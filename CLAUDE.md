@@ -37,11 +37,48 @@ Everything else: choose the safest path forward and log it.
   3. The owner explicitly says stop
   4. 3 consecutive items end in `blocked` status (signal that something is structurally wrong — write a `backlog/reports/STRUCTURAL-BLOCK.md` summarizing the pattern and wait)
 
-### Communication during the long run
+### Communication during the long run — STRICT (this is the rule you keep breaking)
 
-- Between items, output ONE short status line: `[ITEM] M1-XXX done → PR #N · next: M1-YYY` (one line, no headers, no celebration).
-- Save persona + reviewer feedback to `backlog/reports/` as you go — that's where the owner reviews quality, not in your chat output.
-- Don't repeat the full ORCHESTRATOR_RUN_SUMMARY between items. Only emit it when stopping (one of the 4 conditions above).
+Between items, output **exactly this**, nothing else:
+
+```
+[ITEM] M1-XXX done → PR #N · next: M1-YYY
+```
+
+ZERO of the following between items:
+- ❌ "Status:" sections, headers, or markdown tables recapping progress
+- ❌ Lists of completed work, verdict summaries, persona quotes
+- ❌ Localhost URLs (the owner already knows them — they were stated once)
+- ❌ "Cum testezi" / "Where to look" / "Ce ai livrat" sections
+- ❌ Recap tables of all shipped PRs
+- ❌ Emoji or celebration ("Gata!", "Done!", "✅", "🎉")
+- ❌ Any sentence ending in "?" addressed to the owner
+- ❌ "Continui cu...", "Vrei să...", "Pornesc...", "Trec la..." — ANY phrasing that hints at asking permission or signaling a pause-point
+- ❌ "Per regula §0.1..." or similar meta-commentary on the rules
+- ❌ Pausing for reflection or "checking in"
+
+After emitting the one-line `[ITEM]` status, **immediately call the next tool** for the next item. No paragraph break. No checkpoint. No "what's next" sentence.
+
+**Silence from the owner is not a signal.** They are reviewing PRs in another tab. The chain runs until a hard stop condition fires (see §0.1 above).
+
+Save all detail (reports, verdicts, follow-ups) to `backlog/reports/` and PR bodies — that's the persistence layer. The chat is a thin status stream, not a deliverable.
+
+### The "Continui cu X?" anti-pattern
+
+Before sending any message between items, ask yourself:
+
+> "Does this message contain a question, an offer of choice, a celebratory recap, or anything that could be interpreted as asking the owner to confirm or wait?"
+
+If YES → **delete that part and continue working with the next tool call**. The only acceptable inter-item message is the one-line `[ITEM]` status. Anything else is a violation of §0.1.
+
+Common violations to recognize in your own draft (real examples from past runs):
+- "**3/10 module shipped**" recap table → DELETE
+- "## Status pe scurt" / "## ORCHESTRATOR_RUN_SUMMARY" between items → DELETE
+- "Continui cu M1-004?" / "Spune-mi dacă vrei să..." → DELETE
+- Re-listing localhost URLs every iteration → DELETE
+- "Per regula §0.1: continuu..." → DELETE the meta-comment, just continue
+
+The owner typed *one trigger* ("continuă", "go", etc.). That trigger runs the chain until a stop word is heard. **Do not re-request permission inside the chain.** Asking is treating completion as a checkpoint — it is not.
 
 ### When the owner does send a stop signal
 
