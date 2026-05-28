@@ -2,9 +2,9 @@
   "version": 1,
   "active_milestone": "M1",
   "current_item": null,
-  "last_completed": "M1-007",
-  "iterations": 7,
-  "last_run_at": "2026-05-29T01:10:00Z",
+  "last_completed": "M1-008",
+  "iterations": 8,
+  "last_run_at": "2026-05-29T01:15:00Z",
   "items": {
     "M1-001": {
       "status": "done",
@@ -101,7 +101,19 @@
       ],
       "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "PASS/DISLIKES" }
     },
-    "M1-008": { "status": "pending", "attempts": 0, "blockers": [] },
+    "M1-008": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/8",
+      "branch": "feat/M1-008-multifilale",
+      "reports": [
+        "backlog/reports/M1-008-reviewer.md",
+        "backlog/reports/M1-008-manager.md",
+        "backlog/reports/M1-008-student.md"
+      ],
+      "verdicts": { "reviewer": "APPROVED", "manager": "MAYBE", "student": "PASS" }
+    },
     "M1-009": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-010": { "status": "pending", "attempts": 0, "blockers": [] }
   }

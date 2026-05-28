@@ -22,7 +22,7 @@ Each module gets a dedicated landing sub-page at `/modules/<slug>` with an inter
 | 5 | `M1-005` | Aplicație mobilă — module page | done ✅ | orchestrator | [specs/M1-005-mobile.md](specs/M1-005-mobile.md) · [PR #5](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/5) |
 | 6 | `M1-006` | Rapoarte și analize — module page | done ✅ | orchestrator | [specs/M1-006-rapoarte.md](specs/M1-006-rapoarte.md) · [PR #6](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/6) |
 | 7 | `M1-007` | HR și echipă — module page | done ✅ | orchestrator | [specs/M1-007-hr.md](specs/M1-007-hr.md) · [PR #7](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/7) |
-| 8 | `M1-008` | Multi-filiale și franciză — module page | pending | orchestrator | [specs/M1-008-multifilale.md](specs/M1-008-multifilale.md) |
+| 8 | `M1-008` | Multi-filiale și franciză — module page | done ✅ | orchestrator | [specs/M1-008-multifilale.md](specs/M1-008-multifilale.md) · [PR #8](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/8) |
 | 9 | `M1-009` | Integrări 350+ — module page | pending | orchestrator | [specs/M1-009-integrari.md](specs/M1-009-integrari.md) |
 | 10 | `M1-010` | AI Assistant — module page | pending | orchestrator | [specs/M1-010-ai.md](specs/M1-010-ai.md) |
 
