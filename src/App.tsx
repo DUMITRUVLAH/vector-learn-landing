@@ -1,3 +1,4 @@
+import { HashRouter, useRouter } from "./router/HashRouter";
 import { Navbar } from "./components/Navbar";
 import { Hero } from "./components/Hero";
 import { TrustBar } from "./components/TrustBar";
@@ -12,8 +13,9 @@ import { Testimonials } from "./components/Testimonials";
 import { FAQ } from "./components/FAQ";
 import { CTA } from "./components/CTA";
 import { Footer } from "./components/Footer";
+import { OrarPage } from "./pages/modules/OrarPage";
 
-export default function App() {
+function HomePage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Navbar />
@@ -33,5 +35,19 @@ export default function App() {
       </main>
       <Footer />
     </div>
+  );
+}
+
+function Routes() {
+  const { path } = useRouter();
+  if (path.startsWith("/modules/orar")) return <OrarPage />;
+  return <HomePage />;
+}
+
+export default function App() {
+  return (
+    <HashRouter>
+      <Routes />
+    </HashRouter>
   );
 }

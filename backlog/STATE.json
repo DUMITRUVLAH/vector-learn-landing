@@ -1,12 +1,12 @@
 {
   "version": 1,
   "active_milestone": "M1",
-  "current_item": null,
+  "current_item": "M1-001",
   "last_completed": null,
-  "iterations": 0,
-  "last_run_at": null,
+  "iterations": 1,
+  "last_run_at": "2026-05-28T23:35:00Z",
   "items": {
-    "M1-001": { "status": "pending", "attempts": 0, "blockers": [] },
+    "M1-001": { "status": "in_progress", "attempts": 1, "blockers": [] },
     "M1-002": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-003": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-004": { "status": "pending", "attempts": 0, "blockers": [] },

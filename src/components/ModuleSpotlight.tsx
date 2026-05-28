@@ -14,6 +14,7 @@ const spotlights = [
     ],
     icon: Calendar,
     cta: "Vezi cum funcționează orarul",
+    ctaHref: "#/modules/orar",
     visual: "schedule",
   },
   {
@@ -110,7 +111,7 @@ export function ModuleSpotlight() {
                     ))}
                   </ul>
                   <a
-                    href="#demo"
+                    href={spot.ctaHref ?? "#demo"}
                     className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
                   >
                     {spot.cta} →
