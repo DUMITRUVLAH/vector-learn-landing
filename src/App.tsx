@@ -17,6 +17,7 @@ import { OrarPage } from "./pages/modules/OrarPage";
 import { FinantePage } from "./pages/modules/FinantePage";
 import { CRMPage } from "./pages/modules/CRMPage";
 import { ComunicarePage } from "./pages/modules/ComunicarePage";
+import { MobilePage } from "./pages/modules/MobilePage";
 
 function HomePage() {
   return (
@@ -47,6 +48,7 @@ function Routes() {
   if (path.startsWith("/modules/finante")) return <FinantePage />;
   if (path.startsWith("/modules/crm")) return <CRMPage />;
   if (path.startsWith("/modules/comunicare")) return <ComunicarePage />;
+  if (path.startsWith("/modules/mobile")) return <MobilePage />;
   return <HomePage />;
 }
 
