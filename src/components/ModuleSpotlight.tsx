@@ -30,6 +30,7 @@ const spotlights = [
     ],
     icon: CreditCard,
     cta: "Calculează ROI-ul financiar",
+    ctaHref: "#/modules/finante",
     visual: "finance",
   },
   {
