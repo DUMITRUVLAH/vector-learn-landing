@@ -2,9 +2,9 @@
   "version": 1,
   "active_milestone": "M1",
   "current_item": null,
-  "last_completed": "M1-003",
-  "iterations": 3,
-  "last_run_at": "2026-05-29T00:30:00Z",
+  "last_completed": "M1-004",
+  "iterations": 4,
+  "last_run_at": "2026-05-29T00:45:00Z",
   "items": {
     "M1-001": {
       "status": "done",
@@ -49,7 +49,19 @@
       ],
       "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "OK/TRUSTS" }
     },
-    "M1-004": { "status": "pending", "attempts": 0, "blockers": [] },
+    "M1-004": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/4",
+      "branch": "feat/M1-004-comunicare",
+      "reports": [
+        "backlog/reports/M1-004-reviewer.md",
+        "backlog/reports/M1-004-manager.md",
+        "backlog/reports/M1-004-student.md"
+      ],
+      "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "OK/TRUSTS" }
+    },
     "M1-005": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-006": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-007": { "status": "pending", "attempts": 0, "blockers": [] },
