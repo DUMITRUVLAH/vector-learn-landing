@@ -20,6 +20,7 @@ import { ComunicarePage } from "./pages/modules/ComunicarePage";
 import { MobilePage } from "./pages/modules/MobilePage";
 import { RapoartePage } from "./pages/modules/RapoartePage";
 import { HRPage } from "./pages/modules/HRPage";
+import { MultifilalePage } from "./pages/modules/MultifilalePage";
 
 function HomePage() {
   return (
@@ -53,6 +54,7 @@ function Routes() {
   if (path.startsWith("/modules/mobile")) return <MobilePage />;
   if (path.startsWith("/modules/rapoarte")) return <RapoartePage />;
   if (path.startsWith("/modules/hr")) return <HRPage />;
+  if (path.startsWith("/modules/multifilale")) return <MultifilalePage />;
   return <HomePage />;
 }
 
