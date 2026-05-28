@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 228 76% 52%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 228 76% 52%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --info: 210 92% 45%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 228 76% 52%;
+
+    --radius: 0.875rem;
+
+    --pastel-mint: 158 64% 92%;
+    --pastel-lavender: 250 80% 94%;
+    --pastel-peach: 20 100% 93%;
+    --pastel-sky: 200 80% 92%;
+    --pastel-rose: 340 80% 94%;
+    --pastel-lemon: 50 90% 92%;
+    --pastel-teal: 175 60% 90%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(228, 76%, 52%), hsl(228, 76%, 42%));
+    --gradient-hero: linear-gradient(135deg, hsl(228, 76%, 52%), hsl(250, 76%, 52%));
+    --gradient-card: linear-gradient(180deg, hsl(0, 0%, 100%), hsl(220, 20%, 97%));
+
+    --shadow-sm: 0 1px 3px 0 hsl(222 47% 11% / 0.03), 0 1px 2px -1px hsl(222 47% 11% / 0.02);
+    --shadow-md: 0 4px 8px -2px hsl(222 47% 11% / 0.05), 0 2px 4px -2px hsl(222 47% 11% / 0.03);
+    --shadow-lg: 0 10px 20px -4px hsl(222 47% 11% / 0.06), 0 4px 8px -4px hsl(222 47% 11% / 0.03);
+    --shadow-xl: 0 20px 30px -8px hsl(222 47% 11% / 0.08), 0 8px 12px -6px hsl(222 47% 11% / 0.04);
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 220 14% 96%;
+    --card: 222 47% 9%;
+    --card-foreground: 220 14% 96%;
+    --popover: 222 47% 9%;
+    --popover-foreground: 220 14% 96%;
+    --primary: 228 76% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 30% 16%;
+    --secondary-foreground: 220 14% 96%;
+    --muted: 222 30% 16%;
+    --muted-foreground: 220 9% 60%;
+    --accent: 228 76% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 220 14% 96%;
+    --border: 222 30% 20%;
+    --input: 222 30% 20%;
+    --ring: 228 76% 60%;
+
+    --pastel-mint: 158 30% 18%;
+    --pastel-lavender: 250 30% 18%;
+    --pastel-peach: 20 30% 18%;
+    --pastel-sky: 200 30% 18%;
+    --pastel-rose: 340 30% 18%;
+    --pastel-lemon: 50 30% 18%;
+    --pastel-teal: 175 30% 18%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 {
+    @apply font-sans font-bold tracking-tight;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-[hsl(250,76%,52%)];
+  }
+
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+  }
+
+  .glass {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50;
+  }
+
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  .pastel-mint { background-color: hsl(var(--pastel-mint)); }
+  .pastel-lavender { background-color: hsl(var(--pastel-lavender)); }
+  .pastel-peach { background-color: hsl(var(--pastel-peach)); }
+  .pastel-sky { background-color: hsl(var(--pastel-sky)); }
+  .pastel-rose { background-color: hsl(var(--pastel-rose)); }
+  .pastel-lemon { background-color: hsl(var(--pastel-lemon)); }
+  .pastel-teal { background-color: hsl(var(--pastel-teal)); }
+
+  .grid-pattern {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.5) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.5) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  .radial-mask {
+    mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+    -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+  }
+
+  .glow {
+    box-shadow: 0 0 80px -20px hsl(228 76% 52% / 0.5);
+  }
+}
