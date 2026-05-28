@@ -2,9 +2,9 @@
   "version": 1,
   "active_milestone": "M1",
   "current_item": null,
-  "last_completed": "M1-004",
-  "iterations": 4,
-  "last_run_at": "2026-05-29T00:45:00Z",
+  "last_completed": "M1-005",
+  "iterations": 5,
+  "last_run_at": "2026-05-29T00:55:00Z",
   "items": {
     "M1-001": {
       "status": "done",
@@ -62,7 +62,19 @@
       ],
       "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "OK/TRUSTS" }
     },
-    "M1-005": { "status": "pending", "attempts": 0, "blockers": [] },
+    "M1-005": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/5",
+      "branch": "feat/M1-005-mobile",
+      "reports": [
+        "backlog/reports/M1-005-reviewer.md",
+        "backlog/reports/M1-005-manager.md",
+        "backlog/reports/M1-005-student.md"
+      ],
+      "verdicts": { "reviewer": "APPROVED", "manager": "MAYBE", "student": "OK/TRUSTS" }
+    },
     "M1-006": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-007": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-008": { "status": "pending", "attempts": 0, "blockers": [] },
