@@ -22,6 +22,7 @@ import { RapoartePage } from "./pages/modules/RapoartePage";
 import { HRPage } from "./pages/modules/HRPage";
 import { MultifilalePage } from "./pages/modules/MultifilalePage";
 import { IntegrariPage } from "./pages/modules/IntegrariPage";
+import { AIPage } from "./pages/modules/AIPage";
 
 function HomePage() {
   return (
@@ -57,6 +58,7 @@ function Routes() {
   if (path.startsWith("/modules/hr")) return <HRPage />;
   if (path.startsWith("/modules/multifilale")) return <MultifilalePage />;
   if (path.startsWith("/modules/integrari")) return <IntegrariPage />;
+  if (path.startsWith("/modules/ai")) return <AIPage />;
   return <HomePage />;
 }
 
