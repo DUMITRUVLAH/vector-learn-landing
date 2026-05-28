@@ -2,11 +2,27 @@
   "version": 1,
   "active_milestone": "M1",
   "current_item": null,
-  "last_completed": null,
-  "iterations": 0,
-  "last_run_at": null,
+  "last_completed": "M1-001",
+  "iterations": 1,
+  "last_run_at": "2026-05-28T23:50:00Z",
   "items": {
-    "M1-001": { "status": "pending", "attempts": 0, "blockers": [] },
+    "M1-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/1",
+      "branch": "feat/M1-001-orar",
+      "reports": [
+        "backlog/reports/M1-001-reviewer.md",
+        "backlog/reports/M1-001-manager.md",
+        "backlog/reports/M1-001-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "manager": "MAYBE",
+        "student": "OK"
+      }
+    },
     "M1-002": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-003": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-004": { "status": "pending", "attempts": 0, "blockers": [] },
