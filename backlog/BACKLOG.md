@@ -16,7 +16,7 @@ Each module gets a dedicated landing sub-page at `/modules/<slug>` with an inter
 | # | ID | Title | Status | Owner | Spec |
 |---|----|-------|--------|-------|------|
 | 1 | `M1-001` | Orar interactiv — module page | done ✅ | orchestrator | [specs/M1-001-orar.md](specs/M1-001-orar.md) · [PR #1](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/1) |
-| 2 | `M1-002` | Finanțe — module page | pending | orchestrator | [specs/M1-002-finante.md](specs/M1-002-finante.md) |
+| 2 | `M1-002` | Finanțe — module page | done ✅ | orchestrator | [specs/M1-002-finante.md](specs/M1-002-finante.md) · [PR #2](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/2) |
 | 3 | `M1-003` | CRM și vânzări — module page | pending | orchestrator | [specs/M1-003-crm.md](specs/M1-003-crm.md) |
 | 4 | `M1-004` | Comunicare multi-canal — module page | pending | orchestrator | [specs/M1-004-comunicare.md](specs/M1-004-comunicare.md) |
 | 5 | `M1-005` | Aplicație mobilă — module page | pending | orchestrator | [specs/M1-005-mobile.md](specs/M1-005-mobile.md) |

@@ -2,9 +2,9 @@
   "version": 1,
   "active_milestone": "M1",
   "current_item": null,
-  "last_completed": "M1-001",
-  "iterations": 1,
-  "last_run_at": "2026-05-28T23:50:00Z",
+  "last_completed": "M1-002",
+  "iterations": 2,
+  "last_run_at": "2026-05-29T00:15:00Z",
   "items": {
     "M1-001": {
       "status": "done",
@@ -23,7 +23,19 @@
         "student": "OK"
       }
     },
-    "M1-002": { "status": "pending", "attempts": 0, "blockers": [] },
+    "M1-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/2",
+      "branch": "feat/M1-002-finante",
+      "reports": [
+        "backlog/reports/M1-002-reviewer.md",
+        "backlog/reports/M1-002-manager.md",
+        "backlog/reports/M1-002-student.md"
+      ],
+      "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "DISLIKES/TRUSTS" }
+    },
     "M1-003": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-004": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-005": { "status": "pending", "attempts": 0, "blockers": [] },
