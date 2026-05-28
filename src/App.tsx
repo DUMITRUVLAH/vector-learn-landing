@@ -19,6 +19,7 @@ import { CRMPage } from "./pages/modules/CRMPage";
 import { ComunicarePage } from "./pages/modules/ComunicarePage";
 import { MobilePage } from "./pages/modules/MobilePage";
 import { RapoartePage } from "./pages/modules/RapoartePage";
+import { HRPage } from "./pages/modules/HRPage";
 
 function HomePage() {
   return (
@@ -51,6 +52,7 @@ function Routes() {
   if (path.startsWith("/modules/comunicare")) return <ComunicarePage />;
   if (path.startsWith("/modules/mobile")) return <MobilePage />;
   if (path.startsWith("/modules/rapoarte")) return <RapoartePage />;
+  if (path.startsWith("/modules/hr")) return <HRPage />;
   return <HomePage />;
 }
 
