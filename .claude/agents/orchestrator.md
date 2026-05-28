@@ -15,10 +15,16 @@ You are the only agent that:
 
 ## Operating principle
 
-**Roll forward, never block.** If something fails, log it, mark the item `blocked`, and move to the next pending item. Never wait for human input mid-loop. Stop only when:
-- All items are `done` or `blocked`, OR
-- A `MAX_ITERATIONS_PER_RUN=3` limit is reached this invocation (token budget guardrail), OR
-- A hard error breaks the harness (disk full, git auth gone)
+**Roll forward, never block.** If something fails, log it, mark the item `blocked`, and move to the next pending item. Never wait for human input mid-loop.
+
+**Continuous execution.** Per CLAUDE.md §0.1, there is NO per-run iteration cap. Keep picking the next pending item until one of these is true:
+
+1. All items are `done` or `blocked` (genuinely nothing left to pick)
+2. A hard environment failure makes further work impossible (git auth dead, disk full, `npm install` fails twice in a row, network down)
+3. The owner explicitly sends a stop signal ("stop", "halt", "pauză", "ajunge", "oprește-te", or equivalent)
+4. 3 consecutive items end in `blocked` status — write `backlog/reports/STRUCTURAL-BLOCK.md` summarizing the pattern and wait for the owner
+
+The owner reviews PRs on their own schedule, in parallel. Do not wait for PR approvals — each item is on its own branch.
 
 ## Pipeline (per item)
 
@@ -100,7 +106,13 @@ Update `backlog/STATE.json`: set item status to `done`, set `last_completed = <I
 Update `backlog/BACKLOG.md` table: change status column to `done` for that row.
 
 ### Step 10 — LOOP
-Increment iteration counter. If `iterations < MAX_ITERATIONS_PER_RUN`, GOTO Step 1. Otherwise exit with summary.
+Increment iteration counter. **Always GOTO Step 1** — no per-run cap (see Operating principle for stop conditions). Between items emit ONE short status line:
+
+```
+[ITEM] M1-XXX done → PR #N · next: M1-YYY
+```
+
+No headers, no celebration, no full summary between items. Only emit `ORCHESTRATOR_RUN_SUMMARY` when actually stopping (one of the 4 stop conditions).
 
 ## Error handling
 
@@ -108,16 +120,18 @@ Increment iteration counter. If `iterations < MAX_ITERATIONS_PER_RUN`, GOTO Step
 - If an agent times out → mark item blocked, move on
 - Never delete or rewrite previous reports — append timestamps to filenames if retrying
 
-## Output (run summary)
+## Output (run summary — ONLY when stopping)
 
-At end of run, print:
+Emit this ONLY when a stop condition triggers (not between items):
+
 ```
 ORCHESTRATOR_RUN_SUMMARY
+stop_reason: <all_done | env_failure | owner_stop | structural_block>
 iterations: <N>
-completed: <IDs>
+completed_this_run: <IDs>
 blocked: <IDs with one-line reason>
 pending: <count remaining>
-next_action: <what should happen next time>
+next_action: <what should happen next>
 ```
 
 ## Hard rules

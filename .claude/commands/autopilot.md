@@ -1,5 +1,5 @@
 ---
-description: Run Vector Learn autopilot — orchestrator picks next pending backlog item and runs the full build→review→test→persona→PR pipeline. Repeats up to MAX_ITERATIONS_PER_RUN times in one invocation.
+description: Run Vector Learn autopilot — orchestrator picks next pending backlog item and runs the full build→review→test→persona→PR pipeline. Loops continuously until the owner sends a stop signal, all items are done/blocked, or a hard environment failure occurs.
 allowed-tools: Agent, Bash, Read, Write, Edit
 ---
 
@@ -10,13 +10,13 @@ You are now in **Vector Learn autopilot mode**.
 1. **Read** `backlog/STATE.json` and `backlog/BACKLOG.md` to understand the current state of the project.
 2. **Invoke** the `orchestrator` agent via the Agent tool with this prompt:
 
-   > Begin one autopilot run. Read backlog/STATE.json, pick the first pending item, execute the full pipeline (build → review → test → personas → commit → PR → mark done), then loop up to MAX_ITERATIONS_PER_RUN=3 items. Report ORCHESTRATOR_RUN_SUMMARY at the end. Never ask for permission — roll forward, block on failures, continue with next item.
+   > Begin a continuous autopilot run. Read backlog/STATE.json, pick the first pending item, execute the full pipeline (build → review → test → personas → commit → PR → mark done), then immediately pick the next pending item and repeat. Per CLAUDE.md §0.1, there is no per-run iteration cap. Stop only when: (a) all items done/blocked, (b) hard env failure, (c) owner sends explicit stop signal, or (d) 3 consecutive items block. Between items emit ONE short status line: `[ITEM] M1-XXX done → PR #N · next: M1-YYY`. Emit ORCHESTRATOR_RUN_SUMMARY only when actually stopping. Never ask the owner for permission — they review PRs in parallel.
 
-3. **When orchestrator returns**, summarize for the user:
+3. **When orchestrator returns** (only at a real stop):
    - How many items completed this run
+   - Stop reason
    - Any blocked items + one-line reason each
    - Number of pending items remaining
-   - Recommendation: should they run `/autopilot` again now, schedule it daily, or address blockers first
 
 ## Rules for this slash command
 
@@ -39,12 +39,17 @@ Or in a tight loop during dev:
 
 ## Stop conditions
 
-Autopilot stops automatically when:
-- All backlog items are `done` or `blocked` (nothing left to pick)
-- 3 items completed this run (token budget guardrail)
-- A hard environment failure occurs (disk, git auth, network)
+Autopilot stops ONLY when one of these is true:
+
+1. **All done** — every backlog item is `done` or `blocked` (nothing left to pick)
+2. **Hard env failure** — git auth dead, disk full, `npm install` fails twice in a row, network down
+3. **Owner stop signal** — owner types "stop", "halt", "pauză", "ajunge", "oprește-te" or clear equivalent
+4. **Structural block** — 3 consecutive items end in `blocked` status
 
 It does NOT stop on:
-- Individual item failures (move to next)
-- Persona reviews returning PASS/DISLIKES (informational, not blocking)
-- Lighthouse below 90 (logged as findings for next iteration)
+- Individual item failures (mark blocked, move to next)
+- Persona reviews returning PASS/DISLIKES (informational, feed into next milestone)
+- Lighthouse below 90 (logged as findings, not blocking)
+- PR not yet reviewed by owner (owner reviews in parallel)
+- Token budget (no longer a guardrail — continuous run)
+- Completing one item (immediately picks the next)

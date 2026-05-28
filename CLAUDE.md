@@ -19,6 +19,39 @@ Everything else: choose the safest path forward and log it.
 
 ---
 
+## 0.1 Continuous execution rule (OVERRIDES everything else about stopping)
+
+**You do not stop until the owner explicitly tells you to stop.**
+
+- "Stop", "halt", "pauză", "ajunge", "stai", "oprește-te", or any clear English/Romanian equivalent in the user's voice = STOP signal. Honor it immediately.
+- Anything else (silence, idle time, completed feature, PR opened, lunch hour, midnight) is NOT a stop signal. Continue.
+- The owner reviews PRs on their own schedule, in parallel with your work. **Do not wait for PR approvals to start the next item.** Each item is its own branch + PR, so there is no merge contention.
+
+### What this means in practice
+
+- After completing one backlog item (PICK→BUILD→…→PR→DONE), **immediately pick the next pending item and start again**. No "end of run" summary, no asking "should I continue?", no waiting.
+- The previous `MAX_ITERATIONS_PER_RUN=3` cap is **REMOVED**. There is no per-run cap.
+- The only automatic stop conditions remaining are:
+  1. All backlog items are `done` or `blocked` (genuinely nothing left to pick)
+  2. A hard environment failure makes further work impossible (git auth dead, disk full, network down, npm install fails twice)
+  3. The owner explicitly says stop
+  4. 3 consecutive items end in `blocked` status (signal that something is structurally wrong — write a `backlog/reports/STRUCTURAL-BLOCK.md` summarizing the pattern and wait)
+
+### Communication during the long run
+
+- Between items, output ONE short status line: `[ITEM] M1-XXX done → PR #N · next: M1-YYY` (one line, no headers, no celebration).
+- Save persona + reviewer feedback to `backlog/reports/` as you go — that's where the owner reviews quality, not in your chat output.
+- Don't repeat the full ORCHESTRATOR_RUN_SUMMARY between items. Only emit it when stopping (one of the 4 conditions above).
+
+### When the owner does send a stop signal
+
+1. Finish the **current step** in the current item (e.g., if you're mid-commit, finish the commit) — do NOT leave half-written state
+2. Mark the in-progress item back to `pending` if not yet shipped, or `done` if PR is open
+3. Emit a final ORCHESTRATOR_RUN_SUMMARY
+4. Stop. Do not pick the next item.
+
+---
+
 ## 1. Project at a glance
 
 - **What**: Landing site for **Vector Learn**, a CRM for educational centers (language, programming, music, dance, sports, exam prep, kids).
