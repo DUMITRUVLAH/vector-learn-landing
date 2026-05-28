@@ -2,9 +2,9 @@
   "version": 1,
   "active_milestone": "M1",
   "current_item": null,
-  "last_completed": "M1-002",
-  "iterations": 2,
-  "last_run_at": "2026-05-29T00:15:00Z",
+  "last_completed": "M1-003",
+  "iterations": 3,
+  "last_run_at": "2026-05-29T00:30:00Z",
   "items": {
     "M1-001": {
       "status": "done",
@@ -36,7 +36,19 @@
       ],
       "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "DISLIKES/TRUSTS" }
     },
-    "M1-003": { "status": "pending", "attempts": 0, "blockers": [] },
+    "M1-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/3",
+      "branch": "feat/M1-003-crm",
+      "reports": [
+        "backlog/reports/M1-003-reviewer.md",
+        "backlog/reports/M1-003-manager.md",
+        "backlog/reports/M1-003-student.md"
+      ],
+      "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "OK/TRUSTS" }
+    },
     "M1-004": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-005": { "status": "pending", "attempts": 0, "blockers": [] },
     "M1-006": { "status": "pending", "attempts": 0, "blockers": [] },
