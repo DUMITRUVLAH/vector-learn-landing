@@ -5,6 +5,12 @@ dist-ssr
 .env
 .env.local
 
+# build artifacts
+*.tsbuildinfo
+vite.config.d.ts
+vite.config.js
+vite.config.mjs.timestamp-*
+
 .DS_Store
 Thumbs.db
 
