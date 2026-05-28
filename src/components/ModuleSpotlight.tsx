@@ -46,6 +46,7 @@ const spotlights = [
     ],
     icon: TrendingUp,
     cta: "Vezi cum crește conversia",
+    ctaHref: "#/modules/crm",
     visual: "crm",
   },
   {

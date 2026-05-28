@@ -15,6 +15,7 @@ import { CTA } from "./components/CTA";
 import { Footer } from "./components/Footer";
 import { OrarPage } from "./pages/modules/OrarPage";
 import { FinantePage } from "./pages/modules/FinantePage";
+import { CRMPage } from "./pages/modules/CRMPage";
 
 function HomePage() {
   return (
@@ -43,6 +44,7 @@ function Routes() {
   const { path } = useRouter();
   if (path.startsWith("/modules/orar")) return <OrarPage />;
   if (path.startsWith("/modules/finante")) return <FinantePage />;
+  if (path.startsWith("/modules/crm")) return <CRMPage />;
   return <HomePage />;
 }
 
