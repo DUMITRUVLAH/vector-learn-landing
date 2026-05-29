@@ -9,6 +9,7 @@ import { db } from "../db/client";
 import { payrollEntries, teachers, lessons, users } from "../db/schema";
 import type { PayrollBreakdownItem } from "../db/schema/payroll";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { writeAuditLog } from "../lib/auditLogger";
 
 export const payrollRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -185,6 +186,18 @@ payrollRoutes.patch(
       .returning();
 
     if (!updated) return c.json({ error: "not_found" }, 404);
+
+    // Audit log
+    await writeAuditLog({
+      tenantId,
+      actorId: c.get("user").id,
+      actionType: "payroll.status_changed",
+      targetType: "payroll",
+      targetId: id,
+      oldValue: { status: "previous" },
+      newValue: { status },
+    });
+
     return c.json(updated);
   }
 );
