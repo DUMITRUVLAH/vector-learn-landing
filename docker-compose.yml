@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vector_learn_pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vlearn
+      POSTGRES_PASSWORD: vlearn_dev_password
+      POSTGRES_DB: vector_learn
+    ports:
+      - "5432:5432"
+    volumes:
+      - vector_learn_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vlearn -d vector_learn"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  vector_learn_pgdata:

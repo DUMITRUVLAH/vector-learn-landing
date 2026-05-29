@@ -5,6 +5,10 @@ dist-ssr
 .env
 .env.local
 
+# PGlite data
+.pglite/
+*.pglite
+
 # build artifacts
 *.tsbuildinfo
 vite.config.d.ts

@@ -30,6 +30,7 @@ import { ExamenePage } from "./pages/audiences/ExamenePage";
 import { ROICalculatorPage } from "./pages/tools/ROICalculatorPage";
 import { MigrationEstimatorPage } from "./pages/tools/MigrationEstimatorPage";
 import { PricingConfiguratorPage } from "./pages/tools/PricingConfiguratorPage";
+import { BackendStatusBadge } from "./components/BackendStatusBadge";
 
 function HomePage() {
   return (
@@ -80,6 +81,7 @@ export default function App() {
   return (
     <HashRouter>
       <Routes />
+      {import.meta.env.DEV && <BackendStatusBadge />}
     </HashRouter>
   );
 }
