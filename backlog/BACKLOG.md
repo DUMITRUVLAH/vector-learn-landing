@@ -83,11 +83,11 @@ Pivot from landing-only to functional SaaS with Postgres + auth + multi-tenant.
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
 | — | `MVP-009` | CRM Leads (kanban + create + convert + note) | — | done ✅ (merged commit `433f73a`) | [specs/MVP-009-crm-leads.md](specs/MVP-009-crm-leads.md) |
-| 1 | `CRM-101` | Intake web public + UTM + captcha + consent GDPR | A | pending | [specs/CRM-101-intake-web.md](specs/CRM-101-intake-web.md) |
-| 2 | `CRM-102` | Deduplicare robustă + merge manual | A | pending | [specs/CRM-102-dedup-merge.md](specs/CRM-102-dedup-merge.md) |
-| 3 | `CRM-103` | Adăugare manuală extinsă + Import CSV | A | pending | [specs/CRM-103-manual-import.md](specs/CRM-103-manual-import.md) |
-| 4 | `CRM-104` | Webhook Facebook Lead Ads + Google gclid | A | pending | [specs/CRM-104-ads-webhooks.md](specs/CRM-104-ads-webhooks.md) |
-| 5 | `CRM-105` | Pipeline: stadii custom + motiv pierdere + filtre | B | pending | [specs/CRM-105-pipeline.md](specs/CRM-105-pipeline.md) |
+| 1 | `CRM-101` | Intake web public + UTM + captcha + consent GDPR | A | done ✅ | [specs/CRM-101-intake-web.md](specs/CRM-101-intake-web.md) · [PR #27](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/27) |
+| 2 | `CRM-102` | Deduplicare robustă + merge manual | A | done ✅ | [specs/CRM-102-dedup-merge.md](specs/CRM-102-dedup-merge.md) · [PR #28](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/28) |
+| 3 | `CRM-103` | Adăugare manuală extinsă + Import CSV | A | done ✅ | [specs/CRM-103-manual-import.md](specs/CRM-103-manual-import.md) · [PR #29](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/29) |
+| 4 | `CRM-104` | Webhook Facebook Lead Ads + Google gclid | A | done ✅ | [specs/CRM-104-ads-webhooks.md](specs/CRM-104-ads-webhooks.md) · [PR #30](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/30) |
+| 5 | `CRM-105` | Pipeline: stadii custom + motiv pierdere + filtre | B | in_progress | [specs/CRM-105-pipeline.md](specs/CRM-105-pipeline.md) |
 | 6 | `CRM-106` | Cartonaș detaliu `/app/leads/:id` (tab-uri, inline edit) | B | pending | [specs/CRM-106-lead-card.md](specs/CRM-106-lead-card.md) |
 | 7 | `CRM-107` | Task-uri & remindere + atașamente | B | pending | [specs/CRM-107-tasks-files.md](specs/CRM-107-tasks-files.md) |
 | 8 | `CRM-108` | Bibliotecă template-uri (email/WhatsApp/SMS) | C | pending | [specs/CRM-108-templates.md](specs/CRM-108-templates.md) |
