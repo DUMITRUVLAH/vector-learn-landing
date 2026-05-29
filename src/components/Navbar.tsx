@@ -1,26 +1,50 @@
-import { useEffect, useState } from "react";
-import { Menu, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Menu, X, ChevronDown } from "lucide-react";
 import { Logo } from "./Logo";
 import { cn } from "@/lib/utils";
 
 const links = [
   { label: "Funcționalități", href: "#features" },
-  { label: "Module", href: "#modules" },
   { label: "Pentru cine", href: "#audience" },
   { label: "Integrări", href: "#integrations" },
   { label: "Prețuri", href: "#pricing" },
   { label: "FAQ", href: "#faq" },
 ];
 
+const modules = [
+  { label: "Orar interactiv", href: "#/modules/orar" },
+  { label: "Finanțe", href: "#/modules/finante" },
+  { label: "CRM și vânzări", href: "#/modules/crm" },
+  { label: "Comunicare", href: "#/modules/comunicare" },
+  { label: "Aplicație mobilă", href: "#/modules/mobile" },
+  { label: "Rapoarte", href: "#/modules/rapoarte" },
+  { label: "HR și echipă", href: "#/modules/hr" },
+  { label: "Multi-filiale", href: "#/modules/multifilale" },
+  { label: "Integrări 350+", href: "#/modules/integrari" },
+  { label: "AI Assistant", href: "#/modules/ai" },
+];
+
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [modulesOpen, setModulesOpen] = useState(false);
+  const modulesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const onClickOutside = (e: MouseEvent) => {
+      if (modulesRef.current && !modulesRef.current.contains(e.target as Node)) {
+        setModulesOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", onClickOutside);
+    return () => window.removeEventListener("mousedown", onClickOutside);
   }, []);
 
   return (
@@ -36,7 +60,48 @@ export function Navbar() {
         <Logo />
 
         <nav className="hidden lg:flex items-center gap-1">
-          {links.map((link) => (
+          <a
+            href="#features"
+            className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors rounded-md"
+          >
+            Funcționalități
+          </a>
+
+          <div ref={modulesRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setModulesOpen((v) => !v)}
+              aria-haspopup="true"
+              aria-expanded={modulesOpen}
+              className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors rounded-md"
+            >
+              Module
+              <ChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 transition-transform",
+                  modulesOpen && "rotate-180"
+                )}
+              />
+            </button>
+            {modulesOpen && (
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-64 rounded-xl border border-border bg-card shadow-lg overflow-hidden animate-fade-in">
+                <div className="p-2">
+                  {modules.map((m) => (
+                    <a
+                      key={m.href}
+                      href={m.href}
+                      onClick={() => setModulesOpen(false)}
+                      className="block px-3 py-2 text-sm text-foreground hover:bg-muted rounded-md transition-colors"
+                    >
+                      {m.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {links.slice(1).map((link) => (
             <a
               key={link.href}
               href={link.href}
@@ -85,6 +150,21 @@ export function Navbar() {
                 {link.label}
               </a>
             ))}
+            <div className="border-t border-border/60 mt-2 pt-2">
+              <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Module
+              </p>
+              {modules.map((m) => (
+                <a
+                  key={m.href}
+                  href={m.href}
+                  onClick={() => setMobileOpen(false)}
+                  className="block px-3 py-2 text-sm text-foreground hover:bg-muted rounded-md"
+                >
+                  {m.label}
+                </a>
+              ))}
+            </div>
             <div className="border-t border-border/60 mt-2 pt-3 flex flex-col gap-2">
               <a
                 href="#login"
