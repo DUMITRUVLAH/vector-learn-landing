@@ -17,6 +17,7 @@ import { lessonRoutes } from "./routes/lessons";
 import { paymentRoutes } from "./routes/payments";
 import { leadRoutes } from "./routes/leads";
 import { pipelineRoutes } from "./routes/pipeline";
+import { taskRoutes } from "./routes/tasks";
 
 const app = new Hono();
 
@@ -42,6 +43,7 @@ app.route("/api/lessons", lessonRoutes);
 app.route("/api/payments", paymentRoutes);
 app.route("/api/leads", leadRoutes);
 app.route("/api/pipeline-stages", pipelineRoutes);
+app.route("/api/leads", taskRoutes);  // tasks/attachments sub-routes under /api/leads/:leadId/tasks|attachments
 
 app.get("/api/health", async (c) => {
   try {

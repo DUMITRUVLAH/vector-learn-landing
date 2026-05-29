@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Filter, Settings, GripVertical, Trash2 } from "lucide-react";
+import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -416,6 +416,20 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
           {lead.email && <Mail className="h-2.5 w-2.5" aria-label="Are email" />}
         </div>
       </div>
+      {/* Next task badge (CRM-107) */}
+      {lead.nextTask && (
+        <div className={cn(
+          "mt-1.5 text-[9px] font-semibold inline-flex items-center gap-1",
+          lead.nextTask.dueAt && new Date(lead.nextTask.dueAt) < new Date()
+            ? "text-destructive"
+            : "text-amber-600 dark:text-amber-400"
+        )}>
+          <Clock className="h-2.5 w-2.5" aria-hidden="true" />
+          {lead.nextTask.dueAt
+            ? new Date(lead.nextTask.dueAt).toLocaleDateString("ro-RO", { day: "2-digit", month: "short" })
+            : lead.nextTask.title.slice(0, 20)}
+        </div>
+      )}
       {lead.convertedToStudentId && (
         <div className="mt-1.5 text-[9px] font-bold text-success inline-flex items-center gap-1">
           <CheckCircle2 className="h-2.5 w-2.5" />

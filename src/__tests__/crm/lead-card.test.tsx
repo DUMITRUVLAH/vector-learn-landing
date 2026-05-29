@@ -22,6 +22,17 @@ vi.mock("@/lib/api/pipeline", () => ({
   fetchPipelineStages: vi.fn(),
 }));
 
+vi.mock("@/lib/api/tasks", () => ({
+  listTasks: vi.fn(),
+  createTask: vi.fn(),
+  updateTask: vi.fn(),
+  deleteTask: vi.fn(),
+  listAttachments: vi.fn(),
+  createAttachment: vi.fn(),
+  deleteAttachment: vi.fn(),
+  getNextTask: vi.fn(),
+}));
+
 vi.mock("@/hooks/useSession", () => ({
   useSession: () => ({ status: "authenticated", user: { id: "u1", tenantId: "t1", role: "owner" } }),
 }));
@@ -39,6 +50,7 @@ import * as pipelineApi from "@/lib/api/pipeline";
 import { LeadCardPage } from "@/pages/app/LeadCardPage";
 import type { Lead, LeadInteraction } from "@/lib/api/leads";
 import type { PipelineStage } from "@/lib/api/pipeline";
+import * as tasksApi from "@/lib/api/tasks";
 
 const MOCK_LEAD: Lead = {
   id: "lead-001",
@@ -88,6 +100,8 @@ describe("CRM-106 — Lead card page", () => {
       body: "Notă nouă", userId: "u1", occurredAt: new Date().toISOString(),
     });
     vi.mocked(leadsApi.updateLead).mockResolvedValue({ ...MOCK_LEAD, phone: "+40779999999" });
+    vi.mocked(tasksApi.listTasks).mockResolvedValue({ items: [] });
+    vi.mocked(tasksApi.listAttachments).mockResolvedValue({ items: [] });
   });
 
   /**

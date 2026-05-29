@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, students, tenants, pipelineStages } from "../db/schema";
+import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 
@@ -230,15 +230,36 @@ leadRoutes.get("/pipeline", async (c) => {
     .where(eq(leads.tenantId, tenantId))
     .orderBy(desc(leads.createdAt));
 
-  const grouped: Record<string, typeof items> = {
+  // Fetch next open task per lead for kanban badge
+  const openTasks = await db
+    .select()
+    .from(leadTasks)
+    .where(and(eq(leadTasks.tenantId, tenantId), eq(leadTasks.status, "open")))
+    .orderBy(asc(leadTasks.dueAt));
+
+  // Build map: leadId → earliest open task
+  const nextTaskMap: Record<string, { dueAt: Date | null; title: string } | undefined> = {};
+  for (const task of openTasks) {
+    if (!nextTaskMap[task.leadId]) {
+      nextTaskMap[task.leadId] = { dueAt: task.dueAt, title: task.title };
+    }
+  }
+
+  // Augment leads with nextTask
+  const augmented = items.map((lead) => ({
+    ...lead,
+    nextTask: nextTaskMap[lead.id] ?? null,
+  }));
+
+  const grouped: Record<string, typeof augmented> = {
     new: [],
     contacted: [],
     trial: [],
     paid: [],
     lost: [],
   };
-  for (const lead of items) {
-    grouped[lead.stage].push(lead);
+  for (const lead of augmented) {
+    (grouped[lead.stage] ??= []).push(lead);
   }
 
   const counts = Object.fromEntries(

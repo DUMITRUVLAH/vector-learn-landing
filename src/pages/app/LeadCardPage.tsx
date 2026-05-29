@@ -1,13 +1,14 @@
 /**
- * CRM-106 — Cartonaș detaliu lead /app/leads/:id
- * Layout 2 coloane: col stânga sticky (info+acțiuni), col dreapta tab-uri (Activitate/GDPR)
- * Inline edit, timeline cronologic invers, badge consent retras
+ * CRM-106/CRM-107 — Cartonaș detaliu lead /app/leads/:id
+ * Layout 2 coloane: col stânga sticky (info+acțiuni), col dreapta tab-uri
+ * CRM-107: Tab Task-uri (CRUD + badge kanban), Tab Fișiere (upload/download)
  */
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Loader2, ArrowLeft, Pencil, Check, X, ChevronDown,
   Phone, Mail, Globe, Calendar, MessageCircle, UserPlus,
   AlertTriangle, CheckCircle2, Trash2, MoreVertical, ShieldOff,
+  Clock, Paperclip, Upload, Download,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -18,6 +19,11 @@ import {
   type Lead, type LeadInteraction,
 } from "@/lib/api/leads";
 import { fetchPipelineStages, type PipelineStage } from "@/lib/api/pipeline";
+import {
+  listTasks, createTask, updateTask, deleteTask,
+  listAttachments, createAttachment, deleteAttachment,
+  type LeadTask, type LeadAttachment,
+} from "@/lib/api/tasks";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -37,7 +43,7 @@ const INTERACTION_LABEL: Record<string, string> = {
   sms: "SMS", meeting: "Întâlnire", stage_change: "Schimbare stadiu", system: "Sistem",
 };
 
-type Tab = "activity" | "gdpr";
+type Tab = "activity" | "tasks" | "files" | "gdpr";
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -52,9 +58,20 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   const [lead, setLead] = useState<Lead | null>(null);
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [interactions, setInteractions] = useState<LeadInteraction[]>([]);
+  const [tasks, setTasks] = useState<LeadTask[]>([]);
+  const [attachments, setAttachments] = useState<LeadAttachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("activity");
+
+  // Task form
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDue, setNewTaskDue] = useState("");
+  const [addingTask, setAddingTask] = useState(false);
+
+  // File upload
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   // Edit state
   const [editing, setEditing] = useState(false);
@@ -88,14 +105,18 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     setLoading(true);
     setError(null);
     try {
-      const [leadRes, stagesRes, interRes] = await Promise.all([
+      const [leadRes, stagesRes, interRes, tasksRes, attRes] = await Promise.all([
         getLead(leadId),
         fetchPipelineStages(),
         listInteractions(leadId),
+        listTasks(leadId),
+        listAttachments(leadId),
       ]);
       setLead(leadRes);
       setStages(stagesRes.stages);
       setInteractions(interRes.items);
+      setTasks(tasksRes.items);
+      setAttachments(attRes.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare");
     } finally {
@@ -221,6 +242,87 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     } finally {
       setRevoking(false);
       setShowActionsMenu(false);
+    }
+  };
+
+  // ─── Tasks ────────────────────────────────────────────────────────────────
+  const handleAddTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lead || !newTaskTitle.trim()) return;
+    setAddingTask(true);
+    try {
+      const created = await createTask(lead.id, {
+        title: newTaskTitle.trim(),
+        dueAt: newTaskDue || null,
+      });
+      setTasks((prev) => [...prev, created]);
+      setNewTaskTitle("");
+      setNewTaskDue("");
+      setToast({ kind: "success", message: "Task adăugat" });
+    } catch {
+      setToast({ kind: "error", message: "Nu pot adăuga task-ul" });
+    } finally {
+      setAddingTask(false);
+    }
+  };
+
+  const handleCompleteTask = async (task: LeadTask) => {
+    if (!lead) return;
+    try {
+      const updated = await updateTask(lead.id, task.id, { status: "done" });
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)));
+      // Refresh interactions to show system entry
+      const freshInter = await listInteractions(lead.id);
+      setInteractions(freshInter.items);
+      setToast({ kind: "success", message: "Task finalizat" });
+    } catch {
+      setToast({ kind: "error", message: "Nu pot finaliza task-ul" });
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!lead) return;
+    try {
+      await deleteTask(lead.id, taskId);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    } catch {
+      setToast({ kind: "error", message: "Nu pot șterge task-ul" });
+    }
+  };
+
+  // ─── Files ────────────────────────────────────────────────────────────────
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !lead) return;
+    setUploadingFile(true);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const dataUrl = evt.target?.result as string;
+      createAttachment(lead.id, {
+        fileName: file.name,
+        fileUrl: dataUrl,
+        mime: file.type || "application/octet-stream",
+        sizeBytes: file.size,
+      })
+        .then((created) => {
+          setAttachments((prev) => [...prev, created]);
+          setToast({ kind: "success", message: "Fișier adăugat" });
+        })
+        .catch(() => setToast({ kind: "error", message: "Nu pot adăuga fișierul" }))
+        .finally(() => { setUploadingFile(false); if (fileInputRef.current) fileInputRef.current.value = ""; });
+    };
+    reader.onerror = () => { setUploadingFile(false); setToast({ kind: "error", message: "Nu pot citi fișierul" }); };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    if (!lead) return;
+    try {
+      await deleteAttachment(lead.id, attachmentId);
+      setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+      setToast({ kind: "success", message: "Fișier șters" });
+    } catch {
+      setToast({ kind: "error", message: "Nu pot șterge fișierul" });
     }
   };
 
@@ -573,8 +675,13 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         {/* ─── RIGHT COLUMN ────────────────────────────────────────────── */}
         <main>
           {/* Tab bar */}
-          <div role="tablist" className="flex gap-1 border-b border-border mb-4">
-            {([["activity", "Activitate"], ["gdpr", "GDPR"]] as [Tab, string][]).map(([t, label]) => (
+          <div role="tablist" className="flex gap-1 border-b border-border mb-4 overflow-x-auto">
+            {([
+              ["activity", "Activitate"],
+              ["tasks", tasks.length > 0 ? `Task-uri (${tasks.filter((t) => t.status === "open").length})` : "Task-uri"],
+              ["files", `Fișiere${attachments.length > 0 ? ` (${attachments.length})` : ""}`],
+              ["gdpr", "GDPR"],
+            ] as [Tab, string][]).map(([t, label]) => (
               <button
                 key={t}
                 role="tab"
@@ -582,7 +689,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                 aria-selected={activeTab === t}
                 onClick={() => setActiveTab(t)}
                 className={cn(
-                  "px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors",
+                  "whitespace-nowrap px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors shrink-0",
                   activeTab === t
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground"
@@ -622,6 +729,156 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                 <ul className="space-y-3" aria-label="Timeline interacțiuni">
                   {interactions.map((item) => (
                     <TimelineItem key={item.id} item={item} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {activeTab === "tasks" && (
+            <div role="tabpanel" aria-label="Task-uri" className="space-y-4">
+              {/* Add task form */}
+              <form onSubmit={(e) => void handleAddTask(e)} className="rounded-xl border border-border bg-card p-4 space-y-3">
+                <p className="text-sm font-semibold">Adaugă task</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                    placeholder="Titlu task (ex: Sună mâine la 10:00)"
+                    className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    aria-label="Titlu task nou"
+                  />
+                  <input
+                    type="datetime-local"
+                    value={newTaskDue}
+                    onChange={(e) => setNewTaskDue(e.target.value)}
+                    className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    aria-label="Scadență task"
+                  />
+                  <button
+                    type="submit"
+                    disabled={addingTask || !newTaskTitle.trim()}
+                    className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {addingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : "+ Adaugă"}
+                  </button>
+                </div>
+              </form>
+
+              {/* Task list */}
+              {tasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">Niciun task.</p>
+              ) : (
+                <ul className="space-y-2" aria-label="Lista task-uri">
+                  {tasks.map((task) => {
+                    const isOverdue = task.status === "open" && task.dueAt && new Date(task.dueAt) < new Date();
+                    return (
+                      <li
+                        key={task.id}
+                        className={cn(
+                          "flex items-start gap-3 rounded-lg border bg-card p-3",
+                          isOverdue ? "border-destructive/40 bg-destructive/5" : "border-border",
+                          task.status === "done" && "opacity-60"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => task.status === "open" && void handleCompleteTask(task)}
+                          disabled={task.status !== "open"}
+                          className={cn(
+                            "mt-0.5 h-5 w-5 shrink-0 rounded border transition-colors",
+                            task.status === "done"
+                              ? "border-success bg-success flex items-center justify-center"
+                              : "border-border hover:border-primary"
+                          )}
+                          aria-label={task.status === "done" ? "Task finalizat" : `Finalizează: ${task.title}`}
+                        >
+                          {task.status === "done" && <Check className="h-3 w-3 text-success-foreground" />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn("text-sm font-medium", task.status === "done" && "line-through")}>{task.title}</p>
+                          {task.dueAt && (
+                            <p className={cn("text-xs mt-0.5 flex items-center gap-1", isOverdue ? "text-destructive font-semibold" : "text-muted-foreground")}>
+                              <Clock className="h-3 w-3" aria-hidden="true" />
+                              {isOverdue ? "Întârziat · " : ""}
+                              {new Date(task.dueAt).toLocaleString("ro-RO")}
+                            </p>
+                          )}
+                          {task.completedAt && (
+                            <p className="text-[10px] text-success mt-0.5">Finalizat: {new Date(task.completedAt).toLocaleDateString("ro-RO")}</p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteTask(task.id)}
+                          className="text-muted-foreground hover:text-destructive"
+                          aria-label={`Șterge task: ${task.title}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {activeTab === "files" && (
+            <div role="tabpanel" aria-label="Fișiere" className="space-y-4">
+              {/* Upload button */}
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  aria-label="Încarcă fișier atașament"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingFile}
+                  className="inline-flex items-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/20 px-4 py-3 text-sm font-semibold hover:bg-muted/40 disabled:opacity-50 w-full justify-center"
+                >
+                  {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {uploadingFile ? "Se încarcă…" : "Încarcă fișier"}
+                </button>
+              </div>
+
+              {/* Attachment list */}
+              {attachments.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">Niciun fișier atașat.</p>
+              ) : (
+                <ul className="space-y-2" aria-label="Lista fișiere">
+                  {attachments.map((att) => (
+                    <li key={att.id} className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+                      <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{att.fileName}</p>
+                        <p className="text-[10px] text-muted-foreground">{att.mime} · {formatBytes(att.sizeBytes)}</p>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <a
+                          href={att.fileUrl}
+                          download={att.fileName}
+                          className="rounded-md border border-border p-1.5 hover:bg-muted"
+                          aria-label={`Descarcă ${att.fileName}`}
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteAttachment(att.id)}
+                          className="rounded-md border border-border p-1.5 hover:bg-muted text-muted-foreground hover:text-destructive"
+                          aria-label={`Șterge ${att.fileName}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </li>
                   ))}
                 </ul>
               )}
@@ -786,4 +1043,12 @@ function DetailRow({ label, value, className }: { label: string; value: string; 
       <p className={cn("text-sm font-medium", className)}>{value}</p>
     </div>
   );
+}
+
+// ─── Format bytes ─────────────────────────────────────────────────────────────
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

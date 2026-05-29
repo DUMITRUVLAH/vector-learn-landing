@@ -32,6 +32,8 @@ export interface Lead {
   convertedToStudentId: string | null;
   convertedAt: string | null;
   lostReason: string | null;
+  /** Next open task (from pipeline endpoint, augmented server-side) */
+  nextTask?: { dueAt: string | null; title: string } | null;
   createdAt: string;
   updatedAt: string;
 }
