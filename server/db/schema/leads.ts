@@ -31,6 +31,7 @@ export const leads = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     fullName: varchar("full_name", { length: 200 }).notNull(),
+    fullNameNormalized: varchar("full_name_normalized", { length: 200 }),  // [CRM-102] dedup
     phone: varchar("phone", { length: 32 }),
     phoneNormalized: varchar("phone_normalized", { length: 32 }),
     email: varchar("email", { length: 255 }),
@@ -46,7 +47,10 @@ export const leads = pgTable(
     consentText: varchar("consent_text", { length: 500 }),
     consentAt: timestamp("consent_at", { withTimezone: true }),
     ipAtConsent: varchar("ip_at_consent", { length: 64 }),
+    userAgentAtConsent: varchar("user_agent_at_consent", { length: 512 }),  // [CRM-101]
+    consentRevokedAt: timestamp("consent_revoked_at", { withTimezone: true }),  // [CRM-101]
     notes: varchar("notes", { length: 2000 }),
+    mergedIntoId: uuid("merged_into_id"),  // [CRM-102] archived lead points to surviving lead
     convertedToStudentId: uuid("converted_to_student_id").references(() => students.id, { onDelete: "set null" }),
     convertedAt: timestamp("converted_at", { withTimezone: true }),
     lostReason: varchar("lost_reason", { length: 500 }),
@@ -58,6 +62,9 @@ export const leads = pgTable(
     stageIdx: index("leads_stage_idx").on(t.tenantId, t.stage),
     phoneIdx: index("leads_phone_idx").on(t.tenantId, t.phoneNormalized),
     emailIdx: index("leads_email_idx").on(t.tenantId, t.emailNormalized),
+    // [CRM-102] composite dedup index
+    dedupIdx: index("leads_dedup_idx").on(t.tenantId, t.phoneNormalized, t.emailNormalized),
+    nameIdx: index("leads_name_idx").on(t.tenantId, t.fullNameNormalized),
   })
 );
 

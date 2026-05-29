@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "MVP-008",
-  "iterations": 25,
+  "current_item": "CRM-102",
+  "last_completed": "CRM-101",
+  "iterations": 27,
   "last_run_at": "2026-05-29T08:30:00Z",
   "milestone_status": "M1+M2+M3 landing + MVP-001..008 complete. CRM is now the CORE milestone: 12 items CRM-101..112 across 5 phases (see backlog/crm/). Build one item at a time per backlog/crm/BUILD-SEQUENCE.md; tests must pass before moving on.",
   "active_milestone": "CRM",
@@ -246,8 +246,8 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/25",
       "branch": "feat/MVP-008-deploy"
     },
-    "CRM-101": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-101-intake-web.md", "phase": "A", "depends_on": ["MVP-009"] },
-    "CRM-102": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-102-dedup-merge.md", "phase": "A", "depends_on": ["CRM-101"] },
+    "CRM-101": { "status": "done", "attempts": 1, "blockers": [], "spec": "backlog/specs/CRM-101-intake-web.md", "phase": "A", "depends_on": ["MVP-009"], "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/27", "branch": "feat/CRM-101-intake-web", "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "PASS/TRUSTS" } },
+    "CRM-102": { "status": "in_progress", "attempts": 1, "blockers": [], "spec": "backlog/specs/CRM-102-dedup-merge.md", "phase": "A", "depends_on": ["CRM-101"] },
     "CRM-103": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-103-manual-import.md", "phase": "A", "depends_on": ["CRM-102"] },
     "CRM-104": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-104-ads-webhooks.md", "phase": "A", "depends_on": ["CRM-101"] },
     "CRM-105": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-105-pipeline.md", "phase": "B", "depends_on": [] },
