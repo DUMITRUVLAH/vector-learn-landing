@@ -14,3 +14,12 @@ export function normalizeEmail(raw: string | null | undefined): string | null {
   const trimmed = raw.trim().toLowerCase();
   return trimmed.length > 0 ? trimmed : null;
 }
+
+export function normalizeName(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const nfc = raw.normalize("NFC");
+  const withoutDiacritics = nfc.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const lower = withoutDiacritics.toLowerCase();
+  const collapsed = lower.replace(/\s+/g, " ").trim();
+  return collapsed.length > 0 ? collapsed : null;
+}

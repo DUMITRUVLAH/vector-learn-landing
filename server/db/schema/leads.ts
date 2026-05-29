@@ -31,6 +31,7 @@ export const leads = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     fullName: varchar("full_name", { length: 200 }).notNull(),
+    fullNameNormalized: varchar("full_name_normalized", { length: 200 }),  // [CRM-102]
     phone: varchar("phone", { length: 32 }),
     phoneNormalized: varchar("phone_normalized", { length: 32 }),
     email: varchar("email", { length: 255 }),
@@ -38,15 +39,22 @@ export const leads = pgTable(
     interestCourse: varchar("interest_course", { length: 200 }),
     stage: leadStageEnum("stage").notNull().default("new"),
     source: leadSourceEnum("source").notNull().default("manual"),
+    assignedTo: uuid("assigned_to").references(() => users.id, { onDelete: "set null" }),  // [CRM-103]
     utmSource: varchar("utm_source", { length: 100 }),
     utmMedium: varchar("utm_medium", { length: 100 }),
     utmCampaign: varchar("utm_campaign", { length: 100 }),
     fbclid: varchar("fbclid", { length: 200 }),
     gclid: varchar("gclid", { length: 200 }),
+    leadgenId: varchar("leadgen_id", { length: 200 }),  // [CRM-104] Facebook leadgen_id for idempotency
+    metaFormId: varchar("meta_form_id", { length: 200 }),  // [CRM-104] Facebook form ID
+    metaAdId: varchar("meta_ad_id", { length: 200 }),     // [CRM-104] Facebook ad ID
     consentText: varchar("consent_text", { length: 500 }),
     consentAt: timestamp("consent_at", { withTimezone: true }),
     ipAtConsent: varchar("ip_at_consent", { length: 64 }),
+    userAgentAtConsent: varchar("user_agent_at_consent", { length: 512 }),  // [CRM-101]
+    consentRevokedAt: timestamp("consent_revoked_at", { withTimezone: true }),  // [CRM-101]
     notes: varchar("notes", { length: 2000 }),
+    mergedIntoId: uuid("merged_into_id"),  // [CRM-102] audit pointer
     convertedToStudentId: uuid("converted_to_student_id").references(() => students.id, { onDelete: "set null" }),
     convertedAt: timestamp("converted_at", { withTimezone: true }),
     lostReason: varchar("lost_reason", { length: 500 }),
@@ -58,6 +66,10 @@ export const leads = pgTable(
     stageIdx: index("leads_stage_idx").on(t.tenantId, t.stage),
     phoneIdx: index("leads_phone_idx").on(t.tenantId, t.phoneNormalized),
     emailIdx: index("leads_email_idx").on(t.tenantId, t.emailNormalized),
+    dedupIdx: index("leads_dedup_idx").on(t.tenantId, t.phoneNormalized, t.emailNormalized),
+    nameIdx: index("leads_name_idx").on(t.tenantId, t.fullNameNormalized),
+    assignedIdx: index("leads_assigned_idx").on(t.tenantId, t.assignedTo),
+    leadgenIdx: index("leads_leadgen_idx").on(t.tenantId, t.leadgenId),  // [CRM-104]
   })
 );
 
