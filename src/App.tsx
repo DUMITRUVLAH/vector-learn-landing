@@ -40,6 +40,7 @@ import { TeachersPage } from "./pages/app/TeachersPage";
 import { PaymentsPage } from "./pages/app/PaymentsPage";
 import { LeadsPage } from "./pages/app/LeadsPage";
 import { LeadCardPage } from "./pages/app/LeadCardPage";
+import { TemplatesPage } from "./pages/app/TemplatesPage";
 
 function HomePage() {
   return (
@@ -94,6 +95,7 @@ function Routes() {
     const id = path.split("/").pop()!;
     return <LeadCardPage leadId={id} />;
   }
+  if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   return <HomePage />;

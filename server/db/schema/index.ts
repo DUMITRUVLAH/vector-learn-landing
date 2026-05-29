@@ -8,3 +8,4 @@ export * from "./payments";
 export * from "./leads";
 export * from "./pipeline";
 export * from "./tasks";
+export * from "./templates";
