@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "HR-401",
-  "last_completed": "REP-304",
-  "iterations": 51,
+  "current_item": "HR-402",
+  "last_completed": "HR-401",
+  "iterations": 52,
   "last_run_at": "2026-05-29T08:30:00Z",
   "milestone_status": "M1+M2+M3 landing + MVP-001..008 complete. CRM is now the CORE milestone: 12 items CRM-101..112 across 5 phases (see backlog/crm/). Build one item at a time per backlog/crm/BUILD-SEQUENCE.md; tests must pass before moving on.",
   "active_milestone": "HR",
@@ -604,17 +604,20 @@
       "depends_on": ["REP-301"]
     },
     "HR-401": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/HR-401-payroll.md",
       "milestone": "HR",
       "phase": "1",
-      "depends_on": ["MVP-006", "MVP-005"]
+      "depends_on": ["MVP-006", "MVP-005"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/53",
+      "branch": "feat/HR-401-payroll",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "HR-402": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/HR-402-teacher-stats.md",
       "milestone": "HR",
