@@ -29,6 +29,7 @@ import { MuzicaPage } from "./pages/audiences/MuzicaPage";
 import { ExamenePage } from "./pages/audiences/ExamenePage";
 import { ROICalculatorPage } from "./pages/tools/ROICalculatorPage";
 import { MigrationEstimatorPage } from "./pages/tools/MigrationEstimatorPage";
+import { PricingConfiguratorPage } from "./pages/tools/PricingConfiguratorPage";
 
 function HomePage() {
   return (
@@ -71,6 +72,7 @@ function Routes() {
   if (path.startsWith("/pentru/examene")) return <ExamenePage />;
   if (path.startsWith("/calculator/roi")) return <ROICalculatorPage />;
   if (path.startsWith("/calculator/migrare")) return <MigrationEstimatorPage />;
+  if (path.startsWith("/calculator/pricing")) return <PricingConfiguratorPage />;
   return <HomePage />;
 }
 
