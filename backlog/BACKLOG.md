@@ -121,6 +121,18 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 4 | `COMM-204` | Broadcast cu segmentare — trimitere masă per segment | 4 | pending | [specs/COMM-204-broadcast.md](specs/COMM-204-broadcast.md) |
 | 5 | `COMM-205` | Notificări sistem automate + quiet hours + anti-spam cap | 5 | pending | [specs/COMM-205-notifications.md](specs/COMM-205-notifications.md) |
 
+## Active milestone: REP — Modulul Rapoarte (analytics real din DB)
+
+> KPI dashboard + revenue charts + student LTV + export CSV.
+> Tenant-scoped, period toggle, dark mode.
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `REP-301` | Dashboard KPI: MRR, elevi activi, churn, ARPU + period toggle | 1 | pending | [specs/REP-301-dashboard-kpi.md](specs/REP-301-dashboard-kpi.md) |
+| 2 | `REP-302` | Revenue over time: line chart MRR lunar + breakdown disciplină | 2 | pending | [specs/REP-302-revenue-chart.md](specs/REP-302-revenue-chart.md) |
+| 3 | `REP-303` | Student retention: LTV per elev + top 10 + attendance rate | 3 | pending | [specs/REP-303-student-retention.md](specs/REP-303-student-retention.md) |
+| 4 | `REP-304` | Export rapoarte: CSV plăți + CSV elevi + download din UI | 4 | pending | [specs/REP-304-export.md](specs/REP-304-export.md) |
+
 ## Quality gates (required before status → `done`)
 
 1. **Build passes**: `npm run build` exits 0
