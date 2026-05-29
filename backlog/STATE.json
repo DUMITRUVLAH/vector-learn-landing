@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "active_milestone": "M1",
+  "active_milestone": "M2",
   "current_item": null,
   "last_completed": "M1-010",
   "iterations": 10,
@@ -140,6 +140,10 @@
         "backlog/reports/M1-010-student.md"
       ],
       "verdicts": { "reviewer": "APPROVED", "manager": "MATCH", "student": "DISLIKES/NEUTRAL" }
-    }
+    },
+    "M2-001": { "status": "pending", "attempts": 0, "blockers": [] },
+    "M2-002": { "status": "pending", "attempts": 0, "blockers": [] },
+    "M2-003": { "status": "pending", "attempts": 0, "blockers": [] },
+    "M2-004": { "status": "pending", "attempts": 0, "blockers": [] }
   }
 }

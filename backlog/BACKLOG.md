@@ -28,10 +28,16 @@ Each module gets a dedicated landing sub-page at `/modules/<slug>` with an inter
 
 **🎉 M1 milestone: 10/10 done. All PRs open for review.**
 
-## Next milestone: M2 — Audience landing pages
+## Active milestone: M2 — Audience landing pages
 
-Pages tailored per persona: `/pentru/limbi`, `/pentru/programare`, `/pentru/muzica`, etc.
-Will be expanded after M1 reaches 100% done.
+Pages tailored per persona at `/pentru/<slug>`. Each reuses shared shells from M2-001 and shows segment-specific pain → solution mapping back to M1 module pages.
+
+| # | ID | Title | Status | Owner | Spec |
+|---|----|-------|--------|-------|------|
+| 1 | `M2-001` | Pentru centre de limbi străine | pending | orchestrator | [specs/M2-001-limbi.md](specs/M2-001-limbi.md) |
+| 2 | `M2-002` | Pentru școli de programare & IT | pending | orchestrator | [specs/M2-002-programare.md](specs/M2-002-programare.md) |
+| 3 | `M2-003` | Pentru școli de muzică | pending | orchestrator | [specs/M2-003-muzica.md](specs/M2-003-muzica.md) |
+| 4 | `M2-004` | Pentru pregătire examene | pending | orchestrator | [specs/M2-004-examene.md](specs/M2-004-examene.md) |
 
 ## Next milestone: M3 — Tools & calculators
 
