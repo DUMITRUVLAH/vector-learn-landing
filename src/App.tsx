@@ -25,6 +25,7 @@ import { IntegrariPage } from "./pages/modules/IntegrariPage";
 import { AIPage } from "./pages/modules/AIPage";
 import { LimbiPage } from "./pages/audiences/LimbiPage";
 import { ProgramarePage } from "./pages/audiences/ProgramarePage";
+import { MuzicaPage } from "./pages/audiences/MuzicaPage";
 
 function HomePage() {
   return (
@@ -63,6 +64,7 @@ function Routes() {
   if (path.startsWith("/modules/ai")) return <AIPage />;
   if (path.startsWith("/pentru/limbi")) return <LimbiPage />;
   if (path.startsWith("/pentru/programare")) return <ProgramarePage />;
+  if (path.startsWith("/pentru/muzica")) return <MuzicaPage />;
   return <HomePage />;
 }
 
