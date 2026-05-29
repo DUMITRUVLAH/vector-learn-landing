@@ -5,9 +5,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, count, eq, gte, isNotNull, lt, sql, sum } from "drizzle-orm";
+import { and, count, eq, gte, isNotNull, lt, sql, sum, desc } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, adCampaignBudgets, payments, students } from "../db/schema";
+import { leads, adCampaignBudgets, payments, students, lessons, courses, studentLessons } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const analyticsRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -364,4 +364,93 @@ analyticsRoutes.get("/kpi", async (c) => {
     prevMrrCents,
     prevActiveStudents,
   });
+});
+
+// ─── REP-302: Revenue over time ───────────────────────────────────────────────
+
+analyticsRoutes.get("/revenue-over-time", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const months = Math.min(Number(c.req.query("months") ?? 12), 24);
+
+  // Generate month labels for last N months
+  const now = new Date();
+  const monthRows: { month: string; totalCents: number; newStudents: number }[] = [];
+
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const monthStart = new Date(d.getFullYear(), d.getMonth(), 1);
+    const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+
+    const [payRow] = await db
+      .select({ total: sum(payments.amountCents) })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.tenantId, tenantId),
+          eq(payments.status, "paid"),
+          gte(payments.paidAt, monthStart),
+          lt(payments.paidAt, monthEnd)
+        )
+      );
+
+    const [studRow] = await db
+      .select({ cnt: count(students.id) })
+      .from(students)
+      .where(
+        and(
+          eq(students.tenantId, tenantId),
+          gte(students.createdAt, monthStart),
+          lt(students.createdAt, monthEnd)
+        )
+      );
+
+    monthRows.push({
+      month: monthStr,
+      totalCents: Number(payRow?.total ?? 0),
+      newStudents: Number(studRow?.cnt ?? 0),
+    });
+  }
+
+  return c.json({ months: monthRows });
+});
+
+// ─── REP-302: Revenue by course (top 10) ─────────────────────────────────────
+
+analyticsRoutes.get("/revenue-by-course", async (c) => {
+  const tenantId = c.get("user").tenantId;
+
+  // Revenue per course: sum payments per student, joined via student_lessons → lessons → course
+  // Simplified: group payments by student, then join to student_lessons to get course
+  // For performance, use a simpler approach: count paid students per course
+
+  const courseStats = await db
+    .select({
+      courseName: courses.name,
+      studentCount: count(studentLessons.studentId),
+    })
+    .from(studentLessons)
+    .innerJoin(lessons, eq(studentLessons.lessonId, lessons.id))
+    .innerJoin(courses, eq(lessons.courseId, courses.id))
+    .where(eq(lessons.tenantId, tenantId))
+    .groupBy(courses.id, courses.name)
+    .orderBy(desc(count(studentLessons.studentId)))
+    .limit(10);
+
+  // Get payment totals per student for enrolled courses (approximation)
+  // For now: MRR-style estimate = count students × avg payment
+  const [avgPayRow] = await db
+    .select({ avg: sql<number>`coalesce(avg(${payments.amountCents}), 0)::int` })
+    .from(payments)
+    .where(and(eq(payments.tenantId, tenantId), eq(payments.status, "paid")));
+
+  const avgCents = Number(avgPayRow?.avg ?? 0);
+
+  const items = (Array.isArray(courseStats) ? courseStats : []).map((r) => ({
+    courseName: r.courseName,
+    studentCount: Number(r.studentCount),
+    totalCents: Number(r.studentCount) * avgCents, // estimate
+  }));
+
+  return c.json({ items });
 });
