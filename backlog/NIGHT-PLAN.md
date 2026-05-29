@@ -41,3 +41,4 @@ Each module → 3–5 items. Source of behavior: the matching `backlog/user-stor
 - HR-401 done → PR #53 (calcul salariu lunar payroll_entries + UI breakdown)
 - HR-402 done → PR #54 (stats profesor: ore, prezență, venituri)
 - HR-403 done → PR #55 (disponibilitate profesor: grid 7×16h + drag-to-mark)
+- HR-404 done → PR #56 (audit log HR: rate/payroll changes + UI + CSV export)
