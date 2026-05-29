@@ -4,8 +4,8 @@
   "last_completed": "MVP-008",
   "iterations": 25,
   "last_run_at": "2026-05-29T08:30:00Z",
-  "milestone_status": "M1+M2+M3 landing + MVP-001..008 complete: full SaaS deployable, 5 modules CRUD live, Docker production-ready.",
-  "active_milestone": "MVP",
+  "milestone_status": "M1+M2+M3 landing + MVP-001..008 complete. CRM is now the CORE milestone: 12 items CRM-101..112 across 5 phases (see backlog/crm/). Build one item at a time per backlog/crm/BUILD-SEQUENCE.md; tests must pass before moving on.",
+  "active_milestone": "CRM",
   "items": {
     "M1-001": {
       "status": "done",
@@ -245,6 +245,18 @@
       "blockers": [],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/25",
       "branch": "feat/MVP-008-deploy"
-    }
+    },
+    "CRM-101": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-101-intake-web.md", "phase": "A", "depends_on": ["MVP-009"] },
+    "CRM-102": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-102-dedup-merge.md", "phase": "A", "depends_on": ["CRM-101"] },
+    "CRM-103": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-103-manual-import.md", "phase": "A", "depends_on": ["CRM-102"] },
+    "CRM-104": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-104-ads-webhooks.md", "phase": "A", "depends_on": ["CRM-101"] },
+    "CRM-105": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-105-pipeline.md", "phase": "B", "depends_on": [] },
+    "CRM-106": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-106-lead-card.md", "phase": "B", "depends_on": ["CRM-105"] },
+    "CRM-107": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-107-tasks-files.md", "phase": "B", "depends_on": ["CRM-106"] },
+    "CRM-108": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-108-templates.md", "phase": "C", "depends_on": ["CRM-106"] },
+    "CRM-109": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-109-comms.md", "phase": "C", "depends_on": ["CRM-108"] },
+    "CRM-110": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-110-automation.md", "phase": "D", "depends_on": ["CRM-109"] },
+    "CRM-111": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-111-convert-family.md", "phase": "E", "depends_on": ["CRM-106"] },
+    "CRM-112": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-112-analytics.md", "phase": "E", "depends_on": ["CRM-111"] }
   }
 }
