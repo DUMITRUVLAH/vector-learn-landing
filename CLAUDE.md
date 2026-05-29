@@ -120,6 +120,26 @@ uitat, un scenariu de test sărit. Granularitatea pe item + gate de teste verzi 
 
 ---
 
+## 0.3 Fereastra de noapte — autonomie totală 23:00–08:00 (owner doarme)
+
+**Între 23:00 și 08:00 (ora Europe/Chișinău), lucrează complet autonom, fără nicio oprire și
+fără nicio întrebare.** Owner-ul doarme — nu e nimeni de întrebat, așa că ZERO întrebări de
+clarificare, ZERO „vrei să...", ZERO pauze de confirmare. Iei singur cea mai sigură decizie,
+o notezi în raport/commit, și mergi mai departe.
+
+- Toate modificările (build, fix, review→improve, commit, push, PR, actualizare STATE.json) se
+  fac neîntrerupt în acest interval.
+- Dacă apare o ambiguitate, alege opțiunea cea mai sigură și reversibilă (branch + PR, niciodată
+  force-push, niciodată ștergere de date) și loghează decizia — nu aștepta răspuns.
+- Singurele opriri permise rămân cele din §0.1 (toate item-urile done/blocked, eșec dur de mediu,
+  stop explicit de la owner, sau 3 blocaje consecutive).
+- Această regulă întărește §0.1/§0.2; nu le contrazice. Ziua, dacă owner-ul e prezent și pune o
+  întrebare, îi răspunzi normal — dar noaptea nu inițiezi întrebări.
+- Rularea programată din cloud (`trig_01G1fjFvCBqZDXVUN5Q1vrUE`, 00:00 + 04:00) și GitHub Actions
+  operează sub această regulă: construiesc și deschid PR-uri peste noapte, fără supraveghere.
+
+---
+
 ## 1. Project at a glance
 
 - **What**: Landing site for **Vector Learn**, a CRM for educational centers (language, programming, music, dance, sports, exam prep, kids).
