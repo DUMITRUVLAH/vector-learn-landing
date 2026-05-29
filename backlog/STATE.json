@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "active_milestone": "M2",
+  "active_milestone": "M3",
   "current_item": null,
   "last_completed": "M2-004",
   "iterations": 14,
@@ -168,6 +168,9 @@
       "blockers": [],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/14",
       "branch": "feat/M2-004-examene"
-    }
+    },
+    "M3-001": { "status": "pending", "attempts": 0, "blockers": [] },
+    "M3-002": { "status": "pending", "attempts": 0, "blockers": [] },
+    "M3-003": { "status": "pending", "attempts": 0, "blockers": [] }
   }
 }

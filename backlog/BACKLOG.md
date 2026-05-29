@@ -41,11 +41,15 @@ Pages tailored per persona at `/pentru/<slug>`. Each reuses shared shells from M
 
 **🎉 M2 milestone: 4/4 done.**
 
-## Next milestone: M3 — Tools & calculators
+## Active milestone: M3 — Tools & calculators
 
-- ROI calculator
-- Migration cost estimator
-- Interactive pricing configurator
+Interactive tools that help prospects self-qualify and feel confident before booking a demo.
+
+| # | ID | Title | Status | Owner | Spec |
+|---|----|-------|--------|-------|------|
+| 1 | `M3-001` | ROI Calculator interactiv | pending | orchestrator | [specs/M3-001-roi.md](specs/M3-001-roi.md) |
+| 2 | `M3-002` | Migration Cost Estimator | pending | orchestrator | [specs/M3-002-migrare.md](specs/M3-002-migrare.md) |
+| 3 | `M3-003` | Pricing Configurator | pending | orchestrator | [specs/M3-003-pricing.md](specs/M3-003-pricing.md) |
 
 ## Quality gates (required before status → `done`)
 
