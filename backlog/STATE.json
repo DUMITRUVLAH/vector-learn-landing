@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "COMM-202",
-  "last_completed": "COMM-201",
-  "iterations": 41,
+  "current_item": "COMM-203",
+  "last_completed": "COMM-202",
+  "iterations": 42,
   "last_run_at": "2026-05-29T08:30:00Z",
   "milestone_status": "M1+M2+M3 landing + MVP-001..008 complete. CRM is now the CORE milestone: 12 items CRM-101..112 across 5 phases (see backlog/crm/). Build one item at a time per backlog/crm/BUILD-SEQUENCE.md; tests must pass before moving on.",
   "active_milestone": "COMM",
@@ -529,17 +529,20 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "COMM-202": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/COMM-202-message-log.md",
       "milestone": "COMM",
       "phase": "2",
-      "depends_on": ["COMM-201"]
+      "depends_on": ["COMM-201"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/45",
+      "branch": "feat/COMM-202-message-log",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "COMM-203": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/COMM-203-inbox.md",
       "milestone": "COMM",
