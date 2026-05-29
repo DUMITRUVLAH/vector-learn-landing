@@ -51,6 +51,14 @@
     --pastel-lemon: 50 90% 92%;
     --pastel-teal: 175 60% 90%;
 
+    --pastel-mint-fg: 158 40% 28%;
+    --pastel-lavender-fg: 250 40% 38%;
+    --pastel-peach-fg: 20 50% 34%;
+    --pastel-sky-fg: 200 60% 30%;
+    --pastel-rose-fg: 340 50% 38%;
+    --pastel-lemon-fg: 38 70% 32%;
+    --pastel-teal-fg: 175 50% 26%;
+
     --gradient-primary: linear-gradient(135deg, hsl(228, 76%, 52%), hsl(228, 76%, 42%));
     --gradient-hero: linear-gradient(135deg, hsl(228, 76%, 52%), hsl(250, 76%, 52%));
     --gradient-card: linear-gradient(180deg, hsl(0, 0%, 100%), hsl(220, 20%, 97%));
@@ -89,6 +97,14 @@
     --pastel-rose: 340 30% 18%;
     --pastel-lemon: 50 30% 18%;
     --pastel-teal: 175 30% 18%;
+
+    --pastel-mint-fg: 158 50% 75%;
+    --pastel-lavender-fg: 250 50% 80%;
+    --pastel-peach-fg: 20 60% 78%;
+    --pastel-sky-fg: 200 60% 78%;
+    --pastel-rose-fg: 340 60% 80%;
+    --pastel-lemon-fg: 50 70% 78%;
+    --pastel-teal-fg: 175 50% 75%;
   }
 }
 
@@ -133,6 +149,14 @@
   .pastel-rose { background-color: hsl(var(--pastel-rose)); }
   .pastel-lemon { background-color: hsl(var(--pastel-lemon)); }
   .pastel-teal { background-color: hsl(var(--pastel-teal)); }
+
+  .text-pastel-mint-fg { color: hsl(var(--pastel-mint-fg)); }
+  .text-pastel-lavender-fg { color: hsl(var(--pastel-lavender-fg)); }
+  .text-pastel-peach-fg { color: hsl(var(--pastel-peach-fg)); }
+  .text-pastel-sky-fg { color: hsl(var(--pastel-sky-fg)); }
+  .text-pastel-rose-fg { color: hsl(var(--pastel-rose-fg)); }
+  .text-pastel-lemon-fg { color: hsl(var(--pastel-lemon-fg)); }
+  .text-pastel-teal-fg { color: hsl(var(--pastel-teal-fg)); }
 
   .grid-pattern {
     background-image:

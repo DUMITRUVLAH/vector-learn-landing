@@ -34,10 +34,12 @@ Pages tailored per persona at `/pentru/<slug>`. Each reuses shared shells from M
 
 | # | ID | Title | Status | Owner | Spec |
 |---|----|-------|--------|-------|------|
-| 1 | `M2-001` | Pentru centre de limbi străine | pending | orchestrator | [specs/M2-001-limbi.md](specs/M2-001-limbi.md) |
-| 2 | `M2-002` | Pentru școli de programare & IT | pending | orchestrator | [specs/M2-002-programare.md](specs/M2-002-programare.md) |
-| 3 | `M2-003` | Pentru școli de muzică | pending | orchestrator | [specs/M2-003-muzica.md](specs/M2-003-muzica.md) |
-| 4 | `M2-004` | Pentru pregătire examene | pending | orchestrator | [specs/M2-004-examene.md](specs/M2-004-examene.md) |
+| 1 | `M2-001` | Pentru centre de limbi străine | done ✅ | orchestrator | [specs/M2-001-limbi.md](specs/M2-001-limbi.md) · [PR #11](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/11) |
+| 2 | `M2-002` | Pentru școli de programare & IT | done ✅ | orchestrator | [specs/M2-002-programare.md](specs/M2-002-programare.md) · [PR #12](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/12) |
+| 3 | `M2-003` | Pentru școli de muzică | done ✅ | orchestrator | [specs/M2-003-muzica.md](specs/M2-003-muzica.md) · [PR #13](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/13) |
+| 4 | `M2-004` | Pentru pregătire examene | done ✅ | orchestrator | [specs/M2-004-examene.md](specs/M2-004-examene.md) · [PR #14](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/14) |
+
+**🎉 M2 milestone: 4/4 done.**
 
 ## Next milestone: M3 — Tools & calculators
 

@@ -2,10 +2,10 @@
   "version": 1,
   "active_milestone": "M2",
   "current_item": null,
-  "last_completed": "M1-010",
-  "iterations": 10,
-  "last_run_at": "2026-05-29T01:32:00Z",
-  "milestone_status": "M1 complete (10/10)",
+  "last_completed": "M2-004",
+  "iterations": 14,
+  "last_run_at": "2026-05-29T07:25:00Z",
+  "milestone_status": "M1 complete (10/10) + M2 complete (4/4) + nav fix",
   "items": {
     "M1-001": {
       "status": "done",
@@ -141,9 +141,33 @@
       ],
       "verdicts": { "reviewer": "APPROVED", "manager": "MATCH", "student": "DISLIKES/NEUTRAL" }
     },
-    "M2-001": { "status": "pending", "attempts": 0, "blockers": [] },
-    "M2-002": { "status": "pending", "attempts": 0, "blockers": [] },
-    "M2-003": { "status": "pending", "attempts": 0, "blockers": [] },
-    "M2-004": { "status": "pending", "attempts": 0, "blockers": [] }
+    "M2-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/11",
+      "branch": "feat/M2-001-limbi"
+    },
+    "M2-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/12",
+      "branch": "feat/M2-002-programare"
+    },
+    "M2-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/13",
+      "branch": "feat/M2-003-muzica"
+    },
+    "M2-004": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/14",
+      "branch": "feat/M2-004-examene"
+    }
   }
 }

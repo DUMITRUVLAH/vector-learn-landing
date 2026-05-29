@@ -14,6 +14,7 @@ const spotlights = [
     ],
     icon: Calendar,
     cta: "Vezi cum funcționează orarul",
+    ctaHref: "#/modules/orar",
     visual: "schedule",
   },
   {
@@ -29,6 +30,7 @@ const spotlights = [
     ],
     icon: CreditCard,
     cta: "Calculează ROI-ul financiar",
+    ctaHref: "#/modules/finante",
     visual: "finance",
   },
   {
@@ -44,6 +46,7 @@ const spotlights = [
     ],
     icon: TrendingUp,
     cta: "Vezi cum crește conversia",
+    ctaHref: "#/modules/crm",
     visual: "crm",
   },
   {
@@ -110,7 +113,7 @@ export function ModuleSpotlight() {
                     ))}
                   </ul>
                   <a
-                    href="#demo"
+                    href={spot.ctaHref ?? "#demo"}
                     className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
                   >
                     {spot.cta} →
