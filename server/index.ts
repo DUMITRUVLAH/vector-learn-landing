@@ -8,6 +8,9 @@ import { db } from "./db/client";
 import { tenants, users, students, lessons } from "./db/schema";
 import { authRoutes } from "./routes/auth";
 import { studentRoutes } from "./routes/students";
+import { teacherRoutes } from "./routes/teachers";
+import { courseRoutes } from "./routes/courses";
+import { lessonRoutes } from "./routes/lessons";
 
 const app = new Hono();
 
@@ -22,6 +25,9 @@ app.use(
 
 app.route("/api/auth", authRoutes);
 app.route("/api/students", studentRoutes);
+app.route("/api/teachers", teacherRoutes);
+app.route("/api/courses", courseRoutes);
+app.route("/api/lessons", lessonRoutes);
 
 app.get("/api/health", async (c) => {
   try {
