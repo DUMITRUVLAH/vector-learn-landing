@@ -39,3 +39,4 @@ Each module → 3–5 items. Source of behavior: the matching `backlog/user-stor
 - COMM-201..205 done (PRs #44..48) — Comunicare module
 - REP-301..304 done (PRs #49..52) — Rapoarte module
 - HR-401 done → PR #53 (calcul salariu lunar payroll_entries + UI breakdown)
+- HR-402 done → PR #54 (stats profesor: ore, prezență, venituri)
