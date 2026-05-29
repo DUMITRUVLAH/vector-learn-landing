@@ -1,10 +1,14 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, gte, lt, ne, or, sql } from "drizzle-orm";
+import { and, eq, gte, lt, ne, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { lessons, courses, teachers, users } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { NotificationService } from "../services/notifications";
+
+/** COMM-205: singleton notification service for lesson reschedule triggers */
+const notificationService = new NotificationService(db);
 
 const createLessonSchema = z.object({
   courseId: z.string().uuid(),
@@ -160,6 +164,30 @@ lessonRoutes.patch("/:id", zValidator("json", updateLessonSchema), async (c) => 
     .set(patch)
     .where(and(eq(lessons.id, id), eq(lessons.tenantId, tenantId)))
     .returning();
+
+  // COMM-205: if scheduledAt changed → queue notification for students
+  if (body.scheduledAt && existing.scheduledAt.toISOString() !== new Date(body.scheduledAt).toISOString()) {
+    // Best-effort: fire and forget (don't block response)
+    const { studentLessons } = await import("../db/schema");
+    db.select({ studentId: studentLessons.studentId })
+      .from(studentLessons)
+      .where(eq(studentLessons.lessonId, id))
+      .then(async (rows) => {
+        for (const row of rows) {
+          const newTime = new Date(body.scheduledAt!).toLocaleString("ro-RO", { timeZone: "Europe/Bucharest" });
+          await notificationService.queueNotification({
+            tenantId,
+            recipientType: "student",
+            recipientId: row.studentId,
+            channel: "sms",
+            payload: {
+              body: `Lecția dvs. a fost mutată la ${newTime}. Vă rugăm să confirmați prezența.`,
+            },
+          }).catch(() => { /* silent — notification failure shouldn't break response */ });
+        }
+      }).catch(() => { /* silent */ });
+  }
+
   return c.json(updated);
 });
 
