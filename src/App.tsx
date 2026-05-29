@@ -28,6 +28,7 @@ import { ProgramarePage } from "./pages/audiences/ProgramarePage";
 import { MuzicaPage } from "./pages/audiences/MuzicaPage";
 import { ExamenePage } from "./pages/audiences/ExamenePage";
 import { ROICalculatorPage } from "./pages/tools/ROICalculatorPage";
+import { MigrationEstimatorPage } from "./pages/tools/MigrationEstimatorPage";
 
 function HomePage() {
   return (
@@ -69,6 +70,7 @@ function Routes() {
   if (path.startsWith("/pentru/muzica")) return <MuzicaPage />;
   if (path.startsWith("/pentru/examene")) return <ExamenePage />;
   if (path.startsWith("/calculator/roi")) return <ROICalculatorPage />;
+  if (path.startsWith("/calculator/migrare")) return <MigrationEstimatorPage />;
   return <HomePage />;
 }
 
