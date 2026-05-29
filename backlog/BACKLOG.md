@@ -47,9 +47,11 @@ Interactive tools that help prospects self-qualify and feel confident before boo
 
 | # | ID | Title | Status | Owner | Spec |
 |---|----|-------|--------|-------|------|
-| 1 | `M3-001` | ROI Calculator interactiv | pending | orchestrator | [specs/M3-001-roi.md](specs/M3-001-roi.md) |
-| 2 | `M3-002` | Migration Cost Estimator | pending | orchestrator | [specs/M3-002-migrare.md](specs/M3-002-migrare.md) |
-| 3 | `M3-003` | Pricing Configurator | pending | orchestrator | [specs/M3-003-pricing.md](specs/M3-003-pricing.md) |
+| 1 | `M3-001` | ROI Calculator interactiv | done ✅ | orchestrator | [specs/M3-001-roi.md](specs/M3-001-roi.md) · [PR #15](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/15) |
+| 2 | `M3-002` | Migration Cost Estimator | done ✅ | orchestrator | [specs/M3-002-migrare.md](specs/M3-002-migrare.md) · [PR #16](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/16) |
+| 3 | `M3-003` | Pricing Configurator | done ✅ | orchestrator | [specs/M3-003-pricing.md](specs/M3-003-pricing.md) · [PR #17](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/17) |
+
+**🎉 M3 milestone: 3/3 done. M1+M2+M3 all complete (17 PRs).**
 
 ## Quality gates (required before status → `done`)
 

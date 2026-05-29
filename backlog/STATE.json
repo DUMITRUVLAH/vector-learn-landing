@@ -2,10 +2,10 @@
   "version": 1,
   "active_milestone": "M3",
   "current_item": null,
-  "last_completed": "M2-004",
-  "iterations": 14,
-  "last_run_at": "2026-05-29T07:25:00Z",
-  "milestone_status": "M1 complete (10/10) + M2 complete (4/4) + nav fix",
+  "last_completed": "M3-003",
+  "iterations": 17,
+  "last_run_at": "2026-05-29T07:35:00Z",
+  "milestone_status": "M1 (10/10) + M2 (4/4) + M3 (3/3) complete",
   "items": {
     "M1-001": {
       "status": "done",
@@ -169,8 +169,26 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/14",
       "branch": "feat/M2-004-examene"
     },
-    "M3-001": { "status": "pending", "attempts": 0, "blockers": [] },
-    "M3-002": { "status": "pending", "attempts": 0, "blockers": [] },
-    "M3-003": { "status": "pending", "attempts": 0, "blockers": [] }
+    "M3-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/15",
+      "branch": "feat/M3-001-roi"
+    },
+    "M3-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/16",
+      "branch": "feat/M3-002-migrare"
+    },
+    "M3-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/17",
+      "branch": "feat/M3-003-pricing"
+    }
   }
 }
