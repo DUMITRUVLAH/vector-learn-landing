@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, students, tenants } from "../db/schema";
+import { leads, leadInteractions, students, tenants, pipelineStages } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 
@@ -30,6 +30,7 @@ const createLeadSchema = z.object({
   utmMedium: z.string().max(100).optional().nullable(),
   utmCampaign: z.string().max(100).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
+  assignedTo: z.string().uuid().optional().nullable(),
 });
 
 const updateLeadSchema = z.object({
@@ -38,10 +39,12 @@ const updateLeadSchema = z.object({
   email: z.string().email().max(255).optional().nullable().or(z.literal("")),
   interestCourse: z.string().max(200).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
+  assignedTo: z.string().uuid().optional().nullable(),
 });
 
 const stageChangeSchema = z.object({
-  stage: z.enum(STAGES),
+  // Accept any string stage key (validates against pipeline_stages at runtime)
+  stage: z.string().min(1).max(64),
   lostReason: z.string().max(500).optional().nullable(),
 });
 
@@ -151,10 +154,46 @@ leadRoutes.post("/intake", zValidator("json", publicIntakeSchema), async (c) => 
   return c.json({ leadId: created.id, isDuplicate: false });
 });
 
+// Public dedup check (used by manual add form on blur)
+leadRoutes.post("/check-duplicate", async (c) => {
+  // This endpoint requires auth since it reveals internal data
+  return c.json({ error: "use_authenticated_version" }, 400);
+});
+
 // Authenticated routes from here
 leadRoutes.use("/*", async (c, next) => {
   if (c.req.path.endsWith("/intake")) return next();
   return requireAuth(c, next);
+});
+
+const dedupCheckSchema = z.object({
+  phone: z.string().optional(),
+  email: z.string().optional(),
+});
+
+leadRoutes.post("/dedup-check", zValidator("json", dedupCheckSchema), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const { phone, email } = c.req.valid("json");
+
+  const phoneNormalized = normalizePhone(phone ?? null);
+  const emailNormalized = normalizeEmail(email ?? null);
+
+  if (!phoneNormalized && !emailNormalized) {
+    return c.json({ duplicate: null });
+  }
+
+  const conditions = [eq(leads.tenantId, tenantId)];
+  const orConds = [];
+  if (phoneNormalized) orConds.push(eq(leads.phoneNormalized, phoneNormalized));
+  if (emailNormalized) orConds.push(eq(leads.emailNormalized, emailNormalized));
+  if (orConds.length > 0) conditions.push(or(...orConds)!);
+
+  const existing = await db.query.leads.findFirst({
+    where: and(...conditions),
+  });
+
+  if (!existing) return c.json({ duplicate: null });
+  return c.json({ duplicate: { id: existing.id, fullName: existing.fullName, stage: existing.stage } });
 });
 
 leadRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
@@ -232,6 +271,7 @@ leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
       utmMedium: (body.utmMedium as string | null) ?? null,
       utmCampaign: (body.utmCampaign as string | null) ?? null,
       notes: (body.notes as string | null) ?? null,
+      assignedTo: (body.assignedTo as string | null) ?? null,
     })
     .returning();
 
@@ -287,11 +327,26 @@ leadRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async (c) 
   });
   if (!lead) return c.json({ error: "not_found" }, 404);
 
+  // Validate stage key against pipeline_stages (supports custom stages)
+  const targetStage = await db.query.pipelineStages.findFirst({
+    where: and(eq(pipelineStages.tenantId, tenantId), eq(pipelineStages.key, stage)),
+  });
+  // If pipeline_stages has no rows yet (first use), allow the 5 default stage keys
+  const DEFAULT_KEYS = ["new", "contacted", "trial", "paid", "lost"];
+  if (!targetStage && !DEFAULT_KEYS.includes(stage)) {
+    return c.json({ error: "invalid_stage" }, 400);
+  }
+
+  const isLostStage = targetStage?.isLost ?? stage === "lost";
+  if (isLostStage && !lostReason) {
+    return c.json({ error: "lost_reason_required" }, 400);
+  }
+
   const patch: Record<string, unknown> = {
     stage,
     updatedAt: new Date(),
   };
-  if (stage === "lost") patch.lostReason = lostReason ?? null;
+  if (isLostStage) patch.lostReason = lostReason ?? null;
 
   const [updated] = await db
     .update(leads)
@@ -304,7 +359,7 @@ leadRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async (c) 
     leadId: id,
     type: "stage_change",
     direction: "internal",
-    body: `Stage: ${lead.stage} → ${stage}${stage === "lost" && lostReason ? ` (reason: ${lostReason})` : ""}`,
+    body: `Stage: ${lead.stage} → ${stage}${isLostStage && lostReason ? ` (reason: ${lostReason})` : ""}`,
     userId,
   });
 

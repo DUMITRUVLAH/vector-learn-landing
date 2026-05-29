@@ -18,17 +18,22 @@ export interface Lead {
   phone: string | null;
   email: string | null;
   interestCourse: string | null;
-  stage: LeadStage;
+  stage: string;  // string to support custom pipeline stage keys
   source: LeadSource;
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
   notes: string | null;
+  assignedTo: string | null;
   convertedToStudentId: string | null;
   convertedAt: string | null;
   lostReason: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DedupResult {
+  duplicate: { id: string; fullName: string; stage: string } | null;
 }
 
 export interface LeadInteraction {
@@ -42,8 +47,8 @@ export interface LeadInteraction {
 }
 
 export interface PipelineResponse {
-  grouped: Record<LeadStage, Lead[]>;
-  counts: Record<LeadStage, number>;
+  grouped: Record<string, Lead[]>;
+  counts: Record<string, number>;
 }
 
 export function fetchPipeline(): Promise<PipelineResponse> {
@@ -65,6 +70,7 @@ export function createLead(input: {
   interestCourse?: string | null;
   source?: LeadSource;
   notes?: string | null;
+  assignedTo?: string | null;
 }): Promise<Lead> {
   return api<Lead>("/api/leads", {
     method: "POST",
@@ -74,12 +80,22 @@ export function createLead(input: {
 
 export function moveLeadStage(
   id: string,
-  stage: LeadStage,
+  stage: string,  // string to support custom pipeline stage keys
   lostReason?: string
 ): Promise<Lead> {
   return api<Lead>(`/api/leads/${id}/stage`, {
     method: "PATCH",
     body: JSON.stringify({ stage, lostReason: lostReason ?? null }),
+  });
+}
+
+export function checkDuplicate(input: {
+  phone?: string;
+  email?: string;
+}): Promise<DedupResult> {
+  return api<DedupResult>("/api/leads/dedup-check", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 

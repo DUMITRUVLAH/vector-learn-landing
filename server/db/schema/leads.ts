@@ -49,6 +49,7 @@ export const leads = pgTable(
     notes: varchar("notes", { length: 2000 }),
     convertedToStudentId: uuid("converted_to_student_id").references(() => students.id, { onDelete: "set null" }),
     convertedAt: timestamp("converted_at", { withTimezone: true }),
+    assignedTo: uuid("assigned_to").references(() => users.id, { onDelete: "set null" }),
     lostReason: varchar("lost_reason", { length: 500 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
