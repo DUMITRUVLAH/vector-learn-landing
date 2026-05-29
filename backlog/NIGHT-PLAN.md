@@ -39,3 +39,4 @@ Each module → 3–5 items. Source of behavior: the matching `backlog/user-stor
 - COMM-201 done → PR #44 (infra providers + messages table + MessagingService + consent check)
 - COMM-202 done → PR #45 (tab Comunicare în lead card + ComposeMessageModal + template fill)
 - COMM-203 done → PR #46 (inbox unificat + threads API + filter canal + reply)
+- COMM-204 done → PR #47 (broadcast cu segmentare + preview count + consent skip)
