@@ -64,3 +64,22 @@ export function setBudget(input: {
     body: JSON.stringify(input),
   });
 }
+
+// ─── REP-301: KPI Dashboard ───────────────────────────────────────────────────
+
+export type KpiPeriod = "7d" | "30d" | "90d" | "12m";
+
+export interface KpiData {
+  period: KpiPeriod;
+  mrrCents: number;
+  activeStudents: number;
+  newStudents: number;
+  churnRatePct: number;
+  arpuCents: number;
+  prevMrrCents: number;
+  prevActiveStudents: number;
+}
+
+export function getKpi(period: KpiPeriod = "30d"): Promise<KpiData> {
+  return api<KpiData>(`/api/analytics/kpi?period=${period}`);
+}

@@ -1,16 +1,13 @@
 /**
- * CRM-112 — Analytics endpoints
- * GET /api/analytics/crm/funnel — conversion funnel
- * GET /api/analytics/crm/lost-reasons — lost reason aggregation
- * GET /api/analytics/crm/roas — ROAS per campaign
- * POST /api/analytics/crm/budgets — set ad spend per campaign+month
+ * CRM-112 — Analytics endpoints (CRM funnel, lost-reasons, ROAS)
+ * REP-301 — KPI dashboard (MRR, active students, churn, ARPU + period toggle)
  */
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, count, eq, isNotNull, sql, sum } from "drizzle-orm";
+import { and, count, eq, gte, isNotNull, lt, sql, sum } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, adCampaignBudgets } from "../db/schema";
+import { leads, adCampaignBudgets, payments, students } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const analyticsRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -256,4 +253,115 @@ analyticsRoutes.post("/crm/budgets", zValidator("json", setBudgetSchema), async 
     .returning();
 
   return c.json(created, 201);
+});
+
+// ─── REP-301: KPI Dashboard ───────────────────────────────────────────────────
+
+/** Parse period string (7d, 30d, 90d, 12m) → days */
+function periodToDays(period: string): number {
+  if (period === "7d") return 7;
+  if (period === "30d") return 30;
+  if (period === "90d") return 90;
+  if (period === "12m") return 365;
+  return 30; // default
+}
+
+analyticsRoutes.get("/kpi", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const period = c.req.query("period") ?? "30d";
+  const days = periodToDays(period);
+
+  const now = new Date();
+  const periodStart = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  const prevPeriodStart = new Date(periodStart.getTime() - days * 24 * 60 * 60 * 1000);
+
+  // ── MRR: sum of paid payments in period ──
+  const [mrrRow] = await db
+    .select({ total: sum(payments.amountCents) })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.tenantId, tenantId),
+        eq(payments.status, "paid"),
+        gte(payments.paidAt, periodStart)
+      )
+    );
+  const mrrCents = Number(mrrRow?.total ?? 0);
+
+  // Previous period MRR
+  const [prevMrrRow] = await db
+    .select({ total: sum(payments.amountCents) })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.tenantId, tenantId),
+        eq(payments.status, "paid"),
+        gte(payments.paidAt, prevPeriodStart),
+        lt(payments.paidAt, periodStart)
+      )
+    );
+  const prevMrrCents = Number(prevMrrRow?.total ?? 0);
+
+  // ── Active students ──
+  const [activeRow] = await db
+    .select({ cnt: count(students.id) })
+    .from(students)
+    .where(and(eq(students.tenantId, tenantId), eq(students.status, "active")));
+  const activeStudents = Number(activeRow?.cnt ?? 0);
+
+  // Previous active (for delta — approximation: active count at period start)
+  const [prevActiveRow] = await db
+    .select({ cnt: count(students.id) })
+    .from(students)
+    .where(
+      and(
+        eq(students.tenantId, tenantId),
+        eq(students.status, "active"),
+        lt(students.createdAt, periodStart) // existed before period
+      )
+    );
+  const prevActiveStudents = Number(prevActiveRow?.cnt ?? 0);
+
+  // ── New students in period ──
+  const [newRow] = await db
+    .select({ cnt: count(students.id) })
+    .from(students)
+    .where(
+      and(
+        eq(students.tenantId, tenantId),
+        gte(students.createdAt, periodStart)
+      )
+    );
+  const newStudents = Number(newRow?.cnt ?? 0);
+
+  // ── Churn rate: archived/paused students in period ──
+  const [churnRow] = await db
+    .select({ cnt: count(students.id) })
+    .from(students)
+    .where(
+      and(
+        eq(students.tenantId, tenantId),
+        sql`${students.status} IN ('archived', 'paused')`,
+        gte(students.updatedAt, periodStart)
+      )
+    );
+  const churnedStudents = Number(churnRow?.cnt ?? 0);
+  const startCount = prevActiveStudents + newStudents;
+  const churnRatePct = startCount > 0
+    ? Math.round((churnedStudents / startCount) * 1000) / 10
+    : 0;
+
+  // ── ARPU ──
+  const arpuCents = activeStudents > 0 ? Math.round(mrrCents / activeStudents) : 0;
+
+  return c.json({
+    period,
+    mrrCents,
+    activeStudents,
+    newStudents,
+    churnRatePct,
+    arpuCents,
+    prevMrrCents,
+    prevActiveStudents,
+  });
 });
