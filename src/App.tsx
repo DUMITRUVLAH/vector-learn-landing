@@ -46,6 +46,7 @@ import { AnalyticsPage } from "./pages/app/AnalyticsPage";
 import { KpiDashboardPage } from "./pages/app/KpiDashboardPage";
 import { RevenueChartsPage } from "./pages/app/RevenueChartsPage";
 import { StudentRetentionPage } from "./pages/app/StudentRetentionPage";
+import { ExportPage } from "./pages/app/ExportPage";
 
 function HomePage() {
   return (
@@ -103,6 +104,7 @@ function Routes() {
   if (path.startsWith("/app/analytics/kpi")) return <KpiDashboardPage />;
   if (path.startsWith("/app/analytics/revenue")) return <RevenueChartsPage />;
   if (path.startsWith("/app/analytics/students")) return <StudentRetentionPage />;
+  if (path.startsWith("/app/analytics/export")) return <ExportPage />;
   if (path.startsWith("/app/analytics/crm")) return <AnalyticsPage />;
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;

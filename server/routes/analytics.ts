@@ -531,3 +531,119 @@ analyticsRoutes.get("/student-ltv", async (c) => {
 
   return c.json({ items: result });
 });
+
+// ─── REP-304: Export CSV ──────────────────────────────────────────────────────
+
+/** Escape a CSV field: wrap in quotes if it contains comma/newline/quote */
+function csvField(val: unknown): string {
+  const s = val == null ? "" : String(val);
+  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+function toCsv(headers: string[], rows: Record<string, unknown>[]): string {
+  const headerLine = headers.map(csvField).join(",");
+  const dataLines = rows.map((r) => headers.map((h) => csvField(r[h])).join(","));
+  return [headerLine, ...dataLines].join("\r\n");
+}
+
+// GET /api/analytics/export/payments?from=YYYY-MM-DD&to=YYYY-MM-DD
+analyticsRoutes.get("/export/payments", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+
+  const conditions = [
+    eq(payments.tenantId, tenantId),
+    eq(students.tenantId, tenantId),
+  ];
+  if (from) conditions.push(gte(payments.createdAt, new Date(from)));
+  if (to) conditions.push(lt(payments.createdAt, new Date(to)));
+
+  const rows = await db
+    .select({
+      id: payments.id,
+      student_name: students.fullName,
+      amount_cents: payments.amountCents,
+      currency: payments.currency,
+      status: payments.status,
+      due_date: payments.dueDate,
+      paid_at: payments.paidAt,
+      description: payments.description,
+      created_at: payments.createdAt,
+    })
+    .from(payments)
+    .innerJoin(students, eq(payments.studentId, students.id))
+    .where(and(...conditions))
+    .orderBy(desc(payments.createdAt))
+    .limit(5000);
+
+  const csvRows = rows.map((r) => ({
+    id: r.id,
+    student_name: r.student_name,
+    amount_cents: r.amount_cents,
+    amount_eur: (r.amount_cents / 100).toFixed(2),
+    currency: r.currency,
+    status: r.status,
+    due_date: r.due_date?.toISOString().slice(0, 10) ?? "",
+    paid_at: r.paid_at?.toISOString().slice(0, 10) ?? "",
+    description: r.description ?? "",
+    created_at: r.created_at.toISOString().slice(0, 10),
+  }));
+
+  const csv = toCsv(
+    ["id", "student_name", "amount_eur", "currency", "status", "due_date", "paid_at", "description", "created_at"],
+    csvRows
+  );
+
+  const today = new Date().toISOString().slice(0, 10);
+  c.header("Content-Type", "text/csv; charset=utf-8");
+  c.header("Content-Disposition", `attachment; filename="payments-${today}.csv"`);
+  return c.body(csv);
+});
+
+// GET /api/analytics/export/students
+analyticsRoutes.get("/export/students", async (c) => {
+  const tenantId = c.get("user").tenantId;
+
+  const rows = await db
+    .select({
+      id: students.id,
+      full_name: students.fullName,
+      status: students.status,
+      email: students.email,
+      phone: students.phone,
+      parent_email: students.parentEmail,
+      parent_phone: students.parentPhone,
+      birth_date: students.birthDate,
+      created_at: students.createdAt,
+    })
+    .from(students)
+    .where(eq(students.tenantId, tenantId))
+    .orderBy(students.fullName)
+    .limit(10000);
+
+  const csvRows = rows.map((r) => ({
+    id: r.id,
+    full_name: r.full_name,
+    status: r.status,
+    email: r.email ?? "",
+    phone: r.phone ?? "",
+    parent_email: r.parent_email ?? "",
+    parent_phone: r.parent_phone ?? "",
+    birth_date: r.birth_date ?? "",
+    created_at: r.created_at.toISOString().slice(0, 10),
+  }));
+
+  const csv = toCsv(
+    ["id", "full_name", "status", "email", "phone", "parent_email", "parent_phone", "birth_date", "created_at"],
+    csvRows
+  );
+
+  const today = new Date().toISOString().slice(0, 10);
+  c.header("Content-Type", "text/csv; charset=utf-8");
+  c.header("Content-Disposition", `attachment; filename="students-${today}.csv"`);
+  return c.body(csv);
+});
