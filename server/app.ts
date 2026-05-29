@@ -14,6 +14,7 @@ import { leadRoutes } from "./routes/leads";
 import { pipelineRoutes } from "./routes/pipeline";
 import { taskRoutes } from "./routes/tasks";
 import { templateRoutes } from "./routes/templates";
+import { automationRoutes } from "./routes/automations";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -48,6 +49,7 @@ app.route("/api/leads", leadRoutes);
 app.route("/api/pipeline-stages", pipelineRoutes);
 app.route("/api/leads", taskRoutes); // tasks/attachments under /api/leads/:leadId/...
 app.route("/api/templates", templateRoutes);
+app.route("/api/automations", automationRoutes);
 
 app.get("/api/health", async (c) => {
   try {

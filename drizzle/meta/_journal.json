@@ -29,6 +29,13 @@
       "when": 1780059061059,
       "tag": "0003_crm109_interaction_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780059777033,
+      "tag": "0004_crm110_automations",
+      "breakpoints": true
     }
   ]
 }

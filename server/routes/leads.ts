@@ -7,6 +7,7 @@ import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, 
 import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
+import { fireTrigger } from "../lib/automationEngine";
 
 const STAGES = ["new", "contacted", "trial", "paid", "lost"] as const;
 const SOURCES = [
@@ -306,6 +307,9 @@ leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
     userId,
   });
 
+  // Fire automation trigger (fire-and-forget — don't block response)
+  void fireTrigger(tenantId, "lead.created", created).catch(() => undefined);
+
   return c.json(created, 201);
 });
 
@@ -384,6 +388,11 @@ leadRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async (c) 
     body: `Stage: ${lead.stage} → ${stage}${isLostStage && lostReason ? ` (reason: ${lostReason})` : ""}`,
     userId,
   });
+
+  // Fire automation trigger (fire-and-forget — don't block response)
+  if (updated) {
+    void fireTrigger(tenantId, "lead.stage_changed", updated, { toStage: stage }).catch(() => undefined);
+  }
 
   return c.json(updated);
 });

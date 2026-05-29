@@ -91,7 +91,7 @@ Pivot from landing-only to functional SaaS with Postgres + auth + multi-tenant.
 | 6 | `CRM-106` | Cartonaș detaliu `/app/leads/:id` (tab-uri, inline edit) | B | pending | [specs/CRM-106-lead-card.md](specs/CRM-106-lead-card.md) |
 | 7 | `CRM-107` | Task-uri & remindere + atașamente | B | pending | [specs/CRM-107-tasks-files.md](specs/CRM-107-tasks-files.md) |
 | 8 | `CRM-108` | Bibliotecă template-uri (email/WhatsApp/SMS) | C | pending | [specs/CRM-108-templates.md](specs/CRM-108-templates.md) |
-| 9 | `CRM-109` | Comunicare din cartonaș + logare apel | C | pending | [specs/CRM-109-comms.md](specs/CRM-109-comms.md) |
+| 9 | `CRM-109` | Comunicare din cartonaș + logare apel | C | done ✅ | [specs/CRM-109-comms.md](specs/CRM-109-comms.md) · [PR #36](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/36) |
 | 10 | `CRM-110` | Motor automatizări (trigger→condiție→acțiune) | D | pending | [specs/CRM-110-automation.md](specs/CRM-110-automation.md) |
 | 11 | `CRM-111` | Conversie → student cu familie + reasignare + scor | E | pending | [specs/CRM-111-convert-family.md](specs/CRM-111-convert-family.md) |
 | 12 | `CRM-112` | Rapoarte: funnel + lost-reason + ROAS | E | pending | [specs/CRM-112-analytics.md](specs/CRM-112-analytics.md) |
