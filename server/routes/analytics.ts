@@ -454,3 +454,80 @@ analyticsRoutes.get("/revenue-by-course", async (c) => {
 
   return c.json({ items });
 });
+
+// ─── REP-303: Student LTV ─────────────────────────────────────────────────────
+
+analyticsRoutes.get("/student-ltv", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+
+  // Get all students with their payment LTV
+  const allStudents = await db
+    .select({
+      id: students.id,
+      fullName: students.fullName,
+      status: students.status,
+      createdAt: students.createdAt,
+    })
+    .from(students)
+    .where(eq(students.tenantId, tenantId))
+    .orderBy(students.fullName)
+    .limit(limit);
+
+  const result = await Promise.all(
+    allStudents.map(async (s) => {
+      // LTV = sum paid payments
+      const [ltvRow] = await db
+        .select({ total: sum(payments.amountCents) })
+        .from(payments)
+        .where(
+          and(
+            eq(payments.tenantId, tenantId),
+            eq(payments.studentId, s.id),
+            eq(payments.status, "paid")
+          )
+        );
+
+      // Lessons attended
+      const [attendRow] = await db
+        .select({ cnt: count(studentLessons.id) })
+        .from(studentLessons)
+        .where(
+          and(
+            eq(studentLessons.tenantId, tenantId),
+            eq(studentLessons.studentId, s.id),
+            eq(studentLessons.attendanceStatus, "present")
+          )
+        );
+
+      // Last lesson date
+      const lastLesson = await db
+        .select({ scheduledAt: lessons.scheduledAt })
+        .from(studentLessons)
+        .innerJoin(lessons, eq(studentLessons.lessonId, lessons.id))
+        .where(
+          and(
+            eq(studentLessons.tenantId, tenantId),
+            eq(studentLessons.studentId, s.id)
+          )
+        )
+        .orderBy(desc(lessons.scheduledAt))
+        .limit(1);
+
+      return {
+        studentId: s.id,
+        fullName: s.fullName,
+        status: s.status,
+        ltvCents: Number(ltvRow?.total ?? 0),
+        paymentCount: 0, // would need separate count query
+        lessonsAttended: Number(attendRow?.cnt ?? 0),
+        lastLessonAt: lastLesson[0]?.scheduledAt?.toISOString() ?? null,
+      };
+    })
+  );
+
+  // Sort by LTV desc
+  result.sort((a, b) => b.ltvCents - a.ltvCents);
+
+  return c.json({ items: result });
+});

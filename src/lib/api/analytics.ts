@@ -105,3 +105,19 @@ export function getRevenueOverTime(months = 12): Promise<{ months: RevenueMonth[
 export function getRevenueByCourse(): Promise<{ items: RevenueCourse[] }> {
   return api<{ items: RevenueCourse[] }>("/api/analytics/revenue-by-course");
 }
+
+// ─── REP-303: Student LTV ─────────────────────────────────────────────────────
+
+export interface StudentLtv {
+  studentId: string;
+  fullName: string;
+  status: string;
+  ltvCents: number;
+  paymentCount: number;
+  lessonsAttended: number;
+  lastLessonAt: string | null;
+}
+
+export function getStudentLtv(limit = 50): Promise<{ items: StudentLtv[] }> {
+  return api<{ items: StudentLtv[] }>(`/api/analytics/student-ltv?limit=${limit}`);
+}
