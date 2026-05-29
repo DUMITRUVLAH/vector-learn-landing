@@ -305,7 +305,7 @@ export function LeadsPage() {
                         isDragging={draggedId === lead.id}
                         onDragStart={() => setDraggedId(lead.id)}
                         onDragEnd={() => { setDraggedId(null); setHoverStage(null); }}
-                        onClick={() => setOpenLead(lead)}
+                        onClick={() => navigate(`/app/leads/${lead.id}`)}
                       />
                     ))
                   )}

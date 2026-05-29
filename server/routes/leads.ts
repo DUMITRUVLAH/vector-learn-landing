@@ -449,3 +449,77 @@ leadRoutes.post("/:id/interactions", zValidator("json", interactionSchema), asyn
   return c.json(created, 201);
 });
 
+// PATCH /api/leads/:id/consent-revoke — revoke GDPR consent
+leadRoutes.patch("/:id/consent-revoke", async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
+  });
+  if (!lead) return c.json({ error: "not_found" }, 404);
+
+  const [updated] = await db
+    .update(leads)
+    .set({ consentRevokedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)))
+    .returning();
+
+  await db.insert(leadInteractions).values({
+    tenantId,
+    leadId: id,
+    type: "system",
+    direction: "internal",
+    body: "Consimțământ retras de utilizator",
+    userId,
+  });
+
+  return c.json(updated);
+});
+
+// DELETE /api/leads/:id — GDPR erasure (anonymize PII, keep audit trail)
+leadRoutes.delete("/:id", async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
+  });
+  if (!lead) return c.json({ error: "not_found" }, 404);
+
+  // Anonymize PII fields (GDPR erasure — keep record for audit, null out PII)
+  await db
+    .update(leads)
+    .set({
+      fullName: "[Șters GDPR]",
+      phone: null,
+      phoneNormalized: null,
+      email: null,
+      emailNormalized: null,
+      notes: null,
+      consentText: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)));
+
+  // Anonymize interaction bodies that may contain PII
+  await db
+    .update(leadInteractions)
+    .set({ body: "[Șters GDPR]" })
+    .where(and(eq(leadInteractions.leadId, id), eq(leadInteractions.tenantId, tenantId)));
+
+  // Log the erasure
+  await db.insert(leadInteractions).values({
+    tenantId,
+    leadId: id,
+    type: "system",
+    direction: "internal",
+    body: `Date personale șterse (GDPR) de utilizatorul ${userId}`,
+    userId,
+  });
+
+  return c.json({ deleted: true, anonymized: true });
+});
+

@@ -39,6 +39,7 @@ import { SchedulePage } from "./pages/app/SchedulePage";
 import { TeachersPage } from "./pages/app/TeachersPage";
 import { PaymentsPage } from "./pages/app/PaymentsPage";
 import { LeadsPage } from "./pages/app/LeadsPage";
+import { LeadCardPage } from "./pages/app/LeadCardPage";
 
 function HomePage() {
   return (
@@ -88,6 +89,11 @@ function Routes() {
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;
+  // /app/leads/:id must be checked before /app/leads
+  if (path.match(/^\/app\/leads\/[^/]+$/)) {
+    const id = path.split("/").pop()!;
+    return <LeadCardPage leadId={id} />;
+  }
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   return <HomePage />;

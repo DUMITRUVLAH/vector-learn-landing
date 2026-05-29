@@ -47,6 +47,10 @@ const DEFAULT_STAGES: PipelineStage[] = [
   { id: "s5", tenantId: "t1", key: "lost", label: "Pierdut", color: "pastel-rose", orderIndex: 4, isWon: false, isLost: true, isDefault: true, createdAt: "", updatedAt: "" },
 ];
 
+const CONSENT_DEFAULTS = {
+  consentAt: null as null, consentText: null as null, ipAtConsent: null as null, consentRevokedAt: null as null,
+};
+
 const SAMPLE_LEADS: Lead[] = [
   {
     id: "l1", fullName: "Ion Popescu", phone: "0771234567", email: "ion@test.ro",
@@ -54,6 +58,7 @@ const SAMPLE_LEADS: Lead[] = [
     interestCourse: "Engleză", utmSource: "fb", utmMedium: null, utmCampaign: null,
     notes: null, convertedToStudentId: null, convertedAt: null, lostReason: null,
     createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
+    ...CONSENT_DEFAULTS,
   },
   {
     id: "l2", fullName: "Maria Ionescu", phone: "0779876543", email: "maria@test.ro",
@@ -61,6 +66,7 @@ const SAMPLE_LEADS: Lead[] = [
     interestCourse: "Pian", utmSource: null, utmMedium: null, utmCampaign: null,
     notes: null, convertedToStudentId: null, convertedAt: null, lostReason: null,
     createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z",
+    ...CONSENT_DEFAULTS,
   },
   {
     id: "l3", fullName: "Ana Visan", phone: "0770771234", email: null,
@@ -68,6 +74,7 @@ const SAMPLE_LEADS: Lead[] = [
     interestCourse: null, utmSource: null, utmMedium: null, utmCampaign: null,
     notes: null, convertedToStudentId: null, convertedAt: null, lostReason: null,
     createdAt: "2026-01-03T00:00:00Z", updatedAt: "2026-01-03T00:00:00Z",
+    ...CONSENT_DEFAULTS,
   },
 ];
 

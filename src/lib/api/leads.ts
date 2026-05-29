@@ -25,6 +25,10 @@ export interface Lead {
   utmCampaign: string | null;
   notes: string | null;
   assignedTo: string | null;
+  consentAt: string | null;
+  consentText: string | null;
+  ipAtConsent: string | null;
+  consentRevokedAt: string | null;
   convertedToStudentId: string | null;
   convertedAt: string | null;
   lostReason: string | null;
@@ -113,9 +117,27 @@ export function addInteraction(
   });
 }
 
+export function updateLead(
+  id: string,
+  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo">>
+): Promise<Lead> {
+  return api<Lead>(`/api/leads/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
 export function convertLead(id: string): Promise<{ lead: Lead; student: { id: string; fullName: string } }> {
   return api<{ lead: Lead; student: { id: string; fullName: string } }>(
     `/api/leads/${id}/convert`,
     { method: "POST" }
   );
+}
+
+export function revokeConsent(id: string): Promise<Lead> {
+  return api<Lead>(`/api/leads/${id}/consent-revoke`, { method: "PATCH" });
+}
+
+export function deleteLead(id: string): Promise<{ deleted: boolean; anonymized: boolean }> {
+  return api<{ deleted: boolean; anonymized: boolean }>(`/api/leads/${id}`, { method: "DELETE" });
 }
