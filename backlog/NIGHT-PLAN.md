@@ -43,3 +43,4 @@ Each module → 3–5 items. Source of behavior: the matching `backlog/user-stor
 - COMM-205 done → PR #48 (notificări automate + quiet hours + anti-spam)
 - REP-301 done → PR #49 (dashboard KPI: MRR, active students, churn, ARPU)
 - REP-302 done → PR #50 (revenue charts: line chart MRR lunar + bar per disciplină)
+- REP-303 done → PR #51 (student LTV tabel sortabil + search)
