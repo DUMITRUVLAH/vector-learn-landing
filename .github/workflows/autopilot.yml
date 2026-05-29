@@ -1,0 +1,74 @@
+name: Autopilot (CRM build)
+
+# Rulează autopilot pe serverele GitHub — independent de laptopul owner-ului.
+# Pornește pe cron (chiar dacă laptopul e stins) și manual din tab-ul Actions.
+on:
+  schedule:
+    # La fiecare 6 ore (UTC). GitHub poate întârzia cron-ul câteva minute la oră de vârf.
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      items_per_run:
+        description: "Câte item-uri CRM să construiască într-o singură rulare"
+        required: false
+        default: "2"
+      model:
+        description: "Model (claude-opus-4-8 / claude-sonnet-4-6)"
+        required: false
+        default: "claude-sonnet-4-6"
+
+# Nu lăsa două rulări să lucreze pe backlog în același timp (ar produce conflicte pe STATE.json).
+concurrency:
+  group: autopilot
+  cancel-in-progress: false
+
+jobs:
+  autopilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # GitHub-hosted: max 360 min/job
+    permissions:
+      contents: write        # commit STATE.json/BACKLOG.md pe main + push branch-uri feat/CRM-*
+      pull-requests: write   # gh pr create
+      issues: write
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Claude Code CLI
+        run: npm i -g @anthropic-ai/claude-code
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "vector-learn-autopilot[bot]"
+          git config user.email "autopilot@users.noreply.github.com"
+
+      - name: Run autopilot (bounded batch)
+        env:
+          # Auth — setează UNUL dintre cele două ca GitHub Secret (vezi instrucțiuni în PR):
+          #  - ANTHROPIC_API_KEY      → facturare pay-as-you-go (API credits)
+          #  - CLAUDE_CODE_OAUTH_TOKEN → folosește abonamentul Claude (claude setup-token)
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # gh CLI + git push folosesc acest token (preinstalat pe runner)
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ITEMS_PER_RUN: ${{ github.event.inputs.items_per_run || '2' }}
+          MODEL: ${{ github.event.inputs.model || 'claude-sonnet-4-6' }}
+        run: |
+          claude -p "Ești în autopilot mode (CI headless). Citește backlog/STATE.json și backlog/crm/BUILD-SEQUENCE.md. Construiește următoarele ${ITEMS_PER_RUN} item-uri CRM pending, STRICT în ordine, respectând CLAUDE.md §0.1 și §0.2: un item = un branch feat/CRM-xxx + un PR; gate dur de teste (dacă pică un scenariu [blocant] → repară, nu trece mai departe); nu pierde feature-uri din CRM-CORE.md. Rulează pipeline-ul complet (build → review → test → personas → commit → PR → update STATE.json/BACKLOG.md pe main → done). După ${ITEMS_PER_RUN} item-uri SAU când nu mai e nimic pending, oprește-te curat și emite ORCHESTRATOR_RUN_SUMMARY. Nu lăsa niciun item la jumătate fără PR. Nu cere permisiune." \
+            --model "${MODEL}" \
+            --permission-mode bypassPermissions \
+            --max-turns 400 \
+            --verbose
