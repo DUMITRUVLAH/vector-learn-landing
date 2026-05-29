@@ -119,7 +119,7 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 2 | `COMM-202` | Log mesaje per lead/student + send-from-template din cartonaș | 2 | done ✅ | [specs/COMM-202-message-log.md](specs/COMM-202-message-log.md) · [PR #45](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/45) |
 | 3 | `COMM-203` | Inbox unificat /app/inbox — conversații threaded per contact | 3 | done ✅ | [specs/COMM-203-inbox.md](specs/COMM-203-inbox.md) · [PR #46](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/46) |
 | 4 | `COMM-204` | Broadcast cu segmentare — trimitere masă per segment | 4 | done ✅ | [specs/COMM-204-broadcast.md](specs/COMM-204-broadcast.md) · [PR #47](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/47) |
-| 5 | `COMM-205` | Notificări sistem automate + quiet hours + anti-spam cap | 5 | pending | [specs/COMM-205-notifications.md](specs/COMM-205-notifications.md) |
+| 5 | `COMM-205` | Notificări sistem automate + quiet hours + anti-spam cap | 5 | done ✅ | [specs/COMM-205-notifications.md](specs/COMM-205-notifications.md) · [PR #48](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/48) |
 
 ## Quality gates (required before status → `done`)
 
