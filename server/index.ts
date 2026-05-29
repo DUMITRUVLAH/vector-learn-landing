@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db/client";
 import { tenants, users, students, lessons } from "./db/schema";
 import { authRoutes } from "./routes/auth";
+import { studentRoutes } from "./routes/students";
 
 const app = new Hono();
 
@@ -20,6 +21,7 @@ app.use(
 );
 
 app.route("/api/auth", authRoutes);
+app.route("/api/students", studentRoutes);
 
 app.get("/api/health", async (c) => {
   try {

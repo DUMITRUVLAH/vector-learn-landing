@@ -34,6 +34,7 @@ import { BackendStatusBadge } from "./components/BackendStatusBadge";
 import { LoginPage } from "./pages/app/LoginPage";
 import { SignupPage } from "./pages/app/SignupPage";
 import { DashboardPage } from "./pages/app/DashboardPage";
+import { StudentsPage } from "./pages/app/StudentsPage";
 
 function HomePage() {
   return (
@@ -79,6 +80,7 @@ function Routes() {
   if (path.startsWith("/calculator/pricing")) return <PricingConfiguratorPage />;
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
+  if (path.startsWith("/app/students")) return <StudentsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   return <HomePage />;
 }
