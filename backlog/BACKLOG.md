@@ -133,6 +133,15 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 3 | `REP-303` | Student retention: LTV per elev + top 10 + attendance rate | 3 | pending | [specs/REP-303-student-retention.md](specs/REP-303-student-retention.md) |
 | 4 | `REP-304` | Export rapoarte: CSV plăți + CSV elevi + download din UI | 4 | pending | [specs/REP-304-export.md](specs/REP-304-export.md) |
 
+## Active milestone: HR — Modulul HR (payroll + stats + disponibilitate + audit)
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `HR-401` | Calcul salariu lunar + payroll_entries tabel | 1 | pending | [specs/HR-401-payroll.md](specs/HR-401-payroll.md) |
+| 2 | `HR-402` | Stats profesor: ore, prezență%, venituri | 2 | pending | [specs/HR-402-teacher-stats.md](specs/HR-402-teacher-stats.md) |
+| 3 | `HR-403` | Disponibilitate profesor: grid săptămânal + conflict | 3 | pending | [specs/HR-403-availability.md](specs/HR-403-availability.md) |
+| 4 | `HR-404` | Audit log HR: rate/rol/payroll cu actor + timestamp | 4 | pending | [specs/HR-404-audit-log.md](specs/HR-404-audit-log.md) |
+
 ## Quality gates (required before status → `done`)
 
 1. **Build passes**: `npm run build` exits 0
