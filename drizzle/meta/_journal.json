@@ -15,6 +15,41 @@
       "when": 1780032827327,
       "tag": "0001_petite_sister_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780052358876,
+      "tag": "0002_tricky_malice",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780059061059,
+      "tag": "0003_crm109_interaction_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780059777033,
+      "tag": "0004_crm110_automations",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780060431899,
+      "tag": "0005_crm111_families_score",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780060944620,
+      "tag": "0006_crm112_analytics",
+      "breakpoints": true
     }
   ]
 }

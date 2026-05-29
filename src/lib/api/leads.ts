@@ -18,17 +18,42 @@ export interface Lead {
   phone: string | null;
   email: string | null;
   interestCourse: string | null;
-  stage: LeadStage;
+  stage: string;  // string to support custom pipeline stage keys
   source: LeadSource;
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
   notes: string | null;
+  assignedTo: string | null;
+  consentAt: string | null;
+  consentText: string | null;
+  ipAtConsent: string | null;
+  consentRevokedAt: string | null;
   convertedToStudentId: string | null;
   convertedAt: string | null;
   lostReason: string | null;
+  /** CRM-111: Lead score 0-100 (hot ≥70, warm ≥40, cold <40) */
+  score?: number | null;
+  /** Next open task (from pipeline endpoint, augmented server-side) */
+  nextTask?: { dueAt: string | null; title: string } | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DedupResult {
+  duplicate: { id: string; fullName: string; stage: string } | null;
+}
+
+/** Metadata stored with an interaction (template_id, call outcome, etc.) — CRM-109 */
+export interface InteractionMetadata {
+  template_id?: string;
+  outcome?: "interested" | "not_interested" | "wrong_number" | "no_answer";
+  duration_seconds?: number | null;
+  recording_url?: string | null;
+  subject?: string;
+  channel?: string;
+  stub?: boolean;
+  [key: string]: unknown;
 }
 
 export interface LeadInteraction {
@@ -37,13 +62,15 @@ export interface LeadInteraction {
   type: "note" | "call" | "email" | "whatsapp" | "sms" | "meeting" | "stage_change" | "system";
   direction: "inbound" | "outbound" | "internal";
   body: string | null;
+  /** JSONB metadata: template_id, call outcome/duration, etc. */
+  metadata?: InteractionMetadata | null;
   userId: string | null;
   occurredAt: string;
 }
 
 export interface PipelineResponse {
-  grouped: Record<LeadStage, Lead[]>;
-  counts: Record<LeadStage, number>;
+  grouped: Record<string, Lead[]>;
+  counts: Record<string, number>;
 }
 
 export function fetchPipeline(): Promise<PipelineResponse> {
@@ -65,6 +92,7 @@ export function createLead(input: {
   interestCourse?: string | null;
   source?: LeadSource;
   notes?: string | null;
+  assignedTo?: string | null;
 }): Promise<Lead> {
   return api<Lead>("/api/leads", {
     method: "POST",
@@ -74,12 +102,22 @@ export function createLead(input: {
 
 export function moveLeadStage(
   id: string,
-  stage: LeadStage,
+  stage: string,  // string to support custom pipeline stage keys
   lostReason?: string
 ): Promise<Lead> {
   return api<Lead>(`/api/leads/${id}/stage`, {
     method: "PATCH",
     body: JSON.stringify({ stage, lostReason: lostReason ?? null }),
+  });
+}
+
+export function checkDuplicate(input: {
+  phone?: string;
+  email?: string;
+}): Promise<DedupResult> {
+  return api<DedupResult>("/api/leads/dedup-check", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 
@@ -97,9 +135,90 @@ export function addInteraction(
   });
 }
 
-export function convertLead(id: string): Promise<{ lead: Lead; student: { id: string; fullName: string } }> {
-  return api<{ lead: Lead; student: { id: string; fullName: string } }>(
+export function updateLead(
+  id: string,
+  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo">>
+): Promise<Lead> {
+  return api<Lead>(`/api/leads/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+/** CRM-111: Enhanced convert with optional family/payer data */
+export function convertLead(
+  id: string,
+  input?: {
+    payerName?: string | null;
+    payerPhone?: string | null;
+    payerEmail?: string | null;
+    studentName?: string | null;
+    studentPhone?: string | null;
+    studentEmail?: string | null;
+    birthDate?: string | null;
+    studentStatus?: "active" | "trial";
+  }
+): Promise<{ lead: Lead; student: { id: string; fullName: string; familyId?: string | null }; familyId: string | null }> {
+  return api<{ lead: Lead; student: { id: string; fullName: string; familyId?: string | null }; familyId: string | null }>(
     `/api/leads/${id}/convert`,
+    { method: "POST", body: JSON.stringify(input ?? {}) }
+  );
+}
+
+/** CRM-111: Assign lead to a user (reasignare) */
+export function assignLead(
+  id: string,
+  assignedTo: string | null
+): Promise<Lead> {
+  return api<Lead>(`/api/leads/${id}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ assignedTo }),
+  });
+}
+
+/** CRM-111: Calculate and save lead score */
+export function scoreLead(id: string): Promise<{ lead: Lead; score: number; badge: "hot" | "warm" | "cold" }> {
+  return api<{ lead: Lead; score: number; badge: "hot" | "warm" | "cold" }>(
+    `/api/leads/${id}/score`,
     { method: "POST" }
   );
+}
+
+export function revokeConsent(id: string): Promise<Lead> {
+  return api<Lead>(`/api/leads/${id}/consent-revoke`, { method: "PATCH" });
+}
+
+export function deleteLead(id: string): Promise<{ deleted: boolean; anonymized: boolean }> {
+  return api<{ deleted: boolean; anonymized: boolean }>(`/api/leads/${id}`, { method: "DELETE" });
+}
+
+/** CRM-109: Send email/WhatsApp/SMS from lead card with optional template */
+export function sendMessage(
+  leadId: string,
+  input: {
+    channel: "email" | "whatsapp" | "sms";
+    templateId?: string | null;
+    subject?: string | null;
+    body: string;
+  }
+): Promise<LeadInteraction> {
+  return api<LeadInteraction>(`/api/leads/${leadId}/send-message`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** CRM-109: Log a phone call with outcome + duration + note */
+export function logCall(
+  leadId: string,
+  input: {
+    outcome: "interested" | "not_interested" | "wrong_number" | "no_answer";
+    durationSeconds?: number | null;
+    note?: string | null;
+  }
+): Promise<LeadInteraction> {
+  return api<LeadInteraction>(`/api/leads/${leadId}/log-call`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }

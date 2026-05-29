@@ -120,6 +120,26 @@ uitat, un scenariu de test sărit. Granularitatea pe item + gate de teste verzi 
 
 ---
 
+## 0.3 Fereastra de noapte — autonomie totală 23:00–08:00 (owner doarme)
+
+**Între 23:00 și 08:00 (ora Europe/Chișinău), lucrează complet autonom, fără nicio oprire și
+fără nicio întrebare.** Owner-ul doarme — nu e nimeni de întrebat, așa că ZERO întrebări de
+clarificare, ZERO „vrei să...", ZERO pauze de confirmare. Iei singur cea mai sigură decizie,
+o notezi în raport/commit, și mergi mai departe.
+
+- Toate modificările (build, fix, review→improve, commit, push, PR, actualizare STATE.json) se
+  fac neîntrerupt în acest interval.
+- Dacă apare o ambiguitate, alege opțiunea cea mai sigură și reversibilă (branch + PR, niciodată
+  force-push, niciodată ștergere de date) și loghează decizia — nu aștepta răspuns.
+- Singurele opriri permise rămân cele din §0.1 (toate item-urile done/blocked, eșec dur de mediu,
+  stop explicit de la owner, sau 3 blocaje consecutive).
+- Această regulă întărește §0.1/§0.2; nu le contrazice. Ziua, dacă owner-ul e prezent și pune o
+  întrebare, îi răspunzi normal — dar noaptea nu inițiezi întrebări.
+- Rularea programată din cloud (`trig_01G1fjFvCBqZDXVUN5Q1vrUE`, 00:00 + 04:00) și GitHub Actions
+  operează sub această regulă: construiesc și deschid PR-uri peste noapte, fără supraveghere.
+
+---
+
 ## 1. Project at a glance
 
 - **What**: Landing site for **Vector Learn**, a CRM for educational centers (language, programming, music, dance, sports, exam prep, kids).
@@ -203,6 +223,33 @@ uitat, un scenariu de test sărit. Granularitatea pe item + gate de teste verzi 
 - Integration tests for stateful demos (kanban drag, calculator math, filter logic)
 - Aim for ≥ 70% coverage on new code (not enforced, but tracked)
 
+### 3.5.1 Backend / full-app gates (the ones that stop integration breaks) — NON-NEGOTIABLE
+Unit tests in isolation are not enough: they run on PGlite and pass even when the integrated
+app is broken. Every backend/full-stack item must also pass these (enforced by `test-runner`):
+- **Migration discipline:** after any `server/db/schema/*` change, `npm run db:generate` must
+  leave NO uncommitted migration, and `npm run db:reset && npm run db:seed` must succeed.
+  A schema change without a committed migration breaks every fresh deploy. (This is how the
+  `pipeline_stages`/`lead_tasks`/`message_templates` tables almost shipped with no migration.)
+- **Live API integration smoke:** boot the server, `POST /api/auth/login`, then hit the
+  endpoints the item touched → all 200 with expected JSON. Catches route wiring, auth, and
+  DB-result bugs that unit tests miss.
+- **DB portability:** prod is Postgres (Supabase), local/tests may be PGlite — result shapes
+  differ. Never use raw `db.execute(...).rows`; use the query builder, or handle both with
+  `Array.isArray(r) ? r : r.rows`. (This is the `.rows` bug that broke `/api/health/db`.)
+- **In-app links** must point to real routes (`#/app/login`), never dead anchors (`#login`).
+
+### 3.5.2 Review → improve loop (don't ship the first draft)
+Each item goes through three reviewers, whose findings are handed to an **improver** pass
+(feature-builder) that applies the fixes; then it is re-reviewed. Repeat until clean (max 3
+cycles), THEN run the test gate. Test failures trigger a fix loop (repair, don't skip — §0.2).
+The reviewers:
+- `code-reviewer-vl` — design-system, a11y, dark mode, dead code, dead links.
+- **`integration-architect`** — does this feature actually connect to the other modules? DB
+  foreign keys, cross-module data flow (lead→student→payment→lesson), API contracts, UI wiring,
+  tenant safety. Stops modules from being built as disconnected islands. (See its agent file.)
+- `ce-adversarial-reviewer` — failure modes/edge cases, on large or high-risk diffs (auth,
+  payments, data mutations, migrations, external APIs).
+
 ### 3.6 Commits & branches
 - Conventional commits (`feat:`, `fix:`, `chore:`, `docs:`)
 - One branch per backlog item: `feat/<ID>-<slug>`
@@ -285,12 +332,20 @@ The owner can always:
 
 If a feature ships without:
 - ✅ All acceptance criteria met
-- ✅ Build + typecheck + tests green
-- ✅ Reviewer APPROVED
+- ✅ Build + typecheck + lint + unit tests green
+- ✅ Migration gate green (no uncommitted migration; `db:reset` + `db:seed` succeed) — §3.5.1
+- ✅ Live API integration smoke green (login + the item's endpoints return 200) — §3.5.1
+- ✅ DB-portability check green (no raw `.execute().rows`) — §3.5.1
+- ✅ Reviewer APPROVED **after the review→improve loop** (incl. adversarial review on risky diffs) — §3.5.2
 - ✅ Persona reports saved (even if PASS)
 - ✅ PR open with structured body
 
 …then autopilot has a bug. Fix the orchestrator before fixing the feature.
+
+**The point of the new gates:** a feature can be "build + unit-tests green" and still be broken
+when integrated/deployed (wrong DB result shape, missing migration, dead link, unwired route).
+The migration + integration-smoke + portability gates are exactly what turn "code that compiles"
+into "a real app that works" — which is the bar for the demo and for autonomous runs.
 
 ---
 

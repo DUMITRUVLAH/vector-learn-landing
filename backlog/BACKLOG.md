@@ -83,20 +83,30 @@ Pivot from landing-only to functional SaaS with Postgres + auth + multi-tenant.
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
 | — | `MVP-009` | CRM Leads (kanban + create + convert + note) | — | done ✅ (merged commit `433f73a`) | [specs/MVP-009-crm-leads.md](specs/MVP-009-crm-leads.md) |
-| 1 | `CRM-101` | Intake web public + UTM + captcha + consent GDPR | A | done ✅ | [specs/CRM-101-intake-web.md](specs/CRM-101-intake-web.md) · [PR #27](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/27) |
-| 2 | `CRM-102` | Deduplicare robustă + merge manual | A | done ✅ | [specs/CRM-102-dedup-merge.md](specs/CRM-102-dedup-merge.md) · [PR #28](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/28) |
-| 3 | `CRM-103` | Adăugare manuală extinsă + Import CSV | A | done ✅ | [specs/CRM-103-manual-import.md](specs/CRM-103-manual-import.md) · [PR #29](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/29) |
-| 4 | `CRM-104` | Webhook Facebook Lead Ads + Google gclid | A | done ✅ | [specs/CRM-104-ads-webhooks.md](specs/CRM-104-ads-webhooks.md) · [PR #30](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/30) |
-| 5 | `CRM-105` | Pipeline: stadii custom + motiv pierdere + filtre | B | done ✅ | [specs/CRM-105-pipeline.md](specs/CRM-105-pipeline.md) · [PR #31](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/31) |
-| 6 | `CRM-106` | Cartonaș detaliu `/app/leads/:id` (tab-uri, inline edit) | B | done ✅ | [specs/CRM-106-lead-card.md](specs/CRM-106-lead-card.md) · [PR #32](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/32) |
-| 7 | `CRM-107` | Task-uri & remindere + atașamente | B | done ✅ | [specs/CRM-107-tasks-files.md](specs/CRM-107-tasks-files.md) · [PR #33](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/33) |
-| 8 | `CRM-108` | Bibliotecă template-uri (email/WhatsApp/SMS) | C | done ✅ | [specs/CRM-108-templates.md](specs/CRM-108-templates.md) · [PR #34](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/34) |
-| 9 | `CRM-109` | Comunicare din cartonaș + logare apel | C | pending | [specs/CRM-109-comms.md](specs/CRM-109-comms.md) |
-| 10 | `CRM-110` | Motor automatizări (trigger→condiție→acțiune) | D | pending | [specs/CRM-110-automation.md](specs/CRM-110-automation.md) |
-| 11 | `CRM-111` | Conversie → student cu familie + reasignare + scor | E | pending | [specs/CRM-111-convert-family.md](specs/CRM-111-convert-family.md) |
-| 12 | `CRM-112` | Rapoarte: funnel + lost-reason + ROAS | E | pending | [specs/CRM-112-analytics.md](specs/CRM-112-analytics.md) |
+| 1 | `CRM-101` | Intake web public + UTM + captcha + consent GDPR | A | pending | [specs/CRM-101-intake-web.md](specs/CRM-101-intake-web.md) |
+| 2 | `CRM-102` | Deduplicare robustă + merge manual | A | pending | [specs/CRM-102-dedup-merge.md](specs/CRM-102-dedup-merge.md) |
+| 3 | `CRM-103` | Adăugare manuală extinsă + Import CSV | A | pending | [specs/CRM-103-manual-import.md](specs/CRM-103-manual-import.md) |
+| 4 | `CRM-104` | Webhook Facebook Lead Ads + Google gclid | A | pending | [specs/CRM-104-ads-webhooks.md](specs/CRM-104-ads-webhooks.md) |
+| 5 | `CRM-105` | Pipeline: stadii custom + motiv pierdere + filtre | B | pending | [specs/CRM-105-pipeline.md](specs/CRM-105-pipeline.md) |
+| 6 | `CRM-106` | Cartonaș detaliu `/app/leads/:id` (tab-uri, inline edit) | B | pending | [specs/CRM-106-lead-card.md](specs/CRM-106-lead-card.md) |
+| 7 | `CRM-107` | Task-uri & remindere + atașamente | B | pending | [specs/CRM-107-tasks-files.md](specs/CRM-107-tasks-files.md) |
+| 8 | `CRM-108` | Bibliotecă template-uri (email/WhatsApp/SMS) | C | pending | [specs/CRM-108-templates.md](specs/CRM-108-templates.md) |
+| 9 | `CRM-109` | Comunicare din cartonaș + logare apel | C | done ✅ | [specs/CRM-109-comms.md](specs/CRM-109-comms.md) · [PR #36](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/36) |
+| 10 | `CRM-110` | Motor automatizări (trigger→condiție→acțiune) | D | done ✅ | [specs/CRM-110-automation.md](specs/CRM-110-automation.md) · [PR #37](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/37) |
+| 11 | `CRM-111` | Conversie → student cu familie + reasignare + scor | E | done ✅ | [specs/CRM-111-convert-family.md](specs/CRM-111-convert-family.md) · [PR #38](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/38) |
+| 12 | `CRM-112` | Rapoarte: funnel + lost-reason + ROAS | E | done ✅ | [specs/CRM-112-analytics.md](specs/CRM-112-analytics.md) · [PR #39](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/39) |
 
-**Ordine de build:** `CRM-101 → 102 → 103 → 104 → 105 → 106 → 107 → 108 → 109 → 110 → 111 → 112`.
+### Faza F — paritate cu CRM-ul real (Kommo) — vezi [CRM-CORE §11](crm/CRM-CORE.md)
+Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul inițial.
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 13 | `CRM-113` | Valoare deal (€) per lead + rollup valoare pe pipeline | F | pending | [specs/CRM-113-deal-value.md](specs/CRM-113-deal-value.md) |
+| 14 | `CRM-114` | Companie + contacte multiple (B2B) + nume deal | F | pending | [specs/CRM-114-company-contacts.md](specs/CRM-114-company-contacts.md) |
+| 15 | `CRM-115` | Tag-uri + câmpuri custom configurabile per tenant | F | pending | [specs/CRM-115-tags-custom-fields.md](specs/CRM-115-tags-custom-fields.md) |
+| 16 | `CRM-116` | Semnale task pe card — „Fără task" + aging restanță | F | pending | [specs/CRM-116-task-signals.md](specs/CRM-116-task-signals.md) |
+
+**Ordine de build:** `CRM-101 → … → 112` (done) → `113 → 116 → 114 → 115` (valoare + semnale task întâi — impact maxim pe demo).
 
 ## Quality gates (required before status → `done`)
 
@@ -104,11 +114,16 @@ Pivot from landing-only to functional SaaS with Postgres + auth + multi-tenant.
 2. **Type check passes**: `npm run typecheck` exits 0
 3. **Lint passes**: `npm run lint` exits 0
 4. **Tests pass**: `npm test` — all green
-5. **Lighthouse ≥ 90**: performance, accessibility, best-practices, SEO
-6. **Axe a11y**: 0 violations on critical/serious
-7. **Reviewer agent**: returns `APPROVED`
-8. **Manager persona agent**: ≤ 3 friction points (none critical)
-9. **Student persona agent**: ≤ 3 friction points (none critical)
-10. **Conventional commit + PR** opened on `main`
+5. **Migration gate** (backend items): `db:generate` leaves no uncommitted migration; `db:reset` + `db:seed` succeed — CLAUDE.md §3.5.1
+6. **API integration smoke** (backend items): server boots, login + the item's endpoints return 200 — §3.5.1
+7. **DB-portability**: no raw `.execute().rows` — §3.5.1
+8. **Lighthouse ≥ 90** (page items): performance, accessibility, best-practices, SEO
+9. **Axe a11y**: 0 violations on critical/serious
+10. **Reviewer agent**: `APPROVED` after the review→improve loop (+ adversarial review on risky diffs) — §3.5.2
+11. **Manager persona agent**: ≤ 3 friction points (none critical)
+12. **Student persona agent**: ≤ 3 friction points (none critical)
+13. **Conventional commit + PR** opened on `main`
 
-If any gate fails → status `blocked`, write report to `backlog/reports/<ID>-blocked.md`, move to the next item. Never halt the loop.
+Gates 5–7 are **repair-don't-skip** (CLAUDE.md §0.2): a red gate triggers a fix loop, not an
+instant block. Only block if a real fix attempt fails and the cause is clearly structural →
+write `backlog/reports/<ID>-blocked.md`, move to the next item. Never halt the loop.

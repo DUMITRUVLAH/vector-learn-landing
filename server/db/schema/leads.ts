@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, pgEnum, index, jsonb, integer } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { students } from "./students";
 import { users } from "./users";
@@ -49,7 +49,11 @@ export const leads = pgTable(
     notes: varchar("notes", { length: 2000 }),
     convertedToStudentId: uuid("converted_to_student_id").references(() => students.id, { onDelete: "set null" }),
     convertedAt: timestamp("converted_at", { withTimezone: true }),
+    assignedTo: uuid("assigned_to").references(() => users.id, { onDelete: "set null" }),
+    consentRevokedAt: timestamp("consent_revoked_at", { withTimezone: true }),
     lostReason: varchar("lost_reason", { length: 500 }),
+    /** CRM-111: Lead score 0-100 derived from source signals — hot/warm/cold */
+    score: integer("score"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -94,6 +98,8 @@ export const leadInteractions = pgTable(
     type: interactionTypeEnum("type").notNull(),
     direction: interactionDirectionEnum("direction").notNull().default("internal"),
     body: varchar("body", { length: 2000 }),
+    /** JSONB: { template_id, outcome, duration_seconds, recording_url } — CRM-109 */
+    metadata: jsonb("metadata"),
     userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   },
