@@ -6,6 +6,7 @@ import { logger } from "hono/logger";
 import { sql } from "drizzle-orm";
 import { db } from "./db/client";
 import { tenants, users, students, lessons } from "./db/schema";
+import { authRoutes } from "./routes/auth";
 
 const app = new Hono();
 
@@ -17,6 +18,8 @@ app.use(
     credentials: true,
   })
 );
+
+app.route("/api/auth", authRoutes);
 
 app.get("/api/health", async (c) => {
   try {
