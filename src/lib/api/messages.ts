@@ -69,3 +69,35 @@ export async function listMessages(params: {
   if (params.limit) qs.set("limit", String(params.limit));
   return api<ListMessagesResponse>(`/messages?${qs.toString()}`);
 }
+
+// ─── Threads (Inbox) ─────────────────────────────────────────────────────────
+
+export interface Thread {
+  contactId: string;
+  contactType: "lead" | "student";
+  contactName: string;
+  channel: MessageChannel;
+  lastMessageAt: string;
+  lastMessagePreview: string;
+  unreadCount: number;
+}
+
+export interface ListThreadsResponse {
+  threads: Thread[];
+}
+
+export interface ThreadMessagesResponse {
+  messages: Message[];
+  contact: { id: string; name: string; type: "lead" | "student" };
+}
+
+export async function listThreads(): Promise<ListThreadsResponse> {
+  return api<ListThreadsResponse>("/messages/threads");
+}
+
+export async function getThreadMessages(
+  contactId: string,
+  channel: MessageChannel
+): Promise<ThreadMessagesResponse> {
+  return api<ThreadMessagesResponse>(`/messages/threads/${contactId}/${channel}`);
+}
