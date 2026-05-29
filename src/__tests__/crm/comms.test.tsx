@@ -76,6 +76,8 @@ const makeBaseLead = (overrides: Partial<Lead> = {}): Lead => ({
   convertedToStudentId: null,
   convertedAt: null,
   lostReason: null,
+  valueCents: 0,
+  debtCents: 0,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   ...overrides,

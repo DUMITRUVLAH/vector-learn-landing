@@ -1,9 +1,11 @@
 /**
- * CRM-106/CRM-107/CRM-109/CRM-111 — Cartonaș detaliu lead /app/leads/:id
- * Layout 2 coloane: col stânga sticky (info+acțiuni), col dreapta tab-uri
- * CRM-107: Tab Task-uri (CRUD + badge kanban), Tab Fișiere (upload/download)
- * CRM-109: Butoane Email/WhatsApp/Sună + logare apel + SendMessageModal + LogCallModal
- * CRM-111: Score badge hot/warm/cold, enhanced ConvertModal cu familie + plătitor
+ * CRM-106/107/109/111/113/114/115 — Cartonaș detaliu lead /app/leads/:id
+ * CRM-107: Task-uri + Fișiere
+ * CRM-109: Email/WhatsApp/Sună + logare apel
+ * CRM-111: Score badge, ConvertModal cu familie
+ * CRM-113: Valoare deal + datorie (inline edit)
+ * CRM-114: Companie + deal_name + contacte multiple (tab Contacte)
+ * CRM-115: Tag-uri libere + câmpuri custom (tab Custom Fields)
  */
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -18,7 +20,10 @@ import { useRouter } from "@/router/HashRouter";
 import {
   getLead, updateLead, moveLeadStage,
   listInteractions, addInteraction, revokeConsent, deleteLead,
-  type Lead, type LeadInteraction,
+  listContacts, createContact, updateContact, deleteContact,
+  listTags, addTag, removeTag,
+  listFieldValues, upsertFieldValue, listCustomFields,
+  type Lead, type LeadInteraction, type LeadContact, type CustomField, type LeadFieldValue,
 } from "@/lib/api/leads";
 import { fetchPipelineStages, type PipelineStage } from "@/lib/api/pipeline";
 import {
@@ -47,7 +52,7 @@ const INTERACTION_LABEL: Record<string, string> = {
   sms: "SMS", meeting: "Întâlnire", stage_change: "Schimbare stadiu", system: "Sistem",
 };
 
-type Tab = "activity" | "tasks" | "files" | "gdpr";
+type Tab = "activity" | "tasks" | "files" | "contacts" | "fields" | "gdpr";
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -64,6 +69,13 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   const [interactions, setInteractions] = useState<LeadInteraction[]>([]);
   const [tasks, setTasks] = useState<LeadTask[]>([]);
   const [attachments, setAttachments] = useState<LeadAttachment[]>([]);
+  /** CRM-114: contacts */
+  const [contacts, setContacts] = useState<LeadContact[]>([]);
+  /** CRM-115: tags */
+  const [tags, setTags] = useState<string[]>([]);
+  /** CRM-115: custom fields + values */
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [fieldValues, setFieldValues] = useState<LeadFieldValue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("activity");
@@ -118,18 +130,25 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     setLoading(true);
     setError(null);
     try {
-      const [leadRes, stagesRes, interRes, tasksRes, attRes] = await Promise.all([
+      const [leadRes, stagesRes, interRes, tasksRes, attRes, contactsRes, tagsRes, fieldValuesRes] = await Promise.all([
         getLead(leadId),
         fetchPipelineStages(),
         listInteractions(leadId),
         listTasks(leadId),
         listAttachments(leadId),
+        listContacts(leadId),
+        listTags(leadId),
+        listFieldValues(leadId),
       ]);
       setLead(leadRes);
       setStages(stagesRes.stages);
       setInteractions(interRes.items);
       setTasks(tasksRes.items);
       setAttachments(attRes.items);
+      setContacts(contactsRes.items);
+      setTags(tagsRes.tags);
+      setCustomFields(fieldValuesRes.fields);
+      setFieldValues(fieldValuesRes.values);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare");
     } finally {
@@ -148,6 +167,10 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
       email: lead.email,
       interestCourse: lead.interestCourse,
       notes: lead.notes,
+      valueCents: lead.valueCents,
+      debtCents: lead.debtCents,
+      company: lead.company,
+      dealName: lead.dealName,
     });
     setEditing(true);
   };
@@ -412,11 +435,12 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   const consentRevoked = !!lead.consentRevokedAt;
   const currentStage = stages.find((s) => s.key === lead.stage);
   const currentStageLabel = currentStage?.label ?? lead.stage;
+  const displayTitle = lead.dealName ?? lead.fullName;
 
   return (
     <AppShell
-      pageTitle={lead.fullName}
-      pageDescription={`${SOURCE_LABEL[lead.source] ?? lead.source} · ${currentStageLabel}`}
+      pageTitle={displayTitle}
+      pageDescription={[lead.company, `${SOURCE_LABEL[lead.source] ?? lead.source}`, currentStageLabel].filter(Boolean).join(" · ")}
       actions={
         <div className="flex gap-2">
           <button
@@ -731,6 +755,24 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               </p>
             </div>
 
+            {/* CRM-114: Company + Deal name */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Companie</p>
+              {editing ? (
+                <input type="text" value={editDraft.company ?? lead.company ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, company: e.target.value || null }))} placeholder="ex: S.R.L. Acme" className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Companie" />
+              ) : (
+                <p className="text-sm">{lead.company ?? "—"}</p>
+              )}
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Titlu deal</p>
+              {editing ? (
+                <input type="text" value={editDraft.dealName ?? lead.dealName ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, dealName: e.target.value || null }))} placeholder="opțional, override full_name" className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Titlu deal" />
+              ) : (
+                <p className="text-sm text-muted-foreground">{lead.dealName ?? "—"}</p>
+              )}
+            </div>
+
             {/* Notes */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Note</p>
@@ -745,6 +787,36 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               ) : (
                 <p className="text-sm text-muted-foreground">{lead.notes ?? "—"}</p>
               )}
+            </div>
+
+            {/* CRM-113: Value + debt */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Valoare deal (€)</p>
+                {editing ? (
+                  <input type="number" min="0" step="0.01" value={editDraft.valueCents !== undefined ? ((editDraft.valueCents ?? 0) / 100).toFixed(2) : ((lead.valueCents ?? 0) / 100).toFixed(2)} onChange={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); setEditDraft((d) => ({ ...d, valueCents: isNaN(v) ? 0 : Math.round(v * 100) })); }} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Valoare deal în euro" />
+                ) : (
+                  <p className="text-sm font-bold">{(lead.valueCents ?? 0) > 0 ? new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format((lead.valueCents ?? 0) / 100) : "—"}</p>
+                )}
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Datorie (€)</p>
+                {editing ? (
+                  <input type="number" min="0" step="0.01" value={editDraft.debtCents !== undefined ? ((editDraft.debtCents ?? 0) / 100).toFixed(2) : ((lead.debtCents ?? 0) / 100).toFixed(2)} onChange={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); setEditDraft((d) => ({ ...d, debtCents: isNaN(v) ? 0 : Math.round(v * 100) })); }} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Datorie în euro" />
+                ) : (
+                  <p className={cn("text-sm font-semibold", (lead.debtCents ?? 0) > 0 ? "text-destructive" : "text-muted-foreground")}>{(lead.debtCents ?? 0) > 0 ? new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format((lead.debtCents ?? 0) / 100) : "—"}</p>
+                )}
+              </div>
+            </div>
+
+            {/* CRM-115: Tags */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Tag-uri</p>
+              <TagsInline
+                leadId={leadId}
+                tags={tags}
+                setTags={setTags}
+              />
             </div>
           </section>
 
@@ -785,6 +857,8 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               ["activity", "Activitate"],
               ["tasks", tasks.length > 0 ? `Task-uri (${tasks.filter((t) => t.status === "open").length})` : "Task-uri"],
               ["files", `Fișiere${attachments.length > 0 ? ` (${attachments.length})` : ""}`],
+              ["contacts", `Contacte${contacts.length > 0 ? ` (${contacts.length})` : ""}`],
+              ["fields", `Câmpuri${fieldValues.length > 0 ? ` (${fieldValues.length})` : ""}`],
               ["gdpr", "GDPR"],
             ] as [Tab, string][]).map(([t, label]) => (
               <button
@@ -988,6 +1062,21 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                 </ul>
               )}
             </div>
+          )}
+
+          {/* CRM-114: Contacts tab */}
+          {activeTab === "contacts" && (
+            <ContactsTab leadId={leadId} contacts={contacts} setContacts={setContacts} />
+          )}
+
+          {/* CRM-115: Custom fields tab */}
+          {activeTab === "fields" && (
+            <FieldsTab
+              leadId={leadId}
+              customFields={customFields}
+              fieldValues={fieldValues}
+              setFieldValues={setFieldValues}
+            />
           )}
 
           {activeTab === "gdpr" && (
@@ -1217,4 +1306,260 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ─── CRM-115: TagsInline ──────────────────────────────────────────────────────
+
+interface TagsInlineProps {
+  leadId: string;
+  tags: string[];
+  setTags: React.Dispatch<React.SetStateAction<string[]>>;
+}
+
+function TagsInline({ leadId, tags, setTags }: TagsInlineProps) {
+  const [newTag, setNewTag] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const handleAdd = async () => {
+    const t = newTag.trim().toLowerCase();
+    if (!t || tags.includes(t)) { setNewTag(""); return; }
+    setAdding(true);
+    try {
+      await addTag(leadId, t);
+      setTags((prev) => [...prev, t]);
+      setNewTag("");
+    } catch {
+      // ignore
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleRemove = async (tag: string) => {
+    try {
+      await removeTag(leadId, tag);
+      setTags((prev) => prev.filter((t) => t !== tag));
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {tags.length === 0 && <p className="text-xs text-muted-foreground">Niciun tag.</p>}
+        {tags.map((tag) => (
+          <span
+            key={tag}
+            className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary"
+          >
+            {tag}
+            <button
+              type="button"
+              onClick={() => void handleRemove(tag)}
+              className="hover:text-destructive ml-0.5"
+              aria-label={`Șterge tag ${tag}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-1.5">
+        <input
+          type="text"
+          value={newTag}
+          onChange={(e) => setNewTag(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleAdd(); } }}
+          placeholder="adaugă tag..."
+          className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
+          aria-label="Tag nou"
+        />
+        <button
+          type="button"
+          onClick={() => void handleAdd()}
+          disabled={adding || !newTag.trim()}
+          className="rounded-md bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── CRM-114: ContactsTab ─────────────────────────────────────────────────────
+
+interface ContactsTabProps {
+  leadId: string;
+  contacts: LeadContact[];
+  setContacts: React.Dispatch<React.SetStateAction<LeadContact[]>>;
+}
+
+function ContactsTab({ leadId, contacts, setContacts }: ContactsTabProps) {
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newRole, setNewRole] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPrimary, setNewPrimary] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    setSubmitting(true);
+    try {
+      const created = await createContact(leadId, { fullName: newName.trim(), role: newRole || null, phone: newPhone || null, email: newEmail || null, isPrimary: newPrimary });
+      setContacts((prev) => newPrimary ? [...prev.map((c) => ({ ...c, isPrimary: 0 })), created] : [...prev, created]);
+      setNewName(""); setNewRole(""); setNewPhone(""); setNewEmail(""); setNewPrimary(false); setAdding(false);
+    } catch { /* ignore */ } finally { setSubmitting(false); }
+  };
+
+  const handleSetPrimary = async (contact: LeadContact) => {
+    try {
+      await updateContact(leadId, contact.id, { isPrimary: true });
+      setContacts((prev) => prev.map((c) => ({ ...c, isPrimary: c.id === contact.id ? 1 : 0 })));
+    } catch { /* ignore */ }
+  };
+
+  const handleDelete = async (contactId: string) => {
+    try {
+      await deleteContact(leadId, contactId);
+      setContacts((prev) => prev.filter((c) => c.id !== contactId));
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <div role="tabpanel" aria-label="Contacte" className="space-y-4">
+      {contacts.length === 0 && !adding && (
+        <p className="text-sm text-muted-foreground py-6 text-center">Niciun contact adăugat.</p>
+      )}
+      {contacts.length > 0 && (
+        <ul className="space-y-2" aria-label="Lista contacte">
+          {contacts.map((c) => (
+            <li key={c.id} className="flex items-start gap-3 rounded-xl border border-border bg-card p-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold">{c.fullName}</p>
+                  {c.isPrimary === 1 && <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">Primar</span>}
+                </div>
+                {c.role && <p className="text-[11px] text-muted-foreground mt-0.5">{c.role}</p>}
+                {c.phone && <a href={`tel:${c.phone}`} className="text-xs text-primary hover:underline flex items-center gap-1 mt-0.5"><Phone className="h-3 w-3" aria-hidden="true" />{c.phone}</a>}
+                {c.email && <a href={`mailto:${c.email}`} className="text-xs text-primary hover:underline flex items-center gap-1 mt-0.5"><Mail className="h-3 w-3" aria-hidden="true" />{c.email}</a>}
+              </div>
+              <div className="flex gap-1 shrink-0">
+                {c.isPrimary !== 1 && (
+                  <button type="button" onClick={() => void handleSetPrimary(c)} className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold hover:bg-muted">Primar</button>
+                )}
+                <button type="button" onClick={() => void handleDelete(c.id)} className="rounded-md border border-border p-1.5 hover:bg-muted text-muted-foreground hover:text-destructive" aria-label={`Șterge contact ${c.fullName}`}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {adding ? (
+        <form onSubmit={(e) => void handleAdd(e)} className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+          <p className="text-sm font-bold">Contact nou</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div><label htmlFor="nc-name" className="block text-[11px] font-semibold mb-1">Nume *</label><input id="nc-name" type="text" required value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Nume contact" /></div>
+            <div><label htmlFor="nc-role" className="block text-[11px] font-semibold mb-1">Rol</label><input id="nc-role" type="text" value={newRole} onChange={(e) => setNewRole(e.target.value)} placeholder="decident/plătitor" className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Rol contact" /></div>
+            <div><label htmlFor="nc-phone" className="block text-[11px] font-semibold mb-1">Telefon</label><input id="nc-phone" type="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Telefon contact" /></div>
+            <div><label htmlFor="nc-email" className="block text-[11px] font-semibold mb-1">Email</label><input id="nc-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Email contact" /></div>
+          </div>
+          <label className="inline-flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={newPrimary} onChange={(e) => setNewPrimary(e.target.checked)} className="h-4 w-4" aria-label="Contact primar" />Contact primar</label>
+          <div className="flex gap-2 justify-end">
+            <button type="button" onClick={() => setAdding(false)} className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted">Anulează</button>
+            <button type="submit" disabled={submitting || !newName.trim()} className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Adaugă"}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button type="button" onClick={() => setAdding(true)} className="inline-flex items-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm font-semibold hover:bg-muted/40 w-full justify-center">
+          <UserPlus className="h-4 w-4" />
+          Adaugă contact
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── CRM-115: FieldsTab ───────────────────────────────────────────────────────
+
+interface FieldsTabProps {
+  leadId: string;
+  customFields: CustomField[];
+  fieldValues: LeadFieldValue[];
+  setFieldValues: React.Dispatch<React.SetStateAction<LeadFieldValue[]>>;
+}
+
+function FieldsTab({ leadId, customFields, fieldValues, setFieldValues }: FieldsTabProps) {
+  const getVal = (fieldId: string) => fieldValues.find((v) => v.fieldId === fieldId)?.value ?? "";
+
+  const handleChange = async (fieldId: string, value: string) => {
+    try {
+      const updated = await upsertFieldValue(leadId, { fieldId, value: value || null });
+      setFieldValues((prev) => {
+        const idx = prev.findIndex((v) => v.fieldId === fieldId);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = updated;
+          return next;
+        }
+        return [...prev, updated];
+      });
+    } catch { /* ignore */ }
+  };
+
+  if (customFields.length === 0) {
+    return (
+      <div role="tabpanel" aria-label="Câmpuri custom" className="py-8 text-center">
+        <p className="text-sm text-muted-foreground">Niciun câmp custom configurat.</p>
+        <p className="text-xs text-muted-foreground mt-1">Adaugă câmpuri din <span className="font-semibold">Settings → CRM → Câmpuri</span>.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div role="tabpanel" aria-label="Câmpuri custom" className="space-y-4">
+      {customFields.map((field) => (
+        <div key={field.id}>
+          <label htmlFor={`cf-${field.id}`} className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">{field.label}</label>
+          {field.type === "select" && field.options ? (
+            <select
+              id={`cf-${field.id}`}
+              value={getVal(field.id)}
+              onChange={(e) => void handleChange(field.id, e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+              aria-label={field.label}
+            >
+              <option value="">— selectează —</option>
+              {field.options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          ) : field.type === "number" ? (
+            <input
+              id={`cf-${field.id}`}
+              type="number"
+              value={getVal(field.id)}
+              onChange={(e) => void handleChange(field.id, e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+              aria-label={field.label}
+            />
+          ) : (
+            <input
+              id={`cf-${field.id}`}
+              type="text"
+              value={getVal(field.id)}
+              onChange={(e) => void handleChange(field.id, e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+              aria-label={field.label}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }

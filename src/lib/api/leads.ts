@@ -34,6 +34,14 @@ export interface Lead {
   lostReason: string | null;
   /** CRM-111: Lead score 0-100 (hot ≥70, warm ≥40, cold <40) */
   score?: number | null;
+  /** CRM-113: Deal value in euro-cents */
+  valueCents: number;
+  /** CRM-113: Remaining debt in euro-cents */
+  debtCents: number;
+  /** CRM-114: Company name for B2B leads */
+  company?: string | null;
+  /** CRM-114: Deal name — if set, used as display title */
+  dealName?: string | null;
   /** Next open task (from pipeline endpoint, augmented server-side) */
   nextTask?: { dueAt: string | null; title: string } | null;
   createdAt: string;
@@ -71,6 +79,10 @@ export interface LeadInteraction {
 export interface PipelineResponse {
   grouped: Record<string, Lead[]>;
   counts: Record<string, number>;
+  /** CRM-113: Σ value_cents per stage key */
+  valueSums: Record<string, number>;
+  /** CRM-113: Grand total value_cents across all stages */
+  totalValueCents: number;
 }
 
 export function fetchPipeline(): Promise<PipelineResponse> {
@@ -93,6 +105,10 @@ export function createLead(input: {
   source?: LeadSource;
   notes?: string | null;
   assignedTo?: string | null;
+  valueCents?: number;
+  debtCents?: number;
+  company?: string | null;
+  dealName?: string | null;
 }): Promise<Lead> {
   return api<Lead>("/api/leads", {
     method: "POST",
@@ -137,7 +153,7 @@ export function addInteraction(
 
 export function updateLead(
   id: string,
-  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo">>
+  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo" | "valueCents" | "debtCents" | "company" | "dealName">>
 ): Promise<Lead> {
   return api<Lead>(`/api/leads/${id}`, {
     method: "PATCH",
@@ -218,6 +234,131 @@ export function logCall(
   }
 ): Promise<LeadInteraction> {
   return api<LeadInteraction>(`/api/leads/${leadId}/log-call`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// ─── CRM-114: Lead contacts ───────────────────────────────────────────────────
+
+export interface LeadContact {
+  id: string;
+  tenantId: string;
+  leadId: string;
+  fullName: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+  isPrimary: number; // 0 or 1
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function listContacts(leadId: string): Promise<{ items: LeadContact[] }> {
+  return api<{ items: LeadContact[] }>(`/api/leads/${leadId}/contacts`);
+}
+
+export function createContact(
+  leadId: string,
+  input: { fullName: string; role?: string | null; phone?: string | null; email?: string | null; isPrimary?: boolean }
+): Promise<LeadContact> {
+  return api<LeadContact>(`/api/leads/${leadId}/contacts`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateContact(
+  leadId: string,
+  contactId: string,
+  patch: { fullName?: string; role?: string | null; phone?: string | null; email?: string | null; isPrimary?: boolean }
+): Promise<LeadContact> {
+  return api<LeadContact>(`/api/leads/${leadId}/contacts/${contactId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteContact(leadId: string, contactId: string): Promise<{ deleted: boolean }> {
+  return api<{ deleted: boolean }>(`/api/leads/${leadId}/contacts/${contactId}`, { method: "DELETE" });
+}
+
+// ─── CRM-115: Tags ────────────────────────────────────────────────────────────
+
+export function listTags(leadId: string): Promise<{ tags: string[] }> {
+  return api<{ tags: string[] }>(`/api/leads/${leadId}/tags`);
+}
+
+export function addTag(leadId: string, tag: string): Promise<{ tag: string }> {
+  return api<{ tag: string }>(`/api/leads/${leadId}/tags`, {
+    method: "POST",
+    body: JSON.stringify({ tag }),
+  });
+}
+
+export function removeTag(leadId: string, tag: string): Promise<{ deleted: boolean }> {
+  return api<{ deleted: boolean }>(`/api/leads/${leadId}/tags/${encodeURIComponent(tag)}`, { method: "DELETE" });
+}
+
+// ─── CRM-115: Custom fields (settings) ───────────────────────────────────────
+
+export interface CustomField {
+  id: string;
+  tenantId: string;
+  key: string;
+  label: string;
+  type: "text" | "select" | "number";
+  options: string[] | null;
+  orderIndex: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function listCustomFields(): Promise<{ fields: CustomField[] }> {
+  return api<{ fields: CustomField[] }>("/api/settings/custom-fields");
+}
+
+export function createCustomField(
+  input: { key: string; label: string; type?: "text" | "select" | "number"; options?: string[] | null; orderIndex?: number }
+): Promise<CustomField> {
+  return api<CustomField>("/api/settings/custom-fields", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateCustomField(
+  id: string,
+  patch: { label?: string; type?: "text" | "select" | "number"; options?: string[] | null; orderIndex?: number }
+): Promise<CustomField> {
+  return api<CustomField>(`/api/settings/custom-fields/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteCustomField(id: string): Promise<{ deleted: boolean }> {
+  return api<{ deleted: boolean }>(`/api/settings/custom-fields/${id}`, { method: "DELETE" });
+}
+
+// ─── CRM-115: Lead field values ───────────────────────────────────────────────
+
+export interface LeadFieldValue {
+  id: string;
+  leadId: string;
+  fieldId: string;
+  value: string | null;
+}
+
+export function listFieldValues(leadId: string): Promise<{ values: LeadFieldValue[]; fields: CustomField[] }> {
+  return api<{ values: LeadFieldValue[]; fields: CustomField[] }>(`/api/leads/${leadId}/field-values`);
+}
+
+export function upsertFieldValue(
+  leadId: string,
+  input: { fieldId: string; value: string | null }
+): Promise<LeadFieldValue> {
+  return api<LeadFieldValue>(`/api/leads/${leadId}/field-values`, {
     method: "POST",
     body: JSON.stringify(input),
   });

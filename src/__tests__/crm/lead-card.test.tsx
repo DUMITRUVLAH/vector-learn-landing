@@ -20,6 +20,16 @@ vi.mock("@/lib/api/leads", () => ({
   logCall: vi.fn(),
   scoreLead: vi.fn(),
   assignLead: vi.fn(),
+  listContacts: vi.fn(),
+  createContact: vi.fn(),
+  updateContact: vi.fn(),
+  deleteContact: vi.fn(),
+  listTags: vi.fn(),
+  addTag: vi.fn(),
+  removeTag: vi.fn(),
+  listFieldValues: vi.fn(),
+  upsertFieldValue: vi.fn(),
+  listCustomFields: vi.fn(),
 }));
 
 vi.mock("@/lib/api/pipeline", () => ({
@@ -74,6 +84,8 @@ const MOCK_LEAD: Lead = {
   convertedToStudentId: null,
   convertedAt: null,
   lostReason: null,
+  valueCents: 0,
+  debtCents: 0,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };
@@ -106,6 +118,9 @@ describe("CRM-106 — Lead card page", () => {
     vi.mocked(leadsApi.updateLead).mockResolvedValue({ ...MOCK_LEAD, phone: "+40779999999" });
     vi.mocked(tasksApi.listTasks).mockResolvedValue({ items: [] });
     vi.mocked(tasksApi.listAttachments).mockResolvedValue({ items: [] });
+    vi.mocked(leadsApi.listContacts).mockResolvedValue({ items: [] });
+    vi.mocked(leadsApi.listTags).mockResolvedValue({ tags: [] });
+    vi.mocked(leadsApi.listFieldValues).mockResolvedValue({ values: [], fields: [] });
   });
 
   /**
