@@ -1,0 +1,52 @@
+import { api } from "../api";
+
+export interface Payment {
+  id: string;
+  studentId: string;
+  amountCents: number;
+  currency: "EUR" | "RON" | "USD";
+  status: "pending" | "paid" | "overdue" | "refunded" | "cancelled";
+  dueDate: string | null;
+  paidAt: string | null;
+  description: string | null;
+  createdAt: string;
+  studentName: string;
+}
+
+export interface PaymentStats {
+  monthPaidCents: number;
+  pendingCents: number;
+  overdueCents: number;
+}
+
+export function listPayments(): Promise<{ items: Payment[] }> {
+  return api<{ items: Payment[] }>("/api/payments");
+}
+
+export function paymentStats(): Promise<PaymentStats> {
+  return api<PaymentStats>("/api/payments/stats");
+}
+
+export function createPayment(input: {
+  studentId: string;
+  amountCents: number;
+  currency?: "EUR" | "RON" | "USD";
+  status?: "pending" | "paid" | "overdue" | "refunded" | "cancelled";
+  dueDate?: string | null;
+  description?: string | null;
+}): Promise<Payment> {
+  return api<Payment>("/api/payments", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updatePaymentStatus(
+  id: string,
+  status: Payment["status"]
+): Promise<Payment> {
+  return api<Payment>(`/api/payments/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}

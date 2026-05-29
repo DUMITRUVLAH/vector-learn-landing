@@ -11,6 +11,7 @@ import { studentRoutes } from "./routes/students";
 import { teacherRoutes } from "./routes/teachers";
 import { courseRoutes } from "./routes/courses";
 import { lessonRoutes } from "./routes/lessons";
+import { paymentRoutes } from "./routes/payments";
 
 const app = new Hono();
 
@@ -28,6 +29,7 @@ app.route("/api/students", studentRoutes);
 app.route("/api/teachers", teacherRoutes);
 app.route("/api/courses", courseRoutes);
 app.route("/api/lessons", lessonRoutes);
+app.route("/api/payments", paymentRoutes);
 
 app.get("/api/health", async (c) => {
   try {
