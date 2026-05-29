@@ -131,7 +131,7 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 1 | `REP-301` | Dashboard KPI: MRR, elevi activi, churn, ARPU + period toggle | 1 | done ✅ | [specs/REP-301-dashboard-kpi.md](specs/REP-301-dashboard-kpi.md) · [PR #49](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/49) |
 | 2 | `REP-302` | Revenue over time: line chart MRR lunar + breakdown disciplină | 2 | done ✅ | [specs/REP-302-revenue-chart.md](specs/REP-302-revenue-chart.md) · [PR #50](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/50) |
 | 3 | `REP-303` | Student retention: LTV per elev + top 10 + attendance rate | 3 | done ✅ | [specs/REP-303-student-retention.md](specs/REP-303-student-retention.md) · [PR #51](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/51) |
-| 4 | `REP-304` | Export rapoarte: CSV plăți + CSV elevi + download din UI | 4 | pending | [specs/REP-304-export.md](specs/REP-304-export.md) |
+| 4 | `REP-304` | Export rapoarte: CSV plăți + CSV elevi + download din UI | 4 | done ✅ | [specs/REP-304-export.md](specs/REP-304-export.md) · [PR #52](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/52) |
 
 ## Quality gates (required before status → `done`)
 

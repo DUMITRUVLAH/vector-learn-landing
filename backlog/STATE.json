@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "REP-304",
-  "last_completed": "REP-303",
-  "iterations": 49,
+  "current_item": null,
+  "last_completed": "REP-304",
+  "iterations": 50,
   "last_run_at": "2026-05-29T08:30:00Z",
   "milestone_status": "M1+M2+M3 landing + MVP-001..008 complete. CRM is now the CORE milestone: 12 items CRM-101..112 across 5 phases (see backlog/crm/). Build one item at a time per backlog/crm/BUILD-SEQUENCE.md; tests must pass before moving on.",
   "active_milestone": "REP",
@@ -613,13 +613,16 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "REP-304": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/REP-304-export.md",
       "milestone": "REP",
       "phase": "4",
-      "depends_on": ["REP-301"]
+      "depends_on": ["REP-301"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/52",
+      "branch": "feat/REP-304-export",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "COMM-205": {
       "status": "pending",
