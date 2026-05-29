@@ -83,8 +83,8 @@ Pivot from landing-only to functional SaaS with Postgres + auth + multi-tenant.
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
 | — | `MVP-009` | CRM Leads (kanban + create + convert + note) | — | done ✅ (merged commit `433f73a`) | [specs/MVP-009-crm-leads.md](specs/MVP-009-crm-leads.md) |
-| 1 | `CRM-101` | Intake web public + UTM + captcha + consent GDPR | A | pending | [specs/CRM-101-intake-web.md](specs/CRM-101-intake-web.md) |
-| 2 | `CRM-102` | Deduplicare robustă + merge manual | A | pending | [specs/CRM-102-dedup-merge.md](specs/CRM-102-dedup-merge.md) |
+| 1 | `CRM-101` | Intake web public + UTM + captcha + consent GDPR | A | done ✅ | [specs/CRM-101-intake-web.md](specs/CRM-101-intake-web.md) · [PR #27](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/27) |
+| 2 | `CRM-102` | Deduplicare robustă + merge manual | A | done ✅ | [specs/CRM-102-dedup-merge.md](specs/CRM-102-dedup-merge.md) · [PR #28](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/28) |
 | 3 | `CRM-103` | Adăugare manuală extinsă + Import CSV | A | pending | [specs/CRM-103-manual-import.md](specs/CRM-103-manual-import.md) |
 | 4 | `CRM-104` | Webhook Facebook Lead Ads + Google gclid | A | pending | [specs/CRM-104-ads-webhooks.md](specs/CRM-104-ads-webhooks.md) |
 | 5 | `CRM-105` | Pipeline: stadii custom + motiv pierdere + filtre | B | pending | [specs/CRM-105-pipeline.md](specs/CRM-105-pipeline.md) |

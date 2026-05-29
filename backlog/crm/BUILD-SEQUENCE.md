@@ -100,4 +100,5 @@ Ordinea liniară recomandată pentru autopilot:
 > Format: `- [CRM-CORE §X.Y] descriere scurtă → propus item CRM-NNN`. Apoi cineva îl promovează
 > în secvență. Nu îl implementa în PR-ul curent.
 
-_(gol la momentul scrierii — secvența acoperă tot inventarul din CORE §2)_
+- [CRM-CORE §8.2 + §9] `assigned_to` în modalul add lead acceptă UUID brut; ar trebui dropdown cu useri din tenant (Owner/Manager/Vânzător/Recepționer). → de adăugat în CRM-106 (editare inline cartonaș) sau item separat.
+- [CRM-CORE §8.6 CSV] Lipsă buton „Descarcă template CSV" — recepționerul nu știe formatul așteptat. → de adăugat în CRM-103 v2 sau CRM-105.

@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
-import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle } from "lucide-react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -10,10 +10,13 @@ import {
   convertLead,
   listInteractions,
   addInteraction,
+  checkDuplicate,
   type Lead,
   type LeadStage,
   type LeadInteraction,
+  type DedupResult,
 } from "@/lib/api/leads";
+import { api } from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +52,7 @@ export function LeadsPage() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [hoverStage, setHoverStage] = useState<LeadStage | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
@@ -104,14 +108,25 @@ export function LeadsPage() {
       pageTitle="CRM — Leads"
       pageDescription={`${totalLeads} lead-uri active în pipeline · conversie: ${counts.paid > 0 ? Math.round((counts.paid / totalLeads) * 100) : 0}%`}
       actions={
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          Adaugă lead
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowImport(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
+            aria-label="Import CSV"
+          >
+            <Upload className="h-4 w-4" />
+            Import CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            Adaugă lead
+          </button>
+        </div>
       }
     >
       {loading ? (
@@ -222,6 +237,18 @@ export function LeadsPage() {
         />
       )}
 
+      {showImport && (
+        <CsvImportModal
+          onClose={() => setShowImport(false)}
+          onImported={(summary) => {
+            setShowImport(false);
+            setToast({ kind: "success", message: `Import: ${summary.created} create, ${summary.duplicates} duplicate, ${summary.errors} erori` });
+            void fetchAll();
+          }}
+          onError={(m) => setToast({ kind: "error", message: m })}
+        />
+      )}
+
       {openLead && (
         <LeadDetailModal
           lead={openLead}
@@ -271,10 +298,43 @@ function CreateLeadModal({
   const [interestCourse, setInterestCourse] = useState("");
   const [source, setSource] = useState<"manual" | "facebook_ad" | "google_ads" | "referral" | "phone_in" | "instagram" | "other">("manual");
   const [notes, setNotes] = useState("");
+  const [assignedTo, setAssignedTo] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // CRM-102/103: Live dedup state
+  const [dedupResult, setDedupResult] = useState<DedupResult["duplicate"] | null>(null);
+  const [forceCreate, setForceCreate] = useState(false);
+  const dedupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const checkDedup = useCallback(async (phoneVal: string, emailVal: string) => {
+    if (!phoneVal && !emailVal) {
+      setDedupResult(null);
+      return;
+    }
+    try {
+      const result = await checkDuplicate({
+        phone: phoneVal || undefined,
+        email: emailVal || undefined,
+      });
+      setDedupResult(result.duplicate);
+    } catch {
+      // Dedup check failure is non-blocking
+      setDedupResult(null);
+    }
+  }, []);
+
+  const handlePhoneBlur = () => {
+    if (dedupTimerRef.current) clearTimeout(dedupTimerRef.current);
+    dedupTimerRef.current = setTimeout(() => void checkDedup(phone, email), 300);
+  };
+
+  const handleEmailBlur = () => {
+    if (dedupTimerRef.current) clearTimeout(dedupTimerRef.current);
+    dedupTimerRef.current = setTimeout(() => void checkDedup(phone, email), 300);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // T-CRM-103-1: block submit if name empty (HTML5 required handles this)
     setSubmitting(true);
     try {
       await createLead({
@@ -283,8 +343,9 @@ function CreateLeadModal({
         email: email || null,
         interestCourse: interestCourse || null,
         source,
+        assignedTo: assignedTo || null,
         notes: notes || null,
-      });
+      } as Parameters<typeof createLead>[0]);
       onSaved();
     } catch (err) {
       onError(err instanceof ApiError ? `Eroare: ${err.code}` : "Nu pot salva lead-ul");
@@ -295,6 +356,37 @@ function CreateLeadModal({
 
   return (
     <Modal title="Adaugă lead nou" onClose={onClose}>
+      {/* CRM-102/103: Dedup banner */}
+      {dedupResult && !forceCreate && (
+        <div
+          role="alert"
+          className="mb-3 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning-foreground"
+        >
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-amber-700">Există deja: {dedupResult.fullName}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Stadiu actual: {STAGES.find((s) => s.id === dedupResult.stage)?.label ?? dedupResult.stage}</p>
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => onError(`Deschide lead-ul existent: ${dedupResult.id}`)}
+                className="text-xs font-semibold text-primary hover:underline"
+              >
+                Deschide
+              </button>
+              <span className="text-muted-foreground">·</span>
+              <button
+                type="button"
+                onClick={() => setForceCreate(true)}
+                className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+              >
+                Creează oricum
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={submit} className="space-y-3">
         <FormField id="l-name" label="Nume complet" required>
           <input
@@ -314,6 +406,7 @@ function CreateLeadModal({
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              onBlur={handlePhoneBlur}
               className="input-base"
               placeholder="+40 7XX XXX XXX"
             />
@@ -324,6 +417,7 @@ function CreateLeadModal({
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onBlur={handleEmailBlur}
               className="input-base"
             />
           </FormField>
@@ -349,6 +443,19 @@ function CreateLeadModal({
             <option value="other">Altul</option>
           </select>
         </FormField>
+        {/* CRM-103: assigned_to field */}
+        <FormField id="l-assigned" label="Responsabil (ID vânzător)">
+          <input
+            id="l-assigned"
+            type="text"
+            value={assignedTo}
+            onChange={(e) => setAssignedTo(e.target.value)}
+            className="input-base"
+            placeholder="UUID vânzător (opțional)"
+            aria-describedby="l-assigned-hint"
+          />
+          <p id="l-assigned-hint" className="text-[11px] text-muted-foreground mt-1">Filtrabil din panoul Responsabil în kanban.</p>
+        </FormField>
         <FormField id="l-notes" label="Note">
           <textarea
             id="l-notes"
@@ -362,7 +469,11 @@ function CreateLeadModal({
           <button type="button" onClick={onClose} className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted">
             Anulează
           </button>
-          <button type="submit" disabled={submitting} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+          <button
+            type="submit"
+            disabled={submitting || (dedupResult !== null && !forceCreate)}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
             {submitting ? "Se salvează..." : "Adaugă"}
           </button>
         </div>
@@ -371,6 +482,264 @@ function CreateLeadModal({
         .input-base { width: 100%; border-radius: 0.5rem; border: 1px solid hsl(var(--input)); background-color: hsl(var(--background)); padding: 0.5rem 0.75rem; font-size: 0.875rem; }
         .input-base:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--ring)); }
       `}</style>
+    </Modal>
+  );
+}
+
+// CRM-103: CSV import modal
+interface ImportSummary { created: number; duplicates: number; errors: number }
+
+function CsvImportModal({
+  onClose,
+  onImported,
+  onError,
+}: {
+  onClose: () => void;
+  onImported: (summary: ImportSummary) => void;
+  onError: (m: string) => void;
+}) {
+  type Step = "upload" | "map" | "preview" | "done";
+  const [step, setStep] = useState<Step>("upload");
+  const [, setCsvText] = useState<string>("");
+  const [rows, setRows] = useState<string[][]>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
+  // Column mapping: maps our field → CSV column index
+  const [mapping, setMapping] = useState<Record<string, number>>({});
+  const [previewRows, setPreviewRows] = useState<Array<Record<string, string>>>([]);
+  const [previewSummary, setPreviewSummary] = useState<ImportSummary | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const OUR_FIELDS = [
+    { key: "fullName", label: "Nume complet *" },
+    { key: "phone", label: "Telefon" },
+    { key: "email", label: "Email" },
+    { key: "interestCourse", label: "Curs de interes" },
+    { key: "source", label: "Sursă" },
+    { key: "notes", label: "Note" },
+  ] as const;
+
+  const parseCsv = (text: string): string[][] => {
+    return text.trim().split("\n").map((line) =>
+      line.split(",").map((cell) => cell.trim().replace(/^"|"$/g, ""))
+    );
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      setCsvText(text);
+      const parsed = parseCsv(text);
+      if (parsed.length < 2) {
+        onError("CSV-ul trebuie să aibă cel puțin un header și un rând de date.");
+        return;
+      }
+      setHeaders(parsed[0]);
+      setRows(parsed.slice(1));
+      // Auto-map common column names
+      const autoMap: Record<string, number> = {};
+      parsed[0].forEach((h, i) => {
+        const lh = h.toLowerCase();
+        if (lh.includes("num") || lh.includes("name")) autoMap["fullName"] = i;
+        else if (lh.includes("tel") || lh.includes("phone")) autoMap["phone"] = i;
+        else if (lh.includes("email") || lh.includes("mail")) autoMap["email"] = i;
+        else if (lh.includes("curs") || lh.includes("course") || lh.includes("interes")) autoMap["interestCourse"] = i;
+        else if (lh.includes("sursa") || lh.includes("source")) autoMap["source"] = i;
+        else if (lh.includes("note") || lh.includes("obs")) autoMap["notes"] = i;
+      });
+      setMapping(autoMap);
+      setStep("map");
+    };
+    reader.readAsText(file);
+  };
+
+  const buildMappedRows = () =>
+    rows.map((row) =>
+      Object.fromEntries(
+        OUR_FIELDS.map(({ key }) => [key, mapping[key] !== undefined ? (row[mapping[key]] ?? "") : ""])
+      )
+    );
+
+  const handlePreview = async () => {
+    const mapped = buildMappedRows();
+    setPreviewRows(mapped.slice(0, 5));
+
+    // Dry-run to get summary
+    try {
+      setSubmitting(true);
+      const res = await api<{ summary: ImportSummary }>("/api/leads/import", {
+        method: "POST",
+        body: JSON.stringify({
+          rows: mapped.map((r) => ({
+            fullName: r.fullName || "",
+            phone: r.phone || null,
+            email: r.email || null,
+            interestCourse: r.interestCourse || null,
+            source: r.source || "import",
+            notes: r.notes || null,
+          })),
+          dryRun: true,
+        }),
+      });
+      setPreviewSummary(res.summary);
+      setStep("preview");
+    } catch {
+      onError("Nu pot valida CSV-ul. Verifică formatul.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCommit = async () => {
+    const mapped = buildMappedRows();
+    try {
+      setSubmitting(true);
+      const res = await api<{ summary: ImportSummary }>("/api/leads/import", {
+        method: "POST",
+        body: JSON.stringify({
+          rows: mapped.map((r) => ({
+            fullName: r.fullName || "",
+            phone: r.phone || null,
+            email: r.email || null,
+            interestCourse: r.interestCourse || null,
+            source: r.source || "import",
+            notes: r.notes || null,
+          })),
+          dryRun: false,
+        }),
+      });
+      onImported(res.summary);
+    } catch {
+      onError("Importul a eșuat. Încearcă din nou.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal title="Import CSV leaduri" onClose={onClose} wide>
+      <div className="space-y-4">
+        {step === "upload" && (
+          <>
+            <p className="text-sm text-muted-foreground">
+              Încarcă un fișier CSV cu leaduri din Excel sau alt CRM. Câmpuri obligatorii: Nume complet.
+            </p>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFileChange}
+              className="hidden"
+              aria-label="Selectează fișier CSV"
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted/20 px-6 py-8 text-sm font-semibold hover:bg-muted/40 transition-colors"
+            >
+              <Upload className="h-5 w-5 text-muted-foreground" />
+              Alege fișier CSV
+            </button>
+          </>
+        )}
+
+        {step === "map" && (
+          <>
+            <p className="text-sm font-semibold">Mapare coloane ({rows.length} rânduri detectate)</p>
+            <div className="space-y-2">
+              {OUR_FIELDS.map(({ key, label }) => (
+                <div key={key} className="flex items-center gap-3">
+                  <label htmlFor={`map-${key}`} className="text-sm w-32 shrink-0">{label}</label>
+                  <select
+                    id={`map-${key}`}
+                    value={mapping[key] ?? ""}
+                    onChange={(e) => setMapping((prev) => ({ ...prev, [key]: parseInt(e.target.value) }))}
+                    className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                  >
+                    <option value="">— nu mapa —</option>
+                    {headers.map((h, i) => (
+                      <option key={i} value={i}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setStep("upload")} className="rounded-md border border-border px-4 py-2 text-sm font-semibold hover:bg-muted">
+                Înapoi
+              </button>
+              <button
+                type="button"
+                disabled={!mapping["fullName"] && mapping["fullName"] !== 0}
+                onClick={() => void handlePreview()}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Preview"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === "preview" && previewSummary && (
+          <>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-lg bg-success/10 p-3">
+                <p className="text-2xl font-bold text-success">{previewSummary.created}</p>
+                <p className="text-xs text-muted-foreground">Leaduri noi</p>
+              </div>
+              <div className="rounded-lg bg-warning/10 p-3">
+                <p className="text-2xl font-bold text-amber-600">{previewSummary.duplicates}</p>
+                <p className="text-xs text-muted-foreground">Duplicate</p>
+              </div>
+              <div className="rounded-lg bg-destructive/10 p-3">
+                <p className="text-2xl font-bold text-destructive">{previewSummary.errors}</p>
+                <p className="text-xs text-muted-foreground">Erori</p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Preview primele 5 rânduri:</p>
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="text-[11px] w-full">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40">
+                      {OUR_FIELDS.filter(({ key }) => mapping[key] !== undefined).map(({ key, label }) => (
+                        <th key={key} className="px-2 py-1.5 text-left font-semibold">{label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRows.map((row, i) => (
+                      <tr key={i} className="border-b border-border last:border-0">
+                        {OUR_FIELDS.filter(({ key }) => mapping[key] !== undefined).map(({ key }) => (
+                          <td key={key} className="px-2 py-1.5 truncate max-w-[100px]">{row[key] || "—"}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setStep("map")} className="rounded-md border border-border px-4 py-2 text-sm font-semibold hover:bg-muted">
+                Modifică maparea
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCommit()}
+                disabled={submitting}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : `Importă ${previewSummary.created} leaduri`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </Modal>
   );
 }

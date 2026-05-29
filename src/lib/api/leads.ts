@@ -14,16 +14,27 @@ export type LeadSource =
 
 export interface Lead {
   id: string;
+  tenantId: string;
   fullName: string;
+  fullNameNormalized: string | null;
   phone: string | null;
   email: string | null;
   interestCourse: string | null;
   stage: LeadStage;
   source: LeadSource;
+  assignedTo: string | null;
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
+  fbclid: string | null;
+  gclid: string | null;
+  consentText: string | null;
+  consentAt: string | null;
+  ipAtConsent: string | null;
+  userAgentAtConsent: string | null;
+  consentRevokedAt: string | null;
   notes: string | null;
+  mergedIntoId: string | null;
   convertedToStudentId: string | null;
   convertedAt: string | null;
   lostReason: string | null;
@@ -64,6 +75,7 @@ export function createLead(input: {
   email?: string | null;
   interestCourse?: string | null;
   source?: LeadSource;
+  assignedTo?: string | null;
   notes?: string | null;
 }): Promise<Lead> {
   return api<Lead>("/api/leads", {
@@ -102,4 +114,72 @@ export function convertLead(id: string): Promise<{ lead: Lead; student: { id: st
     `/api/leads/${id}/convert`,
     { method: "POST" }
   );
+}
+
+// CRM-101: Public intake
+export interface IntakeInput {
+  tenantSlug: string;
+  fullName: string;
+  phone?: string | null;
+  email?: string | null;
+  interestCourse?: string | null;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  fbclid?: string | null;
+  gclid?: string | null;
+  consentText: string;
+  consentAt?: string;
+  captchaToken?: string | null;
+}
+
+export interface IntakeResponse {
+  leadId: string;
+  isDuplicate: boolean;
+  interactionId?: string;
+}
+
+export function submitIntake(input: IntakeInput): Promise<IntakeResponse> {
+  return api<IntakeResponse>("/api/leads/intake", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// CRM-102: Live dedup check
+export interface DedupResult {
+  duplicate: { id: string; fullName: string; stage: LeadStage } | null;
+}
+
+export function checkDuplicate(params: { phone?: string; email?: string }): Promise<DedupResult> {
+  const qs = new URLSearchParams();
+  if (params.phone) qs.set("phone", params.phone);
+  if (params.email) qs.set("email", params.email);
+  return api<DedupResult>(`/api/leads/dedup?${qs.toString()}`);
+}
+
+// CRM-102: Merge
+export interface MergeResult {
+  survivorId: string;
+  sourceId: string;
+  merged: boolean;
+  survivor: Lead;
+}
+
+export function mergeLeads(survivorId: string, sourceId: string): Promise<MergeResult> {
+  return api<MergeResult>(`/api/leads/${survivorId}/merge`, {
+    method: "POST",
+    body: JSON.stringify({ sourceId }),
+  });
+}
+
+/** Update lead fields */
+export function updateLead(
+  id: string,
+  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo">>
+): Promise<Lead> {
+  return api<Lead>(`/api/leads/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
 }
