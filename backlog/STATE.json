@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "active_milestone": "M3",
   "current_item": null,
-  "last_completed": "M3-003",
-  "iterations": 17,
-  "last_run_at": "2026-05-29T07:35:00Z",
-  "milestone_status": "M1 (10/10) + M2 (4/4) + M3 (3/3) complete",
+  "last_completed": "MVP-004",
+  "iterations": 21,
+  "last_run_at": "2026-05-29T08:08:00Z",
+  "milestone_status": "M1+M2+M3 landing complete. MVP backend live: 9 tables, auth, students CRUD end-to-end.",
+  "active_milestone": "MVP",
   "items": {
     "M1-001": {
       "status": "done",
@@ -189,6 +189,34 @@
       "blockers": [],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/17",
       "branch": "feat/M3-003-pricing"
+    },
+    "MVP-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/18",
+      "branch": "feat/MVP-001-backend-skeleton"
+    },
+    "MVP-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/19",
+      "branch": "feat/MVP-002-schema"
+    },
+    "MVP-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/20",
+      "branch": "feat/MVP-003-auth"
+    },
+    "MVP-004": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/21",
+      "branch": "feat/MVP-004-students"
     }
   }
 }

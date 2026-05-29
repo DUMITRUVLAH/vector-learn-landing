@@ -53,6 +53,17 @@ Interactive tools that help prospects self-qualify and feel confident before boo
 
 **🎉 M3 milestone: 3/3 done. M1+M2+M3 all complete (17 PRs).**
 
+## Active milestone: MVP — Real backend product
+
+Pivot from landing-only to functional SaaS with Postgres + auth + multi-tenant.
+
+| # | ID | Title | Status | Owner | Spec |
+|---|----|-------|--------|-------|------|
+| 1 | `MVP-001` | Backend skeleton (Hono + Drizzle + PGlite) | done ✅ | orchestrator | [specs/MVP-001-backend-skeleton.md](specs/MVP-001-backend-skeleton.md) · [PR #18](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/18) |
+| 2 | `MVP-002` | Database schema (9 tables) + seed | done ✅ | orchestrator | [specs/MVP-002-schema.md](specs/MVP-002-schema.md) · [PR #19](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/19) |
+| 3 | `MVP-003` | Authentication (signup/login/session) | done ✅ | orchestrator | [specs/MVP-003-auth.md](specs/MVP-003-auth.md) · [PR #20](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/20) |
+| 4 | `MVP-004` | Students CRUD (API + dashboard) | done ✅ | orchestrator | [specs/MVP-004-students-api.md](specs/MVP-004-students-api.md) · [PR #21](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/21) |
+
 ## Quality gates (required before status → `done`)
 
 1. **Build passes**: `npm run build` exits 0

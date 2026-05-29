@@ -1,0 +1,71 @@
+import { api } from "../api";
+
+export interface Student {
+  id: string;
+  tenantId: string;
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+  parentPhone: string | null;
+  parentEmail: string | null;
+  birthDate: string | null;
+  status: "active" | "trial" | "paused" | "archived";
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListStudentsResponse {
+  items: Student[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListStudentsParams {
+  search?: string;
+  status?: "active" | "trial" | "paused" | "archived" | "all";
+  limit?: number;
+  offset?: number;
+}
+
+export interface StudentInput {
+  fullName: string;
+  phone?: string | null;
+  email?: string | null;
+  parentPhone?: string | null;
+  parentEmail?: string | null;
+  birthDate?: string | null;
+  status?: "active" | "trial" | "paused" | "archived";
+  notes?: string | null;
+}
+
+export function listStudents(params: ListStudentsParams = {}): Promise<ListStudentsResponse> {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set("search", params.search);
+  if (params.status) qs.set("status", params.status);
+  if (params.limit !== undefined) qs.set("limit", String(params.limit));
+  if (params.offset !== undefined) qs.set("offset", String(params.offset));
+  const query = qs.toString();
+  return api<ListStudentsResponse>(`/api/students${query ? `?${query}` : ""}`);
+}
+
+export function createStudent(input: StudentInput): Promise<Student> {
+  return api<Student>("/api/students", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateStudent(id: string, input: Partial<StudentInput>): Promise<Student> {
+  return api<Student>(`/api/students/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function archiveStudent(id: string): Promise<{ ok: true; id: string }> {
+  return api<{ ok: true; id: string }>(`/api/students/${id}`, {
+    method: "DELETE",
+  });
+}

@@ -1,0 +1,37 @@
+import { pgTable, uuid, varchar, timestamp, pgEnum, date, index } from "drizzle-orm/pg-core";
+import { tenants } from "./tenants";
+
+export const studentStatusEnum = pgEnum("student_status", [
+  "active",
+  "trial",
+  "paused",
+  "archived",
+]);
+
+export const students = pgTable(
+  "students",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    fullName: varchar("full_name", { length: 200 }).notNull(),
+    phone: varchar("phone", { length: 32 }),
+    email: varchar("email", { length: 255 }),
+    parentPhone: varchar("parent_phone", { length: 32 }),
+    parentEmail: varchar("parent_email", { length: 255 }),
+    birthDate: date("birth_date"),
+    status: studentStatusEnum("status").notNull().default("active"),
+    notes: varchar("notes", { length: 1000 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("students_tenant_idx").on(t.tenantId),
+    statusIdx: index("students_status_idx").on(t.tenantId, t.status),
+    nameIdx: index("students_name_idx").on(t.tenantId, t.fullName),
+  })
+);
+
+export type Student = typeof students.$inferSelect;
+export type NewStudent = typeof students.$inferInsert;
