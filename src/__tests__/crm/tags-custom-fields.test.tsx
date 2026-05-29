@@ -54,6 +54,19 @@ vi.mock("@/hooks/useSession", () => ({
   useSession: () => ({ status: "authenticated", user: { id: "u1", tenantId: "t1", role: "owner" } }),
 }));
 
+// COMM-202: mock messages + templates
+vi.mock("@/lib/api/messages", () => ({
+  listMessages: vi.fn().mockResolvedValue({ items: [] }),
+  sendMessage: vi.fn(),
+}));
+
+vi.mock("@/lib/api/templates", () => ({
+  listTemplates: vi.fn().mockResolvedValue({ items: [] }),
+  extractVariables: vi.fn().mockReturnValue([]),
+  renderPreview: vi.fn().mockReturnValue(""),
+  KNOWN_VARIABLES: {},
+}));
+
 vi.mock("@/router/HashRouter", () => ({
   useRouter: () => ({ navigate: vi.fn(), path: "/app/leads/lead-001" }),
   Link: ({ children, to, className }: { children: React.ReactNode; to: string; className?: string }) => (

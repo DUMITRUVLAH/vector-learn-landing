@@ -1,11 +1,11 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "CRM-115",
-  "iterations": 39,
+  "last_completed": "COMM-205",
+  "iterations": 45,
   "last_run_at": "2026-05-29T08:30:00Z",
   "milestone_status": "M1+M2+M3 landing + MVP-001..008 complete. CRM is now the CORE milestone: 12 items CRM-101..112 across 5 phases (see backlog/crm/). Build one item at a time per backlog/crm/BUILD-SEQUENCE.md; tests must pass before moving on.",
-  "active_milestone": "CRM",
+  "active_milestone": "COMM",
   "items": {
     "M1-001": {
       "status": "done",
@@ -515,6 +515,66 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/41",
       "branch": "feat/CRM-116-task-signals",
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "COMM-201": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/COMM-201-provider-infra.md",
+      "milestone": "COMM",
+      "phase": "1",
+      "depends_on": ["CRM-108", "CRM-109"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/44",
+      "branch": "feat/COMM-201-provider-infra",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "COMM-202": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/COMM-202-message-log.md",
+      "milestone": "COMM",
+      "phase": "2",
+      "depends_on": ["COMM-201"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/45",
+      "branch": "feat/COMM-202-message-log",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "COMM-203": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/COMM-203-inbox.md",
+      "milestone": "COMM",
+      "phase": "3",
+      "depends_on": ["COMM-201", "COMM-202"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/46",
+      "branch": "feat/COMM-203-inbox",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "COMM-204": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/COMM-204-broadcast.md",
+      "milestone": "COMM",
+      "phase": "4",
+      "depends_on": ["COMM-201", "COMM-202"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/47",
+      "branch": "feat/COMM-204-broadcast",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "COMM-205": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/COMM-205-notifications.md",
+      "milestone": "COMM",
+      "phase": "5",
+      "depends_on": ["COMM-201", "COMM-204"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/48",
+      "branch": "feat/COMM-205-notifications",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "LOVES" }
     }
   }
 }
