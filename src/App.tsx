@@ -45,6 +45,7 @@ import { AutomationsPage } from "./pages/app/AutomationsPage";
 import { AnalyticsPage } from "./pages/app/AnalyticsPage";
 import { PayrollPage } from "./pages/app/PayrollPage";
 import { TeacherStatsPage } from "./pages/app/TeacherStatsPage";
+import { AvailabilityPage } from "./pages/app/AvailabilityPage";
 
 function HomePage() {
   return (
@@ -105,6 +106,11 @@ function Routes() {
   if (path.match(/^\/app\/hr\/teachers\/[^/]+\/stats$/)) {
     const id = path.split("/")[4];
     return <TeacherStatsPage teacherId={id} />;
+  }
+  // /app/hr/teachers/:id/availability
+  if (path.match(/^\/app\/hr\/teachers\/[^/]+\/availability$/)) {
+    const id = path.split("/")[4];
+    return <AvailabilityPage teacherId={id} />;
   }
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;

@@ -85,6 +85,13 @@
       "when": 1780092703763,
       "tag": "0011_hr401_payroll",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1780093342817,
+      "tag": "0012_hr403_teacher_availability",
+      "breakpoints": true
     }
   ]
 }
