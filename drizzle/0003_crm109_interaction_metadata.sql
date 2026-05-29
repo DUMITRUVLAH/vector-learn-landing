@@ -1,0 +1,1 @@
+ALTER TABLE "lead_interactions" ADD COLUMN "metadata" jsonb;

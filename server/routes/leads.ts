@@ -3,7 +3,8 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks } from "../db/schema";
+import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates } from "../db/schema";
+import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 
@@ -497,6 +498,125 @@ leadRoutes.patch("/:id/consent-revoke", async (c) => {
   });
 
   return c.json(updated);
+});
+
+// POST /api/leads/:id/send-message — send email/WhatsApp/SMS from lead card (CRM-109)
+const sendMessageSchema = z.object({
+  channel: z.enum(["email", "whatsapp", "sms"]),
+  templateId: z.string().uuid().optional().nullable(),
+  subject: z.string().max(500).optional().nullable(),
+  body: z.string().min(1).max(4000),
+});
+
+leadRoutes.post("/:id/send-message", zValidator("json", sendMessageSchema), async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+  const { channel, templateId, subject, body } = c.req.valid("json");
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
+  });
+  if (!lead) return c.json({ error: "not_found" }, 404);
+
+  // Block if consent revoked
+  if (lead.consentRevokedAt) {
+    return c.json({ error: "consent_revoked", message: "Consimțământul a fost retras — trimiterea este blocată." }, 403);
+  }
+
+  // Validate template if provided
+  let resolvedTemplateId: string | null = templateId ?? null;
+  if (templateId) {
+    const tmpl = await db.query.messageTemplates.findFirst({
+      where: and(eq(messageTemplates.id, templateId), eq(messageTemplates.tenantId, tenantId)),
+    });
+    if (!tmpl) return c.json({ error: "template_not_found" }, 404);
+    resolvedTemplateId = tmpl.id;
+  }
+
+  // Build context for template rendering from lead fields
+  const context: Record<string, string> = {
+    first_name: lead.fullName.split(" ")[0] ?? lead.fullName,
+    full_name: lead.fullName,
+    phone: lead.phone ?? "",
+    course: lead.interestCourse ?? "",
+    center_name: "Vector Learn",
+    trial_date: "",
+  };
+
+  // Provider stub: in dev we log; real integration (SendGrid/Twilio/360dialog) wired per channel
+  // stub — no real send, just log interaction
+  const metadata: Record<string, unknown> = { channel, stub: true };
+  if (resolvedTemplateId) metadata.template_id = resolvedTemplateId;
+  if (subject) metadata.subject = renderTemplate(subject, context);
+
+  const [created] = await db
+    .insert(leadInteractions)
+    .values({
+      tenantId,
+      leadId: id,
+      type: channel,
+      direction: "outbound",
+      body: renderTemplate(body, context),
+      metadata,
+      userId,
+    })
+    .returning();
+
+  return c.json(created, 201);
+});
+
+// POST /api/leads/:id/log-call — log a phone call with outcome (CRM-109)
+const logCallSchema = z.object({
+  outcome: z.enum(["interested", "not_interested", "wrong_number", "no_answer"]),
+  durationSeconds: z.number().int().min(0).max(7200).optional().nullable(),
+  note: z.string().max(2000).optional().nullable(),
+});
+
+leadRoutes.post("/:id/log-call", zValidator("json", logCallSchema), async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+  const { outcome, durationSeconds, note } = c.req.valid("json");
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
+  });
+  if (!lead) return c.json({ error: "not_found" }, 404);
+
+  const OUTCOME_LABELS: Record<string, string> = {
+    interested: "Interesat",
+    not_interested: "Nu e interesat",
+    wrong_number: "Număr greșit",
+    no_answer: "Nu a răspuns",
+  };
+
+  const bodyParts: string[] = [`Apel ieșit — ${OUTCOME_LABELS[outcome] ?? outcome}`];
+  if (durationSeconds != null && durationSeconds > 0) {
+    const mins = Math.floor(durationSeconds / 60);
+    const secs = durationSeconds % 60;
+    bodyParts.push(`Durată: ${mins > 0 ? `${mins}m ` : ""}${secs}s`);
+  }
+  if (note?.trim()) bodyParts.push(note.trim());
+
+  const metadata: Record<string, unknown> = { outcome };
+  if (durationSeconds != null) metadata.duration_seconds = durationSeconds;
+  metadata.recording_url = null; // placeholder — real recording integration deferred
+
+  const [created] = await db
+    .insert(leadInteractions)
+    .values({
+      tenantId,
+      leadId: id,
+      type: "call",
+      direction: "outbound",
+      body: bodyParts.join(" · "),
+      metadata,
+      userId,
+    })
+    .returning();
+
+  return c.json(created, 201);
 });
 
 // DELETE /api/leads/:id — GDPR erasure (anonymize PII, keep audit trail)

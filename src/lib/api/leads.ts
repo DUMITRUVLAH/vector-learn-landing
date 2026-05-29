@@ -42,12 +42,26 @@ export interface DedupResult {
   duplicate: { id: string; fullName: string; stage: string } | null;
 }
 
+/** Metadata stored with an interaction (template_id, call outcome, etc.) — CRM-109 */
+export interface InteractionMetadata {
+  template_id?: string;
+  outcome?: "interested" | "not_interested" | "wrong_number" | "no_answer";
+  duration_seconds?: number | null;
+  recording_url?: string | null;
+  subject?: string;
+  channel?: string;
+  stub?: boolean;
+  [key: string]: unknown;
+}
+
 export interface LeadInteraction {
   id: string;
   leadId: string;
   type: "note" | "call" | "email" | "whatsapp" | "sms" | "meeting" | "stage_change" | "system";
   direction: "inbound" | "outbound" | "internal";
   body: string | null;
+  /** JSONB metadata: template_id, call outcome/duration, etc. */
+  metadata?: InteractionMetadata | null;
   userId: string | null;
   occurredAt: string;
 }
@@ -142,4 +156,35 @@ export function revokeConsent(id: string): Promise<Lead> {
 
 export function deleteLead(id: string): Promise<{ deleted: boolean; anonymized: boolean }> {
   return api<{ deleted: boolean; anonymized: boolean }>(`/api/leads/${id}`, { method: "DELETE" });
+}
+
+/** CRM-109: Send email/WhatsApp/SMS from lead card with optional template */
+export function sendMessage(
+  leadId: string,
+  input: {
+    channel: "email" | "whatsapp" | "sms";
+    templateId?: string | null;
+    subject?: string | null;
+    body: string;
+  }
+): Promise<LeadInteraction> {
+  return api<LeadInteraction>(`/api/leads/${leadId}/send-message`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** CRM-109: Log a phone call with outcome + duration + note */
+export function logCall(
+  leadId: string,
+  input: {
+    outcome: "interested" | "not_interested" | "wrong_number" | "no_answer";
+    durationSeconds?: number | null;
+    note?: string | null;
+  }
+): Promise<LeadInteraction> {
+  return api<LeadInteraction>(`/api/leads/${leadId}/log-call`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }

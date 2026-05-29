@@ -1,7 +1,8 @@
 /**
- * CRM-106/CRM-107 — Cartonaș detaliu lead /app/leads/:id
+ * CRM-106/CRM-107/CRM-109 — Cartonaș detaliu lead /app/leads/:id
  * Layout 2 coloane: col stânga sticky (info+acțiuni), col dreapta tab-uri
  * CRM-107: Tab Task-uri (CRUD + badge kanban), Tab Fișiere (upload/download)
+ * CRM-109: Butoane Email/WhatsApp/Sună + logare apel + SendMessageModal + LogCallModal
  */
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@/lib/api/tasks";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { SendMessageModal, LogCallModal, type SendChannel } from "@/components/crm/CommModal";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -90,6 +92,13 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   const [revoking, setRevoking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+
+  // CRM-109: Communication modals
+  const [sendModal, setSendModal] = useState<{ open: boolean; channel: SendChannel }>({
+    open: false,
+    channel: "email",
+  });
+  const [logCallModal, setLogCallModal] = useState(false);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -209,6 +218,38 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     } finally {
       setSubmittingNote(false);
     }
+  };
+
+  // ─── CRM-109: Communication handlers ─────────────────────────────────────
+  const handleOpenSend = (channel: SendChannel) => {
+    if (!lead) return;
+    if (lead.consentRevokedAt) {
+      setToast({ kind: "error", message: "Consimțământul a fost retras — trimitere blocată." });
+      return;
+    }
+    setSendModal({ open: true, channel });
+  };
+
+  const handleOpenCall = () => {
+    if (!lead) return;
+    // Open tel: link first (native phone dialer)
+    if (lead.phone) {
+      window.location.href = `tel:${lead.phone}`;
+    }
+    // Show log-call modal regardless (user logs after call ends)
+    setLogCallModal(true);
+  };
+
+  const handleSendSuccess = (interaction: import("@/lib/api/leads").LeadInteraction) => {
+    setInteractions((prev) => [interaction, ...prev]);
+    setSendModal({ open: false, channel: "email" });
+    setToast({ kind: "success", message: "Mesaj trimis și logat în timeline!" });
+  };
+
+  const handleLogCallSuccess = (interaction: import("@/lib/api/leads").LeadInteraction) => {
+    setInteractions((prev) => [interaction, ...prev]);
+    setLogCallModal(false);
+    setToast({ kind: "success", message: "Apel logat în timeline!" });
   };
 
   // ─── Convert ─────────────────────────────────────────────────────────────
@@ -549,14 +590,40 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                   aria-label="Telefon"
                 />
               ) : lead.phone ? (
-                <a
-                  href={`tel:${lead.phone}`}
-                  className={cn("flex items-center gap-1.5 text-sm font-medium text-primary hover:underline", consentRevoked && "pointer-events-none opacity-50")}
-                  aria-disabled={consentRevoked}
-                >
-                  <Phone className="h-3.5 w-3.5" aria-hidden="true" />
-                  {lead.phone}
-                </a>
+                <div className="flex items-center justify-between gap-2">
+                  <a
+                    href={`tel:${lead.phone}`}
+                    className={cn("flex items-center gap-1.5 text-sm font-medium text-primary hover:underline", consentRevoked && "pointer-events-none opacity-50")}
+                    aria-disabled={consentRevoked}
+                  >
+                    <Phone className="h-3.5 w-3.5" aria-hidden="true" />
+                    {lead.phone}
+                  </a>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={handleOpenCall}
+                      disabled={consentRevoked}
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted disabled:opacity-40"
+                      aria-label="Sună lead"
+                      title="Sună + Loghează apel"
+                    >
+                      <Phone className="h-3 w-3" aria-hidden="true" />
+                      Sună
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSend("whatsapp")}
+                      disabled={consentRevoked}
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted disabled:opacity-40"
+                      aria-label="Trimite WhatsApp"
+                      title="Trimite WhatsApp"
+                    >
+                      <MessageCircle className="h-3 w-3" aria-hidden="true" />
+                      WA
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">—</p>
               )}
@@ -574,14 +641,27 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                   aria-label="Email"
                 />
               ) : lead.email ? (
-                <a
-                  href={`mailto:${lead.email}`}
-                  className={cn("flex items-center gap-1.5 text-sm font-medium text-primary hover:underline", consentRevoked && "pointer-events-none opacity-50")}
-                  aria-disabled={consentRevoked}
-                >
-                  <Mail className="h-3.5 w-3.5" aria-hidden="true" />
-                  {lead.email}
-                </a>
+                <div className="flex items-center justify-between gap-2">
+                  <a
+                    href={`mailto:${lead.email}`}
+                    className={cn("flex items-center gap-1.5 text-sm font-medium text-primary hover:underline min-w-0 truncate", consentRevoked && "pointer-events-none opacity-50")}
+                    aria-disabled={consentRevoked}
+                  >
+                    <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{lead.email}</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSend("email")}
+                    disabled={consentRevoked}
+                    className="shrink-0 inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted disabled:opacity-40"
+                    aria-label="Trimite email"
+                    title="Trimite email"
+                  >
+                    <Mail className="h-3 w-3" aria-hidden="true" />
+                    Email
+                  </button>
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">—</p>
               )}
@@ -939,6 +1019,25 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         />
       )}
 
+      {/* CRM-109: Send message modal */}
+      {sendModal.open && lead && (
+        <SendMessageModal
+          lead={lead}
+          defaultChannel={sendModal.channel}
+          onSuccess={handleSendSuccess}
+          onCancel={() => setSendModal({ open: false, channel: "email" })}
+        />
+      )}
+
+      {/* CRM-109: Log call modal */}
+      {logCallModal && lead && (
+        <LogCallModal
+          lead={lead}
+          onSuccess={handleLogCallSuccess}
+          onCancel={() => setLogCallModal(false)}
+        />
+      )}
+
       {/* Toast */}
       {toast && (
         <div
@@ -960,16 +1059,34 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
 
 // ─── Timeline Item ────────────────────────────────────────────────────────────
 
+const INTERACTION_ICON: Record<string, React.ReactNode> = {
+  note: <MessageCircle className="h-3 w-3 text-primary" aria-hidden="true" />,
+  call: <Phone className="h-3 w-3 text-primary" aria-hidden="true" />,
+  email: <Mail className="h-3 w-3 text-primary" aria-hidden="true" />,
+  whatsapp: <MessageCircle className="h-3 w-3 text-success" aria-hidden="true" />,
+  sms: <Phone className="h-3 w-3 text-primary" aria-hidden="true" />,
+  stage_change: <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />,
+  system: <AlertTriangle className="h-3 w-3 text-muted-foreground" aria-hidden="true" />,
+};
+
 function TimelineItem({ item }: { item: LeadInteraction }) {
+  const meta = item.metadata;
+
   return (
     <li className="flex gap-3">
       <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
-        <MessageCircle className="h-3 w-3 text-primary" aria-hidden="true" />
+        {INTERACTION_ICON[item.type] ?? <MessageCircle className="h-3 w-3 text-primary" aria-hidden="true" />}
       </div>
       <div className="flex-1 rounded-lg border border-border bg-card p-3">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-semibold text-foreground capitalize">
             {INTERACTION_LABEL[item.type] ?? item.type}
+            {item.direction === "outbound" && (
+              <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">(ieșit)</span>
+            )}
+            {item.direction === "inbound" && (
+              <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">(primit)</span>
+            )}
           </span>
           <time className="text-[10px] text-muted-foreground" dateTime={item.occurredAt}>
             {new Date(item.occurredAt).toLocaleString("ro-RO")}
@@ -977,6 +1094,21 @@ function TimelineItem({ item }: { item: LeadInteraction }) {
         </div>
         {item.body && (
           <p className="text-sm text-foreground/80 whitespace-pre-wrap">{item.body}</p>
+        )}
+        {/* Metadata badges */}
+        {meta && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {typeof meta.template_id === "string" && (
+              <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                template
+              </span>
+            )}
+            {typeof meta.duration_seconds === "number" && meta.duration_seconds > 0 && (
+              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                {Math.floor(meta.duration_seconds / 60)}m {meta.duration_seconds % 60}s
+              </span>
+            )}
+          </div>
         )}
       </div>
     </li>
