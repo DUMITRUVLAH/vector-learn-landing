@@ -1,3 +1,4 @@
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { HashRouter, useRouter } from "./router/HashRouter";
 import { Navbar } from "./components/Navbar";
 import { Hero } from "./components/Hero";
@@ -98,6 +99,7 @@ export default function App() {
     <HashRouter>
       <Routes />
       {import.meta.env.DEV && <BackendStatusBadge />}
+      <SpeedInsights />
     </HashRouter>
   );
 }
