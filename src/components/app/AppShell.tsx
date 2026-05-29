@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Link, useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
@@ -14,6 +14,7 @@ interface AppShellProps {
 
 const NAV = [
   { label: "Dashboard", href: "/app", icon: LayoutDashboard },
+  { label: "Leads", href: "/app/leads", icon: TrendingUp },
   { label: "Elevi", href: "/app/students", icon: Users },
   { label: "Orar", href: "/app/schedule", icon: Calendar },
   { label: "Profesori", href: "/app/teachers", icon: GraduationCap },
@@ -114,7 +115,7 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
       </div>
 
       <nav className="md:hidden border-t border-border bg-card sticky bottom-0 z-20">
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-6">
           {NAV.map((item) => {
             const Icon = item.icon;
             const active = item.href === "/app" ? path === "/app" || path === "/app/" : path.startsWith(item.href);

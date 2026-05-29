@@ -8,6 +8,13 @@
       "when": 1780030450014,
       "tag": "0000_married_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780032827327,
+      "tag": "0001_petite_sister_grimm",
+      "breakpoints": true
     }
   ]
 }
