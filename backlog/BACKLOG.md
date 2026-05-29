@@ -142,6 +142,15 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 3 | `HR-403` | Disponibilitate profesor: grid săptămânal + conflict | 3 | done ✅ | [specs/HR-403-availability.md](specs/HR-403-availability.md) · [PR #55](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/55) |
 | 4 | `HR-404` | Audit log HR: rate/rol/payroll cu actor + timestamp | 4 | done ✅ | [specs/HR-404-audit-log.md](specs/HR-404-audit-log.md) · [PR #56](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/56) |
 
+## Active milestone: SCHED — Modulul Orar (rooms + recurring + attendance + iCal)
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `SCHED-501` | Săli de clasă: rooms table + conflict + dropdown | 1 | pending | [specs/SCHED-501-rooms.md](specs/SCHED-501-rooms.md) |
+| 2 | `SCHED-502` | Lecții recurente: lesson_series + bulk cancel | 2 | pending | [specs/SCHED-502-recurring.md](specs/SCHED-502-recurring.md) |
+| 3 | `SCHED-503` | Marcare prezență la lecție + lock 24h | 3 | pending | [specs/SCHED-503-attendance.md](specs/SCHED-503-attendance.md) |
+| 4 | `SCHED-504` | Export iCal /api/calendar/teacher/:id.ics | 4 | pending | [specs/SCHED-504-ical.md](specs/SCHED-504-ical.md) |
+
 ## Quality gates (required before status → `done`)
 
 1. **Build passes**: `npm run build` exits 0
