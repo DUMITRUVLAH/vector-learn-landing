@@ -139,7 +139,7 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 |---|----|-------|------|--------|------|
 | 1 | `HR-401` | Calcul salariu lunar + payroll_entries tabel | 1 | done ✅ | [specs/HR-401-payroll.md](specs/HR-401-payroll.md) · [PR #53](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/53) |
 | 2 | `HR-402` | Stats profesor: ore, prezență%, venituri | 2 | done ✅ | [specs/HR-402-teacher-stats.md](specs/HR-402-teacher-stats.md) · [PR #54](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/54) |
-| 3 | `HR-403` | Disponibilitate profesor: grid săptămânal + conflict | 3 | pending | [specs/HR-403-availability.md](specs/HR-403-availability.md) |
+| 3 | `HR-403` | Disponibilitate profesor: grid săptămânal + conflict | 3 | done ✅ | [specs/HR-403-availability.md](specs/HR-403-availability.md) · [PR #55](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/55) |
 | 4 | `HR-404` | Audit log HR: rate/rol/payroll cu actor + timestamp | 4 | pending | [specs/HR-404-audit-log.md](specs/HR-404-audit-log.md) |
 
 ## Quality gates (required before status → `done`)
