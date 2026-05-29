@@ -43,6 +43,13 @@
       "when": 1780060431899,
       "tag": "0005_crm111_families_score",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780060944620,
+      "tag": "0006_crm112_analytics",
+      "breakpoints": true
     }
   ]
 }

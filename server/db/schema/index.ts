@@ -11,3 +11,4 @@ export * from "./tasks";
 export * from "./templates";
 export * from "./automations";
 export * from "./families";
+export * from "./analytics";

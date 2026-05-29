@@ -42,6 +42,7 @@ import { LeadsPage } from "./pages/app/LeadsPage";
 import { LeadCardPage } from "./pages/app/LeadCardPage";
 import { TemplatesPage } from "./pages/app/TemplatesPage";
 import { AutomationsPage } from "./pages/app/AutomationsPage";
+import { AnalyticsPage } from "./pages/app/AnalyticsPage";
 
 function HomePage() {
   return (
@@ -96,6 +97,7 @@ function Routes() {
     const id = path.split("/").pop()!;
     return <LeadCardPage leadId={id} />;
   }
+  if (path.startsWith("/app/analytics/crm")) return <AnalyticsPage />;
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
