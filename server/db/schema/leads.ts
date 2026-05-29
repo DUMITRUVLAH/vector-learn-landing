@@ -54,6 +54,10 @@ export const leads = pgTable(
     lostReason: varchar("lost_reason", { length: 500 }),
     /** CRM-111: Lead score 0-100 derived from source signals — hot/warm/cold */
     score: integer("score"),
+    /** CRM-113: Deal value in euro-cents (e.g. 36000 = €360.00) */
+    valueCents: integer("value_cents").notNull().default(0),
+    /** CRM-113: Remaining debt in euro-cents (shown on card only when > 0) */
+    debtCents: integer("debt_cents").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

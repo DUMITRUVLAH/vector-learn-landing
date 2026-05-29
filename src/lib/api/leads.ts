@@ -34,6 +34,10 @@ export interface Lead {
   lostReason: string | null;
   /** CRM-111: Lead score 0-100 (hot ≥70, warm ≥40, cold <40) */
   score?: number | null;
+  /** CRM-113: Deal value in euro-cents */
+  valueCents: number;
+  /** CRM-113: Remaining debt in euro-cents (shown only when > 0) */
+  debtCents: number;
   /** Next open task (from pipeline endpoint, augmented server-side) */
   nextTask?: { dueAt: string | null; title: string } | null;
   createdAt: string;
@@ -71,6 +75,10 @@ export interface LeadInteraction {
 export interface PipelineResponse {
   grouped: Record<string, Lead[]>;
   counts: Record<string, number>;
+  /** CRM-113: Σ value_cents per stage key */
+  valueSums: Record<string, number>;
+  /** CRM-113: Grand total value_cents across all stages */
+  totalValueCents: number;
 }
 
 export function fetchPipeline(): Promise<PipelineResponse> {
@@ -93,6 +101,10 @@ export function createLead(input: {
   source?: LeadSource;
   notes?: string | null;
   assignedTo?: string | null;
+  /** CRM-113: Deal value in euro-cents */
+  valueCents?: number;
+  /** CRM-113: Remaining debt in euro-cents */
+  debtCents?: number;
 }): Promise<Lead> {
   return api<Lead>("/api/leads", {
     method: "POST",
@@ -137,7 +149,7 @@ export function addInteraction(
 
 export function updateLead(
   id: string,
-  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo">>
+  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo" | "valueCents" | "debtCents">>
 ): Promise<Lead> {
   return api<Lead>(`/api/leads/${id}`, {
     method: "PATCH",

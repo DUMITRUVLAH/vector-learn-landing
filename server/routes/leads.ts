@@ -33,6 +33,10 @@ const createLeadSchema = z.object({
   utmCampaign: z.string().max(100).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
   assignedTo: z.string().uuid().optional().nullable(),
+  /** CRM-113: Deal value in euro-cents */
+  valueCents: z.number().int().min(0).default(0),
+  /** CRM-113: Remaining debt in euro-cents */
+  debtCents: z.number().int().min(0).default(0),
 });
 
 const updateLeadSchema = z.object({
@@ -42,6 +46,10 @@ const updateLeadSchema = z.object({
   interestCourse: z.string().max(200).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
   assignedTo: z.string().uuid().optional().nullable(),
+  /** CRM-113: Deal value in euro-cents */
+  valueCents: z.number().int().min(0).optional(),
+  /** CRM-113: Remaining debt in euro-cents */
+  debtCents: z.number().int().min(0).optional(),
 });
 
 const stageChangeSchema = z.object({
@@ -268,7 +276,13 @@ leadRoutes.get("/pipeline", async (c) => {
     Object.entries(grouped).map(([k, v]) => [k, v.length])
   );
 
-  return c.json({ grouped, counts });
+  // CRM-113: Aggregate value_cents and debt_cents per stage
+  const valueSums = Object.fromEntries(
+    Object.entries(grouped).map(([k, v]) => [k, v.reduce((s, l) => s + (l.valueCents ?? 0), 0)])
+  );
+  const totalValueCents = Object.values(valueSums).reduce((s, v) => s + v, 0);
+
+  return c.json({ grouped, counts, valueSums, totalValueCents });
 });
 
 leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
@@ -295,6 +309,8 @@ leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
       utmCampaign: (body.utmCampaign as string | null) ?? null,
       notes: (body.notes as string | null) ?? null,
       assignedTo: (body.assignedTo as string | null) ?? null,
+      valueCents: (body.valueCents as number | undefined) ?? 0,
+      debtCents: (body.debtCents as number | undefined) ?? 0,
     })
     .returning();
 

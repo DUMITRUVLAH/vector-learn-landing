@@ -41,6 +41,8 @@ const makeLead = (overrides: Partial<Lead> = {}): Lead => ({
   consentRevokedAt: null,
   lostReason: null,
   score: null,
+  valueCents: 0,
+  debtCents: 0,
   convertedToStudentId: null,
   convertedAt: null,
   createdAt: new Date(),

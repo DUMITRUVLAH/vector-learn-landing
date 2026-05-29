@@ -58,6 +58,10 @@ export function LeadsPage() {
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [grouped, setGrouped] = useState<Record<string, Lead[]>>({});
   const [counts, setCounts] = useState<Record<string, number>>({});
+  /** CRM-113: Σ value_cents per stage key */
+  const [valueSums, setValueSums] = useState<Record<string, number>>({});
+  /** CRM-113: Grand total value_cents across all stages */
+  const [totalValueCents, setTotalValueCents] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -106,6 +110,8 @@ export function LeadsPage() {
       ]);
       setGrouped(pipelineRes.grouped as Record<string, Lead[]>);
       setCounts(pipelineRes.counts as Record<string, number>);
+      setValueSums((pipelineRes.valueSums as Record<string, number>) ?? {});
+      setTotalValueCents((pipelineRes.totalValueCents as number) ?? 0);
       setStages(stagesRes.stages);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare");
@@ -177,10 +183,16 @@ export function LeadsPage() {
   const paidCount = counts["paid"] ?? 0;
   const conversionRate = totalLeads > 0 ? Math.round((paidCount / totalLeads) * 100) : 0;
 
+  /** CRM-113: Format euro-cents to "€X.XXX" ro-RO locale */
+  const formatEur = (cents: number) =>
+    cents === 0
+      ? null
+      : new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(cents / 100);
+
   return (
     <AppShell
       pageTitle="CRM — Leads"
-      pageDescription={`${totalLeads} lead-uri · conversie: ${conversionRate}%`}
+      pageDescription={[`${totalLeads} lead-uri`, `conversie: ${conversionRate}%`, totalValueCents > 0 ? formatEur(totalValueCents) : null].filter(Boolean).join(" · ")}
       actions={
         <div className="flex gap-2">
           <button
@@ -290,6 +302,12 @@ export function LeadsPage() {
                     <p className="text-xs font-bold text-foreground">{stage.label}</p>
                     <span className="text-sm font-display font-bold tabular-nums">{leadsHere.length}</span>
                   </div>
+                  {/* CRM-113: show Σ value for this stage when > 0 */}
+                  {(valueSums[stage.key] ?? 0) > 0 && (
+                    <p className="text-[10px] text-foreground/70 font-semibold mt-0.5 tabular-nums">
+                      {formatEur(valueSums[stage.key])}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-2">
@@ -408,6 +426,21 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
       <p className="text-xs font-semibold truncate">{lead.fullName}</p>
       {lead.interestCourse && (
         <p className="text-[10px] text-muted-foreground truncate mt-0.5">{lead.interestCourse}</p>
+      )}
+      {/* CRM-113: value / debt on card */}
+      {(lead.valueCents > 0 || lead.debtCents > 0) && (
+        <div className="flex items-center gap-2 mt-1">
+          {lead.valueCents > 0 && (
+            <span className="text-[10px] font-bold text-foreground tabular-nums">
+              {new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(lead.valueCents / 100)}
+            </span>
+          )}
+          {lead.debtCents > 0 && (
+            <span className="text-[10px] font-semibold text-destructive tabular-nums">
+              Datorie {new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(lead.debtCents / 100)}
+            </span>
+          )}
+        </div>
       )}
       <div className="flex items-center justify-between gap-2 mt-2">
         <span className="text-[10px] text-muted-foreground">{SOURCE_LABEL[lead.source] ?? lead.source}</span>
@@ -667,6 +700,8 @@ function CreateLeadModal({ onClose, onSaved, onError }: { onClose: () => void; o
   const [source, setSource] = useState<"manual" | "facebook_ad" | "google_ads" | "referral" | "phone_in" | "instagram" | "other">("manual");
   const [notes, setNotes] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
+  /** CRM-113: value in EUR (converted to cents on submit) */
+  const [valueEur, setValueEur] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [dedupResult, setDedupResult] = useState<DedupResult["duplicate"] | null>(null);
   const [forceCreate, setForceCreate] = useState(false);
@@ -699,7 +734,8 @@ function CreateLeadModal({ onClose, onSaved, onError }: { onClose: () => void; o
     e.preventDefault();
     setSubmitting(true);
     try {
-      await createLead({ fullName, phone: phone || null, email: email || null, interestCourse: interestCourse || null, source, assignedTo: assignedTo || null, notes: notes || null } as Parameters<typeof createLead>[0]);
+      const valueCents = valueEur.trim() ? Math.round(parseFloat(valueEur.replace(",", ".")) * 100) : 0;
+      await createLead({ fullName, phone: phone || null, email: email || null, interestCourse: interestCourse || null, source, assignedTo: assignedTo || null, notes: notes || null, valueCents: isNaN(valueCents) ? 0 : valueCents } as Parameters<typeof createLead>[0]);
       onSaved();
     } catch (err) {
       onError(err instanceof ApiError ? `Eroare: ${err.code}` : "Nu pot salva lead-ul");
@@ -753,6 +789,10 @@ function CreateLeadModal({ onClose, onSaved, onError }: { onClose: () => void; o
         <FormField id="l-assigned" label="Responsabil (ID)">
           <input id="l-assigned" type="text" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className="input-base" placeholder="UUID (opțional)" aria-describedby="l-assigned-hint" />
           <p id="l-assigned-hint" className="text-[11px] text-muted-foreground mt-1">Filtru Responsabil disponibil în kanban.</p>
+        </FormField>
+        {/* CRM-113: deal value */}
+        <FormField id="l-value" label="Valoare deal (€)">
+          <input id="l-value" type="number" min="0" step="0.01" value={valueEur} onChange={(e) => setValueEur(e.target.value)} className="input-base" placeholder="ex: 360" />
         </FormField>
         <FormField id="l-notes" label="Note">
           <textarea id="l-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="input-base resize-none" />

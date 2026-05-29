@@ -74,6 +74,8 @@ const MOCK_LEAD: Lead = {
   convertedToStudentId: null,
   convertedAt: null,
   lostReason: null,
+  valueCents: 0,
+  debtCents: 0,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
 };

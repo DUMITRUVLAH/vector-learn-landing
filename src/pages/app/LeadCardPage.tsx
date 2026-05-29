@@ -148,6 +148,8 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
       email: lead.email,
       interestCourse: lead.interestCourse,
       notes: lead.notes,
+      valueCents: lead.valueCents,
+      debtCents: lead.debtCents,
     });
     setEditing(true);
   };
@@ -745,6 +747,56 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               ) : (
                 <p className="text-sm text-muted-foreground">{lead.notes ?? "—"}</p>
               )}
+            </div>
+
+            {/* CRM-113: Deal value + debt */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Valoare deal (€)</p>
+                {editing ? (
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editDraft.valueCents !== undefined ? (editDraft.valueCents / 100).toFixed(2) : (lead.valueCents / 100).toFixed(2)}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value.replace(",", "."));
+                      setEditDraft((d) => ({ ...d, valueCents: isNaN(val) ? 0 : Math.round(val * 100) }));
+                    }}
+                    className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                    aria-label="Valoare deal în euro"
+                  />
+                ) : (
+                  <p className="text-sm font-bold">
+                    {lead.valueCents > 0
+                      ? new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(lead.valueCents / 100)
+                      : "—"}
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Datorie (€)</p>
+                {editing ? (
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editDraft.debtCents !== undefined ? (editDraft.debtCents / 100).toFixed(2) : (lead.debtCents / 100).toFixed(2)}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value.replace(",", "."));
+                      setEditDraft((d) => ({ ...d, debtCents: isNaN(val) ? 0 : Math.round(val * 100) }));
+                    }}
+                    className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                    aria-label="Datorie în euro"
+                  />
+                ) : (
+                  <p className={cn("text-sm font-semibold", lead.debtCents > 0 ? "text-destructive" : "text-muted-foreground")}>
+                    {lead.debtCents > 0
+                      ? new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(lead.debtCents / 100)
+                      : "—"}
+                  </p>
+                )}
+              </div>
             </div>
           </section>
 

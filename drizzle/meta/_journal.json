@@ -50,6 +50,13 @@
       "when": 1780060944620,
       "tag": "0006_crm112_analytics",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780086266217,
+      "tag": "0007_crm113_deal_value",
+      "breakpoints": true
     }
   ]
 }
