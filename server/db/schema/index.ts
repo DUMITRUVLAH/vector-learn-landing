@@ -12,3 +12,4 @@ export * from "./templates";
 export * from "./automations";
 export * from "./families";
 export * from "./analytics";
+export * from "./messages";
