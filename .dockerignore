@@ -1,0 +1,12 @@
+node_modules
+dist
+.pglite
+*.pglite
+.git
+.github
+.env
+.env.local
+*.log
+backlog/reports
+.claude
+README.md

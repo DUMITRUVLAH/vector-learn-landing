@@ -17,7 +17,12 @@
     "db:reset": "rm -rf .pglite && npm run db:migrate",
     "db:seed": "tsx server/db/seed.ts",
     "server:dev": "tsx watch server/index.ts",
-    "stack:dev": "concurrently -n api,web -c yellow,cyan \"npm run server:dev\" \"npm run dev\""
+    "stack:dev": "concurrently -n api,web -c yellow,cyan \"npm run server:dev\" \"npm run dev\"",
+    "start": "tsx server/db/migrate.ts && tsx server/index.ts",
+    "docker:build": "docker build -t vector-learn .",
+    "docker:up": "docker compose up -d --build",
+    "docker:logs": "docker compose logs -f app",
+    "docker:down": "docker compose down"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.4.6",
