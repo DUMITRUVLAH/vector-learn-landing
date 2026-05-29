@@ -16,6 +16,10 @@ vi.mock("@/lib/api/leads", () => ({
   addInteraction: vi.fn(),
   revokeConsent: vi.fn(),
   deleteLead: vi.fn(),
+  sendMessage: vi.fn(),
+  logCall: vi.fn(),
+  scoreLead: vi.fn(),
+  assignLead: vi.fn(),
 }));
 
 vi.mock("@/lib/api/pipeline", () => ({

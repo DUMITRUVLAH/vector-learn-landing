@@ -1,8 +1,9 @@
 /**
- * CRM-106/CRM-107/CRM-109 — Cartonaș detaliu lead /app/leads/:id
+ * CRM-106/CRM-107/CRM-109/CRM-111 — Cartonaș detaliu lead /app/leads/:id
  * Layout 2 coloane: col stânga sticky (info+acțiuni), col dreapta tab-uri
  * CRM-107: Tab Task-uri (CRUD + badge kanban), Tab Fișiere (upload/download)
  * CRM-109: Butoane Email/WhatsApp/Sună + logare apel + SendMessageModal + LogCallModal
+ * CRM-111: Score badge hot/warm/cold, enhanced ConvertModal cu familie + plătitor
  */
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -15,7 +16,7 @@ import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import {
-  getLead, updateLead, moveLeadStage, convertLead,
+  getLead, updateLead, moveLeadStage,
   listInteractions, addInteraction, revokeConsent, deleteLead,
   type Lead, type LeadInteraction,
 } from "@/lib/api/leads";
@@ -25,9 +26,10 @@ import {
   listAttachments, createAttachment, deleteAttachment,
   type LeadTask, type LeadAttachment,
 } from "@/lib/api/tasks";
-import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { SendMessageModal, LogCallModal, type SendChannel } from "@/components/crm/CommModal";
+import { ConvertModal, getScoreBadge, SCORE_BADGE_STYLES, SCORE_BADGE_LABELS } from "@/components/crm/ConvertModal";
+import { scoreLead } from "@/lib/api/leads";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -88,7 +90,6 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   const [lostReasonModal, setLostReasonModal] = useState(false);
   const [pendingStage, setPendingStage] = useState<string | null>(null);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
-  const [converting, setConverting] = useState(false);
   const [revoking, setRevoking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
@@ -99,6 +100,9 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     channel: "email",
   });
   const [logCallModal, setLogCallModal] = useState(false);
+
+  // CRM-111: Enhanced convert modal
+  const [convertModal, setConvertModal] = useState(false);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -252,20 +256,19 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     setToast({ kind: "success", message: "Apel logat în timeline!" });
   };
 
-  // ─── Convert ─────────────────────────────────────────────────────────────
-  const handleConvert = async () => {
+  // ─── Convert (CRM-111: open modal instead of confirm) ────────────────────
+  const handleConvert = () => {
     if (!lead) return;
-    if (!confirm(`Convertești "${lead.fullName}" în student?`)) return;
-    setConverting(true);
-    try {
-      await convertLead(lead.id);
-      setToast({ kind: "success", message: "Convertit în student!" });
-      void fetchAll();
-    } catch (err) {
-      setToast({ kind: "error", message: err instanceof ApiError && err.code === "already_converted" ? "Lead deja convertit" : "Nu pot converti" });
-    } finally {
-      setConverting(false);
-    }
+    setConvertModal(true);
+  };
+
+  const handleConvertSuccess = async (result: { studentId: string; familyId: string | null }) => {
+    setConvertModal(false);
+    setToast({
+      kind: "success",
+      message: `Convertit în student!${result.familyId ? " Familie creată." : ""}`,
+    });
+    void fetchAll();
   };
 
   // ─── Revoke consent ───────────────────────────────────────────────────────
@@ -534,10 +537,33 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               )}
             </div>
 
-            {/* Score placeholder */}
+            {/* Score badge (CRM-111) */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Scor lead</p>
-              <span className="text-xs text-muted-foreground italic">Disponibil în CRM-111</span>
+              {lead.score != null ? (
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold",
+                    SCORE_BADGE_STYLES[getScoreBadge(lead.score)]
+                  )}>
+                    {SCORE_BADGE_LABELS[getScoreBadge(lead.score)]} {lead.score}
+                  </span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!lead) return;
+                    void scoreLead(lead.id).then((res) => {
+                      setLead((prev) => prev ? { ...prev, score: res.score } : prev);
+                      setToast({ kind: "success", message: `Scor calculat: ${res.score} (${res.badge})` });
+                    });
+                  }}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Calculează scor
+                </button>
+              )}
             </div>
 
             {/* Assigned to */}
@@ -727,11 +753,10 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
             <div className="space-y-2">
               <button
                 type="button"
-                onClick={() => void handleConvert()}
-                disabled={converting || consentRevoked}
+                onClick={handleConvert}
                 className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-success px-4 py-2.5 text-sm font-semibold text-success-foreground hover:bg-success/90 disabled:opacity-50"
               >
-                {converting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                <UserPlus className="h-4 w-4" />
                 Convertește în Student
               </button>
               <button
@@ -1035,6 +1060,15 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
           lead={lead}
           onSuccess={handleLogCallSuccess}
           onCancel={() => setLogCallModal(false)}
+        />
+      )}
+
+      {/* CRM-111: Enhanced convert modal */}
+      {convertModal && lead && (
+        <ConvertModal
+          lead={lead}
+          onSuccess={handleConvertSuccess}
+          onCancel={() => setConvertModal(false)}
         />
       )}
 

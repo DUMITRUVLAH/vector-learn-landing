@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "CRM-110",
-  "last_completed": "CRM-109",
-  "iterations": 27,
+  "current_item": "CRM-111",
+  "last_completed": "CRM-110",
+  "iterations": 29,
   "last_run_at": "2026-05-29T08:30:00Z",
   "milestone_status": "M1+M2+M3 landing + MVP-001..008 complete. CRM is now the CORE milestone: 12 items CRM-101..112 across 5 phases (see backlog/crm/). Build one item at a time per backlog/crm/BUILD-SEQUENCE.md; tests must pass before moving on.",
   "active_milestone": "CRM",
@@ -401,18 +401,32 @@
       }
     },
     "CRM-110": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-110-automation.md",
       "phase": "D",
       "depends_on": [
         "CRM-109"
-      ]
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/37",
+      "branch": "feat/CRM-110-automation",
+      "reports": [
+        "backlog/reports/CRM-110-reviewer.md",
+        "backlog/reports/CRM-110-integration.md",
+        "backlog/reports/CRM-110-manager.md",
+        "backlog/reports/CRM-110-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "APPROVED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-111": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-111-convert-family.md",
       "phase": "E",

@@ -32,6 +32,8 @@ export interface Lead {
   convertedToStudentId: string | null;
   convertedAt: string | null;
   lostReason: string | null;
+  /** CRM-111: Lead score 0-100 (hot ≥70, warm ≥40, cold <40) */
+  score?: number | null;
   /** Next open task (from pipeline endpoint, augmented server-side) */
   nextTask?: { dueAt: string | null; title: string } | null;
   createdAt: string;
@@ -143,9 +145,41 @@ export function updateLead(
   });
 }
 
-export function convertLead(id: string): Promise<{ lead: Lead; student: { id: string; fullName: string } }> {
-  return api<{ lead: Lead; student: { id: string; fullName: string } }>(
+/** CRM-111: Enhanced convert with optional family/payer data */
+export function convertLead(
+  id: string,
+  input?: {
+    payerName?: string | null;
+    payerPhone?: string | null;
+    payerEmail?: string | null;
+    studentName?: string | null;
+    studentPhone?: string | null;
+    studentEmail?: string | null;
+    birthDate?: string | null;
+    studentStatus?: "active" | "trial";
+  }
+): Promise<{ lead: Lead; student: { id: string; fullName: string; familyId?: string | null }; familyId: string | null }> {
+  return api<{ lead: Lead; student: { id: string; fullName: string; familyId?: string | null }; familyId: string | null }>(
     `/api/leads/${id}/convert`,
+    { method: "POST", body: JSON.stringify(input ?? {}) }
+  );
+}
+
+/** CRM-111: Assign lead to a user (reasignare) */
+export function assignLead(
+  id: string,
+  assignedTo: string | null
+): Promise<Lead> {
+  return api<Lead>(`/api/leads/${id}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ assignedTo }),
+  });
+}
+
+/** CRM-111: Calculate and save lead score */
+export function scoreLead(id: string): Promise<{ lead: Lead; score: number; badge: "hot" | "warm" | "cold" }> {
+  return api<{ lead: Lead; score: number; badge: "hot" | "warm" | "cold" }>(
+    `/api/leads/${id}/score`,
     { method: "POST" }
   );
 }

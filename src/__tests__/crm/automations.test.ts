@@ -11,7 +11,9 @@
 import { describe, it, expect } from "vitest";
 import { evaluateCondition, evaluateConditions } from "../../../server/lib/automationEngine";
 import type { AutomationCondition } from "../../../server/db/schema/automations";
-import type { Lead } from "../../../server/db/schema/leads";
+// Use server Lead type (has score: number | null, not optional)
+import type { Lead as ServerLead } from "../../../server/db/schema/leads";
+type Lead = ServerLead;
 
 // ─── Test fixtures ─────────────────────────────────────────────────────────────
 
@@ -38,6 +40,7 @@ const makeLead = (overrides: Partial<Lead> = {}): Lead => ({
   assignedTo: null,
   consentRevokedAt: null,
   lostReason: null,
+  score: null,
   convertedToStudentId: null,
   convertedAt: null,
   createdAt: new Date(),
@@ -197,33 +200,40 @@ describe("CRM-110 — Test mode (dry-run)", () => {
 // ─── T-CRM-110-5: partial action failure ─────────────────────────────────────
 
 describe("CRM-110 — Partial action failure", () => {
+  type ActionStatus = "ok" | "failed" | "skipped";
+  interface ActionResultTest {
+    type: string;
+    status: ActionStatus;
+    detail: string;
+  }
+
   it("T-CRM-110-5: overall status=failed if any action failed, others still run", () => {
-    const actionResults = [
-      { type: "send_template", status: "ok" as const, detail: "sent" },
-      { type: "create_task", status: "failed" as const, detail: "template_not_found: xyz" },
-      { type: "move_stage", status: "ok" as const, detail: "moved to contacted" },
+    const actionResults: ActionResultTest[] = [
+      { type: "send_template", status: "ok", detail: "sent" },
+      { type: "create_task", status: "failed", detail: "template_not_found: xyz" },
+      { type: "move_stage", status: "ok", detail: "moved to contacted" },
     ];
     // Engine logic: if any failed → overall = failed
-    const overallStatus = actionResults.some((r) => r.status === "failed") ? "failed" : "ok";
+    const overallStatus: ActionStatus = actionResults.some((r) => r.status === "failed") ? "failed" : "ok";
     expect(overallStatus).toBe("failed");
     // But 2 out of 3 succeeded — they "ran"
     expect(actionResults.filter((r) => r.status === "ok")).toHaveLength(2);
   });
 
   it("T-CRM-110-5: no partial failure → overall ok", () => {
-    const actionResults = [
-      { type: "send_template", status: "ok" as const, detail: "sent" },
-      { type: "create_task", status: "ok" as const, detail: "created" },
+    const actionResults: ActionResultTest[] = [
+      { type: "send_template", status: "ok", detail: "sent" },
+      { type: "create_task", status: "ok", detail: "created" },
     ];
-    const overallStatus = actionResults.some((r) => r.status === "failed") ? "failed" : "ok";
+    const overallStatus: ActionStatus = actionResults.some((r) => r.status === "failed") ? "failed" : "ok";
     expect(overallStatus).toBe("ok");
   });
 
   it("T-CRM-110-5: skipped action does not make overall failed", () => {
-    const actionResults = [
-      { type: "send_template", status: "skipped" as const, detail: "consent_revoked" },
+    const actionResults: ActionResultTest[] = [
+      { type: "send_template", status: "skipped", detail: "consent_revoked" },
     ];
-    const overallStatus = actionResults.some((r) => r.status === "failed") ? "failed" : "ok";
+    const overallStatus: ActionStatus = actionResults.some((r) => r.status === "failed") ? "failed" : "ok";
     expect(overallStatus).toBe("ok"); // skipped is not failed
   });
 });

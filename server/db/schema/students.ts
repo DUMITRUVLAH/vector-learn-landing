@@ -1,5 +1,6 @@
-import { pgTable, uuid, varchar, timestamp, pgEnum, date, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, pgEnum, date, index, integer } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
+import { families } from "./families";
 
 export const studentStatusEnum = pgEnum("student_status", [
   "active",
@@ -23,6 +24,8 @@ export const students = pgTable(
     birthDate: date("birth_date"),
     status: studentStatusEnum("status").notNull().default("active"),
     notes: varchar("notes", { length: 1000 }),
+    /** CRM-111: Link to payer family — plătitor↔elevi relationship */
+    familyId: uuid("family_id").references(() => families.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

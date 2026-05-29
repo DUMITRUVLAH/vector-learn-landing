@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates } from "../db/schema";
+import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families } from "../db/schema";
 import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
@@ -397,10 +397,25 @@ leadRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async (c) 
   return c.json(updated);
 });
 
-leadRoutes.post("/:id/convert", async (c) => {
+// CRM-111: Enhanced convert schema with family/payer data
+const convertLeadSchema = z.object({
+  /** Payer (parent/guardian) — required for family model */
+  payerName: z.string().min(1).max(200).optional().nullable(),
+  payerPhone: z.string().max(32).optional().nullable(),
+  payerEmail: z.string().email().max(255).optional().nullable().or(z.literal("")),
+  /** Student override fields */
+  studentName: z.string().min(2).max(200).optional().nullable(),
+  studentPhone: z.string().max(32).optional().nullable(),
+  studentEmail: z.string().email().max(255).optional().nullable().or(z.literal("")),
+  birthDate: z.string().max(20).optional().nullable(), // ISO date string
+  studentStatus: z.enum(["active", "trial"]).default("active"),
+});
+
+leadRoutes.post("/:id/convert", zValidator("json", convertLeadSchema), async (c) => {
   const id = c.req.param("id");
   const tenantId = c.get("user").tenantId;
   const userId = c.get("user").id;
+  const body = c.req.valid("json");
 
   const lead = await db.query.leads.findFirst({
     where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
@@ -410,17 +425,44 @@ leadRoutes.post("/:id/convert", async (c) => {
     return c.json({ error: "already_converted", studentId: lead.convertedToStudentId }, 409);
   }
 
+  // Create or skip family record if payer data provided
+  let familyId: string | null = null;
+  const hasPayerData = body.payerName?.trim();
+  if (hasPayerData) {
+    const [family] = await db
+      .insert(families)
+      .values({
+        tenantId,
+        payerName: body.payerName!.trim(),
+        payerPhone: body.payerPhone || null,
+        payerEmail: body.payerEmail || null,
+      })
+      .returning();
+    familyId = family.id;
+  }
+
+  // Create student
   const [student] = await db
     .insert(students)
     .values({
       tenantId,
-      fullName: lead.fullName,
-      phone: lead.phone,
-      email: lead.email,
-      status: "active",
-      notes: lead.notes ?? `Convertit din lead pe ${new Date().toLocaleDateString("ro-RO")}`,
+      fullName: (body.studentName || lead.fullName).trim(),
+      phone: body.studentPhone || lead.phone,
+      email: body.studentEmail || lead.email,
+      parentPhone: body.payerPhone || lead.phone,
+      parentEmail: body.payerEmail || lead.email,
+      birthDate: body.birthDate || null,
+      status: body.studentStatus,
+      notes: `Convertit din lead pe ${new Date().toLocaleDateString("ro-RO")}`,
+      familyId: familyId || null,
     })
     .returning();
+
+  // CRM-111: Google Offline Conversion stub (real integration deferred)
+  if (lead.gclid) {
+    // TODO: send Google Offline Conversion — gclid present
+    // Stub: just log for now
+  }
 
   await db
     .update(leads)
@@ -437,11 +479,12 @@ leadRoutes.post("/:id/convert", async (c) => {
     leadId: id,
     type: "system",
     direction: "internal",
-    body: `Converted to student: ${student.id}`,
+    body: `Convertit în student: ${student.id}${familyId ? ` (familie: ${familyId})` : ""}`,
     userId,
   });
 
-  return c.json({ lead: { ...lead, convertedToStudentId: student.id, stage: "paid" }, student });
+  const updatedLead = { ...lead, convertedToStudentId: student.id, stage: "paid" as const };
+  return c.json({ lead: updatedLead, student, familyId });
 });
 
 leadRoutes.get("/:id/interactions", async (c) => {
@@ -507,6 +550,97 @@ leadRoutes.patch("/:id/consent-revoke", async (c) => {
   });
 
   return c.json(updated);
+});
+
+// POST /api/leads/:id/assign — reasign lead to a different user (CRM-111)
+const assignLeadSchema = z.object({
+  assignedTo: z.string().uuid().nullable(),
+});
+
+leadRoutes.post("/:id/assign", zValidator("json", assignLeadSchema), async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+  const { assignedTo } = c.req.valid("json");
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
+  });
+  if (!lead) return c.json({ error: "not_found" }, 404);
+
+  const [updated] = await db
+    .update(leads)
+    .set({ assignedTo, updatedAt: new Date() })
+    .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)))
+    .returning();
+
+  await db.insert(leadInteractions).values({
+    tenantId,
+    leadId: id,
+    type: "system",
+    direction: "internal",
+    body: `Reasignat de ${userId} → ${assignedTo ?? "neasignat"}`,
+    userId,
+  });
+
+  return c.json(updated);
+});
+
+// POST /api/leads/:id/score — calculate and save lead score (CRM-111)
+leadRoutes.post("/:id/score", async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
+  });
+  if (!lead) return c.json({ error: "not_found" }, 404);
+
+  // Score algorithm: signals that increase priority
+  let score = 0;
+
+  // Source signal (highest-intent sources score more)
+  const sourceScores: Record<string, number> = {
+    webform: 30,
+    facebook_ad: 25,
+    google_ads: 30,
+    phone_in: 40,
+    referral: 35,
+    instagram: 20,
+    manual: 15,
+    import: 10,
+    other: 10,
+  };
+  score += sourceScores[lead.source] ?? 10;
+
+  // Stage signal
+  const stageScores: Record<string, number> = {
+    new: 10,
+    contacted: 25,
+    trial: 45,
+    paid: 100,
+    lost: 0,
+  };
+  score += stageScores[lead.stage] ?? 10;
+
+  // Has email
+  if (lead.email) score += 10;
+  // Has phone
+  if (lead.phone) score += 10;
+  // Has course interest
+  if (lead.interestCourse) score += 5;
+
+  // Cap at 100
+  score = Math.min(score, 100);
+
+  const [updated] = await db
+    .update(leads)
+    .set({ score, updatedAt: new Date() })
+    .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)))
+    .returning();
+
+  const badge = score >= 70 ? "hot" : score >= 40 ? "warm" : "cold";
+  return c.json({ lead: updated, score, badge });
 });
 
 // POST /api/leads/:id/send-message — send email/WhatsApp/SMS from lead card (CRM-109)
