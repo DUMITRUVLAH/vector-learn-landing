@@ -114,7 +114,7 @@ export function Navbar() {
 
         <div className="hidden lg:flex items-center gap-3">
           <a
-            href="#login"
+            href="#/app/login"
             className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-2"
           >
             Autentificare
@@ -167,7 +167,7 @@ export function Navbar() {
             </div>
             <div className="border-t border-border/60 mt-2 pt-3 flex flex-col gap-2">
               <a
-                href="#login"
+                href="#/app/login"
                 className="px-3 py-3 text-sm font-medium text-muted-foreground"
               >
                 Autentificare

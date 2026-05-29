@@ -29,8 +29,13 @@ The owner reviews PRs on their own schedule, in parallel. Do not wait for PR app
 ## Pipeline (per item)
 
 ```
-PICK → BUILD → REVIEW → TEST → PERSONA_MANAGER → PERSONA_STUDENT → COMMIT → PR → MARK_DONE → LOOP
+PICK → BUILD → REVIEW⇄IMPROVE(≤3) → TEST⇄FIX(≤2) → PERSONA_MANAGER → PERSONA_STUDENT → COMMIT → PR → MARK_DONE → LOOP
 ```
+
+`REVIEW⇄IMPROVE` = reviewer(s) give findings, improver applies them, re-review until clean.
+`TEST⇄FIX` = on a red gate, fix in place and re-test (repair, don't skip — CLAUDE.md §0.2).
+The TEST gate now includes migration discipline, a live API integration smoke, and a
+driver-portability check (see test-runner) — the three gates that catch integration breaks.
 
 ### Step 1 — PICK
 1. Read `backlog/STATE.json`
@@ -46,18 +51,32 @@ Invoke `feature-builder` agent via Agent tool. Pass the spec file path. Wait for
 - `partial` → mark item `blocked`, write report, GOTO Step 1 (next item)
 - `blocked` → same as partial
 
-### Step 3 — REVIEW
-Invoke `code-reviewer-vl`. Pass the ID. Wait for `REVIEW_RESULT`.
+### Step 3 — REVIEW → IMPROVE (iterate until clean, max 3 cycles)
+A two-reviewer pass, then an improver applies the feedback, then re-review. This is the
+"one agent reviews, another improves it" loop — repeat until clean, don't ship the first draft.
 
-- `APPROVED` → continue to TEST
-- `CHANGES_REQUESTED` → re-invoke `feature-builder` ONCE with reviewer findings as additional context. If still not approved → block.
-- `REJECTED` → block immediately.
+For `cycle` in 1..3:
+1. Invoke `code-reviewer-vl` (design-system compliance, a11y, dark mode, no hardcoded colors, dead code).
+2. Invoke `integration-architect` — checks the feature actually connects to the other modules:
+   DB foreign keys, cross-module data flow (lead→student→payment→lesson), api contracts, UI wiring,
+   tenant safety. This is the "do the modules communicate / is the database wiring them together?"
+   pass. `GAPS_FOUND` or `BROKEN` produce fix instructions that go to the improver.
+3. If the diff is large (≥ 50 changed lines) OR touches auth / payments / data mutations / migrations / external APIs, ALSO invoke `ce-adversarial-reviewer` for failure-mode and edge-case findings.
+4. Combine the verdicts:
+   - **All clean** (reviewer APPROVED + integration CONNECTED + no adversarial findings) → continue to TEST.
+   - **REJECTED or integration BROKEN** (fundamental) → still try ONE improver pass; if it remains broken → block.
+   - **CHANGES_REQUESTED / GAPS_FOUND / findings** → invoke `feature-builder` as the **IMPROVER**, passing the combined findings (incl. integration FIX_INSTRUCTIONS): "apply exactly these fixes, do not touch unrelated code." Then loop back to step 1.
+5. After 3 full cycles still not clean → block; write `backlog/reports/<ID>-blocked.md` with the unresolved findings.
 
-### Step 4 — TEST
+Save the integration report to `backlog/reports/<ID>-integration.md`.
+
+Save each review to `backlog/reports/<ID>-reviewer.md` (append the cycle number; never overwrite).
+
+### Step 4 — TEST (repair, don't skip — CLAUDE.md §0.2)
 Invoke `test-runner`. Pass the ID.
 
 - `PASS` → continue to PERSONA_MANAGER
-- `FAIL` → block
+- `FAIL` → this is a real bug, not a stop. Invoke `feature-builder` as the **FIXER** with the failing gate output (especially `MIGRATION_GATE` / `INTEGRATION_SMOKE` / `PORTABILITY`), then re-run `test-runner`. Repeat up to **2 fix cycles**. Only if it still fails AND the cause is clearly structural → block with `backlog/reports/<ID>-tests.md`. **Never advance to PR with a red blocking gate.**
 
 ### Step 5 — PERSONA_MANAGER
 Invoke `persona-manager`. Pass the ID.

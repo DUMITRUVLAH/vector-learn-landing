@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "MVP-008",
+  "last_completed": "CRM-108",
   "iterations": 25,
   "last_run_at": "2026-05-29T08:30:00Z",
   "milestone_status": "M1+M2+M3 landing + MVP-001..008 complete. CRM is now the CORE milestone: 12 items CRM-101..112 across 5 phases (see backlog/crm/). Build one item at a time per backlog/crm/BUILD-SEQUENCE.md; tests must pass before moving on.",
@@ -35,7 +35,11 @@
         "backlog/reports/M1-002-manager.md",
         "backlog/reports/M1-002-student.md"
       ],
-      "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "DISLIKES/TRUSTS" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "manager": "BUY",
+        "student": "DISLIKES/TRUSTS"
+      }
     },
     "M1-003": {
       "status": "done",
@@ -48,7 +52,11 @@
         "backlog/reports/M1-003-manager.md",
         "backlog/reports/M1-003-student.md"
       ],
-      "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "OK/TRUSTS" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "manager": "BUY",
+        "student": "OK/TRUSTS"
+      }
     },
     "M1-004": {
       "status": "done",
@@ -61,7 +69,11 @@
         "backlog/reports/M1-004-manager.md",
         "backlog/reports/M1-004-student.md"
       ],
-      "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "OK/TRUSTS" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "manager": "BUY",
+        "student": "OK/TRUSTS"
+      }
     },
     "M1-005": {
       "status": "done",
@@ -74,7 +86,11 @@
         "backlog/reports/M1-005-manager.md",
         "backlog/reports/M1-005-student.md"
       ],
-      "verdicts": { "reviewer": "APPROVED", "manager": "MAYBE", "student": "OK/TRUSTS" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "manager": "MAYBE",
+        "student": "OK/TRUSTS"
+      }
     },
     "M1-006": {
       "status": "done",
@@ -87,7 +103,11 @@
         "backlog/reports/M1-006-manager.md",
         "backlog/reports/M1-006-student.md"
       ],
-      "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "NEUTRAL/LEAN" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "manager": "BUY",
+        "student": "NEUTRAL/LEAN"
+      }
     },
     "M1-007": {
       "status": "done",
@@ -100,7 +120,11 @@
         "backlog/reports/M1-007-manager.md",
         "backlog/reports/M1-007-student.md"
       ],
-      "verdicts": { "reviewer": "APPROVED", "manager": "BUY", "student": "PASS/DISLIKES" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "manager": "BUY",
+        "student": "PASS/DISLIKES"
+      }
     },
     "M1-008": {
       "status": "done",
@@ -113,7 +137,11 @@
         "backlog/reports/M1-008-manager.md",
         "backlog/reports/M1-008-student.md"
       ],
-      "verdicts": { "reviewer": "APPROVED", "manager": "MAYBE", "student": "PASS" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      }
     },
     "M1-009": {
       "status": "done",
@@ -126,7 +154,11 @@
         "backlog/reports/M1-009-manager.md",
         "backlog/reports/M1-009-student.md"
       ],
-      "verdicts": { "reviewer": "APPROVED", "manager": "MIXED", "student": "DISLIKES" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "manager": "MIXED",
+        "student": "DISLIKES"
+      }
     },
     "M1-010": {
       "status": "done",
@@ -139,7 +171,11 @@
         "backlog/reports/M1-010-manager.md",
         "backlog/reports/M1-010-student.md"
       ],
-      "verdicts": { "reviewer": "APPROVED", "manager": "MATCH", "student": "DISLIKES/NEUTRAL" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "manager": "MATCH",
+        "student": "DISLIKES/NEUTRAL"
+      }
     },
     "M2-001": {
       "status": "done",
@@ -246,17 +282,139 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/25",
       "branch": "feat/MVP-008-deploy"
     },
-    "CRM-101": { "status": "done", "attempts": 1, "blockers": [], "spec": "backlog/specs/CRM-101-intake-web.md", "phase": "A", "depends_on": ["MVP-009"], "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/27", "branch": "feat/CRM-101-intake-web" },
-    "CRM-102": { "status": "done", "attempts": 1, "blockers": [], "spec": "backlog/specs/CRM-102-dedup-merge.md", "phase": "A", "depends_on": ["CRM-101"], "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/28", "branch": "feat/CRM-102-dedup-merge" },
-    "CRM-103": { "status": "done", "attempts": 1, "blockers": [], "spec": "backlog/specs/CRM-103-manual-import.md", "phase": "A", "depends_on": ["CRM-102"], "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/29", "branch": "feat/CRM-103-manual-import" },
-    "CRM-104": { "status": "done", "attempts": 1, "blockers": [], "spec": "backlog/specs/CRM-104-ads-webhooks.md", "phase": "A", "depends_on": ["CRM-101"], "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/30", "branch": "feat/CRM-104-ads-webhooks" },
-    "CRM-105": { "status": "in_progress", "attempts": 1, "blockers": [], "spec": "backlog/specs/CRM-105-pipeline.md", "phase": "B", "depends_on": [], "branch": "feat/CRM-105-pipeline" },
-    "CRM-106": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-106-lead-card.md", "phase": "B", "depends_on": ["CRM-105"] },
-    "CRM-107": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-107-tasks-files.md", "phase": "B", "depends_on": ["CRM-106"] },
-    "CRM-108": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-108-templates.md", "phase": "C", "depends_on": ["CRM-106"] },
-    "CRM-109": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-109-comms.md", "phase": "C", "depends_on": ["CRM-108"] },
-    "CRM-110": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-110-automation.md", "phase": "D", "depends_on": ["CRM-109"] },
-    "CRM-111": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-111-convert-family.md", "phase": "E", "depends_on": ["CRM-106"] },
-    "CRM-112": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/CRM-112-analytics.md", "phase": "E", "depends_on": ["CRM-111"] }
+    "CRM-101": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-101-intake-web.md",
+      "phase": "A",
+      "depends_on": [
+        "MVP-009"
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/27",
+      "branch": "feat/CRM-101-intake-web"
+    },
+    "CRM-102": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-102-dedup-merge.md",
+      "phase": "A",
+      "depends_on": [
+        "CRM-101"
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/28",
+      "branch": "feat/CRM-102-dedup-merge"
+    },
+    "CRM-103": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-103-manual-import.md",
+      "phase": "A",
+      "depends_on": [
+        "CRM-102"
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/29",
+      "branch": "feat/CRM-103-manual-import"
+    },
+    "CRM-104": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-104-ads-webhooks.md",
+      "phase": "A",
+      "depends_on": [
+        "CRM-101"
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/30",
+      "branch": "feat/CRM-104-ads-webhooks"
+    },
+    "CRM-105": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-105-pipeline.md",
+      "phase": "B",
+      "depends_on": [],
+      "branch": "feat/crm-105-*",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/31"
+    },
+    "CRM-106": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-106-lead-card.md",
+      "phase": "B",
+      "depends_on": [
+        "CRM-105"
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/32",
+      "branch": "feat/crm-106-*"
+    },
+    "CRM-107": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-107-tasks-files.md",
+      "phase": "B",
+      "depends_on": [
+        "CRM-106"
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/33",
+      "branch": "feat/crm-107-*"
+    },
+    "CRM-108": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-108-templates.md",
+      "phase": "C",
+      "depends_on": [
+        "CRM-106"
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/34",
+      "branch": "feat/crm-108-*"
+    },
+    "CRM-109": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-109-comms.md",
+      "phase": "C",
+      "depends_on": [
+        "CRM-108"
+      ]
+    },
+    "CRM-110": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-110-automation.md",
+      "phase": "D",
+      "depends_on": [
+        "CRM-109"
+      ]
+    },
+    "CRM-111": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-111-convert-family.md",
+      "phase": "E",
+      "depends_on": [
+        "CRM-106"
+      ]
+    },
+    "CRM-112": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-112-analytics.md",
+      "phase": "E",
+      "depends_on": [
+        "CRM-111"
+      ]
+    }
   }
 }

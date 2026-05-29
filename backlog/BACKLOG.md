@@ -104,11 +104,16 @@ Pivot from landing-only to functional SaaS with Postgres + auth + multi-tenant.
 2. **Type check passes**: `npm run typecheck` exits 0
 3. **Lint passes**: `npm run lint` exits 0
 4. **Tests pass**: `npm test` — all green
-5. **Lighthouse ≥ 90**: performance, accessibility, best-practices, SEO
-6. **Axe a11y**: 0 violations on critical/serious
-7. **Reviewer agent**: returns `APPROVED`
-8. **Manager persona agent**: ≤ 3 friction points (none critical)
-9. **Student persona agent**: ≤ 3 friction points (none critical)
-10. **Conventional commit + PR** opened on `main`
+5. **Migration gate** (backend items): `db:generate` leaves no uncommitted migration; `db:reset` + `db:seed` succeed — CLAUDE.md §3.5.1
+6. **API integration smoke** (backend items): server boots, login + the item's endpoints return 200 — §3.5.1
+7. **DB-portability**: no raw `.execute().rows` — §3.5.1
+8. **Lighthouse ≥ 90** (page items): performance, accessibility, best-practices, SEO
+9. **Axe a11y**: 0 violations on critical/serious
+10. **Reviewer agent**: `APPROVED` after the review→improve loop (+ adversarial review on risky diffs) — §3.5.2
+11. **Manager persona agent**: ≤ 3 friction points (none critical)
+12. **Student persona agent**: ≤ 3 friction points (none critical)
+13. **Conventional commit + PR** opened on `main`
 
-If any gate fails → status `blocked`, write report to `backlog/reports/<ID>-blocked.md`, move to the next item. Never halt the loop.
+Gates 5–7 are **repair-don't-skip** (CLAUDE.md §0.2): a red gate triggers a fix loop, not an
+instant block. Only block if a real fix attempt fails and the cause is clearly structural →
+write `backlog/reports/<ID>-blocked.md`, move to the next item. Never halt the loop.

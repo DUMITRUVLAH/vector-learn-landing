@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { db, pglite } from "./client";
+import { db, closeDb } from "./client";
 import { tenants, users, students, teachers, courses, lessons } from "./schema";
 import { eq } from "drizzle-orm";
 
@@ -117,11 +117,11 @@ async function seed() {
 
 seed()
   .then(async () => {
-    await pglite.close();
+    await closeDb();
     console.log("\n🎉 Seed complete.");
   })
   .catch(async (err) => {
     console.error("❌ Seed failed:", err);
-    await pglite.close();
+    await closeDb();
     process.exit(1);
   });

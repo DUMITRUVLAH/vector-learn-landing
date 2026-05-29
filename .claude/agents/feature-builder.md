@@ -25,7 +25,10 @@ Read one spec from `backlog/specs/<ID>.md`, implement it completely, and report 
    - Form controls have `<label htmlFor>` (visible or sr-only)
    - Touch targets minimum 44×44px (`touch-target` utility)
 9. **Romanian copy.** All user-facing strings in Romanian, consistent with existing landing tone.
-10. **Routing:** Use simple hash-based routing (`window.location.hash`) or install `react-router-dom` if not present. The page must be accessible at the declared path.
+10. **Routing:** Use simple hash-based routing (`window.location.hash`) or install `react-router-dom` if not present. The page must be accessible at the declared path. In-app links must use real app routes (e.g. `#/app/login`), never dead anchors like `#login`.
+11. **Schema changes → migrations (non-negotiable).** If you touch `server/db/schema/*`, run `npm run db:generate`, **commit the generated migration**, and verify `npm run db:reset && npm run db:seed` succeed. A schema change without a committed migration is INCOMPLETE — it breaks every fresh deploy.
+12. **DB portability.** Prod runs Postgres (Supabase); local/tests may run PGlite. Result shapes differ — never rely on raw `db.execute(...).rows`. Prefer the query builder (`db.select` / `db.query`); if you must use raw execute, handle both: `const rows = Array.isArray(r) ? r : r.rows`.
+13. **API endpoints must be smoke-tested live.** Boot the server, log in, and curl the endpoints you added/changed — they must return 200 with the expected shape before you claim success.
 
 ## Definition of complete
 
@@ -33,6 +36,8 @@ Before reporting back, you MUST:
 - Run `npm run build` — exits 0
 - Run `npm run typecheck` — exits 0
 - Run `npm test -- --run` — all green
+- **If you changed schema:** `npm run db:generate` leaves NO uncommitted migration, and `npm run db:reset && npm run db:seed` both exit 0
+- **API smoke:** start the server, log in, curl the endpoint(s) you touched → 200 + expected JSON
 - Manually verify in dev server (start `npm run dev`, curl the page, check status 200)
 - Stage all files: `git add .`
 
@@ -47,6 +52,8 @@ TESTS_ADDED: <count>
 BUILD: <pass|fail>
 TYPECHECK: <pass|fail>
 TESTS: <pass|fail>
+MIGRATION: <pass|n/a>      # n/a if no schema change; pass = generated+committed+reset OK
+API_SMOKE: <pass|n/a>      # n/a if no new endpoints; pass = login + endpoints 200
 NOTES: <one paragraph, max 6 lines>
 ```
 
