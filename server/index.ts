@@ -1,27 +1,43 @@
 import "dotenv/config";
 import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { sql } from "drizzle-orm";
 import { db } from "./db/client";
 import { tenants, users, students, lessons } from "./db/schema";
 import { authRoutes } from "./routes/auth";
 import { studentRoutes } from "./routes/students";
+import { teacherRoutes } from "./routes/teachers";
+import { courseRoutes } from "./routes/courses";
+import { lessonRoutes } from "./routes/lessons";
+import { paymentRoutes } from "./routes/payments";
 
 const app = new Hono();
 
 app.use("*", logger());
+const allowedOrigins = [
+  "http://localhost:5173",
+  ...(process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
+];
+
 app.use(
   "/api/*",
   cors({
-    origin: ["http://localhost:5173"],
+    origin: (origin) => (allowedOrigins.includes(origin) ? origin : allowedOrigins[0]),
     credentials: true,
   })
 );
 
 app.route("/api/auth", authRoutes);
 app.route("/api/students", studentRoutes);
+app.route("/api/teachers", teacherRoutes);
+app.route("/api/courses", courseRoutes);
+app.route("/api/lessons", lessonRoutes);
+app.route("/api/payments", paymentRoutes);
 
 app.get("/api/health", async (c) => {
   try {
@@ -76,10 +92,31 @@ app.get("/api/health/db", async (c) => {
   }
 });
 
+// Serve frontend static files in production (dist/)
+const distDir = path.resolve(process.cwd(), "dist");
+if (existsSync(distDir)) {
+  console.log(`📦 Serving frontend from ${distDir}`);
+  app.use(
+    "/*",
+    serveStatic({
+      root: "./dist",
+    })
+  );
+  // SPA fallback: any unknown path returns index.html
+  app.notFound(async (c) => {
+    const indexPath = path.join(distDir, "index.html");
+    if (existsSync(indexPath)) {
+      const html = await import("node:fs/promises").then((fs) => fs.readFile(indexPath, "utf8"));
+      return c.html(html);
+    }
+    return c.text("Not found", 404);
+  });
+}
+
 const port = Number(process.env.PORT ?? 3000);
 
 serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`🚀 Vector Learn API running on http://localhost:${info.port}`);
+  console.log(`🚀 Vector Learn running on http://localhost:${info.port}`);
 });
 
 export default app;
