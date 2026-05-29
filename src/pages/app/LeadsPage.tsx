@@ -67,6 +67,9 @@ export function LeadsPage() {
   const [filterSource, setFilterSource] = useState("all");
   const [filterAssigned, setFilterAssigned] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  /** CRM-116: task signal filters */
+  const [filterNoTask, setFilterNoTask] = useState(false);
+  const [filterOverdue, setFilterOverdue] = useState(false);
 
   // Modals
   const [showCreate, setShowCreate] = useState(false);
@@ -130,6 +133,12 @@ export function LeadsPage() {
         const nameMatch = lead.fullName.toLowerCase().includes(q);
         const phoneMatch = phoneQ.length > 0 && (lead.phone ?? "").replace(/\D/g, "").includes(phoneQ);
         if (!nameMatch && !phoneMatch) return false;
+      }
+      // CRM-116: task signal filters
+      if (filterNoTask && lead.nextTask !== null && lead.nextTask !== undefined) return false;
+      if (filterOverdue) {
+        const isOverdue = lead.nextTask?.dueAt != null && new Date(lead.nextTask.dueAt) < new Date();
+        if (!isOverdue) return false;
       }
       return true;
     });
@@ -246,10 +255,32 @@ export function LeadsPage() {
           <option value="">Neasignat</option>
         </select>
 
-        {(filterSource !== "all" || filterAssigned !== "all" || searchQuery) && (
+        {/* CRM-116: task signal filter checkboxes */}
+        <label className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs text-muted-foreground cursor-pointer hover:bg-muted select-none">
+          <input
+            type="checkbox"
+            checked={filterNoTask}
+            onChange={(e) => { setFilterNoTask(e.target.checked); if (e.target.checked) setFilterOverdue(false); }}
+            className="h-3.5 w-3.5"
+            aria-label="Filtrează leaduri fără task"
+          />
+          Fără task
+        </label>
+        <label className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs text-muted-foreground cursor-pointer hover:bg-muted select-none">
+          <input
+            type="checkbox"
+            checked={filterOverdue}
+            onChange={(e) => { setFilterOverdue(e.target.checked); if (e.target.checked) setFilterNoTask(false); }}
+            className="h-3.5 w-3.5"
+            aria-label="Filtrează leaduri cu task restant"
+          />
+          Restanțe
+        </label>
+
+        {(filterSource !== "all" || filterAssigned !== "all" || searchQuery || filterNoTask || filterOverdue) && (
           <button
             type="button"
-            onClick={() => { setFilterSource("all"); setFilterAssigned("all"); setSearchQuery(""); }}
+            onClick={() => { setFilterSource("all"); setFilterAssigned("all"); setSearchQuery(""); setFilterNoTask(false); setFilterOverdue(false); }}
             className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted"
           >
             <X className="h-3 w-3" />
@@ -416,18 +447,34 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
           {lead.email && <Mail className="h-2.5 w-2.5" aria-label="Are email" />}
         </div>
       </div>
-      {/* Next task badge (CRM-107) */}
-      {lead.nextTask && (
-        <div className={cn(
-          "mt-1.5 text-[9px] font-semibold inline-flex items-center gap-1",
-          lead.nextTask.dueAt && new Date(lead.nextTask.dueAt) < new Date()
-            ? "text-destructive"
-            : "text-amber-600 dark:text-amber-400"
-        )}>
-          <Clock className="h-2.5 w-2.5" aria-hidden="true" />
-          {lead.nextTask.dueAt
-            ? new Date(lead.nextTask.dueAt).toLocaleDateString("ro-RO", { day: "2-digit", month: "short" })
-            : lead.nextTask.title.slice(0, 20)}
+      {/* CRM-116: Task signal badges */}
+      {lead.nextTask ? (
+        (() => {
+          const isOverdue = lead.nextTask.dueAt != null && new Date(lead.nextTask.dueAt) < new Date();
+          const daysOverdue = isOverdue
+            ? Math.floor((Date.now() - new Date(lead.nextTask.dueAt!).getTime()) / 86400000)
+            : 0;
+          return (
+            <div className={cn(
+              "mt-1.5 text-[9px] font-semibold inline-flex items-center gap-1",
+              isOverdue ? "text-destructive" : "text-amber-600 dark:text-amber-400"
+            )} aria-label={isOverdue ? `Task restant ${daysOverdue} zile` : "Următor task"}>
+              <Clock className="h-2.5 w-2.5" aria-hidden="true" />
+              {isOverdue
+                ? `${daysOverdue}d`
+                : lead.nextTask.dueAt
+                  ? new Date(lead.nextTask.dueAt).toLocaleDateString("ro-RO", { day: "2-digit", month: "short" })
+                  : lead.nextTask.title.slice(0, 20)}
+            </div>
+          );
+        })()
+      ) : (
+        /* CRM-116: "Fără task" badge — portocaliu (warning) */
+        <div
+          className="mt-1.5 text-[9px] font-semibold inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded px-1.5 py-0.5"
+          aria-label="Lead fără task deschis"
+        >
+          Fără task
         </div>
       )}
       {lead.convertedToStudentId && (
