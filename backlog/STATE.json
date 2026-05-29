@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "CRM-112",
-  "iterations": 32,
+  "current_item": "CRM-114",
+  "last_completed": "CRM-116",
+  "iterations": 36,
   "last_run_at": "2026-05-29T08:30:00Z",
   "milestone_status": "M1+M2+M3 landing + MVP-001..008 complete. CRM is now the CORE milestone: 12 items CRM-101..112 across 5 phases (see backlog/crm/). Build one item at a time per backlog/crm/BUILD-SEQUENCE.md; tests must pass before moving on.",
   "active_milestone": "CRM",
@@ -473,19 +473,19 @@
       }
     },
     "CRM-113": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-113-deal-value.md",
       "phase": "F",
-      "depends_on": [
-        "CRM-105",
-        "CRM-112"
-      ]
+      "depends_on": ["CRM-105", "CRM-112"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/40",
+      "branch": "feat/CRM-113-deal-value",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-114": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-114-company-contacts.md",
       "phase": "F",
@@ -504,14 +504,15 @@
       ]
     },
     "CRM-116": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-116-task-signals.md",
       "phase": "F",
-      "depends_on": [
-        "CRM-107"
-      ]
+      "depends_on": ["CRM-107"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/41",
+      "branch": "feat/CRM-116-task-signals",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     }
   }
 }

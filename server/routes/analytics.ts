@@ -8,7 +8,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, count, eq, isNotNull, sql } from "drizzle-orm";
+import { and, count, eq, isNotNull, sql, sum } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, adCampaignBudgets } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -192,6 +192,35 @@ analyticsRoutes.get("/crm/roas", async (c) => {
   rows.sort((a, b) => b.paidStudents - a.paidStudents);
 
   return c.json({ campaigns: rows });
+});
+
+// ─── CRM-113: Pipeline value weighted by stage ────────────────────────────────
+
+// GET /api/analytics/crm/pipeline-value — Σ value_cents per stage
+analyticsRoutes.get("/crm/pipeline-value", async (c) => {
+  const tenantId = c.get("user").tenantId;
+
+  const result = await db
+    .select({
+      stage: leads.stage,
+      totalValueCents: sum(leads.valueCents),
+      totalDebtCents: sum(leads.debtCents),
+      cnt: count(leads.id),
+    })
+    .from(leads)
+    .where(eq(leads.tenantId, tenantId))
+    .groupBy(leads.stage);
+
+  const rows = (Array.isArray(result) ? result : []).map((r) => ({
+    stage: r.stage,
+    count: Number(r.cnt),
+    valueCents: Number(r.totalValueCents ?? 0),
+    debtCents: Number(r.totalDebtCents ?? 0),
+  }));
+
+  const grandTotal = rows.reduce((s, r) => s + r.valueCents, 0);
+
+  return c.json({ stages: rows, grandTotalValueCents: grandTotal });
 });
 
 // ─── Budget management ────────────────────────────────────────────────────────

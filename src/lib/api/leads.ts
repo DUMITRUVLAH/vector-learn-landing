@@ -34,6 +34,14 @@ export interface Lead {
   lostReason: string | null;
   /** CRM-111: Lead score 0-100 (hot ≥70, warm ≥40, cold <40) */
   score?: number | null;
+  /** CRM-113: Deal value in euro-cents */
+  valueCents: number;
+  /** CRM-113: Remaining debt in euro-cents (shown only when > 0) */
+  debtCents: number;
+  /** CRM-114: Company name for B2B leads */
+  company?: string | null;
+  /** CRM-114: Deal name — if set, used as display title instead of full_name */
+  dealName?: string | null;
   /** Next open task (from pipeline endpoint, augmented server-side) */
   nextTask?: { dueAt: string | null; title: string } | null;
   createdAt: string;
@@ -71,6 +79,10 @@ export interface LeadInteraction {
 export interface PipelineResponse {
   grouped: Record<string, Lead[]>;
   counts: Record<string, number>;
+  /** CRM-113: Σ value_cents per stage key */
+  valueSums: Record<string, number>;
+  /** CRM-113: Grand total value_cents across all stages */
+  totalValueCents: number;
 }
 
 export function fetchPipeline(): Promise<PipelineResponse> {
@@ -93,6 +105,14 @@ export function createLead(input: {
   source?: LeadSource;
   notes?: string | null;
   assignedTo?: string | null;
+  /** CRM-113: Deal value in euro-cents */
+  valueCents?: number;
+  /** CRM-113: Remaining debt in euro-cents */
+  debtCents?: number;
+  /** CRM-114: Company name */
+  company?: string | null;
+  /** CRM-114: Deal name */
+  dealName?: string | null;
 }): Promise<Lead> {
   return api<Lead>("/api/leads", {
     method: "POST",
@@ -137,7 +157,7 @@ export function addInteraction(
 
 export function updateLead(
   id: string,
-  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo">>
+  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo" | "valueCents" | "debtCents" | "company" | "dealName">>
 ): Promise<Lead> {
   return api<Lead>(`/api/leads/${id}`, {
     method: "PATCH",
@@ -221,4 +241,48 @@ export function logCall(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+// ─── CRM-114: Lead contacts API ───────────────────────────────────────────────
+
+export interface LeadContact {
+  id: string;
+  tenantId: string;
+  leadId: string;
+  fullName: string;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+  isPrimary: number; // 0 or 1
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function listContacts(leadId: string): Promise<{ items: LeadContact[] }> {
+  return api<{ items: LeadContact[] }>(`/api/leads/${leadId}/contacts`);
+}
+
+export function createContact(
+  leadId: string,
+  input: { fullName: string; role?: string | null; phone?: string | null; email?: string | null; isPrimary?: boolean }
+): Promise<LeadContact> {
+  return api<LeadContact>(`/api/leads/${leadId}/contacts`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateContact(
+  leadId: string,
+  contactId: string,
+  patch: { fullName?: string; role?: string | null; phone?: string | null; email?: string | null; isPrimary?: boolean }
+): Promise<LeadContact> {
+  return api<LeadContact>(`/api/leads/${leadId}/contacts/${contactId}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteContact(leadId: string, contactId: string): Promise<{ deleted: boolean }> {
+  return api<{ deleted: boolean }>(`/api/leads/${leadId}/contacts/${contactId}`, { method: "DELETE" });
 }

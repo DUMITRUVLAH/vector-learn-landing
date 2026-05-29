@@ -15,6 +15,10 @@ vi.mock("@/lib/api/leads", () => ({
   addInteraction: vi.fn(),
   revokeConsent: vi.fn(),
   deleteLead: vi.fn(),
+  listContacts: vi.fn(),
+  createContact: vi.fn(),
+  updateContact: vi.fn(),
+  deleteContact: vi.fn(),
 }));
 
 vi.mock("@/lib/api/pipeline", () => ({
@@ -57,6 +61,7 @@ const MOCK_LEAD: Lead = {
   utmSource: null, utmMedium: null, utmCampaign: null, notes: null,
   consentAt: null, consentText: null, ipAtConsent: null, consentRevokedAt: null,
   convertedToStudentId: null, convertedAt: null, lostReason: null,
+  valueCents: 0, debtCents: 0,
   createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
 };
 
@@ -100,6 +105,7 @@ describe("CRM-107 — Task-uri per lead", () => {
     vi.mocked(leadsApi.listInteractions).mockResolvedValue({ items: [] });
     vi.mocked(tasksApi.listTasks).mockResolvedValue({ items: [] });
     vi.mocked(tasksApi.listAttachments).mockResolvedValue({ items: [] });
+    vi.mocked(leadsApi.listContacts).mockResolvedValue({ items: [] });
   });
 
   /**
@@ -180,6 +186,7 @@ describe("CRM-107 — Fișiere per lead", () => {
     vi.mocked(leadsApi.listInteractions).mockResolvedValue({ items: [] });
     vi.mocked(tasksApi.listTasks).mockResolvedValue({ items: [] });
     vi.mocked(tasksApi.listAttachments).mockResolvedValue({ items: [] });
+    vi.mocked(leadsApi.listContacts).mockResolvedValue({ items: [] });
   });
 
   /**
