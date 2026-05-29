@@ -46,6 +46,8 @@ export const leads = pgTable(
     consentText: varchar("consent_text", { length: 500 }),
     consentAt: timestamp("consent_at", { withTimezone: true }),
     ipAtConsent: varchar("ip_at_consent", { length: 64 }),
+    userAgentAtConsent: varchar("user_agent_at_consent", { length: 512 }),
+    consentRevokedAt: timestamp("consent_revoked_at", { withTimezone: true }),
     notes: varchar("notes", { length: 2000 }),
     convertedToStudentId: uuid("converted_to_student_id").references(() => students.id, { onDelete: "set null" }),
     convertedAt: timestamp("converted_at", { withTimezone: true }),

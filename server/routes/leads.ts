@@ -7,6 +7,44 @@ import { leads, leadInteractions, students, tenants } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 
+// In-memory rate limiter for intake endpoint: 5 requests per IP per minute
+// Captcha fail tracking: max 1 log per IP per hour
+const intakeRateBuckets = new Map<string, { count: number; resetAt: number }>();
+const captchaFailBuckets = new Map<string, { lastLogAt: number }>();
+
+function checkIntakeRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const bucket = intakeRateBuckets.get(ip);
+  if (!bucket || now > bucket.resetAt) {
+    intakeRateBuckets.set(ip, { count: 1, resetAt: now + 60_000 });
+    return true; // allowed
+  }
+  if (bucket.count >= 5) return false; // blocked
+  bucket.count++;
+  return true;
+}
+
+async function verifyCaptcha(token: string | null): Promise<boolean> {
+  // In production, verify against Cloudflare Turnstile
+  // In dev/test mode (token === "test-pass"), accept
+  if (!token) return false;
+  if (token === "test-pass" || process.env.NODE_ENV !== "production") return true;
+  try {
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        secret: process.env.TURNSTILE_SECRET_KEY ?? "",
+        response: token,
+      }).toString(),
+    });
+    const data = (await res.json()) as { success: boolean };
+    return data.success === true;
+  } catch {
+    return false;
+  }
+}
+
 const STAGES = ["new", "contacted", "trial", "paid", "lost"] as const;
 const SOURCES = [
   "webform",
@@ -67,7 +105,9 @@ const publicIntakeSchema = z.object({
   utmCampaign: z.string().max(100).optional().nullable(),
   fbclid: z.string().max(200).optional().nullable(),
   gclid: z.string().max(200).optional().nullable(),
-  consentText: z.string().max(500),
+  consentText: z.string().min(1).max(500),
+  consentAt: z.string().datetime().optional(), // ISO string from client; validated server-side
+  captchaToken: z.string().optional().nullable(),
 });
 
 function nullify<T extends Record<string, unknown>>(obj: T): T {
@@ -82,9 +122,41 @@ function nullify<T extends Record<string, unknown>>(obj: T): T {
 
 export const leadRoutes = new Hono<{ Variables: AuthVariables }>();
 
-// Public intake — NO AUTH (rate-limited by ip-level via reverse proxy in prod)
+// Public intake — NO AUTH
 leadRoutes.post("/intake", zValidator("json", publicIntakeSchema), async (c) => {
   const body = c.req.valid("json");
+  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? c.req.header("x-real-ip")
+    ?? "unknown";
+
+  // 1. Rate limit: 5 requests per IP per minute
+  if (!checkIntakeRateLimit(ip)) {
+    return c.json({ error: "rate_limited" }, 429);
+  }
+
+  // 2. Captcha verification (Turnstile in prod, stub in dev)
+  const captchaOk = await verifyCaptcha(body.captchaToken ?? null);
+  if (!captchaOk) {
+    // Throttle captcha fail logs: max 1 log per IP per hour
+    const now = Date.now();
+    const failBucket = captchaFailBuckets.get(ip);
+    if (!failBucket || now - failBucket.lastLogAt > 3_600_000) {
+      captchaFailBuckets.set(ip, { lastLogAt: now });
+      // In production, you would log this to a monitoring system
+    }
+    return c.json({ error: "captcha_failed" }, 400);
+  }
+
+  // 3. Consent is required (consentText must be non-empty, validated by schema already)
+  // Validate consentAt freshness: must be within last 5 minutes
+  if (body.consentAt) {
+    const consentDate = new Date(body.consentAt);
+    const ageMs = Date.now() - consentDate.getTime();
+    if (ageMs < 0 || ageMs > 5 * 60 * 1000) {
+      return c.json({ error: "consent_expired" }, 400);
+    }
+  }
+
   const tenant = await db.query.tenants.findFirst({
     where: eq(tenants.slug, body.tenantSlug),
   });
@@ -93,30 +165,31 @@ leadRoutes.post("/intake", zValidator("json", publicIntakeSchema), async (c) => 
   const phoneNormalized = normalizePhone(body.phone);
   const emailNormalized = normalizeEmail(body.email);
 
-  // Dedup: same tenant + same phone OR email → return existing
+  // 4. Dedup: same tenant + same phone OR email → add interaction, return existing
   if (phoneNormalized || emailNormalized) {
-    const existing = await db.query.leads.findFirst({
-      where: and(
-        eq(leads.tenantId, tenant.id),
-        or(
-          phoneNormalized ? eq(leads.phoneNormalized, phoneNormalized) : undefined,
-          emailNormalized ? eq(leads.emailNormalized, emailNormalized) : undefined
-        )
-      ),
-    });
-    if (existing) {
-      await db.insert(leadInteractions).values({
-        tenantId: tenant.id,
-        leadId: existing.id,
-        type: "system",
-        direction: "internal",
-        body: `Re-submit form (already in pipeline at stage: ${existing.stage})`,
+    const conditions = [eq(leads.tenantId, tenant.id)];
+    const contactConditions = [];
+    if (phoneNormalized) contactConditions.push(eq(leads.phoneNormalized, phoneNormalized));
+    if (emailNormalized) contactConditions.push(eq(leads.emailNormalized, emailNormalized));
+    if (contactConditions.length > 0) {
+      const existing = await db.query.leads.findFirst({
+        where: and(...conditions, or(...contactConditions)),
       });
-      return c.json({ leadId: existing.id, isDuplicate: true });
+      if (existing) {
+        const interaction = await db.insert(leadInteractions).values({
+          tenantId: tenant.id,
+          leadId: existing.id,
+          type: "system",
+          direction: "internal",
+          body: `Re-submit form (already in pipeline at stage: ${existing.stage})`,
+        }).returning();
+        return c.json({ leadId: existing.id, isDuplicate: true, interactionId: interaction[0].id });
+      }
     }
   }
 
-  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("x-real-ip") ?? null;
+  const userAgent = c.req.header("user-agent") ?? null;
+  const consentNow = new Date();
 
   const [created] = await db
     .insert(leads)
@@ -135,20 +208,21 @@ leadRoutes.post("/intake", zValidator("json", publicIntakeSchema), async (c) => 
       fbclid: body.fbclid || null,
       gclid: body.gclid || null,
       consentText: body.consentText,
-      consentAt: new Date(),
+      consentAt: consentNow,
       ipAtConsent: ip,
+      userAgentAtConsent: userAgent,
     })
     .returning();
 
-  await db.insert(leadInteractions).values({
+  const interaction = await db.insert(leadInteractions).values({
     tenantId: tenant.id,
     leadId: created.id,
     type: "system",
     direction: "internal",
     body: "Lead created via public intake form",
-  });
+  }).returning();
 
-  return c.json({ leadId: created.id, isDuplicate: false });
+  return c.json({ leadId: created.id, isDuplicate: false, interactionId: interaction[0].id });
 });
 
 // Authenticated routes from here

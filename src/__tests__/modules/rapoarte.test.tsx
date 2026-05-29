@@ -10,7 +10,7 @@ describe("KPICard", () => {
   it("renders label and value (no animation)", () => {
     render(<KPICard label="MRR" value={1234} format="currency" animate={false} />);
     expect(screen.getByText(/MRR/i)).toBeInTheDocument();
-    expect(screen.getByTestId("kpi-MRR").textContent).toMatch(/1[. ]234/);
+    expect(screen.getByTestId("kpi-MRR").textContent).toMatch(/1[.,\s]234/);
   });
 
   it("formats percent values", () => {

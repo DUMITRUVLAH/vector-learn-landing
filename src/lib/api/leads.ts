@@ -14,6 +14,7 @@ export type LeadSource =
 
 export interface Lead {
   id: string;
+  tenantId: string;
   fullName: string;
   phone: string | null;
   email: string | null;
@@ -23,6 +24,13 @@ export interface Lead {
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
+  fbclid: string | null;
+  gclid: string | null;
+  consentText: string | null;
+  consentAt: string | null;
+  ipAtConsent: string | null;
+  userAgentAtConsent: string | null;
+  consentRevokedAt: string | null;
   notes: string | null;
   convertedToStudentId: string | null;
   convertedAt: string | null;
@@ -102,4 +110,44 @@ export function convertLead(id: string): Promise<{ lead: Lead; student: { id: st
     `/api/leads/${id}/convert`,
     { method: "POST" }
   );
+}
+
+export interface IntakeInput {
+  tenantSlug: string;
+  fullName: string;
+  phone?: string | null;
+  email?: string | null;
+  interestCourse?: string | null;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  fbclid?: string | null;
+  gclid?: string | null;
+  consentText: string;
+  consentAt?: string;
+  captchaToken?: string | null;
+}
+
+export interface IntakeResponse {
+  leadId: string;
+  isDuplicate: boolean;
+  interactionId?: string;
+}
+
+export function submitIntake(input: IntakeInput): Promise<IntakeResponse> {
+  return api<IntakeResponse>("/api/leads/intake", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Update lead fields (phone, email, consent revoke, etc.) */
+export function updateLead(
+  id: string,
+  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes">>
+): Promise<Lead> {
+  return api<Lead>(`/api/leads/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
 }
