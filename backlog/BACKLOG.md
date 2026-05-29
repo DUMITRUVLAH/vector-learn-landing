@@ -108,6 +108,19 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 
 **Ordine de build:** `CRM-101 → … → 112` (done) → `113 → 116 → 114 → 115` (valoare + semnale task întâi — impact maxim pe demo).
 
+## Active milestone: COMM — Modulul Comunicare (mesagerie reală backend)
+
+> Fundație mesagerie + log per lead/student + inbox unificat + broadcast + notificări automate.
+> Refolosește CRM-108 templates. Respectă `consent_revoked_at`. Stacked branches pentru migrări secvențiale.
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `COMM-201` | Infra provideri: stub email/SMS/WhatsApp + tabel messages + delivery status | 1 | pending | [specs/COMM-201-provider-infra.md](specs/COMM-201-provider-infra.md) |
+| 2 | `COMM-202` | Log mesaje per lead/student + send-from-template din cartonaș | 2 | pending | [specs/COMM-202-message-log.md](specs/COMM-202-message-log.md) |
+| 3 | `COMM-203` | Inbox unificat /app/inbox — conversații threaded per contact | 3 | pending | [specs/COMM-203-inbox.md](specs/COMM-203-inbox.md) |
+| 4 | `COMM-204` | Broadcast cu segmentare — trimitere masă per segment | 4 | pending | [specs/COMM-204-broadcast.md](specs/COMM-204-broadcast.md) |
+| 5 | `COMM-205` | Notificări sistem automate + quiet hours + anti-spam cap | 5 | pending | [specs/COMM-205-notifications.md](specs/COMM-205-notifications.md) |
+
 ## Quality gates (required before status → `done`)
 
 1. **Build passes**: `npm run build` exits 0

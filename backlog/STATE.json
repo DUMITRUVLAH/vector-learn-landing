@@ -5,7 +5,7 @@
   "iterations": 39,
   "last_run_at": "2026-05-29T08:30:00Z",
   "milestone_status": "M1+M2+M3 landing + MVP-001..008 complete. CRM is now the CORE milestone: 12 items CRM-101..112 across 5 phases (see backlog/crm/). Build one item at a time per backlog/crm/BUILD-SEQUENCE.md; tests must pass before moving on.",
-  "active_milestone": "CRM",
+  "active_milestone": "COMM",
   "items": {
     "M1-001": {
       "status": "done",
@@ -515,6 +515,51 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/41",
       "branch": "feat/CRM-116-task-signals",
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "COMM-201": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/COMM-201-provider-infra.md",
+      "milestone": "COMM",
+      "phase": "1",
+      "depends_on": ["CRM-108", "CRM-109"]
+    },
+    "COMM-202": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/COMM-202-message-log.md",
+      "milestone": "COMM",
+      "phase": "2",
+      "depends_on": ["COMM-201"]
+    },
+    "COMM-203": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/COMM-203-inbox.md",
+      "milestone": "COMM",
+      "phase": "3",
+      "depends_on": ["COMM-201", "COMM-202"]
+    },
+    "COMM-204": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/COMM-204-broadcast.md",
+      "milestone": "COMM",
+      "phase": "4",
+      "depends_on": ["COMM-201", "COMM-202"]
+    },
+    "COMM-205": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/COMM-205-notifications.md",
+      "milestone": "COMM",
+      "phase": "5",
+      "depends_on": ["COMM-201", "COMM-204"]
     }
   }
 }
