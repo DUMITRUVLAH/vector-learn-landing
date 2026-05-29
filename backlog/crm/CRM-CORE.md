@@ -402,5 +402,42 @@ Multi-tenant: fiecare query e `tenant_id`-scoped (row-level). Niciodată cross-t
 
 ---
 
+## 11. Features din CRM-ul real (Kommo) — extindere Faza F
+
+Observate în CRM-ul de producție al owner-ului. Aceste comportamente lipseau din spec și devin
+item-uri noi `CRM-113..116` (Faza F). Sursa de adevăr pentru ele rămâne aici.
+
+### 11.1 Valoarea deal-ului (€) + rollup pipeline `[CRM-113]`
+- `leads.value_cents` („Sale" — valoarea deal-ului) și `leads.debt_cents` („Datorie" — sold rămas).
+- Header kanban: **total leaduri + suma valorilor** (ex. „2483 leads: €300.671").
+- Fiecare coloană: **count + Σ valoare** (ex. „DECIZIE · 6 leads · €1.468").
+- Cardul afișează valoarea (€360) și, dacă există, datoria.
+- Raportul de pipeline (CRM-112) folosește `value_cents` pentru valoare ponderată pe stadiu.
+- Stadii noi posibile (configurabile, CRM-105): „Cont de plată" (factură emisă) și „Achitat 1/2"
+  (plată parțială) între `trial` și `paid`.
+
+### 11.2 Companie + contacte multiple (B2B) `[CRM-114]`
+- `leads.company` + tabel `lead_contacts` (mai mulți contacți per lead: nume, rol, telefon, email).
+- Cardul afișează compania sub nume (ex. „S.R.L. CEGEKA DEVELOPMENT"). Buton „Adaugă contact".
+- Numele deal-ului ≠ numele persoanei (ex. „Managementul Clinicii Stomatologice — Popovici Nicolae").
+  `leads.deal_name` opțional; dacă lipsește, se afișează `full_name`.
+
+### 11.3 Tag-uri + câmpuri custom configurabile `[CRM-115]`
+- Tag-uri libere per lead (`lead_tags`), inclusiv tag de sursă (ex. „organic").
+- Câmpuri custom configurabile per tenant (Setup): tip select/text (ex. „Ediție", „Curs Live",
+  „Curs Înregistrat", „Motivul refuzului"). Tabel `custom_fields` + `lead_field_values`.
+
+### 11.4 Semnale de task pe card + aging `[CRM-116]`
+- Badge **„Fără task"** (portocaliu) pe cardurile fără task deschis — semnalează leaduri uitate.
+- **Aging restanță**: task scadent depășit afișat roșu cu nr. de zile (ex. „75d").
+- Data următorului task pe card; stage-change events arată sursa („Mutat în … din Formular site").
+
+### 11.5 Note (Faza F, viitor, neprioritizat încă)
+- Programare următoare („Upcoming Appointment") legată de modulul Orar.
+- Chat intern + participanți (colaboratori) per lead.
+- Număr lead vizibil (#id) + tab-uri pe cartonaș (Main / Formular / Statistici / Media / Setup).
+
+---
+
 *Acest document este CORE. Orice spec `CRM-*` trebuie să fie consistent cu el. Dacă un spec
 contrazice acest document, documentul câștigă — actualizează-l explicit, nu deriva în tăcere.*

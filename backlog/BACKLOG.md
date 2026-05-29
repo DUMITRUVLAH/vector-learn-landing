@@ -96,7 +96,17 @@ Pivot from landing-only to functional SaaS with Postgres + auth + multi-tenant.
 | 11 | `CRM-111` | Conversie → student cu familie + reasignare + scor | E | done ✅ | [specs/CRM-111-convert-family.md](specs/CRM-111-convert-family.md) · [PR #38](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/38) |
 | 12 | `CRM-112` | Rapoarte: funnel + lost-reason + ROAS | E | done ✅ | [specs/CRM-112-analytics.md](specs/CRM-112-analytics.md) · [PR #39](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/39) |
 
-**Ordine de build:** `CRM-101 → 102 → 103 → 104 → 105 → 106 → 107 → 108 → 109 → 110 → 111 → 112`.
+### Faza F — paritate cu CRM-ul real (Kommo) — vezi [CRM-CORE §11](crm/CRM-CORE.md)
+Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul inițial.
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 13 | `CRM-113` | Valoare deal (€) per lead + rollup valoare pe pipeline | F | pending | [specs/CRM-113-deal-value.md](specs/CRM-113-deal-value.md) |
+| 14 | `CRM-114` | Companie + contacte multiple (B2B) + nume deal | F | pending | [specs/CRM-114-company-contacts.md](specs/CRM-114-company-contacts.md) |
+| 15 | `CRM-115` | Tag-uri + câmpuri custom configurabile per tenant | F | pending | [specs/CRM-115-tags-custom-fields.md](specs/CRM-115-tags-custom-fields.md) |
+| 16 | `CRM-116` | Semnale task pe card — „Fără task" + aging restanță | F | pending | [specs/CRM-116-task-signals.md](specs/CRM-116-task-signals.md) |
+
+**Ordine de build:** `CRM-101 → … → 112` (done) → `113 → 116 → 114 → 115` (valoare + semnale task întâi — impact maxim pe demo).
 
 ## Quality gates (required before status → `done`)
 

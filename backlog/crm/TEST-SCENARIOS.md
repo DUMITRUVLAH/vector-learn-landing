@@ -113,6 +113,30 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-112-3** `[blocant]` Given campanie cu buget și N convertiți, Then ROAS = cost / paying-students calculat corect.
 - **T-CRM-112-4** Given breakdown per sursă, Then conversia e segmentată corect pe `source`.
 
+## CRM-113 — Valoare deal + rollup {#crm-113}
+- **T-CRM-113-1** `[blocant]` Given un lead cu `value_cents=36000`, When deschizi pipeline, Then cardul afișează „€360".
+- **T-CRM-113-2** `[blocant]` Given 3 leaduri în „contacted" cu valori, Then antetul coloanei arată count + Σ valoare corecte.
+- **T-CRM-113-3** `[blocant]` Given header kanban, Then arată total leaduri + Σ valoare pe tot pipeline-ul.
+- **T-CRM-113-4** Given `debt_cents>0`, Then cardul arată „Datorie €x"; dacă 0 → nu se afișează.
+- **T-CRM-113-5** Given editezi valoarea din card, Then persistă după reload (PATCH /api/leads/:id).
+
+## CRM-114 — Companie + contacte {#crm-114}
+- **T-CRM-114-1** `[blocant]` Given lead cu `company`, Then cardul afișează compania sub nume.
+- **T-CRM-114-2** `[blocant]` Given adaugi 2 contacte, Then ambele apar; exact unul `is_primary`.
+- **T-CRM-114-3** Given `deal_name` setat, Then titlul cartonașului = deal_name (nu full_name).
+- **T-CRM-114-4** Given ștergi un contact, Then dispare; tenant-scoped.
+
+## CRM-115 — Tag-uri + câmpuri custom {#crm-115}
+- **T-CRM-115-1** `[blocant]` Given adaugi tag „vip", Then apare pe lead și e filtrabil.
+- **T-CRM-115-2** `[blocant]` Given owner creează câmp custom select „Ediție" cu opțiuni, Then apare în cartonaș și valoarea se salvează per lead.
+- **T-CRM-115-3** Given intake fără UTM, Then se atașează tag „organic".
+
+## CRM-116 — Semnale task pe card {#crm-116}
+- **T-CRM-116-1** `[blocant]` Given lead fără task open, Then card arată badge „Fără task" (warning).
+- **T-CRM-116-2** `[blocant]` Given task open scadent acum 75 zile, Then card arată „75d" roșu.
+- **T-CRM-116-3** Given task open mâine, Then card arată data, nu badge roșu.
+- **T-CRM-116-4** Given filtru „fără task", Then se afișează doar leadurile fără task open.
+
 ---
 
 ## Scenarii transversale (rulate la fiecare item)

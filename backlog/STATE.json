@@ -471,6 +471,47 @@
         "manager": "BUY",
         "student": "OK"
       }
+    },
+    "CRM-113": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-113-deal-value.md",
+      "phase": "F",
+      "depends_on": [
+        "CRM-105",
+        "CRM-112"
+      ]
+    },
+    "CRM-114": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-114-company-contacts.md",
+      "phase": "F",
+      "depends_on": [
+        "CRM-106"
+      ]
+    },
+    "CRM-115": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-115-tags-custom-fields.md",
+      "phase": "F",
+      "depends_on": [
+        "CRM-106"
+      ]
+    },
+    "CRM-116": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-116-task-signals.md",
+      "phase": "F",
+      "depends_on": [
+        "CRM-107"
+      ]
     }
   }
 }
