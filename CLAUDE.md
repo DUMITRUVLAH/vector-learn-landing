@@ -89,6 +89,37 @@ The owner typed *one trigger* ("continuă", "go", etc.). That trigger runs the c
 
 ---
 
+## 0.2 Build pas-cu-pas / grupat — anti-pierdere de feature-uri (OVERRIDES batching)
+
+**Construiește un singur backlog item odată, în ordinea din secvența lui de build. Nu comasa
+mai multe item-uri într-un PR. Nu trece la următorul item cu testele celui curent roșii.**
+
+De ce: modulele mari (în special **CRM**, care e CORE-ul produsului) au zeci de comportamente și
+click-uri. Construite „la grămadă", se pierd detalii — un click neimplementat, un edge-case GDPR
+uitat, un scenariu de test sărit. Granularitatea pe item + gate de teste verzi împiedică asta.
+
+### Regulile (obligatorii când lucrezi automat pe un modul cu secvență de build)
+
+1. **Un item = un PR.** Ia primul item pending în ordinea din `BUILD-SEQUENCE.md`-ul modulului
+   (pentru CRM: `backlog/crm/BUILD-SEQUENCE.md`). Nu sări, nu comasa.
+2. **Doar scope-ul item-ului.** Implementează exact ce e „in scope" în specul lui. Comportamentele
+   din documentul CORE neacoperite de specul curent **NU se implementează pe furiș și NU se uită**
+   — se notează în secțiunea „Backlog descoperit" a fișierului BUILD-SEQUENCE și se continuă.
+3. **Gate dur de teste (repară, nu sări).** Rulează scenariile item-ului din `TEST-SCENARIOS.md`.
+   **Dacă un scenariu `[blocant]` pică → repară pe loc → re-rulează.** Un item cu teste roșii NU se
+   închide și NU se trece mai departe. (Excepție: dacă un fix eșuează după o încercare reală și e
+   clar structural, marchează `blocked` cu raport — vezi §6 — dar întâi chiar încearcă să repari.)
+4. **Consistență cu CORE.** Dacă implementarea diferă de documentul CORE al modulului, actualizează
+   CORE explicit în același PR. Nu lăsa documentația să derive în tăcere.
+5. **Documentul CORE este sursa de adevăr** pentru comportament (ce se întâmplă la fiecare click,
+   cum se adaugă un client, layout-ul kanban/cartonaș). Pentru CRM: `backlog/crm/CRM-CORE.md`.
+
+### Pe scurt
+> Ia features **pas cu pas / grupate pe item**, în ordine. Testează fiecare item. Dacă testele
+> pică → **repară, nu trece mai departe**. Nu pierde niciun feature din CORE — notează-l, nu-l uita.
+
+---
+
 ## 1. Project at a glance
 
 - **What**: Landing site for **Vector Learn**, a CRM for educational centers (language, programming, music, dance, sports, exam prep, kids).

@@ -70,6 +70,34 @@ Pivot from landing-only to functional SaaS with Postgres + auth + multi-tenant.
 
 **🎉 MVP milestone: 8/8 done. Full SaaS functional, deployable. 25 PRs total.**
 
+## Active milestone: CRM — Modulul CORE (lead → student → plătitor)
+
+> **CRM-ul este inima produsului.** Documentația „cap-coadă" trăiește în
+> [`backlog/crm/`](crm/README.md): [CRM-CORE.md](crm/CRM-CORE.md) (kanban, cartonaș, click-map,
+> fluxuri de adăugare), [BUILD-SEQUENCE.md](crm/BUILD-SEQUENCE.md) (driverul pas-cu-pas),
+> [TEST-SCENARIOS.md](crm/TEST-SCENARIOS.md) (gate dur).
+>
+> **Regulă (CLAUDE.md §0.2): un item odată, în ordine; testele lui trebuie verzi înainte de
+> următorul.** Nu comasa item-uri, nu trece mai departe cu teste roșii, nu pierde feature-uri.
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| — | `MVP-009` | CRM Leads (kanban + create + convert + note) | — | done ✅ (merged commit `433f73a`) | [specs/MVP-009-crm-leads.md](specs/MVP-009-crm-leads.md) |
+| 1 | `CRM-101` | Intake web public + UTM + captcha + consent GDPR | A | done ✅ | [specs/CRM-101-intake-web.md](specs/CRM-101-intake-web.md) · [PR #27](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/27) |
+| 2 | `CRM-102` | Deduplicare robustă + merge manual | A | done ✅ | [specs/CRM-102-dedup-merge.md](specs/CRM-102-dedup-merge.md) · [PR #28](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/28) |
+| 3 | `CRM-103` | Adăugare manuală extinsă + Import CSV | A | done ✅ | [specs/CRM-103-manual-import.md](specs/CRM-103-manual-import.md) · [PR #29](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/29) |
+| 4 | `CRM-104` | Webhook Facebook Lead Ads + Google gclid | A | pending | [specs/CRM-104-ads-webhooks.md](specs/CRM-104-ads-webhooks.md) |
+| 5 | `CRM-105` | Pipeline: stadii custom + motiv pierdere + filtre | B | pending | [specs/CRM-105-pipeline.md](specs/CRM-105-pipeline.md) |
+| 6 | `CRM-106` | Cartonaș detaliu `/app/leads/:id` (tab-uri, inline edit) | B | pending | [specs/CRM-106-lead-card.md](specs/CRM-106-lead-card.md) |
+| 7 | `CRM-107` | Task-uri & remindere + atașamente | B | pending | [specs/CRM-107-tasks-files.md](specs/CRM-107-tasks-files.md) |
+| 8 | `CRM-108` | Bibliotecă template-uri (email/WhatsApp/SMS) | C | pending | [specs/CRM-108-templates.md](specs/CRM-108-templates.md) |
+| 9 | `CRM-109` | Comunicare din cartonaș + logare apel | C | pending | [specs/CRM-109-comms.md](specs/CRM-109-comms.md) |
+| 10 | `CRM-110` | Motor automatizări (trigger→condiție→acțiune) | D | pending | [specs/CRM-110-automation.md](specs/CRM-110-automation.md) |
+| 11 | `CRM-111` | Conversie → student cu familie + reasignare + scor | E | pending | [specs/CRM-111-convert-family.md](specs/CRM-111-convert-family.md) |
+| 12 | `CRM-112` | Rapoarte: funnel + lost-reason + ROAS | E | pending | [specs/CRM-112-analytics.md](specs/CRM-112-analytics.md) |
+
+**Ordine de build:** `CRM-101 → 102 → 103 → 104 → 105 → 106 → 107 → 108 → 109 → 110 → 111 → 112`.
+
 ## Quality gates (required before status → `done`)
 
 1. **Build passes**: `npm run build` exits 0

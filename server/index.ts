@@ -16,6 +16,7 @@ import { courseRoutes } from "./routes/courses";
 import { lessonRoutes } from "./routes/lessons";
 import { paymentRoutes } from "./routes/payments";
 import { leadRoutes } from "./routes/leads";
+import { webhookRoutes } from "./routes/webhooks";
 
 const app = new Hono();
 
@@ -40,6 +41,7 @@ app.route("/api/courses", courseRoutes);
 app.route("/api/lessons", lessonRoutes);
 app.route("/api/payments", paymentRoutes);
 app.route("/api/leads", leadRoutes);
+app.route("/webhooks", webhookRoutes);
 
 app.get("/api/health", async (c) => {
   try {
