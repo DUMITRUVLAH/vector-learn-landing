@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "REP-301",
-  "last_completed": "COMM-205",
-  "iterations": 46,
+  "current_item": "REP-302",
+  "last_completed": "REP-301",
+  "iterations": 47,
   "last_run_at": "2026-05-29T08:30:00Z",
   "milestone_status": "M1+M2+M3 landing + MVP-001..008 complete. CRM is now the CORE milestone: 12 items CRM-101..112 across 5 phases (see backlog/crm/). Build one item at a time per backlog/crm/BUILD-SEQUENCE.md; tests must pass before moving on.",
   "active_milestone": "REP",
@@ -577,17 +577,20 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "LOVES" }
     },
     "REP-301": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/REP-301-dashboard-kpi.md",
       "milestone": "REP",
       "phase": "1",
-      "depends_on": ["MVP-007", "MVP-004"]
+      "depends_on": ["MVP-007", "MVP-004"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/49",
+      "branch": "feat/REP-301-dashboard-kpi",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "REP-302": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/REP-302-revenue-chart.md",
       "milestone": "REP",
