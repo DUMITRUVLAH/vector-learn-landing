@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { migrate } from "drizzle-orm/pglite/migrator";
-import { db, pglite } from "./client.js";
+import { db, pglite } from "./client";
 
 async function main() {
   console.log("⏳ Running migrations…");

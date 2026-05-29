@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import * as schema from "./schema/index.js";
+import * as schema from "./schema/index";
 import path from "node:path";
 
 const dbPath = process.env.DATABASE_PATH ?? path.resolve(process.cwd(), ".pglite");

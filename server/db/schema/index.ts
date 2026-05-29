@@ -1,7 +1,7 @@
-import { pgTable, uuid, timestamp, boolean } from "drizzle-orm/pg-core";
-
-export const healthCheck = pgTable("health_check", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  ok: boolean("ok").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export * from "./tenants";
+export * from "./users";
+export * from "./students";
+export * from "./teachers";
+export * from "./courses";
+export * from "./lessons";
+export * from "./payments";

@@ -4,7 +4,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { sql } from "drizzle-orm";
-import { db } from "./db/client.js";
+import { db } from "./db/client";
+import { tenants, users, students, lessons } from "./db/schema";
 
 const app = new Hono();
 
@@ -39,13 +40,25 @@ app.get("/api/health", async (c) => {
 
 app.get("/api/health/db", async (c) => {
   try {
-    const result = await db.execute(
-      sql`SELECT count(*)::int as table_count FROM information_schema.tables WHERE table_schema = 'public'`
+    const tablesResult = await db.execute(
+      sql`SELECT count(*)::int as table_count FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE '\\_\\_%' ESCAPE '\\'`
     );
-    const row = result.rows[0] as { table_count: number } | undefined;
+    const tableRow = tablesResult.rows[0] as { table_count: number } | undefined;
+
+    const [tenantCount] = await db.select({ c: sql<number>`count(*)::int` }).from(tenants);
+    const [userCount] = await db.select({ c: sql<number>`count(*)::int` }).from(users);
+    const [studentCount] = await db.select({ c: sql<number>`count(*)::int` }).from(students);
+    const [lessonCount] = await db.select({ c: sql<number>`count(*)::int` }).from(lessons);
+
     return c.json({
       ok: true,
-      tables: row?.table_count ?? 0,
+      tables: tableRow?.table_count ?? 0,
+      counts: {
+        tenants: tenantCount.c,
+        users: userCount.c,
+        students: studentCount.c,
+        lessons: lessonCount.c,
+      },
     });
   } catch (error) {
     return c.json(
