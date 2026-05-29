@@ -103,7 +103,7 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 |---|----|-------|------|--------|------|
 | 13 | `CRM-113` | Valoare deal (€) per lead + rollup valoare pe pipeline | F | pending | [specs/CRM-113-deal-value.md](specs/CRM-113-deal-value.md) |
 | 14 | `CRM-114` | Companie + contacte multiple (B2B) + nume deal | F | pending | [specs/CRM-114-company-contacts.md](specs/CRM-114-company-contacts.md) |
-| 15 | `CRM-115` | Tag-uri + câmpuri custom configurabile per tenant | F | pending | [specs/CRM-115-tags-custom-fields.md](specs/CRM-115-tags-custom-fields.md) |
+| 15 | `CRM-115` | Tag-uri + câmpuri custom configurabile per tenant | F | done ✅ | [specs/CRM-115-tags-custom-fields.md](specs/CRM-115-tags-custom-fields.md) · [PR #43](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/43) |
 | 16 | `CRM-116` | Semnale task pe card — „Fără task" + aging restanță | F | pending | [specs/CRM-116-task-signals.md](specs/CRM-116-task-signals.md) |
 
 **Ordine de build:** `CRM-101 → … → 112` (done) → `113 → 116 → 114 → 115` (valoare + semnale task întâi — impact maxim pe demo).
