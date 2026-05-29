@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Loader2, Mail, Wallet, Percent } from "lucide-react";
+import { Loader2, Mail, Wallet, Percent, BarChart3 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -114,6 +114,17 @@ export function TeachersPage() {
                         <Percent className="h-3 w-3 text-muted-foreground" />
                         {t.commissionPct}%
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/app/hr/teachers/${t.id}/stats`)}
+                        className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+                        aria-label={`Statistici ${t.name}`}
+                      >
+                        <BarChart3 className="h-3 w-3" aria-hidden="true" />
+                        Stats
+                      </button>
                     </td>
                   </tr>
                 ))}

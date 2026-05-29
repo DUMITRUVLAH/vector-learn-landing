@@ -4,6 +4,7 @@ import { courses } from "./courses";
 import { teachers } from "./teachers";
 import { students } from "./students";
 import { users } from "./users";
+import { rooms } from "./rooms";
 
 export const lessonStatusEnum = pgEnum("lesson_status", [
   "scheduled",
@@ -38,6 +39,8 @@ export const lessons = pgTable(
     status: lessonStatusEnum("status").notNull().default("scheduled"),
     meetingUrl: varchar("meeting_url", { length: 500 }),
     notes: varchar("notes", { length: 2000 }),
+    /** SCHED-501: Optional room assignment */
+    roomId: uuid("room_id").references(() => rooms.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

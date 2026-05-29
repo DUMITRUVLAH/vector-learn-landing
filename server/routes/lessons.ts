@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, gte, lt, ne, or, sql } from "drizzle-orm";
+import { and, eq, gte, lt, ne, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { lessons, courses, teachers, users } from "../db/schema";
+import { lessons, courses, teachers, users, rooms } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 const createLessonSchema = z.object({
@@ -13,6 +13,8 @@ const createLessonSchema = z.object({
   durationMinutes: z.number().int().min(15).max(480).default(60),
   meetingUrl: z.string().url().max(500).optional().nullable().or(z.literal("")),
   notes: z.string().max(2000).optional().nullable(),
+  /** SCHED-501: Optional room assignment */
+  roomId: z.string().uuid().optional().nullable(),
 });
 
 const updateLessonSchema = createLessonSchema.partial();
@@ -25,6 +27,32 @@ const listQuerySchema = z.object({
 export const lessonRoutes = new Hono<{ Variables: AuthVariables }>();
 
 lessonRoutes.use("*", requireAuth);
+
+/** SCHED-501: Check if a room is occupied in the given time window */
+async function findRoomConflict(
+  tenantId: string,
+  roomId: string,
+  startISO: string,
+  durationMinutes: number,
+  excludeLessonId?: string
+): Promise<{ id: string } | null> {
+  const start = new Date(startISO);
+  const end = new Date(start.getTime() + durationMinutes * 60_000);
+  const conditions = [
+    eq(lessons.tenantId, tenantId),
+    eq(lessons.roomId, roomId),
+    ne(lessons.status, "cancelled"),
+    sql`${lessons.scheduledAt} < ${end.toISOString()}`,
+    sql`(${lessons.scheduledAt} + (${lessons.durationMinutes} * interval '1 minute')) > ${start.toISOString()}`,
+  ];
+  if (excludeLessonId) conditions.push(ne(lessons.id, excludeLessonId));
+  const conflicts = await db
+    .select({ id: lessons.id })
+    .from(lessons)
+    .where(and(...conditions))
+    .limit(1);
+  return conflicts[0] ?? null;
+}
 
 async function findConflict(
   tenantId: string,
@@ -106,6 +134,14 @@ lessonRoutes.post("/", zValidator("json", createLessonSchema), async (c) => {
     );
   }
 
+  // SCHED-501: Room conflict check
+  if (body.roomId) {
+    const roomConflict = await findRoomConflict(tenantId, body.roomId, body.scheduledAt, body.durationMinutes);
+    if (roomConflict) {
+      return c.json({ error: "room_double_booked", conflictingLessonId: roomConflict.id }, 409);
+    }
+  }
+
   const [created] = await db
     .insert(lessons)
     .values({
@@ -116,6 +152,7 @@ lessonRoutes.post("/", zValidator("json", createLessonSchema), async (c) => {
       durationMinutes: body.durationMinutes,
       meetingUrl: body.meetingUrl || null,
       notes: body.notes || null,
+      roomId: body.roomId ?? null,
     })
     .returning();
   return c.json(created, 201);
@@ -154,6 +191,17 @@ lessonRoutes.patch("/:id", zValidator("json", updateLessonSchema), async (c) => 
   if (body.durationMinutes !== undefined) patch.durationMinutes = body.durationMinutes;
   if (body.meetingUrl !== undefined) patch.meetingUrl = body.meetingUrl || null;
   if (body.notes !== undefined) patch.notes = body.notes || null;
+  if (body.roomId !== undefined) patch.roomId = body.roomId ?? null;
+
+  // SCHED-501: Room conflict check on patch
+  if (body.roomId && (body.scheduledAt || body.durationMinutes)) {
+    const schedAt = body.scheduledAt ?? existing.scheduledAt.toISOString();
+    const dur = body.durationMinutes ?? existing.durationMinutes;
+    const roomConflict = await findRoomConflict(tenantId, body.roomId, schedAt, dur, id);
+    if (roomConflict) {
+      return c.json({ error: "room_double_booked", conflictingLessonId: roomConflict.id }, 409);
+    }
+  }
 
   const [updated] = await db
     .update(lessons)

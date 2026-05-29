@@ -57,6 +57,55 @@
       "when": 1780088159440,
       "tag": "0007_crm115_tags_custom_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780089485085,
+      "tag": "0008_comm201_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780090522431,
+      "tag": "0009_comm204_broadcasts",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1780091500000,
+      "tag": "0010_comm205_notification_queue",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780092703763,
+      "tag": "0011_hr401_payroll",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1780093342817,
+      "tag": "0012_hr403_teacher_availability",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1780093602612,
+      "tag": "0013_hr404_audit_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1780094110520,
+      "tag": "0014_sched501_rooms",
+      "breakpoints": true
     }
   ]
 }

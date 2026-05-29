@@ -12,6 +12,8 @@ export interface Lesson {
   courseName: string;
   courseLevel: string | null;
   teacherName: string;
+  /** SCHED-501: Optional room assignment */
+  roomId?: string | null;
 }
 
 export interface Teacher {
@@ -45,6 +47,7 @@ export function createLesson(input: {
   teacherId: string;
   scheduledAt: string;
   durationMinutes: number;
+  roomId?: string | null;
 }): Promise<Lesson> {
   return api<Lesson>("/api/lessons", {
     method: "POST",
