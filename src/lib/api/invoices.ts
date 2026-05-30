@@ -67,3 +67,15 @@ export function updateInvoiceStatus(
     body: JSON.stringify({ status, ...extras }),
   });
 }
+
+export interface DebtSummaryItem {
+  id: string;
+  fullName: string;
+  debtCents: number;
+  email: string | null;
+  phone: string | null;
+}
+
+export function getDebtSummary(): Promise<{ items: DebtSummaryItem[] }> {
+  return api<{ items: DebtSummaryItem[] }>("/api/invoices/debt-summary");
+}

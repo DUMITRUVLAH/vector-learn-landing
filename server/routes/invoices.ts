@@ -187,9 +187,13 @@ invoiceRoutes.patch("/:id", zValidator("json", updateInvoiceSchema), async (c) =
   const tenantId = c.get("user").tenantId;
   const body = c.req.valid("json");
 
-  // Disallow transitioning from cancelled to anything
+  // Fetch existing invoice for guard checks and debt calculation
   const [existing] = await db
-    .select({ status: invoices.status })
+    .select({
+      status: invoices.status,
+      studentId: invoices.studentId,
+      amountCents: invoices.amountCents,
+    })
     .from(invoices)
     .where(and(eq(invoices.id, id), eq(invoices.tenantId, tenantId)));
 
@@ -212,5 +216,40 @@ invoiceRoutes.patch("/:id", zValidator("json", updateInvoiceSchema), async (c) =
     .returning();
 
   if (!updated) return c.json({ error: "not_found" }, 404);
+
+  // FIN-602: When marking invoice as paid, decrease student debt (floor at 0)
+  if (body.status === "paid" && existing.status !== "paid") {
+    await db
+      .update(students)
+      .set({
+        debtCents: sql`GREATEST(0, ${students.debtCents} - ${existing.amountCents})`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(students.id, existing.studentId), eq(students.tenantId, tenantId)));
+  }
+
   return c.json(updated);
+});
+
+// GET /api/invoices/debt-summary — list students with debt > 0, ordered DESC
+invoiceRoutes.get("/debt-summary", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const rows = await db
+    .select({
+      id: students.id,
+      fullName: students.fullName,
+      debtCents: students.debtCents,
+      email: students.email,
+      phone: students.phone,
+    })
+    .from(students)
+    .where(
+      and(
+        eq(students.tenantId, tenantId),
+        sql`${students.debtCents} > 0`
+      )
+    )
+    .orderBy(sql`${students.debtCents} DESC`);
+
+  return c.json({ items: rows });
 });
