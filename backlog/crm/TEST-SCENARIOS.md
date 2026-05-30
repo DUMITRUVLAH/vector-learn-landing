@@ -163,6 +163,21 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-120-9** Given `totalActions > 0`, Then badge-ul din navigație arată count-ul corect.
 - **T-CRM-120-10** Given click pe un rând din orice secțiune, Then navigare la `/app/leads/:id`.
 
+## CRM-124 — SLA timp de răspuns + lead-rot {#crm-124}
+
+- **T-CRM-124-1** `[blocant]` Given lead creat acum 5 min, sla_default_hours=24, Then badge SLA = „green" (< prag).
+- **T-CRM-124-2** `[blocant]` Given lead creat acum 25h, sla_default_hours=24, Then badge = „yellow" (> 24h dar < 48h).
+- **T-CRM-124-3** `[blocant]` Given lead creat acum 50h, sla_default_hours=24, Then badge = „red" (> 2x prag).
+- **T-CRM-124-4** `[blocant]` Given sla_hot_minutes=15 și lead hot creat acum 20 min, Then badge = „yellow"; cu 30 min threshold → „green".
+- **T-CRM-124-5** `[blocant]` Given lead creat acum 10z fără nicio interacțiune, rot_days=7, Then apare în secțiunea „Neglijate" din `/api/leads/today`.
+- **T-CRM-124-5b** Given lead creat acum 10z cu ultima interacțiune acum 8z, rot_days=7, Then tot apare în „Neglijate".
+- **T-CRM-124-5c** Given lead creat acum 10z cu interacțiune acum 3z, rot_days=7, Then NU apare în „Neglijate".
+- **T-CRM-124-6** Given lead creat acum 3z, rot_days=7, Then NU apare în „Neglijate" (prea tânăr).
+- **T-CRM-124-7** Given `PATCH /api/leads/today/sla-config { slaHotMinutes: 30 }`, Then tenant.sla_hot_minutes = 30; `GET /api/leads/today/sla-config` confirmă.
+- **T-CRM-124-8** Given schema migrare 0008, Then `tenants.sla_hot_minutes` DEFAULT 15, `sla_default_hours` DEFAULT 24, `rot_days` DEFAULT 7.
+- **T-CRM-124-9** `[blocant]` Given `GET /api/leads/today`, Then răspunsul include `neglected[]` + `slaConfig` câmpuri.
+- **T-CRM-124-10** `[blocant]` Multi-tenant: configurația SLA a tenantului A nu e vizibilă/editabilă de tenantul B.
+
 ---
 
 ## Scenarii transversale (rulate la fiecare item)

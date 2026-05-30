@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, pgEnum, integer } from "drizzle-orm/pg-core";
 
 export const planEnum = pgEnum("plan", ["starter", "growth", "pro", "enterprise"]);
 
@@ -7,6 +7,12 @@ export const tenants = pgTable("tenants", {
   name: varchar("name", { length: 200 }).notNull(),
   slug: varchar("slug", { length: 64 }).notNull().unique(),
   plan: planEnum("plan").notNull().default("starter"),
+  /** CRM-124: SLA — minutes until first response for hot leads (default 15) */
+  slaHotMinutes: integer("sla_hot_minutes").notNull().default(15),
+  /** CRM-124: SLA — hours until first response for default leads (default 24) */
+  slaDefaultHours: integer("sla_default_hours").notNull().default(24),
+  /** CRM-124: Lead-rot — days without contact before "neglected" (default 7) */
+  rotDays: integer("rot_days").notNull().default(7),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
