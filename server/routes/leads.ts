@@ -8,6 +8,7 @@ import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 import { fireTrigger } from "../lib/automationEngine";
+import { autoAssign } from "../lib/roundRobin";
 
 const STAGES = ["new", "contacted", "trial", "paid", "lost"] as const;
 const SOURCES = [
@@ -133,6 +134,9 @@ leadRoutes.post("/intake", zValidator("json", publicIntakeSchema), async (c) => 
 
   const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("x-real-ip") ?? null;
 
+  // CRM-135: apply round-robin auto-assign for intake leads (no explicit assignee)
+  const intakeAssignedTo = await autoAssign(db, tenant.id, null);
+
   const [created] = await db
     .insert(leads)
     .values({
@@ -152,6 +156,7 @@ leadRoutes.post("/intake", zValidator("json", publicIntakeSchema), async (c) => 
       consentText: body.consentText,
       consentAt: new Date(),
       ipAtConsent: ip,
+      assignedTo: intakeAssignedTo,
     })
     .returning();
 
@@ -295,6 +300,9 @@ leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
   const phoneNormalized = normalizePhone(body.phone as string | null);
   const emailNormalized = normalizeEmail(body.email as string | null);
 
+  // CRM-135: apply round-robin auto-assign if enabled and no explicit assignee
+  const assignedTo = await autoAssign(db, tenantId, (body.assignedTo as string | null) ?? null);
+
   const [created] = await db
     .insert(leads)
     .values({
@@ -310,7 +318,7 @@ leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
       utmMedium: (body.utmMedium as string | null) ?? null,
       utmCampaign: (body.utmCampaign as string | null) ?? null,
       notes: (body.notes as string | null) ?? null,
-      assignedTo: (body.assignedTo as string | null) ?? null,
+      assignedTo,
       valueCents: (body.valueCents as number | undefined) ?? 0,
       debtCents: (body.debtCents as number | undefined) ?? 0,
       company: (body.company as string | null) ?? null,

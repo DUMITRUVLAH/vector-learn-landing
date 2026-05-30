@@ -47,6 +47,12 @@ import { PayrollPage } from "./pages/app/PayrollPage";
 import { TeacherStatsPage } from "./pages/app/TeacherStatsPage";
 import { AvailabilityPage } from "./pages/app/AvailabilityPage";
 import { AuditLogPage } from "./pages/app/AuditLogPage";
+import { FeatureTreePage } from "./pages/app/FeatureTreePage";
+import { KpiDashboardPage } from "./pages/app/KpiDashboardPage";
+import { RevenueChartsPage } from "./pages/app/RevenueChartsPage";
+import { StudentRetentionPage } from "./pages/app/StudentRetentionPage";
+import { ExportPage } from "./pages/app/ExportPage";
+import { CRMSettingsPage } from "./pages/app/CRMSettingsPage";
 
 function HomePage() {
   return (
@@ -116,7 +122,13 @@ function Routes() {
   if (path.startsWith("/app/hr/audit")) return <AuditLogPage />;
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
+  if (path.startsWith("/app/settings/crm")) return <CRMSettingsPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
+  if (path.startsWith("/app/reports/kpi")) return <KpiDashboardPage />;
+  if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
+  if (path.startsWith("/app/reports/retention")) return <StudentRetentionPage />;
+  if (path.startsWith("/app/reports/export")) return <ExportPage />;
+  if (path.startsWith("/app/features")) return <FeatureTreePage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   return <HomePage />;
 }
