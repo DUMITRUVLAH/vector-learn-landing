@@ -28,6 +28,25 @@ export const app = new Hono();
 
 app.use("*", logger());
 
+// TEMPORARY diagnostic #4 — does reading a POST JSON body hang? (GET diagnostics all pass;
+// only POST login hangs. Suspect: Vercel Node helpers pre-consume the body, so Hono's
+// c.req.json() waits forever for an already-read stream.)
+app.post("/api/__diag__/echo", async (c) => {
+  const t = Date.now();
+  let timer: ReturnType<typeof setTimeout>;
+  try {
+    const body = await Promise.race([
+      c.req.json(),
+      new Promise((_, rej) => { timer = setTimeout(() => rej(new Error("c.req.json() timeout 6000ms — body stream hung")), 6000); }),
+    ]);
+    clearTimeout(timer!);
+    return c.json({ ok: true, ms: Date.now() - t, body });
+  } catch (e) {
+    clearTimeout(timer!);
+    return c.json({ ok: false, ms: Date.now() - t, error: e instanceof Error ? e.message : String(e) }, 500);
+  }
+});
+
 // TEMPORARY diagnostic #3 — runs EACH login step in isolation to find which one hangs:
 // bcrypt verify, the session INSERT (write), etc. DB read already proven fine.
 app.get("/api/__diag__/login-steps", async (c) => {
