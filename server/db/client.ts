@@ -5,7 +5,7 @@ import postgres from "postgres";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "./schema/index";
-import { resolveDatabaseUrl } from "./env";
+import { resolveDatabaseUrl, isVercelRuntime } from "./env";
 
 /**
  * Dual-mode DB client:
@@ -19,8 +19,17 @@ import { resolveDatabaseUrl } from "./env";
  */
 // On Vercel serverless → pooled (:6543) connection (pgBouncer). Locally → direct (:5432),
 // which is also what migrations/DDL use.
-const onVercel = !!process.env.VERCEL;
-const databaseUrl = resolveDatabaseUrl(!onVercel);
+// `isVercelRuntime` is snapshotted in env.ts BEFORE `.env.local` loads, so a `vercel env pull`
+// that wrote `VERCEL="1"` into `.env.local` does not make local dev think it is on Vercel.
+const onVercel = isVercelRuntime;
+
+// Local dev MUST use the embedded PGlite (DATABASE_PATH) and never the remote Supabase
+// pooler. `vercel env pull` writes the Supabase POSTGRES_URL into `.env.local`, which would
+// otherwise hijack local dev onto the pooler — where a stale-password/default-pool connection
+// hangs every query and surfaces in the UI as `Unexpected token '<', "<!doctype "...`.
+// Off Vercel + DATABASE_PATH set ⇒ force PGlite, ignoring any leaked remote URL.
+const preferLocalPglite = !onVercel && !!process.env.DATABASE_PATH;
+const databaseUrl = preferLocalPglite ? undefined : resolveDatabaseUrl(!onVercel);
 
 function createConnection(): {
   db: PostgresJsDatabase<typeof schema>;

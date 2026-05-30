@@ -1,5 +1,13 @@
 import dotenv from "dotenv";
 
+// Snapshot the REAL Vercel runtime flag BEFORE loading `.env.local`. The genuine Vercel
+// serverless runtime sets `VERCEL=1` in the OS process env at spawn (before any module runs);
+// `.env.local` is never present there. Locally, `vercel env pull` writes `VERCEL="1"` INTO
+// `.env.local`, so reading `process.env.VERCEL` after the load below would falsely report
+// "on Vercel" on localhost — which flips the DB client to the serverless `max:1` pooler config
+// and deadlocks every local request. Capturing here, pre-load, keeps the two cases distinct.
+export const isVercelRuntime = !!process.env.VERCEL;
+
 // Load `.env.local` (where `vercel env pull` writes) additively on top of `.env`.
 // `override: false` means it only fills vars not already set — never clobbers .env.
 dotenv.config({ path: ".env.local", override: false });
