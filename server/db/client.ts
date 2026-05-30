@@ -27,8 +27,16 @@ function createConnection(): {
   closeDb: () => Promise<void>;
 } {
   if (databaseUrl) {
-    // `prepare: false` is required behind the Supabase transaction pooler (pgBouncer, port 6543).
-    const client = postgres(databaseUrl, { prepare: false });
+    // Supabase transaction pooler (pgBouncer :6543): no prepared statements, explicit SSL,
+    // 1 connection per serverless invocation, and short timeouts so a bad connection FAILS
+    // fast (visible error) instead of hanging the function into a 504.
+    const client = postgres(databaseUrl, {
+      prepare: false,
+      ssl: "require",
+      max: 1,
+      connect_timeout: 10,
+      idle_timeout: 20,
+    });
     return {
       db: drizzlePostgres(client, { schema }),
       closeDb: () => client.end(),
