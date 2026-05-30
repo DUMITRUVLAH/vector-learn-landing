@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "SCHED-503",
   "last_completed": "SCHED-502",
   "iterations": 62,
   "last_run_at": "2026-05-30T10:18:00Z",
@@ -709,8 +709,8 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "SCHED-503": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHED-503-attendance.md",
       "milestone": "SCHED",
