@@ -5,6 +5,7 @@ import { teachers } from "./teachers";
 import { students } from "./students";
 import { users } from "./users";
 import { rooms } from "./rooms";
+import { lessonSeries } from "./lessonSeries";
 
 export const lessonStatusEnum = pgEnum("lesson_status", [
   "scheduled",
@@ -41,6 +42,8 @@ export const lessons = pgTable(
     notes: varchar("notes", { length: 2000 }),
     /** SCHED-501: Optional room assignment */
     roomId: uuid("room_id").references(() => rooms.id, { onDelete: "set null" }),
+    /** SCHED-502: Links this lesson to a recurring series */
+    seriesId: uuid("series_id").references(() => lessonSeries.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

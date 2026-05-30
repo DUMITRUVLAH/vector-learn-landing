@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2 } from "lucide-react";
+import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -15,6 +15,7 @@ import {
   type Course,
 } from "@/lib/api/lessons";
 import { listRooms, type Room } from "@/lib/api/rooms";
+import { createRecurringLessons } from "@/lib/api/recurring";
 import { cn } from "@/lib/utils";
 
 const DAYS = ["Luni", "Marți", "Miercuri", "Joi", "Vineri", "Sâmbătă", "Duminică"];
@@ -67,6 +68,7 @@ export function SchedulePage() {
   const [modal, setModal] = useState<
     | { kind: "create"; day: number; hour: number }
     | { kind: "view"; lesson: Lesson }
+    | { kind: "recurring" }
     | null
   >(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
@@ -162,6 +164,15 @@ export function SchedulePage() {
     >
       <div className="mb-3 flex items-center justify-between">
         <p className="text-sm font-semibold">{labelForWeek}</p>
+        <button
+          type="button"
+          onClick={() => setModal({ kind: "recurring" })}
+          className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted"
+          aria-label="Adaugă lecție recurentă"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Repetă
+        </button>
       </div>
 
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -267,6 +278,21 @@ export function SchedulePage() {
           onCancelled={() => {
             setModal(null);
             setToast({ kind: "success", message: "Lecție anulată" });
+            void fetchAll();
+          }}
+          onError={(msg) => setToast({ kind: "error", message: msg })}
+        />
+      )}
+
+      {modal?.kind === "recurring" && (
+        <RecurringModal
+          teachers={teachers}
+          courses={courses}
+          rooms={rooms}
+          onClose={() => setModal(null)}
+          onSaved={(count) => {
+            setModal(null);
+            setToast({ kind: "success", message: `${count} lecții recurente programate` });
             void fetchAll();
           }}
           onError={(msg) => setToast({ kind: "error", message: msg })}
@@ -533,5 +559,187 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
         <div className="p-5">{children}</div>
       </div>
     </div>
+  );
+}
+
+// ─── SCHED-502: Recurring lessons modal ───────────────────────────────────────
+
+interface RecurringModalProps {
+  teachers: Teacher[];
+  courses: Course[];
+  rooms: Room[];
+  onClose: () => void;
+  onSaved: (count: number) => void;
+  onError: (msg: string) => void;
+}
+
+function RecurringModal({ teachers, courses, rooms, onClose, onSaved, onError }: RecurringModalProps) {
+  const now = new Date();
+  now.setMinutes(0, 0, 0);
+  now.setHours(now.getHours() + 1);
+
+  const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
+  const [teacherId, setTeacherId] = useState(teachers[0]?.id ?? "");
+  const [roomId, setRoomId] = useState("");
+  const [date, setDate] = useState(formatDateInput(now));
+  const [time, setTime] = useState(`${String(now.getHours()).padStart(2, "0")}:00`);
+  const [duration, setDuration] = useState(courses[0]?.durationMinutes ?? 60);
+  const [count, setCount] = useState(8);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!courseId || !teacherId) return;
+    setSubmitting(true);
+    const firstScheduledAt = new Date(`${date}T${time}:00`).toISOString();
+    try {
+      const result = await createRecurringLessons({
+        courseId,
+        teacherId,
+        firstScheduledAt,
+        durationMinutes: duration,
+        roomId: roomId || null,
+        recurrence: { type: "weekly", count },
+      });
+      onSaved(result.lessons.length);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "conflicts") {
+        onError("Conflict de orar: unele sloturi sunt ocupate. Verifică orarul și încearcă din nou.");
+      } else {
+        onError("Nu pot crea seria de lecții recurente.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (courses.length === 0 || teachers.length === 0) {
+    return (
+      <ModalShell title="Lecție recurentă" onClose={onClose}>
+        <div className="rounded-md bg-warning/10 border border-warning/30 p-4 text-sm">
+          <AlertTriangle className="h-4 w-4 inline mr-1 text-warning" />
+          Nu ai {courses.length === 0 ? "cursuri" : "profesori"} definiți. Creează-i mai întâi.
+        </div>
+      </ModalShell>
+    );
+  }
+
+  return (
+    <ModalShell title="Programare lecție recurentă" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        <div>
+          <label htmlFor="rc-course" className="block text-sm font-semibold mb-1.5">Curs</label>
+          <select
+            id="rc-course"
+            value={courseId}
+            onChange={(e) => {
+              setCourseId(e.target.value);
+              const c = courses.find((x) => x.id === e.target.value);
+              if (c) setDuration(c.durationMinutes);
+            }}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}{c.level ? ` (${c.level})` : ""}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="rc-teacher" className="block text-sm font-semibold mb-1.5">Profesor</label>
+          <select
+            id="rc-teacher"
+            value={teacherId}
+            onChange={(e) => setTeacherId(e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {teachers.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="rc-date" className="block text-sm font-semibold mb-1.5">Prima dată</label>
+            <input
+              id="rc-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="rc-time" className="block text-sm font-semibold mb-1.5">Ora</label>
+            <input
+              id="rc-time"
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="rc-dur" className="block text-sm font-semibold mb-1.5">Durată (min)</label>
+            <input
+              id="rc-dur"
+              type="number"
+              min={15}
+              max={480}
+              step={15}
+              value={duration}
+              onChange={(e) => setDuration(Number(e.target.value))}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="rc-count" className="block text-sm font-semibold mb-1.5">Ocurențe</label>
+            <input
+              id="rc-count"
+              type="number"
+              min={1}
+              max={52}
+              value={count}
+              onChange={(e) => setCount(Number(e.target.value))}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+        {rooms.length > 0 && (
+          <div>
+            <label htmlFor="rc-room" className="block text-sm font-semibold mb-1.5">Sală (opțional)</label>
+            <select
+              id="rc-room"
+              value={roomId}
+              onChange={(e) => setRoomId(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              aria-label="Selectează sală pentru seria recurentă"
+            >
+              <option value="">— fără sală —</option>
+              {rooms.map((r) => (
+                <option key={r.id} value={r.id}>{r.name} (cap. {r.capacity})</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Se vor crea {count} lecții săptămânale consecutiv.
+        </p>
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <button type="button" onClick={onClose} className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted">
+            Anulează
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Creează {count} lecții
+          </button>
+        </div>
+      </form>
+    </ModalShell>
   );
 }
