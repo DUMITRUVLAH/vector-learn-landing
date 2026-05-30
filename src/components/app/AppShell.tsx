@@ -1,5 +1,5 @@
-import { ReactNode } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3 } from "lucide-react";
+import { ReactNode, useEffect, useState } from "react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, Sun } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Link, useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
@@ -14,6 +14,7 @@ interface AppShellProps {
 
 const NAV = [
   { label: "Dashboard", href: "/app", icon: LayoutDashboard },
+  { label: "Azi", href: "/app/leads/today", icon: Sun }, // CRM-120: Today dashboard
   { label: "Leads", href: "/app/leads", icon: TrendingUp },
   { label: "Elevi", href: "/app/students", icon: Users },
   { label: "Orar", href: "/app/schedule", icon: Calendar },
@@ -26,6 +27,33 @@ const NAV = [
 export function AppShell({ children, pageTitle, pageDescription, actions }: AppShellProps) {
   const { data, logout } = useSession();
   const { path, navigate } = useRouter();
+  /** CRM-120: Today action counter for nav badge */
+  const [todayCount, setTodayCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Fetch today counter only when authenticated and not already on today page
+    if (!data) return;
+    // Use stored value first (session-level cache to avoid refetch on every nav)
+    try {
+      const cached = sessionStorage.getItem("today_count_cache");
+      if (cached) {
+        const { count, ts } = JSON.parse(cached) as { count: number; ts: number };
+        // Use cache if < 5 min old
+        if (Date.now() - ts < 5 * 60 * 1000) {
+          setTodayCount(count);
+          return;
+        }
+      }
+    } catch { /* ignore */ }
+
+    fetch("/api/leads/today", { credentials: "include" })
+      .then((r) => r.ok ? r.json() as Promise<{ totalActions: number }> : Promise.reject())
+      .then(({ totalActions }) => {
+        setTodayCount(totalActions);
+        try { sessionStorage.setItem("today_count_cache", JSON.stringify({ count: totalActions, ts: Date.now() })); } catch { /* ignore */ }
+      })
+      .catch(() => { /* ignore — badge is optional */ });
+  }, [data]);
 
   const handleLogout = async () => {
     await logout();
@@ -79,6 +107,7 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
             {NAV.map((item) => {
               const Icon = item.icon;
               const active = item.href === "/app" ? path === "/app" || path === "/app/" : path.startsWith(item.href);
+              const isTodayItem = item.href === "/app/leads/today";
               return (
                 <Link
                   key={item.href}
@@ -90,8 +119,17 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1">{item.label}</span>
+                  {/* CRM-120: badge counter for Today dashboard */}
+                  {isTodayItem && todayCount !== null && todayCount > 0 && (
+                    <span
+                      className="ml-auto inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold min-w-[18px] h-[18px] px-1"
+                      aria-label={`${todayCount} acțiuni de azi`}
+                    >
+                      {todayCount > 99 ? "99+" : todayCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -116,21 +154,32 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
         </main>
       </div>
 
-      <nav className="md:hidden border-t border-border bg-card sticky bottom-0 z-20">
-        <div className="grid grid-cols-6">
-          {NAV.map((item) => {
+      <nav className="md:hidden border-t border-border bg-card sticky bottom-0 z-20" aria-label="Navigare mobilă">
+        <div className="grid grid-cols-5 overflow-x-auto">
+          {NAV.slice(0, 5).map((item) => {
             const Icon = item.icon;
             const active = item.href === "/app" ? path === "/app" || path === "/app/" : path.startsWith(item.href);
+            const isTodayItem = item.href === "/app/leads/today";
             return (
               <Link
                 key={item.href}
                 to={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-1 py-2.5 text-[10px] font-semibold",
+                  "relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-semibold",
                   active ? "text-primary" : "text-muted-foreground"
                 )}
               >
-                <Icon className="h-4 w-4" />
+                <div className="relative">
+                  <Icon className="h-4 w-4" />
+                  {isTodayItem && todayCount !== null && todayCount > 0 && (
+                    <span
+                      className="absolute -top-1.5 -right-2 inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[8px] font-bold min-w-[14px] h-[14px] px-0.5"
+                      aria-label={`${todayCount} acțiuni`}
+                    >
+                      {todayCount > 9 ? "9+" : todayCount}
+                    </span>
+                  )}
+                </div>
                 {item.label}
               </Link>
             );

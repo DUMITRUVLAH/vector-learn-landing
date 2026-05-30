@@ -137,6 +137,32 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-116-3** Given task open mâine, Then card arată data, nu badge roșu.
 - **T-CRM-116-4** Given filtru „fără task", Then se afișează doar leadurile fără task open.
 
+## CRM-117 — Vedere Listă/Tabel {#crm-117}
+
+- **T-CRM-117-1** `[blocant]` Given utilizatorul apasă butonul „Liste", Then vederea se schimbă din Kanban în tabel și preferința se salvează în localStorage.
+- **T-CRM-117-2** `[blocant]` Given utilizatorul reîncarcă pagina, Then prefer. `crm_view_mode` din localStorage e restaurată (kanban sau list).
+- **T-CRM-117-3** `[blocant]` Given vederea listă e activă, When `GET /api/leads?view=list&page=1&pageSize=50`, Then răspuns cu `{ items, page, pageSize, total, totalPages }` — fără raw `.execute().rows`.
+- **T-CRM-117-4** `[blocant]` Given 100+ leaduri, When vederea listă e activă, Then se afișează exact 50/pagină și paginarea funcționează.
+- **T-CRM-117-5** `[blocant]` Given click pe header „Valoare", Then lista se resortează asc/desc și indicatorul vizual se actualizează.
+- **T-CRM-117-6** Given filtru sursă „Facebook" cu vederea listă, When se apasă „Aplică filtre", Then lista afișează doar leadurile Facebook.
+- **T-CRM-117-7** `[blocant]` Given click pe badge de stadiu dintr-un rând, Then apare dropdown inline; alegând un stadiu nou → `PATCH /api/leads/:id/stage` → lista se reîncarcă.
+- **T-CRM-117-8** `[blocant]` Given click pe un rând, Then navigare la `/app/leads/:id`.
+- **T-CRM-117-9** `[blocant]` Multi-tenant: `GET /api/leads?view=list` returnează doar leadurile tenantului autentificat.
+- **T-CRM-117-10** Given 0 leaduri care corespund filtrelor, Then se afișează stare empty „Niciun lead găsit".
+
+## CRM-120 — Dashboard „Azi" {#crm-120}
+
+- **T-CRM-120-1** `[blocant]` Given user autentificat, When `GET /api/leads/today`, Then răspuns cu `{ overdueOrDueToday, newUncontacted, followUpNeeded, nextBestAction, totalActions }` — tenant-scoped, fără raw `.execute().rows`.
+- **T-CRM-120-2** `[blocant]` Given lead creat acum 1h fără outbound interaction, Then apare în `newUncontacted`; un lead creat acum 50h NU apare.
+- **T-CRM-120-3** `[blocant]` Given lead în `contacted` cu ultimul contact outbound acum 3 zile, Then apare în `followUpNeeded`; cu contact acum 1h NU apare.
+- **T-CRM-120-4** `[blocant]` Given task open cu `due_at` = ieri, Then apare în `overdueOrDueToday`; task done NU apare.
+- **T-CRM-120-5** Given `nextBestAction` returnat, Then sunt maxim 5 leaduri sortate după score desc.
+- **T-CRM-120-6** `[blocant]` Given user NON-manager, Then endpoint returnează doar leads ale acelui user (assigned_to = userId sau unassigned).
+- **T-CRM-120-7** `[blocant]` Given tenant A cu 3 acțiuni, When fetch din tenant B, Then `totalActions = 0` pentru tenant B.
+- **T-CRM-120-8** Given pagina `/app/leads/today` se deschide, Then cele 4 secțiuni apar sau empty state dacă nu sunt date.
+- **T-CRM-120-9** Given `totalActions > 0`, Then badge-ul din navigație arată count-ul corect.
+- **T-CRM-120-10** Given click pe un rând din orice secțiune, Then navigare la `/app/leads/:id`.
+
 ---
 
 ## Scenarii transversale (rulate la fiecare item)

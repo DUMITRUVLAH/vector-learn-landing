@@ -89,6 +89,53 @@ export function fetchPipeline(): Promise<PipelineResponse> {
   return api<PipelineResponse>("/api/leads/pipeline");
 }
 
+// ─── CRM-120: Today dashboard ─────────────────────────────────────────────────
+
+export interface TodayDashboardItem {
+  id: string;
+  fullName: string;
+  stage: string;
+  phone: string | null;
+  interestCourse: string | null;
+  valueCents: number;
+  reason: string;
+}
+
+export interface TodayDashboardTask {
+  taskId: string;
+  taskTitle: string;
+  dueAt: string | null;
+  leadId: string;
+  leadFullName: string;
+  leadStage: string;
+  leadPhone: string | null;
+  leadInterestCourse: string | null;
+  leadValueCents: number;
+}
+
+export interface TodayNBAItem {
+  id: string;
+  fullName: string;
+  stage: string;
+  phone: string | null;
+  interestCourse: string | null;
+  valueCents: number;
+  score: number | null;
+  ageDays: number;
+}
+
+export interface TodayDashboardResponse {
+  overdueOrDueToday: TodayDashboardTask[];
+  newUncontacted: (TodayDashboardItem & { source: string; createdAt: string })[];
+  followUpNeeded: (TodayDashboardItem & { updatedAt: string })[];
+  nextBestAction: TodayNBAItem[];
+  totalActions: number;
+}
+
+export function fetchTodayDashboard(): Promise<TodayDashboardResponse> {
+  return api<TodayDashboardResponse>("/api/leads/today");
+}
+
 export function getLead(id: string): Promise<Lead> {
   return api<Lead>(`/api/leads/${id}`);
 }

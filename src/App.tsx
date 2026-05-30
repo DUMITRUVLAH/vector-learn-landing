@@ -43,6 +43,7 @@ import { LeadCardPage } from "./pages/app/LeadCardPage";
 import { TemplatesPage } from "./pages/app/TemplatesPage";
 import { AutomationsPage } from "./pages/app/AutomationsPage";
 import { AnalyticsPage } from "./pages/app/AnalyticsPage";
+import { TodayDashboardPage } from "./pages/app/TodayDashboardPage";
 
 function HomePage() {
   return (
@@ -92,6 +93,8 @@ function Routes() {
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;
+  // CRM-120: /app/leads/today dashboard
+  if (path.startsWith("/app/leads/today")) return <TodayDashboardPage />;
   // /app/leads/:id must be checked before /app/leads
   if (path.match(/^\/app\/leads\/[^/]+$/)) {
     const id = path.split("/").pop()!;

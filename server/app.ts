@@ -17,6 +17,7 @@ import { templateRoutes } from "./routes/templates";
 import { automationRoutes } from "./routes/automations";
 import { analyticsRoutes } from "./routes/analytics";
 import { tagRoutes } from "./routes/tags";
+import { leadsTodayRoutes } from "./routes/leads-today";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -47,6 +48,7 @@ app.route("/api/teachers", teacherRoutes);
 app.route("/api/courses", courseRoutes);
 app.route("/api/lessons", lessonRoutes);
 app.route("/api/payments", paymentRoutes);
+app.route("/api/leads/today", leadsTodayRoutes); // CRM-120: must be before /api/leads (more specific)
 app.route("/api/leads", leadRoutes);
 app.route("/api/pipeline-stages", pipelineRoutes);
 app.route("/api/leads", taskRoutes); // tasks/attachments under /api/leads/:leadId/...
