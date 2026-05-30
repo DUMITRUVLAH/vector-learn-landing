@@ -68,12 +68,16 @@ export interface LeadInteraction {
   id: string;
   leadId: string;
   type: "note" | "call" | "email" | "whatsapp" | "sms" | "meeting" | "stage_change" | "system";
-  direction: "inbound" | "outbound" | "internal";
+  direction: "inbound" | "outbound" | "internal" | null;
   body: string | null;
   /** JSONB metadata: template_id, call outcome/duration, etc. */
   metadata?: InteractionMetadata | null;
-  userId: string | null;
+  userId?: string | null;
   occurredAt: string;
+  /** Populated server-side; may be undefined for optimistic entries. */
+  createdAt?: string;
+  /** CRM-131: true for optimistic entries that haven't been confirmed by the server yet. */
+  optimistic?: boolean;
 }
 
 export interface PipelineResponse {

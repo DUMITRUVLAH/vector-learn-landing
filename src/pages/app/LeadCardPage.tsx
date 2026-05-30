@@ -6,6 +6,7 @@
  * CRM-113: Valoare deal + datorie (inline edit)
  * CRM-114: Companie + deal_name + contacte multiple (tab Contacte)
  * CRM-115: Tag-uri libere + câmpuri custom (tab Custom Fields)
+ * CRM-132: Timeline filters — filtrare activitate după tip
  */
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -35,6 +36,10 @@ import { cn } from "@/lib/utils";
 import { SendMessageModal, LogCallModal, type SendChannel } from "@/components/crm/CommModal";
 import { ConvertModal, getScoreBadge, SCORE_BADGE_STYLES, SCORE_BADGE_LABELS } from "@/components/crm/ConvertModal";
 import { scoreLead } from "@/lib/api/leads";
+import {
+  TimelineFilters, computeFilterCounts, applyTimelineFilter,
+  type TimelineFilter,
+} from "@/components/crm/TimelineFilters";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -97,6 +102,9 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   // Note compose
   const [noteBody, setNoteBody] = useState("");
   const [submittingNote, setSubmittingNote] = useState(false);
+
+  // CRM-132: Timeline filter
+  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all");
 
   // Modals
   const [lostReasonModal, setLostReasonModal] = useState(false);
@@ -901,16 +909,36 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                 </button>
               </form>
 
-              {/* Timeline */}
-              {interactions.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">Niciun istoric încă.</p>
-              ) : (
-                <ul className="space-y-3" aria-label="Timeline interacțiuni">
-                  {interactions.map((item) => (
-                    <TimelineItem key={item.id} item={item} />
-                  ))}
-                </ul>
+              {/* CRM-132: Timeline filters */}
+              {interactions.length > 0 && (
+                <TimelineFilters
+                  active={timelineFilter}
+                  counts={computeFilterCounts(interactions)}
+                  onChange={setTimelineFilter}
+                />
               )}
+
+              {/* Timeline */}
+              {(() => {
+                const filtered = applyTimelineFilter(interactions, timelineFilter);
+                if (interactions.length === 0) {
+                  return (
+                    <p className="text-sm text-muted-foreground py-8 text-center">Niciun istoric încă.</p>
+                  );
+                }
+                if (filtered.length === 0) {
+                  return (
+                    <p className="text-sm text-muted-foreground py-8 text-center">Nicio intrare de tipul selectat.</p>
+                  );
+                }
+                return (
+                  <ul className="space-y-3" aria-label="Timeline interacțiuni">
+                    {filtered.map((item) => (
+                      <TimelineItem key={item.id} item={item} />
+                    ))}
+                  </ul>
+                );
+              })()}
             </div>
           )}
 

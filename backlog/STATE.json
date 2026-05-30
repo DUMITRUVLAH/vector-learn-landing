@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "CRM-131",
-  "last_completed": "CRM-130",
-  "iterations": 65,
-  "last_run_at": "2026-05-30T16:52:00Z",
-  "milestone_status": "CRM-101..116 (Faze A-F) all done. CRM Faza I: CRM-129 done (PR#84), CRM-130 done (PR#85), CRM-131 pending. SCHED-503/504 also pending.",
+  "current_item": "CRM-132",
+  "last_completed": "CRM-131",
+  "iterations": 66,
+  "last_run_at": "2026-05-30T17:05:00Z",
+  "milestone_status": "CRM-101..116 (Faze A-F) all done. CRM Faza I: CRM-129 done (PR#84), CRM-130 done (PR#85), CRM-131 done (PR#86). CRM-132+133 pending. SCHED-503/504 also pending.",
   "active_milestone": "CRM",
   "items": {
     "M1-001": {
@@ -751,17 +751,20 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-131": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-131-lead-card-ux-polish.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-130"]
+      "depends_on": ["CRM-130"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/86",
+      "branch": "feat/CRM-131-lead-card-ux-polish",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-132": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-132-timeline-filters.md",
       "milestone": "CRM",
