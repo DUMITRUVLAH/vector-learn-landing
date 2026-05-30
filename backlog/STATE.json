@@ -728,6 +728,7 @@
       "milestone": "SCHED",
       "phase": "4",
       "depends_on": ["SCHED-501"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/60",
       "branch": "feat/SCHED-504-ical",
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     }
