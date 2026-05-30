@@ -43,7 +43,12 @@ await build({
 });
 writeFileSync(
   `${FN}/.vc-config.json`,
-  JSON.stringify({ runtime: "nodejs20.x", handler: "index.mjs", launcherType: "Nodejs", shouldAddHelpers: true, maxDuration: 30 }, null, 2)
+  // shouldAddHelpers MUST be false. With it true, Vercel's Node launcher pre-reads the request
+  // body to populate req.body — which drains the stream before Hono's getRequestListener builds
+  // the Web Request. Hono's c.req.json() then waits forever for an already-consumed body, so
+  // EVERY POST (login, signup, …) hangs 30s → FUNCTION_INVOCATION_TIMEOUT. GET routes were fine
+  // because they have no body. Disabling helpers lets Hono read the raw request stream itself.
+  JSON.stringify({ runtime: "nodejs20.x", handler: "index.mjs", launcherType: "Nodejs", shouldAddHelpers: false, maxDuration: 30 }, null, 2)
 );
 
 // 3. Routing: /api/* → the function; everything else → static (SPA index for unknown paths)
