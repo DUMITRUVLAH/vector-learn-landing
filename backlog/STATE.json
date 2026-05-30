@@ -4,8 +4,8 @@
   "last_completed": "SCHED-502",
   "iterations": 62,
   "last_run_at": "2026-05-30T10:18:00Z",
-  "milestone_status": "M1+M2+M3 landing + MVP-001..008 + CRM-101..116 + COMM-201..205 + REP-301..304 + HR-401..404 + SCHED-501..502 complete. SCHED milestone active. Next: SCHED-503 (attendance), SCHED-504 (iCal).",
-  "active_milestone": "SCHED",
+  "milestone_status": "M1+M2+M3 landing + MVP-001..008 + CRM-101..116 (Faze A-F) + COMM-201..205 + REP-301..304 + HR-401..404 + SCHED-501..502 complete. CRM Faza I active (CRM-129..131 pending). SCHED-503/504 also pending.",
+  "active_milestone": "CRM",
   "items": {
     "M1-001": {
       "status": "done",
@@ -725,6 +725,33 @@
       "milestone": "SCHED",
       "phase": "4",
       "depends_on": ["SCHED-501"]
+    },
+    "CRM-129": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-129-tag-filter-bulk-assign.md",
+      "milestone": "CRM",
+      "phase": "I",
+      "depends_on": ["CRM-115", "CRM-116"]
+    },
+    "CRM-130": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-130-keyboard-shortcuts-wip.md",
+      "milestone": "CRM",
+      "phase": "I",
+      "depends_on": ["CRM-129"]
+    },
+    "CRM-131": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-131-lead-card-ux-polish.md",
+      "milestone": "CRM",
+      "phase": "I",
+      "depends_on": ["CRM-130"]
     }
   }
 }

@@ -137,6 +137,31 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-116-3** Given task open mâine, Then card arată data, nu badge roșu.
 - **T-CRM-116-4** Given filtru „fără task", Then se afișează doar leadurile fără task open.
 
+## CRM-129 — Filtru tag + bulk assign + Ziua mea {#crm-129}
+- **T-CRM-129-1** `[blocant]` Given kanban cu leads tagged „vip" și „organic", When selectez filtrul „vip", Then doar leadurile cu tag „vip" rămân vizibile în toate coloanele.
+- **T-CRM-129-2** `[blocant]` Given 3 leaduri selectate, When apas „Reasignează", Then `PATCH /api/leads/bulk-assign` e chemat cu cele 3 ID-uri și noul assignedTo; pipeline reîncarcă.
+- **T-CRM-129-3** `[blocant]` Given butonul „Ziua mea" activ, Then se afișează doar leadurile cu nextTask.dueAt = today.
+- **T-CRM-129-4** Given filtrul tag „vip" + filtrul sursă „Facebook" activ simultan, Then se afișează numai leadurile cu tag „vip" ȘI source = „facebook_ad".
+- **T-CRM-129-5** Given Escape apăsat cu carduri selectate, Then selecția se șterge.
+- **T-CRM-129-6** `[blocant]` `PATCH /api/leads/bulk-assign` cu leadIds din tenant B → 403/0 rânduri afectate.
+
+## CRM-130 — Shortcuts tastatură + WIP limits + collapse {#crm-130}
+- **T-CRM-130-1** `[blocant]` Given `useKanbanKeyboard` montat, When tastez `/` (nu în input), Then callback `onSearch` e apelat.
+- **T-CRM-130-2** `[blocant]` Given `useKanbanKeyboard`, When tastez `n` (nu în input), Then callback `onNewLead` e apelat.
+- **T-CRM-130-3** `[blocant]` Given shortcut-ul `/` și focus pe un `<input>`, When tastez `/`, Then callback NU e apelat.
+- **T-CRM-130-4** `[blocant]` Given stage cu `wip_limit=3` și `count=5`, Then header coloană conține indicator roșu.
+- **T-CRM-130-5** Given stage cu `wip_limit=null`, Then header NU afișează indicator roșu.
+- **T-CRM-130-6** `[blocant]` Given coloană colapsată în localStorage, When pagina se reîncarcă, Then coloana respectivă e încă colapsată.
+
+## CRM-131 — Lead card UX polish {#crm-131}
+- **T-CRM-131-1** `[blocant]` Given `LeadCardSkeleton` randat, Then conține elemente cu clasa `animate-pulse`.
+- **T-CRM-131-2** `[blocant]` Given submit notă cu mock care rezolvă după delay, Then nota apare imediat cu indicator „Se salvează..."; după rezolvare, indicatorul dispare.
+- **T-CRM-131-3** `[blocant]` Given submit notă cu mock care rejectează, Then nota optimistă dispare și toast eroare e afișat.
+- **T-CRM-131-4** `[blocant]` Given `useUndoableDelete` cu delay 5000ms, When cancel în 100ms, Then callback delete NU e apelat.
+- **T-CRM-131-5** Given `useUndoableDelete` fără cancel, Then callback delete e apelat după delay.
+- **T-CRM-131-6** `[blocant]` Given tab Activitate cu 0 interacțiuni, Then conține textul „Nicio activitate încă".
+- **T-CRM-131-7** Given tab Task-uri cu 0 task-uri, Then conține textul „Nicio sarcină".
+
 ---
 
 ## Scenarii transversale (rulate la fiecare item)

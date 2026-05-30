@@ -101,12 +101,20 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 13 | `CRM-113` | Valoare deal (€) per lead + rollup valoare pe pipeline | F | pending | [specs/CRM-113-deal-value.md](specs/CRM-113-deal-value.md) |
-| 14 | `CRM-114` | Companie + contacte multiple (B2B) + nume deal | F | pending | [specs/CRM-114-company-contacts.md](specs/CRM-114-company-contacts.md) |
+| 13 | `CRM-113` | Valoare deal (€) per lead + rollup valoare pe pipeline | F | done ✅ | [specs/CRM-113-deal-value.md](specs/CRM-113-deal-value.md) · [PR #40](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/40) |
+| 14 | `CRM-114` | Companie + contacte multiple (B2B) + nume deal | F | done ✅ | [specs/CRM-114-company-contacts.md](specs/CRM-114-company-contacts.md) · [PR #42](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/42) |
 | 15 | `CRM-115` | Tag-uri + câmpuri custom configurabile per tenant | F | done ✅ | [specs/CRM-115-tags-custom-fields.md](specs/CRM-115-tags-custom-fields.md) · [PR #43](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/43) |
-| 16 | `CRM-116` | Semnale task pe card — „Fără task" + aging restanță | F | pending | [specs/CRM-116-task-signals.md](specs/CRM-116-task-signals.md) |
+| 16 | `CRM-116` | Semnale task pe card — „Fără task" + aging restanță | F | done ✅ | [specs/CRM-116-task-signals.md](specs/CRM-116-task-signals.md) · [PR #41](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/41) |
 
-**Ordine de build:** `CRM-101 → … → 112` (done) → `113 → 116 → 114 → 115` (valoare + semnale task întâi — impact maxim pe demo).
+**Faza F: toate done ✅**
+
+### Faza I — Completări & UX polish
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 17 | `CRM-129` | Filtru tag în kanban + reasignare bulk + vizualizare „Ziua mea" | I | pending | [specs/CRM-129-tag-filter-bulk-assign.md](specs/CRM-129-tag-filter-bulk-assign.md) |
+| 18 | `CRM-130` | Shortcuts tastatură kanban (n/e/j/k//) + WIP limits + collapse coloană | I | pending | [specs/CRM-130-keyboard-shortcuts-wip.md](specs/CRM-130-keyboard-shortcuts-wip.md) |
+| 19 | `CRM-131` | Lead card UX polish — skeleton, optimistic UI, inline note edit, empty states | I | pending | [specs/CRM-131-lead-card-ux-polish.md](specs/CRM-131-lead-card-ux-polish.md) |
 
 ## Active milestone: COMM — Modulul Comunicare (mesagerie reală backend)
 
