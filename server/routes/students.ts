@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { students } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { getBranchScope } from "../middleware/branchScope";
 
 const studentBaseSchema = z.object({
   fullName: z.string().min(2).max(200),
@@ -25,6 +26,8 @@ const listQuerySchema = z.object({
   status: z.enum(["active", "trial", "paused", "archived", "all"]).default("all"),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
+  /** BRANCH-702: optional filter by branch UUID */
+  branch_id: z.string().uuid().optional(),
 });
 
 function normalizeOptional<T extends Record<string, unknown>>(input: T): T {
@@ -42,12 +45,20 @@ export const studentRoutes = new Hono<{ Variables: AuthVariables }>();
 studentRoutes.use("*", requireAuth);
 
 studentRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
-  const { search, status, limit, offset } = c.req.valid("query");
+  const { search, status, limit, offset, branch_id } = c.req.valid("query");
   const tenantId = c.get("user").tenantId;
 
   const conditions = [eq(students.tenantId, tenantId)];
   if (status !== "all") {
     conditions.push(eq(students.status, status));
+  }
+  // BRANCH-703: server-side branch scope enforcement (takes priority over client filter)
+  const scope = getBranchScope(c);
+  if (scope) {
+    conditions.push(eq(students.branchId, scope));
+  } else if (branch_id) {
+    // BRANCH-702: optional client-side branch filter (only when user has full access)
+    conditions.push(eq(students.branchId, branch_id));
   }
   if (search && search.trim()) {
     const q = `%${search.trim()}%`;

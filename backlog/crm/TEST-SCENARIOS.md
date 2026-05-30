@@ -137,7 +137,58 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-116-3** Given task open mâine, Then card arată data, nu badge roșu.
 - **T-CRM-116-4** Given filtru „fără task", Then se afișează doar leadurile fără task open.
 
+## CRM-117 — List view {#crm-117}
+- **T-CRM-117-1** `[blocant]` Given `/app/leads?view=list`, Then se afișează leadurile în tabel.
+- **T-CRM-117-2** Given click pe un rând, Then navigează la `/app/leads/:id`.
+
+## CRM-119 — Căutare globală + Vizualizări salvate {#crm-119}
+- **T-CRM-119-1** `[blocant]` Given filtre active, When salvezi cu nume, Then vizualizarea apare în dropdown.
+- **T-CRM-119-2** `[blocant]` Given vizualizare salvată, When apăs X, Then e ștearsă.
+- **T-CRM-119-3** `[blocant]` Given search „ACME", Then filtrarea returnează leaduri cu „ACME" în company/dealName/interestCourse.
+- **T-CRM-119-4** `[blocant]` `GET /api/saved-views` → 200 `{ views: [] }`.
+
+## CRM-123 — Notificări in-app {#crm-123}
+- **T-CRM-123-1** `[blocant]` Given lead nou creat, Then notificare `lead_created` pentru user assigned_to sau manageri.
+- **T-CRM-123-2** `[blocant]` Given notificare necitită, When o citesc, Then `is_read=true`, badge scade cu 1.
+- **T-CRM-123-3** `[blocant]` `GET /api/notifications` → 200 `{ items: [], unreadCount: 0 }`.
+- **T-CRM-123-4** `[blocant]` Given „Marchează toate", Then `unreadCount = 0`.
+- **T-CRM-123-5** Multi-tenant: notificările tenantului A nu sunt vizibile din tenantul B.
+
+## CRM-125 — Forecast ponderat {#crm-125}
+- **T-CRM-125-1** `[blocant]` Given leaduri în „trial" cu probability=60%, Then forecast ponderat = gross × 0.6.
+- **T-CRM-125-2** `[blocant]` Given owner schimbă probability, Then forecast se recalculează.
+- **T-CRM-125-3** `[blocant]` `GET /api/analytics/crm/forecast` → 200 `{ stages, totalGrossCents, totalWeightedCents }`.
+
 ---
+
+## CRM-128 — Empty states + onboarding {#crm-128}
+
+- **T-CRM-128-1** `[blocant]` EmptyLeads renderizează cu text şi buton CTA când leads array e gol (no filters active).
+- **T-CRM-128-2** `[blocant]` EmptySearch renderizează când lista filtrată e goală (filterActive=true).
+- **T-CRM-128-3** `[blocant]` OnboardingChecklist apare când tenant are < 5 leads şi nu e dismissed; dispare când dismissed=true în localStorage.
+- **T-CRM-128-4** OnboardingChecklist: step auto-marcat done după event corespunzător.
+- **T-CRM-128-5** OnboardingChecklist auto-dismiss când toate 4 steps sunt done.
+- **T-CRM-128-6** Build + typecheck + lint pass.
+
+## CRM-127 — Undo + audit log {#crm-127}
+
+- **T-CRM-127-1** `[blocant]` Given lead creat via API, Then crm_audit_log are 1 rând action='lead.created'.
+- **T-CRM-127-2** `[blocant]` Given lead stage schimbat, Then rând audit cu before_snapshot.stage != after_snapshot.stage.
+- **T-CRM-127-3** `[blocant]` Given `POST /api/leads/:id/crm-delete`, Then returnează undoToken; `POST /api/leads/undo/:token` restaurează leadul.
+- **T-CRM-127-4** Given token folosit după 35s, Then 410 Gone.
+- **T-CRM-127-5** `GET /api/audit-log` returnează rânduri newest-first, respectă param limit.
+- **T-CRM-127-6** Build + typecheck + lint pass.
+- **T-CRM-127-7** Migraţia `0010_crm127_audit_log.sql` există în `drizzle/` şi conţine CREATE TABLE crm_audit_log.
+
+## CRM-126 — Follow-up cadences {#crm-126}
+
+- **T-CRM-126-1** `[blocant]` Given `POST /api/cadences` cu name + steps valid, Then 201 + cadence creată cu ID.
+- **T-CRM-126-2** `[blocant]` Given un lead schimbă stage-ul la `trigger_stage` al unei cadenţe active, Then un enrollment apare cu status=active, next_fire_at=enrolled_at+step[0].delay_days.
+- **T-CRM-126-3** `[blocant]` Given enrollment cu next_fire_at<=now, When `POST /api/cadences/tick` cu X-Internal-Key, Then stepul se execută (interaction/task creat), current_step incrementat.
+- **T-CRM-126-4** Given o interacţiune inbound creată pentru lead, Then toate enrollments active ale leadului devin paused.
+- **T-CRM-126-5** Given enrollment la ultimul pas, When tick, Then status=completed.
+- **T-CRM-126-6** Build + typecheck + lint pass.
+- **T-CRM-126-7** Migraţia `0009_crm126_cadences.sql` există în `drizzle/` şi conţine CREATE TABLE.
 
 ## Scenarii transversale (rulate la fiecare item)
 

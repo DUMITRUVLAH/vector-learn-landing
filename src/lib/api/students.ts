@@ -11,6 +11,8 @@ export interface Student {
   birthDate: string | null;
   status: "active" | "trial" | "paused" | "archived";
   notes: string | null;
+  /** FIN-602: Outstanding debt in cents */
+  debtCents?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,6 +29,8 @@ export interface ListStudentsParams {
   status?: "active" | "trial" | "paused" | "archived" | "all";
   limit?: number;
   offset?: number;
+  /** BRANCH-702: filter by branch UUID, omit for all branches */
+  branch_id?: string;
 }
 
 export interface StudentInput {
@@ -46,6 +50,8 @@ export function listStudents(params: ListStudentsParams = {}): Promise<ListStude
   if (params.status) qs.set("status", params.status);
   if (params.limit !== undefined) qs.set("limit", String(params.limit));
   if (params.offset !== undefined) qs.set("offset", String(params.offset));
+  // BRANCH-702: optional branch filter
+  if (params.branch_id) qs.set("branch_id", params.branch_id);
   const query = qs.toString();
   return api<ListStudentsResponse>(`/api/students${query ? `?${query}` : ""}`);
 }
