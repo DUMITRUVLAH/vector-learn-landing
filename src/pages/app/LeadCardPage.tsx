@@ -36,6 +36,8 @@ import { SendMessageModal, LogCallModal, type SendChannel } from "@/components/c
 import { ConvertModal, getScoreBadge, SCORE_BADGE_STYLES, SCORE_BADGE_LABELS } from "@/components/crm/ConvertModal";
 import { scoreLead } from "@/lib/api/leads";
 import { CadencePanel } from "@/components/crm/CadencePanel";
+import { UndoToast } from "@/components/crm/UndoToast";
+import { crmDeleteLead } from "@/lib/api/audit";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -106,6 +108,8 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   const [revoking, setRevoking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  // CRM-127: Undo token after CRM delete
+  const [undoToken, setUndoToken] = useState<{ token: string; expiresAt: string } | null>(null);
 
   // CRM-109: Communication modals
   const [sendModal, setSendModal] = useState<{ open: boolean; channel: SendChannel }>({
@@ -414,6 +418,23 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     }
   };
 
+  // ─── CRM-127: CRM Delete (with undo) ─────────────────────────────────────
+  const handleCrmDelete = async () => {
+    if (!lead) return;
+    if (!confirm(`Ştergi lead-ul "${lead.fullName}" din CRM? Poți anula în 30 secunde.`)) return;
+    setDeleting(true);
+    try {
+      const res = await crmDeleteLead(lead.id);
+      setUndoToken({ token: res.undoToken, expiresAt: res.expiresAt });
+      setTimeout(() => navigate("/app/leads"), 500);
+    } catch {
+      setToast({ kind: "error", message: "Nu pot șterge lead-ul" });
+    } finally {
+      setDeleting(false);
+      setShowActionsMenu(false);
+    }
+  };
+
   // ─── Render ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -501,6 +522,16 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                       Retrage consimțământul
                     </button>
                   )}
+                  {/* CRM-127: CRM delete with undo */}
+                  <button
+                    type="button"
+                    onClick={() => void handleCrmDelete()}
+                    disabled={deleting}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted text-muted-foreground"
+                  >
+                    {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    Şterge din CRM
+                  </button>
                   <button
                     type="button"
                     onClick={() => void handleGdprDelete()}
@@ -1184,6 +1215,19 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         >
           {toast.message}
         </div>
+      )}
+      {/* CRM-127: Undo toast */}
+      {undoToken && (
+        <UndoToast
+          undoToken={undoToken.token}
+          expiresAt={undoToken.expiresAt}
+          message="Lead şters"
+          onUndo={() => {
+            setUndoToken(null);
+            navigate("/app/leads");
+          }}
+          onDismiss={() => setUndoToken(null)}
+        />
       )}
     </AppShell>
   );

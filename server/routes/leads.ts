@@ -10,6 +10,49 @@ import { normalizePhone, normalizeEmail } from "../lib/normalize";
 import { fireTrigger } from "../lib/automationEngine";
 import { createNotification, notifyManagersAndOwners } from "../lib/createNotification";
 import { enrollLeadInCadences, pauseEnrollmentsOnReply } from "./cadences";
+import { crmAuditLog } from "../db/schema";
+
+// ─── CRM-127: Audit log helper ────────────────────────────────────────────────
+async function auditLog(opts: {
+  tenantId: string;
+  actorId?: string | null;
+  entityId: string;
+  action: string;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+}): Promise<void> {
+  try {
+    await db.insert(crmAuditLog).values({
+      tenantId: opts.tenantId,
+      actorId: opts.actorId ?? null,
+      entityId: opts.entityId,
+      action: opts.action,
+      beforeSnapshot: opts.before ?? null,
+      afterSnapshot: opts.after ?? null,
+    });
+  } catch {
+    // Never block the main operation due to audit failure
+  }
+}
+
+// ─── CRM-127: Undo token store (in-memory, TTL 35s) ──────────────────────────
+interface UndoEntry {
+  leadIds: string[];
+  snapshots: Record<string, unknown>[];
+  expiresAt: number; // Date.now() + 35000
+}
+const undoStore = new Map<string, UndoEntry>();
+
+function generateUndoToken(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function cleanExpiredTokens(): void {
+  const now = Date.now();
+  for (const [k, v] of undoStore) {
+    if (v.expiresAt < now) undoStore.delete(k);
+  }
+}
 
 const STAGES = ["new", "contacted", "trial", "paid", "lost"] as const;
 const SOURCES = [
@@ -332,6 +375,9 @@ leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
   // Fire automation trigger (fire-and-forget — don't block response)
   void fireTrigger(tenantId, "lead.created", created).catch(() => undefined);
 
+  // CRM-127: Audit log
+  void auditLog({ tenantId, actorId: userId, entityId: created.id, action: "lead.created", after: created as unknown as Record<string, unknown> }).catch(() => undefined);
+
   // CRM-123: Notify assigned user (or all managers/admins if unassigned)
   const notifPayload = {
     type: "lead_created" as const,
@@ -363,7 +409,14 @@ leadRoutes.get("/:id", async (c) => {
 leadRoutes.patch("/:id", zValidator("json", updateLeadSchema), async (c) => {
   const id = c.req.param("id");
   const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
   const body = nullify(c.req.valid("json"));
+
+  // CRM-127: Fetch before snapshot
+  const before = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
+  });
+  if (!before) return c.json({ error: "not_found" }, 404);
 
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   for (const [k, v] of Object.entries(body)) patch[k] = v;
@@ -376,6 +429,16 @@ leadRoutes.patch("/:id", zValidator("json", updateLeadSchema), async (c) => {
     .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)))
     .returning();
   if (!updated) return c.json({ error: "not_found" }, 404);
+
+  // CRM-127: Audit log — only changed fields
+  const changedBefore: Record<string, unknown> = {};
+  const changedAfter: Record<string, unknown> = {};
+  for (const k of Object.keys(body)) {
+    changedBefore[k] = (before as unknown as Record<string, unknown>)[k];
+    changedAfter[k] = (updated as unknown as Record<string, unknown>)[k];
+  }
+  void auditLog({ tenantId, actorId: userId, entityId: id, action: "lead.updated", before: changedBefore, after: changedAfter }).catch(() => undefined);
+
   return c.json(updated);
 });
 
@@ -431,6 +494,12 @@ leadRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async (c) 
     void fireTrigger(tenantId, "lead.stage_changed", updated, { toStage: stage }).catch(() => undefined);
     // CRM-126: Auto-enroll in matching cadences
     void enrollLeadInCadences(tenantId, id, stage).catch(() => undefined);
+    // CRM-127: Audit log
+    void auditLog({
+      tenantId, actorId: userId, entityId: id, action: "lead.stage_changed",
+      before: { stage: lead.stage },
+      after: { stage },
+    }).catch(() => undefined);
   }
 
   return c.json(updated);
@@ -860,5 +929,104 @@ leadRoutes.delete("/:id", async (c) => {
   });
 
   return c.json({ deleted: true, anonymized: true });
+});
+
+// CRM-127: POST /api/leads/:id/crm-delete — soft CRM delete with undo token
+leadRoutes.post("/:id/crm-delete", async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
+  });
+  if (!lead) return c.json({ error: "not_found" }, 404);
+
+  // Hard delete the lead (CRM delete — not GDPR erasure)
+  await db
+    .delete(leads)
+    .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)));
+
+  // CRM-127: Audit log
+  void auditLog({
+    tenantId, actorId: userId, entityId: id, action: "lead.deleted",
+    before: lead as unknown as Record<string, unknown>,
+  }).catch(() => undefined);
+
+  // Store undo token (35s TTL)
+  cleanExpiredTokens();
+  const token = generateUndoToken();
+  const expiresAt = Date.now() + 35_000;
+  undoStore.set(token, {
+    leadIds: [id],
+    snapshots: [lead as unknown as Record<string, unknown>],
+    expiresAt,
+  });
+
+  return c.json({
+    deleted: true,
+    undoToken: token,
+    expiresAt: new Date(expiresAt).toISOString(),
+  });
+});
+
+// CRM-127: POST /api/leads/undo/:token — restore deleted lead
+leadRoutes.post("/undo/:token", async (c) => {
+  const token = c.req.param("token");
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+
+  cleanExpiredTokens();
+  const entry = undoStore.get(token);
+  if (!entry) return c.json({ error: "undo_token_expired_or_invalid" }, 410);
+  if (entry.expiresAt < Date.now()) {
+    undoStore.delete(token);
+    return c.json({ error: "undo_token_expired_or_invalid" }, 410);
+  }
+
+  undoStore.delete(token);
+
+  const restoredIds: string[] = [];
+  for (const snapshot of entry.snapshots) {
+    // Re-insert lead from snapshot (pick only known columns)
+    const snap = snapshot as Record<string, unknown>;
+    if (snap.tenantId !== tenantId) continue; // safety: never restore cross-tenant
+
+    try {
+      // Type-safe insert — extract known fields
+      const [restored] = await db
+        .insert(leads)
+        .values({
+          id: snap.id as string,
+          tenantId: snap.tenantId as string,
+          fullName: (snap.fullName as string) ?? "Restaurat",
+          phone: (snap.phone as string | null) ?? null,
+          phoneNormalized: (snap.phoneNormalized as string | null) ?? null,
+          email: (snap.email as string | null) ?? null,
+          emailNormalized: (snap.emailNormalized as string | null) ?? null,
+          interestCourse: (snap.interestCourse as string | null) ?? null,
+          stage: (snap.stage as "new" | "contacted" | "trial" | "paid" | "lost") ?? "new",
+          source: (snap.source as "manual") ?? "manual",
+          notes: (snap.notes as string | null) ?? null,
+          assignedTo: (snap.assignedTo as string | null) ?? null,
+          valueCents: (snap.valueCents as number) ?? 0,
+          debtCents: (snap.debtCents as number) ?? 0,
+          company: (snap.company as string | null) ?? null,
+          dealName: (snap.dealName as string | null) ?? null,
+          createdAt: snap.createdAt ? new Date(snap.createdAt as string) : new Date(),
+          updatedAt: new Date(),
+        })
+        .onConflictDoNothing()
+        .returning();
+      if (restored) {
+        restoredIds.push(restored.id);
+        void auditLog({ tenantId, actorId: userId, entityId: restored.id, action: "lead.restored", after: restored as unknown as Record<string, unknown> }).catch(() => undefined);
+      }
+    } catch {
+      // If ID conflicts (somehow not deleted), skip
+    }
+  }
+
+  return c.json({ restored: true, leadIds: restoredIds });
 });
 
