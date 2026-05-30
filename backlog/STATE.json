@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": "FIN-604",
-  "last_completed": "FIN-603",
-  "iterations": 83,
-  "last_run_at": "2026-05-30T16:00:00Z",
-  "milestone_status": "M1+M2+M3+MVP+CRM+COMM+REP+HR+SCHED ALL COMPLETE. FIN module planned: FIN-601..604 pending.",
-  "active_milestone": "FIN",
+  "current_item": "BRANCH-701",
+  "last_completed": "FIN-604",
+  "iterations": 84,
+  "last_run_at": "2026-05-30T17:00:00Z",
+  "milestone_status": "M1+M2+M3+MVP+CRM+COMM+REP+HR+SCHED+FIN ALL COMPLETE. BRANCH module started: BRANCH-701..704 pending.",
+  "active_milestone": "BRANCH",
   "items": {
     "M1-001": {
       "status": "done",
@@ -1146,13 +1146,57 @@
       }
     },
     "FIN-604": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FIN-604-efactura-stub.md",
       "milestone": "FIN",
       "phase": "4",
-      "depends_on": ["FIN-601"]
+      "depends_on": ["FIN-601"],
+      "branch": "feat/FIN-604-efactura-stub",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/79",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "BRANCH-701": {
+      "status": "in_progress",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/BRANCH-701-schema.md",
+      "milestone": "BRANCH",
+      "phase": "1",
+      "depends_on": ["MVP-002", "MVP-004", "MVP-005"]
+    },
+    "BRANCH-702": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BRANCH-702-switcher.md",
+      "milestone": "BRANCH",
+      "phase": "2",
+      "depends_on": ["BRANCH-701"]
+    },
+    "BRANCH-703": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BRANCH-703-scoped-roles.md",
+      "milestone": "BRANCH",
+      "phase": "3",
+      "depends_on": ["BRANCH-701", "BRANCH-702"]
+    },
+    "BRANCH-704": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BRANCH-704-reports.md",
+      "milestone": "BRANCH",
+      "phase": "4",
+      "depends_on": ["BRANCH-702", "BRANCH-703"]
     }
   }
 }
