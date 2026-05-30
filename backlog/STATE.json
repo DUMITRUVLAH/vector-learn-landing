@@ -751,13 +751,31 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-131": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-131-lead-card-ux-polish.md",
       "milestone": "CRM",
       "phase": "I",
       "depends_on": ["CRM-130"]
+    },
+    "CRM-132": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-132-timeline-filters.md",
+      "milestone": "CRM",
+      "phase": "I",
+      "depends_on": ["CRM-131"]
+    },
+    "CRM-133": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-133-duplicate-detection-banner.md",
+      "milestone": "CRM",
+      "phase": "I",
+      "depends_on": ["CRM-102", "CRM-131"]
     }
   }
 }

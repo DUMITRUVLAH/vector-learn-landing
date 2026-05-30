@@ -162,6 +162,19 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-131-6** `[blocant]` Given tab Activitate cu 0 interacțiuni, Then conține textul „Nicio activitate încă".
 - **T-CRM-131-7** Given tab Task-uri cu 0 task-uri, Then conține textul „Nicio sarcină".
 
+## CRM-132 — Timeline filters {#crm-132}
+- **T-CRM-132-1** `[blocant]` Given `TimelineFilters` randat cu counts `{all:5, note:2, call:1, commChannel:1, stage_change:1}`, Then 5 butoane vizibile cu numerele corecte.
+- **T-CRM-132-2** `[blocant]` Given filtru "Apeluri" selectat și interactions cu 1 call + 2 notes, When render, Then doar 1 item vizibil în timeline.
+- **T-CRM-132-3** `[blocant]` Given filtru "Note" cu 0 note, Then textul „Nicio intrare de tipul selectat" vizibil.
+- **T-CRM-132-4** Given filtru activ e "Apeluri", When click pe "Toate", Then toate interacțiunile revin vizibile.
+
+## CRM-133 — Duplicate detection banner {#crm-133}
+- **T-CRM-133-1** `[blocant]` Given `dedup-check` returnează 1 duplicat, Then banner cu textul „Posibil duplicat" e vizibil.
+- **T-CRM-133-2** `[blocant]` Given `dedup-check` returnează `{ duplicates: [] }`, Then banner nu apare.
+- **T-CRM-133-3** `[blocant]` Given `dedup-check` eșuează (reject), Then banner nu apare.
+- **T-CRM-133-4** `[blocant]` Given click „Fuzionează", Then `MergeLeadModal` se deschide cu 2 opțiuni radio.
+- **T-CRM-133-5** Given confirmare merge, Then `POST /api/leads/:id/merge` e apelat o singură dată cu parametrii corecți.
+
 ---
 
 ## Scenarii transversale (rulate la fiecare item)
