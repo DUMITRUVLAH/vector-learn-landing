@@ -4,6 +4,7 @@ import { Logo } from "@/components/Logo";
 import { Link, useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "@/components/NotificationBell";
 
 interface AppShellProps {
   children: ReactNode;
@@ -60,6 +61,7 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
                     .slice(0, 2)
                     .join("")}
                 </div>
+                <NotificationBell />
                 <button
                   type="button"
                   onClick={handleLogout}
