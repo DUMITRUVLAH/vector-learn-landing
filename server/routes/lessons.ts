@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, gte, lt, ne, or, sql } from "drizzle-orm";
+import { and, eq, gte, lt, ne, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { lessons, courses, teachers, users } from "../db/schema";
+import { lessons, courses, teachers, users, students, studentLessons } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 const createLessonSchema = z.object({
@@ -174,3 +174,108 @@ lessonRoutes.delete("/:id", async (c) => {
   if (!cancelled) return c.json({ error: "not_found" }, 404);
   return c.json({ ok: true, id: cancelled.id });
 });
+
+// SCHED-503: Attendance routes
+
+lessonRoutes.get("/:id/students", async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+
+  // Verify lesson belongs to tenant
+  const lesson = await db.query.lessons.findFirst({
+    where: and(eq(lessons.id, id), eq(lessons.tenantId, tenantId)),
+  });
+  if (!lesson) return c.json({ error: "not_found" }, 404);
+
+  const rows = await db
+    .select({
+      studentLessonId: studentLessons.id,
+      studentId: studentLessons.studentId,
+      attendanceStatus: studentLessons.attendanceStatus,
+      markedBy: studentLessons.markedBy,
+      markedAt: studentLessons.markedAt,
+      fullName: students.fullName,
+      email: students.email,
+      phone: students.phone,
+    })
+    .from(studentLessons)
+    .innerJoin(students, eq(studentLessons.studentId, students.id))
+    .where(and(eq(studentLessons.lessonId, id), eq(studentLessons.tenantId, tenantId)))
+    .orderBy(students.fullName);
+
+  return c.json({ items: rows });
+});
+
+const attendanceBodySchema = z.object({
+  attendanceStatus: z.enum(["present", "absent", "late", "excused"]),
+});
+
+const LOCK_HOURS = 24;
+
+lessonRoutes.patch(
+  "/:id/students/:studentId/attendance",
+  zValidator("json", attendanceBodySchema),
+  async (c) => {
+    const lessonId = c.req.param("id");
+    const studentId = c.req.param("studentId");
+    const tenantId = c.get("user").tenantId;
+    const user = c.get("user");
+    const { attendanceStatus } = c.req.valid("json");
+
+    // Verify lesson belongs to tenant
+    const lesson = await db.query.lessons.findFirst({
+      where: and(eq(lessons.id, lessonId), eq(lessons.tenantId, tenantId)),
+    });
+    if (!lesson) return c.json({ error: "not_found" }, 404);
+
+    // Only allow marking when lesson has started (scheduledAt < now)
+    const now = new Date();
+    if (lesson.scheduledAt > now) {
+      return c.json({ error: "lesson_not_started" }, 422);
+    }
+
+    // 24h lock: if lesson ended more than 24h ago AND markedBy is already set → only manager can edit
+    const lockCutoff = new Date(now.getTime() - LOCK_HOURS * 60 * 60 * 1000);
+    const isLocked = lesson.scheduledAt < lockCutoff;
+
+    if (isLocked && user.role !== "admin") {
+      return c.json({ error: "attendance_locked", message: "Prezența poate fi modificată doar de manager după 24h." }, 403);
+    }
+
+    // Upsert the student_lessons row
+    const existing = await db.query.studentLessons.findFirst({
+      where: and(
+        eq(studentLessons.lessonId, lessonId),
+        eq(studentLessons.studentId, studentId),
+        eq(studentLessons.tenantId, tenantId),
+      ),
+    });
+
+    if (existing) {
+      const [updated] = await db
+        .update(studentLessons)
+        .set({
+          attendanceStatus,
+          markedBy: user.id,
+          markedAt: now,
+        })
+        .where(eq(studentLessons.id, existing.id))
+        .returning();
+      return c.json(updated);
+    } else {
+      // Auto-enroll: create the student_lessons record if it doesn't exist
+      const [created] = await db
+        .insert(studentLessons)
+        .values({
+          tenantId,
+          lessonId,
+          studentId,
+          attendanceStatus,
+          markedBy: user.id,
+          markedAt: now,
+        })
+        .returning();
+      return c.json(created, 201);
+    }
+  }
+);

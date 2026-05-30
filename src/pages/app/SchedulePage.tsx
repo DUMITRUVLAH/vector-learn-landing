@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Loader2, Plus, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2 } from "lucide-react";
+import { Loader2, Plus, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, Users, Lock } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -10,9 +10,13 @@ import {
   listCourses,
   createLesson,
   cancelLesson,
+  getLessonStudents,
+  markAttendance,
   type Lesson,
   type Teacher,
   type Course,
+  type LessonStudent,
+  type AttendanceStatus,
 } from "@/lib/api/lessons";
 import { cn } from "@/lib/utils";
 
@@ -428,6 +432,141 @@ function CreateLessonModal({
   );
 }
 
+const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
+  present: "Prezent",
+  absent: "Absent",
+  late: "Întârziat",
+  excused: "Motivat",
+  pending: "Neprecizat",
+};
+
+const ATTENDANCE_COLORS: Record<AttendanceStatus, string> = {
+  present: "text-success",
+  absent: "text-destructive",
+  late: "text-warning",
+  excused: "text-muted-foreground",
+  pending: "text-muted-foreground",
+};
+
+function AttendancePanel({ lesson, onError }: { lesson: Lesson; onError: (msg: string) => void }) {
+  const [students, setStudents] = useState<LessonStudent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState<string | null>(null);
+
+  const lessonDate = new Date(lesson.scheduledAt);
+  const now = new Date();
+  const hasStarted = lessonDate <= now;
+  const isLocked24h = lessonDate < new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  useEffect(() => {
+    if (!hasStarted) return;
+    getLessonStudents(lesson.id)
+      .then((r) => setStudents(r.items))
+      .catch(() => onError("Nu pot încărca lista de elevi."))
+      .finally(() => setLoading(false));
+  }, [lesson.id, hasStarted, onError]);
+
+  if (!hasStarted) {
+    return (
+      <div className="mt-4 pt-4 border-t border-border">
+        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5" />
+          Prezența se poate marca după ce lecția a început.
+        </p>
+      </div>
+    );
+  }
+
+  const handleStatusChange = async (studentId: string, status: string) => {
+    if (status === "pending") return;
+    setUpdating(studentId);
+    try {
+      const updated = await markAttendance(
+        lesson.id,
+        studentId,
+        status as Exclude<AttendanceStatus, "pending">
+      );
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.studentId === studentId
+            ? { ...s, attendanceStatus: updated.attendanceStatus as AttendanceStatus, markedBy: updated.markedBy, markedAt: updated.markedAt }
+            : s
+        )
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        onError("Prezența este blocată după 24h. Contactați un manager.");
+      } else {
+        onError("Nu pot salva prezența.");
+      }
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5" />
+          Prezență elevi
+        </h3>
+        {isLocked24h && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">
+            <Lock className="h-3 w-3" />
+            Blocat 24h
+          </span>
+        )}
+      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-4 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          <span className="text-xs">Se încarcă…</span>
+        </div>
+      ) : students.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-2">Niciun elev înscris la această lecție.</p>
+      ) : (
+        <div className="space-y-1.5" role="list" aria-label="Lista elevi și prezență">
+          {students.map((s) => (
+            <div
+              key={s.studentId}
+              className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2"
+              role="listitem"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-semibold truncate">{s.fullName}</p>
+                {s.email && <p className="text-[10px] text-muted-foreground truncate">{s.email}</p>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {updating === s.studentId && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                <label htmlFor={`att-${s.studentId}`} className="sr-only">
+                  Status prezență {s.fullName}
+                </label>
+                <select
+                  id={`att-${s.studentId}`}
+                  value={s.attendanceStatus}
+                  onChange={(e) => void handleStatusChange(s.studentId, e.target.value)}
+                  disabled={updating === s.studentId}
+                  className={cn(
+                    "rounded border border-input bg-background px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60",
+                    ATTENDANCE_COLORS[s.attendanceStatus]
+                  )}
+                >
+                  <option value="pending">{ATTENDANCE_LABELS.pending}</option>
+                  <option value="present">{ATTENDANCE_LABELS.present}</option>
+                  <option value="absent">{ATTENDANCE_LABELS.absent}</option>
+                  <option value="late">{ATTENDANCE_LABELS.late}</option>
+                  <option value="excused">{ATTENDANCE_LABELS.excused}</option>
+                </select>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ViewLessonModal({
   lesson,
   onClose,
@@ -465,6 +604,7 @@ function ViewLessonModal({
         {lesson.courseLevel && <Row label="Nivel" value={lesson.courseLevel} />}
         {lesson.notes && <Row label="Note" value={lesson.notes} />}
       </div>
+      <AttendancePanel lesson={lesson} onError={onError} />
       <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-border">
         <button type="button" onClick={onClose} className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted">
           Închide
