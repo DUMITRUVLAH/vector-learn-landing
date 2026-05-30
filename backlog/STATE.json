@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "SCHED-503",
-  "last_completed": "SCHED-502",
-  "iterations": 62,
+  "current_item": "CRM-129",
+  "last_completed": "CRM-129",
+  "iterations": 63,
   "last_run_at": "2026-05-30T10:18:00Z",
   "milestone_status": "M1+M2+M3 landing + MVP-001..008 + CRM-101..116 (Faze A-F) + COMM-201..205 + REP-301..304 + HR-401..404 + SCHED-501..502 complete. CRM Faza I active (CRM-129..131 pending). SCHED-503/504 also pending.",
   "active_milestone": "CRM",
@@ -727,13 +727,21 @@
       "depends_on": ["SCHED-501"]
     },
     "CRM-129": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-129-tag-filter-bulk-assign.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-115", "CRM-116"]
+      "depends_on": ["CRM-115", "CRM-116"],
+      "branch": "feat/CRM-129-tag-filter-bulk-assign",
+      "reports": [
+        "backlog/reports/CRM-129-reviewer.md",
+        "backlog/reports/CRM-129-integration.md",
+        "backlog/reports/CRM-129-manager.md",
+        "backlog/reports/CRM-129-student.md"
+      ],
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-130": {
       "status": "pending",

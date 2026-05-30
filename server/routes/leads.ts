@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families } from "../db/schema";
+import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, leadTags } from "../db/schema";
 import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
@@ -257,10 +257,24 @@ leadRoutes.get("/pipeline", async (c) => {
     }
   }
 
-  // Augment leads with nextTask
+  // CRM-129: Fetch tags for all leads in one query
+  const leadIds = items.map((l) => l.id);
+  const allTags = leadIds.length > 0
+    ? await db
+        .select({ leadId: leadTags.leadId, tag: leadTags.tag })
+        .from(leadTags)
+        .where(and(eq(leadTags.tenantId, tenantId), inArray(leadTags.leadId, leadIds)))
+    : [];
+  const tagsMap: Record<string, string[]> = {};
+  for (const t of allTags) {
+    (tagsMap[t.leadId] ??= []).push(t.tag);
+  }
+
+  // Augment leads with nextTask and tags
   const augmented = items.map((lead) => ({
     ...lead,
     nextTask: nextTaskMap[lead.id] ?? null,
+    tags: tagsMap[lead.id] ?? [],
   }));
 
   const grouped: Record<string, typeof augmented> = {
@@ -604,6 +618,41 @@ leadRoutes.post("/:id/assign", zValidator("json", assignLeadSchema), async (c) =
   });
 
   return c.json(updated);
+});
+
+// PATCH /api/leads/bulk-assign — bulk reassign multiple leads (CRM-129)
+const bulkAssignSchema = z.object({
+  leadIds: z.array(z.string().uuid()).min(1).max(100),
+  assignedTo: z.string().uuid().nullable(),
+});
+
+leadRoutes.patch("/bulk-assign", zValidator("json", bulkAssignSchema), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+  const { leadIds, assignedTo } = c.req.valid("json");
+
+  // Tenant-safety: only update leads that belong to this tenant
+  const updated = await db
+    .update(leads)
+    .set({ assignedTo, updatedAt: new Date() })
+    .where(and(eq(leads.tenantId, tenantId), inArray(leads.id, leadIds)))
+    .returning({ id: leads.id });
+
+  // Log interactions for each updated lead
+  if (updated.length > 0) {
+    await db.insert(leadInteractions).values(
+      updated.map((l) => ({
+        tenantId,
+        leadId: l.id,
+        type: "system" as const,
+        direction: "internal" as const,
+        body: `Reasignat (bulk) de ${userId} → ${assignedTo ?? "neasignat"}`,
+        userId,
+      }))
+    );
+  }
+
+  return c.json({ updated: updated.length });
 });
 
 // POST /api/leads/:id/score — calculate and save lead score (CRM-111)

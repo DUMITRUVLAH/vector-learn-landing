@@ -44,6 +44,8 @@ export interface Lead {
   dealName?: string | null;
   /** Next open task (from pipeline endpoint, augmented server-side) */
   nextTask?: { dueAt: string | null; title: string } | null;
+  /** CRM-129: Tags for this lead (from pipeline endpoint) */
+  tags?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -298,6 +300,19 @@ export function addTag(leadId: string, tag: string): Promise<{ tag: string }> {
 
 export function removeTag(leadId: string, tag: string): Promise<{ deleted: boolean }> {
   return api<{ deleted: boolean }>(`/api/leads/${leadId}/tags/${encodeURIComponent(tag)}`, { method: "DELETE" });
+}
+
+// ─── CRM-129: Bulk assign ─────────────────────────────────────────────────────
+
+/** Bulk reassign multiple leads to a new assignee (or null = unassign) */
+export function bulkAssignLeads(
+  leadIds: string[],
+  assignedTo: string | null
+): Promise<{ updated: number }> {
+  return api<{ updated: number }>("/api/leads/bulk-assign", {
+    method: "PATCH",
+    body: JSON.stringify({ leadIds, assignedTo }),
+  });
 }
 
 // ─── CRM-115: Custom fields (settings) ───────────────────────────────────────

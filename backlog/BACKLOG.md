@@ -112,7 +112,7 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 17 | `CRM-129` | Filtru tag în kanban + reasignare bulk + vizualizare „Ziua mea" | I | pending | [specs/CRM-129-tag-filter-bulk-assign.md](specs/CRM-129-tag-filter-bulk-assign.md) |
+| 17 | `CRM-129` | Filtru tag în kanban + reasignare bulk + vizualizare „Ziua mea" | I | done ✅ | [specs/CRM-129-tag-filter-bulk-assign.md](specs/CRM-129-tag-filter-bulk-assign.md) |
 | 18 | `CRM-130` | Shortcuts tastatură kanban (n/e/j/k//) + WIP limits + collapse coloană | I | pending | [specs/CRM-130-keyboard-shortcuts-wip.md](specs/CRM-130-keyboard-shortcuts-wip.md) |
 | 19 | `CRM-131` | Lead card UX polish — skeleton, optimistic UI, inline note edit, empty states | I | pending | [specs/CRM-131-lead-card-ux-polish.md](specs/CRM-131-lead-card-ux-polish.md) |
 

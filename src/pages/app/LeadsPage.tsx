@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock } from "lucide-react";
+import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, Users, CalendarCheck, Tag, CheckSquare } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -11,6 +11,7 @@ import {
   listInteractions,
   addInteraction,
   checkDuplicate,
+  bulkAssignLeads,
   type Lead,
   type LeadStage,
   type LeadInteraction,
@@ -52,8 +53,9 @@ const LOST_REASON_PRESETS = [
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function LeadsPage() {
-  const { status: sessionStatus } = useSession();
+  const { status: sessionStatus, data: sessionData } = useSession();
   const { navigate } = useRouter();
+  const currentUserId = sessionData?.user?.id ?? null;
 
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [grouped, setGrouped] = useState<Record<string, Lead[]>>({});
@@ -73,6 +75,13 @@ export function LeadsPage() {
   /** CRM-116: task signal filters */
   const [filterNoTask, setFilterNoTask] = useState(false);
   const [filterOverdue, setFilterOverdue] = useState(false);
+  /** CRM-129: tag filter */
+  const [filterTag, setFilterTag] = useState("all");
+  /** CRM-129: "Ziua mea" — tasks due today assigned to current user */
+  const [filterMyDay, setFilterMyDay] = useState(false);
+  /** CRM-129: multi-select cards */
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+  const [showBulkAssign, setShowBulkAssign] = useState(false);
 
   // Modals
   const [showCreate, setShowCreate] = useState(false);
@@ -82,9 +91,16 @@ export function LeadsPage() {
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
+  // CRM-129: Escape clears multi-selection
   useEffect(() => {
-    if (sessionStatus === "unauthenticated") navigate("/app/login");
-  }, [sessionStatus, navigate]);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && selectedLeadIds.size > 0) {
+        setSelectedLeadIds(new Set());
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedLeadIds]);
 
   useEffect(() => {
     if (!toast) return;
@@ -126,9 +142,19 @@ export function LeadsPage() {
     void fetchAll();
   }, [fetchAll]);
 
+  // CRM-129: Derive all unique tags from all leads for the filter dropdown
+  const allTags = Array.from(
+    new Set(
+      Object.values(grouped)
+        .flat()
+        .flatMap((l) => l.tags ?? [])
+    )
+  ).sort();
+
   // Client-side filtering
   const getFilteredLeads = (stageKey: string): Lead[] => {
     const all = grouped[stageKey] ?? [];
+    const todayStr = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
     return all.filter((lead) => {
       if (filterSource !== "all" && lead.source !== filterSource) return false;
       if (filterAssigned !== "all" && lead.assignedTo !== filterAssigned) return false;
@@ -144,6 +170,18 @@ export function LeadsPage() {
       if (filterOverdue) {
         const isOverdue = lead.nextTask?.dueAt != null && new Date(lead.nextTask.dueAt) < new Date();
         if (!isOverdue) return false;
+      }
+      // CRM-129: tag filter
+      if (filterTag !== "all") {
+        if (!(lead.tags ?? []).includes(filterTag)) return false;
+      }
+      // CRM-129: "Ziua mea" — task due today assigned to current user
+      if (filterMyDay) {
+        const task = lead.nextTask;
+        if (!task?.dueAt) return false;
+        const taskDate = task.dueAt.slice(0, 10);
+        if (taskDate !== todayStr) return false;
+        if (currentUserId && lead.assignedTo !== currentUserId) return false;
       }
       return true;
     });
@@ -232,6 +270,31 @@ export function LeadsPage() {
         </div>
       }
     >
+      {/* CRM-129: Bulk selection bar — shown when cards are selected */}
+      {selectedLeadIds.size > 0 && (
+        <div className="mb-3 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5">
+          <CheckSquare className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
+          <span className="text-sm font-semibold text-primary">{selectedLeadIds.size} selectate</span>
+          <button
+            type="button"
+            onClick={() => setShowBulkAssign(true)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            <Users className="h-3.5 w-3.5" />
+            Reasignează
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedLeadIds(new Set())}
+            className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+            aria-label="Deselectează tot"
+          >
+            <X className="h-3 w-3" />
+            Anulează
+          </button>
+        </div>
+      )}
+
       {/* Filter bar */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1.5 text-sm flex-1 min-w-[160px]">
@@ -266,6 +329,22 @@ export function LeadsPage() {
           <option value="">Neasignat</option>
         </select>
 
+        {/* CRM-129: Tag filter */}
+        {allTags.length > 0 && (
+          <div className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm">
+            <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+            <select
+              value={filterTag}
+              onChange={(e) => setFilterTag(e.target.value)}
+              className="bg-transparent outline-none text-sm"
+              aria-label="Filtrează după tag"
+            >
+              <option value="all">Toate tag-urile</option>
+              {allTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+            </select>
+          </div>
+        )}
+
         {/* CRM-116: task signal filters */}
         <label className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs text-muted-foreground cursor-pointer hover:bg-muted select-none">
           <input type="checkbox" checked={filterNoTask} onChange={(e) => { setFilterNoTask(e.target.checked); if (e.target.checked) setFilterOverdue(false); }} className="h-3.5 w-3.5" aria-label="Filtrează leaduri fără task" />
@@ -276,10 +355,27 @@ export function LeadsPage() {
           Restanțe
         </label>
 
-        {(filterSource !== "all" || filterAssigned !== "all" || searchQuery || filterNoTask || filterOverdue) && (
+        {/* CRM-129: "Ziua mea" quick filter */}
+        <button
+          type="button"
+          onClick={() => setFilterMyDay((v) => !v)}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-semibold transition-colors",
+            filterMyDay
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border text-muted-foreground hover:bg-muted"
+          )}
+          aria-pressed={filterMyDay}
+          aria-label="Ziua mea — task-uri scadente azi"
+        >
+          <CalendarCheck className="h-3.5 w-3.5" />
+          Ziua mea
+        </button>
+
+        {(filterSource !== "all" || filterAssigned !== "all" || searchQuery || filterNoTask || filterOverdue || filterTag !== "all" || filterMyDay) && (
           <button
             type="button"
-            onClick={() => { setFilterSource("all"); setFilterAssigned("all"); setSearchQuery(""); setFilterNoTask(false); setFilterOverdue(false); }}
+            onClick={() => { setFilterSource("all"); setFilterAssigned("all"); setSearchQuery(""); setFilterNoTask(false); setFilterOverdue(false); setFilterTag("all"); setFilterMyDay(false); }}
             className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted"
           >
             <X className="h-3 w-3" />
@@ -339,9 +435,15 @@ export function LeadsPage() {
                         key={lead.id}
                         lead={lead}
                         isDragging={draggedId === lead.id}
+                        isSelected={selectedLeadIds.has(lead.id)}
                         onDragStart={() => setDraggedId(lead.id)}
                         onDragEnd={() => { setDraggedId(null); setHoverStage(null); }}
                         onClick={() => navigate(`/app/leads/${lead.id}`)}
+                        onToggleSelect={(id) => setSelectedLeadIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(id)) next.delete(id); else next.add(id);
+                          return next;
+                        })}
                       />
                     ))
                   )}
@@ -399,6 +501,25 @@ export function LeadsPage() {
         />
       )}
 
+      {/* CRM-129: Bulk assign modal */}
+      {showBulkAssign && (
+        <BulkAssignModal
+          count={selectedLeadIds.size}
+          onConfirm={async (assignedTo) => {
+            try {
+              const { updated } = await bulkAssignLeads(Array.from(selectedLeadIds), assignedTo);
+              setToast({ kind: "success", message: `${updated} lead-uri reasignate` });
+              setSelectedLeadIds(new Set());
+              setShowBulkAssign(false);
+              void fetchAll();
+            } catch {
+              setToast({ kind: "error", message: "Reasignarea a eșuat" });
+            }
+          }}
+          onCancel={() => setShowBulkAssign(false)}
+        />
+      )}
+
       {toast && (
         <div
           role="status"
@@ -421,26 +542,45 @@ export function LeadsPage() {
 interface KanbanCardProps {
   lead: Lead;
   isDragging: boolean;
+  isSelected: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
   onClick: () => void;
+  onToggleSelect: (id: string) => void;
 }
 
-function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: KanbanCardProps) {
+function KanbanCard({ lead, isDragging, isSelected, onDragStart, onDragEnd, onClick, onToggleSelect }: KanbanCardProps) {
   return (
-    <button
-      type="button"
-      draggable
-      onDragStart={(e) => { onDragStart(); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", lead.id); }}
-      onDragEnd={onDragEnd}
-      onClick={onClick}
-      className={cn(
-        "text-left rounded-lg border border-border bg-card p-2.5 cursor-move shadow-sm transition-all",
-        "hover:shadow-md hover:-translate-y-0.5",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        isDragging && "opacity-50"
-      )}
-    >
+    <div className="relative group">
+      {/* CRM-129: Checkbox for multi-select (visible on hover or when selected) */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onToggleSelect(lead.id); }}
+        aria-label={isSelected ? "Deselectează cardul" : "Selectează cardul"}
+        aria-pressed={isSelected}
+        className={cn(
+          "absolute top-1.5 left-1.5 z-10 flex h-4 w-4 items-center justify-center rounded border transition-all",
+          isSelected
+            ? "border-primary bg-primary text-primary-foreground opacity-100"
+            : "border-border bg-card opacity-0 group-hover:opacity-100"
+        )}
+      >
+        {isSelected && <CheckSquare className="h-3 w-3" aria-hidden="true" />}
+      </button>
+      <button
+        type="button"
+        draggable
+        onDragStart={(e) => { onDragStart(); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", lead.id); }}
+        onDragEnd={onDragEnd}
+        onClick={onClick}
+        className={cn(
+          "w-full text-left rounded-lg border bg-card p-2.5 cursor-move shadow-sm transition-all",
+          "hover:shadow-md hover:-translate-y-0.5",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          isDragging && "opacity-50",
+          isSelected ? "border-primary ring-1 ring-primary/40" : "border-border"
+        )}
+      >
       {/* CRM-114: Use dealName as title if set */}
       <p className="text-xs font-semibold truncate">{lead.dealName ?? lead.fullName}</p>
       {/* CRM-114: Company under name */}
@@ -504,7 +644,66 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
           Convertit
         </div>
       )}
-    </button>
+      </button>
+    </div>
+  );
+}
+
+// ─── Bulk Assign Modal ────────────────────────────────────────────────────────
+
+interface BulkAssignModalProps {
+  count: number;
+  onConfirm: (assignedTo: string | null) => void;
+  onCancel: () => void;
+}
+
+function BulkAssignModal({ count, onConfirm, onCancel }: BulkAssignModalProps) {
+  const [assignedTo, setAssignedTo] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleConfirm = async () => {
+    setSubmitting(true);
+    await onConfirm(assignedTo.trim() || null);
+    setSubmitting(false);
+  };
+
+  return (
+    <Modal title={`Reasignează ${count} lead-uri`} onClose={onCancel}>
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Introdu ID-ul utilizatorului care va prelua cele {count} lead-uri selectate. Lasă gol pentru a elimina responsabilul.
+        </p>
+        <div>
+          <label htmlFor="bulk-assign-user" className="block text-sm font-semibold mb-1.5">
+            UUID responsabil nou
+          </label>
+          <input
+            id="bulk-assign-user"
+            type="text"
+            value={assignedTo}
+            onChange={(e) => setAssignedTo(e.target.value)}
+            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (opțional)"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Lasă gol → elimină responsabilul de la toate lead-urile selectate.
+          </p>
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onCancel} className="rounded-md border border-border px-4 py-2 text-sm font-semibold hover:bg-muted">
+            Anulează
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => void handleConfirm()}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : `Reasignează ${count}`}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
