@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "SCHED-503",
-  "last_completed": "SCHED-502",
-  "iterations": 62,
-  "last_run_at": "2026-05-30T10:18:00Z",
-  "milestone_status": "M1+M2+M3 landing + MVP-001..008 + CRM-101..116 (Faze A-F) + COMM-201..205 + REP-301..304 + HR-401..404 + SCHED-501..502 complete. CRM Faza I active (CRM-129..131 pending). SCHED-503/504 also pending.",
+  "current_item": "CRM-131",
+  "last_completed": "CRM-130",
+  "iterations": 65,
+  "last_run_at": "2026-05-30T16:52:00Z",
+  "milestone_status": "CRM-101..116 (Faze A-F) all done. CRM Faza I: CRM-129 done (PR#84), CRM-130 done (PR#85), CRM-131 pending. SCHED-503/504 also pending.",
   "active_milestone": "CRM",
   "items": {
     "M1-001": {
@@ -727,22 +727,28 @@
       "depends_on": ["SCHED-501"]
     },
     "CRM-129": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-129-tag-filter-bulk-assign.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-115", "CRM-116"]
+      "depends_on": ["CRM-115", "CRM-116"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/84",
+      "branch": "feat/CRM-129-tag-filter-bulk-assign",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-130": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-130-keyboard-shortcuts-wip.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-129"]
+      "depends_on": ["CRM-129"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/85",
+      "branch": "feat/CRM-130-keyboard-shortcuts-wip",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-131": {
       "status": "pending",
