@@ -137,6 +137,18 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-116-3** Given task open mâine, Then card arată data, nu badge roșu.
 - **T-CRM-116-4** Given filtru „fără task", Then se afișează doar leadurile fără task open.
 
+## CRM-117 — List view {#crm-117}
+- **T-CRM-117-1** `[blocant]` Given `/app/leads?view=list`, Then se afișează leadurile în tabel cu coloanele: Nume, Stadiu, Sursă, Responsabil, Valoare, Data.
+- **T-CRM-117-2** Given click pe un rând, Then navigează la `/app/leads/:id`.
+- **T-CRM-117-3** Given sortare pe coloana „Valoare", Then leadurile sunt ordonate descrescător.
+
+## CRM-119 — Căutare globală + Vizualizări salvate {#crm-119}
+- **T-CRM-119-1** `[blocant]` Given filtre active (sursă=Facebook), When apăs „Salvează filtrul" și introduc un nume, Then vizualizarea apare în dropdown și o pot reactiva cu un click.
+- **T-CRM-119-2** `[blocant]` Given o vizualizare salvată, When apăs X lângă ea, Then e ștearsă și nu mai apare în dropdown.
+- **T-CRM-119-3** `[blocant]` Given search „ACME", Then filtrarea returnează leaduri cu „ACME" în `company` sau `dealName` sau `interestCourse`, nu doar `fullName`/`phone`.
+- **T-CRM-119-4** `[blocant]` Given `GET /api/saved-views` autenticat, Then răspuns 200 cu `{ views: [] }` (sau lista).
+- **T-CRM-119-5** Multi-tenant: vizualizările tenantului A nu sunt vizibile din tenantul B.
+
 ---
 
 ## Scenarii transversale (rulate la fiecare item)

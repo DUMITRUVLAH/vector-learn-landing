@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "CRM-122",
-  "iterations": 68,
+  "last_completed": "CRM-119",
+  "iterations": 69,
   "last_run_at": "2026-05-30T14:15:00Z",
   "milestone_status": "M1+M2+M3 landing + MVP-001..008 + CRM-101..121 + COMM-201..205 + REP-301..304 + HR-401..404 + SCHED-501..504 complete. CRM-118 (PR#66) + CRM-124 (PR#67) + CRM-122 (PR#68) done. CRM Faza G+H active (CRM-119..128 pending minus 118/122/124).",
   "active_milestone": "CRM",
@@ -986,15 +986,22 @@
       }
     },
     "CRM-119": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-119-search-saved-views.md",
       "milestone": "CRM",
       "phase": "G",
       "depends_on": [
         "CRM-117"
-      ]
+      ],
+      "branch": "feat/CRM-119-search-saved-views",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-123": {
       "status": "pending",
