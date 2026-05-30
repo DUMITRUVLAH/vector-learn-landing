@@ -1,7 +1,6 @@
 import "dotenv/config";
 import path from "node:path";
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
+import { createRequire } from "node:module";
 import postgres from "postgres";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -10,14 +9,15 @@ import { resolveDatabaseUrl } from "./env";
 
 /**
  * Dual-mode DB client:
- *  - If DATABASE_URL is set  → managed Postgres (Supabase). Production / Vercel-ready.
- *  - Otherwise               → embedded PGlite on disk (zero-config local dev).
+ *  - If a Postgres URL is set → managed Postgres (Supabase). Production / Vercel-ready.
+ *  - Otherwise                → embedded PGlite on disk (zero-config local dev).
  *
- * The exported `db` keeps one stable type so all routes type-check identically.
- * Use `closeDb()` in scripts instead of touching the underlying client.
+ * PGlite (WASM) is loaded LAZILY (require, only in the local branch) so it is never
+ * evaluated in Vercel's serverless runtime — importing it there crashes the function
+ * (FUNCTION_INVOCATION_FAILED). The exported `db` keeps one stable type so all routes
+ * type-check identically. Use `closeDb()` in scripts instead of touching the client.
  */
-// On Vercel serverless → use the pooled (:6543) connection (many short-lived
-// invocations need pgBouncer). Locally → prefer the direct (:5432) connection,
+// On Vercel serverless → pooled (:6543) connection (pgBouncer). Locally → direct (:5432),
 // which is also what migrations/DDL use.
 const onVercel = !!process.env.VERCEL;
 const databaseUrl = resolveDatabaseUrl(!onVercel);
@@ -34,6 +34,11 @@ function createConnection(): {
       closeDb: () => client.end(),
     };
   }
+
+  // Local-only fallback. Lazy require keeps PGlite out of the serverless code path.
+  const req = createRequire(import.meta.url);
+  const { PGlite } = req("@electric-sql/pglite") as typeof import("@electric-sql/pglite");
+  const { drizzle: drizzlePglite } = req("drizzle-orm/pglite") as typeof import("drizzle-orm/pglite");
 
   const dbPath = process.env.DATABASE_PATH ?? path.resolve(process.cwd(), ".pglite");
   const pglite = new PGlite(dbPath);
