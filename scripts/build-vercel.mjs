@@ -1,10 +1,14 @@
 /**
  * Vercel build via the Build Output API (v3).
  *
- * Vercel's default @vercel/node builder transpiles api/index.ts without bundling, so the
- * extensionless ESM imports (../server/app, ./routes/*, …) fail at runtime with
- * ERR_MODULE_NOT_FOUND. We instead esbuild-bundle the whole API into ONE self-contained
- * file, so there are no runtime relative-import resolutions at all.
+ * Vercel's default @vercel/node builder transpiles the API entry without bundling, so the
+ * extensionless ESM imports (./app, ./routes/*, …) fail at runtime with ERR_MODULE_NOT_FOUND.
+ * We instead esbuild-bundle the whole API into ONE self-contained file, so there are no
+ * runtime relative-import resolutions at all.
+ *
+ * The entry lives at server/vercel-entry.ts (NOT a root api/ folder): a root api/ directory
+ * makes Vercel auto-build it with @vercel/node and override this Build Output, reintroducing
+ * the ERR_MODULE_NOT_FOUND. Keeping the entry in server/ leaves this script the sole builder.
  *
  * Run AFTER `vite build` (frontend → dist/). Produces .vercel/output/ which Vercel deploys.
  */
@@ -23,7 +27,7 @@ cpSync("dist", `${OUT}/static`, { recursive: true });
 const FN = `${OUT}/functions/api/index.func`;
 mkdirSync(FN, { recursive: true });
 await build({
-  entryPoints: ["api/index.ts"],
+  entryPoints: ["server/vercel-entry.ts"],
   bundle: true,
   platform: "node",
   format: "esm",

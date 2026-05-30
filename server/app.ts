@@ -21,8 +21,8 @@ import { tagRoutes } from "./routes/tags";
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
  * static-file serving. Shared by:
- *   - server/index.ts  → local single-port Node server (adds static + serve()).
- *   - api/index.ts      → Vercel serverless function (handle(app)).
+ *   - server/index.ts        → local single-port Node server (adds static + serve()).
+ *   - server/vercel-entry.ts → Vercel serverless function (bundled by build-vercel.mjs).
  */
 export const app = new Hono();
 
