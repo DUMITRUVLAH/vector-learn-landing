@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "BRANCH-701",
-  "iterations": 84,
-  "last_run_at": "2026-05-30T17:00:00Z",
-  "milestone_status": "M1+M2+M3+MVP+CRM+COMM+REP+HR+SCHED+FIN ALL COMPLETE. BRANCH module started: BRANCH-701..704 pending.",
+  "last_completed": "BRANCH-704",
+  "iterations": 87,
+  "last_run_at": "2026-05-30T18:30:00Z",
+  "milestone_status": "M1+M2+M3+MVP+CRM+COMM+REP+HR+SCHED+FIN+BRANCH ALL COMPLETE. BRANCH module: 701-704 all done.",
   "active_milestone": "BRANCH",
   "items": {
     "M1-001": {
@@ -1197,22 +1197,38 @@
       }
     },
     "BRANCH-703": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BRANCH-703-scoped-roles.md",
       "milestone": "BRANCH",
       "phase": "3",
-      "depends_on": ["BRANCH-701", "BRANCH-702"]
+      "depends_on": ["BRANCH-701", "BRANCH-702"],
+      "branch": "feat/BRANCH-703-scoped-roles",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/82",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "BRANCH-704": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BRANCH-704-reports.md",
       "milestone": "BRANCH",
       "phase": "4",
-      "depends_on": ["BRANCH-702", "BRANCH-703"]
+      "depends_on": ["BRANCH-702", "BRANCH-703"],
+      "branch": "feat/BRANCH-704-branch-reports",
+      "pr": null,
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     }
   }
 }
