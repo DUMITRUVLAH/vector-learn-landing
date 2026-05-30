@@ -66,6 +66,34 @@ doar scope-ul item-ului. Așa nimic nu se pierde și nimic nu umflă PR-ul curen
 | `CRM-111` | Conversie → student cu legătură familie (plătitor↔elevi) + reasignare + scor | [CRM-111](../specs/CRM-111-convert-family.md) | §6.7, §2.2 | CRM-106 |
 | `CRM-112` | Rapoarte: funnel conversie + lost-reason + ROAS per campanie | [CRM-112](../specs/CRM-112-analytics.md) | §2.6 | CRM-111 |
 
+## Faza G — Scală & UX (de la „funcțional" la „ready-to-use")
+
+> Fazele A–F au construit toate feature-urile (paritate Kommo). Faza G+H închid golul dintre
+> „are toate funcțiile" și „o academie reală îl folosește 8h/zi, de pe telefon, fără să se enerveze".
+
+| Item | Titlu | Spec | CORE ref | Depinde de |
+|---|---|---|---|---|
+| `CRM-117` | Vedere Listă/Tabel comutabilă (sortare, coloane, paginare) — kanban moare la scală | [CRM-117](../specs/CRM-117-list-view.md) | §5 | CRM-105, CRM-113 |
+| `CRM-120` | Dashboard „Azi" per vânzător (task scadent + leaduri noi + Next Best Action) | [CRM-120](../specs/CRM-120-today-dashboard.md) | §2.3 | CRM-107, CRM-111 |
+| `CRM-118` | Bulk-select + acțiuni în masă (reasignează/stage/tag/șterge N leaduri) | [CRM-118](../specs/CRM-118-bulk-actions.md) | §6.1, §9 | CRM-117 |
+| `CRM-124` | SLA timp de răspuns + lead-rot escalation (leaduri uitate ies în „Atenție") | [CRM-124](../specs/CRM-124-sla-lead-rot.md) | §11.4, §2.2 | CRM-116, CRM-120 |
+| `CRM-119` | Căutare globală ⌘K + salvare vizualizări filtrate | [CRM-119](../specs/CRM-119-search-saved-views.md) | §5.1 | CRM-117 |
+| `CRM-125` | Prognoză venit ponderată (Σ valoare × probabilitate stadiu) | [CRM-125](../specs/CRM-125-weighted-forecast.md) | §11.1, §2.6 | CRM-113, CRM-112 |
+
+## Faza H — Mobile & Acțiune (folosit pe teren, ghidează, nu doar stochează)
+
+| Item | Titlu | Spec | CORE ref | Depinde de |
+|---|---|---|---|---|
+| `CRM-121` | Vedere mobilă dedicată (listă + swipe: sună/WhatsApp/mută stadiu) | [CRM-121](../specs/CRM-121-mobile-view.md) | §5, §6.1 | CRM-117, CRM-109 |
+| `CRM-122` | Quick-add mobil în 3 atingeri + click-to-call nativ + dedup live | [CRM-122](../specs/CRM-122-quick-add-mobile.md) | §8.2, §8.8 | CRM-121, CRM-102 |
+| `CRM-123` | Centru notificări in-app (clopoțel) — lead alocat / task scadent / mențiune | [CRM-123](../specs/CRM-123-notifications.md) | §2.5, §6.1 | CRM-107, CRM-111 |
+| `CRM-126` | Secvențe follow-up (cadence) — pas 1/2/3 auto, peste motorul CRM-110 | [CRM-126](../specs/CRM-126-followup-cadence.md) | §2.5 | CRM-110, CRM-108 |
+| `CRM-127` | Undo (mutare/ștergere) + audit log per lead vizibil în cartonaș | [CRM-127](../specs/CRM-127-undo-audit.md) | §5.3, §6.1, §10 | CRM-106 |
+| `CRM-128` | Empty states + onboarding (primul login nu e ecran gol) | [CRM-128](../specs/CRM-128-empty-states-onboarding.md) | §5, §8 | CRM-117, CRM-120 |
+
+**Ordinea de build Faza G+H (impact/efort):**
+`CRM-117 → 120 → 121 → 118 → 124 → 122 → 119 → 123 → 125 → 126 → 127 → 128`
+
 ---
 
 ## Diagrama dependențelor
