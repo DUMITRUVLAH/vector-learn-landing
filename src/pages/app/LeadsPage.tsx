@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock } from "lucide-react";
+import { MobileLeadList } from "@/components/crm/MobileLeadList";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -296,10 +297,39 @@ export function LeadsPage() {
       ) : error ? (
         <div className="py-16 text-center text-sm text-destructive">{error}</div>
       ) : (
-        <div
-          className="grid gap-3 min-h-[500px] overflow-x-auto"
-          style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(200px, 1fr))` }}
-        >
+        <>
+          {/* CRM-121: Mobile list — hidden on lg+, shown on mobile */}
+          <div className="lg:hidden">
+            <MobileLeadList
+              leads={Object.values(grouped).flat().filter((lead) => {
+                if (filterSource !== "all" && lead.source !== filterSource) return false;
+                if (filterAssigned !== "all" && lead.assignedTo !== filterAssigned) return false;
+                if (searchQuery.trim()) {
+                  const q = searchQuery.toLowerCase().trim();
+                  const phoneQ = q.replace(/\D/g, "");
+                  const nameMatch = lead.fullName.toLowerCase().includes(q);
+                  const phoneMatch = phoneQ.length > 0 && (lead.phone ?? "").replace(/\D/g, "").includes(phoneQ);
+                  if (!nameMatch && !phoneMatch) return false;
+                }
+                if (filterNoTask && lead.nextTask !== null && lead.nextTask !== undefined) return false;
+                if (filterOverdue) {
+                  const isOverdue = lead.nextTask?.dueAt != null && new Date(lead.nextTask.dueAt) < new Date();
+                  if (!isOverdue) return false;
+                }
+                return true;
+              })}
+              stages={stages}
+              onTap={(id) => navigate(`/app/leads/${id}`)}
+              onRefresh={() => void fetchAll()}
+              onError={(m) => setToast({ kind: "error", message: m })}
+            />
+          </div>
+
+          {/* Kanban — hidden on mobile (< lg), shown on desktop */}
+          <div
+            className="hidden lg:grid gap-3 min-h-[500px] overflow-x-auto"
+            style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(200px, 1fr))` }}
+          >
           {stages.map((stage) => {
             const leadsHere = getFilteredLeads(stage.key);
             const isHover = hoverStage === stage.key && draggedId !== null;
@@ -349,7 +379,8 @@ export function LeadsPage() {
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Modals */}
