@@ -147,7 +147,7 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
 | 1 | `SCHED-501` | Săli de clasă: rooms table + conflict detection + dropdown | 1 | done ✅ | [specs/SCHED-501-rooms.md](specs/SCHED-501-rooms.md) · [PR #57](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/57) |
-| 2 | `SCHED-502` | Lecții recurente: pattern săptămânal + excepții | 2 | pending | [specs/SCHED-502-recurring.md](specs/SCHED-502-recurring.md) |
+| 2 | `SCHED-502` | Lecții recurente: pattern săptămânal + excepții | 2 | done ✅ | [specs/SCHED-502-recurring.md](specs/SCHED-502-recurring.md) · [PR #58](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/58) |
 | 3 | `SCHED-503` | Prezență: marcare per lecție + raport prezență % | 3 | pending | [specs/SCHED-503-attendance.md](specs/SCHED-503-attendance.md) |
 | 4 | `SCHED-504` | Export iCal: calendar personalizat profesor/elev | 4 | pending | [specs/SCHED-504-ical.md](specs/SCHED-504-ical.md) |
 
