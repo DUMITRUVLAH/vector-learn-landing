@@ -496,3 +496,37 @@ export function bulkAction(input: {
     body: JSON.stringify(input),
   });
 }
+
+// ─── CRM-133: Duplicate detection banner ─────────────────────────────────────
+
+/**
+ * GET /api/leads/dedup-banner?phone=&email=&excludeId=
+ * Returns potential duplicate leads for the given phone/email,
+ * excluding the lead with `excludeId`.
+ */
+export function getDedupBanner(params: {
+  phone?: string | null;
+  email?: string | null;
+  excludeId?: string;
+}): Promise<{ duplicates: Lead[] }> {
+  const query = new URLSearchParams();
+  if (params.phone) query.set("phone", params.phone);
+  if (params.email) query.set("email", params.email);
+  if (params.excludeId) query.set("excludeId", params.excludeId);
+  return api<{ duplicates: Lead[] }>(`/api/leads/dedup-banner?${query.toString()}`);
+}
+
+/**
+ * POST /api/leads/:id/merge
+ * Merges two leads. Copies interactions + tasks from the archived lead to the kept one.
+ * The archived lead is marked stage=lost, lostReason="merged".
+ */
+export function mergeLead(
+  leadId: string,
+  input: { mergeWithId: string; keepId: string }
+): Promise<{ merged: boolean; keptLead: Lead }> {
+  return api<{ merged: boolean; keptLead: Lead }>(`/api/leads/${leadId}/merge`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}

@@ -20,6 +20,8 @@ vi.mock("@/lib/api/leads", () => ({
   convertLead: vi.fn(),
   assignLead: vi.fn(),
   scoreLead: vi.fn(),
+  getDedupBanner: vi.fn(),
+  mergeLead: vi.fn(),
 }));
 
 // ─── Fixtures ──────────────────────────────────────────────────────────────────

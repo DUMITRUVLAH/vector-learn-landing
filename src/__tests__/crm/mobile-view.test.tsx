@@ -14,6 +14,8 @@ vi.mock("@/lib/api/leads", () => ({
   listInteractions: vi.fn(),
   addInteraction: vi.fn(),
   checkDuplicate: vi.fn(),
+  getDedupBanner: vi.fn(),
+  mergeLead: vi.fn(),
 }));
 
 vi.mock("@/lib/api/pipeline", () => ({

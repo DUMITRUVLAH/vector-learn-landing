@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, ne, or } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, leadTags } from "../db/schema";
 import { renderTemplate } from "../db/schema/templates";
@@ -1423,5 +1423,116 @@ leadRoutes.post("/undo/:token", async (c) => {
   }
 
   return c.json({ restored: true, leadIds: restoredIds });
+});
+
+// ─── CRM-133: Duplicate detection banner — GET /dedup-banner ─────────────────
+// Returns potential duplicates for the given phone/email, excluding the current lead.
+// Used by LeadCardPage on mount to show a banner if duplicates exist.
+
+const dedupBannerSchema = z.object({
+  phone: z.string().optional(),
+  email: z.string().optional(),
+  excludeId: z.string().uuid().optional(),
+});
+
+leadRoutes.get("/dedup-banner", zValidator("query", dedupBannerSchema), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const { phone, email, excludeId } = c.req.valid("query");
+
+  const phoneNormalized = normalizePhone(phone ?? null);
+  const emailNormalized = normalizeEmail(email ?? null);
+
+  if (!phoneNormalized && !emailNormalized) {
+    return c.json({ duplicates: [] });
+  }
+
+  const conditions = [eq(leads.tenantId, tenantId)];
+  const orConds: ReturnType<typeof eq>[] = [];
+  if (phoneNormalized) orConds.push(eq(leads.phoneNormalized, phoneNormalized));
+  if (emailNormalized) orConds.push(eq(leads.emailNormalized, emailNormalized));
+  if (orConds.length > 0) conditions.push(or(...orConds)!);
+  if (excludeId) conditions.push(ne(leads.id, excludeId));
+
+  // Exclude already-converted leads and "lost" leads with mergedReason
+  const found = await db.query.leads.findMany({
+    where: and(...conditions),
+    limit: 5,
+    orderBy: [desc(leads.createdAt)],
+  });
+
+  // Filter out leads already converted
+  const duplicates = found.filter((l) => !l.convertedToStudentId);
+
+  return c.json({ duplicates });
+});
+
+// ─── CRM-133: Merge leads — POST /:id/merge ────────────────────────────────
+// Merges two leads: copies interactions + tasks from the source into the target,
+// then marks the source as lost (stage=lost, lostReason="merged").
+// keepId = the lead to keep; the other lead is archived (marked lost).
+
+const mergeLeadSchema = z.object({
+  mergeWithId: z.string().uuid(),
+  keepId: z.string().uuid(),
+});
+
+leadRoutes.post("/:id/merge", zValidator("json", mergeLeadSchema), async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+  const { mergeWithId, keepId } = c.req.valid("json");
+
+  // Validate that both leads belong to this tenant
+  const leadA = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
+  });
+  const leadB = await db.query.leads.findFirst({
+    where: and(eq(leads.id, mergeWithId), eq(leads.tenantId, tenantId)),
+  });
+
+  if (!leadA) return c.json({ error: "lead_not_found" }, 404);
+  if (!leadB) return c.json({ error: "merge_target_not_found" }, 404);
+
+  // Validate keepId is one of the two leads
+  if (keepId !== id && keepId !== mergeWithId) {
+    return c.json({ error: "keepId_must_be_one_of_the_two_leads" }, 400);
+  }
+
+  const archiveId = keepId === id ? mergeWithId : id;
+
+  // Copy interactions from archived lead to kept lead (update leadId)
+  await db
+    .update(leadInteractions)
+    .set({ leadId: keepId })
+    .where(and(eq(leadInteractions.leadId, archiveId), eq(leadInteractions.tenantId, tenantId)));
+
+  // Copy tasks from archived lead to kept lead
+  await db
+    .update(leadTasks)
+    .set({ leadId: keepId })
+    .where(and(eq(leadTasks.leadId, archiveId), eq(leadTasks.tenantId, tenantId)));
+
+  // Log merge event on the kept lead
+  await db.insert(leadInteractions).values({
+    tenantId,
+    leadId: keepId,
+    type: "system",
+    direction: "internal",
+    body: `Lead fuzionat cu ${archiveId} de utilizatorul ${userId}. Lead arhivat: ${archiveId}.`,
+    userId,
+  });
+
+  // Archive the source lead (mark as lost with lostReason "merged")
+  await db
+    .update(leads)
+    .set({ stage: "lost", lostReason: "merged", updatedAt: new Date() })
+    .where(and(eq(leads.id, archiveId), eq(leads.tenantId, tenantId)));
+
+  // Return the kept lead
+  const keptLead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, keepId), eq(leads.tenantId, tenantId)),
+  });
+
+  return c.json({ merged: true, keptLead });
 });
 

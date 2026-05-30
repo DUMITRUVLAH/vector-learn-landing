@@ -37,6 +37,8 @@ vi.mock("@/lib/api/pipeline", () => ({
   createPipelineStage: vi.fn(),
   updatePipelineStage: vi.fn(),
   deletePipelineStage: vi.fn(),
+  getDedupBanner: vi.fn(),
+  mergeLead: vi.fn(),
 }));
 
 vi.mock("@/hooks/useSession", () => ({

@@ -34,6 +34,8 @@ vi.mock("@/lib/api/leads", () => ({
   listFieldValues: vi.fn(),
   upsertFieldValue: vi.fn(),
   listCustomFields: vi.fn(),
+  getDedupBanner: vi.fn(),
+  mergeLead: vi.fn(),
 }));
 
 vi.mock("@/lib/api/pipeline", () => ({

@@ -28,6 +28,8 @@ vi.mock("@/lib/api/leads", () => ({
   fetchUsers: vi.fn().mockResolvedValue([]),
   addInteraction: vi.fn(),
   convertLead: vi.fn(),
+  getDedupBanner: vi.fn(),
+  mergeLead: vi.fn(),
 }));
 
 vi.mock("@/lib/api/crm", () => ({

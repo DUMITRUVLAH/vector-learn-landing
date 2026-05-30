@@ -19,6 +19,8 @@ import type { Lead, LeadInteraction } from "@/lib/api/leads";
 vi.mock("@/lib/api/leads", () => ({
   sendMessage: vi.fn(),
   logCall: vi.fn(),
+  getDedupBanner: vi.fn(),
+  mergeLead: vi.fn(),
 }));
 
 vi.mock("@/lib/api/templates", async (importOriginal) => {
