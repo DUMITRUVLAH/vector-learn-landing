@@ -2,11 +2,20 @@ import "dotenv/config";
 import { db, closeDb } from "./client";
 import { tenants, users, students, teachers, courses, lessons } from "./schema";
 import { eq } from "drizzle-orm";
+import { hashPassword } from "../auth/password";
 
 const DEMO_SLUG = "demo-lingua-school";
+const DEMO_PASSWORD = "demo123456";
 
 async function seed() {
   console.log("🌱 Seeding demo tenant…");
+
+  // Real bcrypt hash so seeded accounts can log in on EVERY environment —
+  // local, preview, and Vercel production. Previously these rows stored a
+  // "$placeholder$" sentinel that only the dev-only /__dev__/setup-demo-password
+  // endpoint could fix; that endpoint is blocked in production, so prod logins
+  // failed with invalid_credentials. Hashing here removes that prod dependency.
+  const demoPasswordHash = await hashPassword(DEMO_PASSWORD);
 
   const existing = await db.query.tenants.findFirst({
     where: eq(tenants.slug, DEMO_SLUG),
@@ -33,7 +42,7 @@ async function seed() {
     .values({
       tenantId: tenant.id,
       email: "admin@demo.vectorlearn.io",
-      passwordHash: "$placeholder$", // replaced by real hash in MVP-003
+      passwordHash: demoPasswordHash,
       name: "Andreea Mitran",
       role: "admin",
     })
@@ -42,9 +51,9 @@ async function seed() {
   const teacherUsers = await db
     .insert(users)
     .values([
-      { tenantId: tenant.id, email: "ana@demo.vectorlearn.io", passwordHash: "$placeholder$", name: "Ana Marinescu", role: "teacher" },
-      { tenantId: tenant.id, email: "radu@demo.vectorlearn.io", passwordHash: "$placeholder$", name: "Radu Constantin", role: "teacher" },
-      { tenantId: tenant.id, email: "elena@demo.vectorlearn.io", passwordHash: "$placeholder$", name: "Elena Vasilescu", role: "teacher" },
+      { tenantId: tenant.id, email: "ana@demo.vectorlearn.io", passwordHash: demoPasswordHash, name: "Ana Marinescu", role: "teacher" },
+      { tenantId: tenant.id, email: "radu@demo.vectorlearn.io", passwordHash: demoPasswordHash, name: "Radu Constantin", role: "teacher" },
+      { tenantId: tenant.id, email: "elena@demo.vectorlearn.io", passwordHash: demoPasswordHash, name: "Elena Vasilescu", role: "teacher" },
     ])
     .returning();
 
@@ -109,8 +118,9 @@ async function seed() {
     .returning();
 
   console.log(`✅ ${lessonRows.length} lessons created`);
-  console.log(`\n📌 Demo credentials (after MVP-003 auth):`);
+  console.log(`\n📌 Demo credentials:`);
   console.log(`   email: ${admin.email}`);
+  console.log(`   password: ${DEMO_PASSWORD}`);
   console.log(`   tenant slug: ${tenant.slug}`);
   console.log(`   tenant id: ${tenant.id}`);
 }
