@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Loader2, Plus, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2 } from "lucide-react";
+import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -14,6 +14,7 @@ import {
   type Teacher,
   type Course,
 } from "@/lib/api/lessons";
+import { listRooms, type Room } from "@/lib/api/rooms";
 import { cn } from "@/lib/utils";
 
 const DAYS = ["Luni", "Marți", "Miercuri", "Joi", "Vineri", "Sâmbătă", "Duminică"];
@@ -60,6 +61,7 @@ export function SchedulePage() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<
@@ -85,14 +87,16 @@ export function SchedulePage() {
     setLoading(true);
     setError(null);
     try {
-      const [lr, tr, cr] = await Promise.all([
+      const [lr, tr, cr, rr] = await Promise.all([
         listLessons(weekStart.toISOString(), weekEnd.toISOString()),
         listTeachers(),
         listCourses(),
+        listRooms(),
       ]);
       setLessons(lr.items);
       setTeachers(tr.items);
       setCourses(cr.items);
+      setRooms(rr.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare");
     } finally {
@@ -245,6 +249,7 @@ export function SchedulePage() {
           hour={modal.hour}
           teachers={teachers}
           courses={courses}
+          rooms={rooms}
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null);
@@ -291,6 +296,7 @@ function CreateLessonModal({
   hour,
   teachers,
   courses,
+  rooms,
   onClose,
   onSaved,
   onError,
@@ -300,6 +306,7 @@ function CreateLessonModal({
   hour: number;
   teachers: Teacher[];
   courses: Course[];
+  rooms: Room[];
   onClose: () => void;
   onSaved: () => void;
   onError: (msg: string) => void;
@@ -312,6 +319,7 @@ function CreateLessonModal({
 
   const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
   const [teacherId, setTeacherId] = useState(teachers[0]?.id ?? "");
+  const [roomId, setRoomId] = useState("");
   const [date, setDate] = useState(formatDateInput(initialDate));
   const [time, setTime] = useState(`${String(hour).padStart(2, "0")}:00`);
   const [duration, setDuration] = useState(courses[0]?.durationMinutes ?? 60);
@@ -323,11 +331,13 @@ function CreateLessonModal({
     setSubmitting(true);
     const scheduledAt = new Date(`${date}T${time}:00`).toISOString();
     try {
-      await createLesson({ courseId, teacherId, scheduledAt, durationMinutes: duration });
+      await createLesson({ courseId, teacherId, scheduledAt, durationMinutes: duration, roomId: roomId || null });
       onSaved();
     } catch (err) {
       if (err instanceof ApiError && err.code === "teacher_double_booked") {
         onError("Profesorul este deja rezervat la această oră.");
+      } else if (err instanceof ApiError && err.code === "room_double_booked") {
+        onError("Sala este ocupată la această oră.");
       } else {
         onError("Nu pot salva lecția.");
       }
@@ -415,6 +425,23 @@ function CreateLessonModal({
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           />
         </div>
+        {rooms.length > 0 && (
+          <div>
+            <label htmlFor="m-room" className="block text-sm font-semibold mb-1.5">Sală (opțional)</label>
+            <select
+              id="m-room"
+              value={roomId}
+              onChange={(e) => setRoomId(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              aria-label="Selectează sală"
+            >
+              <option value="">— fără sală —</option>
+              {rooms.map((r) => (
+                <option key={r.id} value={r.id}>{r.name} (cap. {r.capacity})</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted">
             Anulează

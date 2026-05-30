@@ -17,6 +17,11 @@ import { templateRoutes } from "./routes/templates";
 import { automationRoutes } from "./routes/automations";
 import { analyticsRoutes } from "./routes/analytics";
 import { tagRoutes } from "./routes/tags";
+import { payrollRoutes } from "./routes/payroll";
+import { hrTeacherRoutes } from "./routes/hrTeachers";
+import { availabilityRoutes } from "./routes/availability";
+import { auditLogRoutes } from "./routes/auditLog";
+import { roomRoutes } from "./routes/rooms";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -54,6 +59,11 @@ app.route("/api/templates", templateRoutes);
 app.route("/api/automations", automationRoutes);
 app.route("/api/analytics", analyticsRoutes);
 app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
+app.route("/api/hr/payroll", payrollRoutes);
+app.route("/api/hr/teacher-stats", hrTeacherRoutes);
+app.route("/api/hr/teachers", availabilityRoutes);
+app.route("/api/hr/audit-log", auditLogRoutes);
+app.route("/api/rooms", roomRoutes);
 
 app.get("/api/health", async (c) => {
   try {
