@@ -17,8 +17,6 @@ import { resolveDatabaseUrl, isVercelRuntime } from "./env";
  * (FUNCTION_INVOCATION_FAILED). The exported `db` keeps one stable type so all routes
  * type-check identically. Use `closeDb()` in scripts instead of touching the client.
  */
-// On Vercel serverless → pooled (:6543) connection (pgBouncer). Locally → direct (:5432),
-// which is also what migrations/DDL use.
 // `isVercelRuntime` is snapshotted in env.ts BEFORE `.env.local` loads, so a `vercel env pull`
 // that wrote `VERCEL="1"` into `.env.local` does not make local dev think it is on Vercel.
 const onVercel = isVercelRuntime;
@@ -29,20 +27,31 @@ const onVercel = isVercelRuntime;
 // hangs every query and surfaces in the UI as `Unexpected token '<', "<!doctype "...`.
 // Off Vercel + DATABASE_PATH set ⇒ force PGlite, ignoring any leaked remote URL.
 const preferLocalPglite = !onVercel && !!process.env.DATABASE_PATH;
-const databaseUrl = preferLocalPglite ? undefined : resolveDatabaseUrl(!onVercel);
+
+// On Vercel serverless, prefer the SESSION pooler (`POSTGRES_URL_NON_POOLING`, :5432 on the
+// pooler host) over the TRANSACTION pooler (:6543). The transaction pooler hung every query:
+// the function connected (connect_timeout never fired) but findFirst() never returned, dying
+// at the 30s FUNCTION_INVOCATION_TIMEOUT. The session pooler supports full session features
+// (prepared statements, type introspection) and behaves like a normal Postgres connection,
+// which is what postgres.js + Drizzle expect. `resolveDatabaseUrl(true)` returns the
+// non-pooling URL (falling back to the pooled one if only that is set).
+const databaseUrl = preferLocalPglite
+  ? undefined
+  : resolveDatabaseUrl(onVercel ? true : !onVercel);
 
 function createConnection(): {
   db: PostgresJsDatabase<typeof schema>;
   closeDb: () => Promise<void>;
 } {
   if (databaseUrl) {
-    // `prepare: false` for the Supabase transaction pooler (pgBouncer). The single-connection +
-    // short-timeout options are SERVERLESS-ONLY — on the persistent local/container server `max:1`
-    // serializes requests into a deadlock, so local keeps a normal pool.
+    // Serverless uses the SESSION pooler (:5432) which supports prepared statements, so we do
+    // NOT pass prepare:false there. The single-connection + short-timeout options are
+    // SERVERLESS-ONLY — on the persistent local/container server `max:1` serializes requests
+    // into a deadlock, so local keeps a normal pool. SSL is carried by the URL's sslmode=require.
     const client = postgres(
       databaseUrl,
       onVercel
-        ? { prepare: false, ssl: "require", max: 1, connect_timeout: 10, idle_timeout: 20 }
+        ? { max: 1, connect_timeout: 10, idle_timeout: 20 }
         : { prepare: false }
     );
     return {
