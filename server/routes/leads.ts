@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, count, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families } from "../db/schema";
+import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, leadTags } from "../db/schema";
 import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
@@ -920,5 +920,150 @@ leadRoutes.delete("/:id", async (c) => {
   });
 
   return c.json({ deleted: true, anonymized: true });
+});
+
+// ─── CRM-118: Bulk-action endpoint ───────────────────────────────────────────
+const bulkActionSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+  action: z.enum(["stage", "assign", "tag", "delete"]),
+  payload: z.object({
+    stage: z.string().min(1).max(64).optional(),
+    lostReason: z.string().max(500).optional().nullable(),
+    assignedTo: z.string().uuid().optional().nullable(),
+    tag: z.string().min(1).max(100).optional(),
+  }).optional(),
+});
+
+leadRoutes.post("/bulk-action", zValidator("json", bulkActionSchema), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+  const { ids, action, payload } = c.req.valid("json");
+
+  // Fetch only leads that belong to this tenant
+  const ownedLeads = await db
+    .select({ id: leads.id, stage: leads.stage, gclid: leads.gclid })
+    .from(leads)
+    .where(and(eq(leads.tenantId, tenantId), inArray(leads.id, ids)));
+
+  const ownedIds = ownedLeads.map((l) => l.id);
+  const skipped = ids.length - ownedIds.length;
+
+  if (ownedIds.length === 0) {
+    return c.json({ processed: 0, failed: skipped, errors: ["No leads found for this tenant"] });
+  }
+
+  let processed = 0;
+  const errors: string[] = [];
+
+  if (action === "stage") {
+    const newStage = payload?.stage;
+    if (!newStage) return c.json({ error: "stage required" }, 400);
+
+    // Validate stage exists
+    const targetStage = await db.query.pipelineStages.findFirst({
+      where: and(eq(pipelineStages.tenantId, tenantId), eq(pipelineStages.key, newStage)),
+    });
+    const DEFAULT_KEYS = ["new", "contacted", "trial", "paid", "lost"];
+    const isLostStage = targetStage?.isLost ?? newStage === "lost";
+
+    if (isLostStage && !payload?.lostReason) {
+      return c.json({ error: "lost_reason_required" }, 400);
+    }
+
+    const patch: Record<string, unknown> = { stage: newStage, updatedAt: new Date() };
+    if (isLostStage) patch.lostReason = payload?.lostReason ?? null;
+
+    // Validate stage key
+    if (!targetStage && !DEFAULT_KEYS.includes(newStage)) {
+      return c.json({ error: "invalid_stage" }, 400);
+    }
+
+    await db.update(leads).set(patch).where(and(eq(leads.tenantId, tenantId), inArray(leads.id, ownedIds)));
+
+    // Audit interactions
+    const interactionRows = ownedLeads.map((l) => ({
+      tenantId,
+      leadId: l.id,
+      type: "system" as const,
+      direction: "internal" as const,
+      body: `Bulk: stadiu schimbat → ${newStage}${isLostStage && payload?.lostReason ? ` (${payload.lostReason})` : ""}`,
+      userId,
+    }));
+    if (interactionRows.length > 0) await db.insert(leadInteractions).values(interactionRows);
+    processed = ownedIds.length;
+
+  } else if (action === "assign") {
+    const assignedTo = payload?.assignedTo ?? null;
+    await db.update(leads).set({ assignedTo, updatedAt: new Date() }).where(and(eq(leads.tenantId, tenantId), inArray(leads.id, ownedIds)));
+
+    const interactionRows = ownedLeads.map((l) => ({
+      tenantId,
+      leadId: l.id,
+      type: "system" as const,
+      direction: "internal" as const,
+      body: assignedTo ? `Bulk: reasignat către ${assignedTo}` : "Bulk: responsabil eliminat",
+      userId,
+    }));
+    if (interactionRows.length > 0) await db.insert(leadInteractions).values(interactionRows);
+    processed = ownedIds.length;
+
+  } else if (action === "tag") {
+    const tag = payload?.tag?.trim();
+    if (!tag) return c.json({ error: "tag required" }, 400);
+
+    // Insert tags, ignore conflicts (tag already exists for that lead)
+    for (const leadId of ownedIds) {
+      try {
+        await db.insert(leadTags).values({ tenantId, leadId, tag }).onConflictDoNothing();
+        processed++;
+      } catch {
+        errors.push(`Could not add tag to lead ${leadId}`);
+      }
+    }
+
+    const interactionRows = ownedIds.map((leadId) => ({
+      tenantId,
+      leadId,
+      type: "system" as const,
+      direction: "internal" as const,
+      body: `Bulk: tag „${tag}" adăugat`,
+      userId,
+    }));
+    if (interactionRows.length > 0) await db.insert(leadInteractions).values(interactionRows);
+
+  } else if (action === "delete") {
+    // GDPR erasure — anonymize PII, keep audit trail
+    await db
+      .update(leads)
+      .set({
+        fullName: "[Șters GDPR]",
+        phone: null,
+        phoneNormalized: null,
+        email: null,
+        emailNormalized: null,
+        notes: null,
+        consentText: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(leads.tenantId, tenantId), inArray(leads.id, ownedIds)));
+
+    await db
+      .update(leadInteractions)
+      .set({ body: "[Șters GDPR]" })
+      .where(and(eq(leadInteractions.tenantId, tenantId), inArray(leadInteractions.leadId, ownedIds)));
+
+    const erasureRows = ownedIds.map((leadId) => ({
+      tenantId,
+      leadId,
+      type: "system" as const,
+      direction: "internal" as const,
+      body: `Date personale șterse în masă (GDPR) de utilizatorul ${userId}`,
+      userId,
+    }));
+    if (erasureRows.length > 0) await db.insert(leadInteractions).values(erasureRows);
+    processed = ownedIds.length;
+  }
+
+  return c.json({ processed, failed: skipped + (ownedIds.length - processed), errors: errors.length > 0 ? errors : undefined });
 });
 
