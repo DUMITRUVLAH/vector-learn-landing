@@ -11,6 +11,8 @@ export interface Student {
   birthDate: string | null;
   status: "active" | "trial" | "paused" | "archived";
   notes: string | null;
+  /** FIN-602: Outstanding debt in cents */
+  debtCents?: number;
   createdAt: string;
   updatedAt: string;
 }

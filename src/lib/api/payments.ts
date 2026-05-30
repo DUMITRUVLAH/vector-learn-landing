@@ -50,3 +50,11 @@ export function updatePaymentStatus(
     body: JSON.stringify({ status }),
   });
 }
+
+// FIN-602: Link a payment to an invoice
+export function linkPaymentToInvoice(paymentId: string, invoiceId: string): Promise<unknown> {
+  return api(`/api/payments/${paymentId}/link-invoice`, {
+    method: "PATCH",
+    body: JSON.stringify({ invoiceId }),
+  });
+}

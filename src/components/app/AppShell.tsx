@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3 } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, ListChecks, Shield, FileText } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { NotificationBell } from "@/components/app/NotificationBell";
 import { Link, useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
@@ -19,8 +20,11 @@ const NAV = [
   { label: "Orar", href: "/app/schedule", icon: Calendar },
   { label: "Profesori", href: "/app/teachers", icon: GraduationCap },
   { label: "Plăți", href: "/app/payments", icon: CreditCard },
+  { label: "Facturi", href: "/app/invoices", icon: FileText },
   { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
   { label: "Analytics", href: "/app/analytics/crm", icon: BarChart3 },
+  { label: "Cadences", href: "/app/cadences", icon: ListChecks },
+  { label: "Audit Log", href: "/app/audit-log", icon: Shield },
 ];
 
 export function AppShell({ children, pageTitle, pageDescription, actions }: AppShellProps) {
@@ -59,6 +63,8 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
                     .slice(0, 2)
                     .join("")}
                 </div>
+                {/* CRM-123: Notification bell */}
+                <NotificationBell />
                 <button
                   type="button"
                   onClick={handleLogout}

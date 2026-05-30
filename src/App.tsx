@@ -43,6 +43,9 @@ import { LeadCardPage } from "./pages/app/LeadCardPage";
 import { TemplatesPage } from "./pages/app/TemplatesPage";
 import { AutomationsPage } from "./pages/app/AutomationsPage";
 import { AnalyticsPage } from "./pages/app/AnalyticsPage";
+import { CadencesPage } from "./pages/app/CadencesPage";
+import { AuditLogPage } from "./pages/app/AuditLogPage";
+import { InvoicesPage } from "./pages/app/InvoicesPage";
 
 function HomePage() {
   return (
@@ -100,6 +103,9 @@ function Routes() {
   if (path.startsWith("/app/analytics/crm")) return <AnalyticsPage />;
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
+  if (path.startsWith("/app/cadences")) return <CadencesPage />;
+  if (path.startsWith("/app/audit-log")) return <AuditLogPage />;
+  if (path.startsWith("/app/invoices")) return <InvoicesPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   return <HomePage />;

@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { db, closeDb } from "./client";
-import { tenants, users, students, teachers, courses, lessons } from "./schema";
+import { tenants, users, students, teachers, courses, lessons, branches } from "./schema";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -37,6 +37,17 @@ async function seed() {
 
   console.log(`✅ Tenant created: ${tenant.name}`);
 
+  // BRANCH-701: Create default branch for the tenant
+  const [defaultBranch] = await db
+    .insert(branches)
+    .values({
+      tenantId: tenant.id,
+      name: "Sediul principal",
+      address: "Strada Exemplu 1, București",
+      status: "active",
+    })
+    .returning();
+
   const [admin] = await db
     .insert(users)
     .values({
@@ -65,6 +76,7 @@ async function seed() {
         userId: u.id,
         hourlyRateCents: [3500, 4500, 4000][i],
         commissionPct: [45, 50, 45][i],
+        branchId: defaultBranch.id, // BRANCH-701
       }))
     )
     .returning();
@@ -90,6 +102,7 @@ async function seed() {
         parentPhone: `+4072${String(2000000 + i).padStart(7, "0")}`,
         parentEmail: `parent.${i}@example.com`,
         status: i % 8 === 0 ? "trial" : i % 12 === 0 ? "paused" : "active",
+        branchId: defaultBranch.id, // BRANCH-701: assign to default branch
       }))
     )
     .returning();
@@ -99,9 +112,9 @@ async function seed() {
   const [engB2, pythonAv, pianMid] = await db
     .insert(courses)
     .values([
-      { tenantId: tenant.id, name: "Engleză B2", description: "Curs intermediar-avansat, pregătire Cambridge B2", level: "B2", defaultPriceCents: 28000, durationMinutes: 90 },
-      { tenantId: tenant.id, name: "Python avansat", description: "Web scraping, async, Django", level: "advanced", defaultPriceCents: 42000, durationMinutes: 120 },
-      { tenantId: tenant.id, name: "Pian — intermediar", description: "Grade 4-5 ABRSM", level: "intermediate", defaultPriceCents: 60000, durationMinutes: 60 },
+      { tenantId: tenant.id, name: "Engleză B2", description: "Curs intermediar-avansat, pregătire Cambridge B2", level: "B2", defaultPriceCents: 28000, durationMinutes: 90, branchId: defaultBranch.id },
+      { tenantId: tenant.id, name: "Python avansat", description: "Web scraping, async, Django", level: "advanced", defaultPriceCents: 42000, durationMinutes: 120, branchId: defaultBranch.id },
+      { tenantId: tenant.id, name: "Pian — intermediar", description: "Grade 4-5 ABRSM", level: "intermediate", defaultPriceCents: 60000, durationMinutes: 60, branchId: defaultBranch.id },
     ])
     .returning();
 
@@ -109,11 +122,11 @@ async function seed() {
   const lessonRows = await db
     .insert(lessons)
     .values([
-      { tenantId: tenant.id, courseId: engB2.id, teacherId: teacherRows[0].id, scheduledAt: new Date(now.getTime() + 24 * 3600 * 1000), durationMinutes: 90, status: "scheduled" },
-      { tenantId: tenant.id, courseId: pythonAv.id, teacherId: teacherRows[1].id, scheduledAt: new Date(now.getTime() + 48 * 3600 * 1000), durationMinutes: 120, status: "scheduled" },
-      { tenantId: tenant.id, courseId: pianMid.id, teacherId: teacherRows[2].id, scheduledAt: new Date(now.getTime() + 72 * 3600 * 1000), durationMinutes: 60, status: "scheduled" },
-      { tenantId: tenant.id, courseId: engB2.id, teacherId: teacherRows[0].id, scheduledAt: new Date(now.getTime() - 24 * 3600 * 1000), durationMinutes: 90, status: "completed" },
-      { tenantId: tenant.id, courseId: pythonAv.id, teacherId: teacherRows[1].id, scheduledAt: new Date(now.getTime() - 48 * 3600 * 1000), durationMinutes: 120, status: "completed" },
+      { tenantId: tenant.id, courseId: engB2.id, teacherId: teacherRows[0].id, scheduledAt: new Date(now.getTime() + 24 * 3600 * 1000), durationMinutes: 90, status: "scheduled", branchId: defaultBranch.id },
+      { tenantId: tenant.id, courseId: pythonAv.id, teacherId: teacherRows[1].id, scheduledAt: new Date(now.getTime() + 48 * 3600 * 1000), durationMinutes: 120, status: "scheduled", branchId: defaultBranch.id },
+      { tenantId: tenant.id, courseId: pianMid.id, teacherId: teacherRows[2].id, scheduledAt: new Date(now.getTime() + 72 * 3600 * 1000), durationMinutes: 60, status: "scheduled", branchId: defaultBranch.id },
+      { tenantId: tenant.id, courseId: engB2.id, teacherId: teacherRows[0].id, scheduledAt: new Date(now.getTime() - 24 * 3600 * 1000), durationMinutes: 90, status: "completed", branchId: defaultBranch.id },
+      { tenantId: tenant.id, courseId: pythonAv.id, teacherId: teacherRows[1].id, scheduledAt: new Date(now.getTime() - 48 * 3600 * 1000), durationMinutes: 120, status: "completed", branchId: defaultBranch.id },
     ])
     .returning();
 
