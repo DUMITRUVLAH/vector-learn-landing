@@ -19,3 +19,4 @@ export * from "./payroll";
 export * from "./availability";
 export * from "./auditLog";
 export * from "./rooms";
+export * from "./lessonSeries";
