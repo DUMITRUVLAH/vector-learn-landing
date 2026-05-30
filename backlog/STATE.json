@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "CRM-127",
-  "last_completed": "CRM-126",
-  "iterations": 75,
+  "current_item": "CRM-128",
+  "last_completed": "CRM-127",
+  "iterations": 76,
   "last_run_at": "2026-05-30T15:00:00Z",
   "milestone_status": "M1+M2+M3+MVP+CRM-101..125+COMM+REP+HR+SCHED complete. CRM Faza H active: CRM-126 in_progress, 127/128 pending.",
   "active_milestone": "CRM",
@@ -1061,19 +1061,25 @@
       }
     },
     "CRM-127": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-127-undo-audit.md",
       "milestone": "CRM",
       "phase": "H",
-      "depends_on": [
-        "CRM-106"
-      ]
+      "depends_on": ["CRM-106"],
+      "branch": "feat/CRM-127-undo-audit",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/74",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-128": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-128-empty-states-onboarding.md",
       "milestone": "CRM",

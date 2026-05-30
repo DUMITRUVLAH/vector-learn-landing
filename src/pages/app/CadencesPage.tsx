@@ -3,7 +3,8 @@
  * Shows all cadences for the tenant + inline create form.
  */
 import { useEffect, useState } from "react";
-import { Plus, Loader2, Trash2, ChevronDown, ChevronUp, ListChecks, ToggleLeft, ToggleRight } from "lucide-react";
+import { Plus, Loader2, Trash2, ChevronDown, ChevronUp, ToggleLeft, ToggleRight } from "lucide-react";
+import { EmptyCadences } from "@/components/crm/EmptyCadences";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -349,22 +350,9 @@ export function CadencesPage() {
         </div>
       )}
 
-      {/* Empty */}
+      {/* CRM-128: Empty state */}
       {!loading && cadences.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center" role="status" aria-live="polite">
-          <ListChecks className="h-12 w-12 text-muted-foreground mb-4" aria-hidden="true" />
-          <h3 className="text-lg font-semibold mb-1">Nicio cadenţă</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            Crează prima serie de follow-up automatizat.
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowForm(true)}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-          >
-            Crează prima cadenţă
-          </button>
-        </div>
+        <EmptyCadences onCreateFirst={() => setShowForm(true)} />
       )}
 
       {/* Cadences table */}

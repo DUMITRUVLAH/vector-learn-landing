@@ -26,6 +26,8 @@ import {
 import { api } from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { EmptyLeads } from "@/components/crm/EmptyLeads";
+import { OnboardingChecklist } from "@/components/crm/OnboardingChecklist";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web",
@@ -52,7 +54,7 @@ const LOST_REASON_PRESETS = [
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function LeadsPage() {
-  const { status: sessionStatus } = useSession();
+  const { status: sessionStatus, data: sessionData } = useSession();
   const { navigate } = useRouter();
 
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -295,6 +297,9 @@ export function LeadsPage() {
         </div>
       ) : error ? (
         <div className="py-16 text-center text-sm text-destructive">{error}</div>
+      ) : !loading && totalLeads === 0 && filterSource === "all" && filterAssigned === "all" && !searchQuery && !filterNoTask && !filterOverdue ? (
+        /* CRM-128: Full-page empty state when no leads at all */
+        <EmptyLeads onAddLead={() => setShowCreate(true)} />
       ) : (
         <div
           className="grid gap-3 min-h-[500px] overflow-x-auto"
@@ -411,6 +416,14 @@ export function LeadsPage() {
         >
           {toast.message}
         </div>
+      )}
+
+      {/* CRM-128: Onboarding checklist (only for new tenants with < 5 leads) */}
+      {sessionData?.tenant.id && (
+        <OnboardingChecklist
+          tenantId={sessionData.tenant.id}
+          totalLeads={totalLeads}
+        />
       )}
     </AppShell>
   );
