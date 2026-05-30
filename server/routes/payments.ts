@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { payments, students } from "../db/schema";
+import { payments, students, invoices } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 const createPaymentSchema = z.object({
@@ -119,3 +119,36 @@ paymentRoutes.patch("/:id", zValidator("json", updatePaymentSchema), async (c) =
   if (!updated) return c.json({ error: "not_found" }, 404);
   return c.json(updated);
 });
+
+// FIN-602: Link an existing payment to an invoice
+paymentRoutes.patch(
+  "/:id/link-invoice",
+  zValidator("json", z.object({ invoiceId: z.string().uuid() })),
+  async (c) => {
+    const id = c.req.param("id");
+    const tenantId = c.get("user").tenantId;
+    const { invoiceId } = c.req.valid("json");
+
+    // Verify the payment belongs to this tenant
+    const [payment] = await db
+      .select({ id: payments.id })
+      .from(payments)
+      .where(and(eq(payments.id, id), eq(payments.tenantId, tenantId)));
+    if (!payment) return c.json({ error: "payment_not_found" }, 404);
+
+    // Verify the invoice belongs to this tenant
+    const [invoice] = await db
+      .select({ id: invoices.id })
+      .from(invoices)
+      .where(and(eq(invoices.id, invoiceId), eq(invoices.tenantId, tenantId)));
+    if (!invoice) return c.json({ error: "invoice_not_found" }, 404);
+
+    const [updated] = await db
+      .update(invoices)
+      .set({ paymentId: id, updatedAt: new Date() })
+      .where(and(eq(invoices.id, invoiceId), eq(invoices.tenantId, tenantId)))
+      .returning();
+
+    return c.json(updated);
+  }
+);

@@ -108,6 +108,23 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 
 **Ordine de build:** `CRM-101 → … → 112` (done) → `113 → 116 → 114 → 115` (valoare + semnale task întâi — impact maxim pe demo).
 
+### Faza G+H — Funcționalități avansate pipeline
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 17 | `CRM-117` | List view tabelar cu sortare + filtre | G | done ✅ | [specs/CRM-117-list-view.md](specs/CRM-117-list-view.md) · [PR #63](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/63) |
+| 18 | `CRM-118` | Acțiuni în masă (bulk): schimb stadiu, reasignare, tag, ștergere | G | done ✅ | [specs/CRM-118-bulk-actions.md](specs/CRM-118-bulk-actions.md) · [PR #66](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/66) |
+| 19 | `CRM-119` | Căutare globală extinsă + Vizualizări salvate (Saved Views) | G | done ✅ | [specs/CRM-119-search-saved-views.md](specs/CRM-119-search-saved-views.md) · [PR #70](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/70) |
+| 20 | `CRM-120` | Today dashboard: tasks azi + leads fără task + activitate recentă | G | done ✅ | [specs/CRM-120-today-dashboard.md](specs/CRM-120-today-dashboard.md) · [PR #64](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/64) |
+| 21 | `CRM-121` | Mobile view: kanban 2 coloane + gesturi touch | H | done ✅ | [specs/CRM-121-mobile-view.md](specs/CRM-121-mobile-view.md) · [PR #65](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/65) |
+| 22 | `CRM-122` | Quick add mobile: FAB + pre-fill din context | H | done ✅ | [specs/CRM-122-quick-add-mobile.md](specs/CRM-122-quick-add-mobile.md) · [PR #68](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/68) |
+| 23 | `CRM-123` | Notificări in-app: badge + feed notificări | H | done ✅ | [specs/CRM-123-notifications.md](specs/CRM-123-notifications.md) |
+| 24 | `CRM-124` | SLA + lead rot: avertizare leaduri necontactate | G | done ✅ | [specs/CRM-124-sla-lead-rot.md](specs/CRM-124-sla-lead-rot.md) · [PR #67](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/67) |
+| 25 | `CRM-125` | Forecast ponderat pe pipeline + probabilitate per stadiu | G | done ✅ | [specs/CRM-125-weighted-forecast.md](specs/CRM-125-weighted-forecast.md) · [PR #71](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/71) |
+| 26 | `CRM-126` | Follow-up cadence: serie automatizată de follow-up-uri | H | done ✅ | [specs/CRM-126-followup-cadence.md](specs/CRM-126-followup-cadence.md) · [PR #73](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/73) |
+| 27 | `CRM-127` | Undo + audit log acțiuni CRM | H | done ✅ | [specs/CRM-127-undo-audit.md](specs/CRM-127-undo-audit.md) · [PR #74](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/74) |
+| 28 | `CRM-128` | Empty states + onboarding ghid primul lead | H | done ✅ | [specs/CRM-128-empty-states-onboarding.md](specs/CRM-128-empty-states-onboarding.md) · [PR #75](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/75) |
+
 ## Active milestone: COMM — Modulul Comunicare (mesagerie reală backend)
 
 > Fundație mesagerie + log per lead/student + inbox unificat + broadcast + notificări automate.
@@ -150,6 +167,27 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 2 | `SCHED-502` | Lecții recurente: pattern săptămânal + excepții | 2 | done ✅ | [specs/SCHED-502-recurring.md](specs/SCHED-502-recurring.md) · [PR #58](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/58) |
 | 3 | `SCHED-503` | Prezență: marcare per lecție + raport prezență % | 3 | pending | [specs/SCHED-503-attendance.md](specs/SCHED-503-attendance.md) |
 | 4 | `SCHED-504` | Export iCal: calendar personalizat profesor/elev | 4 | pending | [specs/SCHED-504-ical.md](specs/SCHED-504-ical.md) |
+
+## Active milestone: FIN — Modulul Finanțe (facturi + datorie + recurent + e-Factura)
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `FIN-601` | Facturi PDF cu serie incrementală + UI /app/invoices | 1 | done ✅ | [specs/FIN-601-invoices.md](specs/FIN-601-invoices.md) · [PR #76](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/76) |
+| 2 | `FIN-602` | Datorie elev — link CRM-113 debt_cents + reconciliere plăți | 2 | done ✅ | [specs/FIN-602-debt-reconciliation.md](specs/FIN-602-debt-reconciliation.md) · [PR #77](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/77) |
+| 3 | `FIN-603` | Abonamente recurente — generare automată facturi lunare | 3 | done ✅ | [specs/FIN-603-recurring-billing.md](specs/FIN-603-recurring-billing.md) · [PR #78](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/78) |
+| 4 | `FIN-604` | e-Factura export stub (UBL 2.1 XML) + export SAGA CSV | 4 | done ✅ | [specs/FIN-604-efactura-stub.md](specs/FIN-604-efactura-stub.md) · [PR #79](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/79) |
+
+## Active milestone: BRANCH — Modulul Multifiliale (branches + scoped access + reports)
+
+> Fundație multi-branch: branches table, branch_id pe entități, switcher UI, scoped permissions,
+> rapoarte consolidate vs per-filială.
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `BRANCH-701` | Branches schema + branch_id pe entități | 1 | done ✅ | [specs/BRANCH-701-schema.md](specs/BRANCH-701-schema.md) · [PR #80](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/80) |
+| 2 | `BRANCH-702` | Branch switcher UI + filtrare globală | 2 | pending | [specs/BRANCH-702-switcher.md](specs/BRANCH-702-switcher.md) |
+| 3 | `BRANCH-703` | Roluri scoped pe filială — manager vede doar filiala lui | 3 | pending | [specs/BRANCH-703-scoped-roles.md](specs/BRANCH-703-scoped-roles.md) |
+| 4 | `BRANCH-704` | Rapoarte per filială + consolidat | 4 | pending | [specs/BRANCH-704-reports.md](specs/BRANCH-704-reports.md) |
 
 ## Quality gates (required before status → `done`)
 
