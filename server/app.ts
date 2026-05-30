@@ -28,6 +28,64 @@ export const app = new Hono();
 
 app.use("*", logger());
 
+// TEMPORARY diagnostic — pinpoints the prod DB hang. Tries several connection strategies
+// against the env URLs with hard per-attempt timeouts, reporting connect time, query time,
+// or the exact error/timeout. Mounted FIRST so no auth/route shadows it. Remove once fixed.
+app.get("/api/__diag__/db", async (c) => {
+  const postgres = (await import("postgres")).default;
+
+  function pick(suffix: string): { name: string; url: string } | null {
+    if (process.env[suffix]) return { name: suffix, url: process.env[suffix]! };
+    const k = Object.keys(process.env).find((x) => x.endsWith(suffix) && process.env[x]);
+    return k ? { name: k, url: process.env[k]! } : null;
+  }
+
+  async function withTimeout<T>(label: string, ms: number, p: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<never>((_, rej) => {
+      timer = setTimeout(() => rej(new Error(`${label}: hard timeout after ${ms}ms`)), ms);
+    });
+    try {
+      return await Promise.race([p, timeout]);
+    } finally {
+      clearTimeout(timer!);
+    }
+  }
+
+  async function attempt(label: string, urlInfo: { name: string; url: string } | null, opts: Record<string, unknown>) {
+    if (!urlInfo) return { label, skipped: "url not present in env" };
+    const hostport = urlInfo.url.replace(/.*@([^/?]+).*/, "$1");
+    const t0 = Date.now();
+    let client: ReturnType<typeof postgres> | undefined;
+    try {
+      client = postgres(urlInfo.url, { ...opts, max: 1 });
+      // Force an actual round-trip with a hard 8s ceiling.
+      await withTimeout(label, 8000, client`select 1 as ok` as unknown as Promise<unknown>);
+      return { label, env: urlInfo.name, hostport, ok: true, ms: Date.now() - t0, opts: Object.keys(opts) };
+    } catch (e) {
+      return { label, env: urlInfo.name, hostport, ok: false, ms: Date.now() - t0, error: e instanceof Error ? e.message : String(e), opts: Object.keys(opts) };
+    } finally {
+      try { await withTimeout("end", 2000, (client?.end({ timeout: 1 }) ?? Promise.resolve()) as Promise<unknown>); } catch { /* ignore */ }
+    }
+  }
+
+  const pooled = pick("POSTGRES_URL");
+  const nonpool = pick("POSTGRES_URL_NON_POOLING");
+
+  const results = [];
+  // Run sequentially so one hang doesn't mask another; each is hard-capped at 8s.
+  results.push(await attempt("transaction-pooler :6543 (prepare:false)", pooled, { prepare: false, ssl: "require", connect_timeout: 8 }));
+  results.push(await attempt("session-pooler :5432 (prepare:false)", nonpool, { prepare: false, ssl: "require", connect_timeout: 8 }));
+  results.push(await attempt("session-pooler :5432 (ssl:false/url-ssl)", nonpool, { connect_timeout: 8 }));
+  results.push(await attempt("session-pooler :5432 (prepare:false, no-explicit-ssl)", nonpool, { prepare: false, connect_timeout: 8 }));
+
+  return c.json({
+    runtime: { onVercel: !!process.env.VERCEL, region: process.env.VERCEL_REGION ?? null, node: process.version },
+    envUrls: { pooled: pooled?.name ?? null, nonpool: nonpool?.name ?? null, hasDATABASE_URL: !!process.env.DATABASE_URL },
+    results,
+  });
+});
+
 const allowedOrigins = [
   "http://localhost:5173",
   ...(process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
