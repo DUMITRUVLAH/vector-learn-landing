@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "CRM-136",
-  "last_completed": "CRM-135",
+  "current_item": null,
+  "last_completed": "CRM-136",
   "iterations": 71,
-  "last_run_at": "2026-05-30T17:20:00Z",
-  "milestone_status": "CRM-101..116 (Faze A-F) all done. CRM Faza I: CRM-129..135 done (PR#84..90). CRM-136 in_progress. SCHED-503/504 pending.",
+  "last_run_at": "2026-05-30T18:05:00Z",
+  "milestone_status": "CRM-101..116 (Faze A-F) all done. CRM Faza I: CRM-129..136 done (PR#84..91). SCHED-503/504 pending.",
   "active_milestone": "CRM",
   "items": {
     "M1-001": {
@@ -811,13 +811,16 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-136": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-136-kanban-density-toggle.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-129", "CRM-130"]
+      "depends_on": ["CRM-129", "CRM-130"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/91",
+      "branch": "feat/CRM-136-kanban-density-toggle",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "LOVES" }
     }
   }
 }
