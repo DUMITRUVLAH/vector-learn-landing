@@ -184,7 +184,7 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 1 | `BRANCH-701` | Branches schema + branch_id pe entități | 1 | pending | [specs/BRANCH-701-schema.md](specs/BRANCH-701-schema.md) |
+| 1 | `BRANCH-701` | Branches schema + branch_id pe entități | 1 | done ✅ | [specs/BRANCH-701-schema.md](specs/BRANCH-701-schema.md) · [PR #80](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/80) |
 | 2 | `BRANCH-702` | Branch switcher UI + filtrare globală | 2 | pending | [specs/BRANCH-702-switcher.md](specs/BRANCH-702-switcher.md) |
 | 3 | `BRANCH-703` | Roluri scoped pe filială — manager vede doar filiala lui | 3 | pending | [specs/BRANCH-703-scoped-roles.md](specs/BRANCH-703-scoped-roles.md) |
 | 4 | `BRANCH-704` | Rapoarte per filială + consolidat | 4 | pending | [specs/BRANCH-704-reports.md](specs/BRANCH-704-reports.md) |
