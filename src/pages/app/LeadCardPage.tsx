@@ -6,13 +6,14 @@
  * CRM-113: Valoare deal + datorie (inline edit)
  * CRM-114: Companie + deal_name + contacte multiple (tab Contacte)
  * CRM-115: Tag-uri libere + câmpuri custom (tab Custom Fields)
+ * CRM-131: Loading skeletons, optimistic note UI, undo task delete, empty states
  */
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Loader2, ArrowLeft, Pencil, Check, X, ChevronDown,
   Phone, Mail, Globe, Calendar, MessageCircle, UserPlus,
   AlertTriangle, CheckCircle2, Trash2, MoreVertical, ShieldOff,
-  Clock, Paperclip, Upload, Download,
+  Clock, Paperclip, Upload, Download, FileText, CheckSquare,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -35,6 +36,8 @@ import { cn } from "@/lib/utils";
 import { SendMessageModal, LogCallModal, type SendChannel } from "@/components/crm/CommModal";
 import { ConvertModal, getScoreBadge, SCORE_BADGE_STYLES, SCORE_BADGE_LABELS } from "@/components/crm/ConvertModal";
 import { scoreLead } from "@/lib/api/leads";
+import { LeadCardSkeleton } from "@/components/crm/LeadCardSkeleton";
+import { useUndoableDelete } from "@/hooks/useUndoableDelete";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -105,6 +108,9 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   const [revoking, setRevoking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  // CRM-131: undo task delete toast
+  const [undoToast, setUndoToast] = useState<{ taskId: string; message: string } | null>(null);
+  const undoToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // CRM-109: Communication modals
   const [sendModal, setSendModal] = useState<{ open: boolean; channel: SendChannel }>({
@@ -116,9 +122,17 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   // CRM-111: Enhanced convert modal
   const [convertModal, setConvertModal] = useState(false);
 
-  useEffect(() => {
-    if (sessionStatus === "unauthenticated") navigate("/app/login");
-  }, [sessionStatus, navigate]);
+  // CRM-131: Undo task delete
+  const { scheduleDelete: scheduleTaskDelete, undoDelete: undoTaskDelete } = useUndoableDelete<string>({
+    delayMs: 5000,
+    onDelete: async (taskId) => {
+      if (!lead) return;
+      await deleteTask(lead.id, taskId);
+    },
+    onError: () => {
+      setToast({ kind: "error", message: "Nu s-a putut șterge task-ul" });
+    },
+  });
 
   useEffect(() => {
     if (!toast) return;
@@ -230,18 +244,39 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     }
   };
 
-  // ─── Note ─────────────────────────────────────────────────────────────────
+  // ─── Note (CRM-131: optimistic insert) ────────────────────────────────────
   const addNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!lead || !noteBody.trim()) return;
     setSubmittingNote(true);
+
+    // Optimistic insert — appears instantly in timeline
+    const optimisticId = `optimistic-${Date.now()}`;
+    const optimisticNote: LeadInteraction = {
+      id: optimisticId,
+      leadId: lead.id,
+      type: "note",
+      body: noteBody,
+      direction: null,
+      occurredAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      metadata: null,
+      optimistic: true,
+    };
+    setInteractions((prev) => [optimisticNote, ...prev]);
+    const savedBody = noteBody;
+    setNoteBody("");
+
     try {
-      const created = await addInteraction(lead.id, { type: "note", body: noteBody });
-      setInteractions((prev) => [created, ...prev]);
-      setNoteBody("");
-      setToast({ kind: "success", message: "Notă adăugată" });
+      const created = await addInteraction(lead.id, { type: "note", body: savedBody });
+      // Replace the optimistic entry with the real server response
+      setInteractions((prev) =>
+        prev.map((item) => (item.id === optimisticId ? created : item))
+      );
     } catch {
-      setToast({ kind: "error", message: "Nu pot adăuga nota" });
+      // Rollback: remove the optimistic entry
+      setInteractions((prev) => prev.filter((item) => item.id !== optimisticId));
+      setToast({ kind: "error", message: "Nu s-a salvat nota — încearcă din nou" });
     } finally {
       setSubmittingNote(false);
     }
@@ -347,15 +382,37 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     }
   };
 
-  const handleDeleteTask = async (taskId: string) => {
-    if (!lead) return;
-    try {
-      await deleteTask(lead.id, taskId);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
-    } catch {
-      setToast({ kind: "error", message: "Nu pot șterge task-ul" });
-    }
+  // CRM-131: Undo task delete — optimistic remove + 5s undo window
+  const handleDeleteTask = (taskId: string) => {
+    // Optimistically remove from UI
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+
+    // Schedule the actual DELETE with 5s delay
+    scheduleTaskDelete(taskId);
+
+    // Show toast with undo button
+    setUndoToast({
+      taskId,
+      message: "Task șters",
+    });
+    // Auto-dismiss undo toast after 5s
+    if (undoToastTimerRef.current) clearTimeout(undoToastTimerRef.current);
+    undoToastTimerRef.current = setTimeout(() => setUndoToast(null), 5200);
   };
+
+  // CRM-131: Handle undo task delete
+  const handleUndoTaskDelete = useCallback(() => {
+    const restoredId = undoTaskDelete();
+    if (restoredId) {
+      // Fetch fresh tasks to restore the deleted one
+      void fetchAll();
+    }
+    setUndoToast(null);
+    if (undoToastTimerRef.current) {
+      clearTimeout(undoToastTimerRef.current);
+      undoToastTimerRef.current = null;
+    }
+  }, [undoTaskDelete, fetchAll]);
 
   // ─── Files ────────────────────────────────────────────────────────────────
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -417,9 +474,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   if (loading) {
     return (
       <AppShell pageTitle="Lead…" pageDescription="">
-        <div className="flex items-center justify-center py-24 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin mr-2" /> Se încarcă…
-        </div>
+        <LeadCardSkeleton />
       </AppShell>
     );
   }
@@ -655,8 +710,8 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                       onClick={handleOpenCall}
                       disabled={consentRevoked}
                       className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted disabled:opacity-40"
-                      aria-label="Sună lead"
-                      title="Sună + Loghează apel"
+                      aria-label={`Sună ${lead.phone ?? "lead"}`}
+                      title={`Sună ${lead.phone ?? ""} + Loghează apel`}
                     >
                       <Phone className="h-3 w-3" aria-hidden="true" />
                       Sună
@@ -903,7 +958,10 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
 
               {/* Timeline */}
               {interactions.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">Niciun istoric încă.</p>
+                <div className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
+                  <MessageCircle className="h-8 w-8 opacity-30" aria-hidden="true" />
+                  <p className="text-sm">Nicio activitate încă. Adaugă o notă sau înregistrează un apel.</p>
+                </div>
               ) : (
                 <ul className="space-y-3" aria-label="Timeline interacțiuni">
                   {interactions.map((item) => (
@@ -948,7 +1006,10 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
 
               {/* Task list */}
               {tasks.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">Niciun task.</p>
+                <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
+                  <CheckSquare className="h-8 w-8 opacity-30" aria-hidden="true" />
+                  <p className="text-sm">Nicio sarcină. Adaugă un reminder ca să nu uiți.</p>
+                </div>
               ) : (
                 <ul className="space-y-2" aria-label="Lista task-uri">
                   {tasks.map((task) => {
@@ -991,7 +1052,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                         </div>
                         <button
                           type="button"
-                          onClick={() => void handleDeleteTask(task.id)}
+                          onClick={() => handleDeleteTask(task.id)}
                           className="text-muted-foreground hover:text-destructive"
                           aria-label={`Șterge task: ${task.title}`}
                         >
@@ -1029,7 +1090,10 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
 
               {/* Attachment list */}
               {attachments.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">Niciun fișier atașat.</p>
+                <div className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
+                  <FileText className="h-8 w-8 opacity-30" aria-hidden="true" />
+                  <p className="text-sm">Niciun document. Încarcă un contract sau CI.</p>
+                </div>
               ) : (
                 <ul className="space-y-2" aria-label="Lista fișiere">
                   {attachments.map((att) => (
@@ -1176,6 +1240,25 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
           {toast.message}
         </div>
       )}
+
+      {/* CRM-131: Undo task delete toast */}
+      {undoToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 left-4 z-50 flex items-center gap-3 rounded-lg border border-border bg-card shadow-lg px-4 py-3 text-sm font-medium"
+        >
+          <span>{undoToast.message}</span>
+          <button
+            type="button"
+            onClick={handleUndoTaskDelete}
+            className="rounded-md bg-primary px-2.5 py-1 text-xs font-bold text-primary-foreground hover:bg-primary/90"
+            aria-label="Anulează ștergerea task-ului"
+          >
+            Anulează (5s)
+          </button>
+        </div>
+      )}
     </AppShell>
   );
 }
@@ -1196,18 +1279,27 @@ function TimelineItem({ item }: { item: LeadInteraction }) {
   const meta = item.metadata;
 
   return (
-    <li className="flex gap-3">
+    <li className={cn("flex gap-3", item.optimistic && "opacity-70")}>
       <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
-        {INTERACTION_ICON[item.type] ?? <MessageCircle className="h-3 w-3 text-primary" aria-hidden="true" />}
+        {item.optimistic
+          ? <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />
+          : (INTERACTION_ICON[item.type] ?? <MessageCircle className="h-3 w-3 text-primary" aria-hidden="true" />)
+        }
       </div>
-      <div className="flex-1 rounded-lg border border-border bg-card p-3">
+      <div className={cn(
+        "flex-1 rounded-lg border bg-card p-3",
+        item.optimistic ? "border-dashed border-muted-foreground/40" : "border-border"
+      )}>
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-semibold text-foreground capitalize">
             {INTERACTION_LABEL[item.type] ?? item.type}
-            {item.direction === "outbound" && (
+            {item.optimistic && (
+              <span className="ml-1.5 text-[10px] font-normal text-muted-foreground italic">Se salvează...</span>
+            )}
+            {!item.optimistic && item.direction === "outbound" && (
               <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">(ieșit)</span>
             )}
-            {item.direction === "inbound" && (
+            {!item.optimistic && item.direction === "inbound" && (
               <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">(primit)</span>
             )}
           </span>
@@ -1216,7 +1308,7 @@ function TimelineItem({ item }: { item: LeadInteraction }) {
           </time>
         </div>
         {item.body && (
-          <p className="text-sm text-foreground/80 whitespace-pre-wrap">{item.body}</p>
+          <p className={cn("text-sm whitespace-pre-wrap", item.optimistic ? "text-foreground/60" : "text-foreground/80")}>{item.body}</p>
         )}
         {/* Metadata badges */}
         {meta && (
