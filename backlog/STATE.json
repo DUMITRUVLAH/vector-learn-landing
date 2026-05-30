@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "FIN-601",
   "last_completed": "CRM-128",
-  "iterations": 77,
+  "iterations": 78,
   "last_run_at": "2026-05-30T16:00:00Z",
   "milestone_status": "M1+M2+M3+MVP+CRM+COMM+REP+HR+SCHED ALL COMPLETE. FIN module planned: FIN-601..604 pending.",
   "active_milestone": "FIN",
@@ -1095,8 +1095,8 @@
       }
     },
     "FIN-601": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FIN-601-invoices.md",
       "milestone": "FIN",
