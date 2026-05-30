@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock } from "lucide-react";
+import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, LayoutList, KanbanSquare, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import {
   fetchPipeline,
+  fetchLeadsList,
   moveLeadStage,
   createLead,
   convertLead,
@@ -15,6 +16,7 @@ import {
   type LeadStage,
   type LeadInteraction,
   type DedupResult,
+  type ListSortCol,
 } from "@/lib/api/leads";
 import {
   fetchPipelineStages,
@@ -73,6 +75,52 @@ export function LeadsPage() {
   /** CRM-116: task signal filters */
   const [filterNoTask, setFilterNoTask] = useState(false);
   const [filterOverdue, setFilterOverdue] = useState(false);
+
+  // CRM-117: view toggle — persisted in localStorage
+  const [viewMode, setViewMode] = useState<"kanban" | "list">(() => {
+    try { return (localStorage.getItem("crm_view_mode") as "kanban" | "list") ?? "kanban"; } catch { return "kanban"; }
+  });
+
+  const handleViewMode = (mode: "kanban" | "list") => {
+    setViewMode(mode);
+    try { localStorage.setItem("crm_view_mode", mode); } catch { /* ignore */ }
+  };
+
+  // CRM-117: list view state
+  const [listItems, setListItems] = useState<(Lead & { nextTask?: { dueAt: string | null; title: string } | null })[]>([]);
+  const [listTotal, setListTotal] = useState(0);
+  const [listTotalPages, setListTotalPages] = useState(0);
+  const [listPage, setListPage] = useState(1);
+  const [listPageSize] = useState(50);
+  const [listSort, setListSort] = useState<ListSortCol>("createdAt");
+  const [listDir, setListDir] = useState<"asc" | "desc">("desc");
+  const [listLoading, setListLoading] = useState(false);
+
+  const fetchList = useCallback(async (opts?: { page?: number; sort?: ListSortCol; dir?: "asc" | "desc" }) => {
+    setListLoading(true);
+    try {
+      const res = await fetchLeadsList({
+        page: opts?.page ?? listPage,
+        pageSize: listPageSize,
+        sort: opts?.sort ?? listSort,
+        dir: opts?.dir ?? listDir,
+        search: searchQuery || undefined,
+        source: filterSource !== "all" ? filterSource : undefined,
+        assignedTo: filterAssigned !== "all" ? filterAssigned : undefined,
+      });
+      setListItems(res.items);
+      setListTotal(res.total);
+      setListTotalPages(res.totalPages);
+      setListPage(res.page);
+    } catch { /* keep stale */ }
+    finally { setListLoading(false); }
+  }, [listPage, listPageSize, listSort, listDir, searchQuery, filterSource, filterAssigned]);
+
+  useEffect(() => {
+    if (viewMode === "list") {
+      void fetchList({ page: 1 });
+    }
+  }, [viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Modals
   const [showCreate, setShowCreate] = useState(false);
@@ -202,7 +250,40 @@ export function LeadsPage() {
       pageTitle="CRM — Leads"
       pageDescription={[`${totalLeads} lead-uri`, `conversie: ${conversionRate}%`, totalValueCents > 0 ? formatEur(totalValueCents) : null].filter(Boolean).join(" · ")}
       actions={
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {/* CRM-117: Kanban / List toggle */}
+          <div className="inline-flex rounded-md border border-border bg-card overflow-hidden" role="group" aria-label="Alegere vedere">
+            <button
+              type="button"
+              onClick={() => handleViewMode("kanban")}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-2 text-sm font-semibold transition-colors",
+                viewMode === "kanban"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted text-foreground"
+              )}
+              aria-pressed={viewMode === "kanban"}
+              aria-label="Vedere Kanban"
+            >
+              <KanbanSquare className="h-4 w-4" />
+              <span className="hidden sm:inline">Kanban</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleViewMode("list")}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-2 text-sm font-semibold transition-colors border-l border-border",
+                viewMode === "list"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted text-foreground"
+              )}
+              aria-pressed={viewMode === "list"}
+              aria-label="Vedere Listă"
+            >
+              <LayoutList className="h-4 w-4" />
+              <span className="hidden sm:inline">Listă</span>
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => setShowStagesEditor(true)}
@@ -276,6 +357,17 @@ export function LeadsPage() {
           Restanțe
         </label>
 
+        {/* List view: apply filters button */}
+        {viewMode === "list" && (
+          <button
+            type="button"
+            onClick={() => void fetchList({ page: 1 })}
+            className="inline-flex items-center gap-1 rounded-md border border-primary bg-primary/10 px-2 py-1.5 text-xs text-primary font-semibold hover:bg-primary/20"
+          >
+            <Search className="h-3 w-3" />
+            Aplică filtre
+          </button>
+        )}
         {(filterSource !== "all" || filterAssigned !== "all" || searchQuery || filterNoTask || filterOverdue) && (
           <button
             type="button"
@@ -288,7 +380,32 @@ export function LeadsPage() {
         )}
       </div>
 
-      {loading ? (
+      {viewMode === "list" ? (
+        <LeadListView
+          items={listItems}
+          total={listTotal}
+          page={listPage}
+          pageSize={listPageSize}
+          totalPages={listTotalPages}
+          sort={listSort}
+          dir={listDir}
+          loading={listLoading}
+          stages={stages}
+          onSort={(col, dir) => {
+            setListSort(col);
+            setListDir(dir);
+            void fetchList({ sort: col, dir, page: 1 });
+          }}
+          onPage={(p) => { setListPage(p); void fetchList({ page: p }); }}
+          onRowClick={(id) => navigate(`/app/leads/${id}`)}
+          onStageChange={async (id, stage) => {
+            try {
+              await moveLeadStage(id, stage);
+              void fetchList({ page: listPage });
+            } catch { /* ignore */ }
+          }}
+        />
+      ) : loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin mr-2" />
           Se încarcă pipeline-ul…
@@ -505,6 +622,246 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
         </div>
       )}
     </button>
+  );
+}
+
+// ─── Lead List View (CRM-117) ─────────────────────────────────────────────────
+
+interface LeadListViewProps {
+  items: (Lead & { nextTask?: { dueAt: string | null; title: string } | null })[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  sort: ListSortCol;
+  dir: "asc" | "desc";
+  loading: boolean;
+  stages: import("@/lib/api/pipeline").PipelineStage[];
+  onSort: (col: ListSortCol, dir: "asc" | "desc") => void;
+  onPage: (p: number) => void;
+  onRowClick: (id: string) => void;
+  onStageChange: (id: string, stage: string) => Promise<void>;
+}
+
+const STAGE_LABEL: Record<string, string> = {
+  new: "Lead nou", contacted: "Contactat", trial: "Trial", paid: "Client", lost: "Pierdut",
+};
+
+function LeadListView({ items, total, page, pageSize, totalPages, sort, dir, loading, stages, onSort, onPage, onRowClick, onStageChange }: LeadListViewProps) {
+  const [stageEditing, setStageEditing] = useState<string | null>(null);
+
+  const handleSort = (col: ListSortCol) => {
+    if (sort === col) {
+      onSort(col, dir === "asc" ? "desc" : "asc");
+    } else {
+      onSort(col, "asc");
+    }
+  };
+
+  const SortIcon = ({ col }: { col: ListSortCol }) => {
+    if (sort !== col) return <ChevronUp className="h-3 w-3 opacity-30" aria-hidden="true" />;
+    return dir === "asc"
+      ? <ChevronUp className="h-3 w-3 text-primary" aria-hidden="true" />
+      : <ChevronDown className="h-3 w-3 text-primary" aria-hidden="true" />;
+  };
+
+  const ThSort = ({ col, children }: { col: ListSortCol; children: React.ReactNode }) => (
+    <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 hover:text-primary transition-colors"
+        onClick={() => handleSort(col)}
+        aria-label={`Sortează după ${String(col)}`}
+      >
+        {children}
+        <SortIcon col={col} />
+      </button>
+    </th>
+  );
+
+  const formatEur = (cents: number) =>
+    cents === 0
+      ? null
+      : new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(cents / 100);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+        Se încarcă lista…
+      </div>
+    );
+  }
+
+  if (!loading && items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+        <LayoutList className="h-8 w-8 opacity-30" aria-hidden="true" />
+        <p className="text-sm">Niciun lead găsit. Modifică filtrele sau adaugă un lead nou.</p>
+      </div>
+    );
+  }
+
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Table */}
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
+        <table className="w-full text-sm" aria-label={`Lista leaduri — ${total} total`}>
+          <thead>
+            <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
+              <ThSort col="fullName">Nume / Companie</ThSort>
+              <ThSort col="stage">Stadiu</ThSort>
+              <ThSort col="source">Sursă</ThSort>
+              <ThSort col="valueCents">Valoare</ThSort>
+              <ThSort col="debtCents">Datorie</ThSort>
+              <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Următor task</th>
+              <ThSort col="createdAt">Creat</ThSort>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((lead) => {
+              const isOverdue = lead.nextTask?.dueAt != null && new Date(lead.nextTask.dueAt) < new Date();
+              const daysOverdue = isOverdue
+                ? Math.floor((Date.now() - new Date(lead.nextTask!.dueAt!).getTime()) / 86400000)
+                : 0;
+
+              return (
+                <tr
+                  key={lead.id}
+                  className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer transition-colors group"
+                  onClick={() => onRowClick(lead.id)}
+                >
+                  {/* Name / company */}
+                  <td className="px-3 py-2.5 max-w-[200px]">
+                    <p className="font-semibold truncate">{lead.dealName ?? lead.fullName}</p>
+                    {lead.company && <p className="text-[11px] text-muted-foreground truncate italic">{lead.company}</p>}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {lead.phone && <Phone className="h-2.5 w-2.5 text-muted-foreground/60" aria-label="Are telefon" />}
+                      {lead.email && <Mail className="h-2.5 w-2.5 text-muted-foreground/60" aria-label="Are email" />}
+                    </div>
+                  </td>
+
+                  {/* Stage — inline editable dropdown */}
+                  <td
+                    className="px-3 py-2.5"
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Stadiu: ${STAGE_LABEL[lead.stage] ?? lead.stage}`}
+                  >
+                    {stageEditing === lead.id ? (
+                      <select
+                        autoFocus
+                        value={lead.stage}
+                        onChange={async (e) => {
+                          setStageEditing(null);
+                          await onStageChange(lead.id, e.target.value);
+                        }}
+                        onBlur={() => setStageEditing(null)}
+                        className="text-xs rounded border border-input bg-background px-1.5 py-1"
+                        aria-label="Schimbă stadiu"
+                      >
+                        {stages.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                        {/* Fallback for default stages if no custom stages */}
+                        {stages.length === 0 && (
+                          <>
+                            <option value="new">Lead nou</option>
+                            <option value="contacted">Contactat</option>
+                            <option value="trial">Trial</option>
+                            <option value="paid">Client</option>
+                            <option value="lost">Pierdut</option>
+                          </>
+                        )}
+                      </select>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setStageEditing(lead.id)}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border border-border/60 hover:border-primary/50 transition-colors"
+                        aria-label={`Stadiu ${STAGE_LABEL[lead.stage] ?? lead.stage} — click pentru a edita`}
+                      >
+                        {STAGE_LABEL[lead.stage] ?? lead.stage}
+                      </button>
+                    )}
+                  </td>
+
+                  {/* Source */}
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                    {SOURCE_LABEL[lead.source] ?? lead.source}
+                  </td>
+
+                  {/* Value */}
+                  <td className="px-3 py-2.5 text-xs font-semibold tabular-nums whitespace-nowrap">
+                    {formatEur(lead.valueCents ?? 0) ?? <span className="text-muted-foreground">—</span>}
+                  </td>
+
+                  {/* Debt */}
+                  <td className="px-3 py-2.5 text-xs tabular-nums whitespace-nowrap">
+                    {(lead.debtCents ?? 0) > 0
+                      ? <span className="text-destructive font-semibold">{formatEur(lead.debtCents)}</span>
+                      : <span className="text-muted-foreground">—</span>
+                    }
+                  </td>
+
+                  {/* Next task */}
+                  <td className="px-3 py-2.5 text-xs whitespace-nowrap">
+                    {lead.nextTask ? (
+                      <span className={cn(
+                        "inline-flex items-center gap-1 font-semibold",
+                        isOverdue ? "text-destructive" : "text-amber-600 dark:text-amber-400"
+                      )}>
+                        <Clock className="h-3 w-3" aria-hidden="true" />
+                        {isOverdue
+                          ? `${daysOverdue}d restant`
+                          : lead.nextTask.dueAt
+                            ? new Date(lead.nextTask.dueAt).toLocaleDateString("ro-RO", { day: "2-digit", month: "short" })
+                            : lead.nextTask.title.slice(0, 20)}
+                      </span>
+                    ) : (
+                      <span className="text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded px-1.5 py-0.5 font-semibold">
+                        Fără task
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Created */}
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                    {new Date(lead.createdAt).toLocaleDateString("ro-RO", { day: "2-digit", month: "short", year: "2-digit" })}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{start}–{end} din {total} leaduri</span>
+        <div className="flex items-center gap-1" role="navigation" aria-label="Paginare">
+          <button
+            type="button"
+            onClick={() => onPage(page - 1)}
+            disabled={page <= 1}
+            className="inline-flex items-center justify-center rounded-md border border-border p-1.5 hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Pagina anterioară"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+          <span className="px-2 font-semibold text-foreground">{page} / {totalPages}</span>
+          <button
+            type="button"
+            onClick={() => onPage(page + 1)}
+            disabled={page >= totalPages}
+            className="inline-flex items-center justify-center rounded-md border border-border p-1.5 hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Pagina următoare"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

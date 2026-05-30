@@ -137,6 +137,19 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-116-3** Given task open mâine, Then card arată data, nu badge roșu.
 - **T-CRM-116-4** Given filtru „fără task", Then se afișează doar leadurile fără task open.
 
+## CRM-117 — Vedere Listă/Tabel {#crm-117}
+
+- **T-CRM-117-1** `[blocant]` Given utilizatorul apasă butonul „Listă", Then vedera se schimbă din Kanban în tabel și preferința se salvează în localStorage.
+- **T-CRM-117-2** `[blocant]` Given utilizatorul reîncarcă pagina, Then prefer. `crm_view_mode` din localStorage e restaurată (kanban sau list).
+- **T-CRM-117-3** `[blocant]` Given vederea listă e activă, When `GET /api/leads?view=list&page=1&pageSize=50`, Then răspuns cu `{ items, page, pageSize, total, totalPages }` — nu raw `.execute().rows`.
+- **T-CRM-117-4** `[blocant]` Given 100+ leaduri, When vederea listă e activă, Then se afișează exact 50/pagină și paginarea funcționează (pagina 2 → altă felie de date).
+- **T-CRM-117-5** `[blocant]` Given click pe header „Valoare", Then lista se resortează asc/desc și indicatorul vizual (săgeată) se actualizează.
+- **T-CRM-117-6** Given filtru sursă „Facebook" cu vederea listă, When se apasă „Aplică filtre", Then lista afișează doar leadurile Facebook.
+- **T-CRM-117-7** `[blocant]` Given click pe badge de stadiu dintr-un rând, Then apare dropdown inline; alegând un stadiu nou → `PATCH /api/leads/:id/stage` → lista se reîncarcă.
+- **T-CRM-117-8** `[blocant]` Given click pe un rând, Then navigare la `/app/leads/:id`.
+- **T-CRM-117-9** `[blocant]` Multi-tenant: `GET /api/leads?view=list` returnează **doar** leadurile tenantului autentificat.
+- **T-CRM-117-10** Given 0 leaduri care corespund filtrelor, Then se afișează stare empty „Niciun lead găsit".
+
 ---
 
 ## Scenarii transversale (rulate la fiecare item)

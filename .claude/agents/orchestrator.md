@@ -31,7 +31,7 @@ The owner reviews PRs on their own schedule, in parallel. Do not wait for PR app
 ## Pipeline (per item)
 
 ```
-PICK → BUILD → REVIEW⇄IMPROVE(≤3) → TEST⇄FIX(≤2) → PERSONA_MANAGER → PERSONA_STUDENT → COMMIT → PR → MARK_DONE → LOOP
+PICK → BUILD → TEST-WRITER → REVIEW⇄IMPROVE(≤3) → TEST⇄FIX(≤2) → PERSONA_MANAGER → PERSONA_STUDENT → COMMIT → PR → MARK_DONE → LOOP
 ```
 
 `REVIEW⇄IMPROVE` = reviewer(s) give findings, improver applies them, re-review until clean.
@@ -77,9 +77,18 @@ Triggered only when no `pending` item exists and no `blocked` item is retryable.
 ### Step 2 — BUILD
 Invoke `feature-builder` agent via Agent tool. Pass the spec file path. Wait for `BUILDER_RESULT`.
 
-- `success` → continue to REVIEW
+- `success` → continue to TEST-WRITER
 - `partial` → mark item `blocked`, write report, GOTO Step 1 (next item)
 - `blocked` → same as partial
+
+### Step 2b — TEST-WRITER (independent test authoring — TDD gate)
+Invoke `test-writer` agent. Pass the spec file path and ID. The test-writer does NOT read implementation files — it writes tests from the spec alone.
+
+Wait for `TEST_WRITER_RESULT`:
+- `success` → continue to REVIEW. The written tests are now part of the working tree.
+- If test-writer fails to produce tests (spec too vague) → note in report, continue to REVIEW anyway (non-blocking failure of the test-writer itself; the fixer will address coverage gaps).
+
+The tests written here are what test-runner will execute in Step 4. The intention: tests are written independently of the implementation, so they catch behavior gaps rather than rubber-stamping the code.
 
 ### Step 3 — REVIEW → IMPROVE (iterate until clean, max 3 cycles)
 A two-reviewer pass, then an improver applies the feedback, then re-review. This is the
@@ -105,8 +114,19 @@ Save each review to `backlog/reports/<ID>-reviewer.md` (append the cycle number;
 ### Step 4 — TEST (repair, don't skip — CLAUDE.md §0.2)
 Invoke `test-runner`. Pass the ID.
 
+test-runner now runs these gates in order (see its agent file for exact commands):
+1. Build + typecheck + lint
+2. Unit tests (vitest) — must pass
+3. Migration discipline gate (BLOCKING)
+4. API integration smoke (BLOCKING)
+5. DB portability check (BLOCKING)
+6. **Coverage gate (BLOCKING): ≥ 80% on new code** — `npm test -- --run --coverage`. If below 80%, the fixer must add tests (not remove lines) until coverage rises.
+7. **Playwright E2E gate (BLOCKING):** `npm run test:e2e` — all E2E tests written by test-writer must pass. Any Playwright failure is treated the same as a red unit test.
+8. Lighthouse ≥ 0.9 (skip if no Chrome)
+9. Axe a11y: 0 critical+serious violations
+
 - `PASS` → continue to PERSONA_MANAGER
-- `FAIL` → this is a real bug, not a stop. Invoke `feature-builder` as the **FIXER** with the failing gate output (especially `MIGRATION_GATE` / `INTEGRATION_SMOKE` / `PORTABILITY`), then re-run `test-runner`. Repeat up to **2 fix cycles**. Only if it still fails AND the cause is clearly structural → block with `backlog/reports/<ID>-tests.md`. **Never advance to PR with a red blocking gate.**
+- `FAIL` → this is a real bug, not a stop. Invoke `feature-builder` as the **FIXER** with the failing gate output (especially `MIGRATION_GATE` / `INTEGRATION_SMOKE` / `PORTABILITY` / `COVERAGE` / `E2E`), then re-run `test-runner`. Repeat up to **2 fix cycles**. Only if it still fails AND the cause is clearly structural → block with `backlog/reports/<ID>-tests.md`. **Never advance to PR with a red blocking gate.**
 
 ### Step 5 — PERSONA_MANAGER
 Invoke `persona-manager`. Pass the ID.
