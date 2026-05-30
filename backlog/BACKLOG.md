@@ -117,6 +117,9 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 19 | `CRM-131` | Lead card UX polish — skeleton, optimistic UI, inline note edit, empty states | I | done ✅ | [specs/CRM-131-lead-card-ux-polish.md](specs/CRM-131-lead-card-ux-polish.md) · [PR #86](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/86) |
 | 20 | `CRM-132` | Timeline filters — filtrare activitate după tip (notă/apel/email/stadiu) | I | done ✅ | [specs/CRM-132-timeline-filters.md](specs/CRM-132-timeline-filters.md) · [PR #87](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/87) |
 | 21 | `CRM-133` | Duplicate detection banner — alertă deduplicare proeminentă pe cartonașul lead | I | done ✅ | [specs/CRM-133-duplicate-detection-banner.md](specs/CRM-133-duplicate-detection-banner.md) · [PR #88](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/88) |
+| 22 | `CRM-134` | @mentions in note-uri + notificare utilizator menționat | I | pending | [specs/CRM-134-mentions-notifications.md](specs/CRM-134-mentions-notifications.md) |
+| 23 | `CRM-135` | Round-robin auto-assign pentru lead-uri noi | I | pending | [specs/CRM-135-round-robin-assign.md](specs/CRM-135-round-robin-assign.md) |
+| 24 | `CRM-136` | Kanban card density toggle — compact/comfortable, persistat per user | I | pending | [specs/CRM-136-kanban-density-toggle.md](specs/CRM-136-kanban-density-toggle.md) |
 
 ## Active milestone: COMM — Modulul Comunicare (mesagerie reală backend)
 

@@ -3,11 +3,32 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families } from "../db/schema";
+import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, users, leadMentions, inAppNotifications } from "../db/schema";
 import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 import { fireTrigger } from "../lib/automationEngine";
+
+/**
+ * Parse @mentions from a note body and resolve them to user IDs.
+ * Matches "@Prenume" or "@Prenume Nume" patterns.
+ */
+function parseMentionedUserIds(
+  body: string,
+  tenantMembers: Array<{ id: string; name: string }>
+): string[] {
+  // Find all @<word> or @<word word> tokens
+  const tokens = body.match(/@([A-Za-zÀ-ž]+(?: [A-Za-zÀ-ž]+)*)/g) ?? [];
+  const mentioned = new Set<string>();
+  for (const token of tokens) {
+    const name = token.slice(1).trim(); // strip leading @
+    const member = tenantMembers.find(
+      (m) => m.name.toLowerCase() === name.toLowerCase()
+    );
+    if (member) mentioned.add(member.id);
+  }
+  return Array.from(mentioned);
+}
 
 const STAGES = ["new", "contacted", "trial", "paid", "lost"] as const;
 const SOURCES = [
@@ -521,7 +542,8 @@ leadRoutes.get("/:id/interactions", async (c) => {
 leadRoutes.post("/:id/interactions", zValidator("json", interactionSchema), async (c) => {
   const id = c.req.param("id");
   const tenantId = c.get("user").tenantId;
-  const userId = c.get("user").id;
+  const user = c.get("user");
+  const userId = user.id;
   const body = c.req.valid("json");
 
   const lead = await db.query.leads.findFirst({
@@ -540,6 +562,51 @@ leadRoutes.post("/:id/interactions", zValidator("json", interactionSchema), asyn
       userId,
     })
     .returning();
+
+  // CRM-134: Parse @mentions on note interactions and create in-app notifications
+  if (body.type === "note" && body.body?.includes("@")) {
+    try {
+      const tenantMembers = await db
+        .select({ id: users.id, name: users.name })
+        .from(users)
+        .where(eq(users.tenantId, tenantId));
+
+      const mentionedUserIds = parseMentionedUserIds(body.body, tenantMembers);
+
+      if (mentionedUserIds.length > 0) {
+        // Insert lead_mentions rows
+        await db.insert(leadMentions).values(
+          mentionedUserIds.map((mentionedUserId) => ({
+            tenantId,
+            leadId: id,
+            interactionId: created.id,
+            mentionedUserId,
+          }))
+        );
+
+        // Insert in_app_notifications for each mentioned user (skip self-mention)
+        const notifTargets = mentionedUserIds.filter((uid) => uid !== userId);
+        if (notifTargets.length > 0) {
+          await db.insert(inAppNotifications).values(
+            notifTargets.map((recipientUserId) => ({
+              tenantId,
+              recipientUserId,
+              kind: "mention" as const,
+              payload: {
+                body: `${user.name} te-a menționat în nota despre ${lead.fullName}`,
+                lead_id: id,
+                interaction_id: created.id,
+                actor_name: user.name,
+              },
+            }))
+          );
+        }
+      }
+    } catch {
+      // Mention processing is best-effort — never fail the main interaction save
+    }
+  }
+
   return c.json(created, 201);
 });
 
