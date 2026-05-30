@@ -29,6 +29,8 @@ const updateStageSchema = z.object({
   orderIndex: z.number().int().min(0).optional(),
   isWon: z.boolean().optional(),
   isLost: z.boolean().optional(),
+  /** CRM-130: WIP limit for this stage (null = no limit) */
+  wipLimit: z.number().int().min(1).max(9999).nullable().optional(),
 });
 
 const reorderSchema = z.object({

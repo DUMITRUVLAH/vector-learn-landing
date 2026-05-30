@@ -10,6 +10,8 @@ export interface PipelineStage {
   isWon: boolean;
   isLost: boolean;
   isDefault: boolean;
+  /** CRM-130: max leads allowed in this stage; null = no limit */
+  wipLimit?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,7 +40,7 @@ export function createPipelineStage(input: {
 
 export function updatePipelineStage(
   id: string,
-  patch: Partial<Pick<PipelineStage, "label" | "color" | "orderIndex" | "isWon" | "isLost">>
+  patch: Partial<Pick<PipelineStage, "label" | "color" | "orderIndex" | "isWon" | "isLost" | "wipLimit">>
 ): Promise<PipelineStage> {
   return api<PipelineStage>(`/api/pipeline-stages/${id}`, {
     method: "PATCH",

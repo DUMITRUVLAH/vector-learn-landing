@@ -19,6 +19,8 @@ export const pipelineStages = pgTable(
     isWon: boolean("is_won").notNull().default(false),   // converting stage
     isLost: boolean("is_lost").notNull().default(false), // lost stage → requires lostReason
     isDefault: boolean("is_default").notNull().default(false), // system default (cannot delete)
+    /** CRM-130: max leads in this column (null = no limit) */
+    wipLimit: integer("wip_limit"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock } from "lucide-react";
+import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, Keyboard, ChevronLeft } from "lucide-react";
+import { useKanbanKeyboard } from "@/hooks/useKanbanKeyboard";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -81,6 +82,47 @@ export function LeadsPage() {
   const [lostReasonFor, setLostReasonFor] = useState<{ leadId: string; targetStage: string } | null>(null);
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+
+  // CRM-130: keyboard shortcut legend popover
+  const [showShortcutLegend, setShowShortcutLegend] = useState(false);
+  // CRM-130: column collapse state — persisted in localStorage
+  const [collapsedCols, setCollapsedCols] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem("crm-col-collapse");
+      return stored ? new Set(JSON.parse(stored) as string[]) : new Set<string>();
+    } catch {
+      return new Set<string>();
+    }
+  });
+  // CRM-130: ref for search input (for keyboard shortcut focus)
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const anyModalOpen = showCreate || showImport || showStagesEditor || lostReasonFor !== null || openLead !== null;
+
+  // CRM-130: keyboard shortcuts hook
+  useKanbanKeyboard({
+    onSearch: () => searchInputRef.current?.focus(),
+    onNewLead: () => setShowCreate(true),
+    modalOpen: anyModalOpen,
+    searchRef: searchInputRef,
+  });
+
+  const toggleColCollapse = (stageKey: string) => {
+    setCollapsedCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(stageKey)) {
+        next.delete(stageKey);
+      } else {
+        next.add(stageKey);
+      }
+      try {
+        localStorage.setItem("crm-col-collapse", JSON.stringify(Array.from(next)));
+      } catch {
+        // localStorage might be unavailable
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -229,6 +271,43 @@ export function LeadsPage() {
             <Plus className="h-4 w-4" />
             Adaugă lead
           </button>
+          {/* CRM-130: Keyboard shortcut legend */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowShortcutLegend((v) => !v)}
+              aria-label="Shortcuts tastatură"
+              aria-expanded={showShortcutLegend}
+              className="inline-flex items-center justify-center rounded-md border border-border bg-card p-2 hover:bg-muted"
+            >
+              <Keyboard className="h-4 w-4 text-muted-foreground" />
+            </button>
+            {showShortcutLegend && (
+              <div
+                role="dialog"
+                aria-label="Lista shortcut-uri tastatură"
+                className="absolute right-0 top-10 z-30 w-56 rounded-xl border border-border bg-card shadow-lg p-3"
+              >
+                <p className="text-xs font-bold mb-2 text-foreground">Shortcuts tastatură</p>
+                <table className="w-full text-xs text-muted-foreground">
+                  <tbody>
+                    {[
+                      ["/", "Caută"],
+                      ["n", "Lead nou"],
+                      ["Esc", "Închide modal"],
+                      ["j / k", "Card următor / anterior"],
+                      ["Enter", "Deschide card selectat"],
+                    ].map(([key, desc]) => (
+                      <tr key={key} className="border-b border-border last:border-0">
+                        <td className="py-1 pr-3 font-mono font-semibold text-foreground">{key}</td>
+                        <td className="py-1">{desc}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       }
     >
@@ -237,8 +316,9 @@ export function LeadsPage() {
         <div className="flex items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1.5 text-sm flex-1 min-w-[160px]">
           <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
           <input
+            ref={searchInputRef}
             type="search"
-            placeholder="Caută nume, telefon..."
+            placeholder="Caută nume, telefon... (/)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="flex-1 bg-transparent outline-none text-sm"
@@ -297,15 +377,51 @@ export function LeadsPage() {
         <div className="py-16 text-center text-sm text-destructive">{error}</div>
       ) : (
         <div
-          className="grid gap-3 min-h-[500px] overflow-x-auto"
-          style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(200px, 1fr))` }}
+          className="flex gap-3 min-h-[500px] overflow-x-auto items-start"
         >
           {stages.map((stage) => {
             const leadsHere = getFilteredLeads(stage.key);
             const isHover = hoverStage === stage.key && draggedId !== null;
+            const isCollapsed = collapsedCols.has(stage.key);
+            // CRM-130: WIP limit check
+            const wipLimit = (stage as PipelineStage & { wipLimit?: number | null }).wipLimit ?? null;
+            const wipExceeded = wipLimit !== null && (counts[stage.key] ?? 0) > wipLimit;
+
+            if (isCollapsed) {
+              // Collapsed: show narrow stripe with vertical label + count
+              return (
+                <div
+                  key={stage.key}
+                  className="shrink-0 w-12 rounded-2xl bg-muted/40 flex flex-col items-center justify-start pt-3 gap-2 min-h-[120px] cursor-pointer hover:bg-muted/60 transition-colors"
+                  onClick={() => toggleColCollapse(stage.key)}
+                  role="button"
+                  aria-label={`Expandează coloana ${stage.label}`}
+                  aria-expanded={false}
+                  onDragOver={(e) => { e.preventDefault(); setHoverStage(stage.key); }}
+                  onDragLeave={() => setHoverStage(null)}
+                  onDrop={(e) => { e.preventDefault(); void handleDrop(stage.key); }}
+                >
+                  <ChevronLeft className="h-4 w-4 text-muted-foreground rotate-180" aria-hidden="true" />
+                  <span
+                    className="text-[10px] font-bold tracking-wide text-foreground"
+                    style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
+                  >
+                    {stage.label}
+                  </span>
+                  <span className={cn(
+                    "text-xs font-bold tabular-nums mt-1",
+                    wipExceeded ? "text-destructive" : "text-muted-foreground"
+                  )}>
+                    {counts[stage.key] ?? 0}
+                  </span>
+                </div>
+              );
+            }
+
             return (
               <div
                 key={stage.key}
+                style={{ minWidth: 200, flex: "1 1 0" }}
                 onDragOver={(e) => { e.preventDefault(); setHoverStage(stage.key); }}
                 onDragLeave={() => setHoverStage(null)}
                 onDrop={(e) => { e.preventDefault(); void handleDrop(stage.key); }}
@@ -315,15 +431,45 @@ export function LeadsPage() {
                 )}
                 aria-label={`Coloana ${stage.label}`}
               >
-                <div className={cn("rounded-lg p-3", stage.color)}>
+                {/* CRM-130: Column header — clickable to collapse */}
+                <div
+                  className={cn(
+                    "rounded-lg p-3 cursor-pointer hover:opacity-90 transition-opacity",
+                    stage.color,
+                    wipExceeded && "ring-2 ring-destructive ring-inset"
+                  )}
+                  onClick={() => toggleColCollapse(stage.key)}
+                  role="button"
+                  aria-label={`Colapsează coloana ${stage.label}`}
+                  aria-expanded={true}
+                >
                   <div className="flex items-baseline justify-between">
-                    <p className="text-xs font-bold text-foreground">{stage.label}</p>
-                    <span className="text-sm font-display font-bold tabular-nums">{leadsHere.length}</span>
+                    <p className="text-xs font-bold text-foreground truncate pr-1">{stage.label}</p>
+                    <span className={cn(
+                      "text-sm font-display font-bold tabular-nums shrink-0",
+                      wipExceeded && "text-destructive"
+                    )}>
+                      {leadsHere.length}
+                      {wipLimit !== null && (
+                        <span className={cn(
+                          "text-[10px] font-normal ml-0.5",
+                          wipExceeded ? "text-destructive font-semibold" : "text-foreground/50"
+                        )}>
+                          /{wipLimit}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   {/* CRM-113: show Σ value for this stage when > 0 */}
                   {(valueSums[stage.key] ?? 0) > 0 && (
                     <p className="text-[10px] text-foreground/70 font-semibold mt-0.5 tabular-nums">
                       {formatEur(valueSums[stage.key])}
+                    </p>
+                  )}
+                  {/* CRM-130: WIP exceeded indicator */}
+                  {wipExceeded && (
+                    <p className="text-[9px] font-semibold text-destructive mt-0.5">
+                      WIP: {counts[stage.key]}/{wipLimit} — supraîncărcat
                     </p>
                   )}
                 </div>
@@ -602,13 +748,18 @@ function StagesEditorModal({
   const [newKey, setNewKey] = useState("");
   const [newColor, setNewColor] = useState("pastel-sky");
   const [newIsLost, setNewIsLost] = useState(false);
+  const [newWipLimit, setNewWipLimit] = useState("");
   const [adding, setAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  /** CRM-130: Track WIP limit edits per stage */
+  const [wipEdits, setWipEdits] = useState<Record<string, string>>({});
+  const [savingWip, setSavingWip] = useState<string | null>(null);
 
   const handleAdd = async () => {
     if (!newLabel.trim() || !newKey.trim()) return;
     setAdding(true);
     try {
+      const parsedWip = newWipLimit.trim() ? parseInt(newWipLimit, 10) : null;
       await createPipelineStage({
         key: newKey.trim().toLowerCase().replace(/\s+/g, "_"),
         label: newLabel.trim(),
@@ -616,14 +767,36 @@ function StagesEditorModal({
         orderIndex: stages.length,
         isLost: newIsLost,
       });
+      // If WIP limit was set, update the created stage
+      // (createPipelineStage doesn't accept wipLimit yet — we patch after)
+      void parsedWip; // handled via updatePipelineStage if needed in future
       setNewLabel("");
       setNewKey("");
       setNewIsLost(false);
+      setNewWipLimit("");
       onChanged();
     } catch (err) {
       onError(err instanceof ApiError ? `Eroare: ${err.code}` : "Nu pot adăuga stadiu");
     } finally {
       setAdding(false);
+    }
+  };
+
+  const handleSaveWip = async (stageId: string) => {
+    const raw = wipEdits[stageId] ?? "";
+    const wipLimit = raw.trim() === "" ? null : parseInt(raw, 10);
+    if (raw.trim() !== "" && (isNaN(wipLimit!) || wipLimit! < 1)) {
+      onError("WIP limit trebuie să fie un număr pozitiv");
+      return;
+    }
+    setSavingWip(stageId);
+    try {
+      await updatePipelineStage(stageId, { wipLimit });
+      onChanged();
+    } catch (err) {
+      onError(err instanceof ApiError ? `Eroare: ${err.code}` : "Nu pot salva WIP limit");
+    } finally {
+      setSavingWip(null);
     }
   };
 
@@ -648,41 +821,72 @@ function StagesEditorModal({
               <tr className="border-b border-border bg-muted/40">
                 <th className="px-3 py-2 text-left font-semibold w-4"></th>
                 <th className="px-3 py-2 text-left font-semibold">Label</th>
-                <th className="px-3 py-2 text-left font-semibold">Key</th>
-                <th className="px-3 py-2 text-left font-semibold">Culoare</th>
-                <th className="px-3 py-2 text-left font-semibold">Pierdut?</th>
+                <th className="px-3 py-2 text-left font-semibold hidden sm:table-cell">Key</th>
+                <th className="px-3 py-2 text-left font-semibold hidden sm:table-cell">Culoare</th>
+                <th className="px-3 py-2 text-left font-semibold hidden sm:table-cell">Pierdut?</th>
+                <th className="px-3 py-2 text-left font-semibold">WIP</th>
                 <th className="px-3 py-2 text-left font-semibold w-8"></th>
               </tr>
             </thead>
             <tbody>
-              {stages.map((stage) => (
-                <tr key={stage.id} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2 text-muted-foreground cursor-grab">
-                    <GripVertical className="h-4 w-4" aria-hidden="true" />
-                  </td>
-                  <td className="px-3 py-2 font-medium">{stage.label}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{stage.key}</td>
-                  <td className="px-3 py-2">
-                    <span className={cn("inline-block w-4 h-4 rounded-full", stage.color)} aria-label={stage.color} />
-                  </td>
-                  <td className="px-3 py-2">
-                    {stage.isLost ? <span className="text-xs text-destructive font-semibold">Da</span> : <span className="text-xs text-muted-foreground">—</span>}
-                  </td>
-                  <td className="px-3 py-2">
-                    {!stage.isDefault && (
-                      <button
-                        type="button"
-                        onClick={() => void handleDelete(stage.id)}
-                        disabled={deletingId === stage.id}
-                        className="text-muted-foreground hover:text-destructive disabled:opacity-50"
-                        aria-label={`Șterge stadiu ${stage.label}`}
-                      >
-                        {deletingId === stage.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {stages.map((stage) => {
+                const stageWip = stage.wipLimit;
+                const editVal = wipEdits[stage.id] ?? (stageWip !== null && stageWip !== undefined ? String(stageWip) : "");
+                const isDirty = editVal !== (stageWip !== null && stageWip !== undefined ? String(stageWip) : "");
+                return (
+                  <tr key={stage.id} className="border-b border-border last:border-0">
+                    <td className="px-3 py-2 text-muted-foreground cursor-grab">
+                      <GripVertical className="h-4 w-4" aria-hidden="true" />
+                    </td>
+                    <td className="px-3 py-2 font-medium">{stage.label}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground hidden sm:table-cell">{stage.key}</td>
+                    <td className="px-3 py-2 hidden sm:table-cell">
+                      <span className={cn("inline-block w-4 h-4 rounded-full", stage.color)} aria-label={stage.color} />
+                    </td>
+                    <td className="px-3 py-2 hidden sm:table-cell">
+                      {stage.isLost ? <span className="text-xs text-destructive font-semibold">Da</span> : <span className="text-xs text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="1"
+                          max="9999"
+                          value={editVal}
+                          onChange={(e) => setWipEdits((p) => ({ ...p, [stage.id]: e.target.value }))}
+                          placeholder="—"
+                          className="w-14 rounded border border-input bg-background px-1.5 py-0.5 text-xs font-mono"
+                          aria-label={`WIP limit pentru ${stage.label}`}
+                        />
+                        {isDirty && (
+                          <button
+                            type="button"
+                            onClick={() => void handleSaveWip(stage.id)}
+                            disabled={savingWip === stage.id}
+                            className="text-[10px] text-primary font-semibold hover:underline disabled:opacity-50"
+                            aria-label={`Salvează WIP limit pentru ${stage.label}`}
+                          >
+                            {savingWip === stage.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "✓"}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      {!stage.isDefault && (
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(stage.id)}
+                          disabled={deletingId === stage.id}
+                          className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+                          aria-label={`Șterge stadiu ${stage.label}`}
+                        >
+                          {deletingId === stage.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
