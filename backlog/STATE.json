@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "CRM-131",
-  "last_completed": "CRM-130",
-  "iterations": 65,
-  "last_run_at": "2026-05-30T16:52:00Z",
-  "milestone_status": "CRM-101..116 (Faze A-F) all done. CRM Faza I: CRM-129 done (PR#84), CRM-130 done (PR#85), CRM-131 pending. SCHED-503/504 also pending.",
+  "current_item": null,
+  "last_completed": "CRM-133",
+  "iterations": 68,
+  "last_run_at": "2026-05-30T17:20:00Z",
+  "milestone_status": "CRM-101..116 (Faze A-F) all done. CRM Faza I: CRM-129 done (PR#84), CRM-130 done (PR#85), CRM-131 done (PR#86), CRM-132 done (PR#87), CRM-133 done (PR#88). SCHED-503/504 pending.",
   "active_milestone": "CRM",
   "items": {
     "M1-001": {
@@ -751,31 +751,40 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-131": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-131-lead-card-ux-polish.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-130"]
+      "depends_on": ["CRM-130"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/86",
+      "branch": "feat/CRM-131-lead-card-ux-polish",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-132": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-132-timeline-filters.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-131"]
+      "depends_on": ["CRM-131"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/87",
+      "branch": "feat/CRM-132-timeline-filters",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-133": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-133-duplicate-detection-banner.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-102", "CRM-131"]
+      "depends_on": ["CRM-102", "CRM-131"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/88",
+      "branch": "feat/CRM-133-duplicate-detection-banner",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     }
   }
 }
