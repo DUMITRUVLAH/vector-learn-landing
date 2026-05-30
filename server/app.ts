@@ -28,6 +28,40 @@ export const app = new Hono();
 
 app.use("*", logger());
 
+// TEMPORARY diagnostic #2 — runs the EXACT login query through the app's shared `db` client
+// (the one login uses), step by step with hard timeouts, to find which step hangs.
+app.get("/api/__diag__/login-path", async (c) => {
+  const out: Record<string, unknown> = {};
+  const cap = <T,>(label: string, ms: number, p: Promise<T>) => {
+    let timer: ReturnType<typeof setTimeout>;
+    return Promise.race([
+      p,
+      new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error(`${label}: timeout ${ms}ms`)), ms); }),
+    ]).finally(() => clearTimeout(timer!));
+  };
+  try {
+    const t0 = Date.now();
+    const { db } = await import("./db/client");
+    const { users } = await import("./db/schema");
+    const { eq } = await import("drizzle-orm");
+    out.import_ms = Date.now() - t0;
+
+    const t1 = Date.now();
+    const u = await cap("findFirst", 8000, db.query.users.findFirst({ where: eq(users.email, "admin@demo.vectorlearn.io") }));
+    out.findFirst_ms = Date.now() - t1;
+    out.foundUser = (u as { email?: string } | undefined)?.email ?? null;
+
+    const t2 = Date.now();
+    const raw = await cap("raw-select", 8000, (db as unknown as { execute: (q: unknown) => Promise<unknown> }).execute((await import("drizzle-orm")).sql`select 1 as ok`));
+    out.raw_ms = Date.now() - t2;
+    out.rawShape = Array.isArray(raw) ? "array" : typeof raw;
+
+    return c.json({ ok: true, ...out });
+  } catch (e) {
+    return c.json({ ok: false, error: e instanceof Error ? e.message : String(e), ...out }, 500);
+  }
+});
+
 // TEMPORARY diagnostic — pinpoints the prod DB hang. Tries several connection strategies
 // against the env URLs with hard per-attempt timeouts, reporting connect time, query time,
 // or the exact error/timeout. Mounted FIRST so no auth/route shadows it. Remove once fixed.
