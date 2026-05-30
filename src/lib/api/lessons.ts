@@ -63,3 +63,47 @@ export function listTeachers(): Promise<{ items: Teacher[] }> {
 export function listCourses(): Promise<{ items: Course[] }> {
   return api<{ items: Course[] }>("/api/courses");
 }
+
+// SCHED-503: Attendance
+
+export type AttendanceStatus = "present" | "absent" | "late" | "excused" | "pending";
+
+export interface LessonStudent {
+  studentLessonId: string;
+  studentId: string;
+  attendanceStatus: AttendanceStatus;
+  markedBy: string | null;
+  markedAt: string | null;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+}
+
+export function getLessonStudents(lessonId: string): Promise<{ items: LessonStudent[] }> {
+  return api<{ items: LessonStudent[] }>(`/api/lessons/${lessonId}/students`);
+}
+
+export function markAttendance(
+  lessonId: string,
+  studentId: string,
+  attendanceStatus: Exclude<AttendanceStatus, "pending">
+): Promise<LessonStudent> {
+  return api<LessonStudent>(`/api/lessons/${lessonId}/students/${studentId}/attendance`, {
+    method: "PATCH",
+    body: JSON.stringify({ attendanceStatus }),
+  });
+}
+
+// SCHED-504: iCal calendar token
+
+export interface CalendarTokenResult {
+  token: string;
+  url: string;
+  expiresInDays: number;
+}
+
+export function generateCalendarToken(teacherId: string): Promise<CalendarTokenResult> {
+  return api<CalendarTokenResult>(`/api/teachers/${teacherId}/calendar-token`, {
+    method: "POST",
+  });
+}

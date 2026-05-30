@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "SCHED-502",
-  "iterations": 62,
-  "last_run_at": "2026-05-30T10:18:00Z",
-  "milestone_status": "M1+M2+M3 landing + MVP-001..008 + CRM-101..116 + COMM-201..205 + REP-301..304 + HR-401..404 + SCHED-501..502 complete. SCHED milestone active. Next: SCHED-503 (attendance), SCHED-504 (iCal).",
+  "last_completed": "SCHED-504",
+  "iterations": 64,
+  "last_run_at": "2026-05-30T10:37:00Z",
+  "milestone_status": "M1+M2+M3 landing + MVP-001..008 + CRM-101..116 + COMM-201..205 + REP-301..304 + HR-401..404 + SCHED-501..504 complete. SCHED milestone DONE. All backlog items complete.",
   "active_milestone": "SCHED",
   "items": {
     "M1-001": {
@@ -709,22 +709,27 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "SCHED-503": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHED-503-attendance.md",
       "milestone": "SCHED",
       "phase": "3",
-      "depends_on": ["SCHED-501"]
+      "depends_on": ["SCHED-501"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/59",
+      "branch": "feat/SCHED-503-attendance",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "SCHED-504": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHED-504-ical.md",
       "milestone": "SCHED",
       "phase": "4",
-      "depends_on": ["SCHED-501"]
+      "depends_on": ["SCHED-501"],
+      "branch": "feat/SCHED-504-ical",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     }
   }
 }

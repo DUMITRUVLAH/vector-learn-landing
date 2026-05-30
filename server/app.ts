@@ -17,6 +17,7 @@ import { templateRoutes } from "./routes/templates";
 import { automationRoutes } from "./routes/automations";
 import { analyticsRoutes } from "./routes/analytics";
 import { tagRoutes } from "./routes/tags";
+import { calendarTokenRoutes, calendarIcsRoutes } from "./routes/calendar";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -53,6 +54,8 @@ app.route("/api/leads", taskRoutes); // tasks/attachments under /api/leads/:lead
 app.route("/api/templates", templateRoutes);
 app.route("/api/automations", automationRoutes);
 app.route("/api/analytics", analyticsRoutes);
+app.route("/api/calendar", calendarIcsRoutes); // GET /api/calendar/teacher/:id.ics (public, token-auth — MUST be before tagRoutes)
+app.route("/api/teachers", calendarTokenRoutes); // POST /api/teachers/:id/calendar-token (auth required)
 app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
 
 app.get("/api/health", async (c) => {

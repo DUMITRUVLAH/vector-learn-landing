@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
-import { Loader2, Mail, Wallet, Percent } from "lucide-react";
+import { Loader2, Mail, Wallet, Percent, Calendar, Copy, Check } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
-import { listTeachers, type Teacher } from "@/lib/api/lessons";
+import { listTeachers, generateCalendarToken, type Teacher } from "@/lib/api/lessons";
+import { cn } from "@/lib/utils";
 
 export function TeachersPage() {
   const { status: sessionStatus } = useSession();
@@ -11,6 +12,8 @@ export function TeachersPage() {
   const [items, setItems] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copyingId, setCopyingId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -32,6 +35,26 @@ export function TeachersPage() {
   useEffect(() => {
     void fetchAll();
   }, [fetchAll]);
+
+  const handleCopyCalendar = async (teacherId: string) => {
+    setCopyingId(teacherId);
+    try {
+      const result = await generateCalendarToken(teacherId);
+      await navigator.clipboard.writeText(result.url);
+      setCopiedId(teacherId);
+      setTimeout(() => setCopiedId(null), 2500);
+    } catch {
+      // clipboard write may fail in non-HTTPS contexts; fall back to alert
+      try {
+        const result = await generateCalendarToken(teacherId);
+        window.prompt("Copiați link-ul de calendar:", result.url);
+      } catch {
+        // ignore
+      }
+    } finally {
+      setCopyingId(null);
+    }
+  };
 
   const totalRate = items.reduce((s, t) => s + t.hourlyRateCents, 0);
   const avgCommission = items.length > 0 ? items.reduce((s, t) => s + t.commissionPct, 0) / items.length : 0;
@@ -80,6 +103,9 @@ export function TeachersPage() {
                   <th scope="col" className="text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-4 py-2.5">
                     Comision
                   </th>
+                  <th scope="col" className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-4 py-2.5 hidden md:table-cell">
+                    Calendar
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -114,6 +140,29 @@ export function TeachersPage() {
                         <Percent className="h-3 w-3 text-muted-foreground" />
                         {t.commissionPct}%
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-center hidden md:table-cell">
+                      <button
+                        type="button"
+                        onClick={() => void handleCopyCalendar(t.id)}
+                        disabled={copyingId === t.id}
+                        aria-label={`Copiază link calendar ${t.name}`}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-all disabled:opacity-50",
+                          copiedId === t.id
+                            ? "border-success/40 bg-success/10 text-success"
+                            : "border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {copyingId === t.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : copiedId === t.id ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          <Calendar className="h-3 w-3" />
+                        )}
+                        {copiedId === t.id ? "Copiat!" : "Copiază link Calendar"}
+                      </button>
                     </td>
                   </tr>
                 ))}
