@@ -5,6 +5,7 @@ import { and, eq, gte, lt, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { lessons, courses, teachers, users } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { getBranchScope } from "../middleware/branchScope";
 
 const createLessonSchema = z.object({
   courseId: z.string().uuid(),
@@ -63,8 +64,14 @@ lessonRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
   const conditions = [eq(lessons.tenantId, tenantId)];
   if (from) conditions.push(gte(lessons.scheduledAt, new Date(from)));
   if (to) conditions.push(lt(lessons.scheduledAt, new Date(to)));
-  // BRANCH-702: filter by branch_id if provided
-  if (branch_id) conditions.push(eq(lessons.branchId, branch_id));
+  // BRANCH-703: server-side branch scope enforcement
+  const scope = getBranchScope(c);
+  if (scope) {
+    conditions.push(eq(lessons.branchId, scope));
+  } else if (branch_id) {
+    // BRANCH-702: optional client-side filter (full-access users only)
+    conditions.push(eq(lessons.branchId, branch_id));
+  }
 
   const rows = await db
     .select({

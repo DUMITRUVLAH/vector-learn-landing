@@ -5,6 +5,7 @@ import { and, eq, desc, sql, lte } from "drizzle-orm";
 import { db } from "../db/client";
 import { invoices, students, subscriptions } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { getBranchScope } from "../middleware/branchScope";
 import { generateUBL21 } from "../lib/efactura";
 
 const createInvoiceSchema = z.object({
@@ -34,6 +35,11 @@ invoiceRoutes.get("/", async (c) => {
 
   // Build conditions for optional filters
   const conditions = [eq(invoices.tenantId, tenantId)];
+  // BRANCH-703: filter invoices by student's branch when user has branch scope
+  const scope = getBranchScope(c);
+  if (scope) {
+    conditions.push(eq(students.branchId, scope));
+  }
   if (status && ["draft", "issued", "paid", "cancelled"].includes(status)) {
     conditions.push(eq(invoices.status, status as "draft" | "issued" | "paid" | "cancelled"));
   }

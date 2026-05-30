@@ -1180,17 +1180,25 @@
       }
     },
     "BRANCH-702": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BRANCH-702-switcher.md",
       "milestone": "BRANCH",
       "phase": "2",
-      "depends_on": ["BRANCH-701"]
+      "depends_on": ["BRANCH-701"],
+      "branch": "feat/BRANCH-702-branch-switcher",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/81",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "BRANCH-703": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BRANCH-703-scoped-roles.md",
       "milestone": "BRANCH",

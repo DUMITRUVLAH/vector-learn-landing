@@ -22,6 +22,7 @@ import { cadenceRoutes } from "./routes/cadences";
 import { auditRoutes } from "./routes/audit";
 import { invoiceRoutes } from "./routes/invoices";
 import { branchRoutes } from "./routes/branches";
+import { userRoutes } from "./routes/users";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -64,6 +65,7 @@ app.route("/api/cadences", cadenceRoutes);
 app.route("/api/audit-log", auditRoutes);
 app.route("/api/invoices", invoiceRoutes);
 app.route("/api/branches", branchRoutes);
+app.route("/api/users", userRoutes); // BRANCH-703: user branch-scope management
 
 app.get("/api/health", async (c) => {
   try {

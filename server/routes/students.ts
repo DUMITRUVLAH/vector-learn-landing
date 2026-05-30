@@ -5,6 +5,7 @@ import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { students } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { getBranchScope } from "../middleware/branchScope";
 
 const studentBaseSchema = z.object({
   fullName: z.string().min(2).max(200),
@@ -51,8 +52,12 @@ studentRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
   if (status !== "all") {
     conditions.push(eq(students.status, status));
   }
-  // BRANCH-702: filter by branch_id if provided
-  if (branch_id) {
+  // BRANCH-703: server-side branch scope enforcement (takes priority over client filter)
+  const scope = getBranchScope(c);
+  if (scope) {
+    conditions.push(eq(students.branchId, scope));
+  } else if (branch_id) {
+    // BRANCH-702: optional client-side branch filter (only when user has full access)
     conditions.push(eq(students.branchId, branch_id));
   }
   if (search && search.trim()) {

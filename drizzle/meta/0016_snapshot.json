@@ -1,6 +1,6 @@
 {
-  "id": "d480445f-cd90-443c-aa01-98515625c371",
-  "prevId": "7cab2948-9329-4dc5-baa0-5b82e981b7ca",
+  "id": "c08b9984-45ff-4cea-b2ba-10de37fd66fb",
+  "prevId": "d480445f-cd90-443c-aa01-98515625c371",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -206,6 +206,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'manager'"
+        },
+        "branch_scope": {
+          "name": "branch_scope",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
