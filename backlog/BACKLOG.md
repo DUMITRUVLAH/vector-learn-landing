@@ -83,14 +83,14 @@ Pivot from landing-only to functional SaaS with Postgres + auth + multi-tenant.
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
 | — | `MVP-009` | CRM Leads (kanban + create + convert + note) | — | done ✅ (merged commit `433f73a`) | [specs/MVP-009-crm-leads.md](specs/MVP-009-crm-leads.md) |
-| 1 | `CRM-101` | Intake web public + UTM + captcha + consent GDPR | A | pending | [specs/CRM-101-intake-web.md](specs/CRM-101-intake-web.md) |
-| 2 | `CRM-102` | Deduplicare robustă + merge manual | A | pending | [specs/CRM-102-dedup-merge.md](specs/CRM-102-dedup-merge.md) |
-| 3 | `CRM-103` | Adăugare manuală extinsă + Import CSV | A | pending | [specs/CRM-103-manual-import.md](specs/CRM-103-manual-import.md) |
-| 4 | `CRM-104` | Webhook Facebook Lead Ads + Google gclid | A | pending | [specs/CRM-104-ads-webhooks.md](specs/CRM-104-ads-webhooks.md) |
-| 5 | `CRM-105` | Pipeline: stadii custom + motiv pierdere + filtre | B | pending | [specs/CRM-105-pipeline.md](specs/CRM-105-pipeline.md) |
-| 6 | `CRM-106` | Cartonaș detaliu `/app/leads/:id` (tab-uri, inline edit) | B | pending | [specs/CRM-106-lead-card.md](specs/CRM-106-lead-card.md) |
-| 7 | `CRM-107` | Task-uri & remindere + atașamente | B | pending | [specs/CRM-107-tasks-files.md](specs/CRM-107-tasks-files.md) |
-| 8 | `CRM-108` | Bibliotecă template-uri (email/WhatsApp/SMS) | C | pending | [specs/CRM-108-templates.md](specs/CRM-108-templates.md) |
+| 1 | `CRM-101` | Intake web public + UTM + captcha + consent GDPR | A | done ✅ | [specs/CRM-101-intake-web.md](specs/CRM-101-intake-web.md) · [PR #27](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/27) |
+| 2 | `CRM-102` | Deduplicare robustă + merge manual | A | done ✅ | [specs/CRM-102-dedup-merge.md](specs/CRM-102-dedup-merge.md) · [PR #28](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/28) |
+| 3 | `CRM-103` | Adăugare manuală extinsă + Import CSV | A | done ✅ | [specs/CRM-103-manual-import.md](specs/CRM-103-manual-import.md) · [PR #29](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/29) |
+| 4 | `CRM-104` | Webhook Facebook Lead Ads + Google gclid | A | done ✅ | [specs/CRM-104-ads-webhooks.md](specs/CRM-104-ads-webhooks.md) · [PR #30](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/30) |
+| 5 | `CRM-105` | Pipeline: stadii custom + motiv pierdere + filtre | B | done ✅ | [specs/CRM-105-pipeline.md](specs/CRM-105-pipeline.md) · [PR #31](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/31) |
+| 6 | `CRM-106` | Cartonaș detaliu `/app/leads/:id` (tab-uri, inline edit) | B | done ✅ | [specs/CRM-106-lead-card.md](specs/CRM-106-lead-card.md) · [PR #32](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/32) |
+| 7 | `CRM-107` | Task-uri & remindere + atașamente | B | done ✅ | [specs/CRM-107-tasks-files.md](specs/CRM-107-tasks-files.md) · [PR #33](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/33) |
+| 8 | `CRM-108` | Bibliotecă template-uri (email/WhatsApp/SMS) | C | done ✅ | [specs/CRM-108-templates.md](specs/CRM-108-templates.md) · [PR #34](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/34) |
 | 9 | `CRM-109` | Comunicare din cartonaș + logare apel | C | done ✅ | [specs/CRM-109-comms.md](specs/CRM-109-comms.md) · [PR #36](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/36) |
 | 10 | `CRM-110` | Motor automatizări (trigger→condiție→acțiune) | D | done ✅ | [specs/CRM-110-automation.md](specs/CRM-110-automation.md) · [PR #37](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/37) |
 | 11 | `CRM-111` | Conversie → student cu familie + reasignare + scor | E | done ✅ | [specs/CRM-111-convert-family.md](specs/CRM-111-convert-family.md) · [PR #38](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/38) |
@@ -101,12 +101,37 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 13 | `CRM-113` | Valoare deal (€) per lead + rollup valoare pe pipeline | F | pending | [specs/CRM-113-deal-value.md](specs/CRM-113-deal-value.md) |
-| 14 | `CRM-114` | Companie + contacte multiple (B2B) + nume deal | F | pending | [specs/CRM-114-company-contacts.md](specs/CRM-114-company-contacts.md) |
+| 13 | `CRM-113` | Valoare deal (€) per lead + rollup valoare pe pipeline | F | done ✅ | [specs/CRM-113-deal-value.md](specs/CRM-113-deal-value.md) · [PR #40](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/40) |
+| 14 | `CRM-114` | Companie + contacte multiple (B2B) + nume deal | F | done ✅ | [specs/CRM-114-company-contacts.md](specs/CRM-114-company-contacts.md) · [PR #42](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/42) |
 | 15 | `CRM-115` | Tag-uri + câmpuri custom configurabile per tenant | F | done ✅ | [specs/CRM-115-tags-custom-fields.md](specs/CRM-115-tags-custom-fields.md) · [PR #43](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/43) |
-| 16 | `CRM-116` | Semnale task pe card — „Fără task" + aging restanță | F | pending | [specs/CRM-116-task-signals.md](specs/CRM-116-task-signals.md) |
+| 16 | `CRM-116` | Semnale task pe card — „Fără task" + aging restanță | F | done ✅ | [specs/CRM-116-task-signals.md](specs/CRM-116-task-signals.md) · [PR #41](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/41) |
 
-**Ordine de build:** `CRM-101 → … → 112` (done) → `113 → 116 → 114 → 115` (valoare + semnale task întâi — impact maxim pe demo).
+**🎉 CRM Faza A–F: 16/16 done.** Toate feature-urile (paritate Kommo) construite.
+
+### Faza G — Scală & UX (de la „funcțional" la „ready-to-use") — vezi [BUILD-SEQUENCE](crm/BUILD-SEQUENCE.md)
+Golul dintre „are toate funcțiile" și „o academie reală îl folosește 8h/zi fără să se enerveze".
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 17 | `CRM-117` | Vedere Listă/Tabel comutabilă (sortare, coloane, paginare) | G | pending | [specs/CRM-117-list-view.md](specs/CRM-117-list-view.md) |
+| 18 | `CRM-120` | Dashboard „Azi" per vânzător (task + leaduri noi + Next Best Action) | G | pending | [specs/CRM-120-today-dashboard.md](specs/CRM-120-today-dashboard.md) |
+| 19 | `CRM-118` | Bulk-select + acțiuni în masă | G | pending | [specs/CRM-118-bulk-actions.md](specs/CRM-118-bulk-actions.md) |
+| 20 | `CRM-124` | SLA timp de răspuns + lead-rot escalation | G | pending | [specs/CRM-124-sla-lead-rot.md](specs/CRM-124-sla-lead-rot.md) |
+| 21 | `CRM-119` | Căutare globală ⌘K + vizualizări salvate | G | pending | [specs/CRM-119-search-saved-views.md](specs/CRM-119-search-saved-views.md) |
+| 22 | `CRM-125` | Prognoză venit ponderată | G | pending | [specs/CRM-125-weighted-forecast.md](specs/CRM-125-weighted-forecast.md) |
+
+### Faza H — Mobile & Acțiune (folosit pe teren, ghidează nu doar stochează)
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 23 | `CRM-121` | Vedere mobilă dedicată (listă + swipe-actions) | H | pending | [specs/CRM-121-mobile-view.md](specs/CRM-121-mobile-view.md) |
+| 24 | `CRM-122` | Quick-add mobil 3 atingeri + click-to-call + dedup live | H | pending | [specs/CRM-122-quick-add-mobile.md](specs/CRM-122-quick-add-mobile.md) |
+| 25 | `CRM-123` | Centru notificări in-app (clopoțel) | H | pending | [specs/CRM-123-notifications.md](specs/CRM-123-notifications.md) |
+| 26 | `CRM-126` | Secvențe follow-up (cadence) peste motorul CRM-110 | H | pending | [specs/CRM-126-followup-cadence.md](specs/CRM-126-followup-cadence.md) |
+| 27 | `CRM-127` | Undo (mutare/ștergere) + audit log per lead | H | pending | [specs/CRM-127-undo-audit.md](specs/CRM-127-undo-audit.md) |
+| 28 | `CRM-128` | Empty states + onboarding | H | pending | [specs/CRM-128-empty-states-onboarding.md](specs/CRM-128-empty-states-onboarding.md) |
+
+**Ordine de build Faza G+H:** `CRM-117 → 120 → 121 → 118 → 124 → 122 → 119 → 123 → 125 → 126 → 127 → 128`
 
 ## Active milestone: COMM — Modulul Comunicare (mesagerie reală backend)
 

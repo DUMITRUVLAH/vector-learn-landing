@@ -43,8 +43,36 @@ driver-portability check (see test-runner) — the three gates that catch integr
 1. Read `backlog/STATE.json`
 2. Find first item where `status == "pending"`
 3. If none → check for `blocked` items, attempt retry on those whose `attempts < 2`
-4. If still none → exit with message "ALL_DONE"
+4. If still none → **GOTO Step 1b (PLAN)**. Do NOT exit with ALL_DONE while NIGHT-PLAN still has unbuilt modules.
 5. Update STATE.json: set `current_item`, status `in_progress`, increment `attempts`, bump `iterations`
+
+### Step 1b — PLAN (auto-generate backlog when empty)
+Triggered only when no `pending` item exists and no `blocked` item is retryable.
+
+**Source of direction:**
+1. `backlog/NIGHT-PLAN.md` — module order: Finanțe `FIN-6xx`, Multifilale `BRANCH-7xx`, Settings `SET-8xx`, Integrări `INT-9xx`, AI `AI-Axx`. Pick the first module whose prefix has zero items in STATE.json.
+2. `backlog/user-stories/<module>.md` — behavior contract for that module (what items must cover).
+3. Persona feedback in `backlog/reports/*-manager.md` and `*-student.md` — friction/DISLIKES become candidate items.
+
+**What the planner does:**
+1. Determine next module (first in NIGHT-PLAN with no items in STATE).
+2. Derive **3–5 items** in dependency order, sized one-PR-each, from `user-stories/<module>.md`.
+3. For EACH item, write `backlog/specs/<ID>.md` with full template (frontmatter, Goal, User stories, Acceptance criteria, Files, Tests, DoD):
+   - **Tests section** must contain:
+     - 3–6 Given/When/Then scenarios in the format: `- **T-<ID>-N** [blocant|normal] Given..., When..., Then...`
+     - For backend items: one `[blocant]` scenario each for migration gate, live API smoke (login + endpoint → 200), and DB-portability (result shape correct)
+     - For UI items: one `[blocant]` for render-without-crash, one `[normal]` for the main interaction
+     - Mark scenarios blocking (`[blocant]`) if failure means the feature is broken; `[normal]` for degraded-but-usable
+   - **User stories section** must list 2–4 "Ca <rol>, vreau să <acțiune>, pentru că <motiv>" rows drawn from `user-stories/<module>.md`
+4. Append the new module's scenarios to `backlog/crm/TEST-SCENARIOS.md` (or create `backlog/<module>/TEST-SCENARIOS.md` if it's a new module) under a `## <MODULE> — <Name>` heading, using the same T-<ID>-N `[blocant]` format as the CRM file.
+5. Add each item to `backlog/STATE.json` (`status: "pending"`, `attempts: 0`, `blockers: []`, `spec`, `milestone`, `phase`, `depends_on`) and a row to `backlog/BACKLOG.md` under a new "Active milestone" heading.
+6. Append ONE line to `## Progress log` in `backlog/NIGHT-PLAN.md`: `- planner: generated <MODULE> items <ID..ID> from user-stories/<module>.md`.
+7. Set `active_milestone` + update `milestone_status` in STATE.json.
+8. GOTO Step 1 and pick the first new item.
+
+**Genuine ALL_DONE:** if every module in NIGHT-PLAN already has items in STATE.json → exit with `ORCHESTRATOR_RUN_SUMMARY`, `stop_reason: all_done`.
+
+**Bounded-batch interaction:** spec generation doesn't count toward the 3-item cap. If a module yields 4 specs but cap allows 3 builds, build 3 and leave the 4th `pending` for the next run.
 
 ### Step 2 — BUILD
 Invoke `feature-builder` agent via Agent tool. Pass the spec file path. Wait for `BUILDER_RESULT`.

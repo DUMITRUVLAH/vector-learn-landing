@@ -4,7 +4,7 @@
   "last_completed": "SCHED-502",
   "iterations": 62,
   "last_run_at": "2026-05-30T10:18:00Z",
-  "milestone_status": "M1+M2+M3 landing + MVP-001..008 + CRM-101..116 + COMM-201..205 + REP-301..304 + HR-401..404 + SCHED-501..502 complete. SCHED milestone active. Next: SCHED-503 (attendance), SCHED-504 (iCal).",
+  "milestone_status": "M1+M2+M3 landing + MVP-001..008 + CRM-101..116 + COMM-201..205 + REP-301..304 + HR-401..404 + SCHED-501..502 complete. SCHED active (503,504 pending). CRM Faza G+H added (CRM-117..128) — ready-to-use pentru academie: listă, mobile, dashboard azi, bulk, SLA, follow-up, undo, onboarding.",
   "active_milestone": "SCHED",
   "items": {
     "M1-001": {
@@ -725,6 +725,114 @@
       "milestone": "SCHED",
       "phase": "4",
       "depends_on": ["SCHED-501"]
+    },
+    "CRM-117": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-117-list-view.md",
+      "milestone": "CRM",
+      "phase": "G",
+      "depends_on": ["CRM-105", "CRM-113"]
+    },
+    "CRM-120": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-120-today-dashboard.md",
+      "milestone": "CRM",
+      "phase": "G",
+      "depends_on": ["CRM-107", "CRM-111"]
+    },
+    "CRM-121": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-121-mobile-view.md",
+      "milestone": "CRM",
+      "phase": "H",
+      "depends_on": ["CRM-117", "CRM-109"]
+    },
+    "CRM-118": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-118-bulk-actions.md",
+      "milestone": "CRM",
+      "phase": "G",
+      "depends_on": ["CRM-117"]
+    },
+    "CRM-124": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-124-sla-lead-rot.md",
+      "milestone": "CRM",
+      "phase": "G",
+      "depends_on": ["CRM-116", "CRM-120"]
+    },
+    "CRM-122": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-122-quick-add-mobile.md",
+      "milestone": "CRM",
+      "phase": "H",
+      "depends_on": ["CRM-121", "CRM-102"]
+    },
+    "CRM-119": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-119-search-saved-views.md",
+      "milestone": "CRM",
+      "phase": "G",
+      "depends_on": ["CRM-117"]
+    },
+    "CRM-123": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-123-notifications.md",
+      "milestone": "CRM",
+      "phase": "H",
+      "depends_on": ["CRM-107", "CRM-111"]
+    },
+    "CRM-125": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-125-weighted-forecast.md",
+      "milestone": "CRM",
+      "phase": "G",
+      "depends_on": ["CRM-113", "CRM-112"]
+    },
+    "CRM-126": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-126-followup-cadence.md",
+      "milestone": "CRM",
+      "phase": "H",
+      "depends_on": ["CRM-110", "CRM-108"]
+    },
+    "CRM-127": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-127-undo-audit.md",
+      "milestone": "CRM",
+      "phase": "H",
+      "depends_on": ["CRM-106"]
+    },
+    "CRM-128": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-128-empty-states-onboarding.md",
+      "milestone": "CRM",
+      "phase": "H",
+      "depends_on": ["CRM-117", "CRM-120"]
     }
   }
 }
