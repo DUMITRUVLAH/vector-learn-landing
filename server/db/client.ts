@@ -27,16 +27,15 @@ function createConnection(): {
   closeDb: () => Promise<void>;
 } {
   if (databaseUrl) {
-    // Supabase transaction pooler (pgBouncer :6543): no prepared statements, explicit SSL,
-    // 1 connection per serverless invocation, and short timeouts so a bad connection FAILS
-    // fast (visible error) instead of hanging the function into a 504.
-    const client = postgres(databaseUrl, {
-      prepare: false,
-      ssl: "require",
-      max: 1,
-      connect_timeout: 10,
-      idle_timeout: 20,
-    });
+    // `prepare: false` for the Supabase transaction pooler (pgBouncer). The single-connection +
+    // short-timeout options are SERVERLESS-ONLY — on the persistent local/container server `max:1`
+    // serializes requests into a deadlock, so local keeps a normal pool.
+    const client = postgres(
+      databaseUrl,
+      onVercel
+        ? { prepare: false, ssl: "require", max: 1, connect_timeout: 10, idle_timeout: 20 }
+        : { prepare: false }
+    );
     return {
       db: drizzlePostgres(client, { schema }),
       closeDb: () => client.end(),
