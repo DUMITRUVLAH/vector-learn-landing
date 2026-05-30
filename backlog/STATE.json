@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "CRM-123",
-  "iterations": 73,
-  "last_run_at": "2026-05-30T14:45:00Z",
-  "milestone_status": "M1+M2+M3+MVP+CRM-101..122+COMM+REP+HR+SCHED complete. CRM-118/119/124/125 (PR#66/70/67/71) done. CRM-122 (PR#68) done. CRM Faza H active: CRM-123 in_progress, 126/127/128 pending.",
+  "current_item": "CRM-126",
+  "last_completed": "CRM-125",
+  "iterations": 74,
+  "last_run_at": "2026-05-30T15:00:00Z",
+  "milestone_status": "M1+M2+M3+MVP+CRM-101..125+COMM+REP+HR+SCHED complete. CRM Faza H active: CRM-126 in_progress, 127/128 pending.",
   "active_milestone": "CRM",
   "items": {
     "M1-001": {
@@ -986,15 +986,23 @@
       }
     },
     "CRM-119": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-119-search-saved-views.md",
       "milestone": "CRM",
       "phase": "G",
       "depends_on": [
         "CRM-117"
-      ]
+      ],
+      "branch": "feat/CRM-119-search-saved-views",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/70",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-123": {
       "status": "done",
@@ -1036,8 +1044,8 @@
       }
     },
     "CRM-126": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-126-followup-cadence.md",
       "milestone": "CRM",

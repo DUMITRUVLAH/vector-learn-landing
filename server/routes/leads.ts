@@ -9,6 +9,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 import { fireTrigger } from "../lib/automationEngine";
 import { createNotification, notifyManagersAndOwners } from "../lib/createNotification";
+import { enrollLeadInCadences, pauseEnrollmentsOnReply } from "./cadences";
 
 const STAGES = ["new", "contacted", "trial", "paid", "lost"] as const;
 const SOURCES = [
@@ -428,6 +429,8 @@ leadRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async (c) 
   // Fire automation trigger (fire-and-forget — don't block response)
   if (updated) {
     void fireTrigger(tenantId, "lead.stage_changed", updated, { toStage: stage }).catch(() => undefined);
+    // CRM-126: Auto-enroll in matching cadences
+    void enrollLeadInCadences(tenantId, id, stage).catch(() => undefined);
   }
 
   return c.json(updated);
@@ -566,6 +569,12 @@ leadRoutes.post("/:id/interactions", zValidator("json", interactionSchema), asyn
       userId,
     })
     .returning();
+
+  // CRM-126: Auto-pause cadence enrollments when lead replies
+  if (body.direction === "inbound") {
+    void pauseEnrollmentsOnReply(tenantId, id).catch(() => undefined);
+  }
+
   return c.json(created, 201);
 });
 
