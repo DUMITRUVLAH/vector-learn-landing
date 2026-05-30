@@ -173,7 +173,7 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
 | 1 | `FIN-601` | Facturi PDF cu serie incrementală + UI /app/invoices | 1 | done ✅ | [specs/FIN-601-invoices.md](specs/FIN-601-invoices.md) · [PR #76](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/76) |
-| 2 | `FIN-602` | Datorie elev — link CRM-113 debt_cents + reconciliere plăți | 2 | pending | [specs/FIN-602-debt-reconciliation.md](specs/FIN-602-debt-reconciliation.md) |
+| 2 | `FIN-602` | Datorie elev — link CRM-113 debt_cents + reconciliere plăți | 2 | done ✅ | [specs/FIN-602-debt-reconciliation.md](specs/FIN-602-debt-reconciliation.md) · [PR #77](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/77) |
 | 3 | `FIN-603` | Abonamente recurente — generare automată facturi lunare | 3 | pending | [specs/FIN-603-recurring-billing.md](specs/FIN-603-recurring-billing.md) |
 | 4 | `FIN-604` | e-Factura export stub (UBL 2.1 XML) + export SAGA CSV | 4 | pending | [specs/FIN-604-efactura-stub.md](specs/FIN-604-efactura-stub.md) |
 
