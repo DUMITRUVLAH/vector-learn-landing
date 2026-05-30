@@ -19,6 +19,8 @@ export const pipelineStages = pgTable(
     isWon: boolean("is_won").notNull().default(false),   // converting stage
     isLost: boolean("is_lost").notNull().default(false), // lost stage → requires lostReason
     isDefault: boolean("is_default").notNull().default(false), // system default (cannot delete)
+    /** CRM-125: Win probability 0–100% for weighted forecast calculation */
+    probabilityPct: integer("probability_pct").notNull().default(10),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -33,9 +35,9 @@ export type NewPipelineStage = typeof pipelineStages.$inferInsert;
 
 /** Default stages to seed for new tenants (or migration) */
 export const DEFAULT_PIPELINE_STAGES: Omit<NewPipelineStage, "id" | "tenantId" | "createdAt" | "updatedAt">[] = [
-  { key: "new", label: "Lead nou", color: "pastel-sky", orderIndex: 0, isWon: false, isLost: false, isDefault: true },
-  { key: "contacted", label: "Contactat", color: "pastel-lavender", orderIndex: 1, isWon: false, isLost: false, isDefault: true },
-  { key: "trial", label: "Trial / Demo", color: "pastel-peach", orderIndex: 2, isWon: false, isLost: false, isDefault: true },
-  { key: "paid", label: "Client", color: "pastel-mint", orderIndex: 3, isWon: true, isLost: false, isDefault: true },
-  { key: "lost", label: "Pierdut", color: "pastel-rose", orderIndex: 4, isWon: false, isLost: true, isDefault: true },
+  { key: "new", label: "Lead nou", color: "pastel-sky", orderIndex: 0, isWon: false, isLost: false, isDefault: true, probabilityPct: 10 },
+  { key: "contacted", label: "Contactat", color: "pastel-lavender", orderIndex: 1, isWon: false, isLost: false, isDefault: true, probabilityPct: 25 },
+  { key: "trial", label: "Trial / Demo", color: "pastel-peach", orderIndex: 2, isWon: false, isLost: false, isDefault: true, probabilityPct: 60 },
+  { key: "paid", label: "Client", color: "pastel-mint", orderIndex: 3, isWon: true, isLost: false, isDefault: true, probabilityPct: 100 },
+  { key: "lost", label: "Pierdut", color: "pastel-rose", orderIndex: 4, isWon: false, isLost: true, isDefault: true, probabilityPct: 0 },
 ];

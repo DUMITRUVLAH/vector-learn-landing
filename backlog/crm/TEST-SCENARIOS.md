@@ -137,6 +137,24 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-116-3** Given task open mâine, Then card arată data, nu badge roșu.
 - **T-CRM-116-4** Given filtru „fără task", Then se afișează doar leadurile fără task open.
 
+## CRM-117 — List view {#crm-117}
+- **T-CRM-117-1** `[blocant]` Given `/app/leads?view=list`, Then se afișează leadurile în tabel cu coloanele: Nume, Stadiu, Sursă, Responsabil, Valoare, Data.
+- **T-CRM-117-2** Given click pe un rând, Then navigează la `/app/leads/:id`.
+- **T-CRM-117-3** Given sortare pe coloana „Valoare", Then leadurile sunt ordonate descrescător.
+
+## CRM-119 — Căutare globală + Vizualizări salvate {#crm-119}
+- **T-CRM-119-1** `[blocant]` Given filtre active (sursă=Facebook), When apăs „Salvează filtrul" și introduc un nume, Then vizualizarea apare în dropdown și o pot reactiva cu un click.
+- **T-CRM-119-2** `[blocant]` Given o vizualizare salvată, When apăs X lângă ea, Then e ștearsă și nu mai apare în dropdown.
+- **T-CRM-119-3** `[blocant]` Given search „ACME", Then filtrarea returnează leaduri cu „ACME" în `company` sau `dealName` sau `interestCourse`.
+- **T-CRM-119-4** `[blocant]` Given `GET /api/saved-views` autenticat, Then răspuns 200 cu `{ views: [] }`.
+- **T-CRM-119-5** Multi-tenant: vizualizările tenantului A nu sunt vizibile din tenantul B.
+
+## CRM-125 — Forecast ponderat {#crm-125}
+- **T-CRM-125-1** `[blocant]` Given 3 leaduri în „trial" cu value_cents total 100000 și probability=60%, Then forecast ponderat al stagei = 60000.
+- **T-CRM-125-2** `[blocant]` Given owner schimbă probability „new" de la 10% la 20%, Then forecast-ul se recalculează.
+- **T-CRM-125-3** `[blocant]` Given `GET /api/analytics/crm/forecast` autenticat, Then 200 cu `{ stages: [...], totalGrossCents, totalWeightedCents }`.
+- **T-CRM-125-4** Multi-tenant: forecast-ul tenantului A nu include date din tenantul B.
+
 ---
 
 ## Scenarii transversale (rulate la fiecare item)

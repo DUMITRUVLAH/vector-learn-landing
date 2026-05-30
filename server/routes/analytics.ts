@@ -8,9 +8,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, count, eq, isNotNull, sql, sum } from "drizzle-orm";
+import { and, asc, count, eq, isNotNull, sql, sum } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, adCampaignBudgets } from "../db/schema";
+import { leads, adCampaignBudgets, pipelineStages } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const analyticsRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -256,4 +256,60 @@ analyticsRoutes.post("/crm/budgets", zValidator("json", setBudgetSchema), async 
     .returning();
 
   return c.json(created, 201);
+});
+
+// ─── CRM-125: Weighted Forecast ───────────────────────────────────────────────
+
+// GET /api/analytics/crm/forecast
+analyticsRoutes.get("/crm/forecast", async (c) => {
+  const tenantId = c.get("user").tenantId;
+
+  // Get all pipeline stages for this tenant
+  const stages = await db
+    .select()
+    .from(pipelineStages)
+    .where(eq(pipelineStages.tenantId, tenantId))
+    .orderBy(asc(pipelineStages.orderIndex));
+
+  // Sum value_cents per stage key
+  const valueByStageResult = await db
+    .select({
+      stage: leads.stage,
+      gross: sum(leads.valueCents),
+      cnt: count(leads.id),
+    })
+    .from(leads)
+    .where(eq(leads.tenantId, tenantId))
+    .groupBy(leads.stage);
+
+  const valueByStage = Array.isArray(valueByStageResult) ? valueByStageResult : (valueByStageResult as unknown as typeof valueByStageResult);
+
+  const valueMap: Record<string, { gross: number; cnt: number }> = {};
+  for (const row of valueByStage) {
+    valueMap[row.stage] = {
+      gross: Number(row.gross ?? 0),
+      cnt: Number(row.cnt ?? 0),
+    };
+  }
+
+  // Build forecast per stage
+  const forecastStages = stages.map((stage) => {
+    const { gross = 0, cnt = 0 } = valueMap[stage.key] ?? {};
+    const weightedCents = Math.round(gross * (stage.probabilityPct / 100));
+    return {
+      stageId: stage.id,
+      stage: stage.key,
+      label: stage.label,
+      color: stage.color,
+      probabilityPct: stage.probabilityPct,
+      count: cnt,
+      grossCents: gross,
+      weightedCents,
+    };
+  });
+
+  const totalGrossCents = forecastStages.reduce((s, f) => s + f.grossCents, 0);
+  const totalWeightedCents = forecastStages.reduce((s, f) => s + f.weightedCents, 0);
+
+  return c.json({ stages: forecastStages, totalGrossCents, totalWeightedCents });
 });
