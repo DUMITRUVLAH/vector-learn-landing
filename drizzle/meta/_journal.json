@@ -57,6 +57,48 @@
       "when": 1780088159440,
       "tag": "0007_crm115_tags_custom_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780140043920,
+      "tag": "0008_neat_shatterstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780200000000,
+      "tag": "0009_crm126_cadences",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1780200060000,
+      "tag": "0010_crm127_audit_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780300000000,
+      "tag": "0011_fin601_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1780300060000,
+      "tag": "0012_fin602_debt_reconcile",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1780143485378,
+      "tag": "0013_perpetual_shaman",
+      "breakpoints": true
     }
   ]
 }

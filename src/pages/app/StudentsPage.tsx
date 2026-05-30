@@ -229,9 +229,17 @@ export function StudentsPage() {
                           <p className="text-[10px] text-muted-foreground">{s.parentPhone ?? "—"}</p>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold", badge.cls)}>
-                            {badge.label}
-                          </span>
+                          <div className="inline-flex flex-col items-end gap-1">
+                            <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold", badge.cls)}>
+                              {badge.label}
+                            </span>
+                            {/* FIN-602: Show debt badge when student has outstanding debt */}
+                            {(s.debtCents ?? 0) > 0 && (
+                              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-destructive/15 text-destructive">
+                                Datorie: {new Intl.NumberFormat("ro-RO", { style: "currency", currency: "RON", maximumFractionDigits: 0 }).format((s.debtCents ?? 0) / 100)}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="inline-flex gap-1">
