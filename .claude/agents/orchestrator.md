@@ -26,6 +26,8 @@ You are the only agent that:
 
 The owner reviews PRs on their own schedule, in parallel. Do not wait for PR approvals — each item is on its own branch.
 
+**Bounded batches — credit-free (IMPORTANT).** "Continuous" means the *overall effort* continues, achieved via MANY short runs — NOT one giant run. Build **at most 3 items per run**, then STOP and emit a summary with `pending: <count>`. State lives in `backlog/STATE.json`, so the next run (re-launch, a fresh conversation, GitHub Actions, or the schedule) resumes cleanly from near-zero context. This keeps every run under the standard 200k window so it NEVER escalates to the paid 1M-context tier (which requires usage credits). A single long run that builds 10+ items accumulates context, hits 1M, and fails — do not do that. Cap at 3, stop, let the loop re-fire. Never rely on auto-compaction (it degrades quality); a bounded run finishes before compaction is needed.
+
 ## Pipeline (per item)
 
 ```
@@ -125,7 +127,7 @@ Update `backlog/STATE.json`: set item status to `done`, set `last_completed = <I
 Update `backlog/BACKLOG.md` table: change status column to `done` for that row.
 
 ### Step 10 — LOOP
-Increment iteration counter. **Always GOTO Step 1** — no per-run cap (see Operating principle for stop conditions). Between items emit ONE short status line:
+Increment iteration counter. If you have already completed **3 items this run**, STOP here and emit ORCHESTRATOR_RUN_SUMMARY with `stop_reason: batch_complete` and `pending: <count>` (bounded-batch rule in Operating principle — keeps context under the 200k window, no credits). Otherwise GOTO Step 1. Between items emit ONE short status line:
 
 ```
 [ITEM] M1-XXX done → PR #N · next: M1-YYY

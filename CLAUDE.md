@@ -29,8 +29,8 @@ Everything else: choose the safest path forward and log it.
 
 ### What this means in practice
 
-- After completing one backlog item (PICK→BUILD→…→PR→DONE), **immediately pick the next pending item and start again**. No "end of run" summary, no asking "should I continue?", no waiting.
-- The previous `MAX_ITERATIONS_PER_RUN=3` cap is **REMOVED**. There is no per-run cap.
+- After completing one backlog item (PICK→BUILD→…→PR→DONE), **immediately pick the next pending item and start again**. No "end of run" summary, no asking "should I continue?", no waiting — **until the batch cap below**.
+- **Bounded batches (credit-free): max 3 items per run, then STOP** with a summary + pending count. "Continuous" = the *overall effort* continues across MANY short runs (re-launch / fresh conversation / schedule / GitHub Actions), state in `backlog/STATE.json`. A single long run accumulates context past 200k, escalates to the paid 1M-context tier, and fails — so cap each run at 3 and let the loop re-fire. (This replaces the old "no per-run cap" — continuity is preserved, just chunked.)
 - The only automatic stop conditions remaining are:
   1. All backlog items are `done` or `blocked` (genuinely nothing left to pick)
   2. A hard environment failure makes further work impossible (git auth dead, disk full, network down, npm install fails twice)
