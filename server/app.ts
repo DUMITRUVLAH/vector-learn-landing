@@ -28,6 +28,48 @@ export const app = new Hono();
 
 app.use("*", logger());
 
+// TEMPORARY diagnostic #3 — runs EACH login step in isolation to find which one hangs:
+// bcrypt verify, the session INSERT (write), etc. DB read already proven fine.
+app.get("/api/__diag__/login-steps", async (c) => {
+  const out: Record<string, unknown> = {};
+  const cap = <T,>(label: string, ms: number, p: Promise<T>) => {
+    let timer: ReturnType<typeof setTimeout>;
+    return Promise.race([
+      p,
+      new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error(`${label}: timeout ${ms}ms`)), ms); }),
+    ]).finally(() => clearTimeout(timer!));
+  };
+  try {
+    const { db } = await import("./db/client");
+    const { users, sessions } = await import("./db/schema");
+    const { eq } = await import("drizzle-orm");
+    const { verifyPassword } = await import("./auth/password");
+    const { randomBytes } = await import("node:crypto");
+
+    let t = Date.now();
+    const u = await cap("find", 8000, db.query.users.findFirst({ where: eq(users.email, "admin@demo.vectorlearn.io") }));
+    out.find_ms = Date.now() - t;
+    const user = u as { id: string; passwordHash: string } | undefined;
+    if (!user) return c.json({ ok: false, step: "find", error: "no user" }, 500);
+
+    t = Date.now();
+    out.bcrypt_ok = await cap("bcrypt", 8000, verifyPassword("demo123456", user.passwordHash));
+    out.bcrypt_ms = Date.now() - t;
+
+    t = Date.now();
+    const token = randomBytes(48).toString("base64url");
+    await cap("insert-session", 8000, db.insert(sessions).values({ userId: user.id, token, expiresAt: new Date(Date.now() + 86400000) }) as unknown as Promise<unknown>);
+    out.insertSession_ms = Date.now() - t;
+
+    // cleanup the test session
+    await cap("cleanup", 8000, db.delete(sessions).where(eq(sessions.token, token)) as unknown as Promise<unknown>);
+
+    return c.json({ ok: true, ...out });
+  } catch (e) {
+    return c.json({ ok: false, error: e instanceof Error ? e.message : String(e), ...out }, 500);
+  }
+});
+
 // TEMPORARY diagnostic #2 — runs the EXACT login query through the app's shared `db` client
 // (the one login uses), step by step with hard timeouts, to find which step hangs.
 app.get("/api/__diag__/login-path", async (c) => {
