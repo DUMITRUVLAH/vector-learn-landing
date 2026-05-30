@@ -168,6 +168,15 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 3 | `SCHED-503` | Prezență: marcare per lecție + raport prezență % | 3 | pending | [specs/SCHED-503-attendance.md](specs/SCHED-503-attendance.md) |
 | 4 | `SCHED-504` | Export iCal: calendar personalizat profesor/elev | 4 | pending | [specs/SCHED-504-ical.md](specs/SCHED-504-ical.md) |
 
+## Active milestone: FIN — Modulul Finanțe (facturi + datorie + recurent + e-Factura)
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `FIN-601` | Facturi PDF cu serie incrementală + UI /app/invoices | 1 | pending | [specs/FIN-601-invoices.md](specs/FIN-601-invoices.md) |
+| 2 | `FIN-602` | Datorie elev — link CRM-113 debt_cents + reconciliere plăți | 2 | pending | [specs/FIN-602-debt-reconciliation.md](specs/FIN-602-debt-reconciliation.md) |
+| 3 | `FIN-603` | Abonamente recurente — generare automată facturi lunare | 3 | pending | [specs/FIN-603-recurring-billing.md](specs/FIN-603-recurring-billing.md) |
+| 4 | `FIN-604` | e-Factura export stub (UBL 2.1 XML) + export SAGA CSV | 4 | pending | [specs/FIN-604-efactura-stub.md](specs/FIN-604-efactura-stub.md) |
+
 ## Quality gates (required before status → `done`)
 
 1. **Build passes**: `npm run build` exits 0

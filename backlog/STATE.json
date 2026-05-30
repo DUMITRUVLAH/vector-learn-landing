@@ -4,8 +4,8 @@
   "last_completed": "CRM-128",
   "iterations": 77,
   "last_run_at": "2026-05-30T16:00:00Z",
-  "milestone_status": "M1+M2+M3+MVP+CRM-101..128+COMM+REP+HR+SCHED ALL COMPLETE. CRM Faza G+H DONE. Next: NIGHT-PLAN next module.",
-  "active_milestone": "CRM",
+  "milestone_status": "M1+M2+M3+MVP+CRM+COMM+REP+HR+SCHED ALL COMPLETE. FIN module planned: FIN-601..604 pending.",
+  "active_milestone": "FIN",
   "items": {
     "M1-001": {
       "status": "done",
@@ -1093,6 +1093,42 @@
         "manager": "BUY",
         "student": "PASS"
       }
+    },
+    "FIN-601": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-601-invoices.md",
+      "milestone": "FIN",
+      "phase": "1",
+      "depends_on": ["MVP-007", "CRM-113"]
+    },
+    "FIN-602": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-602-debt-reconciliation.md",
+      "milestone": "FIN",
+      "phase": "2",
+      "depends_on": ["FIN-601", "CRM-113"]
+    },
+    "FIN-603": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-603-recurring-billing.md",
+      "milestone": "FIN",
+      "phase": "3",
+      "depends_on": ["FIN-601", "FIN-602"]
+    },
+    "FIN-604": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-604-efactura-stub.md",
+      "milestone": "FIN",
+      "phase": "4",
+      "depends_on": ["FIN-601"]
     }
   }
 }
