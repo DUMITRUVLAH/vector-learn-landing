@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock } from "lucide-react";
 import { MobileLeadList } from "@/components/crm/MobileLeadList";
+import { QuickAddSheet } from "@/components/crm/QuickAddSheet";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -82,6 +83,8 @@ export function LeadsPage() {
   const [lostReasonFor, setLostReasonFor] = useState<{ leadId: string; targetStage: string } | null>(null);
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  /** CRM-122: Quick-add mobile bottom sheet */
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -323,6 +326,16 @@ export function LeadsPage() {
               onRefresh={() => void fetchAll()}
               onError={(m) => setToast({ kind: "error", message: m })}
             />
+
+            {/* CRM-122: FAB — quick-add button on mobile */}
+            <button
+              type="button"
+              onClick={() => setShowQuickAdd(true)}
+              className="lg:hidden fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Adaugă lead rapid"
+            >
+              <Plus className="h-7 w-7" />
+            </button>
           </div>
 
           {/* Kanban — hidden on mobile (< lg), shown on desktop */}
@@ -427,6 +440,22 @@ export function LeadsPage() {
           onChanged={() => void fetchAll()}
           onConverted={(studentId) => { setOpenLead(null); setToast({ kind: "success", message: "Lead convertit în student!" }); void fetchAll(); void studentId; }}
           onError={(m) => setToast({ kind: "error", message: m })}
+        />
+      )}
+
+      {/* CRM-122: Quick-add bottom sheet for mobile */}
+      {showQuickAdd && (
+        <QuickAddSheet
+          onClose={() => setShowQuickAdd(false)}
+          onSaved={() => {
+            setShowQuickAdd(false);
+            setToast({ kind: "success", message: "Lead adăugat în pipeline" });
+            void fetchAll();
+          }}
+          onError={(m) => {
+            setShowQuickAdd(false);
+            setToast({ kind: "error", message: m });
+          }}
         />
       )}
 
