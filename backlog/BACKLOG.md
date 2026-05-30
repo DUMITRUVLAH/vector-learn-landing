@@ -128,19 +128,28 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 1 | `REP-301` | Dashboard KPI: MRR, elevi activi, churn, ARPU + period toggle | 1 | pending | [specs/REP-301-dashboard-kpi.md](specs/REP-301-dashboard-kpi.md) |
-| 2 | `REP-302` | Revenue over time: line chart MRR lunar + breakdown disciplină | 2 | pending | [specs/REP-302-revenue-chart.md](specs/REP-302-revenue-chart.md) |
-| 3 | `REP-303` | Student retention: LTV per elev + top 10 + attendance rate | 3 | pending | [specs/REP-303-student-retention.md](specs/REP-303-student-retention.md) |
-| 4 | `REP-304` | Export rapoarte: CSV plăți + CSV elevi + download din UI | 4 | pending | [specs/REP-304-export.md](specs/REP-304-export.md) |
+| 1 | `REP-301` | Dashboard KPI: MRR, elevi activi, churn, ARPU + period toggle | 1 | done ✅ | [specs/REP-301-dashboard-kpi.md](specs/REP-301-dashboard-kpi.md) · [PR #49](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/49) |
+| 2 | `REP-302` | Revenue over time: line chart MRR lunar + breakdown disciplină | 2 | done ✅ | [specs/REP-302-revenue-chart.md](specs/REP-302-revenue-chart.md) · [PR #50](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/50) |
+| 3 | `REP-303` | Student retention: LTV per elev + top 10 + attendance rate | 3 | done ✅ | [specs/REP-303-student-retention.md](specs/REP-303-student-retention.md) · [PR #51](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/51) |
+| 4 | `REP-304` | Export rapoarte: CSV plăți + CSV elevi + download din UI | 4 | done ✅ | [specs/REP-304-export.md](specs/REP-304-export.md) · [PR #52](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/52) |
 
 ## Active milestone: HR — Modulul HR (payroll + stats + disponibilitate + audit)
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 1 | `HR-401` | Calcul salariu lunar + payroll_entries tabel | 1 | pending | [specs/HR-401-payroll.md](specs/HR-401-payroll.md) |
-| 2 | `HR-402` | Stats profesor: ore, prezență%, venituri | 2 | pending | [specs/HR-402-teacher-stats.md](specs/HR-402-teacher-stats.md) |
-| 3 | `HR-403` | Disponibilitate profesor: grid săptămânal + conflict | 3 | pending | [specs/HR-403-availability.md](specs/HR-403-availability.md) |
-| 4 | `HR-404` | Audit log HR: rate/rol/payroll cu actor + timestamp | 4 | pending | [specs/HR-404-audit-log.md](specs/HR-404-audit-log.md) |
+| 1 | `HR-401` | Calcul salariu lunar + payroll_entries tabel | 1 | done ✅ | [specs/HR-401-payroll.md](specs/HR-401-payroll.md) · [PR #53](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/53) |
+| 2 | `HR-402` | Stats profesor: ore, prezență%, venituri | 2 | done ✅ | [specs/HR-402-teacher-stats.md](specs/HR-402-teacher-stats.md) · [PR #54](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/54) |
+| 3 | `HR-403` | Disponibilitate profesor: grid săptămânal + conflict | 3 | done ✅ | [specs/HR-403-availability.md](specs/HR-403-availability.md) · [PR #55](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/55) |
+| 4 | `HR-404` | Audit log HR: rate/rol/payroll cu actor + timestamp | 4 | done ✅ | [specs/HR-404-audit-log.md](specs/HR-404-audit-log.md) · [PR #56](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/56) |
+
+## Active milestone: SCHED — Scheduler (săli + recurent + prezență + iCal)
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `SCHED-501` | Săli de clasă: rooms table + conflict detection + dropdown | 1 | done ✅ | [specs/SCHED-501-rooms.md](specs/SCHED-501-rooms.md) · [PR #57](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/57) |
+| 2 | `SCHED-502` | Lecții recurente: pattern săptămânal + excepții | 2 | pending | [specs/SCHED-502-recurring.md](specs/SCHED-502-recurring.md) |
+| 3 | `SCHED-503` | Prezență: marcare per lecție + raport prezență % | 3 | pending | [specs/SCHED-503-attendance.md](specs/SCHED-503-attendance.md) |
+| 4 | `SCHED-504` | Export iCal: calendar personalizat profesor/elev | 4 | pending | [specs/SCHED-504-ical.md](specs/SCHED-504-ical.md) |
 
 ## Quality gates (required before status → `done`)
 
