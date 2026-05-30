@@ -1,4 +1,5 @@
 import { HashRouter, useRouter } from "./router/HashRouter";
+import { BranchProvider } from "./contexts/BranchContext";
 import { Navbar } from "./components/Navbar";
 import { Hero } from "./components/Hero";
 import { TrustBar } from "./components/TrustBar";
@@ -114,8 +115,11 @@ function Routes() {
 export default function App() {
   return (
     <HashRouter>
-      <Routes />
-      {import.meta.env.DEV && <BackendStatusBadge />}
+      {/* BRANCH-702: BranchProvider wraps all app routes so useBranch() works from any page */}
+      <BranchProvider>
+        <Routes />
+        {import.meta.env.DEV && <BackendStatusBadge />}
+      </BranchProvider>
     </HashRouter>
   );
 }

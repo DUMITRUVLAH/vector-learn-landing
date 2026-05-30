@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app/AppShell";
 import { StudentForm } from "@/components/app/StudentForm";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
+import { useBranch } from "@/contexts/BranchContext";
 import {
   listStudents,
   archiveStudent,
@@ -30,6 +31,8 @@ const STATUS_FILTERS: Array<{ value: ListStudentsParams["status"]; label: string
 export function StudentsPage() {
   const { status: sessionStatus } = useSession();
   const { navigate } = useRouter();
+  // BRANCH-702: get active branch filter from context
+  const { activeBranch } = useBranch();
   const [items, setItems] = useState<Student[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -55,7 +58,10 @@ export function StudentsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await listStudents({ search: debouncedSearch, status: statusFilter, limit: 100 });
+      // BRANCH-702: pass branch_id when a specific branch is active
+      const params: ListStudentsParams = { search: debouncedSearch, status: statusFilter, limit: 100 };
+      if (activeBranch !== "all") params.branch_id = activeBranch;
+      const res = await listStudents(params);
       setItems(res.items);
       setTotal(res.total);
     } catch (err) {
@@ -63,7 +69,7 @@ export function StudentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, statusFilter]);
+  }, [debouncedSearch, statusFilter, activeBranch]);
 
   useEffect(() => {
     void fetchList();
