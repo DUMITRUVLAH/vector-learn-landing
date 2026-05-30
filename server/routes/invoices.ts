@@ -5,6 +5,7 @@ import { and, eq, desc, sql, lte } from "drizzle-orm";
 import { db } from "../db/client";
 import { invoices, students, subscriptions } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { generateUBL21 } from "../lib/efactura";
 
 const createInvoiceSchema = z.object({
   studentId: z.string().uuid(),
@@ -449,4 +450,125 @@ invoiceRoutes.post("/subscriptions/run-billing", async (c) => {
   }
 
   return c.json({ processed: due.length, invoicesCreated: invoiceIds });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// FIN-604: e-Factura + SAGA CSV export routes
+// ──────────────────────────────────────────────────────────────────────────────
+
+// GET /api/invoices/export/saga-csv?month=YYYY-MM
+// Returns CSV compatible with SAGA accounting software, tenant-scoped.
+invoiceRoutes.get("/export/saga-csv", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const month = c.req.query("month"); // YYYY-MM
+
+  const conditions = [eq(invoices.tenantId, tenantId)];
+  if (month && /^\d{4}-\d{2}$/.test(month)) {
+    const [yr, mo] = month.split("-").map(Number);
+    const start = new Date(yr, (mo as number) - 1, 1);
+    const end = new Date(yr, mo as number, 1);
+    conditions.push(
+      sql`${invoices.issueDate} >= ${start.toISOString()} AND ${invoices.issueDate} < ${end.toISOString()}`
+    );
+  }
+
+  const rows = await db
+    .select({
+      number: invoices.number,
+      issueDate: invoices.issueDate,
+      invoiceNumber: invoices.invoiceNumber,
+      amountCents: invoices.amountCents,
+      currency: invoices.currency,
+      status: invoices.status,
+      notes: invoices.notes,
+      studentName: students.fullName,
+    })
+    .from(invoices)
+    .innerJoin(students, eq(invoices.studentId, students.id))
+    .where(and(...conditions))
+    .orderBy(invoices.number);
+
+  // SAGA CSV headers (Romanian accounting format)
+  const header = "Nr,Data,Client,CUI/CNP,Descriere,Valoare fara TVA,TVA 19%,Total,Status";
+
+  const lines = rows.map((inv) => {
+    const total = inv.amountCents / 100;
+    const vatRate = 0.19;
+    const vatBase = +(total / (1 + vatRate)).toFixed(2);
+    const vat = +(total - vatBase).toFixed(2);
+    const dateStr = new Date(inv.issueDate).toLocaleDateString("ro-RO", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    const cols = [
+      inv.number,
+      dateStr,
+      `"${(inv.studentName ?? "").replace(/"/g, '""')}"`,
+      "", // CUI/CNP — not in current schema (future)
+      `"${(inv.notes ?? "Servicii educationale").replace(/"/g, '""')}"`,
+      vatBase.toFixed(2),
+      vat.toFixed(2),
+      total.toFixed(2),
+      inv.status,
+    ];
+    return cols.join(",");
+  });
+
+  const csv = [header, ...lines].join("\r\n");
+  const filename = month ? `saga-${month}.csv` : `saga-export.csv`;
+
+  c.header("Content-Type", "text/csv; charset=utf-8");
+  c.header("Content-Disposition", `attachment; filename="${filename}"`);
+  return c.text(csv);
+});
+
+// GET /api/invoices/:id/efactura
+// Generates UBL 2.1 XML for the invoice, sets efactura_status = 'pending'.
+// Matches AFTER /export/saga-csv to avoid route shadowing.
+invoiceRoutes.get("/:id/efactura", async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+
+  const [inv] = await db
+    .select({
+      id: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      issueDate: invoices.issueDate,
+      dueDate: invoices.dueDate,
+      amountCents: invoices.amountCents,
+      currency: invoices.currency,
+      status: invoices.status,
+      notes: invoices.notes,
+      studentName: students.fullName,
+    })
+    .from(invoices)
+    .innerJoin(students, eq(invoices.studentId, students.id))
+    .where(and(eq(invoices.id, id), eq(invoices.tenantId, tenantId)));
+
+  if (!inv) return c.json({ error: "not_found" }, 404);
+
+  // Generate XML
+  const xml = generateUBL21({
+    invoiceNumber: inv.invoiceNumber,
+    issueDate: inv.issueDate,
+    dueDate: inv.dueDate ?? undefined,
+    amountCents: inv.amountCents,
+    currency: inv.currency,
+    studentName: inv.studentName,
+    notes: inv.notes ?? undefined,
+  });
+
+  // Mark as pending e-factura
+  await db
+    .update(invoices)
+    .set({ efacturaStatus: "pending", updatedAt: new Date() })
+    .where(and(eq(invoices.id, id), eq(invoices.tenantId, tenantId)));
+
+  c.header("Content-Type", "application/xml; charset=utf-8");
+  c.header(
+    "Content-Disposition",
+    `attachment; filename="${inv.invoiceNumber.replace(/[^a-zA-Z0-9-]/g, "_")}.xml"`
+  );
+  return c.text(xml);
 });

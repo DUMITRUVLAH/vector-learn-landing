@@ -135,3 +135,22 @@ export function runBilling(): Promise<RunBillingResult> {
     method: "POST",
   });
 }
+
+// ── FIN-604: e-Factura + SAGA CSV ─────────────────────────────────────────────
+
+/**
+ * Triggers XML download for the invoice (e-Factura UBL 2.1).
+ * Opens the download URL in the browser via window.location.href.
+ */
+export function downloadEfacturaXml(id: string): void {
+  window.location.href = `/api/invoices/${id}/efactura`;
+}
+
+/**
+ * Triggers SAGA CSV download for the given month.
+ * Opens the download URL in the browser via window.location.href.
+ */
+export function downloadSagaCsv(month?: string): void {
+  const qs = month ? `?month=${encodeURIComponent(month)}` : "";
+  window.location.href = `/api/invoices/export/saga-csv${qs}`;
+}

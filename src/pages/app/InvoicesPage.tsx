@@ -9,6 +9,8 @@ import {
   Receipt,
   CalendarDays,
   PlayCircle,
+  FileCode,
+  Table2,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -21,6 +23,8 @@ import {
   listSubscriptions,
   updateSubscription,
   runBilling,
+  downloadEfacturaXml,
+  downloadSagaCsv,
   type Invoice,
   type InvoiceStatus,
   type InvoiceCurrency,
@@ -307,6 +311,16 @@ export function InvoicesPage() {
                 Resetează
               </button>
             )}
+            {/* Export SAGA CSV button — aligned right in filter bar */}
+            <button
+              type="button"
+              onClick={() => downloadSagaCsv(filterMonth || undefined)}
+              aria-label="Export SAGA CSV"
+              className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+            >
+              <Table2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Export SAGA CSV
+            </button>
           </div>
 
           {/* Invoice Table */}
@@ -413,6 +427,17 @@ export function InvoicesPage() {
                                 <Download className="h-3 w-3" aria-hidden="true" />
                                 PDF
                               </button>
+                              {(inv.status === "issued" || inv.status === "paid") && (
+                                <button
+                                  type="button"
+                                  onClick={() => downloadEfacturaXml(inv.id)}
+                                  aria-label={`Descarcă e-Factura XML ${inv.invoiceNumber}`}
+                                  className="inline-flex items-center gap-1 rounded-md bg-primary/10 text-primary px-2 py-1 text-[11px] font-semibold hover:bg-primary/20"
+                                >
+                                  <FileCode className="h-3 w-3" aria-hidden="true" />
+                                  e-Fact
+                                </button>
+                              )}
                               {(inv.status === "draft" || inv.status === "issued") && (
                                 <button
                                   type="button"

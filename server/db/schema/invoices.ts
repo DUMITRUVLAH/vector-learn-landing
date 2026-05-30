@@ -44,6 +44,12 @@ export const invoices = pgTable(
     notes: text("notes"),
     /** Storage key for a generated PDF (future) */
     pdfKey: varchar("pdf_key", { length: 500 }),
+    /**
+     * FIN-604: e-Factura SPV status — null = not exported,
+     * 'pending' = XML exported / awaiting submission,
+     * 'submitted' = sent to ANAF (future)
+     */
+    efacturaStatus: varchar("efactura_status", { length: 30 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
