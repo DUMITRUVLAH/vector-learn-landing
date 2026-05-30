@@ -1,11 +1,11 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "CRM-122",
-  "iterations": 68,
-  "last_run_at": "2026-05-30T14:15:00Z",
-  "milestone_status": "M1+M2+M3 landing + MVP-001..008 + CRM-101..121 + COMM-201..205 + REP-301..304 + HR-401..404 + SCHED-501..504 complete. CRM-118 (PR#66) + CRM-124 (PR#67) + CRM-122 (PR#68) done. CRM Faza G+H active (CRM-119..128 pending minus 118/122/124).",
-  "active_milestone": "CRM",
+  "last_completed": "BRANCH-704",
+  "iterations": 87,
+  "last_run_at": "2026-05-30T18:30:00Z",
+  "milestone_status": "M1+M2+M3+MVP+CRM+COMM+REP+HR+SCHED+FIN+BRANCH ALL COMPLETE. BRANCH module: 701-704 all done.",
+  "active_milestone": "BRANCH",
   "items": {
     "M1-001": {
       "status": "done",
@@ -986,19 +986,27 @@
       }
     },
     "CRM-119": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-119-search-saved-views.md",
       "milestone": "CRM",
       "phase": "G",
       "depends_on": [
         "CRM-117"
-      ]
+      ],
+      "branch": "feat/CRM-119-search-saved-views",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/70",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-123": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-123-notifications.md",
       "milestone": "CRM",
@@ -1006,11 +1014,18 @@
       "depends_on": [
         "CRM-107",
         "CRM-111"
-      ]
+      ],
+      "branch": "feat/CRM-123-notifications",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-125": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-125-weighted-forecast.md",
       "milestone": "CRM",
@@ -1018,42 +1033,202 @@
       "depends_on": [
         "CRM-113",
         "CRM-112"
-      ]
+      ],
+      "branch": "feat/CRM-125-weighted-forecast",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/71",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-126": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-126-followup-cadence.md",
       "milestone": "CRM",
       "phase": "H",
-      "depends_on": [
-        "CRM-110",
-        "CRM-108"
-      ]
+      "depends_on": ["CRM-110", "CRM-108"],
+      "branch": "feat/CRM-126-followup-cadence",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/73",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-127": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-127-undo-audit.md",
       "milestone": "CRM",
       "phase": "H",
-      "depends_on": [
-        "CRM-106"
-      ]
+      "depends_on": ["CRM-106"],
+      "branch": "feat/CRM-127-undo-audit",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/74",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-128": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-128-empty-states-onboarding.md",
       "milestone": "CRM",
       "phase": "H",
-      "depends_on": [
-        "CRM-117",
-        "CRM-120"
-      ]
+      "depends_on": ["CRM-117", "CRM-120"],
+      "branch": "feat/CRM-128-empty-states-onboarding",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/75",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "FIN-601": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-601-invoices.md",
+      "milestone": "FIN",
+      "phase": "1",
+      "depends_on": ["MVP-007", "CRM-113"],
+      "branch": "feat/FIN-601-invoices",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/76",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "FIN-602": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-602-debt-reconciliation.md",
+      "milestone": "FIN",
+      "phase": "2",
+      "depends_on": ["FIN-601", "CRM-113"],
+      "branch": "feat/FIN-602-debt-reconciliation",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/77",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "FIN-603": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-603-recurring-billing.md",
+      "milestone": "FIN",
+      "phase": "3",
+      "depends_on": ["FIN-601", "FIN-602"],
+      "branch": "feat/FIN-603-recurring-billing",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/78",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "FIN-604": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-604-efactura-stub.md",
+      "milestone": "FIN",
+      "phase": "4",
+      "depends_on": ["FIN-601"],
+      "branch": "feat/FIN-604-efactura-stub",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/79",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "BRANCH-701": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/BRANCH-701-schema.md",
+      "milestone": "BRANCH",
+      "phase": "1",
+      "depends_on": ["MVP-002", "MVP-004", "MVP-005"],
+      "branch": "feat/BRANCH-701-branches-schema",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/80",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "BRANCH-702": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/BRANCH-702-switcher.md",
+      "milestone": "BRANCH",
+      "phase": "2",
+      "depends_on": ["BRANCH-701"],
+      "branch": "feat/BRANCH-702-branch-switcher",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/81",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "BRANCH-703": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/BRANCH-703-scoped-roles.md",
+      "milestone": "BRANCH",
+      "phase": "3",
+      "depends_on": ["BRANCH-701", "BRANCH-702"],
+      "branch": "feat/BRANCH-703-scoped-roles",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/82",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "BRANCH-704": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/BRANCH-704-reports.md",
+      "milestone": "BRANCH",
+      "phase": "4",
+      "depends_on": ["BRANCH-702", "BRANCH-703"],
+      "branch": "feat/BRANCH-704-branch-reports",
+      "pr": null,
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     }
   }
 }

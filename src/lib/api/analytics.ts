@@ -64,3 +64,23 @@ export function setBudget(input: {
     body: JSON.stringify(input),
   });
 }
+
+// ─── BRANCH-704: Per-branch KPI analytics ────────────────────────────────────
+
+export interface BranchKpi {
+  branchId: string;
+  branchName: string;
+  /** Sum of paid payments in current month (cents) */
+  mrr: number;
+  activeStudents: number;
+  lessonsThisMonth: number;
+}
+
+export interface BranchKpiResponse {
+  branches: BranchKpi[];
+}
+
+export function getBranchKpis(period?: "month" | "quarter"): Promise<BranchKpiResponse> {
+  const qs = period ? `?period=${period}` : "";
+  return api<BranchKpiResponse>(`/api/analytics/branches${qs}`);
+}

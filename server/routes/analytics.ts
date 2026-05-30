@@ -4,13 +4,16 @@
  * GET /api/analytics/crm/lost-reasons — lost reason aggregation
  * GET /api/analytics/crm/roas — ROAS per campaign
  * POST /api/analytics/crm/budgets — set ad spend per campaign+month
+ *
+ * BRANCH-704 — Branch KPI analytics
+ * GET /api/analytics/branches — per-branch KPIs (MRR, active students, lessons this month)
  */
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, count, eq, isNotNull, sql, sum } from "drizzle-orm";
+import { and, count, eq, gte, isNotNull, lt, sql, sum } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, adCampaignBudgets } from "../db/schema";
+import { leads, adCampaignBudgets, branches, students, payments, lessons } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const analyticsRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -256,4 +259,95 @@ analyticsRoutes.post("/crm/budgets", zValidator("json", setBudgetSchema), async 
     .returning();
 
   return c.json(created, 201);
+});
+
+// ─── BRANCH-704: Per-branch KPI analytics ────────────────────────────────────
+
+/**
+ * GET /api/analytics/branches
+ * Returns KPIs per active branch for the tenant.
+ * Optional query param `period` (default `month`): `month` | `quarter`
+ * Response: { branches: [{ branchId, branchName, mrr, activeStudents, lessonsThisMonth }] }
+ */
+analyticsRoutes.get("/branches", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const periodParam = c.req.query("period") ?? "month";
+
+  // Determine date range
+  const now = new Date();
+  let periodStart: Date;
+  if (periodParam === "quarter") {
+    // Last 3 months
+    periodStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  } else {
+    // Current month
+    periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+  const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  // 1. Get all active branches for tenant
+  const branchRows = await db
+    .select({ id: branches.id, name: branches.name })
+    .from(branches)
+    .where(and(eq(branches.tenantId, tenantId), eq(branches.status, "active")));
+
+  const branchList = Array.isArray(branchRows) ? branchRows : [];
+
+  // 2. For each branch, compute KPIs
+  const result = await Promise.all(
+    branchList.map(async (branch) => {
+      // Active students in this branch
+      const [activeRow] = await db
+        .select({ cnt: count(students.id) })
+        .from(students)
+        .where(
+          and(
+            eq(students.tenantId, tenantId),
+            eq(students.branchId, branch.id),
+            eq(students.status, "active")
+          )
+        );
+      const activeStudents = Number(activeRow?.cnt ?? 0);
+
+      // MRR approximation: sum of paid payments in period for students of this branch
+      const mrrResult = await db
+        .select({ total: sum(payments.amountCents) })
+        .from(payments)
+        .innerJoin(students, eq(payments.studentId, students.id))
+        .where(
+          and(
+            eq(payments.tenantId, tenantId),
+            eq(students.branchId, branch.id),
+            eq(payments.status, "paid"),
+            gte(payments.paidAt, periodStart),
+            lt(payments.paidAt, periodEnd)
+          )
+        );
+      const mrr = Number((Array.isArray(mrrResult) ? mrrResult[0] : mrrResult)?.total ?? 0);
+
+      // Lessons this period for this branch
+      const [lessonsRow] = await db
+        .select({ cnt: count(lessons.id) })
+        .from(lessons)
+        .where(
+          and(
+            eq(lessons.tenantId, tenantId),
+            eq(lessons.branchId, branch.id),
+            gte(lessons.scheduledAt, periodStart),
+            lt(lessons.scheduledAt, periodEnd)
+          )
+        );
+      const lessonsThisMonth = Number(lessonsRow?.cnt ?? 0);
+
+      return {
+        branchId: branch.id,
+        branchName: branch.name,
+        mrr,
+        activeStudents,
+        lessonsThisMonth,
+      };
+    })
+  );
+
+  return c.json({ branches: result });
 });

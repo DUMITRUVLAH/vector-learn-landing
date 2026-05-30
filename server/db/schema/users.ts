@@ -21,6 +21,12 @@ export const users = pgTable(
     passwordHash: varchar("password_hash", { length: 255 }).notNull(),
     name: varchar("name", { length: 200 }).notNull(),
     role: userRoleEnum("role").notNull().default("manager"),
+    /**
+     * BRANCH-703: Scoped branch access.
+     * NULL = access to ALL branches (owner/admin).
+     * UUID = access limited to this branch only (branch manager).
+     */
+    branchScope: uuid("branch_scope"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

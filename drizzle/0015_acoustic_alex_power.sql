@@ -1,0 +1,1 @@
+ALTER TABLE "invoices" ADD COLUMN "efactura_status" varchar(30);

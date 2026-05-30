@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app/AppShell";
 import { StudentForm } from "@/components/app/StudentForm";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
+import { useBranch } from "@/contexts/BranchContext";
 import {
   listStudents,
   archiveStudent,
@@ -30,6 +31,8 @@ const STATUS_FILTERS: Array<{ value: ListStudentsParams["status"]; label: string
 export function StudentsPage() {
   const { status: sessionStatus } = useSession();
   const { navigate } = useRouter();
+  // BRANCH-702: get active branch filter from context
+  const { activeBranch } = useBranch();
   const [items, setItems] = useState<Student[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -55,7 +58,10 @@ export function StudentsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await listStudents({ search: debouncedSearch, status: statusFilter, limit: 100 });
+      // BRANCH-702: pass branch_id when a specific branch is active
+      const params: ListStudentsParams = { search: debouncedSearch, status: statusFilter, limit: 100 };
+      if (activeBranch !== "all") params.branch_id = activeBranch;
+      const res = await listStudents(params);
       setItems(res.items);
       setTotal(res.total);
     } catch (err) {
@@ -63,7 +69,7 @@ export function StudentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, statusFilter]);
+  }, [debouncedSearch, statusFilter, activeBranch]);
 
   useEffect(() => {
     void fetchList();
@@ -229,9 +235,17 @@ export function StudentsPage() {
                           <p className="text-[10px] text-muted-foreground">{s.parentPhone ?? "—"}</p>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold", badge.cls)}>
-                            {badge.label}
-                          </span>
+                          <div className="inline-flex flex-col items-end gap-1">
+                            <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold", badge.cls)}>
+                              {badge.label}
+                            </span>
+                            {/* FIN-602: Show debt badge when student has outstanding debt */}
+                            {(s.debtCents ?? 0) > 0 && (
+                              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-destructive/15 text-destructive">
+                                Datorie: {new Intl.NumberFormat("ro-RO", { style: "currency", currency: "RON", maximumFractionDigits: 0 }).format((s.debtCents ?? 0) / 100)}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="inline-flex gap-1">

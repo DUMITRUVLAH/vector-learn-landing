@@ -13,6 +13,8 @@ export const courses = pgTable(
     level: varchar("level", { length: 32 }),
     defaultPriceCents: integer("default_price_cents").notNull().default(0),
     durationMinutes: integer("duration_minutes").notNull().default(60),
+    /** BRANCH-701: Branch offering this course (nullable = global catalog) */
+    branchId: uuid("branch_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
