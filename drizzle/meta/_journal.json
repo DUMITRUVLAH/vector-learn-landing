@@ -57,6 +57,13 @@
       "when": 1780088159440,
       "tag": "0007_crm115_tags_custom_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780140043920,
+      "tag": "0008_neat_shatterstar",
+      "breakpoints": true
     }
   ]
 }

@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "CRM-122",
-  "iterations": 68,
-  "last_run_at": "2026-05-30T14:15:00Z",
-  "milestone_status": "M1+M2+M3 landing + MVP-001..008 + CRM-101..121 + COMM-201..205 + REP-301..304 + HR-401..404 + SCHED-501..504 complete. CRM-118 (PR#66) + CRM-124 (PR#67) + CRM-122 (PR#68) done. CRM Faza G+H active (CRM-119..128 pending minus 118/122/124).",
+  "last_completed": "CRM-123",
+  "iterations": 73,
+  "last_run_at": "2026-05-30T14:45:00Z",
+  "milestone_status": "M1+M2+M3+MVP+CRM-101..122+COMM+REP+HR+SCHED complete. CRM-118/119/124/125 (PR#66/70/67/71) done. CRM-122 (PR#68) done. CRM Faza H active: CRM-123 in_progress, 126/127/128 pending.",
   "active_milestone": "CRM",
   "items": {
     "M1-001": {
@@ -997,8 +997,8 @@
       ]
     },
     "CRM-123": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-123-notifications.md",
       "milestone": "CRM",
@@ -1006,11 +1006,18 @@
       "depends_on": [
         "CRM-107",
         "CRM-111"
-      ]
+      ],
+      "branch": "feat/CRM-123-notifications",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-125": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-125-weighted-forecast.md",
       "milestone": "CRM",
@@ -1018,7 +1025,15 @@
       "depends_on": [
         "CRM-113",
         "CRM-112"
-      ]
+      ],
+      "branch": "feat/CRM-125-weighted-forecast",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/71",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-126": {
       "status": "pending",

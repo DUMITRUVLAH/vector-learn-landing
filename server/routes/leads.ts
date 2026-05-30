@@ -8,6 +8,7 @@ import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 import { fireTrigger } from "../lib/automationEngine";
+import { createNotification, notifyManagersAndOwners } from "../lib/createNotification";
 
 const STAGES = ["new", "contacted", "trial", "paid", "lost"] as const;
 const SOURCES = [
@@ -330,6 +331,21 @@ leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
   // Fire automation trigger (fire-and-forget — don't block response)
   void fireTrigger(tenantId, "lead.created", created).catch(() => undefined);
 
+  // CRM-123: Notify assigned user (or all managers/admins if unassigned)
+  const notifPayload = {
+    type: "lead_created" as const,
+    title: `Nou lead: ${created.fullName}`,
+    body: created.interestCourse ? `Curs: ${created.interestCourse}` : undefined,
+    link: `#/app/leads/${created.id}`,
+    metadata: { leadId: created.id },
+    tenantId,
+  };
+  if (created.assignedTo) {
+    void createNotification({ ...notifPayload, userId: created.assignedTo }).catch(() => undefined);
+  } else {
+    void notifyManagersAndOwners(tenantId, notifPayload).catch(() => undefined);
+  }
+
   return c.json(created, 201);
 });
 
@@ -502,6 +518,16 @@ leadRoutes.post("/:id/convert", zValidator("json", convertLeadSchema), async (c)
     body: `Convertit în student: ${student.id}${familyId ? ` (familie: ${familyId})` : ""}`,
     userId,
   });
+
+  // CRM-123: Notify about conversion
+  void notifyManagersAndOwners(tenantId, {
+    type: "lead_converted",
+    title: `Lead convertit: ${lead.fullName}`,
+    body: `Acum este student activ`,
+    link: `#/app/leads/${id}`,
+    metadata: { leadId: id, studentId: student.id },
+    isRead: false,
+  }).catch(() => undefined);
 
   const updatedLead = { ...lead, convertedToStudentId: student.id, stage: "paid" as const };
   return c.json({ lead: updatedLead, student, familyId });

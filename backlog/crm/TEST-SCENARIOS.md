@@ -137,6 +137,28 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-116-3** Given task open mâine, Then card arată data, nu badge roșu.
 - **T-CRM-116-4** Given filtru „fără task", Then se afișează doar leadurile fără task open.
 
+## CRM-117 — List view {#crm-117}
+- **T-CRM-117-1** `[blocant]` Given `/app/leads?view=list`, Then se afișează leadurile în tabel.
+- **T-CRM-117-2** Given click pe un rând, Then navigează la `/app/leads/:id`.
+
+## CRM-119 — Căutare globală + Vizualizări salvate {#crm-119}
+- **T-CRM-119-1** `[blocant]` Given filtre active, When salvezi cu nume, Then vizualizarea apare în dropdown.
+- **T-CRM-119-2** `[blocant]` Given vizualizare salvată, When apăs X, Then e ștearsă.
+- **T-CRM-119-3** `[blocant]` Given search „ACME", Then filtrarea returnează leaduri cu „ACME" în company/dealName/interestCourse.
+- **T-CRM-119-4** `[blocant]` `GET /api/saved-views` → 200 `{ views: [] }`.
+
+## CRM-123 — Notificări in-app {#crm-123}
+- **T-CRM-123-1** `[blocant]` Given lead nou creat, Then notificare `lead_created` pentru user assigned_to sau manageri.
+- **T-CRM-123-2** `[blocant]` Given notificare necitită, When o citesc, Then `is_read=true`, badge scade cu 1.
+- **T-CRM-123-3** `[blocant]` `GET /api/notifications` → 200 `{ items: [], unreadCount: 0 }`.
+- **T-CRM-123-4** `[blocant]` Given „Marchează toate", Then `unreadCount = 0`.
+- **T-CRM-123-5** Multi-tenant: notificările tenantului A nu sunt vizibile din tenantul B.
+
+## CRM-125 — Forecast ponderat {#crm-125}
+- **T-CRM-125-1** `[blocant]` Given leaduri în „trial" cu probability=60%, Then forecast ponderat = gross × 0.6.
+- **T-CRM-125-2** `[blocant]` Given owner schimbă probability, Then forecast se recalculează.
+- **T-CRM-125-3** `[blocant]` `GET /api/analytics/crm/forecast` → 200 `{ stages, totalGrossCents, totalWeightedCents }`.
+
 ---
 
 ## Scenarii transversale (rulate la fiecare item)
