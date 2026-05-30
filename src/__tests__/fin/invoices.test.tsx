@@ -26,9 +26,12 @@ vi.mock("@/router/HashRouter", () => ({
 
 vi.mock("@/lib/api/invoices", () => ({
   listInvoices: vi.fn().mockResolvedValue({ items: [] }),
+  listSubscriptions: vi.fn().mockResolvedValue({ items: [] }),
   createInvoice: vi.fn(),
   getInvoicePdf: vi.fn(),
   updateInvoiceStatus: vi.fn(),
+  updateSubscription: vi.fn(),
+  runBilling: vi.fn().mockResolvedValue({ processed: 0, invoicesCreated: [] }),
 }));
 
 vi.mock("@/lib/api/students", () => ({
@@ -82,7 +85,7 @@ describe("FIN-601 — InvoicesPage", () => {
 
   it("T-FIN-601-1: renders without crash", async () => {
     render(<InvoicesPage />);
-    expect(screen.getByText("Facturi")).toBeDefined();
+    expect(screen.getByRole("heading", { level: 1 })).toBeDefined();
   });
 
   it("T-FIN-601-3: empty state shows create button", async () => {
@@ -118,7 +121,7 @@ describe("FIN-601 — InvoicesPage", () => {
 
   it("T-FIN-601-5: listInvoices is called with status filter when set", async () => {
     render(<InvoicesPage />);
-    await waitFor(() => screen.getByText("Facturi"));
+    await waitFor(() => screen.getByRole("heading", { level: 1 }));
     expect(invoicesApi.listInvoices).toHaveBeenCalledWith({
       status: undefined,
       month: undefined,

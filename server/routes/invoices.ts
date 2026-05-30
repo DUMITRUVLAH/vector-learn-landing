@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql, lte } from "drizzle-orm";
 import { db } from "../db/client";
-import { invoices, students } from "../db/schema";
+import { invoices, students, subscriptions } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 const createInvoiceSchema = z.object({
@@ -252,4 +252,201 @@ invoiceRoutes.get("/debt-summary", async (c) => {
     .orderBy(sql`${students.debtCents} DESC`);
 
   return c.json({ items: rows });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// FIN-603: Subscription routes (abonamente recurente)
+// ──────────────────────────────────────────────────────────────────────────────
+
+const createSubscriptionSchema = z.object({
+  studentId: z.string().uuid(),
+  amountCents: z.number().int().min(0),
+  currency: z.enum(["EUR", "RON", "USD"]).default("RON"),
+  billingDay: z.number().int().min(1).max(28),
+  description: z.string().max(200).optional().nullable(),
+});
+
+const updateSubscriptionSchema = z.object({
+  status: z.enum(["active", "paused", "cancelled"]).optional(),
+  amountCents: z.number().int().min(0).optional(),
+  description: z.string().max(200).optional().nullable(),
+});
+
+/**
+ * Compute the next billing date given a billing_day and a reference date (today by default).
+ * If billing_day >= today's day, use this month; otherwise next month.
+ * Cap to 28 to avoid month-end overflow.
+ */
+function computeNextBillingDate(billingDay: number, from: Date = new Date()): string {
+  const day = Math.min(billingDay, 28);
+  const year = from.getFullYear();
+  const month = from.getMonth(); // 0-indexed
+  const todayDay = from.getDate();
+
+  let targetYear = year;
+  let targetMonth = month;
+
+  if (day < todayDay) {
+    // Billing day already passed this month → next month
+    targetMonth = month + 1;
+    if (targetMonth > 11) {
+      targetMonth = 0;
+      targetYear += 1;
+    }
+  }
+
+  const mm = String(targetMonth + 1).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  return `${targetYear}-${mm}-${dd}`;
+}
+
+// POST /api/invoices/subscriptions
+invoiceRoutes.post("/subscriptions", zValidator("json", createSubscriptionSchema), async (c) => {
+  const body = c.req.valid("json");
+  const tenantId = c.get("user").tenantId;
+
+  const nextBillingDate = computeNextBillingDate(body.billingDay);
+
+  const [created] = await db
+    .insert(subscriptions)
+    .values({
+      tenantId,
+      studentId: body.studentId,
+      amountCents: body.amountCents,
+      currency: body.currency,
+      billingDay: body.billingDay,
+      description: body.description ?? null,
+      status: "active",
+      nextBillingDate,
+    })
+    .returning();
+
+  return c.json(created, 201);
+});
+
+// GET /api/invoices/subscriptions
+invoiceRoutes.get("/subscriptions", async (c) => {
+  const tenantId = c.get("user").tenantId;
+
+  const rows = await db
+    .select({
+      id: subscriptions.id,
+      tenantId: subscriptions.tenantId,
+      studentId: subscriptions.studentId,
+      amountCents: subscriptions.amountCents,
+      currency: subscriptions.currency,
+      billingDay: subscriptions.billingDay,
+      description: subscriptions.description,
+      status: subscriptions.status,
+      nextBillingDate: subscriptions.nextBillingDate,
+      createdAt: subscriptions.createdAt,
+      studentName: students.fullName,
+    })
+    .from(subscriptions)
+    .innerJoin(students, eq(subscriptions.studentId, students.id))
+    .where(eq(subscriptions.tenantId, tenantId))
+    .orderBy(desc(subscriptions.createdAt));
+
+  return c.json({ items: rows });
+});
+
+// PATCH /api/invoices/subscriptions/:id
+invoiceRoutes.patch(
+  "/subscriptions/:id",
+  zValidator("json", updateSubscriptionSchema),
+  async (c) => {
+    const id = c.req.param("id");
+    const tenantId = c.get("user").tenantId;
+    const body = c.req.valid("json");
+
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.status !== undefined) patch.status = body.status;
+    if (body.amountCents !== undefined) patch.amountCents = body.amountCents;
+    if (body.description !== undefined) patch.description = body.description ?? null;
+
+    const [updated] = await db
+      .update(subscriptions)
+      .set(patch)
+      .where(and(eq(subscriptions.id, id), eq(subscriptions.tenantId, tenantId)))
+      .returning();
+
+    if (!updated) return c.json({ error: "not_found" }, 404);
+    return c.json(updated);
+  }
+);
+
+// POST /api/invoices/subscriptions/run-billing
+// Finds all active subscriptions with next_billing_date <= today, creates an invoice for each,
+// then advances next_billing_date by one month.
+invoiceRoutes.post("/subscriptions/run-billing", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+  // Fetch due subscriptions
+  const due = await db
+    .select({
+      id: subscriptions.id,
+      studentId: subscriptions.studentId,
+      amountCents: subscriptions.amountCents,
+      currency: subscriptions.currency,
+      description: subscriptions.description,
+      billingDay: subscriptions.billingDay,
+      series: sql<string>`'VECT'`,
+    })
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.tenantId, tenantId),
+        eq(subscriptions.status, "active"),
+        lte(subscriptions.nextBillingDate, today)
+      )
+    );
+
+  const invoiceIds: string[] = [];
+
+  for (const sub of due) {
+    // Compute next invoice number
+    const [maxRow] = await db
+      .select({ maxNum: sql<number>`coalesce(max(${invoices.number}), 0)` })
+      .from(invoices)
+      .where(and(eq(invoices.tenantId, tenantId), eq(invoices.series, "VECT")));
+
+    const nextNumber = (maxRow?.maxNum ?? 0) + 1;
+    const year = new Date().getFullYear();
+    const invoiceNumber = `VECT-${year}-${String(nextNumber).padStart(4, "0")}`;
+
+    const [inv] = await db
+      .insert(invoices)
+      .values({
+        tenantId,
+        studentId: sub.studentId,
+        series: "VECT",
+        number: nextNumber,
+        invoiceNumber,
+        amountCents: sub.amountCents,
+        currency: sub.currency,
+        status: "draft",
+        notes: sub.description ?? "Abonament lunar",
+      })
+      .returning({ id: invoices.id });
+
+    if (inv) invoiceIds.push(inv.id);
+
+    // Advance next_billing_date by one month
+    const nextDate = computeNextBillingDate(sub.billingDay, new Date(today + "T12:00:00Z"));
+    // nextDate is now this month or next — but we need exactly +1 month from current nextBillingDate
+    // Use a proper +1 month calculation
+    const curDate = new Date(today + "T12:00:00Z");
+    const nextMonth = new Date(curDate.getFullYear(), curDate.getMonth() + 1, sub.billingDay);
+    const nm = String(nextMonth.getMonth() + 1).padStart(2, "0");
+    const nd = String(Math.min(sub.billingDay, 28)).padStart(2, "0");
+    const advancedDate = `${nextMonth.getFullYear()}-${nm}-${nd}`;
+
+    await db
+      .update(subscriptions)
+      .set({ nextBillingDate: advancedDate, updatedAt: new Date() })
+      .where(and(eq(subscriptions.id, sub.id), eq(subscriptions.tenantId, tenantId)));
+  }
+
+  return c.json({ processed: due.length, invoicesCreated: invoiceIds });
 });

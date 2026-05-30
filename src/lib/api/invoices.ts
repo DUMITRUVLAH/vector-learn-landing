@@ -79,3 +79,59 @@ export interface DebtSummaryItem {
 export function getDebtSummary(): Promise<{ items: DebtSummaryItem[] }> {
   return api<{ items: DebtSummaryItem[] }>("/api/invoices/debt-summary");
 }
+
+// ── FIN-603: Subscriptions ────────────────────────────────────────────────────
+
+export type SubscriptionStatus = "active" | "paused" | "cancelled";
+
+export interface Subscription {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  amountCents: number;
+  currency: InvoiceCurrency;
+  billingDay: number;
+  description: string | null;
+  status: SubscriptionStatus;
+  nextBillingDate: string;
+  createdAt: string;
+  studentName: string;
+}
+
+export interface RunBillingResult {
+  processed: number;
+  invoicesCreated: string[];
+}
+
+export function listSubscriptions(): Promise<{ items: Subscription[] }> {
+  return api<{ items: Subscription[] }>("/api/invoices/subscriptions");
+}
+
+export function createSubscription(input: {
+  studentId: string;
+  amountCents: number;
+  currency?: InvoiceCurrency;
+  billingDay: number;
+  description?: string | null;
+}): Promise<Subscription> {
+  return api<Subscription>("/api/invoices/subscriptions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateSubscription(
+  id: string,
+  patch: { status?: SubscriptionStatus; amountCents?: number; description?: string | null }
+): Promise<Subscription> {
+  return api<Subscription>(`/api/invoices/subscriptions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function runBilling(): Promise<RunBillingResult> {
+  return api<RunBillingResult>("/api/invoices/subscriptions/run-billing", {
+    method: "POST",
+  });
+}

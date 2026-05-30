@@ -16,3 +16,4 @@ export * from "./notifications";
 export * from "./cadences";
 export * from "./audit";
 export * from "./invoices";
+export * from "./subscriptions";

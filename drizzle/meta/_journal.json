@@ -92,6 +92,13 @@
       "when": 1780300060000,
       "tag": "0012_fin602_debt_reconcile",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1780143485378,
+      "tag": "0013_perpetual_shaman",
+      "breakpoints": true
     }
   ]
 }
