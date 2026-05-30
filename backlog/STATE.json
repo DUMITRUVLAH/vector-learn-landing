@@ -931,7 +931,8 @@
         "integration": "CONNECTED",
         "manager": "BUY",
         "student": "OK"
-      }
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/65"
     },
     "CRM-118": {
       "status": "pending",
