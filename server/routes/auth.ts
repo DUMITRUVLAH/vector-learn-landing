@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { setCookie, deleteCookie } from "hono/cookie";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { tenants, users } from "../db/schema";
 import { hashPassword, verifyPassword } from "../auth/password";
@@ -133,16 +133,26 @@ authRoutes.get("/me", requireAuth, async (c) => {
   });
 });
 
-// Helper to set a demo password for seeded admin (one-time helper for dev)
+// Repairs seeded demo accounts that still carry the legacy "$placeholder$"
+// passwordHash (rows seeded before seed.ts hashed real passwords). Fresh seeds
+// no longer need this. In NON-production it runs freely (local/dev convenience).
+// In production it requires the DEMO_RESET_SECRET env var to be set AND matched
+// via the `x-demo-reset-secret` header, so prod's already-seeded demo row can be
+// repaired once without exposing a public password-reset. It only ever touches
+// rows whose hash is still the placeholder sentinel — never a real account.
 authRoutes.post("/__dev__/setup-demo-password", async (c) => {
-  if (process.env.NODE_ENV === "production") {
-    return c.json({ error: "not_available" }, 403);
+  const isProd = process.env.NODE_ENV === "production";
+  if (isProd) {
+    const secret = process.env.DEMO_RESET_SECRET;
+    if (!secret || c.req.header("x-demo-reset-secret") !== secret) {
+      return c.json({ error: "not_available" }, 403);
+    }
   }
   const passwordHash = await hashPassword("demo123456");
   const updated = await db
     .update(users)
     .set({ passwordHash })
-    .where(and(eq(users.email, "admin@demo.vectorlearn.io"), eq(users.passwordHash, "$placeholder$")))
+    .where(eq(users.passwordHash, "$placeholder$"))
     .returning({ id: users.id });
   return c.json({ updated: updated.length, password: "demo123456" });
 });
