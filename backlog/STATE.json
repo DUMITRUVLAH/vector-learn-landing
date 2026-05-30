@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "CRM-128",
-  "last_completed": "CRM-127",
-  "iterations": 76,
-  "last_run_at": "2026-05-30T15:00:00Z",
-  "milestone_status": "M1+M2+M3+MVP+CRM-101..125+COMM+REP+HR+SCHED complete. CRM Faza H active: CRM-126 in_progress, 127/128 pending.",
+  "current_item": null,
+  "last_completed": "CRM-128",
+  "iterations": 77,
+  "last_run_at": "2026-05-30T16:00:00Z",
+  "milestone_status": "M1+M2+M3+MVP+CRM-101..128+COMM+REP+HR+SCHED ALL COMPLETE. CRM Faza G+H DONE. Next: NIGHT-PLAN next module.",
   "active_milestone": "CRM",
   "items": {
     "M1-001": {
@@ -1078,16 +1078,21 @@
       }
     },
     "CRM-128": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-128-empty-states-onboarding.md",
       "milestone": "CRM",
       "phase": "H",
-      "depends_on": [
-        "CRM-117",
-        "CRM-120"
-      ]
+      "depends_on": ["CRM-117", "CRM-120"],
+      "branch": "feat/CRM-128-empty-states-onboarding",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/75",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     }
   }
 }

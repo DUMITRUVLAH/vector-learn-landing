@@ -121,9 +121,9 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 23 | `CRM-123` | Notificări in-app: badge + feed notificări | H | done ✅ | [specs/CRM-123-notifications.md](specs/CRM-123-notifications.md) |
 | 24 | `CRM-124` | SLA + lead rot: avertizare leaduri necontactate | G | done ✅ | [specs/CRM-124-sla-lead-rot.md](specs/CRM-124-sla-lead-rot.md) · [PR #67](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/67) |
 | 25 | `CRM-125` | Forecast ponderat pe pipeline + probabilitate per stadiu | G | done ✅ | [specs/CRM-125-weighted-forecast.md](specs/CRM-125-weighted-forecast.md) · [PR #71](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/71) |
-| 26 | `CRM-126` | Follow-up cadence: serie automatizată de follow-up-uri | H | pending | [specs/CRM-126-followup-cadence.md](specs/CRM-126-followup-cadence.md) |
-| 27 | `CRM-127` | Undo + audit log acțiuni CRM | H | pending | [specs/CRM-127-undo-audit.md](specs/CRM-127-undo-audit.md) |
-| 28 | `CRM-128` | Empty states + onboarding ghid primul lead | H | pending | [specs/CRM-128-empty-states-onboarding.md](specs/CRM-128-empty-states-onboarding.md) |
+| 26 | `CRM-126` | Follow-up cadence: serie automatizată de follow-up-uri | H | done ✅ | [specs/CRM-126-followup-cadence.md](specs/CRM-126-followup-cadence.md) · [PR #73](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/73) |
+| 27 | `CRM-127` | Undo + audit log acțiuni CRM | H | done ✅ | [specs/CRM-127-undo-audit.md](specs/CRM-127-undo-audit.md) · [PR #74](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/74) |
+| 28 | `CRM-128` | Empty states + onboarding ghid primul lead | H | done ✅ | [specs/CRM-128-empty-states-onboarding.md](specs/CRM-128-empty-states-onboarding.md) · [PR #75](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/75) |
 
 ## Active milestone: COMM — Modulul Comunicare (mesagerie reală backend)
 
