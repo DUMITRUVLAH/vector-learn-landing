@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus } from "lucide-react";
+import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { StudentForm } from "@/components/app/StudentForm";
 import { useSession } from "@/hooks/useSession";
@@ -10,6 +10,7 @@ import {
   type Student,
   type ListStudentsParams,
 } from "@/lib/api/students";
+import { listFeedbackForms, sendFeedbackToStudent, type FeedbackForm } from "@/lib/api/feedback";
 import { cn } from "@/lib/utils";
 
 const STATUS_BADGE: Record<Student["status"], { label: string; cls: string }> = {
@@ -41,6 +42,12 @@ export function StudentsPage() {
   const [editing, setEditing] = useState<Student | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [confirmArchive, setConfirmArchive] = useState<Student | null>(null);
+  // FEEDBACK-601: send feedback modal
+  const [feedbackTarget, setFeedbackTarget] = useState<Student | null>(null);
+  const [feedbackForms, setFeedbackForms] = useState<FeedbackForm[]>([]);
+  const [feedbackFormId, setFeedbackFormId] = useState<string>("");
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackLink, setFeedbackLink] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -251,6 +258,15 @@ export function StudentsPage() {
                             >
                               <FilePlus className="h-3.5 w-3.5" />
                             </button>
+                            {/* FEEDBACK-601: send feedback */}
+                            <button
+                              type="button"
+                              onClick={() => { setFeedbackTarget(s); setFeedbackLink(null); setFeedbackFormId(""); void listFeedbackForms().then(({ forms }) => setFeedbackForms(forms)); }}
+                              aria-label={`Trimite feedback pentru ${s.fullName}`}
+                              className="touch-target rounded-md hover:bg-primary/10 hover:text-primary flex items-center justify-center"
+                            >
+                              <MessageSquare className="h-3.5 w-3.5" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => openEdit(s)}
@@ -335,6 +351,85 @@ export function StudentsPage() {
                 Arhivează
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* FEEDBACK-601: Send feedback modal */}
+      {feedbackTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={() => { setFeedbackTarget(null); setFeedbackLink(null); }} />
+          <div className="relative z-10 w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4">
+            <h2 className="text-sm font-semibold">Trimite feedback — {feedbackTarget.fullName}</h2>
+
+            {feedbackLink ? (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">Link de completat (copiați și trimiteți elevului):</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={`${window.location.origin}/#${feedbackLink}`}
+                    aria-label="Link feedback public"
+                    className="flex-1 rounded-md border border-input bg-muted px-2 py-1.5 text-xs font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/#${feedbackLink}`)}
+                    className="rounded-md border border-border bg-card px-2 py-1.5 text-xs font-semibold hover:bg-muted"
+                  >
+                    Copiază
+                  </button>
+                </div>
+                <button type="button" onClick={() => { setFeedbackTarget(null); setFeedbackLink(null); }} className="w-full rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted">
+                  Închide
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="fb-form-select" className="text-xs font-medium text-muted-foreground">Selectează formularul</label>
+                  <select
+                    id="fb-form-select"
+                    value={feedbackFormId}
+                    onChange={(e) => setFeedbackFormId(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-2 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <option value="">— Selectează —</option>
+                    {feedbackForms.map((f) => (
+                      <option key={f.id} value={f.id}>{f.title}</option>
+                    ))}
+                  </select>
+                  {feedbackForms.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Nu există formulare. Creați unul la <a href="#/app/feedback" className="text-primary underline">Feedback</a>.</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setFeedbackTarget(null)} className="flex-1 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted">Anulează</button>
+                  <button
+                    type="button"
+                    disabled={!feedbackFormId || feedbackSending}
+                    onClick={async () => {
+                      if (!feedbackTarget || !feedbackFormId) return;
+                      setFeedbackSending(true);
+                      try {
+                        const { publicUrl } = await sendFeedbackToStudent(feedbackFormId, feedbackTarget.id);
+                        setFeedbackLink(publicUrl);
+                      } catch {
+                        setToast({ kind: "error", message: "Nu s-a putut genera invitația." });
+                        setFeedbackTarget(null);
+                      } finally {
+                        setFeedbackSending(false);
+                      }
+                    }}
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {feedbackSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageSquare className="h-3.5 w-3.5" />}
+                    Trimite
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

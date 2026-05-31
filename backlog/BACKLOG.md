@@ -161,14 +161,14 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 |---|----|-------|------|--------|------|
 | 1 | `SCHED-501` | Săli de clasă: rooms table + conflict detection + dropdown | 1 | done ✅ | [specs/SCHED-501-rooms.md](specs/SCHED-501-rooms.md) · [PR #57](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/57) |
 | 2 | `SCHED-502` | Lecții recurente: pattern săptămânal + excepții | 2 | done ✅ | [specs/SCHED-502-recurring.md](specs/SCHED-502-recurring.md) · [PR #58](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/58) |
-| 3 | `SCHED-503` | Prezență: marcare per lecție + raport prezență % | 3 | done ✅ | [specs/SCHED-503-attendance.md](specs/SCHED-503-attendance.md) · [PR #59](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/59) |
+| 3 | `SCHED-503` | Prezență: marcare per lecție + raport prezență % | 3 | pending | [specs/SCHED-503-attendance.md](specs/SCHED-503-attendance.md) |
 | 4 | `SCHED-504` | Export iCal: calendar personalizat profesor/elev | 4 | pending | [specs/SCHED-504-ical.md](specs/SCHED-504-ical.md) |
 
-## Active milestone: CONTRACT — Generator de contracte (din CRM)
+## Active milestone: FEEDBACK — Formulare de feedback (elevi/părinți)
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 1 | `CONTRACT-501` | Generator contracte: OCR + PF/PJ + PDF + număr auto + integrare CRM | 1 | done ✅ | [specs/CONTRACT-501-generator.md](specs/CONTRACT-501-generator.md) |
+| 1 | `FEEDBACK-601` | Formulare feedback: NPS + text + stele + submit public no-auth + dashboard | 1 | done ✅ | [specs/FEEDBACK-601-forms.md](specs/FEEDBACK-601-forms.md) |
 
 ## Quality gates (required before status → `done`)
 

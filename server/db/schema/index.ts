@@ -24,3 +24,4 @@ export * from "./saved-views";
 export * from "./cadences";
 export * from "./audit";
 export * from "./contracts";
+export * from "./feedback";

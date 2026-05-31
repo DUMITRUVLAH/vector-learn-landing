@@ -51,6 +51,8 @@ import { TodayDashboardPage } from "./pages/app/TodayDashboardPage";
 import { CadencesPage } from "./pages/app/CadencesPage";
 import { LeadAuditLogPage } from "./pages/app/LeadAuditLogPage";
 import { ContractsPage } from "./pages/app/ContractsPage";
+import { FeedbackPage } from "./pages/app/FeedbackPage";
+import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 
 function HomePage() {
   return (
@@ -125,8 +127,14 @@ function Routes() {
   if (path.startsWith("/app/cadences")) return <CadencesPage />;
   if (path.startsWith("/app/audit-log")) return <LeadAuditLogPage />;
   if (path.startsWith("/app/contracts")) return <ContractsPage />;
+  if (path.startsWith("/app/feedback")) return <FeedbackPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
+  // /feedback/:token — public no-auth page for students
+  if (path.match(/^\/feedback\/[^/]+$/)) {
+    const token = path.split("/")[2];
+    return <FeedbackPublicPage token={token} />;
+  }
   return <HomePage />;
 }
 
