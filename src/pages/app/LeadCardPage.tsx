@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { SendMessageModal, LogCallModal, type SendChannel } from "@/components/crm/CommModal";
 import { ConvertModal, getScoreBadge, SCORE_BADGE_STYLES, SCORE_BADGE_LABELS } from "@/components/crm/ConvertModal";
 import { scoreLead } from "@/lib/api/leads";
+import { CadencePanel } from "@/components/crm/CadencePanel";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -847,6 +848,14 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               Convertit la {lead.convertedAt ? new Date(lead.convertedAt).toLocaleDateString("ro-RO") : "—"}
             </div>
           )}
+
+          {/* CRM-126: Cadence panel */}
+          <section className="rounded-xl border border-border bg-card p-4 space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Follow-up Cadences
+            </p>
+            <CadencePanel leadId={leadId} />
+          </section>
         </aside>
 
         {/* ─── RIGHT COLUMN ────────────────────────────────────────────── */}

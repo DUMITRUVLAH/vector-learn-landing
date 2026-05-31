@@ -157,6 +157,16 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 
 ---
 
+## CRM-126 — Follow-up cadences {#crm-126}
+
+- **T-CRM-126-1** `[blocant]` Given `POST /api/cadences` cu name + steps valid, Then 201 + cadence creată cu ID.
+- **T-CRM-126-2** `[blocant]` Given un lead schimbă stage-ul la `trigger_stage` al unei cadenţe active, Then un enrollment apare cu status=active, next_fire_at=enrolled_at+step[0].delay_days.
+- **T-CRM-126-3** `[blocant]` Given enrollment cu next_fire_at<=now, When `POST /api/cadences/tick` cu X-Internal-Key, Then stepul se execută (interaction/task creat), current_step incrementat.
+- **T-CRM-126-4** Given o interacţiune inbound creată pentru lead, Then toate enrollments active ale leadului devin paused.
+- **T-CRM-126-5** Given enrollment la ultimul pas, When tick, Then status=completed.
+- **T-CRM-126-6** Build + typecheck + lint pass.
+- **T-CRM-126-7** Migraţia `0009_crm126_cadences.sql` există în `drizzle/` şi conţine CREATE TABLE.
+
 ## Scenarii transversale (rulate la fiecare item)
 
 - **T-CRM-X-1** `[blocant]` Multi-tenant: un lead al tenantului A NU e vizibil/editabil din tenantul B.

@@ -48,6 +48,7 @@ import { TeacherStatsPage } from "./pages/app/TeacherStatsPage";
 import { AvailabilityPage } from "./pages/app/AvailabilityPage";
 import { AuditLogPage } from "./pages/app/AuditLogPage";
 import { TodayDashboardPage } from "./pages/app/TodayDashboardPage";
+import { CadencesPage } from "./pages/app/CadencesPage";
 
 function HomePage() {
   return (
@@ -119,6 +120,7 @@ function Routes() {
   if (path.startsWith("/app/hr/audit")) return <AuditLogPage />;
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
+  if (path.startsWith("/app/cadences")) return <CadencesPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   return <HomePage />;

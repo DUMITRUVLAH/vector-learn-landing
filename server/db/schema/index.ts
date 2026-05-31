@@ -21,3 +21,4 @@ export * from "./auditLog";
 export * from "./rooms";
 export * from "./lessonSeries";
 export * from "./saved-views";
+export * from "./cadences";
