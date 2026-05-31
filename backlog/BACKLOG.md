@@ -146,9 +146,9 @@ Golul dintre „are toate funcțiile" și „o academie reală îl folosește 8h
 | 23 | `CRM-123` | Notificări in-app: badge + feed notificări | H | done ✅ | [specs/CRM-123-notifications.md](specs/CRM-123-notifications.md) |
 | 24 | `CRM-124` | SLA + lead rot: avertizare leaduri necontactate | G | done ✅ | [specs/CRM-124-sla-lead-rot.md](specs/CRM-124-sla-lead-rot.md) · [PR #67](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/67) |
 | 25 | `CRM-125` | Forecast ponderat pe pipeline + probabilitate per stadiu | G | done ✅ | [specs/CRM-125-weighted-forecast.md](specs/CRM-125-weighted-forecast.md) · [PR #71](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/71) |
-| 26 | `CRM-126` | Follow-up cadence: serie automatizată de follow-up-uri | H | pending | [specs/CRM-126-followup-cadence.md](specs/CRM-126-followup-cadence.md) |
-| 27 | `CRM-127` | Undo + audit log acțiuni CRM | H | pending | [specs/CRM-127-undo-audit.md](specs/CRM-127-undo-audit.md) |
-| 28 | `CRM-128` | Empty states + onboarding ghid primul lead | H | pending | [specs/CRM-128-empty-states-onboarding.md](specs/CRM-128-empty-states-onboarding.md) |
+| 26 | `CRM-126` | Follow-up cadence: serie automatizată de follow-up-uri | H | done ✅ | [specs/CRM-126-followup-cadence.md](specs/CRM-126-followup-cadence.md) · [PR #73](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/73) |
+| 27 | `CRM-127` | Undo + audit log acțiuni CRM | H | done ✅ | [specs/CRM-127-undo-audit.md](specs/CRM-127-undo-audit.md) · [PR #74](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/74) |
+| 28 | `CRM-128` | Empty states + onboarding ghid primul lead | H | done ✅ | [specs/CRM-128-empty-states-onboarding.md](specs/CRM-128-empty-states-onboarding.md) · [PR #75](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/75) |
 
 ## Active milestone: COMM — Modulul Comunicare (mesagerie reală backend)
 
@@ -192,6 +192,15 @@ Golul dintre „are toate funcțiile" și „o academie reală îl folosește 8h
 | 2 | `SCHED-502` | Lecții recurente: pattern săptămânal + excepții | 2 | done ✅ | [specs/SCHED-502-recurring.md](specs/SCHED-502-recurring.md) · [PR #58](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/58) |
 | 3 | `SCHED-503` | Prezență: marcare per lecție + raport prezență % | 3 | pending | [specs/SCHED-503-attendance.md](specs/SCHED-503-attendance.md) |
 | 4 | `SCHED-504` | Export iCal: calendar personalizat profesor/elev | 4 | pending | [specs/SCHED-504-ical.md](specs/SCHED-504-ical.md) |
+
+## Active milestone: FIN — Modulul Finanțe (facturi + datorie + recurent + e-Factura)
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `FIN-601` | Facturi PDF cu serie incrementală + UI /app/invoices | 1 | pending | [specs/FIN-601-invoices.md](specs/FIN-601-invoices.md) |
+| 2 | `FIN-602` | Datorie elev — link CRM-113 debt_cents + reconciliere plăți | 2 | pending | [specs/FIN-602-debt-reconciliation.md](specs/FIN-602-debt-reconciliation.md) |
+| 3 | `FIN-603` | Abonamente recurente — generare automată facturi lunare | 3 | pending | [specs/FIN-603-recurring-billing.md](specs/FIN-603-recurring-billing.md) |
+| 4 | `FIN-604` | e-Factura export stub (UBL 2.1 XML) + export SAGA CSV | 4 | pending | [specs/FIN-604-efactura-stub.md](specs/FIN-604-efactura-stub.md) |
 
 ## Quality gates (required before status → `done`)
 

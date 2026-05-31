@@ -3,7 +3,8 @@
  * Shows last 200 CRM actions, filterable by actor and action type.
  */
 import { useEffect, useState, useCallback } from "react";
-import { Loader2, Shield, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { EmptyAuditLog } from "@/components/crm/EmptyAuditLog";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -145,20 +146,8 @@ export function LeadAuditLogPage() {
         </p>
       )}
 
-      {/* Empty state */}
-      {!loading && entries.length === 0 && !error && (
-        <div
-          className="flex flex-col items-center justify-center py-16 text-center"
-          role="status"
-          aria-live="polite"
-        >
-          <Shield className="h-12 w-12 text-muted-foreground mb-4" aria-hidden="true" />
-          <h3 className="text-lg font-semibold mb-1">Nicio activitate înregistrată încă</h3>
-          <p className="text-sm text-muted-foreground">
-            Acțiunile din CRM vor apărea automat aici.
-          </p>
-        </div>
-      )}
+      {/* CRM-128: Empty state */}
+      {!loading && entries.length === 0 && !error && <EmptyAuditLog />}
 
       {/* Table */}
       {entries.length > 0 && (

@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": "CRM-127",
-  "last_completed": "CRM-126",
-  "iterations": 75,
-  "last_run_at": "2026-05-30T15:00:00Z",
-  "milestone_status": "M1+M2+M3+MVP+CRM-101..125+COMM+REP+HR+SCHED complete. CRM Faza H active: CRM-126 in_progress, 127/128 pending.",
-  "active_milestone": "CRM",
+  "current_item": null,
+  "last_completed": "CRM-128",
+  "iterations": 77,
+  "last_run_at": "2026-05-30T16:00:00Z",
+  "milestone_status": "M1+M2+M3+MVP+CRM+COMM+REP+HR+SCHED ALL COMPLETE. FIN module planned: FIN-601..604 pending.",
+  "active_milestone": "FIN",
   "items": {
     "M1-001": {
       "status": "done",
@@ -1061,27 +1061,74 @@
       }
     },
     "CRM-127": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-127-undo-audit.md",
       "milestone": "CRM",
       "phase": "H",
-      "depends_on": [
-        "CRM-106"
-      ]
+      "depends_on": ["CRM-106"],
+      "branch": "feat/CRM-127-undo-audit",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/74",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-128": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-128-empty-states-onboarding.md",
       "milestone": "CRM",
       "phase": "H",
-      "depends_on": [
-        "CRM-117",
-        "CRM-120"
-      ]
+      "depends_on": ["CRM-117", "CRM-120"],
+      "branch": "feat/CRM-128-empty-states-onboarding",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/75",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "FIN-601": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-601-invoices.md",
+      "milestone": "FIN",
+      "phase": "1",
+      "depends_on": ["MVP-007", "CRM-113"]
+    },
+    "FIN-602": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-602-debt-reconciliation.md",
+      "milestone": "FIN",
+      "phase": "2",
+      "depends_on": ["FIN-601", "CRM-113"]
+    },
+    "FIN-603": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-603-recurring-billing.md",
+      "milestone": "FIN",
+      "phase": "3",
+      "depends_on": ["FIN-601", "FIN-602"]
+    },
+    "FIN-604": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-604-efactura-stub.md",
+      "milestone": "FIN",
+      "phase": "4",
+      "depends_on": ["FIN-601"]
     }
   }
 }

@@ -157,6 +157,15 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 
 ---
 
+## CRM-128 — Empty states + onboarding {#crm-128}
+
+- **T-CRM-128-1** `[blocant]` EmptyLeads renderizează cu text şi buton CTA când leads array e gol (no filters active).
+- **T-CRM-128-2** `[blocant]` EmptySearch renderizează când lista filtrată e goală (filterActive=true).
+- **T-CRM-128-3** `[blocant]` OnboardingChecklist apare când tenant are < 5 leads şi nu e dismissed; dispare când dismissed=true în localStorage.
+- **T-CRM-128-4** OnboardingChecklist: step auto-marcat done după event corespunzător.
+- **T-CRM-128-5** OnboardingChecklist auto-dismiss când toate 4 steps sunt done.
+- **T-CRM-128-6** Build + typecheck + lint pass.
+
 ## CRM-127 — Undo + audit log {#crm-127}
 
 - **T-CRM-127-1** `[blocant]` Given lead creat via API, Then crm_audit_log are 1 rând action='lead.created'.
