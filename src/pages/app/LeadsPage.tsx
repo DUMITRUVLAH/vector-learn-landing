@@ -42,6 +42,8 @@ import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { StageMenu } from "@/components/crm/StageMenu";
 // CRM-139: debounced search
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+// CRM-143: undo toast for stage moves
+import { StageMoveUndoToast } from "@/components/crm/StageMoveUndoToast";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web",
@@ -198,6 +200,11 @@ export function LeadsPage() {
   const [lostReasonFor, setLostReasonFor] = useState<{ leadId: string; targetStage: string } | null>(null);
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  /** CRM-143: undo toast for stage moves */
+  const [stageMoveUndo, setStageMoveUndo] = useState<{
+    message: string;
+    onUndo: () => Promise<void>;
+  } | null>(null);
   /** CRM-122: Quick-add mobile bottom sheet */
   const [showQuickAdd, setShowQuickAdd] = useState(false);
 
@@ -315,10 +322,19 @@ export function LeadsPage() {
       return;
     }
 
+    const prevStage = lead.stage;
+
     try {
       await moveLeadStage(lead.id, toStageKey as LeadStage);
-      setToast({ kind: "success", message: `Lead mutat la "${targetStage?.label ?? toStageKey}"` });
       void fetchAll();
+      // CRM-143: show undo toast
+      setStageMoveUndo({
+        message: `Mutat la "${targetStage?.label ?? toStageKey}"`,
+        onUndo: async () => {
+          await moveLeadStage(lead.id, prevStage as LeadStage);
+          void fetchAll();
+        },
+      });
     } catch {
       setToast({ kind: "error", message: "Nu pot muta lead-ul" });
     }
@@ -327,11 +343,23 @@ export function LeadsPage() {
   const handleLostReasonConfirm = async (lostReason: string) => {
     if (!lostReasonFor) return;
     const { leadId, targetStage } = lostReasonFor;
+    const allLeads = Object.values(grouped).flat();
+    const movedLead = allLeads.find((l) => l.id === leadId);
+    const prevStage = movedLead?.stage;
     setLostReasonFor(null);
     try {
       await moveLeadStage(leadId, targetStage as LeadStage, lostReason);
-      setToast({ kind: "success", message: "Lead marcat ca pierdut" });
       void fetchAll();
+      // CRM-143: undo lost-stage move
+      if (prevStage) {
+        setStageMoveUndo({
+          message: "Lead marcat ca pierdut",
+          onUndo: async () => {
+            await moveLeadStage(leadId, prevStage as LeadStage);
+            void fetchAll();
+          },
+        });
+      }
     } catch {
       setToast({ kind: "error", message: "Nu pot muta lead-ul" });
     }
@@ -540,9 +568,22 @@ export function LeadsPage() {
             onPage={(p) => { setListPage(p); setSelectedIds(new Set()); void fetchList({ page: p }); }}
             onRowClick={(id) => navigate(`/app/leads/${id}`)}
             onStageChange={async (id, stage) => {
+              // CRM-143: capture prev stage for undo
+              const prevLead = listItems.find((l) => l.id === id);
+              const prevStage = prevLead?.stage;
               try {
                 await moveLeadStage(id, stage);
                 void fetchList({ page: listPage });
+                if (prevStage && prevStage !== stage) {
+                  const targetLabel = stages.find((s) => s.key === stage)?.label ?? stage;
+                  setStageMoveUndo({
+                    message: `Mutat la "${targetLabel}"`,
+                    onUndo: async () => {
+                      await moveLeadStage(id, prevStage as LeadStage);
+                      void fetchList({ page: listPage });
+                    },
+                  });
+                }
               } catch { /* ignore */ }
             }}
           />
@@ -762,6 +803,15 @@ export function LeadsPage() {
             setShowQuickAdd(false);
             setToast({ kind: "error", message: m });
           }}
+        />
+      )}
+
+      {/* CRM-143: stage-move undo toast */}
+      {stageMoveUndo && (
+        <StageMoveUndoToast
+          message={stageMoveUndo.message}
+          onUndo={stageMoveUndo.onUndo}
+          onDismiss={() => setStageMoveUndo(null)}
         />
       )}
 
