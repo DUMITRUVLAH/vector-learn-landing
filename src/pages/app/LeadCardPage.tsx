@@ -39,6 +39,8 @@ import { scoreLead } from "@/lib/api/leads";
 import { CadencePanel } from "@/components/crm/CadencePanel";
 import { UndoToast } from "@/components/crm/UndoToast";
 import { crmDeleteLead } from "@/lib/api/audit";
+// CRM-144: copy-to-clipboard button for phone / email
+import { CopyButton } from "@/components/crm/CopyButton";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -698,7 +700,9 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                     <Phone className="h-3.5 w-3.5" aria-hidden="true" />
                     {lead.phone}
                   </a>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 items-center">
+                    {/* CRM-144: copy phone to clipboard */}
+                    <CopyButton value={lead.phone} ariaLabel="Copiază telefonul" />
                     <button
                       type="button"
                       onClick={handleOpenCall}
@@ -749,17 +753,21 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                     <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     <span className="truncate">{lead.email}</span>
                   </a>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenSend("email")}
-                    disabled={consentRevoked}
-                    className="shrink-0 inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted disabled:opacity-40"
-                    aria-label="Trimite email"
-                    title="Trimite email"
-                  >
-                    <Mail className="h-3 w-3" aria-hidden="true" />
-                    Email
-                  </button>
+                  <div className="flex gap-1 items-center shrink-0">
+                    {/* CRM-144: copy email to clipboard */}
+                    <CopyButton value={lead.email} ariaLabel="Copiază email-ul" />
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSend("email")}
+                      disabled={consentRevoked}
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted disabled:opacity-40"
+                      aria-label="Trimite email"
+                      title="Trimite email"
+                    >
+                      <Mail className="h-3 w-3" aria-hidden="true" />
+                      Email
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">—</p>
