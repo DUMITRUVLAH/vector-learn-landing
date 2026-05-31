@@ -43,6 +43,8 @@ import { LeadCardPage } from "./pages/app/LeadCardPage";
 import { TemplatesPage } from "./pages/app/TemplatesPage";
 import { AutomationsPage } from "./pages/app/AutomationsPage";
 import { AnalyticsPage } from "./pages/app/AnalyticsPage";
+import { FeedbackPage } from "./pages/app/FeedbackPage";
+import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 
 function HomePage() {
   return (
@@ -86,8 +88,14 @@ function Routes() {
   if (path.startsWith("/calculator/roi")) return <ROICalculatorPage />;
   if (path.startsWith("/calculator/migrare")) return <MigrationEstimatorPage />;
   if (path.startsWith("/calculator/pricing")) return <PricingConfiguratorPage />;
+  // Public student-facing feedback form (no auth) — must be before /app matching.
+  if (path.match(/^\/feedback\/[^/]+$/)) {
+    const token = path.split("/").pop()!;
+    return <FeedbackPublicPage token={token} />;
+  }
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
+  if (path.startsWith("/app/feedback")) return <FeedbackPage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
