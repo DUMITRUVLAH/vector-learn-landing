@@ -164,6 +164,12 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 3 | `SCHED-503` | Prezență: marcare per lecție + raport prezență % | 3 | pending | [specs/SCHED-503-attendance.md](specs/SCHED-503-attendance.md) |
 | 4 | `SCHED-504` | Export iCal: calendar personalizat profesor/elev | 4 | pending | [specs/SCHED-504-ical.md](specs/SCHED-504-ical.md) |
 
+## Active milestone: FEEDBACK — Formulare de feedback (elevi/părinți)
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `FEEDBACK-601` | Formulare feedback: NPS + text + stele + submit public no-auth + dashboard | 1 | done ✅ | [specs/FEEDBACK-601-forms.md](specs/FEEDBACK-601-forms.md) |
+
 ## Quality gates (required before status → `done`)
 
 1. **Build passes**: `npm run build` exits 0

@@ -23,6 +23,8 @@ import { availabilityRoutes } from "./routes/availability";
 import { auditLogRoutes } from "./routes/auditLog";
 import { roomRoutes } from "./routes/rooms";
 import { recurringRoutes } from "./routes/recurring";
+import { feedbackRoutes } from "./routes/feedback";
+import { feedbackPublicRoutes } from "./routes/feedbackPublic";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -59,6 +61,10 @@ app.route("/api/leads", taskRoutes); // tasks/attachments under /api/leads/:lead
 app.route("/api/templates", templateRoutes);
 app.route("/api/automations", automationRoutes);
 app.route("/api/analytics", analyticsRoutes);
+// FEEDBACK-601: public (no-auth) routes must be registered BEFORE tagRoutes because tagRoutes
+// is mounted at "/api" with a global requireAuth that otherwise intercepts all /api/* requests.
+app.route("/api/feedback-public", feedbackPublicRoutes);
+app.route("/api/feedback", feedbackRoutes);
 app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
 app.route("/api/hr/payroll", payrollRoutes);
 app.route("/api/hr/teacher-stats", hrTeacherRoutes);

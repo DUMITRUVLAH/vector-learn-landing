@@ -47,6 +47,8 @@ import { PayrollPage } from "./pages/app/PayrollPage";
 import { TeacherStatsPage } from "./pages/app/TeacherStatsPage";
 import { AvailabilityPage } from "./pages/app/AvailabilityPage";
 import { AuditLogPage } from "./pages/app/AuditLogPage";
+import { FeedbackPage } from "./pages/app/FeedbackPage";
+import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 
 function HomePage() {
   return (
@@ -116,8 +118,14 @@ function Routes() {
   if (path.startsWith("/app/hr/audit")) return <AuditLogPage />;
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
+  if (path.startsWith("/app/feedback")) return <FeedbackPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
+  // /feedback/:token — public no-auth page for students
+  if (path.match(/^\/feedback\/[^/]+$/)) {
+    const token = path.split("/")[2];
+    return <FeedbackPublicPage token={token} />;
+  }
   return <HomePage />;
 }
 

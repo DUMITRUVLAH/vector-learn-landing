@@ -1,11 +1,11 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "CRM-133",
-  "iterations": 68,
-  "last_run_at": "2026-05-30T17:20:00Z",
-  "milestone_status": "CRM-101..116 (Faze A-F) all done. CRM Faza I: CRM-129..133 done (PR#84..88). CRM-134/135/136 pending. SCHED-503/504 pending.",
-  "active_milestone": "CRM",
+  "last_completed": "FEEDBACK-601",
+  "iterations": 71,
+  "last_run_at": "2026-05-31T04:45:00Z",
+  "milestone_status": "CRM done. SCHED done. CONTRACT-501 done (PR#93). CRM-134/135/136 done (PR#89/90/91). FEEDBACK-601 done (PR pending).",
+  "active_milestone": "FEEDBACK",
   "items": {
     "M1-001": {
       "status": "done",
@@ -787,31 +787,109 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-134": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-134-mentions-notifications.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-131", "CRM-132"]
+      "depends_on": ["CRM-131", "CRM-132"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/89",
+      "branch": "feat/CRM-134-mentions-notifications",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-135": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-135-round-robin-assign.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-101", "CRM-103", "CRM-104"]
+      "depends_on": ["CRM-101", "CRM-103", "CRM-104"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/90",
+      "branch": "feat/CRM-135-round-robin-assign",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "CRM-136": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-136-kanban-density-toggle.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-129", "CRM-130"]
+      "depends_on": ["CRM-129", "CRM-130"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/91",
+      "branch": "feat/CRM-136-kanban-density-toggle",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "SCHED-503": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SCHED-503-attendance.md",
+      "milestone": "SCHED",
+      "phase": "3",
+      "depends_on": ["SCHED-501"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/59",
+      "branch": "feat/SCHED-503-attendance",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "SCHED-504": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SCHED-504-ical.md",
+      "milestone": "SCHED",
+      "phase": "4",
+      "depends_on": ["SCHED-501"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/60",
+      "branch": "feat/SCHED-504-ical",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "CONTRACT-501": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CONTRACT-501-generator.md",
+      "milestone": "CONTRACT",
+      "phase": "1",
+      "depends_on": ["CRM-111"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/93",
+      "branch": "feat/CONTRACT-501-generator",
+      "reports": [
+        "backlog/reports/CONTRACT-501-reviewer.md",
+        "backlog/reports/CONTRACT-501-integration.md",
+        "backlog/reports/CONTRACT-501-manager.md",
+        "backlog/reports/CONTRACT-501-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "FEEDBACK-601": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/FEEDBACK-601-forms.md",
+      "milestone": "FEEDBACK",
+      "phase": "1",
+      "depends_on": ["MVP-004", "CRM-111"],
+      "branch": "feat/FEEDBACK-601-forms",
+      "reports": [
+        "backlog/reports/FEEDBACK-601-reviewer.md",
+        "backlog/reports/FEEDBACK-601-integration.md",
+        "backlog/reports/FEEDBACK-601-manager.md",
+        "backlog/reports/FEEDBACK-601-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     }
   }
 }
