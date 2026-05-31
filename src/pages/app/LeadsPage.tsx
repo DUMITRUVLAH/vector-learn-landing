@@ -644,6 +644,7 @@ export function LeadsPage() {
           onClose={() => setShowCreate(false)}
           onSaved={() => { setShowCreate(false); setToast({ kind: "success", message: "Lead adăugat în pipeline" }); void fetchAll(); }}
           onError={(m) => setToast({ kind: "error", message: m })}
+          onOpenDuplicate={(id) => { setShowCreate(false); navigate(`/app/leads/${id}`); }}
         />
       )}
 
@@ -1579,7 +1580,14 @@ function StagesEditorModal({
 
 // ─── Create Lead Modal ────────────────────────────────────────────────────────
 
-function CreateLeadModal({ onClose, onSaved, onError }: { onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
+interface CreateLeadModalProps {
+  onClose: () => void;
+  onSaved: () => void;
+  onError: (m: string) => void;
+  onOpenDuplicate: (id: string) => void;
+}
+
+function CreateLeadModal({ onClose, onSaved, onError, onOpenDuplicate }: CreateLeadModalProps) {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -1640,7 +1648,7 @@ function CreateLeadModal({ onClose, onSaved, onError }: { onClose: () => void; o
             <p className="font-semibold">Există deja: {dedupResult.fullName}</p>
             <p className="text-xs opacity-75 mt-0.5">Stadiu: {STAGES_LOCAL.find((s) => s.id === dedupResult.stage)?.label ?? dedupResult.stage}</p>
             <div className="flex gap-2 mt-2">
-              <button type="button" onClick={() => onError(`Deschide lead: ${dedupResult.id}`)} className="text-xs font-semibold text-primary hover:underline">Deschide</button>
+              <button type="button" onClick={() => onOpenDuplicate(dedupResult.id)} className="text-xs font-semibold text-primary hover:underline">Deschide</button>
               <span className="text-amber-400">·</span>
               <button type="button" onClick={() => setForceCreate(true)} className="text-xs text-muted-foreground hover:text-foreground">Creează oricum</button>
             </div>
