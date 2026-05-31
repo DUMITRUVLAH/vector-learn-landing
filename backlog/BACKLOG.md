@@ -130,9 +130,9 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 25 | `CRM-137` | Selector responsabil cu nume (înlocuiește input UUID) — peste tot | J | pending | [specs/CRM-137-assignee-picker.md](specs/CRM-137-assignee-picker.md) |
-| 26 | `CRM-138` | Meniu „mută în stadiu" pe cardul kanban (desktop) — alternativă la drag, tastatură | J | pending | [specs/CRM-138-card-stage-menu-desktop.md](specs/CRM-138-card-stage-menu-desktop.md) |
-| 27 | `CRM-139` | Search auto-aplicat (debounced) în vederea Listă — consistent cu Kanban | J | pending | [specs/CRM-139-debounced-search.md](specs/CRM-139-debounced-search.md) |
+| 25 | `CRM-137` | Selector responsabil cu nume (înlocuiește input UUID) — peste tot | J | done ✅ | [specs/CRM-137-assignee-picker.md](specs/CRM-137-assignee-picker.md) |
+| 26 | `CRM-138` | Meniu „mută în stadiu" pe cardul kanban (desktop) — alternativă la drag, tastatură | J | done ✅ | [specs/CRM-138-card-stage-menu-desktop.md](specs/CRM-138-card-stage-menu-desktop.md) |
+| 27 | `CRM-139` | Search auto-aplicat (debounced) în vederea Listă — consistent cu Kanban | J | done ✅ | [specs/CRM-139-debounced-search.md](specs/CRM-139-debounced-search.md) |
 | 28 | `CRM-140` | Fix: „Deschide" din alerta de duplicat navighează la lead (bug) | J | pending | [specs/CRM-140-open-duplicate-fix.md](specs/CRM-140-open-duplicate-fix.md) |
 | 29 | `CRM-141` | „+ Adaugă lead" direct în coloana goală a kanban-ului | J | pending | [specs/CRM-141-add-lead-in-empty-column.md](specs/CRM-141-add-lead-in-empty-column.md) |
 | 30 | `CRM-142` | Sortare per-coloană în kanban (recent / vechi / valoare / SLA) | J | pending | [specs/CRM-142-kanban-column-sort.md](specs/CRM-142-kanban-column-sort.md) |

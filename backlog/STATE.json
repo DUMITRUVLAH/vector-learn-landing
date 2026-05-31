@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "CRM-139",
-  "last_completed": "FEEDBACK-601",
-  "iterations": 72,
+  "current_item": null,
+  "last_completed": "CRM-139",
+  "iterations": 74,
   "last_run_at": "2026-05-31T04:45:00Z",
   "milestone_status": "CRM done. SCHED done. CONTRACT-501 done (PR#93). CRM-134/135/136 done (PR#89/90/91). FEEDBACK-601 done (PR#94). | Added CX (701-705) + DIPLOMA (801-805) — ported from copy-roas, pending.",
   "active_milestone": "CX",
@@ -1055,7 +1055,7 @@
       ]
     },
     "CRM-139": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-139-debounced-search.md",
