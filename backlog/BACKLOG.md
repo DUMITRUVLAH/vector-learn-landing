@@ -119,7 +119,32 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 21 | `CRM-133` | Duplicate detection banner — alertă deduplicare proeminentă pe cartonașul lead | I | done ✅ | [specs/CRM-133-duplicate-detection-banner.md](specs/CRM-133-duplicate-detection-banner.md) · [PR #88](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/88) |
 | 22 | `CRM-134` | @mentions in note-uri + notificare utilizator menționat | I | pending | [specs/CRM-134-mentions-notifications.md](specs/CRM-134-mentions-notifications.md) |
 | 23 | `CRM-135` | Round-robin auto-assign pentru lead-uri noi | I | pending | [specs/CRM-135-round-robin-assign.md](specs/CRM-135-round-robin-assign.md) |
-| 24 | `CRM-136` | Kanban card density toggle — compact/comfortable, persistat per user | I | pending | [specs/CRM-136-kanban-density-toggle.md](specs/CRM-136-kanban-density-toggle.md) |
+| 24 | `CRM-136` | Kanban card density toggle — compact/comfortable, persistat per user | I | done ✅ | [specs/CRM-136-kanban-density-toggle.md](specs/CRM-136-kanban-density-toggle.md) · [PR #91](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/91) |
+
+### Faza J — Pipeline & lead UX (din audit-ul de UX, 2026-06-01)
+
+> 15 îmbunătățiri reale de fricțiune operațională identificate într-un audit UX al paginii lead
+> (`/app/leads/:id`) și al kanban-ului de leads (`/app/leads`). Ordonate pe impact/efort:
+> întâi quick-win-uri și bug-uri (CRM-140/138/141/144/146), apoi restul. O fază = un branch = un PR
+> (§0.2): `feat/CRM-faza-J-lead-ux`.
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 25 | `CRM-137` | Selector responsabil cu nume (înlocuiește input UUID) — peste tot | J | pending | [specs/CRM-137-assignee-picker.md](specs/CRM-137-assignee-picker.md) |
+| 26 | `CRM-138` | Meniu „mută în stadiu" pe cardul kanban (desktop) — alternativă la drag, tastatură | J | pending | [specs/CRM-138-card-stage-menu-desktop.md](specs/CRM-138-card-stage-menu-desktop.md) |
+| 27 | `CRM-139` | Search auto-aplicat (debounced) în vederea Listă — consistent cu Kanban | J | pending | [specs/CRM-139-debounced-search.md](specs/CRM-139-debounced-search.md) |
+| 28 | `CRM-140` | Fix: „Deschide" din alerta de duplicat navighează la lead (bug) | J | pending | [specs/CRM-140-open-duplicate-fix.md](specs/CRM-140-open-duplicate-fix.md) |
+| 29 | `CRM-141` | „+ Adaugă lead" direct în coloana goală a kanban-ului | J | pending | [specs/CRM-141-add-lead-in-empty-column.md](specs/CRM-141-add-lead-in-empty-column.md) |
+| 30 | `CRM-142` | Sortare per-coloană în kanban (recent / vechi / valoare / SLA) | J | pending | [specs/CRM-142-kanban-column-sort.md](specs/CRM-142-kanban-column-sort.md) |
+| 31 | `CRM-143` | Toast cu „Anulează" la mutarea de stadiu (undo) | J | pending | [specs/CRM-143-undo-stage-move.md](specs/CRM-143-undo-stage-move.md) |
+| 32 | `CRM-144` | Buton „copiază" pentru telefon / email pe cartonaș | J | pending | [specs/CRM-144-copy-contact.md](specs/CRM-144-copy-contact.md) |
+| 33 | `CRM-145` | Auto-scor lead la încărcare + explicație factori scor | J | pending | [specs/CRM-145-auto-score-explained.md](specs/CRM-145-auto-score-explained.md) |
+| 34 | `CRM-146` | Iconițe contact mai vizibile pe card + flag „fără telefon/email" | J | pending | [specs/CRM-146-contact-icons-missing-flag.md](specs/CRM-146-contact-icons-missing-flag.md) |
+| 35 | `CRM-147` | Badge restanță pe tab-ul Task-uri al cartonașului | J | pending | [specs/CRM-147-task-overdue-tab-badge.md](specs/CRM-147-task-overdue-tab-badge.md) |
+| 36 | `CRM-148` | „Convertit" duce la fișa studentului (link din cartonaș + card) | J | pending | [specs/CRM-148-converted-link-to-student.md](specs/CRM-148-converted-link-to-student.md) |
+| 37 | `CRM-149` | Pills cu filtrele active + „×" individual pe fiecare | J | pending | [specs/CRM-149-active-filter-pills.md](specs/CRM-149-active-filter-pills.md) |
+| 38 | `CRM-150` | Import CSV: mapare valoare/companie/tag + parser robust | J | pending | [specs/CRM-150-csv-import-fields-parser.md](specs/CRM-150-csv-import-fields-parser.md) |
+| 39 | `CRM-151` | Mobil: acțiuni secundare în meniu „⋯"; doar FAB pentru adăugare | J | pending | [specs/CRM-151-mobile-action-overflow-menu.md](specs/CRM-151-mobile-action-overflow-menu.md) |
 
 ## Active milestone: COMM — Modulul Comunicare (mesagerie reală backend)
 
@@ -169,6 +194,33 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
 | 1 | `FEEDBACK-601` | Formulare feedback: NPS + text + stele + submit public no-auth + dashboard | 1 | done ✅ | [specs/FEEDBACK-601-forms.md](specs/FEEDBACK-601-forms.md) |
+
+## Active milestone: CX — Customer Experience (cohorte cursanți)
+
+> Portat din proiectul `copy-roas` (Vector Academy Dashboard) la nivel de **idei de cod, tabele și
+> features** — reimplementat în arhitectura noastră (Drizzle + tenantId + Hono + design system),
+> NU copy-paste. O fază = un branch = un PR (CLAUDE.md §0.2): `feat/CX-faza-1-cohorts`.
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `CX-701` | Model ediție/cohortă + funcții end-date/progress (din `useCXData`) | 1 | pending | [specs/CX-701-edition-model.md](specs/CX-701-edition-model.md) |
+| 2 | `CX-702` | Pagină cohorte: tab-uri Active/Viitoare/Trecute + progres | 1 | pending | [specs/CX-702-cohort-board.md](specs/CX-702-cohort-board.md) |
+| 3 | `CX-703` | Participanți per cohortă (CRM + manual) cu 3 tabele + stat | 1 | pending | [specs/CX-703-participants-tables.md](specs/CX-703-participants-tables.md) |
+| 4 | `CX-704` | Export CSV participanți cohortă | 1 | pending | [specs/CX-704-export-csv.md](specs/CX-704-export-csv.md) |
+| 5 | `CX-705` | Break-even + profit proiectat per cohortă (din `useProfitability`) | 1 | pending | [specs/CX-705-breakeven-badge.md](specs/CX-705-breakeven-badge.md) |
+
+## Milestone: DIPLOMA — Generare diplome/certificate
+
+> Portat din `copy-roas` (`DiplomaGenerator.tsx` + `VerifyCertificate.tsx`). Editor canvas
+> drag&drop, QR de verificare, export PDF/JPG bulk. Branch: `feat/DIPLOMA-faza-1-certificates`.
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `DIPLOMA-801` | Schema templates + certificate emise + token verificare | 1 | pending | [specs/DIPLOMA-801-schema-templates.md](specs/DIPLOMA-801-schema-templates.md) |
+| 2 | `DIPLOMA-802` | Editor vizual canvas drag&drop câmpuri + salvare template | 1 | pending | [specs/DIPLOMA-802-canvas-editor.md](specs/DIPLOMA-802-canvas-editor.md) |
+| 3 | `DIPLOMA-803` | Generare PDF/JPG per cursant + QR + persistă certificat | 1 | pending | [specs/DIPLOMA-803-generate-qr.md](specs/DIPLOMA-803-generate-qr.md) |
+| 4 | `DIPLOMA-804` | Generare bulk pe cohortă + download ZIP | 1 | pending | [specs/DIPLOMA-804-bulk-zip.md](specs/DIPLOMA-804-bulk-zip.md) |
+| 5 | `DIPLOMA-805` | Pagină publică verificare `/verify/:token` (no-auth) | 1 | pending | [specs/DIPLOMA-805-public-verify.md](specs/DIPLOMA-805-public-verify.md) |
 
 ## Quality gates (required before status → `done`)
 

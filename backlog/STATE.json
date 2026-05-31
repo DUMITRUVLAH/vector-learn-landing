@@ -4,8 +4,8 @@
   "last_completed": "FEEDBACK-601",
   "iterations": 71,
   "last_run_at": "2026-05-31T04:45:00Z",
-  "milestone_status": "CRM done. SCHED done. CONTRACT-501 done (PR#93). CRM-134/135/136 done (PR#89/90/91). FEEDBACK-601 done (PR#94).",
-  "active_milestone": "FEEDBACK",
+  "milestone_status": "CRM done. SCHED done. CONTRACT-501 done (PR#93). CRM-134/135/136 done (PR#89/90/91). FEEDBACK-601 done (PR#94). | Added CX (701-705) + DIPLOMA (801-805) — ported from copy-roas, pending.",
+  "active_milestone": "CX",
   "items": {
     "M1-001": {
       "status": "done",
@@ -478,10 +478,18 @@
       "blockers": [],
       "spec": "backlog/specs/CRM-113-deal-value.md",
       "phase": "F",
-      "depends_on": ["CRM-105", "CRM-112"],
+      "depends_on": [
+        "CRM-105",
+        "CRM-112"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/40",
       "branch": "feat/CRM-113-deal-value",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-114": {
       "status": "done",
@@ -489,10 +497,17 @@
       "blockers": [],
       "spec": "backlog/specs/CRM-114-company-contacts.md",
       "phase": "F",
-      "depends_on": ["CRM-106"],
+      "depends_on": [
+        "CRM-106"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/42",
       "branch": "feat/CRM-114-company-contacts",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-115": {
       "status": "done",
@@ -500,10 +515,17 @@
       "blockers": [],
       "spec": "backlog/specs/CRM-115-tags-custom-fields.md",
       "phase": "F",
-      "depends_on": ["CRM-106"],
+      "depends_on": [
+        "CRM-106"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/43",
       "branch": "feat/CRM-115-tags-custom-fields",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-116": {
       "status": "done",
@@ -511,10 +533,17 @@
       "blockers": [],
       "spec": "backlog/specs/CRM-116-task-signals.md",
       "phase": "F",
-      "depends_on": ["CRM-107"],
+      "depends_on": [
+        "CRM-107"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/41",
       "branch": "feat/CRM-116-task-signals",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "COMM-201": {
       "status": "done",
@@ -523,10 +552,18 @@
       "spec": "backlog/specs/COMM-201-provider-infra.md",
       "milestone": "COMM",
       "phase": "1",
-      "depends_on": ["CRM-108", "CRM-109"],
+      "depends_on": [
+        "CRM-108",
+        "CRM-109"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/44",
       "branch": "feat/COMM-201-provider-infra",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "COMM-202": {
       "status": "done",
@@ -535,10 +572,17 @@
       "spec": "backlog/specs/COMM-202-message-log.md",
       "milestone": "COMM",
       "phase": "2",
-      "depends_on": ["COMM-201"],
+      "depends_on": [
+        "COMM-201"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/45",
       "branch": "feat/COMM-202-message-log",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "COMM-203": {
       "status": "done",
@@ -547,10 +591,18 @@
       "spec": "backlog/specs/COMM-203-inbox.md",
       "milestone": "COMM",
       "phase": "3",
-      "depends_on": ["COMM-201", "COMM-202"],
+      "depends_on": [
+        "COMM-201",
+        "COMM-202"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/46",
       "branch": "feat/COMM-203-inbox",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "COMM-204": {
       "status": "done",
@@ -559,10 +611,18 @@
       "spec": "backlog/specs/COMM-204-broadcast.md",
       "milestone": "COMM",
       "phase": "4",
-      "depends_on": ["COMM-201", "COMM-202"],
+      "depends_on": [
+        "COMM-201",
+        "COMM-202"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/47",
       "branch": "feat/COMM-204-broadcast",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "COMM-205": {
       "status": "done",
@@ -571,10 +631,18 @@
       "spec": "backlog/specs/COMM-205-notifications.md",
       "milestone": "COMM",
       "phase": "5",
-      "depends_on": ["COMM-201", "COMM-204"],
+      "depends_on": [
+        "COMM-201",
+        "COMM-204"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/48",
       "branch": "feat/COMM-205-notifications",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "LOVES" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "REP-301": {
       "status": "done",
@@ -583,10 +651,18 @@
       "spec": "backlog/specs/REP-301-dashboard-kpi.md",
       "milestone": "REP",
       "phase": "1",
-      "depends_on": ["MVP-007", "MVP-004"],
+      "depends_on": [
+        "MVP-007",
+        "MVP-004"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/49",
       "branch": "feat/REP-301-dashboard-kpi",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "REP-302": {
       "status": "done",
@@ -595,10 +671,17 @@
       "spec": "backlog/specs/REP-302-revenue-chart.md",
       "milestone": "REP",
       "phase": "2",
-      "depends_on": ["REP-301"],
+      "depends_on": [
+        "REP-301"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/50",
       "branch": "feat/REP-302-revenue-chart",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "REP-303": {
       "status": "done",
@@ -607,10 +690,17 @@
       "spec": "backlog/specs/REP-303-student-retention.md",
       "milestone": "REP",
       "phase": "3",
-      "depends_on": ["REP-301"],
+      "depends_on": [
+        "REP-301"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/51",
       "branch": "feat/REP-303-student-retention",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "HR-401": {
       "status": "done",
@@ -619,10 +709,18 @@
       "spec": "backlog/specs/HR-401-payroll.md",
       "milestone": "HR",
       "phase": "1",
-      "depends_on": ["MVP-006", "MVP-005"],
+      "depends_on": [
+        "MVP-006",
+        "MVP-005"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/53",
       "branch": "feat/HR-401-payroll",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "HR-402": {
       "status": "done",
@@ -631,10 +729,17 @@
       "spec": "backlog/specs/HR-402-teacher-stats.md",
       "milestone": "HR",
       "phase": "2",
-      "depends_on": ["HR-401"],
+      "depends_on": [
+        "HR-401"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/54",
       "branch": "feat/HR-402-teacher-stats",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "HR-403": {
       "status": "done",
@@ -643,10 +748,17 @@
       "spec": "backlog/specs/HR-403-availability.md",
       "milestone": "HR",
       "phase": "3",
-      "depends_on": ["HR-401"],
+      "depends_on": [
+        "HR-401"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/55",
       "branch": "feat/HR-403-availability",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "HR-404": {
       "status": "done",
@@ -655,10 +767,17 @@
       "spec": "backlog/specs/HR-404-audit-log.md",
       "milestone": "HR",
       "phase": "4",
-      "depends_on": ["HR-401"],
+      "depends_on": [
+        "HR-401"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/56",
       "branch": "feat/HR-404-audit-log",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "REP-304": {
       "status": "done",
@@ -667,22 +786,17 @@
       "spec": "backlog/specs/REP-304-export.md",
       "milestone": "REP",
       "phase": "4",
-      "depends_on": ["REP-301"],
+      "depends_on": [
+        "REP-301"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/52",
       "branch": "feat/REP-304-export",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
-    },
-    "COMM-205": {
-      "status": "done",
-      "attempts": 1,
-      "blockers": [],
-      "spec": "backlog/specs/COMM-205-notifications.md",
-      "milestone": "COMM",
-      "phase": "5",
-      "depends_on": ["COMM-201", "COMM-204"],
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/48",
-      "branch": "feat/COMM-205-notifications",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "LOVES" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHED-501": {
       "status": "done",
@@ -691,10 +805,17 @@
       "spec": "backlog/specs/SCHED-501-rooms.md",
       "milestone": "SCHED",
       "phase": "1",
-      "depends_on": ["MVP-005"],
+      "depends_on": [
+        "MVP-005"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/57",
       "branch": "feat/SCHED-501-rooms",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHED-502": {
       "status": "done",
@@ -703,28 +824,55 @@
       "spec": "backlog/specs/SCHED-502-recurring.md",
       "milestone": "SCHED",
       "phase": "2",
-      "depends_on": ["SCHED-501"],
+      "depends_on": [
+        "SCHED-501"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/58",
       "branch": "feat/SCHED-502-recurring",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHED-503": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHED-503-attendance.md",
       "milestone": "SCHED",
       "phase": "3",
-      "depends_on": ["SCHED-501"]
+      "depends_on": [
+        "SCHED-501"
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/59",
+      "branch": "feat/SCHED-503-attendance",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHED-504": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHED-504-ical.md",
       "milestone": "SCHED",
       "phase": "4",
-      "depends_on": ["SCHED-501"]
+      "depends_on": [
+        "SCHED-501"
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/60",
+      "branch": "feat/SCHED-504-ical",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-129": {
       "status": "done",
@@ -733,10 +881,18 @@
       "spec": "backlog/specs/CRM-129-tag-filter-bulk-assign.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-115", "CRM-116"],
+      "depends_on": [
+        "CRM-115",
+        "CRM-116"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/84",
       "branch": "feat/CRM-129-tag-filter-bulk-assign",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-130": {
       "status": "done",
@@ -745,10 +901,17 @@
       "spec": "backlog/specs/CRM-130-keyboard-shortcuts-wip.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-129"],
+      "depends_on": [
+        "CRM-129"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/85",
       "branch": "feat/CRM-130-keyboard-shortcuts-wip",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-131": {
       "status": "done",
@@ -757,10 +920,17 @@
       "spec": "backlog/specs/CRM-131-lead-card-ux-polish.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-130"],
+      "depends_on": [
+        "CRM-130"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/86",
       "branch": "feat/CRM-131-lead-card-ux-polish",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-132": {
       "status": "done",
@@ -769,10 +939,17 @@
       "spec": "backlog/specs/CRM-132-timeline-filters.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-131"],
+      "depends_on": [
+        "CRM-131"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/87",
       "branch": "feat/CRM-132-timeline-filters",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-133": {
       "status": "done",
@@ -781,10 +958,18 @@
       "spec": "backlog/specs/CRM-133-duplicate-detection-banner.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-102", "CRM-131"],
+      "depends_on": [
+        "CRM-102",
+        "CRM-131"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/88",
       "branch": "feat/CRM-133-duplicate-detection-banner",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-134": {
       "status": "done",
@@ -793,10 +978,18 @@
       "spec": "backlog/specs/CRM-134-mentions-notifications.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-131", "CRM-132"],
+      "depends_on": [
+        "CRM-131",
+        "CRM-132"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/89",
       "branch": "feat/CRM-134-mentions-notifications",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-135": {
       "status": "done",
@@ -805,10 +998,19 @@
       "spec": "backlog/specs/CRM-135-round-robin-assign.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-101", "CRM-103", "CRM-104"],
+      "depends_on": [
+        "CRM-101",
+        "CRM-103",
+        "CRM-104"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/90",
       "branch": "feat/CRM-135-round-robin-assign",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-136": {
       "status": "done",
@@ -817,34 +1019,189 @@
       "spec": "backlog/specs/CRM-136-kanban-density-toggle.md",
       "milestone": "CRM",
       "phase": "I",
-      "depends_on": ["CRM-129", "CRM-130"],
+      "depends_on": [
+        "CRM-129",
+        "CRM-130"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/91",
       "branch": "feat/CRM-136-kanban-density-toggle",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
-    "SCHED-503": {
-      "status": "done",
-      "attempts": 1,
+    "CRM-137": {
+      "status": "pending",
+      "attempts": 0,
       "blockers": [],
-      "spec": "backlog/specs/SCHED-503-attendance.md",
-      "milestone": "SCHED",
-      "phase": "3",
-      "depends_on": ["SCHED-501"],
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/59",
-      "branch": "feat/SCHED-503-attendance",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "spec": "backlog/specs/CRM-137-assignee-picker.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-111"
+      ]
     },
-    "SCHED-504": {
-      "status": "done",
-      "attempts": 1,
+    "CRM-138": {
+      "status": "pending",
+      "attempts": 0,
       "blockers": [],
-      "spec": "backlog/specs/SCHED-504-ical.md",
-      "milestone": "SCHED",
-      "phase": "4",
-      "depends_on": ["SCHED-501"],
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/60",
-      "branch": "feat/SCHED-504-ical",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "spec": "backlog/specs/CRM-138-card-stage-menu-desktop.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-105"
+      ]
+    },
+    "CRM-139": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-139-debounced-search.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-117",
+        "CRM-119"
+      ]
+    },
+    "CRM-140": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-140-open-duplicate-fix.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-102"
+      ]
+    },
+    "CRM-141": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-141-add-lead-in-empty-column.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-105"
+      ]
+    },
+    "CRM-142": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-142-kanban-column-sort.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-105",
+        "CRM-124"
+      ]
+    },
+    "CRM-143": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-143-undo-stage-move.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-105",
+        "CRM-127"
+      ]
+    },
+    "CRM-144": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-144-copy-contact.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-106"
+      ]
+    },
+    "CRM-145": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-145-auto-score-explained.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-111"
+      ]
+    },
+    "CRM-146": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-146-contact-icons-missing-flag.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-105"
+      ]
+    },
+    "CRM-147": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-147-task-overdue-tab-badge.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-107",
+        "CRM-116"
+      ]
+    },
+    "CRM-148": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-148-converted-link-to-student.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-111"
+      ]
+    },
+    "CRM-149": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-149-active-filter-pills.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-119"
+      ]
+    },
+    "CRM-150": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-150-csv-import-fields-parser.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-103",
+        "CRM-113",
+        "CRM-115"
+      ]
+    },
+    "CRM-151": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CRM-151-mobile-action-overflow-menu.md",
+      "milestone": "CRM",
+      "phase": "J",
+      "depends_on": [
+        "CRM-122"
+      ]
     },
     "CONTRACT-501": {
       "status": "done",
@@ -853,7 +1210,9 @@
       "spec": "backlog/specs/CONTRACT-501-generator.md",
       "milestone": "CONTRACT",
       "phase": "1",
-      "depends_on": ["CRM-111"],
+      "depends_on": [
+        "CRM-111"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/93",
       "branch": "feat/CONTRACT-501-generator",
       "reports": [
@@ -876,7 +1235,10 @@
       "spec": "backlog/specs/FEEDBACK-601-forms.md",
       "milestone": "FEEDBACK",
       "phase": "1",
-      "depends_on": ["MVP-004", "CRM-111"],
+      "depends_on": [
+        "MVP-004",
+        "CRM-111"
+      ],
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/94",
       "branch": "feat/FEEDBACK-601-forms",
       "reports": [
@@ -891,6 +1253,119 @@
         "manager": "BUY",
         "student": "LOVES"
       }
+    },
+    "CX-701": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CX-701-edition-model.md",
+      "milestone": "CX",
+      "phase": "1",
+      "depends_on": [
+        "SCHED-502",
+        "CRM-111"
+      ]
+    },
+    "CX-702": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CX-702-cohort-board.md",
+      "milestone": "CX",
+      "phase": "1",
+      "depends_on": [
+        "CX-701"
+      ]
+    },
+    "CX-703": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CX-703-participants-tables.md",
+      "milestone": "CX",
+      "phase": "1",
+      "depends_on": [
+        "CX-702",
+        "CRM-111"
+      ]
+    },
+    "CX-704": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CX-704-export-csv.md",
+      "milestone": "CX",
+      "phase": "1",
+      "depends_on": [
+        "CX-703"
+      ]
+    },
+    "CX-705": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CX-705-breakeven-badge.md",
+      "milestone": "CX",
+      "phase": "1",
+      "depends_on": [
+        "CX-703"
+      ]
+    },
+    "DIPLOMA-801": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/DIPLOMA-801-schema-templates.md",
+      "milestone": "DIPLOMA",
+      "phase": "1",
+      "depends_on": [
+        "CX-701"
+      ]
+    },
+    "DIPLOMA-802": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/DIPLOMA-802-canvas-editor.md",
+      "milestone": "DIPLOMA",
+      "phase": "1",
+      "depends_on": [
+        "DIPLOMA-801"
+      ]
+    },
+    "DIPLOMA-803": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/DIPLOMA-803-generate-qr.md",
+      "milestone": "DIPLOMA",
+      "phase": "1",
+      "depends_on": [
+        "DIPLOMA-802",
+        "CX-703"
+      ]
+    },
+    "DIPLOMA-804": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/DIPLOMA-804-bulk-zip.md",
+      "milestone": "DIPLOMA",
+      "phase": "1",
+      "depends_on": [
+        "DIPLOMA-803"
+      ]
+    },
+    "DIPLOMA-805": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/DIPLOMA-805-public-verify.md",
+      "milestone": "DIPLOMA",
+      "phase": "1",
+      "depends_on": [
+        "DIPLOMA-803"
+      ]
     }
   }
 }

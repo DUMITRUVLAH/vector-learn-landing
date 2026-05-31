@@ -49,6 +49,30 @@ la POST /api/auth/login → 500 (287ms)
 
 ---
 
+## Erorile raportate de owner în browser (2026-06-01) — EXPLICATE
+
+Owner a văzut 2 erori pe deploy-ul preview `hdqiwueps` (VECHI, dinainte de migrarea DB prod):
+
+1. **Lead `http_404`** la `/app/leads/8b8133ab-...` — acel UUID era din DB-ul LOCAL/demo, nu există
+   pe Supabase prod (URL vechi/cached în browser). Leadurile reale de pe prod (ex. `31dfa6a6-...`)
+   întorc 200. Nu e bug — e un ID inexistent. **Mitigare UX recomandată:** lead-card 404 ar trebui
+   să arate „Lead inexistent / șters" cu buton înapoi, nu `http_404` brut. → UX-705.
+
+2. **Orar: „Unexpected token '<' ... is not valid JSON"** — era pe deploy-ul VECHI, când DB prod nu
+   avea încă migrările. `/api/lessons` eșua pe schema veche → 500/HTML → frontend pică pe parse.
+   După migrarea DB (16→25) + deploy nou: `GET /api/lessons?from=&to=` → **200 OK** verificat.
+
+**Verificare completă pe cel mai nou preview (DB prod migrat), toate cu auth:**
+leads/pipeline, leads/today, lessons, students, teachers, rooms, contracts, feedback, cadences,
+notifications, saved-views, analytics/crm/{funnel,lost-reasons,roas} → **toate 200**. Producția e sănătoasă.
+
+> NOTĂ: erorile owner-ului erau pe `hdqiwueps`. Deploy-uri noi (`91zmph8sk`+) au DB-ul migrat și merg.
+> Owner trebuie să deschidă URL-ul celui mai recent deploy (sau domeniul de producție după promovare).
+
+## Bug minor găsit prin testare — PGlite WASM crash local
+`GET /api/lessons?from=&to=` cu range de dată crăpă serverul LOCAL (`RuntimeError: Aborted()` din
+PGlite WASM). NU afectează prod (Postgres real → 200). Doar dev local. → DEV-001 (low prio).
+
 ## Problema #2 (REZOLVAT) — login se rotea la infinit
 
 **Simptom inițial:** butonul „Conectare" se rotea la infinit (POST atârna 30s → timeout).
