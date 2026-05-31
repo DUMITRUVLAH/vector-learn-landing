@@ -821,6 +821,7 @@
       "milestone": "CONTRACT",
       "phase": "1",
       "depends_on": ["CRM-111"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/93",
       "branch": "feat/CONTRACT-501-generator",
       "reports": [
         "backlog/reports/CONTRACT-501-reviewer.md",
