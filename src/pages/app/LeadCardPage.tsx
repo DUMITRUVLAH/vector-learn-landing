@@ -12,7 +12,7 @@ import {
   Loader2, ArrowLeft, Pencil, Check, X, ChevronDown,
   Phone, Mail, Globe, Calendar, MessageCircle, UserPlus,
   AlertTriangle, CheckCircle2, Trash2, MoreVertical, ShieldOff,
-  Clock, Paperclip, Upload, Download,
+  Clock, Paperclip, Upload, Download, FilePlus,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -473,6 +473,23 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               </button>
             </div>
           )}
+          {/* CONTRACT-501: Generate contract button */}
+          <button
+            type="button"
+            onClick={() => {
+              const params = new URLSearchParams();
+              if (lead.fullName) params.set("name", lead.fullName);
+              if (lead.interestCourse) params.set("course", lead.interestCourse);
+              if (lead.valueCents) params.set("valueCents", String(lead.valueCents));
+              params.set("leadId", lead.id);
+              navigate(`/app/contracts?${params.toString()}`);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            aria-label="Generează contract din lead"
+          >
+            <FilePlus className="h-4 w-4" />
+            <span className="hidden sm:inline">Contract</span>
+          </button>
           {/* Actions menu */}
           <div className="relative">
             <button
