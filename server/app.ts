@@ -17,6 +17,8 @@ import { templateRoutes } from "./routes/templates";
 import { automationRoutes } from "./routes/automations";
 import { analyticsRoutes } from "./routes/analytics";
 import { tagRoutes } from "./routes/tags";
+import { feedbackRoutes } from "./routes/feedback";
+import { feedbackPublicRoutes } from "./routes/feedbackPublic";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -53,6 +55,12 @@ app.route("/api/leads", taskRoutes); // tasks/attachments under /api/leads/:lead
 app.route("/api/templates", templateRoutes);
 app.route("/api/automations", automationRoutes);
 app.route("/api/analytics", analyticsRoutes);
+// PUBLIC student-facing submit (no auth). Registered BEFORE the catch-all tagRoutes
+// mount ("/api" + a "/*" requireAuth middleware), which otherwise runs its auth
+// middleware for every /api/* path and rejects the public form with 401. Its prefix
+// "/api/public/feedback" is also collision-free with the auth-guarded "/api/feedback".
+app.route("/api/public/feedback", feedbackPublicRoutes);
+app.route("/api/feedback", feedbackRoutes); // FB: forms CRUD, send, analytics (auth)
 app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
 
 app.get("/api/health", async (c) => {
