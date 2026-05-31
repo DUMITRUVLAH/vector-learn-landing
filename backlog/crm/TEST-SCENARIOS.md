@@ -150,6 +150,19 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-117-9** `[blocant]` Multi-tenant: `GET /api/leads?view=list` returnează **doar** leadurile tenantului autentificat.
 - **T-CRM-117-10** Given 0 leaduri care corespund filtrelor, Then se afișează stare empty „Niciun lead găsit".
 
+## CRM-118 — Bulk actions {#crm-118}
+
+- **T-CRM-118-1** `[blocant]` Given vederea listă activă cu 5 leaduri, When utilizatorul bifează checkbox-ul „selectează tot", Then toate cele 5 ID-uri sunt în selecție și counter-ul arată „5 selectate".
+- **T-CRM-118-2** `[blocant]` Given 3 leaduri selectate, When acțiunea „Schimbă stadiu → contacted" e confirmată, Then `POST /api/leads/bulk-action` cu `{ ids, action:"stage", payload:{stage:"contacted"} }` returnează `{ processed:3, failed:0 }` și lista se reîncarcă.
+- **T-CRM-118-3** `[blocant]` Given 2 leaduri selectate și stadiu destinație `is_lost`, When se confirmă fără `lostReason`, Then request-ul returnează `400 lost_reason_required`; cu motiv → `200 processed:2`.
+- **T-CRM-118-4** `[blocant]` Given 2 leaduri selectate, When acțiunea „Adaugă tag → urgent", Then tag „urgent" apare pe ambele leaduri în `lead_tags`; fiecare lead primește `interaction type=system`.
+- **T-CRM-118-5** `[blocant]` Given 2 leaduri selectate și un ID al altui tenant, When bulk-action, Then lead-ul celuilalt tenant e ignorat (processed=1, failed=1); tenant-scoped.
+- **T-CRM-118-6** `[blocant]` Given 2 leaduri selectate, When ștergere GDPR confirmată dublu, Then PII e anonimizat (`fullName=[Șters GDPR]`, `phone=null`, `email=null`); `interaction system` de audit creat.
+- **T-CRM-118-7** Given se aplică un filtru nou, Then selecția se resetează automat (0 selectate).
+- **T-CRM-118-8** Given toolbar bulk vizibil, Then are `role="toolbar"` cu `aria-label` care include count-ul; 0 violări axe critical/serious.
+- **T-CRM-118-9** Given 0 leaduri selectate, Then toolbar-ul bulk NU este vizibil.
+- **T-CRM-118-10** `[blocant]` Given reasignare bulk cu UUID valid, Then `leads.assigned_to` actualizat pentru toate; `interaction system` „Bulk: reasignat..." creat.
+
 ---
 
 ## Scenarii transversale (rulate la fiecare item)
