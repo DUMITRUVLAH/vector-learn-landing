@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, Fragment } from "react";
 import { Loader2, Plus, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw, Users, Lock } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -213,9 +213,8 @@ export function SchedulePage() {
               })}
 
               {HOURS.map((hour) => (
-                <>
+                <Fragment key={`hour-${hour}`}>
                   <div
-                    key={`hour-${hour}`}
                     className="border-b border-r border-border bg-muted/20 p-2 text-xs font-semibold text-muted-foreground"
                   >
                     {String(hour).padStart(2, "0")}:00
@@ -250,7 +249,7 @@ export function SchedulePage() {
                       </div>
                     );
                   })}
-                </>
+                </Fragment>
               ))}
             </div>
           </div>

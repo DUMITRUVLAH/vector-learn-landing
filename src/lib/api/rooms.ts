@@ -14,7 +14,7 @@ export interface Room {
 }
 
 export function listRooms(): Promise<{ items: Room[] }> {
-  return api<{ items: Room[] }>("/rooms");
+  return api<{ items: Room[] }>("/api/rooms");
 }
 
 export function createRoom(input: {
@@ -22,12 +22,12 @@ export function createRoom(input: {
   capacity?: number;
   description?: string | null;
 }): Promise<Room> {
-  return api<Room>("/rooms", {
+  return api<Room>("/api/rooms", {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
 export function deleteRoom(id: string): Promise<{ deleted: boolean }> {
-  return api<{ deleted: boolean }>(`/rooms/${id}`, { method: "DELETE" });
+  return api<{ deleted: boolean }>(`/api/rooms/${id}`, { method: "DELETE" });
 }
