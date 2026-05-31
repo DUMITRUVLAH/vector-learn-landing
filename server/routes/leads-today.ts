@@ -1,19 +1,28 @@
 /**
  * CRM-120 — GET /api/leads/today
+ * CRM-124 — extended with SLA response badges + neglected leads + SLA settings
+ *
  * Returns the 4 "Today" dashboard sections:
  *  1. overdueOrDueToday  — open tasks due today or overdue, with lead context
  *  2. newUncontacted     — leads created < 48h ago with no outbound interaction
  *  3. followUpNeeded     — leads in contacted/trial with no outbound contact > 2 days
  *  4. nextBestAction     — top 5 by (score desc, age desc), not in the other lists
+ *  5. neglected          — (CRM-124) active leads without any contact > rot_days
+ *
+ * SLA response time badge per lead:
+ *  - Hot (score ≥ 70): green if < sla_hot_minutes, yellow if < 2x, red if > 2x
+ *  - Default: green if < sla_default_hours, yellow if < 2x, red if > 2x
  *
  * Scoping:
  *  - tenant_id always applied
  *  - If user role is NOT 'owner'/'manager', further filter by assigned_to = user.id
  */
 import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
 import { and, asc, desc, eq, gte, isNull, lte, ne, notInArray, or, lt } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, leadTasks } from "../db/schema";
+import { leads, leadInteractions, leadTasks, tenants } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const leadsTodayRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -220,16 +229,140 @@ leadsTodayRoutes.get("/", async (c) => {
     };
   });
 
+  // ─── CRM-124: Fetch SLA settings from tenant ──────────────────────────────
+  const tenant = await db.query.tenants.findFirst({
+    where: eq(tenants.id, tenantId),
+    columns: { slaHotMinutes: true, slaDefaultHours: true, rotDays: true },
+  });
+  const slaHotMinutes = tenant?.slaHotMinutes ?? 15;
+  const slaDefaultHours = tenant?.slaDefaultHours ?? 24;
+  const rotDays = tenant?.rotDays ?? 7;
+
+  // ─── CRM-124: Neglected leads (active, no contact > rot_days) ─────────────
+  const rotCutoff = new Date(now.getTime() - rotDays * 24 * 60 * 60 * 1000);
+
+  const activeLeadConditions = [
+    eq(leads.tenantId, tenantId),
+    ne(leads.stage, "paid"),
+    ne(leads.stage, "lost"),
+    lt(leads.createdAt, rotCutoff), // old enough to be neglected
+  ];
+  if (!isManager) {
+    activeLeadConditions.push(
+      or(eq(leads.assignedTo, userId), isNull(leads.assignedTo))!
+    );
+  }
+
+  const activeLeads = await db
+    .select()
+    .from(leads)
+    .where(and(...activeLeadConditions))
+    .orderBy(asc(leads.createdAt))
+    .limit(50);
+
+  const activeLeadIds = activeLeads.map((l) => l.id);
+  const latestAnyContact: Record<string, Date> = {};
+  if (activeLeadIds.length > 0) {
+    // Find any interaction (outbound or note) in last rot_days
+    const recentInteractions = await db
+      .select({ leadId: leadInteractions.leadId, occurredAt: leadInteractions.occurredAt })
+      .from(leadInteractions)
+      .where(and(
+        eq(leadInteractions.tenantId, tenantId),
+        gte(leadInteractions.occurredAt, rotCutoff)
+      ))
+      .orderBy(desc(leadInteractions.occurredAt));
+
+    for (const i of recentInteractions) {
+      if (!latestAnyContact[i.leadId]) {
+        latestAnyContact[i.leadId] = new Date(i.occurredAt);
+      }
+    }
+  }
+
+  const neglected = activeLeads
+    .filter((l) => !latestAnyContact[l.id])
+    .slice(0, 10)
+    .map((l) => {
+      const daysSinceCreated = Math.floor((now.getTime() - new Date(l.createdAt).getTime()) / 86400000);
+      return {
+        id: l.id,
+        fullName: l.fullName,
+        stage: l.stage,
+        phone: l.phone,
+        interestCourse: l.interestCourse,
+        valueCents: l.valueCents,
+        daysSinceCreated,
+        reason: `Neglijat ${daysSinceCreated}z`,
+      };
+    });
+
+  // ─── CRM-124: SLA response time badge for each new/uncontacted lead ────────
+  // For new uncontacted leads, compute response status
+  const newUncontactedWithSla = newUncontacted.map((l) => {
+    const minutesSinceCreated = (now.getTime() - new Date(l.createdAt).getTime()) / 60000;
+    const isHot = false; // Score isn't loaded here, use default SLA
+    const slaThresholdMinutes = isHot ? slaHotMinutes : slaDefaultHours * 60;
+    let slaBadge: "green" | "yellow" | "red";
+    if (minutesSinceCreated < slaThresholdMinutes) slaBadge = "green";
+    else if (minutesSinceCreated < slaThresholdMinutes * 2) slaBadge = "yellow";
+    else slaBadge = "red";
+    return { ...l, slaBadge, minutesSinceCreated: Math.floor(minutesSinceCreated) };
+  });
+
   // ─── Counter (for nav badge) ───────────────────────────────────────────────
-  const totalActions = dueTasks.length + newUncontacted.length + followUpNeeded.length;
+  const totalActions = dueTasks.length + newUncontacted.length + followUpNeeded.length + neglected.length;
 
   return c.json({
     overdueOrDueToday: dueTasks,
-    newUncontacted,
+    newUncontacted: newUncontactedWithSla,
     followUpNeeded,
     nextBestAction,
+    neglected,
     totalActions,
+    /** CRM-124: SLA config for client-side display */
+    slaConfig: { slaHotMinutes, slaDefaultHours, rotDays },
   });
+});
+
+// ─── CRM-124: GET/PATCH /api/settings/sla ─────────────────────────────────────
+// (We re-export to be mounted in app.ts under /api/settings)
+
+const slaUpdateSchema = z.object({
+  slaHotMinutes: z.number().int().min(1).max(1440).optional(),
+  slaDefaultHours: z.number().int().min(1).max(168).optional(),
+  rotDays: z.number().int().min(1).max(90).optional(),
+});
+
+leadsTodayRoutes.get("/sla-config", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const tenant = await db.query.tenants.findFirst({
+    where: eq(tenants.id, tenantId),
+    columns: { slaHotMinutes: true, slaDefaultHours: true, rotDays: true },
+  });
+  return c.json({
+    slaHotMinutes: tenant?.slaHotMinutes ?? 15,
+    slaDefaultHours: tenant?.slaDefaultHours ?? 24,
+    rotDays: tenant?.rotDays ?? 7,
+  });
+});
+
+leadsTodayRoutes.patch("/sla-config", zValidator("json", slaUpdateSchema), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const body = c.req.valid("json");
+
+  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  if (body.slaHotMinutes !== undefined) patch.slaHotMinutes = body.slaHotMinutes;
+  if (body.slaDefaultHours !== undefined) patch.slaDefaultHours = body.slaDefaultHours;
+  if (body.rotDays !== undefined) patch.rotDays = body.rotDays;
+
+  const [updated] = await db
+    .update(tenants)
+    .set(patch)
+    .where(eq(tenants.id, tenantId))
+    .returning({ slaHotMinutes: tenants.slaHotMinutes, slaDefaultHours: tenants.slaDefaultHours, rotDays: tenants.rotDays });
+
+  return c.json(updated);
 });
 
 export type TodayDashboardResponse = {

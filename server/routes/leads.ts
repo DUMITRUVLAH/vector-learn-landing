@@ -356,11 +356,36 @@ leadRoutes.get("/pipeline", async (c) => {
     }
   }
 
-  // Augment leads with nextTask
-  const augmented = items.map((lead) => ({
-    ...lead,
-    nextTask: nextTaskMap[lead.id] ?? null,
-  }));
+  // CRM-124: Fetch tenant SLA settings for badge computation
+  const tenant = await db.query.tenants.findFirst({
+    where: eq(tenants.id, tenantId),
+    columns: { slaHotMinutes: true, slaDefaultHours: true, rotDays: true },
+  }).catch(() => null);
+  const slaHotMinutes = tenant?.slaHotMinutes ?? 15;
+  const slaDefaultHours = tenant?.slaDefaultHours ?? 24;
+  const rotDays = tenant?.rotDays ?? 7;
+  const now = new Date();
+
+  // Augment leads with nextTask + CRM-124 SLA badge (only for active stages)
+  const augmented = items.map((lead) => {
+    const isActive = !["paid", "lost"].includes(lead.stage);
+    let slaBadge: "green" | "yellow" | "red" | null = null;
+    if (isActive) {
+      const minutesSince = (now.getTime() - new Date(lead.createdAt).getTime()) / 60000;
+      const isHot = (lead.score ?? 0) >= 70;
+      const thresholdMinutes = isHot ? slaHotMinutes : slaDefaultHours * 60;
+      const rotThreshold = rotDays * 24 * 60; // rot_days in minutes
+      if (minutesSince > rotThreshold) slaBadge = "red";
+      else if (minutesSince > thresholdMinutes * 2) slaBadge = "red";
+      else if (minutesSince > thresholdMinutes) slaBadge = "yellow";
+      else slaBadge = "green";
+    }
+    return {
+      ...lead,
+      nextTask: nextTaskMap[lead.id] ?? null,
+      slaBadge,
+    };
+  });
 
   const grouped: Record<string, typeof augmented> = {
     new: [],

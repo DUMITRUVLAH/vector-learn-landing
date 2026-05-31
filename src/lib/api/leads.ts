@@ -44,6 +44,8 @@ export interface Lead {
   dealName?: string | null;
   /** Next open task (from pipeline endpoint, augmented server-side) */
   nextTask?: { dueAt: string | null; title: string } | null;
+  /** CRM-124: SLA response time badge — computed server-side */
+  slaBadge?: "green" | "yellow" | "red" | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -161,16 +163,36 @@ export interface TodayNBAItem {
   ageDays: number;
 }
 
+/** CRM-124: SLA badge color for response time */
+export type SlaBadge = "green" | "yellow" | "red";
+
 export interface TodayDashboardResponse {
   overdueOrDueToday: TodayDashboardTask[];
-  newUncontacted: (TodayDashboardItem & { source: string; createdAt: string })[];
+  newUncontacted: (TodayDashboardItem & { source: string; createdAt: string; slaBadge?: SlaBadge; minutesSinceCreated?: number })[];
   followUpNeeded: (TodayDashboardItem & { updatedAt: string })[];
   nextBestAction: TodayNBAItem[];
+  /** CRM-124: Neglected leads (no contact > rot_days) */
+  neglected?: (TodayDashboardItem & { daysSinceCreated: number })[];
   totalActions: number;
+  /** CRM-124: SLA config from tenant settings */
+  slaConfig?: { slaHotMinutes: number; slaDefaultHours: number; rotDays: number };
 }
 
 export function fetchTodayDashboard(): Promise<TodayDashboardResponse> {
   return api<TodayDashboardResponse>("/api/leads/today");
+}
+
+/** CRM-124: Fetch SLA config for current tenant */
+export function fetchSlaConfig(): Promise<{ slaHotMinutes: number; slaDefaultHours: number; rotDays: number }> {
+  return api<{ slaHotMinutes: number; slaDefaultHours: number; rotDays: number }>("/api/leads/today/sla-config");
+}
+
+/** CRM-124: Update SLA config */
+export function updateSlaConfig(input: { slaHotMinutes?: number; slaDefaultHours?: number; rotDays?: number }): Promise<{ slaHotMinutes: number; slaDefaultHours: number; rotDays: number }> {
+  return api<{ slaHotMinutes: number; slaDefaultHours: number; rotDays: number }>("/api/leads/today/sla-config", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export function getLead(id: string): Promise<Lead> {

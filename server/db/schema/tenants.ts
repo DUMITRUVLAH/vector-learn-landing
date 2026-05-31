@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, pgEnum, integer } from "drizzle-orm/pg-core";
 
 export const planEnum = pgEnum("plan", ["starter", "growth", "pro", "enterprise"]);
 
@@ -9,6 +9,12 @@ export const tenants = pgTable("tenants", {
   plan: planEnum("plan").notNull().default("starter"),
   /** COMM-205: Tenant timezone for quiet hours (IANA, e.g. "Europe/Bucharest") */
   timezone: varchar("timezone", { length: 60 }).notNull().default("Europe/Bucharest"),
+  /** CRM-124: SLA — minutes until first response for hot leads (default 15) */
+  slaHotMinutes: integer("sla_hot_minutes").notNull().default(15),
+  /** CRM-124: SLA — hours until first response for default leads (default 24) */
+  slaDefaultHours: integer("sla_default_hours").notNull().default(24),
+  /** CRM-124: Lead-rot — days without contact before "neglected" (default 7) */
+  rotDays: integer("rot_days").notNull().default(7),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
