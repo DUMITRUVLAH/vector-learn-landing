@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_item": "CRM-137",
+  "current_item": "CRM-138",
   "last_completed": "FEEDBACK-601",
   "iterations": 72,
   "last_run_at": "2026-05-31T04:45:00Z",
@@ -1033,7 +1033,7 @@
       }
     },
     "CRM-137": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-137-assignee-picker.md",
@@ -1044,8 +1044,8 @@
       ]
     },
     "CRM-138": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-138-card-stage-menu-desktop.md",
       "milestone": "CRM",

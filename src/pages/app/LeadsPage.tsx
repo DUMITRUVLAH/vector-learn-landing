@@ -38,6 +38,8 @@ import { OnboardingChecklist } from "@/components/crm/OnboardingChecklist";
 // CRM-137: AssigneePicker + display name hook
 import { AssigneePicker, useAssigneeName } from "@/components/crm/AssigneePicker";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
+// CRM-138: StageMenu for keyboard-accessible stage switching on KanbanCard
+import { StageMenu } from "@/components/crm/StageMenu";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web",
@@ -601,6 +603,16 @@ export function LeadsPage() {
                         onDragStart={() => setDraggedId(lead.id)}
                         onDragEnd={() => { setDraggedId(null); setHoverStage(null); }}
                         onClick={() => navigate(`/app/leads/${lead.id}`)}
+                        stages={stages}
+                        onStageMove={async (stageKey) => {
+                          try {
+                            await moveLeadStage(lead.id, stageKey as LeadStage);
+                            const target = stages.find((s) => s.key === stageKey);
+                            setToast({ kind: "success", message: `Lead mutat la "${target?.label ?? stageKey}"` });
+                            void fetchAll();
+                          } catch { setToast({ kind: "error", message: "Nu pot muta lead-ul" }); }
+                        }}
+                        onStageLost={(stageKey) => setLostReasonFor({ leadId: lead.id, targetStage: stageKey })}
                       />
                     ))
                   )}
@@ -708,23 +720,32 @@ interface KanbanCardProps {
   onDragStart: () => void;
   onDragEnd: () => void;
   onClick: () => void;
+  // CRM-138: stage navigation
+  stages: PipelineStage[];
+  onStageMove: (stageKey: string) => void;
+  onStageLost: (stageKey: string) => void;
 }
 
-function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: KanbanCardProps) {
+function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick, stages, onStageMove, onStageLost }: KanbanCardProps) {
   return (
-    <button
-      type="button"
+    <div
       draggable
       onDragStart={(e) => { onDragStart(); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", lead.id); }}
       onDragEnd={onDragEnd}
-      onClick={onClick}
       className={cn(
-        "text-left rounded-lg border border-border bg-card p-2.5 cursor-move shadow-sm transition-all",
+        "relative rounded-lg border border-border bg-card p-2.5 cursor-move shadow-sm transition-all",
         "hover:shadow-md hover:-translate-y-0.5",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isDragging && "opacity-50"
       )}
     >
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+        )}
+        aria-label={`Deschide lead ${lead.dealName ?? lead.fullName}`}
+      >
       {/* CRM-114: Use dealName as title if set */}
       <p className="text-xs font-semibold truncate">{lead.dealName ?? lead.fullName}</p>
       {/* CRM-114: Company under name */}
@@ -801,7 +822,17 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
           SLA {lead.slaBadge === "red" ? "!!!" : "!"}
         </div>
       )}
-    </button>
+      </button>
+      {/* CRM-138: Stage menu — keyboard-accessible alternative to drag */}
+      <div className="absolute top-1.5 right-1.5">
+        <StageMenu
+          currentStageKey={lead.stage}
+          stages={stages}
+          onMove={onStageMove}
+          onMoveLost={onStageLost}
+        />
+      </div>
+    </div>
   );
 }
 
