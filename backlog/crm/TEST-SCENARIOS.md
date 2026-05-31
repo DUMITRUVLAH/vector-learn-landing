@@ -137,56 +137,27 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-116-3** Given task open mâine, Then card arată data, nu badge roșu.
 - **T-CRM-116-4** Given filtru „fără task", Then se afișează doar leadurile fără task open.
 
-## CRM-117 — Vedere Listă/Tabel {#crm-117}
+## CRM-117 — List view {#crm-117}
+- **T-CRM-117-1** `[blocant]` Given `/app/leads?view=list`, Then se afișează leadurile în tabel.
+- **T-CRM-117-2** Given click pe un rând, Then navigează la `/app/leads/:id`.
 
-- **T-CRM-117-1** `[blocant]` Given utilizatorul apasă butonul „Liste", Then vederea se schimbă din Kanban în tabel și preferința se salvează în localStorage.
-- **T-CRM-117-2** `[blocant]` Given utilizatorul reîncarcă pagina, Then prefer. `crm_view_mode` din localStorage e restaurată.
-- **T-CRM-117-3** `[blocant]` Given vederea listă, When `GET /api/leads?view=list&page=1&pageSize=50`, Then `{ items, page, pageSize, total, totalPages }`.
-- **T-CRM-117-4** `[blocant]` Given 100+ leaduri, Then 50/pagină și paginarea funcționează.
-- **T-CRM-117-5** `[blocant]` Given click header „Valoare", Then lista se resortează asc/desc.
-- **T-CRM-117-6** Given filtru sursă „Facebook", Then lista arată doar leadurile Facebook.
-- **T-CRM-117-7** `[blocant]` Given click badge stadiu din rând, Then dropdown inline → `PATCH /api/leads/:id/stage`.
-- **T-CRM-117-8** `[blocant]` Given click pe un rând, Then navigare la `/app/leads/:id`.
-- **T-CRM-117-9** `[blocant]` Multi-tenant: `GET /api/leads?view=list` returnează doar leadurile tenantului autentificat.
-- **T-CRM-117-10** Given 0 leaduri, Then empty state „Niciun lead găsit".
+## CRM-119 — Căutare globală + Vizualizări salvate {#crm-119}
+- **T-CRM-119-1** `[blocant]` Given filtre active, When salvezi cu nume, Then vizualizarea apare în dropdown.
+- **T-CRM-119-2** `[blocant]` Given vizualizare salvată, When apăs X, Then e ștearsă.
+- **T-CRM-119-3** `[blocant]` Given search „ACME", Then filtrarea returnează leaduri cu „ACME" în company/dealName/interestCourse.
+- **T-CRM-119-4** `[blocant]` `GET /api/saved-views` → 200 `{ views: [] }`.
 
-## CRM-120 — Dashboard „Azi" {#crm-120}
+## CRM-123 — Notificări in-app {#crm-123}
+- **T-CRM-123-1** `[blocant]` Given lead nou creat, Then notificare `lead_created` pentru user assigned_to sau manageri.
+- **T-CRM-123-2** `[blocant]` Given notificare necitită, When o citesc, Then `is_read=true`, badge scade cu 1.
+- **T-CRM-123-3** `[blocant]` `GET /api/notifications` → 200 `{ items: [], unreadCount: 0 }`.
+- **T-CRM-123-4** `[blocant]` Given „Marchează toate", Then `unreadCount = 0`.
+- **T-CRM-123-5** Multi-tenant: notificările tenantului A nu sunt vizibile din tenantul B.
 
-- **T-CRM-120-1** `[blocant]` Given user autentificat, When `GET /api/leads/today`, Then `{ overdueOrDueToday, newUncontacted, followUpNeeded, nextBestAction, totalActions }` — tenant-scoped.
-- **T-CRM-120-2** `[blocant]` Given lead creat acum 1h fără outbound, Then în `newUncontacted`; creat acum 50h NU.
-- **T-CRM-120-3** `[blocant]` Given lead în `contacted` cu ultimul contact acum 3 zile, Then în `followUpNeeded`; contact acum 1h NU.
-- **T-CRM-120-4** `[blocant]` Given task open cu `due_at` = ieri, Then în `overdueOrDueToday`; task done NU.
-- **T-CRM-120-5** Given `nextBestAction`, Then maxim 5 leaduri sortate după score desc.
-- **T-CRM-120-6** `[blocant]` Given user NON-manager, Then returnează doar leads ale acelui user.
-- **T-CRM-120-7** `[blocant]` Multi-tenant: tenant A nu vede datele tenant B.
-- **T-CRM-120-8** Given pagina `/app/leads/today`, Then cele 4 secțiuni sau empty state.
-- **T-CRM-120-9** Given `totalActions > 0`, Then badge în nav arată count-ul.
-- **T-CRM-120-10** Given click pe un rând, Then navigare la `/app/leads/:id`.
-
-## CRM-121 — Vedere mobilă {#crm-121}
-
-- **T-CRM-121-1** `[blocant]` Given lățime < lg (< 1024px), Then `/app/leads` afișează lista mobilă (carduri), nu kanban (`lg:hidden` / `hidden lg:grid`).
-- **T-CRM-121-2** Given lățime ≥ lg, Then se afișează kanban-ul normal.
-- **T-CRM-121-3** `[blocant]` Given swipe stânga pe card, Then apar acțiunile rapide telefon/WhatsApp; tel: link funcționează.
-- **T-CRM-121-4** `[blocant]` Given click pe butonul de stadiu, Then bottom-sheet cu stadii → `PATCH /api/leads/:id/stage`.
-- **T-CRM-121-5** `[blocant]` Given selectarea „Pierdut", Then bottom-sheet motiv → `PATCH` cu `lostReason`.
-- **T-CRM-121-6** `[blocant]` Given tap pe card, Then navigare la `/app/leads/:id`.
-- **T-CRM-121-7** Given 0 leaduri, Then mesaj „Niciun lead găsit".
-- **T-CRM-121-8** `[blocant]` Touch targets ≥ 44px: butoane telefon, WhatsApp, badge stadiu.
-- **T-CRM-121-9** Given filtre active, Then lista mobilă arată leadurile filtrate.
-- **T-CRM-121-10** `[blocant]` 0 axe violations; dark mode OK.
-
-## CRM-122 — Quick-add mobil {#crm-122}
-
-- **T-CRM-122-1** `[blocant]` Given utilizatorul apasă FAB pe mobil, Then se deschide bottom-sheet cu `role="dialog"` și câmpurile Nume + Telefon vizibile; al treilea tap pe „Salvează lead" creează lead-ul.
-- **T-CRM-122-2** `[blocant]` Given butonul Salvează apăsat cu Nume < 2 chars, Then `disabled=true`, niciun request.
-- **T-CRM-122-3** `[blocant]` Given introducere telefon ce există deja (debounce 500ms), Then banner „Există deja: {nume}" cu opțiuni „Deschide" / „Creează oricum".
-- **T-CRM-122-4** `[blocant]` Given submit cu Nume valid, Then `POST /api/leads` cu `source=manual`; toast „Lead adăugat".
-- **T-CRM-122-5** `[blocant]` Given toggle „Mai multe câmpuri", Then câmpurile opționale (curs, note) apar.
-- **T-CRM-122-7** `[blocant]` Given QuickCallLogSheet cu outcome „interested", Then `POST /api/leads/:id/log-call` cu `outcome=interested`.
-- **T-CRM-122-8** Given QuickCallLogSheet fără outcome selectat, Then butonul „Salvează apel" e disabled.
-- **T-CRM-122-9** `[blocant]` Touch targets: FAB h-14 w-14 (56px ≥ 44px); butoanele din sheet au `min-h-[44px]`.
-- **T-CRM-122-10** `[blocant]` 0 axe violations; dark mode OK.
+## CRM-125 — Forecast ponderat {#crm-125}
+- **T-CRM-125-1** `[blocant]` Given leaduri în „trial" cu probability=60%, Then forecast ponderat = gross × 0.6.
+- **T-CRM-125-2** `[blocant]` Given owner schimbă probability, Then forecast se recalculează.
+- **T-CRM-125-3** `[blocant]` `GET /api/analytics/crm/forecast` → 200 `{ stages, totalGrossCents, totalWeightedCents }`.
 
 ---
 

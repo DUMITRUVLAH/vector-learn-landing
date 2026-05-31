@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { NotificationBell } from "@/components/app/NotificationBell";
 import { Link, useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
@@ -88,6 +89,8 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
                     .slice(0, 2)
                     .join("")}
                 </div>
+                {/* CRM-123: Notification bell */}
+                <NotificationBell />
                 <button
                   type="button"
                   onClick={handleLogout}

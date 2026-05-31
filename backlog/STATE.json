@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "CRM-122",
-  "iterations": 68,
-  "last_run_at": "2026-05-30T11:30:00Z",
-  "milestone_status": "M1+M2+M3 landing + MVP-001..008 + CRM-101..117 + COMM-201..205 + REP-301..304 + HR-401..404 + SCHED-501..504 complete. CRM Faza G+H active (CRM-118..128 pending).",
+  "last_completed": "CRM-123",
+  "iterations": 73,
+  "last_run_at": "2026-05-30T14:45:00Z",
+  "milestone_status": "M1+M2+M3+MVP+CRM-101..122+COMM+REP+HR+SCHED complete. CRM-118/119/124/125 (PR#66/70/67/71) done. CRM-122 (PR#68) done. CRM Faza H active: CRM-123 in_progress, 126/127/128 pending.",
   "active_milestone": "CRM",
   "items": {
     "M1-001": {
@@ -905,7 +905,7 @@
         "CRM-107",
         "CRM-111"
       ],
-      "pr": null,
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/64",
       "branch": "feat/CRM-120-today-dashboard",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -916,7 +916,7 @@
     },
     "CRM-121": {
       "status": "done",
-      "attempts": 1,
+      "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/CRM-121-mobile-view.md",
       "milestone": "CRM",
@@ -925,37 +925,48 @@
         "CRM-117",
         "CRM-109"
       ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/65",
       "branch": "feat/CRM-121-mobile-view",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
         "manager": "BUY",
         "student": "OK"
-      },
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/65"
+      }
     },
     "CRM-118": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-118-bulk-actions.md",
       "milestone": "CRM",
       "phase": "G",
-      "depends_on": [
-        "CRM-117"
-      ]
+      "depends_on": ["CRM-117"],
+      "branch": "feat/CRM-118-bulk-actions",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/66",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-124": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-124-sla-lead-rot.md",
       "milestone": "CRM",
       "phase": "G",
-      "depends_on": [
-        "CRM-116",
-        "CRM-120"
-      ]
+      "depends_on": ["CRM-116", "CRM-120"],
+      "branch": "feat/CRM-124-sla-lead-rot",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/67",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-122": {
       "status": "done",
@@ -964,11 +975,9 @@
       "spec": "backlog/specs/CRM-122-quick-add-mobile.md",
       "milestone": "CRM",
       "phase": "H",
+      "depends_on": ["CRM-121", "CRM-102"],
       "branch": "feat/CRM-122-quick-add-mobile",
-      "depends_on": [
-        "CRM-121",
-        "CRM-102"
-      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/68",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
@@ -988,8 +997,8 @@
       ]
     },
     "CRM-123": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-123-notifications.md",
       "milestone": "CRM",
@@ -997,11 +1006,18 @@
       "depends_on": [
         "CRM-107",
         "CRM-111"
-      ]
+      ],
+      "branch": "feat/CRM-123-notifications",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-125": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-125-weighted-forecast.md",
       "milestone": "CRM",
@@ -1009,7 +1025,15 @@
       "depends_on": [
         "CRM-113",
         "CRM-112"
-      ]
+      ],
+      "branch": "feat/CRM-125-weighted-forecast",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/71",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CRM-126": {
       "status": "pending",

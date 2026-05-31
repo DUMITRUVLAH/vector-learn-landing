@@ -120,6 +120,13 @@
       "when": 1780151000000,
       "tag": "0016_crm119_saved_views",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780151100000,
+      "tag": "0017_crm123_notifications",
+      "breakpoints": true
     }
   ]
 }
