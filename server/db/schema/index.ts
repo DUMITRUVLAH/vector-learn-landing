@@ -23,3 +23,4 @@ export * from "./lessonSeries";
 export * from "./saved-views";
 export * from "./cadences";
 export * from "./audit";
+export * from "./contracts";

@@ -155,6 +155,13 @@
       "when": 1780151500000,
       "tag": "0021_crm126_cadences",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1780151600000,
+      "tag": "0022_contract501_contracts",
+      "breakpoints": true
     }
   ]
 }

@@ -28,6 +28,7 @@ import { leadsTodayRoutes } from "./routes/leads-today";
 import { notificationRoutes } from "./routes/notifications";
 import { cadenceRoutes } from "./routes/cadences";
 import { auditRoutes } from "./routes/audit";
+import { contractRoutes } from "./routes/contracts";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -76,6 +77,7 @@ app.route("/api/saved-views", savedViewsRoutes);
 app.route("/api/notifications", notificationRoutes);
 app.route("/api/cadences", cadenceRoutes);
 app.route("/api/audit-log", auditRoutes);
+app.route("/api/contracts", contractRoutes);
 
 app.get("/api/health", async (c) => {
   try {

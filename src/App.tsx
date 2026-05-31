@@ -50,6 +50,7 @@ import { AuditLogPage } from "./pages/app/AuditLogPage";
 import { TodayDashboardPage } from "./pages/app/TodayDashboardPage";
 import { CadencesPage } from "./pages/app/CadencesPage";
 import { LeadAuditLogPage } from "./pages/app/LeadAuditLogPage";
+import { ContractsPage } from "./pages/app/ContractsPage";
 
 function HomePage() {
   return (
@@ -123,6 +124,7 @@ function Routes() {
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
   if (path.startsWith("/app/cadences")) return <CadencesPage />;
   if (path.startsWith("/app/audit-log")) return <LeadAuditLogPage />;
+  if (path.startsWith("/app/contracts")) return <ContractsPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   return <HomePage />;

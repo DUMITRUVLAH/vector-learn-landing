@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X } from "lucide-react";
+import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { StudentForm } from "@/components/app/StudentForm";
 import { useSession } from "@/hooks/useSession";
@@ -235,6 +235,22 @@ export function StudentsPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="inline-flex gap-1">
+                            {/* CONTRACT-501: generate contract from student */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const params = new URLSearchParams();
+                                params.set("name", s.fullName);
+                                if (s.email) params.set("email", s.email);
+                                if (s.phone) params.set("phone", s.phone);
+                                params.set("studentId", s.id);
+                                navigate(`/app/contracts?${params.toString()}`);
+                              }}
+                              aria-label={`Generează contract pentru ${s.fullName}`}
+                              className="touch-target rounded-md hover:bg-primary/10 hover:text-primary flex items-center justify-center"
+                            >
+                              <FilePlus className="h-3.5 w-3.5" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => openEdit(s)}
