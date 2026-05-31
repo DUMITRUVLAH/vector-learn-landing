@@ -1067,7 +1067,7 @@
       ]
     },
     "CRM-140": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-140-open-duplicate-fix.md",
@@ -1075,18 +1075,34 @@
       "phase": "J",
       "depends_on": [
         "CRM-102"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-141": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-141-add-lead-in-empty-column.md",
       "milestone": "CRM",
       "phase": "J",
       "depends_on": [
         "CRM-105"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "CRM-142": {
       "status": "pending",

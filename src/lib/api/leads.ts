@@ -215,6 +215,8 @@ export function createLead(input: {
   debtCents?: number;
   company?: string | null;
   dealName?: string | null;
+  /** CRM-141: initial pipeline stage for direct-to-column creation */
+  stage?: string;
 }): Promise<Lead> {
   return api<Lead>("/api/leads", {
     method: "POST",

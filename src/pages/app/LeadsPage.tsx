@@ -181,6 +181,8 @@ export function LeadsPage() {
 
   // Modals
   const [showCreate, setShowCreate] = useState(false);
+  /** CRM-141: stage pre-selected when opening CreateLeadModal from a kanban column */
+  const [createDefaultStage, setCreateDefaultStage] = useState<string>("new");
   const [showImport, setShowImport] = useState(false);
   const [showStagesEditor, setShowStagesEditor] = useState(false);
   const [lostReasonFor, setLostReasonFor] = useState<{ leadId: string; targetStage: string } | null>(null);
@@ -605,8 +607,19 @@ export function LeadsPage() {
 
                 <div className="flex flex-col gap-2">
                   {leadsHere.length === 0 ? (
-                    <div className="flex items-center justify-center h-24 rounded-lg border border-dashed border-border text-[11px] text-muted-foreground">
-                      Trage aici
+                    /* CRM-141: empty column invites direct lead creation */
+                    <div className="flex flex-col items-center justify-center gap-2 h-24 rounded-lg border border-dashed border-border text-[11px] text-muted-foreground">
+                      <span>Trage aici</span>
+                      <button
+                        type="button"
+                        onClick={() => { setCreateDefaultStage(stage.key); setShowCreate(true); }}
+                        className="min-h-[44px] min-w-[44px] flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={`Adauga lead in stadiul ${stage.label}`}
+                        data-testid={`add-lead-in-${stage.key}`}
+                      >
+                        <Plus className="h-3 w-3" aria-hidden="true" />
+                        {`Adauga in ${stage.label}`}
+                      </button>
                     </div>
                   ) : (
                     leadsHere.map((lead) => (
@@ -645,6 +658,7 @@ export function LeadsPage() {
           onSaved={() => { setShowCreate(false); setToast({ kind: "success", message: "Lead adăugat în pipeline" }); void fetchAll(); }}
           onError={(m) => setToast({ kind: "error", message: m })}
           onOpenDuplicate={(id) => { setShowCreate(false); navigate(`/app/leads/${id}`); }}
+          defaultStage={createDefaultStage}
         />
       )}
 
@@ -1585,9 +1599,11 @@ interface CreateLeadModalProps {
   onSaved: () => void;
   onError: (m: string) => void;
   onOpenDuplicate: (id: string) => void;
+  /** CRM-141: pre-select a pipeline stage when opening from an empty column */
+  defaultStage?: string;
 }
 
-function CreateLeadModal({ onClose, onSaved, onError, onOpenDuplicate }: CreateLeadModalProps) {
+function CreateLeadModal({ onClose, onSaved, onError, onOpenDuplicate, defaultStage }: CreateLeadModalProps) {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -1597,6 +1613,7 @@ function CreateLeadModal({ onClose, onSaved, onError, onOpenDuplicate }: CreateL
   const [assignedTo, setAssignedTo] = useState("");
   const [valueEur, setValueEur] = useState("");
   const [company, setCompany] = useState("");
+  const [selectedStage, setSelectedStage] = useState<string>(defaultStage ?? "new");
   const [submitting, setSubmitting] = useState(false);
   const [dedupResult, setDedupResult] = useState<DedupResult["duplicate"] | null>(null);
   const [forceCreate, setForceCreate] = useState(false);
@@ -1630,7 +1647,7 @@ function CreateLeadModal({ onClose, onSaved, onError, onOpenDuplicate }: CreateL
     setSubmitting(true);
     try {
       const valueCents = valueEur.trim() ? Math.round(parseFloat(valueEur.replace(",", ".")) * 100) : 0;
-      await createLead({ fullName, phone: phone || null, email: email || null, interestCourse: interestCourse || null, source, assignedTo: assignedTo || null, notes: notes || null, valueCents: isNaN(valueCents) ? 0 : valueCents, company: company || null } as Parameters<typeof createLead>[0]);
+      await createLead({ fullName, phone: phone || null, email: email || null, interestCourse: interestCourse || null, source, assignedTo: assignedTo || null, notes: notes || null, valueCents: isNaN(valueCents) ? 0 : valueCents, company: company || null, stage: selectedStage });
       onSaved();
     } catch (err) {
       onError(err instanceof ApiError ? `Eroare: ${err.code}` : "Nu pot salva lead-ul");
@@ -1679,6 +1696,14 @@ function CreateLeadModal({ onClose, onSaved, onError, onOpenDuplicate }: CreateL
             <option value="referral">Recomandare</option>
             <option value="phone_in">Telefon</option>
             <option value="other">Altul</option>
+          </select>
+        </FormField>
+        {/* CRM-141: stage picker so lead lands in the right column on creation */}
+        <FormField id="l-stage" label="Stadiu inițial">
+          <select id="l-stage" value={selectedStage} onChange={(e) => setSelectedStage(e.target.value)} className="input-base">
+            {STAGES_LOCAL.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
           </select>
         </FormField>
         <FormField id="l-company" label="Companie (opțional)">

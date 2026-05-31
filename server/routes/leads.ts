@@ -84,6 +84,8 @@ const createLeadSchema = z.object({
   /** CRM-114 */
   company: z.string().max(300).optional().nullable(),
   dealName: z.string().max(300).optional().nullable(),
+  /** CRM-141: initial stage for direct-to-column creation */
+  stage: z.enum(STAGES).optional().default("new"),
 });
 
 const updateLeadSchema = z.object({
@@ -483,6 +485,8 @@ leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
       debtCents: (body.debtCents as number | undefined) ?? 0,
       company: (body.company as string | null) ?? null,
       dealName: (body.dealName as string | null) ?? null,
+      /** CRM-141: honor initial stage (defaults to "new" via schema) */
+      stage: (body.stage as typeof STAGES[number]) ?? "new",
     })
     .returning();
 
