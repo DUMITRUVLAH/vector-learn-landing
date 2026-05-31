@@ -86,7 +86,7 @@ const recurringSchema = z.object({
   }),
 });
 
-recurringRoutes.post("/", zValidator("json", recurringSchema), async (c) => {
+recurringRoutes.post("/recurring", zValidator("json", recurringSchema), async (c) => {
   const tenantId = c.get("user").tenantId;
   const body = c.req.valid("json");
   const { courseId, teacherId, firstScheduledAt, durationMinutes, meetingUrl, notes, roomId, recurrence } = body;

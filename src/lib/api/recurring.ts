@@ -40,7 +40,7 @@ export function createRecurringLessons(input: CreateRecurringInput): Promise<{
   series: LessonSeries;
   lessons: Lesson[];
 }> {
-  return api("/lessons/recurring", {
+  return api("/api/lessons/recurring", {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -50,7 +50,7 @@ export function cancelSeriesFuture(
   seriesId: string,
   from: string
 ): Promise<{ cancelledCount: number; cancelledIds: string[] }> {
-  return api(`/lessons/series/${seriesId}/future?from=${encodeURIComponent(from)}`, {
+  return api(`/api/lessons/series/${seriesId}/future?from=${encodeURIComponent(from)}`, {
     method: "DELETE",
   });
 }
