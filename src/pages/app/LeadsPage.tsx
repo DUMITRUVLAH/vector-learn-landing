@@ -40,6 +40,8 @@ import { AssigneePicker, useAssigneeName } from "@/components/crm/AssigneePicker
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 // CRM-138: StageMenu for keyboard-accessible stage switching on KanbanCard
 import { StageMenu } from "@/components/crm/StageMenu";
+// CRM-139: debounced search
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web",
@@ -90,6 +92,13 @@ export function LeadsPage() {
   const [filterNoTask, setFilterNoTask] = useState(false);
   const [filterOverdue, setFilterOverdue] = useState(false);
 
+  // CRM-139: debounced filter values for auto-trigger in list view
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
+  const debouncedSource = useDebouncedValue(filterSource, 300);
+  const debouncedAssigned = useDebouncedValue(filterAssigned, 300);
+  const debouncedNoTask = useDebouncedValue(filterNoTask, 300);
+  const debouncedOverdue = useDebouncedValue(filterOverdue, 300);
+
   // CRM-117: view toggle — persisted in localStorage
   const [viewMode, setViewMode] = useState<"kanban" | "list">(() => {
     try { return (localStorage.getItem("crm_view_mode") as "kanban" | "list") ?? "kanban"; } catch { return "kanban"; }
@@ -135,6 +144,15 @@ export function LeadsPage() {
       void fetchList({ page: 1 });
     }
   }, [viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // CRM-139: auto-trigger list re-fetch on debounced filter changes
+  useEffect(() => {
+    if (viewMode === "list") {
+      void fetchList({ page: 1 });
+    }
+    // We intentionally only fire when debounced values change (not on every render)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, debouncedSource, debouncedAssigned, debouncedNoTask, debouncedOverdue]);
 
   // CRM-118: Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -400,16 +418,12 @@ export function LeadsPage() {
           Restanțe
         </label>
 
-        {/* List view: apply filters button */}
-        {viewMode === "list" && (
-          <button
-            type="button"
-            onClick={() => void fetchList({ page: 1 })}
-            className="inline-flex items-center gap-1 rounded-md border border-primary bg-primary/10 px-2 py-1.5 text-xs text-primary font-semibold hover:bg-primary/20"
-          >
-            <Search className="h-3 w-3" />
-            Aplică filtre
-          </button>
+        {/* CRM-139: list view auto-applies via debounce; spinner shows re-fetch in progress */}
+        {viewMode === "list" && listLoading && (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" aria-live="polite" aria-label="Se filtrează...">
+            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+            <span className="sr-only">Se filtrează...</span>
+          </span>
         )}
         {(filterSource !== "all" || filterAssigned !== "all" || searchQuery || filterNoTask || filterOverdue) && (
           <button
