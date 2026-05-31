@@ -34,13 +34,15 @@ import {
 } from "@/lib/api/tasks";
 import { cn } from "@/lib/utils";
 import { SendMessageModal, LogCallModal, type SendChannel } from "@/components/crm/CommModal";
-import { ConvertModal, getScoreBadge, SCORE_BADGE_STYLES, SCORE_BADGE_LABELS } from "@/components/crm/ConvertModal";
-import { scoreLead } from "@/lib/api/leads";
+import { ConvertModal } from "@/components/crm/ConvertModal";
+import { scoreLead, type ScoreFactor } from "@/lib/api/leads";
 import { CadencePanel } from "@/components/crm/CadencePanel";
 import { UndoToast } from "@/components/crm/UndoToast";
 import { crmDeleteLead } from "@/lib/api/audit";
 // CRM-144: copy-to-clipboard button for phone / email
 import { CopyButton } from "@/components/crm/CopyButton";
+// CRM-145: score explainer with factors breakdown
+import { ScoreExplain } from "@/components/crm/ScoreExplain";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -124,6 +126,20 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   // CRM-111: Enhanced convert modal
   const [convertModal, setConvertModal] = useState(false);
 
+  // CRM-145: score factors for explainer; auto-score if missing
+  const [scoreFactors, setScoreFactors] = useState<ScoreFactor[]>([]);
+  const [scoreLoading, setScoreLoading] = useState(false);
+
+  const runScore = async (id: string) => {
+    setScoreLoading(true);
+    try {
+      const res = await scoreLead(id);
+      setLead((prev) => prev ? { ...prev, score: res.score } : prev);
+      setScoreFactors(res.factors ?? []);
+    } catch { /* ignore — user can retry manually */ }
+    finally { setScoreLoading(false); }
+  };
+
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
   }, [sessionStatus, navigate]);
@@ -165,6 +181,15 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   }, [leadId]);
 
   useEffect(() => { void fetchAll(); }, [fetchAll]);
+
+  // CRM-145: auto-score once when lead loads with no score (never loops)
+  const autoScoreFiredRef = useRef(false);
+  useEffect(() => {
+    if (!lead || lead.score != null || autoScoreFiredRef.current) return;
+    autoScoreFiredRef.current = true;
+    void runScore(lead.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead]);
 
   // ─── Edit helpers ─────────────────────────────────────────────────────────
   const startEdit = () => {
@@ -613,28 +638,22 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               )}
             </div>
 
-            {/* Score badge (CRM-111) */}
+            {/* Score badge (CRM-111, CRM-145: auto-score + explainer) */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Scor lead</p>
               {lead.score != null ? (
-                <div className="flex items-center gap-2">
-                  <span className={cn(
-                    "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold",
-                    SCORE_BADGE_STYLES[getScoreBadge(lead.score)]
-                  )}>
-                    {SCORE_BADGE_LABELS[getScoreBadge(lead.score)]} {lead.score}
-                  </span>
-                </div>
+                <ScoreExplain
+                  score={lead.score}
+                  factors={scoreFactors}
+                  recalculating={scoreLoading}
+                  onRecalculate={() => void runScore(lead.id)}
+                />
+              ) : scoreLoading ? (
+                <p className="text-xs text-muted-foreground">Se calculează...</p>
               ) : (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!lead) return;
-                    void scoreLead(lead.id).then((res) => {
-                      setLead((prev) => prev ? { ...prev, score: res.score } : prev);
-                      setToast({ kind: "success", message: `Scor calculat: ${res.score} (${res.badge})` });
-                    });
-                  }}
+                  onClick={() => void runScore(lead.id)}
                   className="text-xs text-primary hover:underline"
                 >
                   Calculează scor

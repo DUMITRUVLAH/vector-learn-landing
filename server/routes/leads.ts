@@ -837,7 +837,7 @@ leadRoutes.post("/:id/assign", zValidator("json", assignLeadSchema), async (c) =
   return c.json(updated);
 });
 
-// POST /api/leads/:id/score — calculate and save lead score (CRM-111)
+// POST /api/leads/:id/score — calculate and save lead score (CRM-111, CRM-145: +factors)
 leadRoutes.post("/:id/score", async (c) => {
   const id = c.req.param("id");
   const tenantId = c.get("user").tenantId;
@@ -848,6 +848,8 @@ leadRoutes.post("/:id/score", async (c) => {
   if (!lead) return c.json({ error: "not_found" }, 404);
 
   // Score algorithm: signals that increase priority
+  // CRM-145: collect factors for explainer UI
+  const factors: Array<{ label: string; points: number }> = [];
   let score = 0;
 
   // Source signal (highest-intent sources score more)
@@ -862,7 +864,20 @@ leadRoutes.post("/:id/score", async (c) => {
     import: 10,
     other: 10,
   };
-  score += sourceScores[lead.source] ?? 10;
+  const sourcePoints = sourceScores[lead.source] ?? 10;
+  score += sourcePoints;
+  const sourceLabels: Record<string, string> = {
+    webform: "Formular web",
+    facebook_ad: "Facebook Ads",
+    google_ads: "Google Ads",
+    phone_in: "Apel intrare",
+    referral: "Recomandare",
+    instagram: "Instagram",
+    manual: "Manual",
+    import: "Import",
+    other: "Altul",
+  };
+  factors.push({ label: `Sursă: ${sourceLabels[lead.source] ?? lead.source}`, points: sourcePoints });
 
   // Stage signal
   const stageScores: Record<string, number> = {
@@ -872,14 +887,23 @@ leadRoutes.post("/:id/score", async (c) => {
     paid: 100,
     lost: 0,
   };
-  score += stageScores[lead.stage] ?? 10;
+  const stagePoints = stageScores[lead.stage] ?? 10;
+  score += stagePoints;
+  const stageLabels: Record<string, string> = {
+    new: "Nou",
+    contacted: "Contactat",
+    trial: "Trial",
+    paid: "Plătit",
+    lost: "Pierdut",
+  };
+  factors.push({ label: `Stadiu: ${stageLabels[lead.stage] ?? lead.stage}`, points: stagePoints });
 
   // Has email
-  if (lead.email) score += 10;
+  if (lead.email) { score += 10; factors.push({ label: "Are email", points: 10 }); }
   // Has phone
-  if (lead.phone) score += 10;
+  if (lead.phone) { score += 10; factors.push({ label: "Are telefon", points: 10 }); }
   // Has course interest
-  if (lead.interestCourse) score += 5;
+  if (lead.interestCourse) { score += 5; factors.push({ label: "Curs dorit specificat", points: 5 }); }
 
   // Cap at 100
   score = Math.min(score, 100);
@@ -891,7 +915,7 @@ leadRoutes.post("/:id/score", async (c) => {
     .returning();
 
   const badge = score >= 70 ? "hot" : score >= 40 ? "warm" : "cold";
-  return c.json({ lead: updated, score, badge });
+  return c.json({ lead: updated, score, badge, factors });
 });
 
 // POST /api/leads/:id/send-message — send email/WhatsApp/SMS from lead card (CRM-109)
