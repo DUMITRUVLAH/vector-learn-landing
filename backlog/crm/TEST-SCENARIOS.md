@@ -137,31 +137,17 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-116-3** Given task open mâine, Then card arată data, nu badge roșu.
 - **T-CRM-116-4** Given filtru „fără task", Then se afișează doar leadurile fără task open.
 
-## CRM-117 — Vedere Listă/Tabel {#crm-117}
+## CRM-117 — List view {#crm-117}
+- **T-CRM-117-1** `[blocant]` Given `/app/leads?view=list`, Then se afișează leadurile în tabel cu coloanele: Nume, Stadiu, Sursă, Responsabil, Valoare, Data.
+- **T-CRM-117-2** Given click pe un rând, Then navigează la `/app/leads/:id`.
+- **T-CRM-117-3** Given sortare pe coloana „Valoare", Then leadurile sunt ordonate descrescător.
 
-- **T-CRM-117-1** `[blocant]` Given utilizatorul apasă butonul „Listă", Then vedera se schimbă din Kanban în tabel și preferința se salvează în localStorage.
-- **T-CRM-117-2** `[blocant]` Given utilizatorul reîncarcă pagina, Then prefer. `crm_view_mode` din localStorage e restaurată (kanban sau list).
-- **T-CRM-117-3** `[blocant]` Given vederea listă e activă, When `GET /api/leads?view=list&page=1&pageSize=50`, Then răspuns cu `{ items, page, pageSize, total, totalPages }` — nu raw `.execute().rows`.
-- **T-CRM-117-4** `[blocant]` Given 100+ leaduri, When vederea listă e activă, Then se afișează exact 50/pagină și paginarea funcționează (pagina 2 → altă felie de date).
-- **T-CRM-117-5** `[blocant]` Given click pe header „Valoare", Then lista se resortează asc/desc și indicatorul vizual (săgeată) se actualizează.
-- **T-CRM-117-6** Given filtru sursă „Facebook" cu vederea listă, When se apasă „Aplică filtre", Then lista afișează doar leadurile Facebook.
-- **T-CRM-117-7** `[blocant]` Given click pe badge de stadiu dintr-un rând, Then apare dropdown inline; alegând un stadiu nou → `PATCH /api/leads/:id/stage` → lista se reîncarcă.
-- **T-CRM-117-8** `[blocant]` Given click pe un rând, Then navigare la `/app/leads/:id`.
-- **T-CRM-117-9** `[blocant]` Multi-tenant: `GET /api/leads?view=list` returnează **doar** leadurile tenantului autentificat.
-- **T-CRM-117-10** Given 0 leaduri care corespund filtrelor, Then se afișează stare empty „Niciun lead găsit".
-
-## CRM-118 — Bulk actions {#crm-118}
-
-- **T-CRM-118-1** `[blocant]` Given vederea listă activă cu 5 leaduri, When utilizatorul bifează checkbox-ul „selectează tot", Then toate cele 5 ID-uri sunt în selecție și counter-ul arată „5 selectate".
-- **T-CRM-118-2** `[blocant]` Given 3 leaduri selectate, When acțiunea „Schimbă stadiu → contacted" e confirmată, Then `POST /api/leads/bulk-action` cu `{ ids, action:"stage", payload:{stage:"contacted"} }` returnează `{ processed:3, failed:0 }` și lista se reîncarcă.
-- **T-CRM-118-3** `[blocant]` Given 2 leaduri selectate și stadiu destinație `is_lost`, When se confirmă fără `lostReason`, Then request-ul returnează `400 lost_reason_required`; cu motiv → `200 processed:2`.
-- **T-CRM-118-4** `[blocant]` Given 2 leaduri selectate, When acțiunea „Adaugă tag → urgent", Then tag „urgent" apare pe ambele leaduri în `lead_tags`; fiecare lead primește `interaction type=system`.
-- **T-CRM-118-5** `[blocant]` Given 2 leaduri selectate și un ID al altui tenant, When bulk-action, Then lead-ul celuilalt tenant e ignorat (processed=1, failed=1); tenant-scoped.
-- **T-CRM-118-6** `[blocant]` Given 2 leaduri selectate, When ștergere GDPR confirmată dublu, Then PII e anonimizat (`fullName=[Șters GDPR]`, `phone=null`, `email=null`); `interaction system` de audit creat.
-- **T-CRM-118-7** Given se aplică un filtru nou, Then selecția se resetează automat (0 selectate).
-- **T-CRM-118-8** Given toolbar bulk vizibil, Then are `role="toolbar"` cu `aria-label` care include count-ul; 0 violări axe critical/serious.
-- **T-CRM-118-9** Given 0 leaduri selectate, Then toolbar-ul bulk NU este vizibil.
-- **T-CRM-118-10** `[blocant]` Given reasignare bulk cu UUID valid, Then `leads.assigned_to` actualizat pentru toate; `interaction system` „Bulk: reasignat..." creat.
+## CRM-119 — Căutare globală + Vizualizări salvate {#crm-119}
+- **T-CRM-119-1** `[blocant]` Given filtre active (sursă=Facebook), When apăs „Salvează filtrul" și introduc un nume, Then vizualizarea apare în dropdown și o pot reactiva cu un click.
+- **T-CRM-119-2** `[blocant]` Given o vizualizare salvată, When apăs X lângă ea, Then e ștearsă și nu mai apare în dropdown.
+- **T-CRM-119-3** `[blocant]` Given search „ACME", Then filtrarea returnează leaduri cu „ACME" în `company` sau `dealName` sau `interestCourse`, nu doar `fullName`/`phone`.
+- **T-CRM-119-4** `[blocant]` Given `GET /api/saved-views` autenticat, Then răspuns 200 cu `{ views: [] }` (sau lista).
+- **T-CRM-119-5** Multi-tenant: vizualizările tenantului A nu sunt vizibile din tenantul B.
 
 ---
 

@@ -23,6 +23,7 @@ import { availabilityRoutes } from "./routes/availability";
 import { auditLogRoutes } from "./routes/auditLog";
 import { roomRoutes } from "./routes/rooms";
 import { recurringRoutes } from "./routes/recurring";
+import { savedViewsRoutes } from "./routes/saved-views";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -66,6 +67,7 @@ app.route("/api/hr/teachers", availabilityRoutes);
 app.route("/api/hr/audit-log", auditLogRoutes);
 app.route("/api/rooms", roomRoutes);
 app.route("/api/lessons", recurringRoutes); // /api/lessons/recurring + /api/lessons/series/:id/future
+app.route("/api/saved-views", savedViewsRoutes);
 
 app.get("/api/health", async (c) => {
   try {

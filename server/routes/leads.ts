@@ -234,11 +234,14 @@ leadRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
   }
   if (search && search.trim()) {
     const q = `%${search.trim()}%`;
+    // CRM-119: extended search covers company, deal_name, interest_course
     const searchCondition = or(
       ilike(leads.fullName, q),
       ilike(leads.email, q),
       ilike(leads.phone, q),
-      ilike(leads.interestCourse, q)
+      ilike(leads.interestCourse, q),
+      ilike(leads.company, q),
+      ilike(leads.dealName, q)
     );
     if (searchCondition) conditions.push(searchCondition);
   }

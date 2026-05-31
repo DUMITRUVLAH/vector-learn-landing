@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, LayoutList, KanbanSquare, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Tag, UserCog, ArrowRightLeft } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { SavedViewsDropdown } from "@/components/crm/SavedViewsDropdown";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -211,7 +212,11 @@ export function LeadsPage() {
         const phoneQ = q.replace(/\D/g, "");
         const nameMatch = lead.fullName.toLowerCase().includes(q);
         const phoneMatch = phoneQ.length > 0 && (lead.phone ?? "").replace(/\D/g, "").includes(phoneQ);
-        if (!nameMatch && !phoneMatch) return false;
+        // CRM-119: also search company, dealName, interestCourse
+        const companyMatch = (lead.company ?? "").toLowerCase().includes(q);
+        const dealMatch = (lead.dealName ?? "").toLowerCase().includes(q);
+        const courseMatch = (lead.interestCourse ?? "").toLowerCase().includes(q);
+        if (!nameMatch && !phoneMatch && !companyMatch && !dealMatch && !courseMatch) return false;
       }
       // CRM-116: task signal filters
       if (filterNoTask && lead.nextTask !== null && lead.nextTask !== undefined) return false;
@@ -404,6 +409,22 @@ export function LeadsPage() {
             Resetează
           </button>
         )}
+
+        {/* CRM-119: Saved views */}
+        <div className="ml-auto">
+          <SavedViewsDropdown
+            activeFilters={{ source: filterSource !== "all" ? filterSource : undefined, assignedTo: filterAssigned !== "all" ? filterAssigned : undefined, searchQuery: searchQuery || undefined, filterNoTask: filterNoTask || undefined, filterOverdue: filterOverdue || undefined }}
+            hasActiveFilters={filterSource !== "all" || filterAssigned !== "all" || !!searchQuery || filterNoTask || filterOverdue}
+            onApplyView={(filters) => {
+              setFilterSource(filters.source ?? "all");
+              setFilterAssigned(filters.assignedTo ?? "all");
+              setSearchQuery(filters.searchQuery ?? "");
+              setFilterNoTask(filters.filterNoTask ?? false);
+              setFilterOverdue(filters.filterOverdue ?? false);
+            }}
+            onError={(m) => setToast({ kind: "error", message: m })}
+          />
+        </div>
       </div>
 
       {viewMode === "list" ? (

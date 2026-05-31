@@ -133,6 +133,23 @@ Golul dintre „are toate funcțiile" și „o academie reală îl folosește 8h
 
 **Ordine de build Faza G+H:** `CRM-117 → 120 → 121 → 118 → 124 → 122 → 119 → 123 → 125 → 126 → 127 → 128`
 
+### Faza G+H — Funcționalități avansate pipeline
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 17 | `CRM-117` | List view tabelar cu sortare + filtre | G | done ✅ | [specs/CRM-117-list-view.md](specs/CRM-117-list-view.md) · [PR #63](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/63) |
+| 18 | `CRM-118` | Acțiuni în masă (bulk): schimb stadiu, reasignare, tag, ștergere | G | done ✅ | [specs/CRM-118-bulk-actions.md](specs/CRM-118-bulk-actions.md) · [PR #66](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/66) |
+| 19 | `CRM-119` | Căutare globală extinsă + Vizualizări salvate (Saved Views) | G | done ✅ | [specs/CRM-119-search-saved-views.md](specs/CRM-119-search-saved-views.md) |
+| 20 | `CRM-120` | Today dashboard: tasks azi + leads fără task + activitate recentă | G | done ✅ | [specs/CRM-120-today-dashboard.md](specs/CRM-120-today-dashboard.md) · [PR #64](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/64) |
+| 21 | `CRM-121` | Mobile view: kanban 2 coloane + gesturi touch | H | done ✅ | [specs/CRM-121-mobile-view.md](specs/CRM-121-mobile-view.md) · [PR #65](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/65) |
+| 22 | `CRM-122` | Quick add mobile: FAB + pre-fill din context | H | done ✅ | [specs/CRM-122-quick-add-mobile.md](specs/CRM-122-quick-add-mobile.md) · [PR #68](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/68) |
+| 23 | `CRM-123` | Notificări in-app: badge + feed notificări + preferințe | H | pending | [specs/CRM-123-notifications.md](specs/CRM-123-notifications.md) |
+| 24 | `CRM-124` | SLA + lead rot: avertizare leaduri necontactate | G | done ✅ | [specs/CRM-124-sla-lead-rot.md](specs/CRM-124-sla-lead-rot.md) · [PR #67](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/67) |
+| 25 | `CRM-125` | Forecast ponderat pe pipeline + probabilitate per stadiu | G | pending | [specs/CRM-125-weighted-forecast.md](specs/CRM-125-weighted-forecast.md) |
+| 26 | `CRM-126` | Follow-up cadence: serie automatizată de follow-up-uri | H | pending | [specs/CRM-126-followup-cadence.md](specs/CRM-126-followup-cadence.md) |
+| 27 | `CRM-127` | Undo + audit log acțiuni CRM | H | pending | [specs/CRM-127-undo-audit.md](specs/CRM-127-undo-audit.md) |
+| 28 | `CRM-128` | Empty states + onboarding ghid primul lead | H | pending | [specs/CRM-128-empty-states-onboarding.md](specs/CRM-128-empty-states-onboarding.md) |
+
 ## Active milestone: COMM — Modulul Comunicare (mesagerie reală backend)
 
 > Fundație mesagerie + log per lead/student + inbox unificat + broadcast + notificări automate.
