@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "SCHED-504",
   "last_completed": "CONTRACT-501",
   "iterations": 68,
   "last_run_at": "2026-05-30T17:20:00Z",
@@ -709,17 +709,20 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "SCHED-503": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHED-503-attendance.md",
       "milestone": "SCHED",
       "phase": "3",
-      "depends_on": ["SCHED-501"]
+      "depends_on": ["SCHED-501"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/59",
+      "branch": "feat/SCHED-503-attendance",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "SCHED-504": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHED-504-ical.md",
       "milestone": "SCHED",
