@@ -7,7 +7,7 @@ priority: P0
 core_ref: [CRM-CORE.md §6.1, §9]
 tests: TEST-SCENARIOS.md#crm-118
 depends_on: [CRM-117]
-status: done
+status: pending
 ---
 
 # CRM-118 — Acțiuni în masă

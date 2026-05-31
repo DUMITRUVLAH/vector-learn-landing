@@ -36,13 +36,21 @@ function createConnection(): {
   closeDb: () => Promise<void>;
 } {
   if (databaseUrl) {
-    // `prepare: false` for the Supabase transaction pooler (pgBouncer). The single-connection +
-    // short-timeout options are SERVERLESS-ONLY — on the persistent local/container server `max:1`
-    // serializes requests into a deadlock, so local keeps a normal pool.
+    // Supabase transaction pooler (pgBouncer, :6543) over Vercel serverless needs BOTH:
+    //   - `prepare: false`     → pgBouncer transaction mode has no named-prepared-statement support.
+    //   - `fetch_types: false` → postgres.js otherwise runs a type-introspection query on connect;
+    //     against the transaction pooler that query can hang indefinitely, so the first real query
+    //     never returns and the function dies with FUNCTION_INVOCATION_TIMEOUT (30s). This was the
+    //     prod login hang: the connection opened but findFirst() never resolved. Disabling the
+    //     types fetch is the documented Supabase-pooler-on-serverless fix.
+    // The single-connection + short-timeout options are SERVERLESS-ONLY — on the persistent
+    // local/container server `max:1` serializes requests into a deadlock, so local keeps a
+    // normal pool. SSL comes from the URL's own `sslmode=require`; passing ssl:"require" here too
+    // double-negotiates and can stall the handshake, so it is left to the connection string.
     const client = postgres(
       databaseUrl,
       onVercel
-        ? { prepare: false, ssl: "require", max: 1, connect_timeout: 10, idle_timeout: 20 }
+        ? { prepare: false, fetch_types: false, max: 1, connect_timeout: 10, idle_timeout: 20 }
         : { prepare: false }
     );
     return {

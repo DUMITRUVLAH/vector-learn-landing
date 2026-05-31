@@ -47,6 +47,7 @@ import { PayrollPage } from "./pages/app/PayrollPage";
 import { TeacherStatsPage } from "./pages/app/TeacherStatsPage";
 import { AvailabilityPage } from "./pages/app/AvailabilityPage";
 import { AuditLogPage } from "./pages/app/AuditLogPage";
+import { TodayDashboardPage } from "./pages/app/TodayDashboardPage";
 
 function HomePage() {
   return (
@@ -96,6 +97,8 @@ function Routes() {
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;
+  // CRM-120: /app/leads/today dashboard
+  if (path.startsWith("/app/leads/today")) return <TodayDashboardPage />;
   // /app/leads/:id must be checked before /app/leads
   if (path.match(/^\/app\/leads\/[^/]+$/)) {
     const id = path.split("/").pop()!;
