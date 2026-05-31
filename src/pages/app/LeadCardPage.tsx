@@ -26,6 +26,7 @@ import {
   type Lead, type LeadInteraction, type LeadContact, type CustomField, type LeadFieldValue,
 } from "@/lib/api/leads";
 import { fetchPipelineStages, type PipelineStage } from "@/lib/api/pipeline";
+import { AssigneePicker, useAssigneeName } from "@/components/crm/AssigneePicker";
 import {
   listTasks, createTask, updateTask, deleteTask,
   listAttachments, createAttachment, deleteAttachment,
@@ -639,20 +640,19 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               )}
             </div>
 
-            {/* Assigned to */}
+            {/* Assigned to — CRM-137: AssigneePicker replaces UUID text input */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Responsabil</p>
               {editing ? (
-                <input
-                  type="text"
-                  value={editDraft.assignedTo ?? lead.assignedTo ?? ""}
-                  onChange={(e) => setEditDraft((d) => ({ ...d, assignedTo: e.target.value || null }))}
-                  placeholder="UUID responsabil (opțional)"
-                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono"
-                  aria-label="Responsabil (UUID)"
+                <AssigneePicker
+                  id="lead-assignee"
+                  value={editDraft.assignedTo ?? lead.assignedTo}
+                  onChange={(userId) => setEditDraft((d) => ({ ...d, assignedTo: userId }))}
+                  ariaLabel="Responsabil"
+                  className="w-full"
                 />
               ) : (
-                <p className="text-sm text-muted-foreground">{lead.assignedTo ? `${lead.assignedTo.slice(0, 8)}…` : "Neasignat"}</p>
+                <AssigneeDisplay assignedTo={lead.assignedTo} />
               )}
             </div>
           </section>
@@ -1632,4 +1632,10 @@ function FieldsTab({ leadId, customFields, fieldValues, setFieldValues }: Fields
       ))}
     </div>
   );
+}
+
+// CRM-137: Inline helper — reads name from team cache, falls back gracefully.
+function AssigneeDisplay({ assignedTo }: { assignedTo: string | null | undefined }) {
+  const name = useAssigneeName(assignedTo);
+  return <p className="text-sm text-muted-foreground">{name}</p>;
 }

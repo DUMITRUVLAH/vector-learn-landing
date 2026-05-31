@@ -35,6 +35,9 @@ import { getForecast } from "@/lib/api/analytics";
 import { cn } from "@/lib/utils";
 import { EmptyLeads } from "@/components/crm/EmptyLeads";
 import { OnboardingChecklist } from "@/components/crm/OnboardingChecklist";
+// CRM-137: AssigneePicker + display name hook
+import { AssigneePicker, useAssigneeName } from "@/components/crm/AssigneePicker";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web",
@@ -379,15 +382,11 @@ export function LeadsPage() {
           {Object.entries(SOURCE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
 
-        <select
+        {/* CRM-137: real team members for filter */}
+        <AssigneeFilterSelect
           value={filterAssigned}
-          onChange={(e) => setFilterAssigned(e.target.value)}
-          className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-          aria-label="Filtrează după responsabil"
-        >
-          <option value="all">Toți responsabilii</option>
-          <option value="">Neasignat</option>
-        </select>
+          onChange={setFilterAssigned}
+        />
 
         {/* CRM-116: task signal filters */}
         <label className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs text-muted-foreground cursor-pointer hover:bg-muted select-none">
@@ -757,6 +756,8 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
           {lead.email && <Mail className="h-2.5 w-2.5" aria-label="Are email" />}
         </div>
       </div>
+      {/* CRM-137: show assignee name instead of UUID fragment */}
+      {lead.assignedTo && <KanbanCardAssigneeName assignedTo={lead.assignedTo} />}
       {/* CRM-116: Task signal badges */}
       {lead.nextTask ? (
         (() => {
@@ -801,6 +802,42 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
         </div>
       )}
     </button>
+  );
+}
+
+// ─── CRM-137: KanbanCardAssigneeName — resolves UUID to name on KanbanCard ──
+
+function KanbanCardAssigneeName({ assignedTo }: { assignedTo: string }) {
+  const name = useAssigneeName(assignedTo);
+  return (
+    <p className="text-[9px] text-muted-foreground truncate mt-0.5" aria-label={`Responsabil: ${name}`}>
+      {name}
+    </p>
+  );
+}
+
+// ─── CRM-137: AssigneeFilterSelect — filter bar dropdown with real members ───
+
+interface AssigneeFilterSelectProps {
+  value: string;
+  onChange: (v: string) => void;
+}
+
+function AssigneeFilterSelect({ value, onChange }: AssigneeFilterSelectProps) {
+  const { members } = useTeamMembers();
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+      aria-label="Filtrează după responsabil"
+    >
+      <option value="all">Toți responsabilii</option>
+      <option value="">Neasignat</option>
+      {members.map((m) => (
+        <option key={m.id} value={m.id}>{m.fullName}</option>
+      ))}
+    </select>
   );
 }
 
@@ -1250,18 +1287,17 @@ function BulkActionToolbar({
           </div>
         )}
 
-        {/* Assign panel */}
+        {/* Assign panel — CRM-137: dropdown with names instead of UUID */}
         {showAssignPanel && (
           <div className="mt-3 pt-3 border-t border-border flex items-end gap-2">
             <div className="flex-1">
-              <label htmlFor="bulk-assign" className="block text-xs font-semibold mb-1">UUID responsabil (gol = elimină)</label>
-              <input
+              <label htmlFor="bulk-assign" className="block text-xs font-semibold mb-1">Responsabil (— elimină —)</label>
+              <AssigneePicker
                 id="bulk-assign"
-                type="text"
-                value={assignValue}
-                onChange={(e) => setAssignValue(e.target.value)}
-                placeholder="UUID utilizator sau gol"
-                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm font-mono"
+                value={assignValue || null}
+                onChange={(v) => setAssignValue(v ?? "")}
+                ariaLabel="Responsabil bulk"
+                className="w-full"
               />
             </div>
             <button
@@ -1595,9 +1631,15 @@ function CreateLeadModal({ onClose, onSaved, onError }: { onClose: () => void; o
         <FormField id="l-company" label="Companie (opțional)">
           <input id="l-company" type="text" value={company} onChange={(e) => setCompany(e.target.value)} className="input-base" placeholder="ex: S.R.L. Acme" />
         </FormField>
-        <FormField id="l-assigned" label="Responsabil (ID)">
-          <input id="l-assigned" type="text" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className="input-base" placeholder="UUID (opțional)" aria-describedby="l-assigned-hint" />
-          <p id="l-assigned-hint" className="text-[11px] text-muted-foreground mt-1">Filtru Responsabil disponibil în kanban.</p>
+        {/* CRM-137: AssigneePicker replaces UUID text input */}
+        <FormField id="l-assigned" label="Responsabil">
+          <AssigneePicker
+            id="l-assigned"
+            value={assignedTo || null}
+            onChange={(v) => setAssignedTo(v ?? "")}
+            ariaLabel="Responsabil"
+            className="input-base"
+          />
         </FormField>
         <FormField id="l-value" label="Valoare deal (€)">
           <input id="l-value" type="number" min="0" step="0.01" value={valueEur} onChange={(e) => setValueEur(e.target.value)} className="input-base" placeholder="ex: 360" />
