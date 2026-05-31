@@ -138,41 +138,22 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-116-4** Given filtru „fără task", Then se afișează doar leadurile fără task open.
 
 ## CRM-117 — List view {#crm-117}
-- **T-CRM-117-1** `[blocant]` Given `/app/leads?view=list`, Then se afișează leadurile în tabel.
+- **T-CRM-117-1** `[blocant]` Given `/app/leads?view=list`, Then se afișează leadurile în tabel cu coloanele: Nume, Stadiu, Sursă, Responsabil, Valoare, Data.
 - **T-CRM-117-2** Given click pe un rând, Then navigează la `/app/leads/:id`.
+- **T-CRM-117-3** Given sortare pe coloana „Valoare", Then leadurile sunt ordonate descrescător.
 
 ## CRM-119 — Căutare globală + Vizualizări salvate {#crm-119}
-- **T-CRM-119-1** `[blocant]` Given filtre active, When salvezi cu nume, Then vizualizarea apare în dropdown.
-- **T-CRM-119-2** `[blocant]` Given vizualizare salvată, When apăs X, Then e ștearsă.
-- **T-CRM-119-3** `[blocant]` Given search „ACME", Then filtrarea returnează leaduri cu „ACME" în company/dealName/interestCourse.
-- **T-CRM-119-4** `[blocant]` `GET /api/saved-views` → 200 `{ views: [] }`.
-
-## CRM-123 — Notificări in-app {#crm-123}
-- **T-CRM-123-1** `[blocant]` Given lead nou creat, Then notificare `lead_created` pentru user assigned_to sau manageri.
-- **T-CRM-123-2** `[blocant]` Given notificare necitită, When o citesc, Then `is_read=true`, badge scade cu 1.
-- **T-CRM-123-3** `[blocant]` `GET /api/notifications` → 200 `{ items: [], unreadCount: 0 }`.
-- **T-CRM-123-4** `[blocant]` Given „Marchează toate", Then `unreadCount = 0`.
-- **T-CRM-123-5** Multi-tenant: notificările tenantului A nu sunt vizibile din tenantul B.
+- **T-CRM-119-1** `[blocant]` Given filtre active (sursă=Facebook), When apăs „Salvează filtrul" și introduc un nume, Then vizualizarea apare în dropdown și o pot reactiva cu un click.
+- **T-CRM-119-2** `[blocant]` Given o vizualizare salvată, When apăs X lângă ea, Then e ștearsă și nu mai apare în dropdown.
+- **T-CRM-119-3** `[blocant]` Given search „ACME", Then filtrarea returnează leaduri cu „ACME" în `company` sau `dealName` sau `interestCourse`.
+- **T-CRM-119-4** `[blocant]` Given `GET /api/saved-views` autenticat, Then răspuns 200 cu `{ views: [] }`.
+- **T-CRM-119-5** Multi-tenant: vizualizările tenantului A nu sunt vizibile din tenantul B.
 
 ## CRM-125 — Forecast ponderat {#crm-125}
-- **T-CRM-125-1** `[blocant]` Given leaduri în „trial" cu probability=60%, Then forecast ponderat = gross × 0.6.
-- **T-CRM-125-2** `[blocant]` Given owner schimbă probability, Then forecast se recalculează.
-- **T-CRM-125-3** `[blocant]` `GET /api/analytics/crm/forecast` → 200 `{ stages, totalGrossCents, totalWeightedCents }`.
-
-## CRM-124 — SLA timp de răspuns + lead-rot {#crm-124}
-
-- **T-CRM-124-1** `[blocant]` Given lead creat acum 5 min, sla_default_hours=24, Then badge SLA = „green" (< prag).
-- **T-CRM-124-2** `[blocant]` Given lead creat acum 25h, sla_default_hours=24, Then badge = „yellow" (> 24h dar < 48h).
-- **T-CRM-124-3** `[blocant]` Given lead creat acum 50h, sla_default_hours=24, Then badge = „red" (> 2x prag).
-- **T-CRM-124-4** `[blocant]` Given sla_hot_minutes=15 și lead hot creat acum 20 min, Then badge = „yellow"; cu 30 min threshold → „green".
-- **T-CRM-124-5** `[blocant]` Given lead creat acum 10z fără nicio interacțiune, rot_days=7, Then apare în secțiunea „Neglijate" din `/api/leads/today`.
-- **T-CRM-124-5b** Given lead creat acum 10z cu ultima interacțiune acum 8z, rot_days=7, Then tot apare în „Neglijate".
-- **T-CRM-124-5c** Given lead creat acum 10z cu interacțiune acum 3z, rot_days=7, Then NU apare în „Neglijate".
-- **T-CRM-124-6** Given lead creat acum 3z, rot_days=7, Then NU apare în „Neglijate" (prea tânăr).
-- **T-CRM-124-7** Given `PATCH /api/leads/today/sla-config { slaHotMinutes: 30 }`, Then tenant.sla_hot_minutes = 30; `GET /api/leads/today/sla-config` confirmă.
-- **T-CRM-124-8** Given schema migrare 0008, Then `tenants.sla_hot_minutes` DEFAULT 15, `sla_default_hours` DEFAULT 24, `rot_days` DEFAULT 7.
-- **T-CRM-124-9** `[blocant]` Given `GET /api/leads/today`, Then răspunsul include `neglected[]` + `slaConfig` câmpuri.
-- **T-CRM-124-10** `[blocant]` Multi-tenant: configurația SLA a tenantului A nu e vizibilă/editabilă de tenantul B.
+- **T-CRM-125-1** `[blocant]` Given 3 leaduri în „trial" cu value_cents total 100000 și probability=60%, Then forecast ponderat al stagei = 60000.
+- **T-CRM-125-2** `[blocant]` Given owner schimbă probability „new" de la 10% la 20%, Then forecast-ul se recalculează.
+- **T-CRM-125-3** `[blocant]` Given `GET /api/analytics/crm/forecast` autenticat, Then 200 cu `{ stages: [...], totalGrossCents, totalWeightedCents }`.
+- **T-CRM-125-4** Multi-tenant: forecast-ul tenantului A nu include date din tenantul B.
 
 ---
 

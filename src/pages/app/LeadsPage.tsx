@@ -31,6 +31,7 @@ import {
 } from "@/lib/api/pipeline";
 import { api } from "@/lib/api";
 import { ApiError } from "@/lib/api";
+import { getForecast } from "@/lib/api/analytics";
 import { cn } from "@/lib/utils";
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -67,6 +68,8 @@ export function LeadsPage() {
   /** CRM-113: Σ value_cents per stage */
   const [valueSums, setValueSums] = useState<Record<string, number>>({});
   const [totalValueCents, setTotalValueCents] = useState(0);
+  /** CRM-125: weighted forecast total */
+  const [totalWeightedCents, setTotalWeightedCents] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -185,15 +188,17 @@ export function LeadsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [pipelineRes, stagesRes] = await Promise.all([
+      const [pipelineRes, stagesRes, forecastRes] = await Promise.all([
         fetchPipeline(),
         fetchPipelineStages(),
+        getForecast().catch(() => null),
       ]);
       setGrouped(pipelineRes.grouped as Record<string, Lead[]>);
       setCounts(pipelineRes.counts as Record<string, number>);
       setValueSums((pipelineRes.valueSums as Record<string, number>) ?? {});
       setTotalValueCents((pipelineRes.totalValueCents as number) ?? 0);
       setStages(stagesRes.stages);
+      if (forecastRes) setTotalWeightedCents(forecastRes.totalWeightedCents);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare");
     } finally {
@@ -283,7 +288,7 @@ export function LeadsPage() {
   return (
     <AppShell
       pageTitle="CRM — Leads"
-      pageDescription={[`${totalLeads} lead-uri`, `conversie: ${conversionRate}%`, totalValueCents > 0 ? formatEur(totalValueCents) : null].filter(Boolean).join(" · ")}
+      pageDescription={[`${totalLeads} lead-uri`, `conversie: ${conversionRate}%`, totalValueCents > 0 ? formatEur(totalValueCents) : null, totalWeightedCents > 0 ? `Forecast: ${formatEur(totalWeightedCents)}` : null].filter(Boolean).join(" · ")}
       actions={
         <div className="flex gap-2 items-center">
           {/* CRM-117: Kanban / List toggle */}

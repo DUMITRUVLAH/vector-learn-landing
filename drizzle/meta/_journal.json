@@ -134,6 +134,13 @@
       "when": 1780151200000,
       "tag": "0018_crm124_sla",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1780151300000,
+      "tag": "0019_crm125_forecast",
+      "breakpoints": true
     }
   ]
 }

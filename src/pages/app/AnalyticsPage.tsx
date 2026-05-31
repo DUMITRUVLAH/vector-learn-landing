@@ -8,6 +8,7 @@ import {
   BarChart3, PieChart, ArrowRight, RefreshCw,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { ForecastWidget } from "@/components/crm/ForecastWidget";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -391,6 +392,11 @@ export function AnalyticsPage() {
           />
         </div>
       )}
+
+      {/* CRM-125: Weighted forecast */}
+      <div className="mt-6">
+        <ForecastWidget />
+      </div>
 
       {/* Toast */}
       {toast && (

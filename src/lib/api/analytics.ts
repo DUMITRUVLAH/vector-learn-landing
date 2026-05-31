@@ -54,6 +54,36 @@ export function getRoas(): Promise<RoasData> {
   return api<RoasData>("/api/analytics/crm/roas");
 }
 
+// ─── CRM-125: Weighted Forecast ───────────────────────────────────────────────
+
+export interface ForecastStage {
+  stageId: string;
+  stage: string;
+  label: string;
+  color: string;
+  probabilityPct: number;
+  count: number;
+  grossCents: number;
+  weightedCents: number;
+}
+
+export interface ForecastData {
+  stages: ForecastStage[];
+  totalGrossCents: number;
+  totalWeightedCents: number;
+}
+
+export function getForecast(): Promise<ForecastData> {
+  return api<ForecastData>("/api/analytics/crm/forecast");
+}
+
+export function updateStageProbability(id: string, probabilityPct: number): Promise<unknown> {
+  return api(`/api/pipeline-stages/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ probabilityPct }),
+  });
+}
+
 export function setBudget(input: {
   utmCampaign: string;
   spendCents: number;

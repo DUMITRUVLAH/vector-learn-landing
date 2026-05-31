@@ -21,6 +21,8 @@ const createStageSchema = z.object({
   orderIndex: z.number().int().min(0).default(0),
   isWon: z.boolean().default(false),
   isLost: z.boolean().default(false),
+  /** CRM-125: Win probability for weighted forecast (default 10%) */
+  probabilityPct: z.number().int().min(0).max(100).default(10),
 });
 
 const updateStageSchema = z.object({
@@ -29,6 +31,8 @@ const updateStageSchema = z.object({
   orderIndex: z.number().int().min(0).optional(),
   isWon: z.boolean().optional(),
   isLost: z.boolean().optional(),
+  /** CRM-125: Win probability for weighted forecast */
+  probabilityPct: z.number().int().min(0).max(100).optional(),
 });
 
 const reorderSchema = z.object({
