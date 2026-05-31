@@ -55,6 +55,21 @@ app.use(
   })
 );
 
+// UX-701: Health checks MUST be public and registered BEFORE any route that mounts
+// auth middleware at "/api" (tagRoutes), otherwise /api/health is intercepted and returns
+// 401 — which made the BackendStatusBadge show "API: down" on every page despite a healthy API.
+app.get("/api/health", async (c) => {
+  try {
+    await db.execute(sql`SELECT 1 as ping`);
+    return c.json({ ok: true, db: "connected", time: new Date().toISOString() });
+  } catch (error) {
+    return c.json(
+      { ok: false, db: "disconnected", error: error instanceof Error ? error.message : "unknown" },
+      503
+    );
+  }
+});
+
 app.route("/api/auth", authRoutes);
 app.route("/api/students", studentRoutes);
 app.route("/api/teachers", teacherRoutes);
@@ -84,18 +99,6 @@ app.route("/api/notifications", notificationRoutes);
 app.route("/api/cadences", cadenceRoutes);
 app.route("/api/audit-log", auditRoutes);
 app.route("/api/contracts", contractRoutes);
-
-app.get("/api/health", async (c) => {
-  try {
-    await db.execute(sql`SELECT 1 as ping`);
-    return c.json({ ok: true, db: "connected", time: new Date().toISOString() });
-  } catch (error) {
-    return c.json(
-      { ok: false, db: "disconnected", error: error instanceof Error ? error.message : "unknown" },
-      503
-    );
-  }
-});
 
 app.get("/api/health/db", async (c) => {
   try {

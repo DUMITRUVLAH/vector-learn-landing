@@ -106,24 +106,21 @@ export function DashboardPage() {
         </div>
 
         <div className="mt-8 rounded-2xl border border-border bg-card p-6">
-          <h2 className="text-base font-bold mb-3">🎉 Bine ai venit în Vector Learn — MVP!</h2>
-          <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-            Aplicația rulează pe Postgres real (PGlite). Datele tale sunt persistente între restart-uri.
-            Următoarea iterație adaugă CRUD complet pentru elevi.
-          </p>
-          <div className="grid sm:grid-cols-3 gap-3 text-xs">
-            <div className="rounded-lg bg-muted p-3">
-              <p className="font-semibold mb-1">Tenant ID</p>
-              <p className="font-mono text-[10px] text-muted-foreground break-all">{tenant.id}</p>
-            </div>
-            <div className="rounded-lg bg-muted p-3">
-              <p className="font-semibold mb-1">User ID</p>
-              <p className="font-mono text-[10px] text-muted-foreground break-all">{user.id}</p>
-            </div>
-            <div className="rounded-lg bg-muted p-3">
-              <p className="font-semibold mb-1">Plan</p>
-              <p className="font-mono text-[10px] text-muted-foreground capitalize">{tenant.plan}</p>
-            </div>
+          <h2 className="text-base font-bold mb-1">Acțiuni rapide</h2>
+          <p className="text-sm text-muted-foreground mb-4">Cele mai folosite acțiuni, la un click distanță.</p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <Link to="/app/leads/today" className="rounded-lg border border-border bg-muted/40 hover:bg-muted hover:border-primary/40 p-4 transition-colors">
+              <p className="font-semibold text-sm">☀️ Ce am de făcut azi</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Task-uri, leaduri noi, follow-up</p>
+            </Link>
+            <Link to="/app/leads" className="rounded-lg border border-border bg-muted/40 hover:bg-muted hover:border-primary/40 p-4 transition-colors">
+              <p className="font-semibold text-sm">＋ Adaugă un lead</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Pipeline CRM · kanban sau listă</p>
+            </Link>
+            <Link to="/app/contracts" className="rounded-lg border border-border bg-muted/40 hover:bg-muted hover:border-primary/40 p-4 transition-colors">
+              <p className="font-semibold text-sm">📄 Generează un contract</p>
+              <p className="text-xs text-muted-foreground mt-0.5">OCR buletin · PDF · număr auto</p>
+            </Link>
           </div>
         </div>
       </main>

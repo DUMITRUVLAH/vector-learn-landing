@@ -58,7 +58,7 @@ export function TodayDashboardPage() {
       pageTitle="Dashboard Azi"
       pageDescription={
         totalActions > 0
-          ? `${totalActions} acțiuni de făcut azi`
+          ? `${totalActions} ${totalActions === 1 ? "acțiune" : "acțiuni"} de făcut azi`
           : "Tot e la zi"
       }
     >
@@ -75,11 +75,21 @@ export function TodayDashboardPage() {
           {totalActions > 0 && (
             <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
               <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-                Ai {totalActions} acțiuni de făcut azi —{" "}
-                {data!.overdueOrDueToday.length > 0 && `${data!.overdueOrDueToday.length} task-uri scadente, `}
-                {data!.newUncontacted.length > 0 && `${data!.newUncontacted.length} leaduri noi, `}
-                {data!.followUpNeeded.length > 0 && `${data!.followUpNeeded.length} follow-up, `}
-                {(data!.neglected?.length ?? 0) > 0 && `${data!.neglected!.length} neglijate`}
+                {(() => {
+                  const parts: string[] = [];
+                  const t = data!.overdueOrDueToday.length;
+                  const n = data!.newUncontacted.length;
+                  const f = data!.followUpNeeded.length;
+                  const g = data!.neglected?.length ?? 0;
+                  if (t > 0) parts.push(`${t} ${t === 1 ? "task scadent" : "task-uri scadente"}`);
+                  if (n > 0) parts.push(`${n} ${n === 1 ? "lead nou" : "leaduri noi"}`);
+                  if (f > 0) parts.push(`${f} follow-up`);
+                  if (g > 0) parts.push(`${g} ${g === 1 ? "neglijat" : "neglijate"}`);
+                  const noun = totalActions === 1 ? "acțiune" : "acțiuni";
+                  return parts.length > 0
+                    ? `Ai ${totalActions} ${noun} de făcut azi: ${parts.join(" · ")}.`
+                    : `Ai ${totalActions} ${noun} de făcut azi.`;
+                })()}
               </p>
               {data!.slaConfig && (
                 <p className="text-[11px] text-amber-600/70 dark:text-amber-400/70 mt-1">
