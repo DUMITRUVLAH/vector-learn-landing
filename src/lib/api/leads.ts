@@ -85,6 +85,43 @@ export interface PipelineResponse {
   totalValueCents: number;
 }
 
+/** CRM-117: Paginated list response */
+export interface LeadsListResponse {
+  items: (Lead & { nextTask?: { dueAt: string | null; title: string } | null })[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export type ListSortCol =
+  | "fullName" | "company" | "stage" | "source"
+  | "valueCents" | "debtCents" | "createdAt" | "updatedAt";
+
+/** CRM-117: Fetch paginated + sorted lead list */
+export function fetchLeadsList(params: {
+  page?: number;
+  pageSize?: number;
+  sort?: ListSortCol;
+  dir?: "asc" | "desc";
+  search?: string;
+  source?: string;
+  assignedTo?: string;
+  stage?: string;
+}): Promise<LeadsListResponse> {
+  const qs = new URLSearchParams();
+  qs.set("view", "list");
+  if (params.page) qs.set("page", String(params.page));
+  if (params.pageSize) qs.set("pageSize", String(params.pageSize));
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.dir) qs.set("dir", params.dir);
+  if (params.search) qs.set("search", params.search);
+  if (params.source && params.source !== "all") qs.set("source", params.source);
+  if (params.assignedTo && params.assignedTo !== "all") qs.set("assignedTo", params.assignedTo);
+  if (params.stage && params.stage !== "all") qs.set("stage", params.stage);
+  return api<LeadsListResponse>(`/api/leads?${qs.toString()}`);
+}
+
 export function fetchPipeline(): Promise<PipelineResponse> {
   return api<PipelineResponse>("/api/leads/pipeline");
 }

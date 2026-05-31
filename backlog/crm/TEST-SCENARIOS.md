@@ -137,77 +137,18 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-116-3** Given task open mâine, Then card arată data, nu badge roșu.
 - **T-CRM-116-4** Given filtru „fără task", Then se afișează doar leadurile fără task open.
 
-## CRM-129 — Filtru tag + bulk assign + Ziua mea {#crm-129}
-- **T-CRM-129-1** `[blocant]` Given kanban cu leads tagged „vip" și „organic", When selectez filtrul „vip", Then doar leadurile cu tag „vip" rămân vizibile în toate coloanele.
-- **T-CRM-129-2** `[blocant]` Given 3 leaduri selectate, When apas „Reasignează", Then `PATCH /api/leads/bulk-assign` e chemat cu cele 3 ID-uri și noul assignedTo; pipeline reîncarcă.
-- **T-CRM-129-3** `[blocant]` Given butonul „Ziua mea" activ, Then se afișează doar leadurile cu nextTask.dueAt = today.
-- **T-CRM-129-4** Given filtrul tag „vip" + filtrul sursă „Facebook" activ simultan, Then se afișează numai leadurile cu tag „vip" ȘI source = „facebook_ad".
-- **T-CRM-129-5** Given Escape apăsat cu carduri selectate, Then selecția se șterge.
-- **T-CRM-129-6** `[blocant]` `PATCH /api/leads/bulk-assign` cu leadIds din tenant B → 403/0 rânduri afectate.
+## CRM-117 — Vedere Listă/Tabel {#crm-117}
 
-## CRM-130 — Shortcuts tastatură + WIP limits + collapse {#crm-130}
-- **T-CRM-130-1** `[blocant]` Given `useKanbanKeyboard` montat, When tastez `/` (nu în input), Then callback `onSearch` e apelat.
-- **T-CRM-130-2** `[blocant]` Given `useKanbanKeyboard`, When tastez `n` (nu în input), Then callback `onNewLead` e apelat.
-- **T-CRM-130-3** `[blocant]` Given shortcut-ul `/` și focus pe un `<input>`, When tastez `/`, Then callback NU e apelat.
-- **T-CRM-130-4** `[blocant]` Given stage cu `wip_limit=3` și `count=5`, Then header coloană conține indicator roșu.
-- **T-CRM-130-5** Given stage cu `wip_limit=null`, Then header NU afișează indicator roșu.
-- **T-CRM-130-6** `[blocant]` Given coloană colapsată în localStorage, When pagina se reîncarcă, Then coloana respectivă e încă colapsată.
-
-## CRM-131 — Lead card UX polish {#crm-131}
-- **T-CRM-131-1** `[blocant]` Given `LeadCardSkeleton` randat, Then conține elemente cu clasa `animate-pulse`.
-- **T-CRM-131-2** `[blocant]` Given submit notă cu mock care rezolvă după delay, Then nota apare imediat cu indicator „Se salvează..."; după rezolvare, indicatorul dispare.
-- **T-CRM-131-3** `[blocant]` Given submit notă cu mock care rejectează, Then nota optimistă dispare și toast eroare e afișat.
-- **T-CRM-131-4** `[blocant]` Given `useUndoableDelete` cu delay 5000ms, When cancel în 100ms, Then callback delete NU e apelat.
-- **T-CRM-131-5** Given `useUndoableDelete` fără cancel, Then callback delete e apelat după delay.
-- **T-CRM-131-6** `[blocant]` Given tab Activitate cu 0 interacțiuni, Then conține textul „Nicio activitate încă".
-- **T-CRM-131-7** Given tab Task-uri cu 0 task-uri, Then conține textul „Nicio sarcină".
-
-## CRM-132 — Timeline filters {#crm-132}
-- **T-CRM-132-1** `[blocant]` Given `TimelineFilters` randat cu counts `{all:5, note:2, call:1, commChannel:1, stage_change:1}`, Then 5 butoane vizibile cu numerele corecte.
-- **T-CRM-132-2** `[blocant]` Given filtru "Apeluri" selectat și interactions cu 1 call + 2 notes, When render, Then doar 1 item vizibil în timeline.
-- **T-CRM-132-3** `[blocant]` Given filtru "Note" cu 0 note, Then textul „Nicio intrare de tipul selectat" vizibil.
-- **T-CRM-132-4** Given filtru activ e "Apeluri", When click pe "Toate", Then toate interacțiunile revin vizibile.
-
-## CRM-133 — Duplicate detection banner {#crm-133}
-- **T-CRM-133-1** `[blocant]` Given `dedup-check` returnează 1 duplicat, Then banner cu textul „Posibil duplicat" e vizibil.
-- **T-CRM-133-2** `[blocant]` Given `dedup-check` returnează `{ duplicates: [] }`, Then banner nu apare.
-- **T-CRM-133-3** `[blocant]` Given `dedup-check` eșuează (reject), Then banner nu apare.
-- **T-CRM-133-4** `[blocant]` Given click „Fuzionează", Then `MergeLeadModal` se deschide cu 2 opțiuni radio.
-- **T-CRM-133-5** Given confirmare merge, Then `POST /api/leads/:id/merge` e apelat o singură dată cu parametrii corecți.
-
-## CRM-134 — @mentions in note-uri + notificări {#crm-134}
-
-- **T-CRM-134-1** `[blocant]` Given `MentionTextarea` randat cu lista `[{id:'u1', name:'Ana Moraru'}]`, When tastez `@Ana`, Then popover vizibil cu opțiunea „Ana Moraru".
-- **T-CRM-134-2** `[blocant]` Given popover deschis, When click pe „Ana Moraru", Then textarea conține `@Ana Moraru` și popover-ul e închis.
-- **T-CRM-134-3** `[blocant]` Given `parseMentions('@Ana Moraru text', [{id:'u1',name:'Ana Moraru'}])`, Then returnează `['u1']`.
-- **T-CRM-134-4** `[blocant]` Given `POST /api/leads/:id/interactions` cu body `"@Ana Moraru nota"` și Ana e în tenant, Then `lead_mentions` are 1 rând nou cu `mentioned_user_id = u1`.
-- **T-CRM-134-5** `[blocant]` Given aceeași cerere, Then `notification_queue` are 1 rând nou cu `channel='in_app'` și `recipient_id = u1`.
-- **T-CRM-134-6** `[blocant]` Given `GET /api/notifications/unread-count` cu 2 notificări unread, Then `{ count: 2 }`.
-- **T-CRM-134-7** `[blocant]` Given `PATCH /api/notifications/mark-read`, Then toate notificările unread ale utilizatorului curent au `sent_at` setat.
-- **T-CRM-134-8** `[blocant]` Given `NotificationBell` cu `count=3`, Then badge cu textul „3" vizibil.
-- **T-CRM-134-9** Given `NotificationBell` cu `count=0`, Then badge nu e vizibil.
-- **T-CRM-134-10** `[blocant]` Multi-tenant: `GET /api/notifications/unread-count` cu token tenant B returnează 0 chiar dacă există notificări în tenant A.
-
-## CRM-135 — Round-robin auto-assign {#crm-135}
-
-- **T-CRM-135-1** `[blocant]` Given `autoAssign` cu `rr_enabled=false`, When called, Then returnează `null` (neschimbat).
-- **T-CRM-135-2** `[blocant]` Given `rr_enabled=true`, `rr_user_ids=['u1','u2']`, `rr_index=0`, `currentAssignedTo=null`, When `autoAssign`, Then returnează `'u1'` și `rr_index` devine `1`.
-- **T-CRM-135-3** `[blocant]` Given `rr_index=1`, `rr_user_ids=['u1','u2']`, When `autoAssign`, Then returnează `'u2'` și `rr_index` devine `2`.
-- **T-CRM-135-4** `[blocant]` Given `rr_index=2` și `len=2` (wrap-around), When `autoAssign`, Then returnează `'u1'` (index % 2 = 0).
-- **T-CRM-135-5** `[blocant]` Given `currentAssignedTo='u3'` + RR activ, When `autoAssign`, Then returnează `'u3'` (no override).
-- **T-CRM-135-6** `[blocant]` Given `POST /api/leads` fără `assignedTo` + RR activ cu `['u1']`, Then lead creat cu `assignedTo='u1'`.
-- **T-CRM-135-7** `[blocant]` Given `PATCH /api/settings/rr-assign` cu rol `teacher` (non-admin), Then `403`.
-- **T-CRM-135-8** Multi-tenant: lead creat în tenant A nu consumă RR-ul tenantului B.
-
-## CRM-136 — Kanban density toggle {#crm-136}
-
-- **T-CRM-136-1** `[blocant]` Given `useKanbanDensity` montat fără `localStorage`, Then returnează `'comfortable'` (default).
-- **T-CRM-136-2** `[blocant]` Given `localStorage['crm_density'] = 'compact'`, When `useKanbanDensity` montat, Then returnează `'compact'`.
-- **T-CRM-136-3** `[blocant]` Given `setDensity('compact')` apelat, Then `localStorage['crm_density']` este `'compact'` și state-ul e `'compact'`.
-- **T-CRM-136-4** `[blocant]` Given `KanbanCard` cu `density='compact'`, Then render-ul conține clasă `py-1` și NU conține avatar element.
-- **T-CRM-136-5** `[blocant]` Given `KanbanCard` cu `density='comfortable'`, Then render-ul conține avatar element.
-- **T-CRM-136-6** `[blocant]` Given `DensityToggle` randat cu `density='compact'`, Then butonul compact are `aria-pressed='true'`.
-- **T-CRM-136-7** Given `DensityToggle` cu `density='comfortable'`, When click pe butonul compact, Then `setDensity` e apelat cu `'compact'`.
+- **T-CRM-117-1** `[blocant]` Given utilizatorul apasă butonul „Listă", Then vedera se schimbă din Kanban în tabel și preferința se salvează în localStorage.
+- **T-CRM-117-2** `[blocant]` Given utilizatorul reîncarcă pagina, Then prefer. `crm_view_mode` din localStorage e restaurată (kanban sau list).
+- **T-CRM-117-3** `[blocant]` Given vederea listă e activă, When `GET /api/leads?view=list&page=1&pageSize=50`, Then răspuns cu `{ items, page, pageSize, total, totalPages }` — nu raw `.execute().rows`.
+- **T-CRM-117-4** `[blocant]` Given 100+ leaduri, When vederea listă e activă, Then se afișează exact 50/pagină și paginarea funcționează (pagina 2 → altă felie de date).
+- **T-CRM-117-5** `[blocant]` Given click pe header „Valoare", Then lista se resortează asc/desc și indicatorul vizual (săgeată) se actualizează.
+- **T-CRM-117-6** Given filtru sursă „Facebook" cu vederea listă, When se apasă „Aplică filtre", Then lista afișează doar leadurile Facebook.
+- **T-CRM-117-7** `[blocant]` Given click pe badge de stadiu dintr-un rând, Then apare dropdown inline; alegând un stadiu nou → `PATCH /api/leads/:id/stage` → lista se reîncarcă.
+- **T-CRM-117-8** `[blocant]` Given click pe un rând, Then navigare la `/app/leads/:id`.
+- **T-CRM-117-9** `[blocant]` Multi-tenant: `GET /api/leads?view=list` returnează **doar** leadurile tenantului autentificat.
+- **T-CRM-117-10** Given 0 leaduri care corespund filtrelor, Then se afișează stare empty „Niciun lead găsit".
 
 ---
 

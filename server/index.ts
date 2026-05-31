@@ -7,8 +7,8 @@ import { app } from "./app";
 
 /**
  * Local / container single-port server: the shared Hono `app` (API) + static
- * frontend (dist) on one port. On Vercel the API runs via api/index.ts and the
- * static frontend is served by Vercel's CDN, so this file is not used there.
+ * frontend (dist) on one port. On Vercel the API runs via server/vercel-entry.ts
+ * and the static frontend is served by Vercel's CDN, so this file is not used there.
  */
 const distDir = path.resolve(process.cwd(), "dist");
 if (existsSync(distDir)) {

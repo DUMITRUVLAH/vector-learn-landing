@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families } from "../db/schema";
 import { renderTemplate } from "../db/schema/templates";
@@ -69,6 +69,15 @@ const interactionSchema = z.object({
 const listQuerySchema = z.object({
   search: z.string().optional(),
   stage: z.enum([...STAGES, "all"]).default("all"),
+  /** CRM-117: list view pagination + sort */
+  view: z.enum(["list", "pipeline"]).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+  sort: z.enum(["fullName", "company", "stage", "source", "valueCents", "debtCents", "createdAt", "updatedAt"]).default("createdAt"),
+  dir: z.enum(["asc", "desc"]).default("desc"),
+  /** Shared filters */
+  source: z.enum([...SOURCES, "all"]).default("all"),
+  assignedTo: z.string().optional(),
 });
 
 const publicIntakeSchema = z.object({
@@ -209,11 +218,20 @@ leadRoutes.post("/dedup-check", zValidator("json", dedupCheckSchema), async (c) 
 });
 
 leadRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
-  const { search, stage } = c.req.valid("query");
+  const { search, stage, view, page, pageSize, sort, dir, source: filterSource, assignedTo } = c.req.valid("query");
   const tenantId = c.get("user").tenantId;
 
   const conditions = [eq(leads.tenantId, tenantId)];
   if (stage !== "all") conditions.push(eq(leads.stage, stage));
+  if (filterSource && filterSource !== "all") conditions.push(eq(leads.source, filterSource as typeof SOURCES[number]));
+  if (assignedTo && assignedTo !== "all") {
+    if (assignedTo === "unassigned") {
+      // filter unassigned leads — use isNull check via raw expression workaround
+      conditions.push(eq(leads.assignedTo, null as unknown as string));
+    } else {
+      conditions.push(eq(leads.assignedTo, assignedTo));
+    }
+  }
   if (search && search.trim()) {
     const q = `%${search.trim()}%`;
     const searchCondition = or(
@@ -225,6 +243,83 @@ leadRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
     if (searchCondition) conditions.push(searchCondition);
   }
 
+  // CRM-117: list view with server-side pagination
+  if (view === "list") {
+    // Build sort expression
+    const SORT_COLS = {
+      fullName: leads.fullName,
+      company: leads.company,
+      stage: leads.stage,
+      source: leads.source,
+      valueCents: leads.valueCents,
+      debtCents: leads.debtCents,
+      createdAt: leads.createdAt,
+      updatedAt: leads.updatedAt,
+    } as const;
+    const sortCol = SORT_COLS[sort as keyof typeof SORT_COLS] ?? leads.createdAt;
+    const orderExpr = dir === "asc" ? asc(sortCol) : desc(sortCol);
+
+    const offset = (page - 1) * pageSize;
+
+    // Total count (for pagination meta)
+    const countResult = await db
+      .select({ cnt: count(leads.id) })
+      .from(leads)
+      .where(and(...conditions));
+    const totalRow = Array.isArray(countResult) ? countResult[0] : (countResult as { cnt: number }[])[0];
+    const totalNum = Number(totalRow?.cnt ?? 0);
+
+    const items = await db
+      .select()
+      .from(leads)
+      .where(and(...conditions))
+      .orderBy(orderExpr)
+      .limit(pageSize)
+      .offset(offset);
+
+    // Augment with next open task per lead
+    if (items.length > 0) {
+      const leadIds = items.map((l) => l.id);
+      const openTasks = await db
+        .select()
+        .from(leadTasks)
+        .where(and(
+          eq(leadTasks.tenantId, tenantId),
+          eq(leadTasks.status, "open")
+        ))
+        .orderBy(asc(leadTasks.dueAt));
+
+      const nextTaskMap: Record<string, { dueAt: Date | null; title: string } | undefined> = {};
+      for (const task of openTasks) {
+        if (leadIds.includes(task.leadId) && !nextTaskMap[task.leadId]) {
+          nextTaskMap[task.leadId] = { dueAt: task.dueAt, title: task.title };
+        }
+      }
+
+      const augmented = items.map((lead) => ({
+        ...lead,
+        nextTask: nextTaskMap[lead.id] ?? null,
+      }));
+
+      return c.json({
+        items: augmented,
+        page,
+        pageSize,
+        total: totalNum,
+        totalPages: Math.ceil(totalNum / pageSize),
+      });
+    }
+
+    return c.json({
+      items: [],
+      page,
+      pageSize,
+      total: 0,
+      totalPages: 0,
+    });
+  }
+
+  // Default: simple list (no pagination)
   const items = await db
     .select()
     .from(leads)
