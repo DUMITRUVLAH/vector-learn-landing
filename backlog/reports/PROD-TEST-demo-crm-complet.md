@@ -18,7 +18,17 @@
 
 ---
 
-## Problema #1 (BLOCANT) — schema DB producție în urmă
+## ✅ REZOLVAT (2026-06-01) — migrările aplicate pe Supabase producție
+
+Credențiale Supabase reîmprospătate via `vercel env pull` (proiect link-uit la Vercel — nu mai
+e nevoie de parolă manuală). Rulat `DATABASE_PATH="" DATABASE_URL=<supabase-direct> npm run db:migrate`
+(DATABASE_PATH gol e CRUCIAL — altfel `preferLocalPglite` forțează PGlite și migrarea rulează local
+degeaba). Rezultat: **16→25 migrări, 30→41 tabele**. Toate tabelele noi create, `tenants.sla_hot_minutes`
+există. **Login pe preview verificat: 200 OK** (Andreea Mitran / Demo Lingua School). Problema #1 închisă.
+
+---
+
+## Problema #1 (BLOCANT — acum REZOLVAT) — schema DB producție în urmă
 
 **Eroare exactă din logurile Vercel:**
 ```
