@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, LayoutList, KanbanSquare, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Tag, UserCog, ArrowRightLeft } from "lucide-react";
+import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, LayoutList, KanbanSquare, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Tag, UserCog, ArrowRightLeft, SortAsc } from "lucide-react";
 import { MobileLeadList } from "@/components/crm/MobileLeadList";
 import { QuickAddSheet } from "@/components/crm/QuickAddSheet";
 import { AppShell } from "@/components/app/AppShell";
@@ -107,6 +107,16 @@ export function LeadsPage() {
   const handleViewMode = (mode: "kanban" | "list") => {
     setViewMode(mode);
     try { localStorage.setItem("crm_view_mode", mode); } catch { /* ignore */ }
+  };
+
+  // CRM-142: Kanban column sort — persisted in localStorage
+  type KanbanSort = "recent" | "oldest" | "value_desc" | "sla_first";
+  const [kanbanSort, setKanbanSort] = useState<KanbanSort>(() => {
+    try { return (localStorage.getItem("crm_kanban_sort") as KanbanSort) ?? "recent"; } catch { return "recent"; }
+  });
+  const handleKanbanSort = (sort: KanbanSort) => {
+    setKanbanSort(sort);
+    try { localStorage.setItem("crm_kanban_sort", sort); } catch { /* ignore */ }
   };
 
   // CRM-117: list view state
@@ -240,7 +250,7 @@ export function LeadsPage() {
   // Client-side filtering
   const getFilteredLeads = (stageKey: string): Lead[] => {
     const all = grouped[stageKey] ?? [];
-    return all.filter((lead) => {
+    const filtered = all.filter((lead) => {
       if (filterSource !== "all" && lead.source !== filterSource) return false;
       if (filterAssigned !== "all" && lead.assignedTo !== filterAssigned) return false;
       if (searchQuery.trim()) {
@@ -261,6 +271,25 @@ export function LeadsPage() {
         if (!isOverdue) return false;
       }
       return true;
+    });
+    // CRM-142: client-side kanban sort
+    return [...filtered].sort((a, b) => {
+      if (kanbanSort === "oldest") {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+      if (kanbanSort === "value_desc") {
+        return (b.valueCents ?? 0) - (a.valueCents ?? 0);
+      }
+      if (kanbanSort === "sla_first") {
+        const slaOrder: Record<string, number> = { red: 0, yellow: 1, green: 2 };
+        const aOrd = slaOrder[a.slaBadge ?? "green"] ?? 2;
+        const bOrd = slaOrder[b.slaBadge ?? "green"] ?? 2;
+        if (aOrd !== bOrd) return aOrd - bOrd;
+        // secondary: oldest first (longest waiting)
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+      // "recent" (default): newest first
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
   };
 
@@ -419,6 +448,26 @@ export function LeadsPage() {
           <input type="checkbox" checked={filterOverdue} onChange={(e) => { setFilterOverdue(e.target.checked); if (e.target.checked) setFilterNoTask(false); }} className="h-3.5 w-3.5" aria-label="Filtrează leaduri cu task restant" />
           Restanțe
         </label>
+
+        {/* CRM-142: kanban column sort — only visible in kanban mode */}
+        {viewMode === "kanban" && (
+          <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="sr-only">Sortare kanban</span>
+            <SortAsc className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <select
+              id="kanban-sort"
+              value={kanbanSort}
+              onChange={(e) => handleKanbanSort(e.target.value as KanbanSort)}
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Sortare carduri kanban"
+            >
+              <option value="recent">Recente</option>
+              <option value="oldest">Cele mai vechi</option>
+              <option value="value_desc">Valoare desc.</option>
+              <option value="sla_first">SLA intai</option>
+            </select>
+          </label>
+        )}
 
         {/* CRM-139: list view auto-applies via debounce; spinner shows re-fetch in progress */}
         {viewMode === "list" && listLoading && (

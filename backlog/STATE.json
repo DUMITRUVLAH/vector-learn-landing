@@ -1105,8 +1105,8 @@
       }
     },
     "CRM-142": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-142-kanban-column-sort.md",
       "milestone": "CRM",
@@ -1114,7 +1114,15 @@
       "depends_on": [
         "CRM-105",
         "CRM-124"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-143": {
       "status": "pending",
