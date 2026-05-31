@@ -27,6 +27,7 @@ import { savedViewsRoutes } from "./routes/saved-views";
 import { leadsTodayRoutes } from "./routes/leads-today";
 import { notificationRoutes } from "./routes/notifications";
 import { cadenceRoutes } from "./routes/cadences";
+import { auditRoutes } from "./routes/audit";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -74,6 +75,7 @@ app.route("/api/lessons", recurringRoutes); // /api/lessons/recurring + /api/les
 app.route("/api/saved-views", savedViewsRoutes);
 app.route("/api/notifications", notificationRoutes);
 app.route("/api/cadences", cadenceRoutes);
+app.route("/api/audit-log", auditRoutes);
 
 app.get("/api/health", async (c) => {
   try {

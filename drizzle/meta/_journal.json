@@ -141,6 +141,13 @@
       "when": 1780151300000,
       "tag": "0019_crm125_forecast",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1780151400000,
+      "tag": "0020_crm127_audit_log",
+      "breakpoints": true
     }
   ]
 }

@@ -157,6 +157,16 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 
 ---
 
+## CRM-127 — Undo + audit log {#crm-127}
+
+- **T-CRM-127-1** `[blocant]` Given lead creat via API, Then crm_audit_log are 1 rând action='lead.created'.
+- **T-CRM-127-2** `[blocant]` Given lead stage schimbat, Then rând audit cu before_snapshot.stage != after_snapshot.stage.
+- **T-CRM-127-3** `[blocant]` Given `POST /api/leads/:id/crm-delete`, Then returnează undoToken; `POST /api/leads/undo/:token` restaurează leadul.
+- **T-CRM-127-4** Given token folosit după 35s, Then 410 Gone.
+- **T-CRM-127-5** `GET /api/audit-log` returnează rânduri newest-first, respectă param limit.
+- **T-CRM-127-6** Build + typecheck + lint pass.
+- **T-CRM-127-7** Migraţia `0010_crm127_audit_log.sql` există în `drizzle/` şi conţine CREATE TABLE crm_audit_log.
+
 ## CRM-126 — Follow-up cadences {#crm-126}
 
 - **T-CRM-126-1** `[blocant]` Given `POST /api/cadences` cu name + steps valid, Then 201 + cadence creată cu ID.
