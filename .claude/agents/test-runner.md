@@ -35,6 +35,27 @@ npm test -- --run --reporter=verbose
 ```
 Capture: total/passed/failed counts.
 
+### 4d. Coverage gate (BLOCKING — 80% on new code)
+```bash
+npm test -- --run --coverage --reporter=verbose
+```
+Parse coverage output for the files touched in this item (from `git diff --name-only main`).
+- If overall new-file coverage < 80% → **FAIL**: "coverage below 80% on new code — add tests, do not remove lines".
+- If vitest coverage is not configured, add to `vite.config.ts` or `vitest.config.ts`:
+  ```ts
+  test: { coverage: { provider: 'v8', reporter: ['text', 'json-summary'] } }
+  ```
+  and run `npm install --save-dev @vitest/coverage-v8` if needed (one-time setup, non-blocking for this run — note in report).
+
+### 4e. Playwright E2E gate (BLOCKING — all E2E tests must pass)
+```bash
+npm run test:e2e 2>&1 | tail -40
+```
+- All tests in `e2e/<ID>.spec.ts` must pass.
+- If `test:e2e` script is missing or `@playwright/test` not installed → **FAIL**: "Playwright not configured — test-writer should have set it up; block and report".
+- If Chromium binary is missing → run `npx playwright install chromium` first, then re-run.
+- Any Playwright test failure → **FAIL** with the test name and error.
+
 ### 4a. Migration discipline gate (BLOCKING — catches schema drift)
 Any schema change must ship with a committed migration, and the DB must rebuild cleanly.
 ```bash
@@ -100,6 +121,8 @@ UNIT_TESTS: <X/Y passed>
 MIGRATION_GATE: <pass|fail>        # db:generate clean + db:reset + db:seed
 INTEGRATION_SMOKE: <pass|fail>     # health/db + login + feature endpoints
 PORTABILITY: <pass|fail>           # no raw .execute().rows
+COVERAGE: <XX% | fail>             # ≥ 80% on new code (BLOCKING)
+E2E: <X/Y passed | fail>           # Playwright tests from e2e/<ID>.spec.ts (BLOCKING)
 LIGHTHOUSE:
   performance: <0.XX | skipped>
   accessibility: <0.XX | skipped>
@@ -118,8 +141,8 @@ VERDICT: <one sentence>
 ```
 
 ## Rules
-- `PASS` = all runnable gates green AND **migration gate + integration smoke + portability pass** AND lighthouse ≥ 0.9 each AND axe critical+serious = 0
-- `FAIL` = any runnable gate fails. The migration gate, integration smoke, and portability check are **BLOCKING** and can never be skipped (they don't need Chrome/network beyond localhost).
-- A `skipped` gate (lighthouse/axe only, when Chrome is unavailable) does NOT cause a fail, but it must be reported. The three new gates are never "skipped".
+- `PASS` = all runnable gates green AND **migration gate + integration smoke + portability + coverage ≥ 80% + all E2E pass** AND lighthouse ≥ 0.9 each AND axe critical+serious = 0
+- `FAIL` = any runnable gate fails. Migration, integration smoke, portability, coverage, and E2E are **BLOCKING** and can never be skipped.
+- A `skipped` gate (lighthouse/axe only, when Chrome is unavailable) does NOT cause a fail, but it must be reported. The five blocking gates are never "skipped".
 - Never silently ignore an error. Always log it (include response bodies for integration failures).
 - Clean up any background processes you start (kill the API/dev server PIDs).

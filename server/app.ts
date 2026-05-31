@@ -17,6 +17,21 @@ import { templateRoutes } from "./routes/templates";
 import { automationRoutes } from "./routes/automations";
 import { analyticsRoutes } from "./routes/analytics";
 import { tagRoutes } from "./routes/tags";
+import { payrollRoutes } from "./routes/payroll";
+import { hrTeacherRoutes } from "./routes/hrTeachers";
+import { availabilityRoutes } from "./routes/availability";
+import { auditLogRoutes } from "./routes/auditLog";
+import { roomRoutes } from "./routes/rooms";
+import { recurringRoutes } from "./routes/recurring";
+import { savedViewsRoutes } from "./routes/saved-views";
+import { leadsTodayRoutes } from "./routes/leads-today";
+import { notificationRoutes } from "./routes/notifications";
+import { cadenceRoutes } from "./routes/cadences";
+import { auditRoutes } from "./routes/audit";
+import { contractRoutes } from "./routes/contracts";
+import { feedbackRoutes } from "./routes/feedback";
+import { feedbackPublicRoutes } from "./routes/feedbackPublic";
+import { contactRoutes } from "./routes/contacts";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -41,20 +56,9 @@ app.use(
   })
 );
 
-app.route("/api/auth", authRoutes);
-app.route("/api/students", studentRoutes);
-app.route("/api/teachers", teacherRoutes);
-app.route("/api/courses", courseRoutes);
-app.route("/api/lessons", lessonRoutes);
-app.route("/api/payments", paymentRoutes);
-app.route("/api/leads", leadRoutes);
-app.route("/api/pipeline-stages", pipelineRoutes);
-app.route("/api/leads", taskRoutes); // tasks/attachments under /api/leads/:leadId/...
-app.route("/api/templates", templateRoutes);
-app.route("/api/automations", automationRoutes);
-app.route("/api/analytics", analyticsRoutes);
-app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
-
+// UX-701: Health checks MUST be public and registered BEFORE any route that mounts
+// auth middleware at "/api" (tagRoutes), otherwise /api/health is intercepted and returns
+// 401 — which made the BackendStatusBadge show "API: down" on every page despite a healthy API.
 app.get("/api/health", async (c) => {
   try {
     await db.execute(sql`SELECT 1 as ping`);
@@ -66,6 +70,40 @@ app.get("/api/health", async (c) => {
     );
   }
 });
+
+app.route("/api/auth", authRoutes);
+app.route("/api/students", studentRoutes);
+app.route("/api/teachers", teacherRoutes);
+app.route("/api/courses", courseRoutes);
+app.route("/api/lessons", lessonRoutes);
+app.route("/api/payments", paymentRoutes);
+app.route("/api/leads/today", leadsTodayRoutes); // CRM-120: must be before /api/leads (more specific)
+app.route("/api/leads", leadRoutes);
+app.route("/api/pipeline-stages", pipelineRoutes);
+app.route("/api/leads", taskRoutes); // tasks/attachments under /api/leads/:leadId/...
+// CRM-114: lead contacts (B2B). Mounted at "/api" because its routes are "/leads/:id/contacts".
+// Must be registered before tagRoutes (which mounts a global requireAuth at "/api" and would
+// otherwise be the only handler matching /api/leads/:id/contacts → SPA index.html fallthrough).
+app.route("/api", contactRoutes);
+app.route("/api/templates", templateRoutes);
+app.route("/api/automations", automationRoutes);
+app.route("/api/analytics", analyticsRoutes);
+// FEEDBACK-601: public (no-auth) routes must be registered BEFORE tagRoutes because tagRoutes
+// is mounted at "/api" with a global requireAuth that otherwise intercepts all /api/* requests.
+app.route("/api/feedback-public", feedbackPublicRoutes);
+app.route("/api/feedback", feedbackRoutes);
+app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
+app.route("/api/hr/payroll", payrollRoutes);
+app.route("/api/hr/teacher-stats", hrTeacherRoutes);
+app.route("/api/hr/teachers", availabilityRoutes);
+app.route("/api/hr/audit-log", auditLogRoutes);
+app.route("/api/rooms", roomRoutes);
+app.route("/api/lessons", recurringRoutes); // /api/lessons/recurring + /api/lessons/series/:id/future
+app.route("/api/saved-views", savedViewsRoutes);
+app.route("/api/notifications", notificationRoutes);
+app.route("/api/cadences", cadenceRoutes);
+app.route("/api/audit-log", auditRoutes);
+app.route("/api/contracts", contractRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

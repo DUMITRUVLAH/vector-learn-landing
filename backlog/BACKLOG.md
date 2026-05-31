@@ -101,12 +101,25 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 13 | `CRM-113` | Valoare deal (€) per lead + rollup valoare pe pipeline | F | pending | [specs/CRM-113-deal-value.md](specs/CRM-113-deal-value.md) |
-| 14 | `CRM-114` | Companie + contacte multiple (B2B) + nume deal | F | pending | [specs/CRM-114-company-contacts.md](specs/CRM-114-company-contacts.md) |
+| 13 | `CRM-113` | Valoare deal (€) per lead + rollup valoare pe pipeline | F | done ✅ | [specs/CRM-113-deal-value.md](specs/CRM-113-deal-value.md) · [PR #40](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/40) |
+| 14 | `CRM-114` | Companie + contacte multiple (B2B) + nume deal | F | done ✅ | [specs/CRM-114-company-contacts.md](specs/CRM-114-company-contacts.md) · [PR #42](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/42) |
 | 15 | `CRM-115` | Tag-uri + câmpuri custom configurabile per tenant | F | done ✅ | [specs/CRM-115-tags-custom-fields.md](specs/CRM-115-tags-custom-fields.md) · [PR #43](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/43) |
-| 16 | `CRM-116` | Semnale task pe card — „Fără task" + aging restanță | F | pending | [specs/CRM-116-task-signals.md](specs/CRM-116-task-signals.md) |
+| 16 | `CRM-116` | Semnale task pe card — „Fără task" + aging restanță | F | done ✅ | [specs/CRM-116-task-signals.md](specs/CRM-116-task-signals.md) · [PR #41](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/41) |
 
-**Ordine de build:** `CRM-101 → … → 112` (done) → `113 → 116 → 114 → 115` (valoare + semnale task întâi — impact maxim pe demo).
+**Faza F: toate done ✅**
+
+### Faza I — Completări & UX polish
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 17 | `CRM-129` | Filtru tag în kanban + reasignare bulk + vizualizare „Ziua mea" | I | done ✅ | [specs/CRM-129-tag-filter-bulk-assign.md](specs/CRM-129-tag-filter-bulk-assign.md) · [PR #84](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/84) |
+| 18 | `CRM-130` | Shortcuts tastatură kanban (n/e/j/k//) + WIP limits + collapse coloană | I | done ✅ | [specs/CRM-130-keyboard-shortcuts-wip.md](specs/CRM-130-keyboard-shortcuts-wip.md) · [PR #85](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/85) |
+| 19 | `CRM-131` | Lead card UX polish — skeleton, optimistic UI, inline note edit, empty states | I | done ✅ | [specs/CRM-131-lead-card-ux-polish.md](specs/CRM-131-lead-card-ux-polish.md) · [PR #86](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/86) |
+| 20 | `CRM-132` | Timeline filters — filtrare activitate după tip (notă/apel/email/stadiu) | I | done ✅ | [specs/CRM-132-timeline-filters.md](specs/CRM-132-timeline-filters.md) · [PR #87](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/87) |
+| 21 | `CRM-133` | Duplicate detection banner — alertă deduplicare proeminentă pe cartonașul lead | I | done ✅ | [specs/CRM-133-duplicate-detection-banner.md](specs/CRM-133-duplicate-detection-banner.md) · [PR #88](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/88) |
+| 22 | `CRM-134` | @mentions in note-uri + notificare utilizator menționat | I | pending | [specs/CRM-134-mentions-notifications.md](specs/CRM-134-mentions-notifications.md) |
+| 23 | `CRM-135` | Round-robin auto-assign pentru lead-uri noi | I | pending | [specs/CRM-135-round-robin-assign.md](specs/CRM-135-round-robin-assign.md) |
+| 24 | `CRM-136` | Kanban card density toggle — compact/comfortable, persistat per user | I | pending | [specs/CRM-136-kanban-density-toggle.md](specs/CRM-136-kanban-density-toggle.md) |
 
 ## Active milestone: COMM — Modulul Comunicare (mesagerie reală backend)
 
@@ -150,6 +163,12 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 2 | `SCHED-502` | Lecții recurente: pattern săptămânal + excepții | 2 | done ✅ | [specs/SCHED-502-recurring.md](specs/SCHED-502-recurring.md) · [PR #58](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/58) |
 | 3 | `SCHED-503` | Prezență: marcare per lecție + raport prezență % | 3 | pending | [specs/SCHED-503-attendance.md](specs/SCHED-503-attendance.md) |
 | 4 | `SCHED-504` | Export iCal: calendar personalizat profesor/elev | 4 | pending | [specs/SCHED-504-ical.md](specs/SCHED-504-ical.md) |
+
+## Active milestone: FEEDBACK — Formulare de feedback (elevi/părinți)
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `FEEDBACK-601` | Formulare feedback: NPS + text + stele + submit public no-auth + dashboard | 1 | done ✅ | [specs/FEEDBACK-601-forms.md](specs/FEEDBACK-601-forms.md) |
 
 ## Quality gates (required before status → `done`)
 

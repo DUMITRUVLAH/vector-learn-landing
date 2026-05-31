@@ -1,13 +1,58 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families } from "../db/schema";
+import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, leadTags } from "../db/schema";
 import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 import { fireTrigger } from "../lib/automationEngine";
+import { createNotification, notifyManagersAndOwners } from "../lib/createNotification";
+import { enrollLeadInCadences, pauseEnrollmentsOnReply } from "./cadences";
+import { crmAuditLog } from "../db/schema";
+
+// ─── CRM-127: Audit log helper ────────────────────────────────────────────────
+async function auditLog(opts: {
+  tenantId: string;
+  actorId?: string | null;
+  entityId: string;
+  action: string;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+}): Promise<void> {
+  try {
+    await db.insert(crmAuditLog).values({
+      tenantId: opts.tenantId,
+      actorId: opts.actorId ?? null,
+      entityId: opts.entityId,
+      action: opts.action,
+      beforeSnapshot: opts.before ?? null,
+      afterSnapshot: opts.after ?? null,
+    });
+  } catch {
+    // Never block the main operation due to audit failure
+  }
+}
+
+// ─── CRM-127: Undo token store (in-memory, TTL 35s) ──────────────────────────
+interface UndoEntry {
+  leadIds: string[];
+  snapshots: Record<string, unknown>[];
+  expiresAt: number; // Date.now() + 35000
+}
+const undoStore = new Map<string, UndoEntry>();
+
+function generateUndoToken(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function cleanExpiredTokens(): void {
+  const now = Date.now();
+  for (const [k, v] of undoStore) {
+    if (v.expiresAt < now) undoStore.delete(k);
+  }
+}
 
 const STAGES = ["new", "contacted", "trial", "paid", "lost"] as const;
 const SOURCES = [
@@ -69,6 +114,15 @@ const interactionSchema = z.object({
 const listQuerySchema = z.object({
   search: z.string().optional(),
   stage: z.enum([...STAGES, "all"]).default("all"),
+  /** CRM-117: list view pagination + sort */
+  view: z.enum(["list", "pipeline"]).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+  sort: z.enum(["fullName", "company", "stage", "source", "valueCents", "debtCents", "createdAt", "updatedAt"]).default("createdAt"),
+  dir: z.enum(["asc", "desc"]).default("desc"),
+  /** Shared filters */
+  source: z.enum([...SOURCES, "all"]).default("all"),
+  assignedTo: z.string().optional(),
 });
 
 const publicIntakeSchema = z.object({
@@ -209,22 +263,111 @@ leadRoutes.post("/dedup-check", zValidator("json", dedupCheckSchema), async (c) 
 });
 
 leadRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
-  const { search, stage } = c.req.valid("query");
+  const { search, stage, view, page, pageSize, sort, dir, source: filterSource, assignedTo } = c.req.valid("query");
   const tenantId = c.get("user").tenantId;
 
   const conditions = [eq(leads.tenantId, tenantId)];
   if (stage !== "all") conditions.push(eq(leads.stage, stage));
+  if (filterSource && filterSource !== "all") conditions.push(eq(leads.source, filterSource as typeof SOURCES[number]));
+  if (assignedTo && assignedTo !== "all") {
+    if (assignedTo === "unassigned") {
+      // filter unassigned leads — use isNull check via raw expression workaround
+      conditions.push(eq(leads.assignedTo, null as unknown as string));
+    } else {
+      conditions.push(eq(leads.assignedTo, assignedTo));
+    }
+  }
   if (search && search.trim()) {
     const q = `%${search.trim()}%`;
+    // CRM-119: extended search covers company, deal_name, interest_course
     const searchCondition = or(
       ilike(leads.fullName, q),
       ilike(leads.email, q),
       ilike(leads.phone, q),
-      ilike(leads.interestCourse, q)
+      ilike(leads.interestCourse, q),
+      ilike(leads.company, q),
+      ilike(leads.dealName, q)
     );
     if (searchCondition) conditions.push(searchCondition);
   }
 
+  // CRM-117: list view with server-side pagination
+  if (view === "list") {
+    // Build sort expression
+    const SORT_COLS = {
+      fullName: leads.fullName,
+      company: leads.company,
+      stage: leads.stage,
+      source: leads.source,
+      valueCents: leads.valueCents,
+      debtCents: leads.debtCents,
+      createdAt: leads.createdAt,
+      updatedAt: leads.updatedAt,
+    } as const;
+    const sortCol = SORT_COLS[sort as keyof typeof SORT_COLS] ?? leads.createdAt;
+    const orderExpr = dir === "asc" ? asc(sortCol) : desc(sortCol);
+
+    const offset = (page - 1) * pageSize;
+
+    // Total count (for pagination meta)
+    const countResult = await db
+      .select({ cnt: count(leads.id) })
+      .from(leads)
+      .where(and(...conditions));
+    const totalRow = Array.isArray(countResult) ? countResult[0] : (countResult as { cnt: number }[])[0];
+    const totalNum = Number(totalRow?.cnt ?? 0);
+
+    const items = await db
+      .select()
+      .from(leads)
+      .where(and(...conditions))
+      .orderBy(orderExpr)
+      .limit(pageSize)
+      .offset(offset);
+
+    // Augment with next open task per lead
+    if (items.length > 0) {
+      const leadIds = items.map((l) => l.id);
+      const openTasks = await db
+        .select()
+        .from(leadTasks)
+        .where(and(
+          eq(leadTasks.tenantId, tenantId),
+          eq(leadTasks.status, "open")
+        ))
+        .orderBy(asc(leadTasks.dueAt));
+
+      const nextTaskMap: Record<string, { dueAt: Date | null; title: string } | undefined> = {};
+      for (const task of openTasks) {
+        if (leadIds.includes(task.leadId) && !nextTaskMap[task.leadId]) {
+          nextTaskMap[task.leadId] = { dueAt: task.dueAt, title: task.title };
+        }
+      }
+
+      const augmented = items.map((lead) => ({
+        ...lead,
+        nextTask: nextTaskMap[lead.id] ?? null,
+      }));
+
+      return c.json({
+        items: augmented,
+        page,
+        pageSize,
+        total: totalNum,
+        totalPages: Math.ceil(totalNum / pageSize),
+      });
+    }
+
+    return c.json({
+      items: [],
+      page,
+      pageSize,
+      total: 0,
+      totalPages: 0,
+    });
+  }
+
+  // Default: simple list (no pagination)
   const items = await db
     .select()
     .from(leads)
@@ -257,11 +400,36 @@ leadRoutes.get("/pipeline", async (c) => {
     }
   }
 
-  // Augment leads with nextTask
-  const augmented = items.map((lead) => ({
-    ...lead,
-    nextTask: nextTaskMap[lead.id] ?? null,
-  }));
+  // CRM-124: Fetch tenant SLA settings for badge computation
+  const tenant = await db.query.tenants.findFirst({
+    where: eq(tenants.id, tenantId),
+    columns: { slaHotMinutes: true, slaDefaultHours: true, rotDays: true },
+  }).catch(() => null);
+  const slaHotMinutes = tenant?.slaHotMinutes ?? 15;
+  const slaDefaultHours = tenant?.slaDefaultHours ?? 24;
+  const rotDays = tenant?.rotDays ?? 7;
+  const now = new Date();
+
+  // Augment leads with nextTask + CRM-124 SLA badge (only for active stages)
+  const augmented = items.map((lead) => {
+    const isActive = !["paid", "lost"].includes(lead.stage);
+    let slaBadge: "green" | "yellow" | "red" | null = null;
+    if (isActive) {
+      const minutesSince = (now.getTime() - new Date(lead.createdAt).getTime()) / 60000;
+      const isHot = (lead.score ?? 0) >= 70;
+      const thresholdMinutes = isHot ? slaHotMinutes : slaDefaultHours * 60;
+      const rotThreshold = rotDays * 24 * 60; // rot_days in minutes
+      if (minutesSince > rotThreshold) slaBadge = "red";
+      else if (minutesSince > thresholdMinutes * 2) slaBadge = "red";
+      else if (minutesSince > thresholdMinutes) slaBadge = "yellow";
+      else slaBadge = "green";
+    }
+    return {
+      ...lead,
+      nextTask: nextTaskMap[lead.id] ?? null,
+      slaBadge,
+    };
+  });
 
   const grouped: Record<string, typeof augmented> = {
     new: [],
@@ -330,6 +498,24 @@ leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
   // Fire automation trigger (fire-and-forget — don't block response)
   void fireTrigger(tenantId, "lead.created", created).catch(() => undefined);
 
+  // CRM-127: Audit log
+  void auditLog({ tenantId, actorId: userId, entityId: created.id, action: "lead.created", after: created as unknown as Record<string, unknown> }).catch(() => undefined);
+
+  // CRM-123: Notify assigned user (or all managers/admins if unassigned)
+  const notifPayload = {
+    type: "lead_created" as const,
+    title: `Nou lead: ${created.fullName}`,
+    body: created.interestCourse ? `Curs: ${created.interestCourse}` : undefined,
+    link: `#/app/leads/${created.id}`,
+    metadata: { leadId: created.id },
+    tenantId,
+  };
+  if (created.assignedTo) {
+    void createNotification({ ...notifPayload, userId: created.assignedTo }).catch(() => undefined);
+  } else {
+    void notifyManagersAndOwners(tenantId, notifPayload).catch(() => undefined);
+  }
+
   return c.json(created, 201);
 });
 
@@ -346,7 +532,14 @@ leadRoutes.get("/:id", async (c) => {
 leadRoutes.patch("/:id", zValidator("json", updateLeadSchema), async (c) => {
   const id = c.req.param("id");
   const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
   const body = nullify(c.req.valid("json"));
+
+  // CRM-127: Fetch before snapshot
+  const before = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
+  });
+  if (!before) return c.json({ error: "not_found" }, 404);
 
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   for (const [k, v] of Object.entries(body)) patch[k] = v;
@@ -359,6 +552,16 @@ leadRoutes.patch("/:id", zValidator("json", updateLeadSchema), async (c) => {
     .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)))
     .returning();
   if (!updated) return c.json({ error: "not_found" }, 404);
+
+  // CRM-127: Audit log — only changed fields
+  const changedBefore: Record<string, unknown> = {};
+  const changedAfter: Record<string, unknown> = {};
+  for (const k of Object.keys(body)) {
+    changedBefore[k] = (before as unknown as Record<string, unknown>)[k];
+    changedAfter[k] = (updated as unknown as Record<string, unknown>)[k];
+  }
+  void auditLog({ tenantId, actorId: userId, entityId: id, action: "lead.updated", before: changedBefore, after: changedAfter }).catch(() => undefined);
+
   return c.json(updated);
 });
 
@@ -412,6 +615,14 @@ leadRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async (c) 
   // Fire automation trigger (fire-and-forget — don't block response)
   if (updated) {
     void fireTrigger(tenantId, "lead.stage_changed", updated, { toStage: stage }).catch(() => undefined);
+    // CRM-126: Auto-enroll in matching cadences
+    void enrollLeadInCadences(tenantId, id, stage).catch(() => undefined);
+    // CRM-127: Audit log
+    void auditLog({
+      tenantId, actorId: userId, entityId: id, action: "lead.stage_changed",
+      before: { stage: lead.stage },
+      after: { stage },
+    }).catch(() => undefined);
   }
 
   return c.json(updated);
@@ -503,6 +714,16 @@ leadRoutes.post("/:id/convert", zValidator("json", convertLeadSchema), async (c)
     userId,
   });
 
+  // CRM-123: Notify about conversion
+  void notifyManagersAndOwners(tenantId, {
+    type: "lead_converted",
+    title: `Lead convertit: ${lead.fullName}`,
+    body: `Acum este student activ`,
+    link: `#/app/leads/${id}`,
+    metadata: { leadId: id, studentId: student.id },
+    isRead: false,
+  }).catch(() => undefined);
+
   const updatedLead = { ...lead, convertedToStudentId: student.id, stage: "paid" as const };
   return c.json({ lead: updatedLead, student, familyId });
 });
@@ -540,6 +761,12 @@ leadRoutes.post("/:id/interactions", zValidator("json", interactionSchema), asyn
       userId,
     })
     .returning();
+
+  // CRM-126: Auto-pause cadence enrollments when lead replies
+  if (body.direction === "inbound") {
+    void pauseEnrollmentsOnReply(tenantId, id).catch(() => undefined);
+  }
+
   return c.json(created, 201);
 });
 
@@ -825,5 +1052,249 @@ leadRoutes.delete("/:id", async (c) => {
   });
 
   return c.json({ deleted: true, anonymized: true });
+});
+
+// ─── CRM-118: Bulk-action endpoint ───────────────────────────────────────────
+const bulkActionSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+  action: z.enum(["stage", "assign", "tag", "delete"]),
+  payload: z.object({
+    stage: z.string().min(1).max(64).optional(),
+    lostReason: z.string().max(500).optional().nullable(),
+    assignedTo: z.string().uuid().optional().nullable(),
+    tag: z.string().min(1).max(100).optional(),
+  }).optional(),
+});
+
+leadRoutes.post("/bulk-action", zValidator("json", bulkActionSchema), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+  const { ids, action, payload } = c.req.valid("json");
+
+  // Fetch only leads that belong to this tenant
+  const ownedLeads = await db
+    .select({ id: leads.id, stage: leads.stage, gclid: leads.gclid })
+    .from(leads)
+    .where(and(eq(leads.tenantId, tenantId), inArray(leads.id, ids)));
+
+  const ownedIds = ownedLeads.map((l) => l.id);
+  const skipped = ids.length - ownedIds.length;
+
+  if (ownedIds.length === 0) {
+    return c.json({ processed: 0, failed: skipped, errors: ["No leads found for this tenant"] });
+  }
+
+  let processed = 0;
+  const errors: string[] = [];
+
+  if (action === "stage") {
+    const newStage = payload?.stage;
+    if (!newStage) return c.json({ error: "stage required" }, 400);
+
+    // Validate stage exists
+    const targetStage = await db.query.pipelineStages.findFirst({
+      where: and(eq(pipelineStages.tenantId, tenantId), eq(pipelineStages.key, newStage)),
+    });
+    const DEFAULT_KEYS = ["new", "contacted", "trial", "paid", "lost"];
+    const isLostStage = targetStage?.isLost ?? newStage === "lost";
+
+    if (isLostStage && !payload?.lostReason) {
+      return c.json({ error: "lost_reason_required" }, 400);
+    }
+
+    const patch: Record<string, unknown> = { stage: newStage, updatedAt: new Date() };
+    if (isLostStage) patch.lostReason = payload?.lostReason ?? null;
+
+    // Validate stage key
+    if (!targetStage && !DEFAULT_KEYS.includes(newStage)) {
+      return c.json({ error: "invalid_stage" }, 400);
+    }
+
+    await db.update(leads).set(patch).where(and(eq(leads.tenantId, tenantId), inArray(leads.id, ownedIds)));
+
+    // Audit interactions
+    const interactionRows = ownedLeads.map((l) => ({
+      tenantId,
+      leadId: l.id,
+      type: "system" as const,
+      direction: "internal" as const,
+      body: `Bulk: stadiu schimbat → ${newStage}${isLostStage && payload?.lostReason ? ` (${payload.lostReason})` : ""}`,
+      userId,
+    }));
+    if (interactionRows.length > 0) await db.insert(leadInteractions).values(interactionRows);
+    processed = ownedIds.length;
+
+  } else if (action === "assign") {
+    const assignedTo = payload?.assignedTo ?? null;
+    await db.update(leads).set({ assignedTo, updatedAt: new Date() }).where(and(eq(leads.tenantId, tenantId), inArray(leads.id, ownedIds)));
+
+    const interactionRows = ownedLeads.map((l) => ({
+      tenantId,
+      leadId: l.id,
+      type: "system" as const,
+      direction: "internal" as const,
+      body: assignedTo ? `Bulk: reasignat către ${assignedTo}` : "Bulk: responsabil eliminat",
+      userId,
+    }));
+    if (interactionRows.length > 0) await db.insert(leadInteractions).values(interactionRows);
+    processed = ownedIds.length;
+
+  } else if (action === "tag") {
+    const tag = payload?.tag?.trim();
+    if (!tag) return c.json({ error: "tag required" }, 400);
+
+    // Insert tags, ignore conflicts (tag already exists for that lead)
+    for (const leadId of ownedIds) {
+      try {
+        await db.insert(leadTags).values({ tenantId, leadId, tag }).onConflictDoNothing();
+        processed++;
+      } catch {
+        errors.push(`Could not add tag to lead ${leadId}`);
+      }
+    }
+
+    const interactionRows = ownedIds.map((leadId) => ({
+      tenantId,
+      leadId,
+      type: "system" as const,
+      direction: "internal" as const,
+      body: `Bulk: tag „${tag}" adăugat`,
+      userId,
+    }));
+    if (interactionRows.length > 0) await db.insert(leadInteractions).values(interactionRows);
+
+  } else if (action === "delete") {
+    // GDPR erasure — anonymize PII, keep audit trail
+    await db
+      .update(leads)
+      .set({
+        fullName: "[Șters GDPR]",
+        phone: null,
+        phoneNormalized: null,
+        email: null,
+        emailNormalized: null,
+        notes: null,
+        consentText: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(leads.tenantId, tenantId), inArray(leads.id, ownedIds)));
+
+    await db
+      .update(leadInteractions)
+      .set({ body: "[Șters GDPR]" })
+      .where(and(eq(leadInteractions.tenantId, tenantId), inArray(leadInteractions.leadId, ownedIds)));
+
+    const erasureRows = ownedIds.map((leadId) => ({
+      tenantId,
+      leadId,
+      type: "system" as const,
+      direction: "internal" as const,
+      body: `Date personale șterse în masă (GDPR) de utilizatorul ${userId}`,
+      userId,
+    }));
+    if (erasureRows.length > 0) await db.insert(leadInteractions).values(erasureRows);
+    processed = ownedIds.length;
+  }
+
+  return c.json({ processed, failed: skipped + (ownedIds.length - processed), errors: errors.length > 0 ? errors : undefined });
+});
+
+// CRM-127: POST /api/leads/:id/crm-delete — soft CRM delete with undo token
+leadRoutes.post("/:id/crm-delete", async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
+  });
+  if (!lead) return c.json({ error: "not_found" }, 404);
+
+  // Hard delete the lead (CRM delete — not GDPR erasure)
+  await db
+    .delete(leads)
+    .where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)));
+
+  // CRM-127: Audit log
+  void auditLog({
+    tenantId, actorId: userId, entityId: id, action: "lead.deleted",
+    before: lead as unknown as Record<string, unknown>,
+  }).catch(() => undefined);
+
+  // Store undo token (35s TTL)
+  cleanExpiredTokens();
+  const token = generateUndoToken();
+  const expiresAt = Date.now() + 35_000;
+  undoStore.set(token, {
+    leadIds: [id],
+    snapshots: [lead as unknown as Record<string, unknown>],
+    expiresAt,
+  });
+
+  return c.json({
+    deleted: true,
+    undoToken: token,
+    expiresAt: new Date(expiresAt).toISOString(),
+  });
+});
+
+// CRM-127: POST /api/leads/undo/:token — restore deleted lead
+leadRoutes.post("/undo/:token", async (c) => {
+  const token = c.req.param("token");
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+
+  cleanExpiredTokens();
+  const entry = undoStore.get(token);
+  if (!entry) return c.json({ error: "undo_token_expired_or_invalid" }, 410);
+  if (entry.expiresAt < Date.now()) {
+    undoStore.delete(token);
+    return c.json({ error: "undo_token_expired_or_invalid" }, 410);
+  }
+
+  undoStore.delete(token);
+
+  const restoredIds: string[] = [];
+  for (const snapshot of entry.snapshots) {
+    // Re-insert lead from snapshot (pick only known columns)
+    const snap = snapshot as Record<string, unknown>;
+    if (snap.tenantId !== tenantId) continue; // safety: never restore cross-tenant
+
+    try {
+      // Type-safe insert — extract known fields
+      const [restored] = await db
+        .insert(leads)
+        .values({
+          id: snap.id as string,
+          tenantId: snap.tenantId as string,
+          fullName: (snap.fullName as string) ?? "Restaurat",
+          phone: (snap.phone as string | null) ?? null,
+          phoneNormalized: (snap.phoneNormalized as string | null) ?? null,
+          email: (snap.email as string | null) ?? null,
+          emailNormalized: (snap.emailNormalized as string | null) ?? null,
+          interestCourse: (snap.interestCourse as string | null) ?? null,
+          stage: (snap.stage as "new" | "contacted" | "trial" | "paid" | "lost") ?? "new",
+          source: (snap.source as "manual") ?? "manual",
+          notes: (snap.notes as string | null) ?? null,
+          assignedTo: (snap.assignedTo as string | null) ?? null,
+          valueCents: (snap.valueCents as number) ?? 0,
+          debtCents: (snap.debtCents as number) ?? 0,
+          company: (snap.company as string | null) ?? null,
+          dealName: (snap.dealName as string | null) ?? null,
+          createdAt: snap.createdAt ? new Date(snap.createdAt as string) : new Date(),
+          updatedAt: new Date(),
+        })
+        .onConflictDoNothing()
+        .returning();
+      if (restored) {
+        restoredIds.push(restored.id);
+        void auditLog({ tenantId, actorId: userId, entityId: restored.id, action: "lead.restored", after: restored as unknown as Record<string, unknown> }).catch(() => undefined);
+      }
+    } catch {
+      // If ID conflicts (somehow not deleted), skip
+    }
+  }
+
+  return c.json({ restored: true, leadIds: restoredIds });
 });
 

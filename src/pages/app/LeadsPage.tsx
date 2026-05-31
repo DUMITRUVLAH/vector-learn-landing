@@ -1,20 +1,26 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock } from "lucide-react";
+import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, LayoutList, KanbanSquare, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Tag, UserCog, ArrowRightLeft } from "lucide-react";
+import { MobileLeadList } from "@/components/crm/MobileLeadList";
+import { QuickAddSheet } from "@/components/crm/QuickAddSheet";
 import { AppShell } from "@/components/app/AppShell";
+import { SavedViewsDropdown } from "@/components/crm/SavedViewsDropdown";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import {
   fetchPipeline,
+  fetchLeadsList,
   moveLeadStage,
   createLead,
   convertLead,
   listInteractions,
   addInteraction,
   checkDuplicate,
+  bulkAction,
   type Lead,
   type LeadStage,
   type LeadInteraction,
   type DedupResult,
+  type ListSortCol,
 } from "@/lib/api/leads";
 import {
   fetchPipelineStages,
@@ -25,7 +31,10 @@ import {
 } from "@/lib/api/pipeline";
 import { api } from "@/lib/api";
 import { ApiError } from "@/lib/api";
+import { getForecast } from "@/lib/api/analytics";
 import { cn } from "@/lib/utils";
+import { EmptyLeads } from "@/components/crm/EmptyLeads";
+import { OnboardingChecklist } from "@/components/crm/OnboardingChecklist";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web",
@@ -52,7 +61,7 @@ const LOST_REASON_PRESETS = [
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function LeadsPage() {
-  const { status: sessionStatus } = useSession();
+  const { status: sessionStatus, data: sessionData } = useSession();
   const { navigate } = useRouter();
 
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -61,6 +70,8 @@ export function LeadsPage() {
   /** CRM-113: Σ value_cents per stage */
   const [valueSums, setValueSums] = useState<Record<string, number>>({});
   const [totalValueCents, setTotalValueCents] = useState(0);
+  /** CRM-125: weighted forecast total */
+  const [totalWeightedCents, setTotalWeightedCents] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -74,6 +85,77 @@ export function LeadsPage() {
   const [filterNoTask, setFilterNoTask] = useState(false);
   const [filterOverdue, setFilterOverdue] = useState(false);
 
+  // CRM-117: view toggle — persisted in localStorage
+  const [viewMode, setViewMode] = useState<"kanban" | "list">(() => {
+    try { return (localStorage.getItem("crm_view_mode") as "kanban" | "list") ?? "kanban"; } catch { return "kanban"; }
+  });
+
+  const handleViewMode = (mode: "kanban" | "list") => {
+    setViewMode(mode);
+    try { localStorage.setItem("crm_view_mode", mode); } catch { /* ignore */ }
+  };
+
+  // CRM-117: list view state
+  const [listItems, setListItems] = useState<(Lead & { nextTask?: { dueAt: string | null; title: string } | null })[]>([]);
+  const [listTotal, setListTotal] = useState(0);
+  const [listTotalPages, setListTotalPages] = useState(0);
+  const [listPage, setListPage] = useState(1);
+  const [listPageSize] = useState(50);
+  const [listSort, setListSort] = useState<ListSortCol>("createdAt");
+  const [listDir, setListDir] = useState<"asc" | "desc">("desc");
+  const [listLoading, setListLoading] = useState(false);
+
+  const fetchList = useCallback(async (opts?: { page?: number; sort?: ListSortCol; dir?: "asc" | "desc" }) => {
+    setListLoading(true);
+    try {
+      const res = await fetchLeadsList({
+        page: opts?.page ?? listPage,
+        pageSize: listPageSize,
+        sort: opts?.sort ?? listSort,
+        dir: opts?.dir ?? listDir,
+        search: searchQuery || undefined,
+        source: filterSource !== "all" ? filterSource : undefined,
+        assignedTo: filterAssigned !== "all" ? filterAssigned : undefined,
+      });
+      setListItems(res.items);
+      setListTotal(res.total);
+      setListTotalPages(res.totalPages);
+      setListPage(res.page);
+    } catch { /* keep stale */ }
+    finally { setListLoading(false); }
+  }, [listPage, listPageSize, listSort, listDir, searchQuery, filterSource, filterAssigned]);
+
+  useEffect(() => {
+    if (viewMode === "list") {
+      void fetchList({ page: 1 });
+    }
+  }, [viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // CRM-118: Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [showBulkStage, setShowBulkStage] = useState(false);
+  const [showBulkTag, setShowBulkTag] = useState(false);
+  const [showBulkAssign, setShowBulkAssign] = useState(false);
+
+  const handleBulkAction = async (action: "stage" | "assign" | "tag" | "delete", payload?: Record<string, unknown>) => {
+    if (selectedIds.size === 0) return;
+    setBulkLoading(true);
+    try {
+      const result = await bulkAction({ ids: Array.from(selectedIds), action, payload });
+      setSelectedIds(new Set());
+      setShowBulkStage(false);
+      setShowBulkTag(false);
+      setShowBulkAssign(false);
+      setToast({ kind: "success", message: `${result.processed} lead-uri actualizate${result.failed > 0 ? ` (${result.failed} sărite)` : ""}` });
+      void fetchList({ page: 1 });
+    } catch (err) {
+      setToast({ kind: "error", message: err instanceof ApiError ? `Eroare: ${err.code}` : "Acțiune bulk eșuată" });
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   // Modals
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -81,6 +163,8 @@ export function LeadsPage() {
   const [lostReasonFor, setLostReasonFor] = useState<{ leadId: string; targetStage: string } | null>(null);
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  /** CRM-122: Quick-add mobile bottom sheet */
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -106,15 +190,17 @@ export function LeadsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [pipelineRes, stagesRes] = await Promise.all([
+      const [pipelineRes, stagesRes, forecastRes] = await Promise.all([
         fetchPipeline(),
         fetchPipelineStages(),
+        getForecast().catch(() => null),
       ]);
       setGrouped(pipelineRes.grouped as Record<string, Lead[]>);
       setCounts(pipelineRes.counts as Record<string, number>);
       setValueSums((pipelineRes.valueSums as Record<string, number>) ?? {});
       setTotalValueCents((pipelineRes.totalValueCents as number) ?? 0);
       setStages(stagesRes.stages);
+      if (forecastRes) setTotalWeightedCents(forecastRes.totalWeightedCents);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare");
     } finally {
@@ -137,7 +223,11 @@ export function LeadsPage() {
         const phoneQ = q.replace(/\D/g, "");
         const nameMatch = lead.fullName.toLowerCase().includes(q);
         const phoneMatch = phoneQ.length > 0 && (lead.phone ?? "").replace(/\D/g, "").includes(phoneQ);
-        if (!nameMatch && !phoneMatch) return false;
+        // CRM-119: also search company, dealName, interestCourse
+        const companyMatch = (lead.company ?? "").toLowerCase().includes(q);
+        const dealMatch = (lead.dealName ?? "").toLowerCase().includes(q);
+        const courseMatch = (lead.interestCourse ?? "").toLowerCase().includes(q);
+        if (!nameMatch && !phoneMatch && !companyMatch && !dealMatch && !courseMatch) return false;
       }
       // CRM-116: task signal filters
       if (filterNoTask && lead.nextTask !== null && lead.nextTask !== undefined) return false;
@@ -200,9 +290,42 @@ export function LeadsPage() {
   return (
     <AppShell
       pageTitle="CRM — Leads"
-      pageDescription={[`${totalLeads} lead-uri`, `conversie: ${conversionRate}%`, totalValueCents > 0 ? formatEur(totalValueCents) : null].filter(Boolean).join(" · ")}
+      pageDescription={[`${totalLeads} lead-uri`, `conversie: ${conversionRate}%`, totalValueCents > 0 ? formatEur(totalValueCents) : null, totalWeightedCents > 0 ? `Forecast: ${formatEur(totalWeightedCents)}` : null].filter(Boolean).join(" · ")}
       actions={
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {/* CRM-117: Kanban / List toggle */}
+          <div className="inline-flex rounded-md border border-border bg-card overflow-hidden" role="group" aria-label="Alegere vedere">
+            <button
+              type="button"
+              onClick={() => handleViewMode("kanban")}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-2 text-sm font-semibold transition-colors",
+                viewMode === "kanban"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted text-foreground"
+              )}
+              aria-pressed={viewMode === "kanban"}
+              aria-label="Vedere Kanban"
+            >
+              <KanbanSquare className="h-4 w-4" />
+              <span className="hidden sm:inline">Kanban</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleViewMode("list")}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-2 text-sm font-semibold transition-colors border-l border-border",
+                viewMode === "list"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted text-foreground"
+              )}
+              aria-pressed={viewMode === "list"}
+              aria-label="Vedere Listă"
+            >
+              <LayoutList className="h-4 w-4" />
+              <span className="hidden sm:inline">Listă</span>
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => setShowStagesEditor(true)}
@@ -276,6 +399,17 @@ export function LeadsPage() {
           Restanțe
         </label>
 
+        {/* List view: apply filters button */}
+        {viewMode === "list" && (
+          <button
+            type="button"
+            onClick={() => void fetchList({ page: 1 })}
+            className="inline-flex items-center gap-1 rounded-md border border-primary bg-primary/10 px-2 py-1.5 text-xs text-primary font-semibold hover:bg-primary/20"
+          >
+            <Search className="h-3 w-3" />
+            Aplică filtre
+          </button>
+        )}
         {(filterSource !== "all" || filterAssigned !== "all" || searchQuery || filterNoTask || filterOverdue) && (
           <button
             type="button"
@@ -286,20 +420,146 @@ export function LeadsPage() {
             Resetează
           </button>
         )}
+
+        {/* CRM-119: Saved views */}
+        <div className="ml-auto">
+          <SavedViewsDropdown
+            activeFilters={{ source: filterSource !== "all" ? filterSource : undefined, assignedTo: filterAssigned !== "all" ? filterAssigned : undefined, searchQuery: searchQuery || undefined, filterNoTask: filterNoTask || undefined, filterOverdue: filterOverdue || undefined }}
+            hasActiveFilters={filterSource !== "all" || filterAssigned !== "all" || !!searchQuery || filterNoTask || filterOverdue}
+            onApplyView={(filters) => {
+              setFilterSource(filters.source ?? "all");
+              setFilterAssigned(filters.assignedTo ?? "all");
+              setSearchQuery(filters.searchQuery ?? "");
+              setFilterNoTask(filters.filterNoTask ?? false);
+              setFilterOverdue(filters.filterOverdue ?? false);
+            }}
+            onError={(m) => setToast({ kind: "error", message: m })}
+          />
+        </div>
       </div>
 
-      {loading ? (
+      {viewMode === "list" ? (
+        <>
+          <LeadListView
+            items={listItems}
+            total={listTotal}
+            page={listPage}
+            pageSize={listPageSize}
+            totalPages={listTotalPages}
+            sort={listSort}
+            dir={listDir}
+            loading={listLoading}
+            stages={stages}
+            selectedIds={selectedIds}
+            onSelectChange={(id, checked) => {
+              setSelectedIds((prev) => {
+                const next = new Set(prev);
+                if (checked) next.add(id); else next.delete(id);
+                return next;
+              });
+            }}
+            onSelectAll={(checked) => {
+              if (checked) {
+                setSelectedIds(new Set(listItems.map((l) => l.id)));
+              } else {
+                setSelectedIds(new Set());
+              }
+            }}
+            onSort={(col, dir) => {
+              setListSort(col);
+              setListDir(dir);
+              setSelectedIds(new Set());
+              void fetchList({ sort: col, dir, page: 1 });
+            }}
+            onPage={(p) => { setListPage(p); setSelectedIds(new Set()); void fetchList({ page: p }); }}
+            onRowClick={(id) => navigate(`/app/leads/${id}`)}
+            onStageChange={async (id, stage) => {
+              try {
+                await moveLeadStage(id, stage);
+                void fetchList({ page: listPage });
+              } catch { /* ignore */ }
+            }}
+          />
+          {/* CRM-118: Bulk action toolbar */}
+          {selectedIds.size > 0 && (
+            <BulkActionToolbar
+              count={selectedIds.size}
+              stages={stages}
+              loading={bulkLoading}
+              showStagePanel={showBulkStage}
+              showTagPanel={showBulkTag}
+              showAssignPanel={showBulkAssign}
+              onToggleStage={() => { setShowBulkStage((v) => !v); setShowBulkTag(false); setShowBulkAssign(false); }}
+              onToggleTag={() => { setShowBulkTag((v) => !v); setShowBulkStage(false); setShowBulkAssign(false); }}
+              onToggleAssign={() => { setShowBulkAssign((v) => !v); setShowBulkStage(false); setShowBulkTag(false); }}
+              onStageConfirm={(stage, lostReason) => void handleBulkAction("stage", { stage, lostReason })}
+              onTagConfirm={(tag) => void handleBulkAction("tag", { tag })}
+              onAssignConfirm={(assignedTo) => void handleBulkAction("assign", { assignedTo })}
+              onDelete={() => {
+                if (confirm(`Ștergi ireversibil ${selectedIds.size} lead-uri (GDPR)? Această acțiune nu poate fi anulată.`)) {
+                  if (confirm(`Confirmare finală: ștergi ${selectedIds.size} lead-uri?`)) {
+                    void handleBulkAction("delete");
+                  }
+                }
+              }}
+              onClearSelection={() => setSelectedIds(new Set())}
+            />
+          )}
+        </>
+      ) : loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin mr-2" />
           Se încarcă pipeline-ul…
         </div>
       ) : error ? (
         <div className="py-16 text-center text-sm text-destructive">{error}</div>
+      ) : !loading && totalLeads === 0 && filterSource === "all" && filterAssigned === "all" && !searchQuery && !filterNoTask && !filterOverdue ? (
+        /* CRM-128: Full-page empty state when no leads at all */
+        <EmptyLeads onAddLead={() => setShowCreate(true)} />
       ) : (
-        <div
-          className="grid gap-3 min-h-[500px] overflow-x-auto"
-          style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(200px, 1fr))` }}
-        >
+        <>
+          {/* CRM-121: Mobile list — hidden on lg+, shown on mobile */}
+          <div className="lg:hidden">
+            <MobileLeadList
+              leads={Object.values(grouped).flat().filter((lead) => {
+                if (filterSource !== "all" && lead.source !== filterSource) return false;
+                if (filterAssigned !== "all" && lead.assignedTo !== filterAssigned) return false;
+                if (searchQuery.trim()) {
+                  const q = searchQuery.toLowerCase().trim();
+                  const phoneQ = q.replace(/\D/g, "");
+                  const nameMatch = lead.fullName.toLowerCase().includes(q);
+                  const phoneMatch = phoneQ.length > 0 && (lead.phone ?? "").replace(/\D/g, "").includes(phoneQ);
+                  if (!nameMatch && !phoneMatch) return false;
+                }
+                if (filterNoTask && lead.nextTask !== null && lead.nextTask !== undefined) return false;
+                if (filterOverdue) {
+                  const isOverdue = lead.nextTask?.dueAt != null && new Date(lead.nextTask.dueAt) < new Date();
+                  if (!isOverdue) return false;
+                }
+                return true;
+              })}
+              stages={stages}
+              onTap={(id) => navigate(`/app/leads/${id}`)}
+              onRefresh={() => void fetchAll()}
+              onError={(m) => setToast({ kind: "error", message: m })}
+            />
+
+            {/* CRM-122: FAB — quick-add button on mobile */}
+            <button
+              type="button"
+              onClick={() => setShowQuickAdd(true)}
+              className="lg:hidden fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Adaugă lead rapid"
+            >
+              <Plus className="h-7 w-7" />
+            </button>
+          </div>
+
+          {/* Kanban — hidden on mobile (< lg), shown on desktop */}
+          <div
+            className="hidden lg:grid gap-3 min-h-[500px] overflow-x-auto"
+            style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(200px, 1fr))` }}
+          >
           {stages.map((stage) => {
             const leadsHere = getFilteredLeads(stage.key);
             const isHover = hoverStage === stage.key && draggedId !== null;
@@ -349,7 +609,8 @@ export function LeadsPage() {
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Modals */}
@@ -399,6 +660,22 @@ export function LeadsPage() {
         />
       )}
 
+      {/* CRM-122: Quick-add bottom sheet for mobile */}
+      {showQuickAdd && (
+        <QuickAddSheet
+          onClose={() => setShowQuickAdd(false)}
+          onSaved={() => {
+            setShowQuickAdd(false);
+            setToast({ kind: "success", message: "Lead adăugat în pipeline" });
+            void fetchAll();
+          }}
+          onError={(m) => {
+            setShowQuickAdd(false);
+            setToast({ kind: "error", message: m });
+          }}
+        />
+      )}
+
       {toast && (
         <div
           role="status"
@@ -411,6 +688,14 @@ export function LeadsPage() {
         >
           {toast.message}
         </div>
+      )}
+
+      {/* CRM-128: Onboarding checklist (only for new tenants with < 5 leads) */}
+      {sessionData?.tenant.id && (
+        <OnboardingChecklist
+          tenantId={sessionData.tenant.id}
+          totalLeads={totalLeads}
+        />
       )}
     </AppShell>
   );
@@ -504,7 +789,493 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
           Convertit
         </div>
       )}
+      {/* CRM-124: SLA badge — show only for active non-converted leads */}
+      {!lead.convertedToStudentId && lead.slaBadge && lead.slaBadge !== "green" && (
+        <div className={cn(
+          "mt-1 text-[9px] font-bold inline-flex items-center rounded px-1.5 py-0.5",
+          lead.slaBadge === "red"
+            ? "bg-destructive/10 text-destructive"
+            : "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
+        )} aria-label={`SLA ${lead.slaBadge === "red" ? "depășit" : "atenție"}`}>
+          SLA {lead.slaBadge === "red" ? "!!!" : "!"}
+        </div>
+      )}
     </button>
+  );
+}
+
+// ─── Lead List View (CRM-117) ─────────────────────────────────────────────────
+
+interface LeadListViewProps {
+  items: (Lead & { nextTask?: { dueAt: string | null; title: string } | null })[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  sort: ListSortCol;
+  dir: "asc" | "desc";
+  loading: boolean;
+  stages: import("@/lib/api/pipeline").PipelineStage[];
+  /** CRM-118: bulk selection */
+  selectedIds?: Set<string>;
+  onSelectChange?: (id: string, checked: boolean) => void;
+  onSelectAll?: (checked: boolean) => void;
+  onSort: (col: ListSortCol, dir: "asc" | "desc") => void;
+  onPage: (p: number) => void;
+  onRowClick: (id: string) => void;
+  onStageChange: (id: string, stage: string) => Promise<void>;
+}
+
+const STAGE_LABEL: Record<string, string> = {
+  new: "Lead nou", contacted: "Contactat", trial: "Trial", paid: "Client", lost: "Pierdut",
+};
+
+function LeadListView({ items, total, page, pageSize, totalPages, sort, dir, loading, stages, selectedIds = new Set(), onSelectChange, onSelectAll, onSort, onPage, onRowClick, onStageChange }: LeadListViewProps) {
+  const [stageEditing, setStageEditing] = useState<string | null>(null);
+
+  const handleSort = (col: ListSortCol) => {
+    if (sort === col) {
+      onSort(col, dir === "asc" ? "desc" : "asc");
+    } else {
+      onSort(col, "asc");
+    }
+  };
+
+  const SortIcon = ({ col }: { col: ListSortCol }) => {
+    if (sort !== col) return <ChevronUp className="h-3 w-3 opacity-30" aria-hidden="true" />;
+    return dir === "asc"
+      ? <ChevronUp className="h-3 w-3 text-primary" aria-hidden="true" />
+      : <ChevronDown className="h-3 w-3 text-primary" aria-hidden="true" />;
+  };
+
+  const ThSort = ({ col, children }: { col: ListSortCol; children: React.ReactNode }) => (
+    <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 hover:text-primary transition-colors"
+        onClick={() => handleSort(col)}
+        aria-label={`Sortează după ${String(col)}`}
+      >
+        {children}
+        <SortIcon col={col} />
+      </button>
+    </th>
+  );
+
+  const formatEur = (cents: number) =>
+    cents === 0
+      ? null
+      : new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(cents / 100);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+        Se încarcă lista…
+      </div>
+    );
+  }
+
+  if (!loading && items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground">
+        <LayoutList className="h-8 w-8 opacity-30" aria-hidden="true" />
+        <p className="text-sm">Niciun lead găsit. Modifică filtrele sau adaugă un lead nou.</p>
+      </div>
+    );
+  }
+
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Table */}
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
+        <table className="w-full text-sm" aria-label={`Lista leaduri — ${total} total`}>
+          <thead>
+            <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
+              {/* CRM-118: Select-all checkbox */}
+              {onSelectChange && (
+                <th className="px-3 py-2 w-8">
+                  <input
+                    type="checkbox"
+                    checked={items.length > 0 && items.every((l) => selectedIds.has(l.id))}
+                    onChange={(e) => onSelectAll?.(e.target.checked)}
+                    aria-label="Selectează toate lead-urile de pe pagină"
+                    className="h-4 w-4 rounded accent-primary"
+                  />
+                </th>
+              )}
+              <ThSort col="fullName">Nume / Companie</ThSort>
+              <ThSort col="stage">Stadiu</ThSort>
+              <ThSort col="source">Sursă</ThSort>
+              <ThSort col="valueCents">Valoare</ThSort>
+              <ThSort col="debtCents">Datorie</ThSort>
+              <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Următor task</th>
+              <ThSort col="createdAt">Creat</ThSort>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((lead) => {
+              const isOverdue = lead.nextTask?.dueAt != null && new Date(lead.nextTask.dueAt) < new Date();
+              const daysOverdue = isOverdue
+                ? Math.floor((Date.now() - new Date(lead.nextTask!.dueAt!).getTime()) / 86400000)
+                : 0;
+              const isSelected = selectedIds.has(lead.id);
+
+              return (
+                <tr
+                  key={lead.id}
+                  className={cn(
+                    "border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer transition-colors group",
+                    isSelected && "bg-primary/5"
+                  )}
+                  onClick={() => onRowClick(lead.id)}
+                >
+                  {/* CRM-118: Row checkbox */}
+                  {onSelectChange && (
+                    <td className="px-3 py-2.5 w-8" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => onSelectChange(lead.id, e.target.checked)}
+                        aria-label={`Selectează ${lead.fullName}`}
+                        className="h-4 w-4 rounded accent-primary"
+                      />
+                    </td>
+                  )}
+                  {/* Name / company */}
+                  <td className="px-3 py-2.5 max-w-[200px]">
+                    <p className="font-semibold truncate">{lead.dealName ?? lead.fullName}</p>
+                    {lead.company && <p className="text-[11px] text-muted-foreground truncate italic">{lead.company}</p>}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {lead.phone && <Phone className="h-2.5 w-2.5 text-muted-foreground/60" aria-label="Are telefon" />}
+                      {lead.email && <Mail className="h-2.5 w-2.5 text-muted-foreground/60" aria-label="Are email" />}
+                    </div>
+                  </td>
+
+                  {/* Stage — inline editable dropdown */}
+                  <td
+                    className="px-3 py-2.5"
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Stadiu: ${STAGE_LABEL[lead.stage] ?? lead.stage}`}
+                  >
+                    {stageEditing === lead.id ? (
+                      <select
+                        autoFocus
+                        value={lead.stage}
+                        onChange={async (e) => {
+                          setStageEditing(null);
+                          await onStageChange(lead.id, e.target.value);
+                        }}
+                        onBlur={() => setStageEditing(null)}
+                        className="text-xs rounded border border-input bg-background px-1.5 py-1"
+                        aria-label="Schimbă stadiu"
+                      >
+                        {stages.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                        {/* Fallback for default stages if no custom stages */}
+                        {stages.length === 0 && (
+                          <>
+                            <option value="new">Lead nou</option>
+                            <option value="contacted">Contactat</option>
+                            <option value="trial">Trial</option>
+                            <option value="paid">Client</option>
+                            <option value="lost">Pierdut</option>
+                          </>
+                        )}
+                      </select>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setStageEditing(lead.id)}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold border border-border/60 hover:border-primary/50 transition-colors"
+                        aria-label={`Stadiu ${STAGE_LABEL[lead.stage] ?? lead.stage} — click pentru a edita`}
+                      >
+                        {STAGE_LABEL[lead.stage] ?? lead.stage}
+                      </button>
+                    )}
+                  </td>
+
+                  {/* Source */}
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                    {SOURCE_LABEL[lead.source] ?? lead.source}
+                  </td>
+
+                  {/* Value */}
+                  <td className="px-3 py-2.5 text-xs font-semibold tabular-nums whitespace-nowrap">
+                    {formatEur(lead.valueCents ?? 0) ?? <span className="text-muted-foreground">—</span>}
+                  </td>
+
+                  {/* Debt */}
+                  <td className="px-3 py-2.5 text-xs tabular-nums whitespace-nowrap">
+                    {(lead.debtCents ?? 0) > 0
+                      ? <span className="text-destructive font-semibold">{formatEur(lead.debtCents)}</span>
+                      : <span className="text-muted-foreground">—</span>
+                    }
+                  </td>
+
+                  {/* Next task */}
+                  <td className="px-3 py-2.5 text-xs whitespace-nowrap">
+                    {lead.nextTask ? (
+                      <span className={cn(
+                        "inline-flex items-center gap-1 font-semibold",
+                        isOverdue ? "text-destructive" : "text-amber-600 dark:text-amber-400"
+                      )}>
+                        <Clock className="h-3 w-3" aria-hidden="true" />
+                        {isOverdue
+                          ? `${daysOverdue}d restant`
+                          : lead.nextTask.dueAt
+                            ? new Date(lead.nextTask.dueAt).toLocaleDateString("ro-RO", { day: "2-digit", month: "short" })
+                            : lead.nextTask.title.slice(0, 20)}
+                      </span>
+                    ) : (
+                      <span className="text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded px-1.5 py-0.5 font-semibold">
+                        Fără task
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Created */}
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                    {new Date(lead.createdAt).toLocaleDateString("ro-RO", { day: "2-digit", month: "short", year: "2-digit" })}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{start}–{end} din {total} leaduri</span>
+        <div className="flex items-center gap-1" role="navigation" aria-label="Paginare">
+          <button
+            type="button"
+            onClick={() => onPage(page - 1)}
+            disabled={page <= 1}
+            className="inline-flex items-center justify-center rounded-md border border-border p-1.5 hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Pagina anterioară"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+          <span className="px-2 font-semibold text-foreground">{page} / {totalPages}</span>
+          <button
+            type="button"
+            onClick={() => onPage(page + 1)}
+            disabled={page >= totalPages}
+            className="inline-flex items-center justify-center rounded-md border border-border p-1.5 hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Pagina următoare"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CRM-118: Bulk Action Toolbar ─────────────────────────────────────────────
+
+interface BulkActionToolbarProps {
+  count: number;
+  stages: import("@/lib/api/pipeline").PipelineStage[];
+  loading: boolean;
+  showStagePanel: boolean;
+  showTagPanel: boolean;
+  showAssignPanel: boolean;
+  onToggleStage: () => void;
+  onToggleTag: () => void;
+  onToggleAssign: () => void;
+  onStageConfirm: (stage: string, lostReason?: string | null) => void;
+  onTagConfirm: (tag: string) => void;
+  onAssignConfirm: (assignedTo: string | null) => void;
+  onDelete: () => void;
+  onClearSelection: () => void;
+}
+
+function BulkActionToolbar({
+  count, stages, loading, showStagePanel, showTagPanel, showAssignPanel,
+  onToggleStage, onToggleTag, onToggleAssign,
+  onStageConfirm, onTagConfirm, onAssignConfirm,
+  onDelete, onClearSelection,
+}: BulkActionToolbarProps) {
+  const [stageValue, setStageValue] = useState("");
+  const [lostReason, setLostReason] = useState("");
+  const [tagValue, setTagValue] = useState("");
+  const [assignValue, setAssignValue] = useState("");
+
+  const DEFAULT_STAGES = [
+    { key: "new", label: "Lead nou", isLost: false },
+    { key: "contacted", label: "Contactat", isLost: false },
+    { key: "trial", label: "Trial", isLost: false },
+    { key: "paid", label: "Client", isLost: false },
+    { key: "lost", label: "Pierdut", isLost: true },
+  ];
+  const allStages = stages.length > 0 ? stages : DEFAULT_STAGES;
+  const selectedStageIsLost = (allStages as Array<{ key: string; label: string; isLost?: boolean }>).find((s) => s.key === stageValue)?.isLost ?? stageValue === "lost";
+
+  return (
+    <div
+      role="toolbar"
+      aria-label={`Acțiuni pentru ${count} lead-uri selectate`}
+      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-2xl"
+    >
+      <div className="rounded-2xl border border-border bg-card/95 backdrop-blur shadow-xl p-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-bold text-primary mr-1">{count} selectate</span>
+
+          <button
+            type="button"
+            onClick={onToggleStage}
+            disabled={loading}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold border transition-colors",
+              showStagePanel ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"
+            )}
+          >
+            <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            Schimbă stadiu
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleAssign}
+            disabled={loading}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold border transition-colors",
+              showAssignPanel ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"
+            )}
+          >
+            <UserCog className="h-3.5 w-3.5" aria-hidden="true" />
+            Reasignează
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleTag}
+            disabled={loading}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold border transition-colors",
+              showTagPanel ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"
+            )}
+          >
+            <Tag className="h-3.5 w-3.5" aria-hidden="true" />
+            Tag
+          </button>
+
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold border border-destructive/50 text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Șterge (GDPR)
+          </button>
+
+          <button
+            type="button"
+            onClick={onClearSelection}
+            disabled={loading}
+            className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted border border-transparent"
+            aria-label="Anulează selecția"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Stage panel */}
+        {showStagePanel && (
+          <div className="mt-3 pt-3 border-t border-border flex items-end gap-2 flex-wrap">
+            <div className="flex-1 min-w-[140px]">
+              <label htmlFor="bulk-stage" className="block text-xs font-semibold mb-1">Stadiu nou</label>
+              <select
+                id="bulk-stage"
+                value={stageValue}
+                onChange={(e) => { setStageValue(e.target.value); setLostReason(""); }}
+                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+              >
+                <option value="">— alege —</option>
+                {allStages.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </div>
+            {selectedStageIsLost && (
+              <div className="flex-1 min-w-[140px]">
+                <label htmlFor="bulk-lost-reason" className="block text-xs font-semibold mb-1">Motiv pierdere *</label>
+                <input
+                  id="bulk-lost-reason"
+                  type="text"
+                  value={lostReason}
+                  onChange={(e) => setLostReason(e.target.value)}
+                  placeholder="ex: Preț prea mare"
+                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                />
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={!stageValue || loading || (selectedStageIsLost && !lostReason.trim())}
+              onClick={() => { onStageConfirm(stageValue, selectedStageIsLost ? lostReason : null); setStageValue(""); setLostReason(""); }}
+              className="rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aplică"}
+            </button>
+          </div>
+        )}
+
+        {/* Tag panel */}
+        {showTagPanel && (
+          <div className="mt-3 pt-3 border-t border-border flex items-end gap-2">
+            <div className="flex-1">
+              <label htmlFor="bulk-tag" className="block text-xs font-semibold mb-1">Tag nou</label>
+              <input
+                id="bulk-tag"
+                type="text"
+                value={tagValue}
+                onChange={(e) => setTagValue(e.target.value)}
+                placeholder="ex: urgent, vip"
+                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={!tagValue.trim() || loading}
+              onClick={() => { onTagConfirm(tagValue.trim()); setTagValue(""); }}
+              className="rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aplică"}
+            </button>
+          </div>
+        )}
+
+        {/* Assign panel */}
+        {showAssignPanel && (
+          <div className="mt-3 pt-3 border-t border-border flex items-end gap-2">
+            <div className="flex-1">
+              <label htmlFor="bulk-assign" className="block text-xs font-semibold mb-1">UUID responsabil (gol = elimină)</label>
+              <input
+                id="bulk-assign"
+                type="text"
+                value={assignValue}
+                onChange={(e) => setAssignValue(e.target.value)}
+                placeholder="UUID utilizator sau gol"
+                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm font-mono"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => { onAssignConfirm(assignValue.trim() || null); setAssignValue(""); }}
+              className="rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aplică"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

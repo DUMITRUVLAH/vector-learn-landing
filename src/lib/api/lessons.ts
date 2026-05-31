@@ -12,6 +12,8 @@ export interface Lesson {
   courseName: string;
   courseLevel: string | null;
   teacherName: string;
+  /** SCHED-501: Optional room assignment */
+  roomId?: string | null;
 }
 
 export interface Teacher {
@@ -45,6 +47,7 @@ export function createLesson(input: {
   teacherId: string;
   scheduledAt: string;
   durationMinutes: number;
+  roomId?: string | null;
 }): Promise<Lesson> {
   return api<Lesson>("/api/lessons", {
     method: "POST",
@@ -62,4 +65,32 @@ export function listTeachers(): Promise<{ items: Teacher[] }> {
 
 export function listCourses(): Promise<{ items: Course[] }> {
   return api<{ items: Course[] }>("/api/courses");
+}
+
+export type AttendanceStatus = "present" | "absent" | "late" | "excused" | "pending";
+
+export interface LessonStudent {
+  studentLessonId: string;
+  studentId: string;
+  attendanceStatus: AttendanceStatus;
+  markedBy: string | null;
+  markedAt: string | null;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+}
+
+export function getLessonStudents(lessonId: string): Promise<{ items: LessonStudent[] }> {
+  return api<{ items: LessonStudent[] }>(`/api/lessons/${lessonId}/students`);
+}
+
+export function markAttendance(
+  lessonId: string,
+  studentId: string,
+  attendanceStatus: Exclude<AttendanceStatus, "pending">
+): Promise<LessonStudent> {
+  return api<LessonStudent>(`/api/lessons/${lessonId}/students/${studentId}/attendance`, {
+    method: "PATCH",
+    body: JSON.stringify({ attendanceStatus }),
+  });
 }

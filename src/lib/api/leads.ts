@@ -44,6 +44,8 @@ export interface Lead {
   dealName?: string | null;
   /** Next open task (from pipeline endpoint, augmented server-side) */
   nextTask?: { dueAt: string | null; title: string } | null;
+  /** CRM-124: SLA response time badge — computed server-side */
+  slaBadge?: "green" | "yellow" | "red" | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -85,8 +87,112 @@ export interface PipelineResponse {
   totalValueCents: number;
 }
 
+/** CRM-117: Paginated list response */
+export interface LeadsListResponse {
+  items: (Lead & { nextTask?: { dueAt: string | null; title: string } | null })[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export type ListSortCol =
+  | "fullName" | "company" | "stage" | "source"
+  | "valueCents" | "debtCents" | "createdAt" | "updatedAt";
+
+/** CRM-117: Fetch paginated + sorted lead list */
+export function fetchLeadsList(params: {
+  page?: number;
+  pageSize?: number;
+  sort?: ListSortCol;
+  dir?: "asc" | "desc";
+  search?: string;
+  source?: string;
+  assignedTo?: string;
+  stage?: string;
+}): Promise<LeadsListResponse> {
+  const qs = new URLSearchParams();
+  qs.set("view", "list");
+  if (params.page) qs.set("page", String(params.page));
+  if (params.pageSize) qs.set("pageSize", String(params.pageSize));
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.dir) qs.set("dir", params.dir);
+  if (params.search) qs.set("search", params.search);
+  if (params.source && params.source !== "all") qs.set("source", params.source);
+  if (params.assignedTo && params.assignedTo !== "all") qs.set("assignedTo", params.assignedTo);
+  if (params.stage && params.stage !== "all") qs.set("stage", params.stage);
+  return api<LeadsListResponse>(`/api/leads?${qs.toString()}`);
+}
+
 export function fetchPipeline(): Promise<PipelineResponse> {
   return api<PipelineResponse>("/api/leads/pipeline");
+}
+
+// ─── CRM-120: Today dashboard ─────────────────────────────────────────────────
+
+export interface TodayDashboardItem {
+  id: string;
+  fullName: string;
+  stage: string;
+  phone: string | null;
+  interestCourse: string | null;
+  valueCents: number;
+  reason: string;
+}
+
+export interface TodayDashboardTask {
+  taskId: string;
+  taskTitle: string;
+  dueAt: string | null;
+  leadId: string;
+  leadFullName: string;
+  leadStage: string;
+  leadPhone: string | null;
+  leadInterestCourse: string | null;
+  leadValueCents: number;
+}
+
+export interface TodayNBAItem {
+  id: string;
+  fullName: string;
+  stage: string;
+  phone: string | null;
+  interestCourse: string | null;
+  valueCents: number;
+  score: number | null;
+  ageDays: number;
+}
+
+/** CRM-124: SLA badge color for response time */
+export type SlaBadge = "green" | "yellow" | "red";
+
+export interface TodayDashboardResponse {
+  overdueOrDueToday: TodayDashboardTask[];
+  newUncontacted: (TodayDashboardItem & { source: string; createdAt: string; slaBadge?: SlaBadge; minutesSinceCreated?: number })[];
+  followUpNeeded: (TodayDashboardItem & { updatedAt: string })[];
+  nextBestAction: TodayNBAItem[];
+  /** CRM-124: Neglected leads (no contact > rot_days) */
+  neglected?: (TodayDashboardItem & { daysSinceCreated: number })[];
+  totalActions: number;
+  /** CRM-124: SLA config from tenant settings */
+  slaConfig?: { slaHotMinutes: number; slaDefaultHours: number; rotDays: number };
+}
+
+export function fetchTodayDashboard(): Promise<TodayDashboardResponse> {
+  return api<TodayDashboardResponse>("/api/leads/today");
+}
+
+/** CRM-124: Fetch SLA config for current tenant */
+export function fetchSlaConfig(): Promise<{ slaHotMinutes: number; slaDefaultHours: number; rotDays: number }> {
+  return api<{ slaHotMinutes: number; slaDefaultHours: number; rotDays: number }>("/api/leads/today/sla-config");
+}
+
+/** CRM-124: Update SLA config */
+export function updateSlaConfig(input: { slaHotMinutes?: number; slaDefaultHours?: number; rotDays?: number }): Promise<{ slaHotMinutes: number; slaDefaultHours: number; rotDays: number }> {
+  return api<{ slaHotMinutes: number; slaDefaultHours: number; rotDays: number }>("/api/leads/today/sla-config", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export function getLead(id: string): Promise<Lead> {
@@ -359,6 +465,30 @@ export function upsertFieldValue(
   input: { fieldId: string; value: string | null }
 ): Promise<LeadFieldValue> {
   return api<LeadFieldValue>(`/api/leads/${leadId}/field-values`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// ─── CRM-118: Bulk actions ────────────────────────────────────────────────────
+
+export interface BulkActionResult {
+  processed: number;
+  failed: number;
+  errors?: string[];
+}
+
+export function bulkAction(input: {
+  ids: string[];
+  action: "stage" | "assign" | "tag" | "delete";
+  payload?: {
+    stage?: string;
+    lostReason?: string | null;
+    assignedTo?: string | null;
+    tag?: string;
+  };
+}): Promise<BulkActionResult> {
+  return api<BulkActionResult>("/api/leads/bulk-action", {
     method: "POST",
     body: JSON.stringify(input),
   });

@@ -16,7 +16,7 @@ Read one spec from `backlog/specs/<ID>.md`, implement it completely, and report 
 2. **Use the design system.** Colors via tokens (`bg-primary`, `text-muted-foreground`), spacing via Tailwind scale, radius/shadow from `var(--radius)` / `shadow-*`. NEVER hardcode hex values in JSX.
 3. **No new deps without justification.** Prefer inline SVG over chart libs, native HTML5 DnD over libraries. If you must add a dep, document why in the PR description.
 4. **Follow the file structure** declared in the spec. If extra files are needed, place them under `src/components/modules/<slug>/`.
-5. **Tests are mandatory.** Every spec lists "Tests required" — implement them in vitest. If vitest is not configured, configure it first (one-time setup is acceptable).
+5. **Tests: implement only fixes, not authoring.** The `test-writer` agent authors tests independently from the spec. Your job is to write implementation code that makes those tests pass. If you are invoked as FIXER (after a TEST gate failure), you may add targeted tests to plug specific coverage gaps — but never delete or weaken existing tests to reach coverage thresholds.
 6. **Strict TypeScript.** Zero `any`. Use `unknown` + narrowing if needed. All component props typed.
 7. **Dark mode parity.** Every new component must render correctly in `.dark` class. Test mentally before claiming done.
 8. **Accessibility baseline:**

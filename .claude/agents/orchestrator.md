@@ -31,7 +31,7 @@ The owner reviews PRs on their own schedule, in parallel. Do not wait for PR app
 ## Pipeline (per item)
 
 ```
-PICK → BUILD → REVIEW⇄IMPROVE(≤3) → TEST⇄FIX(≤2) → PERSONA_MANAGER → PERSONA_STUDENT → COMMIT → PR → MARK_DONE → LOOP
+PICK → BUILD → TEST-WRITER → REVIEW⇄IMPROVE(≤3) → TEST⇄FIX(≤2) → PERSONA_MANAGER → PERSONA_STUDENT → COMMIT → PR → MARK_DONE → LOOP
 ```
 
 `REVIEW⇄IMPROVE` = reviewer(s) give findings, improver applies them, re-review until clean.
@@ -43,15 +43,52 @@ driver-portability check (see test-runner) — the three gates that catch integr
 1. Read `backlog/STATE.json`
 2. Find first item where `status == "pending"`
 3. If none → check for `blocked` items, attempt retry on those whose `attempts < 2`
-4. If still none → exit with message "ALL_DONE"
+4. If still none → **GOTO Step 1b (PLAN)**. Do NOT exit with ALL_DONE while NIGHT-PLAN still has unbuilt modules.
 5. Update STATE.json: set `current_item`, status `in_progress`, increment `attempts`, bump `iterations`
+
+### Step 1b — PLAN (auto-generate backlog when empty)
+Triggered only when no `pending` item exists and no `blocked` item is retryable.
+
+**Source of direction:**
+1. `backlog/NIGHT-PLAN.md` — module order: Finanțe `FIN-6xx`, Multifilale `BRANCH-7xx`, Settings `SET-8xx`, Integrări `INT-9xx`, AI `AI-Axx`. Pick the first module whose prefix has zero items in STATE.json.
+2. `backlog/user-stories/<module>.md` — behavior contract for that module (what items must cover).
+3. Persona feedback in `backlog/reports/*-manager.md` and `*-student.md` — friction/DISLIKES become candidate items.
+
+**What the planner does:**
+1. Determine next module (first in NIGHT-PLAN with no items in STATE).
+2. Derive **3–5 items** in dependency order, sized one-PR-each, from `user-stories/<module>.md`.
+3. For EACH item, write `backlog/specs/<ID>.md` with full template (frontmatter, Goal, User stories, Acceptance criteria, Files, Tests, DoD):
+   - **Tests section** must contain:
+     - 3–6 Given/When/Then scenarios in the format: `- **T-<ID>-N** [blocant|normal] Given..., When..., Then...`
+     - For backend items: one `[blocant]` scenario each for migration gate, live API smoke (login + endpoint → 200), and DB-portability (result shape correct)
+     - For UI items: one `[blocant]` for render-without-crash, one `[normal]` for the main interaction
+     - Mark scenarios blocking (`[blocant]`) if failure means the feature is broken; `[normal]` for degraded-but-usable
+   - **User stories section** must list 2–4 "Ca <rol>, vreau să <acțiune>, pentru că <motiv>" rows drawn from `user-stories/<module>.md`
+4. Append the new module's scenarios to `backlog/crm/TEST-SCENARIOS.md` (or create `backlog/<module>/TEST-SCENARIOS.md` if it's a new module) under a `## <MODULE> — <Name>` heading, using the same T-<ID>-N `[blocant]` format as the CRM file.
+5. Add each item to `backlog/STATE.json` (`status: "pending"`, `attempts: 0`, `blockers: []`, `spec`, `milestone`, `phase`, `depends_on`) and a row to `backlog/BACKLOG.md` under a new "Active milestone" heading.
+6. Append ONE line to `## Progress log` in `backlog/NIGHT-PLAN.md`: `- planner: generated <MODULE> items <ID..ID> from user-stories/<module>.md`.
+7. Set `active_milestone` + update `milestone_status` in STATE.json.
+8. GOTO Step 1 and pick the first new item.
+
+**Genuine ALL_DONE:** if every module in NIGHT-PLAN already has items in STATE.json → exit with `ORCHESTRATOR_RUN_SUMMARY`, `stop_reason: all_done`.
+
+**Bounded-batch interaction:** spec generation doesn't count toward the 3-item cap. If a module yields 4 specs but cap allows 3 builds, build 3 and leave the 4th `pending` for the next run.
 
 ### Step 2 — BUILD
 Invoke `feature-builder` agent via Agent tool. Pass the spec file path. Wait for `BUILDER_RESULT`.
 
-- `success` → continue to REVIEW
+- `success` → continue to TEST-WRITER
 - `partial` → mark item `blocked`, write report, GOTO Step 1 (next item)
 - `blocked` → same as partial
+
+### Step 2b — TEST-WRITER (independent test authoring — TDD gate)
+Invoke `test-writer` agent. Pass the spec file path and ID. The test-writer does NOT read implementation files — it writes tests from the spec alone.
+
+Wait for `TEST_WRITER_RESULT`:
+- `success` → continue to REVIEW. The written tests are now part of the working tree.
+- If test-writer fails to produce tests (spec too vague) → note in report, continue to REVIEW anyway (non-blocking failure of the test-writer itself; the fixer will address coverage gaps).
+
+The tests written here are what test-runner will execute in Step 4. The intention: tests are written independently of the implementation, so they catch behavior gaps rather than rubber-stamping the code.
 
 ### Step 3 — REVIEW → IMPROVE (iterate until clean, max 3 cycles)
 A two-reviewer pass, then an improver applies the feedback, then re-review. This is the
@@ -77,8 +114,19 @@ Save each review to `backlog/reports/<ID>-reviewer.md` (append the cycle number;
 ### Step 4 — TEST (repair, don't skip — CLAUDE.md §0.2)
 Invoke `test-runner`. Pass the ID.
 
+test-runner now runs these gates in order (see its agent file for exact commands):
+1. Build + typecheck + lint
+2. Unit tests (vitest) — must pass
+3. Migration discipline gate (BLOCKING)
+4. API integration smoke (BLOCKING)
+5. DB portability check (BLOCKING)
+6. **Coverage gate (BLOCKING): ≥ 80% on new code** — `npm test -- --run --coverage`. If below 80%, the fixer must add tests (not remove lines) until coverage rises.
+7. **Playwright E2E gate (BLOCKING):** `npm run test:e2e` — all E2E tests written by test-writer must pass. Any Playwright failure is treated the same as a red unit test.
+8. Lighthouse ≥ 0.9 (skip if no Chrome)
+9. Axe a11y: 0 critical+serious violations
+
 - `PASS` → continue to PERSONA_MANAGER
-- `FAIL` → this is a real bug, not a stop. Invoke `feature-builder` as the **FIXER** with the failing gate output (especially `MIGRATION_GATE` / `INTEGRATION_SMOKE` / `PORTABILITY`), then re-run `test-runner`. Repeat up to **2 fix cycles**. Only if it still fails AND the cause is clearly structural → block with `backlog/reports/<ID>-tests.md`. **Never advance to PR with a red blocking gate.**
+- `FAIL` → this is a real bug, not a stop. Invoke `feature-builder` as the **FIXER** with the failing gate output (especially `MIGRATION_GATE` / `INTEGRATION_SMOKE` / `PORTABILITY` / `COVERAGE` / `E2E`), then re-run `test-runner`. Repeat up to **2 fix cycles**. Only if it still fails AND the cause is clearly structural → block with `backlog/reports/<ID>-tests.md`. **Never advance to PR with a red blocking gate.**
 
 ### Step 5 — PERSONA_MANAGER
 Invoke `persona-manager`. Pass the ID.

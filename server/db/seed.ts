@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { db, closeDb } from "./client";
-import { tenants, users, students, teachers, courses, lessons } from "./schema";
+import { tenants, users, students, teachers, courses, lessons, leads } from "./schema";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -118,6 +118,25 @@ async function seed() {
     .returning();
 
   console.log(`✅ ${lessonRows.length} lessons created`);
+
+  // UX-704: Seed realistic CRM leads spread across pipeline stages so the demo looks alive.
+  const norm = (p: string) => p.replace(/\D/g, "").slice(-9);
+  const leadRows = await db
+    .insert(leads)
+    .values([
+      { tenantId: tenant.id, fullName: "Andrei Munteanu", phone: "+373 79 112 233", phoneNormalized: norm("79112233"), email: "andrei.m@gmail.com", interestCourse: "Engleză B2", stage: "new", source: "facebook_ad", valueCents: 28000, utmCampaign: "spring26-eng" },
+      { tenantId: tenant.id, fullName: "Cristina Rusu", phone: "+373 68 445 566", phoneNormalized: norm("68445566"), email: "cristina.rusu@gmail.com", interestCourse: "Python avansat", stage: "new", source: "webform", valueCents: 42000 },
+      { tenantId: tenant.id, fullName: "Mihai Ceban", phone: "+373 60 778 899", phoneNormalized: norm("60778899"), email: "mihai.ceban@mail.md", interestCourse: "Engleză B2", stage: "contacted", source: "google_ads", valueCents: 28000, utmCampaign: "search-eng" },
+      { tenantId: tenant.id, fullName: "Elena Popescu", phone: "+373 79 334 455", phoneNormalized: norm("79334455"), email: "elena.p@gmail.com", interestCourse: "Pian — intermediar", stage: "contacted", source: "referral", valueCents: 60000 },
+      { tenantId: tenant.id, fullName: "Victor Țurcanu", phone: "+373 69 221 100", phoneNormalized: norm("69221100"), email: "victor.t@gmail.com", interestCourse: "Python avansat", stage: "trial", source: "instagram", valueCents: 42000 },
+      { tenantId: tenant.id, fullName: "Daniela Cojocaru", phone: "+373 78 556 677", phoneNormalized: norm("78556677"), email: "daniela.c@mail.md", interestCourse: "Engleză B2", stage: "trial", source: "facebook_ad", valueCents: 28000, utmCampaign: "spring26-eng" },
+      { tenantId: tenant.id, fullName: "S.R.L. TechMinds", phone: "+373 22 887 766", phoneNormalized: norm("22887766"), email: "office@techminds.md", interestCourse: "Python avansat (corporate)", stage: "trial", source: "manual", valueCents: 210000, company: "S.R.L. TechMinds", dealName: "Training Python echipă TechMinds (5 pers.)" },
+      { tenantId: tenant.id, fullName: "Ana Gríu", phone: "+373 60 998 877", phoneNormalized: norm("60998877"), email: "ana.griu@gmail.com", interestCourse: "Pian — intermediar", stage: "lost", source: "phone_in", valueCents: 60000, lostReason: "Preț prea mare" },
+      { tenantId: tenant.id, fullName: "Sergiu Balan", phone: "+373 79 010 020", phoneNormalized: norm("79010020"), email: "sergiu.b@gmail.com", interestCourse: "Engleză B2", stage: "lost", source: "webform", valueCents: 28000, lostReason: "S-a înscris în altă parte" },
+    ])
+    .returning();
+  console.log(`✅ ${leadRows.length} leads created`);
+
   console.log(`\n📌 Demo credentials:`);
   console.log(`   email: ${admin.email}`);
   console.log(`   password: ${DEMO_PASSWORD}`);

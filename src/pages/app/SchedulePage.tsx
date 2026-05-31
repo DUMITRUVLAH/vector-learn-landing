@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
-import { Loader2, Plus, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2 } from "lucide-react";
+import { useEffect, useState, useMemo, useCallback, Fragment } from "react";
+import { Loader2, Plus, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw, Users, Lock } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -10,10 +10,16 @@ import {
   listCourses,
   createLesson,
   cancelLesson,
+  getLessonStudents,
+  markAttendance,
   type Lesson,
   type Teacher,
   type Course,
+  type LessonStudent,
+  type AttendanceStatus,
 } from "@/lib/api/lessons";
+import { listRooms, type Room } from "@/lib/api/rooms";
+import { createRecurringLessons } from "@/lib/api/recurring";
 import { cn } from "@/lib/utils";
 
 const DAYS = ["Luni", "Marți", "Miercuri", "Joi", "Vineri", "Sâmbătă", "Duminică"];
@@ -60,11 +66,13 @@ export function SchedulePage() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<
     | { kind: "create"; day: number; hour: number }
     | { kind: "view"; lesson: Lesson }
+    | { kind: "recurring" }
     | null
   >(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
@@ -85,14 +93,16 @@ export function SchedulePage() {
     setLoading(true);
     setError(null);
     try {
-      const [lr, tr, cr] = await Promise.all([
+      const [lr, tr, cr, rr] = await Promise.all([
         listLessons(weekStart.toISOString(), weekEnd.toISOString()),
         listTeachers(),
         listCourses(),
+        listRooms(),
       ]);
       setLessons(lr.items);
       setTeachers(tr.items);
       setCourses(cr.items);
+      setRooms(rr.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare");
     } finally {
@@ -158,6 +168,15 @@ export function SchedulePage() {
     >
       <div className="mb-3 flex items-center justify-between">
         <p className="text-sm font-semibold">{labelForWeek}</p>
+        <button
+          type="button"
+          onClick={() => setModal({ kind: "recurring" })}
+          className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted"
+          aria-label="Adaugă lecție recurentă"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Repetă
+        </button>
       </div>
 
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -194,9 +213,8 @@ export function SchedulePage() {
               })}
 
               {HOURS.map((hour) => (
-                <>
+                <Fragment key={`hour-${hour}`}>
                   <div
-                    key={`hour-${hour}`}
                     className="border-b border-r border-border bg-muted/20 p-2 text-xs font-semibold text-muted-foreground"
                   >
                     {String(hour).padStart(2, "0")}:00
@@ -231,7 +249,7 @@ export function SchedulePage() {
                       </div>
                     );
                   })}
-                </>
+                </Fragment>
               ))}
             </div>
           </div>
@@ -245,6 +263,7 @@ export function SchedulePage() {
           hour={modal.hour}
           teachers={teachers}
           courses={courses}
+          rooms={rooms}
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null);
@@ -262,6 +281,21 @@ export function SchedulePage() {
           onCancelled={() => {
             setModal(null);
             setToast({ kind: "success", message: "Lecție anulată" });
+            void fetchAll();
+          }}
+          onError={(msg) => setToast({ kind: "error", message: msg })}
+        />
+      )}
+
+      {modal?.kind === "recurring" && (
+        <RecurringModal
+          teachers={teachers}
+          courses={courses}
+          rooms={rooms}
+          onClose={() => setModal(null)}
+          onSaved={(count) => {
+            setModal(null);
+            setToast({ kind: "success", message: `${count} lecții recurente programate` });
             void fetchAll();
           }}
           onError={(msg) => setToast({ kind: "error", message: msg })}
@@ -291,6 +325,7 @@ function CreateLessonModal({
   hour,
   teachers,
   courses,
+  rooms,
   onClose,
   onSaved,
   onError,
@@ -300,6 +335,7 @@ function CreateLessonModal({
   hour: number;
   teachers: Teacher[];
   courses: Course[];
+  rooms: Room[];
   onClose: () => void;
   onSaved: () => void;
   onError: (msg: string) => void;
@@ -312,6 +348,7 @@ function CreateLessonModal({
 
   const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
   const [teacherId, setTeacherId] = useState(teachers[0]?.id ?? "");
+  const [roomId, setRoomId] = useState("");
   const [date, setDate] = useState(formatDateInput(initialDate));
   const [time, setTime] = useState(`${String(hour).padStart(2, "0")}:00`);
   const [duration, setDuration] = useState(courses[0]?.durationMinutes ?? 60);
@@ -323,11 +360,13 @@ function CreateLessonModal({
     setSubmitting(true);
     const scheduledAt = new Date(`${date}T${time}:00`).toISOString();
     try {
-      await createLesson({ courseId, teacherId, scheduledAt, durationMinutes: duration });
+      await createLesson({ courseId, teacherId, scheduledAt, durationMinutes: duration, roomId: roomId || null });
       onSaved();
     } catch (err) {
       if (err instanceof ApiError && err.code === "teacher_double_booked") {
         onError("Profesorul este deja rezervat la această oră.");
+      } else if (err instanceof ApiError && err.code === "room_double_booked") {
+        onError("Sala este ocupată la această oră.");
       } else {
         onError("Nu pot salva lecția.");
       }
@@ -415,6 +454,23 @@ function CreateLessonModal({
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           />
         </div>
+        {rooms.length > 0 && (
+          <div>
+            <label htmlFor="m-room" className="block text-sm font-semibold mb-1.5">Sală (opțional)</label>
+            <select
+              id="m-room"
+              value={roomId}
+              onChange={(e) => setRoomId(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              aria-label="Selectează sală"
+            >
+              <option value="">— fără sală —</option>
+              {rooms.map((r) => (
+                <option key={r.id} value={r.id}>{r.name} (cap. {r.capacity})</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted">
             Anulează
@@ -425,6 +481,141 @@ function CreateLessonModal({
         </div>
       </form>
     </ModalShell>
+  );
+}
+
+const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
+  present: "Prezent",
+  absent: "Absent",
+  late: "Întârziat",
+  excused: "Motivat",
+  pending: "Neprecizat",
+};
+
+const ATTENDANCE_COLORS: Record<AttendanceStatus, string> = {
+  present: "text-success",
+  absent: "text-destructive",
+  late: "text-warning",
+  excused: "text-muted-foreground",
+  pending: "text-muted-foreground",
+};
+
+function AttendancePanel({ lesson, onError }: { lesson: Lesson; onError: (msg: string) => void }) {
+  const [students, setStudents] = useState<LessonStudent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState<string | null>(null);
+
+  const lessonDate = new Date(lesson.scheduledAt);
+  const now = new Date();
+  const hasStarted = lessonDate <= now;
+  const isLocked24h = lessonDate < new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  useEffect(() => {
+    if (!hasStarted) return;
+    getLessonStudents(lesson.id)
+      .then((r) => setStudents(r.items))
+      .catch(() => onError("Nu pot încărca lista de elevi."))
+      .finally(() => setLoading(false));
+  }, [lesson.id, hasStarted, onError]);
+
+  if (!hasStarted) {
+    return (
+      <div className="mt-4 pt-4 border-t border-border">
+        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5" />
+          Prezența se poate marca după ce lecția a început.
+        </p>
+      </div>
+    );
+  }
+
+  const handleStatusChange = async (studentId: string, status: string) => {
+    if (status === "pending") return;
+    setUpdating(studentId);
+    try {
+      const updated = await markAttendance(
+        lesson.id,
+        studentId,
+        status as Exclude<AttendanceStatus, "pending">
+      );
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.studentId === studentId
+            ? { ...s, attendanceStatus: updated.attendanceStatus as AttendanceStatus, markedBy: updated.markedBy, markedAt: updated.markedAt }
+            : s
+        )
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 403) {
+        onError("Prezența este blocată după 24h. Contactați un manager.");
+      } else {
+        onError("Nu pot salva prezența.");
+      }
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5" />
+          Prezență elevi
+        </h3>
+        {isLocked24h && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">
+            <Lock className="h-3 w-3" />
+            Blocat 24h
+          </span>
+        )}
+      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-4 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          <span className="text-xs">Se încarcă…</span>
+        </div>
+      ) : students.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-2">Niciun elev înscris la această lecție.</p>
+      ) : (
+        <div className="space-y-1.5" role="list" aria-label="Lista elevi și prezență">
+          {students.map((s) => (
+            <div
+              key={s.studentId}
+              className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2"
+              role="listitem"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-semibold truncate">{s.fullName}</p>
+                {s.email && <p className="text-[10px] text-muted-foreground truncate">{s.email}</p>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {updating === s.studentId && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                <label htmlFor={`att-${s.studentId}`} className="sr-only">
+                  Status prezență {s.fullName}
+                </label>
+                <select
+                  id={`att-${s.studentId}`}
+                  value={s.attendanceStatus}
+                  onChange={(e) => void handleStatusChange(s.studentId, e.target.value)}
+                  disabled={updating === s.studentId}
+                  className={cn(
+                    "rounded border border-input bg-background px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60",
+                    ATTENDANCE_COLORS[s.attendanceStatus]
+                  )}
+                >
+                  <option value="pending">{ATTENDANCE_LABELS.pending}</option>
+                  <option value="present">{ATTENDANCE_LABELS.present}</option>
+                  <option value="absent">{ATTENDANCE_LABELS.absent}</option>
+                  <option value="late">{ATTENDANCE_LABELS.late}</option>
+                  <option value="excused">{ATTENDANCE_LABELS.excused}</option>
+                </select>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -465,6 +656,7 @@ function ViewLessonModal({
         {lesson.courseLevel && <Row label="Nivel" value={lesson.courseLevel} />}
         {lesson.notes && <Row label="Note" value={lesson.notes} />}
       </div>
+      <AttendancePanel lesson={lesson} onError={onError} />
       <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-border">
         <button type="button" onClick={onClose} className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted">
           Închide
@@ -506,5 +698,187 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
         <div className="p-5">{children}</div>
       </div>
     </div>
+  );
+}
+
+// ─── SCHED-502: Recurring lessons modal ───────────────────────────────────────
+
+interface RecurringModalProps {
+  teachers: Teacher[];
+  courses: Course[];
+  rooms: Room[];
+  onClose: () => void;
+  onSaved: (count: number) => void;
+  onError: (msg: string) => void;
+}
+
+function RecurringModal({ teachers, courses, rooms, onClose, onSaved, onError }: RecurringModalProps) {
+  const now = new Date();
+  now.setMinutes(0, 0, 0);
+  now.setHours(now.getHours() + 1);
+
+  const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
+  const [teacherId, setTeacherId] = useState(teachers[0]?.id ?? "");
+  const [roomId, setRoomId] = useState("");
+  const [date, setDate] = useState(formatDateInput(now));
+  const [time, setTime] = useState(`${String(now.getHours()).padStart(2, "0")}:00`);
+  const [duration, setDuration] = useState(courses[0]?.durationMinutes ?? 60);
+  const [count, setCount] = useState(8);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!courseId || !teacherId) return;
+    setSubmitting(true);
+    const firstScheduledAt = new Date(`${date}T${time}:00`).toISOString();
+    try {
+      const result = await createRecurringLessons({
+        courseId,
+        teacherId,
+        firstScheduledAt,
+        durationMinutes: duration,
+        roomId: roomId || null,
+        recurrence: { type: "weekly", count },
+      });
+      onSaved(result.lessons.length);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "conflicts") {
+        onError("Conflict de orar: unele sloturi sunt ocupate. Verifică orarul și încearcă din nou.");
+      } else {
+        onError("Nu pot crea seria de lecții recurente.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (courses.length === 0 || teachers.length === 0) {
+    return (
+      <ModalShell title="Lecție recurentă" onClose={onClose}>
+        <div className="rounded-md bg-warning/10 border border-warning/30 p-4 text-sm">
+          <AlertTriangle className="h-4 w-4 inline mr-1 text-warning" />
+          Nu ai {courses.length === 0 ? "cursuri" : "profesori"} definiți. Creează-i mai întâi.
+        </div>
+      </ModalShell>
+    );
+  }
+
+  return (
+    <ModalShell title="Programare lecție recurentă" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        <div>
+          <label htmlFor="rc-course" className="block text-sm font-semibold mb-1.5">Curs</label>
+          <select
+            id="rc-course"
+            value={courseId}
+            onChange={(e) => {
+              setCourseId(e.target.value);
+              const c = courses.find((x) => x.id === e.target.value);
+              if (c) setDuration(c.durationMinutes);
+            }}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}{c.level ? ` (${c.level})` : ""}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="rc-teacher" className="block text-sm font-semibold mb-1.5">Profesor</label>
+          <select
+            id="rc-teacher"
+            value={teacherId}
+            onChange={(e) => setTeacherId(e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {teachers.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="rc-date" className="block text-sm font-semibold mb-1.5">Prima dată</label>
+            <input
+              id="rc-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="rc-time" className="block text-sm font-semibold mb-1.5">Ora</label>
+            <input
+              id="rc-time"
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="rc-dur" className="block text-sm font-semibold mb-1.5">Durată (min)</label>
+            <input
+              id="rc-dur"
+              type="number"
+              min={15}
+              max={480}
+              step={15}
+              value={duration}
+              onChange={(e) => setDuration(Number(e.target.value))}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="rc-count" className="block text-sm font-semibold mb-1.5">Ocurențe</label>
+            <input
+              id="rc-count"
+              type="number"
+              min={1}
+              max={52}
+              value={count}
+              onChange={(e) => setCount(Number(e.target.value))}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+        {rooms.length > 0 && (
+          <div>
+            <label htmlFor="rc-room" className="block text-sm font-semibold mb-1.5">Sală (opțional)</label>
+            <select
+              id="rc-room"
+              value={roomId}
+              onChange={(e) => setRoomId(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              aria-label="Selectează sală pentru seria recurentă"
+            >
+              <option value="">— fără sală —</option>
+              {rooms.map((r) => (
+                <option key={r.id} value={r.id}>{r.name} (cap. {r.capacity})</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Se vor crea {count} lecții săptămânale consecutiv.
+        </p>
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <button type="button" onClick={onClose} className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted">
+            Anulează
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Creează {count} lecții
+          </button>
+        </div>
+      </form>
+    </ModalShell>
   );
 }

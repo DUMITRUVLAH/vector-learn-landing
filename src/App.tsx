@@ -43,6 +43,16 @@ import { LeadCardPage } from "./pages/app/LeadCardPage";
 import { TemplatesPage } from "./pages/app/TemplatesPage";
 import { AutomationsPage } from "./pages/app/AutomationsPage";
 import { AnalyticsPage } from "./pages/app/AnalyticsPage";
+import { PayrollPage } from "./pages/app/PayrollPage";
+import { TeacherStatsPage } from "./pages/app/TeacherStatsPage";
+import { AvailabilityPage } from "./pages/app/AvailabilityPage";
+import { AuditLogPage } from "./pages/app/AuditLogPage";
+import { TodayDashboardPage } from "./pages/app/TodayDashboardPage";
+import { CadencesPage } from "./pages/app/CadencesPage";
+import { LeadAuditLogPage } from "./pages/app/LeadAuditLogPage";
+import { ContractsPage } from "./pages/app/ContractsPage";
+import { FeedbackPage } from "./pages/app/FeedbackPage";
+import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 
 function HomePage() {
   return (
@@ -92,16 +102,39 @@ function Routes() {
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;
+  // CRM-120: /app/leads/today dashboard
+  if (path.startsWith("/app/leads/today")) return <TodayDashboardPage />;
   // /app/leads/:id must be checked before /app/leads
   if (path.match(/^\/app\/leads\/[^/]+$/)) {
     const id = path.split("/").pop()!;
     return <LeadCardPage leadId={id} />;
   }
   if (path.startsWith("/app/analytics/crm")) return <AnalyticsPage />;
+  if (path.startsWith("/app/hr/payroll")) return <PayrollPage />;
+  // /app/hr/teachers/:id/stats
+  if (path.match(/^\/app\/hr\/teachers\/[^/]+\/stats$/)) {
+    const id = path.split("/")[4];
+    return <TeacherStatsPage teacherId={id} />;
+  }
+  // /app/hr/teachers/:id/availability
+  if (path.match(/^\/app\/hr\/teachers\/[^/]+\/availability$/)) {
+    const id = path.split("/")[4];
+    return <AvailabilityPage teacherId={id} />;
+  }
+  if (path.startsWith("/app/hr/audit")) return <AuditLogPage />;
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
+  if (path.startsWith("/app/cadences")) return <CadencesPage />;
+  if (path.startsWith("/app/audit-log")) return <LeadAuditLogPage />;
+  if (path.startsWith("/app/contracts")) return <ContractsPage />;
+  if (path.startsWith("/app/feedback")) return <FeedbackPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
+  // /feedback/:token — public no-auth page for students
+  if (path.match(/^\/feedback\/[^/]+$/)) {
+    const token = path.split("/")[2];
+    return <FeedbackPublicPage token={token} />;
+  }
   return <HomePage />;
 }
 

@@ -89,34 +89,48 @@ The owner typed *one trigger* ("continuă", "go", etc.). That trigger runs the c
 
 ---
 
-## 0.2 Build pas-cu-pas / grupat — anti-pierdere de feature-uri (OVERRIDES batching)
+## 0.2 Build pas-cu-pas, livrare grupată pe FAZĂ — anti-pierdere de feature-uri (OVERRIDES batching)
 
-**Construiește un singur backlog item odată, în ordinea din secvența lui de build. Nu comasa
-mai multe item-uri într-un PR. Nu trece la următorul item cu testele celui curent roșii.**
+**Construiește item-urile unul câte unul, în ordinea din secvența de build, dar livrează-le
+GRUPAT PE FAZĂ: o fază întreagă = UN singur branch = UN singur PR.** Nu trece la următorul item
+cu testele celui curent roșii.
 
-De ce: modulele mari (în special **CRM**, care e CORE-ul produsului) au zeci de comportamente și
-click-uri. Construite „la grămadă", se pierd detalii — un click neimplementat, un edge-case GDPR
-uitat, un scenariu de test sărit. Granularitatea pe item + gate de teste verzi împiedică asta.
+> **SCHIMBARE (2026-05-31, cerută de owner):** înainte regula era „1 item = 1 PR", ceea ce a produs
+> ~20 de branch-uri doar pentru CRM — imposibil de văzut împreună local și obositor la review.
+> Acum: **1 fază = 1 PR.** Toate item-urile unei faze se construiesc pe ACELAȘI branch
+> (`feat/<MODUL>-faza-<X>-<slug>`), commit per item, și se deschide UN PR pentru toată faza.
+> Mai puține branch-uri, ușor de văzut tot împreună, review pe o unitate coerentă de valoare.
+
+De ce păstrăm granularitatea PE ITEM (la build + teste): modulele mari (în special **CRM**, CORE-ul
+produsului) au zeci de comportamente. Construite „la grămadă" fără disciplină, se pierd detalii — un
+click neimplementat, un edge-case GDPR uitat, un test sărit. Așa că **build-ul și gate-ul de teste
+rămân per item**; doar livrarea (branch+PR) se grupează pe fază.
 
 ### Regulile (obligatorii când lucrezi automat pe un modul cu secvență de build)
 
-1. **Un item = un PR.** Ia primul item pending în ordinea din `BUILD-SEQUENCE.md`-ul modulului
-   (pentru CRM: `backlog/crm/BUILD-SEQUENCE.md`). Nu sări, nu comasa.
-2. **Doar scope-ul item-ului.** Implementează exact ce e „in scope" în specul lui. Comportamentele
-   din documentul CORE neacoperite de specul curent **NU se implementează pe furiș și NU se uită**
-   — se notează în secțiunea „Backlog descoperit" a fișierului BUILD-SEQUENCE și se continuă.
-3. **Gate dur de teste (repară, nu sări).** Rulează scenariile item-ului din `TEST-SCENARIOS.md`.
-   **Dacă un scenariu `[blocant]` pică → repară pe loc → re-rulează.** Un item cu teste roșii NU se
-   închide și NU se trece mai departe. (Excepție: dacă un fix eșuează după o încercare reală și e
-   clar structural, marchează `blocked` cu raport — vezi §6 — dar întâi chiar încearcă să repari.)
-4. **Consistență cu CORE.** Dacă implementarea diferă de documentul CORE al modulului, actualizează
-   CORE explicit în același PR. Nu lăsa documentația să derive în tăcere.
-5. **Documentul CORE este sursa de adevăr** pentru comportament (ce se întâmplă la fiecare click,
-   cum se adaugă un client, layout-ul kanban/cartonaș). Pentru CRM: `backlog/crm/CRM-CORE.md`.
+1. **O fază = un branch = un PR.** Creează `feat/<MODUL>-faza-<X>-<slug>` din branch-ul de bază la
+   începutul fazei. Construiește pe el, în ordine, TOATE item-urile fazei din `BUILD-SEQUENCE.md`,
+   **commit separat per item** (`feat(CRM-117): …`). La final, UN singur PR pentru toată faza.
+   Nu sări item-uri, nu le comasa în același commit (commit-ul rămâne per item pentru trasabilitate).
+2. **Doar scope-ul item-ului.** Implementează exact ce e „in scope" în specul fiecărui item.
+   Comportamentele din CORE neacoperite de specul curent **NU se implementează pe furiș și NU se
+   uită** — se notează în „Backlog descoperit" din BUILD-SEQUENCE și se continuă.
+3. **Gate dur de teste PER ITEM (repară, nu sări).** După FIECARE item, rulează scenariile lui din
+   `TEST-SCENARIOS.md`. **Dacă un `[blocant]` pică → repară pe loc → re-rulează** înainte de
+   următorul item. Un item cu teste roșii nu se închide. La finalul fazei, build+typecheck+lint+test
+   verzi pe tot branch-ul înainte de PR. (Excepție: fix eșuat și clar structural → `blocked` cu
+   raport — §6 — dar întâi chiar încearcă să repari.)
+4. **Consistență cu CORE.** Dacă implementarea diferă de CORE, actualizează CORE explicit în același
+   PR. Nu lăsa documentația să derive în tăcere.
+5. **Documentul CORE este sursa de adevăr** pentru comportament. Pentru CRM: `backlog/crm/CRM-CORE.md`.
+6. **Migrări secvențiale pe fază.** Item-urile aceleiași faze partajează branch-ul, deci `db:generate`
+   numerotează migrările în continuare (fără coliziuni de prefix). La finalul fazei, `db:reset` +
+   `db:seed` trebuie să treacă (gate §3.5.1).
 
 ### Pe scurt
-> Ia features **pas cu pas / grupate pe item**, în ordine. Testează fiecare item. Dacă testele
-> pică → **repară, nu trece mai departe**. Nu pierde niciun feature din CORE — notează-l, nu-l uita.
+> Construiește **item cu item, testează item cu item** (nu pierde niciun feature din CORE), dar
+> **livrează o fază întreagă într-un singur PR**. Dacă testele unui item pică → **repară, nu trece
+> mai departe**.
 
 ---
 
@@ -252,10 +266,12 @@ The reviewers:
 
 ### 3.6 Commits & branches
 - Conventional commits (`feat:`, `fix:`, `chore:`, `docs:`)
-- One branch per backlog item: `feat/<ID>-<slug>`
-- One PR per branch
-- Squash-merge to `main`
-- Co-author tag: `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`
+- **One branch + one PR per PHASE** (see §0.2): `feat/<MODUL>-faza-<X>-<slug>`. All items of a phase
+  live on the same branch, one commit per item (`feat(CRM-117): …`) for traceability.
+  (Old rule was one-branch-per-item; changed 2026-05-31 to reduce branch sprawl.)
+- For a standalone item with no phase, a single `feat/<ID>-<slug>` branch+PR is still fine.
+- Squash-merge to `main` (or merge-commit if you want to preserve per-item commits in history)
+- Co-author tag: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
 
 ### 3.7 What NOT to do
 - Don't add features outside the spec
