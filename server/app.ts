@@ -31,6 +31,7 @@ import { auditRoutes } from "./routes/audit";
 import { contractRoutes } from "./routes/contracts";
 import { feedbackRoutes } from "./routes/feedback";
 import { feedbackPublicRoutes } from "./routes/feedbackPublic";
+import { contactRoutes } from "./routes/contacts";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -80,6 +81,10 @@ app.route("/api/leads/today", leadsTodayRoutes); // CRM-120: must be before /api
 app.route("/api/leads", leadRoutes);
 app.route("/api/pipeline-stages", pipelineRoutes);
 app.route("/api/leads", taskRoutes); // tasks/attachments under /api/leads/:leadId/...
+// CRM-114: lead contacts (B2B). Mounted at "/api" because its routes are "/leads/:id/contacts".
+// Must be registered before tagRoutes (which mounts a global requireAuth at "/api" and would
+// otherwise be the only handler matching /api/leads/:id/contacts → SPA index.html fallthrough).
+app.route("/api", contactRoutes);
 app.route("/api/templates", templateRoutes);
 app.route("/api/automations", automationRoutes);
 app.route("/api/analytics", analyticsRoutes);
