@@ -1,6 +1,18 @@
 import "dotenv/config";
 import { db, closeDb } from "./client";
-import { tenants, users, students, teachers, courses, lessons } from "./schema";
+import {
+  tenants,
+  users,
+  students,
+  teachers,
+  courses,
+  lessons,
+  feedbackForms,
+  feedbackQuestions,
+  feedbackInvitations,
+  feedbackAnswers,
+  generateInvitationToken,
+} from "./schema";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -118,6 +130,73 @@ async function seed() {
     .returning();
 
   console.log(`✅ ${lessonRows.length} lessons created`);
+
+  // --- FB: Feedback forms demo data ---
+  const [initialForm] = await db
+    .insert(feedbackForms)
+    .values({
+      tenantId: tenant.id,
+      stage: "initial",
+      title: "Feedback Inițial",
+      description: "Trimis după prima săptămână de curs",
+      courseId: engB2.id,
+    })
+    .returning();
+
+  const questionRows = await db
+    .insert(feedbackQuestions)
+    .values([
+      { tenantId: tenant.id, formId: initialForm.id, type: "rating", label: "Cât de mulțumit ești de prima săptămână de curs?", options: "[]", required: true, position: 0 },
+      { tenantId: tenant.id, formId: initialForm.id, type: "yesno", label: "Profesorul a explicat clar obiectivele cursului?", options: "[]", required: true, position: 1 },
+      { tenantId: tenant.id, formId: initialForm.id, type: "single", label: "Ritmul cursului ți se pare:", options: JSON.stringify(["Prea lent", "Potrivit", "Prea rapid"]), required: true, position: 2 },
+      { tenantId: tenant.id, formId: initialForm.id, type: "text", label: "Ce ți-ai dori să se îmbunătățească?", options: "[]", required: false, position: 3 },
+    ])
+    .returning();
+
+  // Invite the first 8 students; 6 of them submit answers.
+  const recipients = studentRows.slice(0, 8);
+  const invitationRows = await db
+    .insert(feedbackInvitations)
+    .values(
+      recipients.map((s, i) => ({
+        tenantId: tenant.id,
+        formId: initialForm.id,
+        studentId: s.id,
+        token: generateInvitationToken(),
+        status: i < 6 ? ("submitted" as const) : ("pending" as const),
+        submittedAt: i < 6 ? new Date(now.getTime() - i * 3600 * 1000) : null,
+      }))
+    )
+    .returning();
+
+  const [qRating, qYesNo, qSingle, qText] = questionRows;
+  const ratingValues = [5, 4, 5, 3, 4, 5];
+  const yesNoValues = [1, 1, 1, 0, 1, 1];
+  const paceValues = ["Potrivit", "Potrivit", "Prea rapid", "Potrivit", "Prea lent", "Potrivit"];
+  const textValues = [
+    "Mai multe exerciții practice ar fi utile.",
+    "Totul e excelent, continuați așa!",
+    "Aș vrea materiale audio suplimentare.",
+    "",
+    "Poate pauze mai dese.",
+    "Nimic, sunt foarte mulțumit.",
+  ];
+  const submitted = invitationRows.filter((inv) => inv.status === "submitted");
+  const answerValues = submitted.flatMap((inv, i) => {
+    const rows = [
+      { tenantId: tenant.id, invitationId: inv.id, questionId: qRating.id, valueNumber: ratingValues[i], valueText: null },
+      { tenantId: tenant.id, invitationId: inv.id, questionId: qYesNo.id, valueNumber: yesNoValues[i], valueText: null },
+      { tenantId: tenant.id, invitationId: inv.id, questionId: qSingle.id, valueNumber: null, valueText: paceValues[i] },
+    ];
+    if (textValues[i]) {
+      rows.push({ tenantId: tenant.id, invitationId: inv.id, questionId: qText.id, valueNumber: null, valueText: textValues[i] });
+    }
+    return rows;
+  });
+  await db.insert(feedbackAnswers).values(answerValues);
+
+  console.log(`✅ feedback form created (${submitted.length}/${invitationRows.length} responses)`);
+
   console.log(`\n📌 Demo credentials:`);
   console.log(`   email: ${admin.email}`);
   console.log(`   password: ${DEMO_PASSWORD}`);
