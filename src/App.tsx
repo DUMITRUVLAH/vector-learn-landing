@@ -56,6 +56,8 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
+import { StudentDetailPage } from "./pages/app/StudentDetailPage"; // GAP-019
+import { GamificationPage } from "./pages/app/GamificationPage"; // GAP-020
 
 function HomePage() {
   return (
