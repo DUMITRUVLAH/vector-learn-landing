@@ -38,6 +38,7 @@ import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
 import { kinderRoutes } from "./routes/kinder"; // KINDER-001
+import { kinderDiaryRoutes } from "./routes/kinderDiary"; // KINDER-002
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -122,6 +123,8 @@ app.route("/api/cohorts", cohortParticipantsRoutes);
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
 // KINDER-001: Kindergarten check-in / sign-out + authorized pickups
 app.route("/api/kinder", kinderRoutes);
+// KINDER-002: Daily report / child diary events
+app.route("/api/kinder", kinderDiaryRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

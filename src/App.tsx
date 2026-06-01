@@ -58,6 +58,7 @@ import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { KinderCheckinPage } from "./pages/app/KinderCheckinPage";
 import { KinderPickupsPage } from "./pages/app/KinderPickupsPage";
+import { KinderDiaryPage } from "./pages/app/KinderDiaryPage";
 
 function HomePage() {
   return (
@@ -139,6 +140,8 @@ function Routes() {
   // KINDER-001: /app/kinder/students/:id/pickups must be before /app/kinder/checkin
   if (path.match(/^\/app\/kinder\/students\/[^/]+\/pickups$/)) return <KinderPickupsPage />;
   if (path.startsWith("/app/kinder/checkin")) return <KinderCheckinPage />;
+  // KINDER-002: daily diary
+  if (path.startsWith("/app/kinder/diary")) return <KinderDiaryPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students

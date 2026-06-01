@@ -93,3 +93,51 @@ export function removePickup(studentId: string, pickupId: string): Promise<{ ok:
     method: "DELETE",
   });
 }
+
+// ─── KINDER-002: Daily report / diary ─────────────────────────────────────────
+
+export type DiaryEventType = "meal" | "nap" | "diaper" | "activity" | "photo" | "note";
+
+export interface DiaryEvent {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  eventDate: string;
+  eventType: DiaryEventType;
+  details: Record<string, unknown> | null;
+  photoUrl: string | null;
+  staffUserId: string | null;
+  createdAt: string;
+}
+
+export interface DiaryResponse {
+  date: string;
+  studentId: string;
+  events: DiaryEvent[];
+}
+
+export interface AddDiaryEventPayload {
+  studentId: string;
+  eventType: DiaryEventType;
+  details?: Record<string, unknown>;
+  photoUrl?: string;
+}
+
+/** GET /api/kinder/diary/:studentId?date=YYYY-MM-DD */
+export function getDiary(studentId: string, date?: string): Promise<DiaryResponse> {
+  const params = date ? `?date=${date}` : "";
+  return api<DiaryResponse>(`/api/kinder/diary/${studentId}${params}`);
+}
+
+/** POST /api/kinder/diary */
+export function addDiaryEvent(payload: AddDiaryEventPayload): Promise<{ ok: boolean; event: DiaryEvent }> {
+  return api<{ ok: boolean; event: DiaryEvent }>("/api/kinder/diary", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** DELETE /api/kinder/diary/:eventId */
+export function deleteDiaryEvent(eventId: string): Promise<{ ok: boolean }> {
+  return api<{ ok: boolean }>(`/api/kinder/diary/${eventId}`, { method: "DELETE" });
+}

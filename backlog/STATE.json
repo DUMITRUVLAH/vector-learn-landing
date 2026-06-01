@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "KINDER-001",
-  "last_completed": "BUGFIX-004",
-  "iterations": 121,
+  "current_item": "KINDER-002",
+  "last_completed": "KINDER-001",
+  "iterations": 122,
   "last_run_at": "2026-06-01T23:00:00Z",
   "milestone_status": "KINDER faza-1 in-progress: check-in/diary/ratio pentru gradinite. PAY-901..LESSON-907 marcate done (acoperite de GAP milestone).",
   "active_milestone": "KINDER",
@@ -1729,7 +1729,7 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "KINDER-001": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/KINDER-001-checkin-signout.md",
@@ -1738,11 +1738,12 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "severity": "high",
       "title": "Digital check-in/sign-out + authorized-pickup + e-signature",
-      "depends_on": []
+      "depends_on": [],
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "KINDER-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/KINDER-002-daily-report.md",
       "milestone": "KINDER",

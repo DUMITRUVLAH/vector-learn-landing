@@ -204,6 +204,13 @@
       "when": 1780340892198,
       "tag": "0028_kinder001_checkin",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1780341531396,
+      "tag": "0029_kinder002_diary",
+      "breakpoints": true
     }
   ]
 }
