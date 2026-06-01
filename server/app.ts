@@ -43,6 +43,7 @@ import {
   publicFormSubmitHandler,
   publicFormPingHandler,
 } from "./routes/publicForms"; // FORMS-001/005
+import { branchRoutes } from "./routes/branches"; // BRANCH-701
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -136,6 +137,8 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
+// BRANCH-701: Multi-branch schema + CRUD
+app.route("/api/branches", branchRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {
