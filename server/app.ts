@@ -37,6 +37,11 @@ import { invoiceRoutes } from "./routes/invoices";
 import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
+import { enrollRoutes } from "./routes/enroll"; // GAP-011
+import { progressRoutes } from "./routes/progress"; // GAP-012
+import { makeupRoutes } from "./routes/makeup"; // GAP-013
+import { stripePaymentRoutes } from "./routes/stripePayments"; // GAP-014
+import { lessonHomeworkRoutes, homeworkRoutes, studentHomeworkRoutes } from "./routes/homework"; // GAP-015
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -93,6 +98,8 @@ app.route("/api", contactRoutes);
 app.route("/api/templates", templateRoutes);
 app.route("/api/automations", automationRoutes);
 app.route("/api/analytics", analyticsRoutes);
+// GAP-011: Public enrollment (BEFORE tagRoutes — no auth required)
+app.route("/api/enroll", enrollRoutes);
 // FEEDBACK-601: public (no-auth) routes must be registered BEFORE tagRoutes because tagRoutes
 // is mounted at "/api" with a global requireAuth that otherwise intercepts all /api/* requests.
 app.route("/api/feedback-public", feedbackPublicRoutes);
@@ -119,6 +126,14 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
+// GAP-012: Gradebook / student progress (public token route BEFORE tagRoutes)
+app.route("/api/progress", progressRoutes);
+app.route("/api/makeup", makeupRoutes); // GAP-013
+app.route("/api/payments/stripe", stripePaymentRoutes); // GAP-014
+// GAP-015: Homework — lesson-scoped and standalone and student-scoped
+app.route("/api/lessons", lessonHomeworkRoutes); // GET/POST/DELETE /api/lessons/:id/homework
+app.route("/api/homework", homeworkRoutes); // POST /api/homework/:id/submit
+app.route("/api/students", studentHomeworkRoutes); // GET /api/students/:id/homework
 
 app.get("/api/health/db", async (c) => {
   try {
