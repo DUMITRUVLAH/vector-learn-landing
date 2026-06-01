@@ -60,6 +60,8 @@ import { KinderCheckinPage } from "./pages/app/KinderCheckinPage";
 import { KinderPickupsPage } from "./pages/app/KinderPickupsPage";
 import { KinderDiaryPage } from "./pages/app/KinderDiaryPage";
 import { KinderRatioPage } from "./pages/app/KinderRatioPage";
+import { KinderMedicalPage } from "./pages/app/KinderMedicalPage";
+import { KinderImmunizationReportPage } from "./pages/app/KinderImmunizationReportPage";
 
 function HomePage() {
   return (
@@ -145,6 +147,9 @@ function Routes() {
   if (path.startsWith("/app/kinder/diary")) return <KinderDiaryPage />;
   // KINDER-003: staff-to-child ratio
   if (path.startsWith("/app/kinder/ratio")) return <KinderRatioPage />;
+  // KINDER-004: medical — allergies, immunization records, medication log
+  if (path.match(/^\/app\/kinder\/students\/[^/]+\/medical$/)) return <KinderMedicalPage />;
+  if (path.startsWith("/app/kinder/immunization-report")) return <KinderImmunizationReportPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students

@@ -200,3 +200,147 @@ export function createRatioLimit(payload: CreateRatioLimitPayload): Promise<{ ok
 export function deleteRatioLimit(limitId: string): Promise<{ ok: boolean }> {
   return api<{ ok: boolean }>(`/api/kinder/ratio/limits/${limitId}`, { method: "DELETE" });
 }
+
+// ─── KINDER-004: Medical — allergies, immunizations, medication log ────────────
+
+export type ReactionType = "mild" | "moderate" | "severe";
+
+export interface ChildAllergy {
+  id: string;
+  studentId: string;
+  allergen: string;
+  reactionType: ReactionType;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImmunizationRecord {
+  id: string;
+  studentId: string;
+  vaccineName: string;
+  administeredDate: string | null;
+  nextDueDate: string | null;
+  provider: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface MedicationLogEntry {
+  id: string;
+  studentId: string;
+  logDate: string;
+  medicationName: string;
+  dosage: string;
+  administeredAt: string;
+  administeredByUserId: string | null;
+  parentConsent: boolean;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface MedicalProfileResponse {
+  allergies: ChildAllergy[];
+  immunizations: ImmunizationRecord[];
+  todayMedications: MedicationLogEntry[];
+}
+
+export type ImmunizationStatus = "overdue" | "due_soon" | "no_record";
+
+export interface AtRiskStudent {
+  studentId: string;
+  fullName: string;
+  status: ImmunizationStatus;
+  vaccines: Array<{
+    vaccineName: string;
+    nextDueDate: string | null;
+    administeredDate: string | null;
+  }>;
+}
+
+export interface ImmunizationStatusResponse {
+  atRisk: AtRiskStudent[];
+  today: string;
+  threshold: string;
+}
+
+/** GET /api/kinder/medical/:studentId */
+export function getMedicalProfile(studentId: string): Promise<MedicalProfileResponse> {
+  return api<MedicalProfileResponse>(`/api/kinder/medical/${studentId}`);
+}
+
+/** POST /api/kinder/medical/:studentId/allergies */
+export function addAllergy(
+  studentId: string,
+  payload: { allergen: string; reactionType: ReactionType; notes?: string }
+): Promise<ChildAllergy> {
+  return api<ChildAllergy>(`/api/kinder/medical/${studentId}/allergies`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** DELETE /api/kinder/medical/:studentId/allergies/:allergyId */
+export function removeAllergy(studentId: string, allergyId: string): Promise<{ deleted: boolean }> {
+  return api<{ deleted: boolean }>(
+    `/api/kinder/medical/${studentId}/allergies/${allergyId}`,
+    { method: "DELETE" }
+  );
+}
+
+/** POST /api/kinder/medical/:studentId/immunizations */
+export function addImmunization(
+  studentId: string,
+  payload: {
+    vaccineName: string;
+    administeredDate?: string;
+    nextDueDate?: string;
+    provider?: string;
+    notes?: string;
+  }
+): Promise<ImmunizationRecord> {
+  return api<ImmunizationRecord>(`/api/kinder/medical/${studentId}/immunizations`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** PUT /api/kinder/medical/:studentId/immunizations/:immId */
+export function updateImmunization(
+  studentId: string,
+  immId: string,
+  payload: Partial<{
+    vaccineName: string;
+    administeredDate: string;
+    nextDueDate: string;
+    provider: string;
+    notes: string;
+  }>
+): Promise<ImmunizationRecord> {
+  return api<ImmunizationRecord>(
+    `/api/kinder/medical/${studentId}/immunizations/${immId}`,
+    { method: "PUT", body: JSON.stringify(payload) }
+  );
+}
+
+/** POST /api/kinder/medical/:studentId/medications */
+export function logMedication(
+  studentId: string,
+  payload: {
+    medicationName: string;
+    dosage: string;
+    administeredAt?: string;
+    parentConsent?: boolean;
+    notes?: string;
+  }
+): Promise<MedicationLogEntry> {
+  return api<MedicationLogEntry>(`/api/kinder/medical/${studentId}/medications`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** GET /api/kinder/immunization-status */
+export function getImmunizationStatus(): Promise<ImmunizationStatusResponse> {
+  return api<ImmunizationStatusResponse>("/api/kinder/immunization-status");
+}

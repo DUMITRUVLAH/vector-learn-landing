@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "KINDER-004",
   "last_completed": "KINDER-003",
-  "iterations": 124,
+  "iterations": 125,
   "last_run_at": "2026-06-01T23:00:00Z",
   "milestone_status": "KINDER faza-1 COMPLETE: KINDER-001 (check-in/pickup/semnatura), KINDER-002 (jurnal zilnic), KINDER-003 (raport personal/copii). PR #108. PAY-901..LESSON-907 done (GAP milestone).",
   "active_milestone": "KINDER",
@@ -1771,15 +1771,16 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "KINDER-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/KINDER-004-medical.md",
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
       "title": "Medical \u2014 allergies, immunization records, medication log",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/KINDER-faza-1-checkin-diary-ratio"
     },
     "KINDER-005": {
       "status": "pending",
