@@ -27,6 +27,7 @@ import {
   type ContractCurrency,
   type CreateContractPayload,
 } from "@/lib/api/contracts";
+import { listCourses, type CourseItem } from "@/lib/api/courses";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -46,6 +47,8 @@ interface FormState {
   repRole: string;
   // Course
   course: string;
+  /** INTEG-202: FK uuid selected from CoursePicker */
+  courseId: string;
   hours: string;
   scheduleText: string;
   language: string;
@@ -65,6 +68,7 @@ const EMPTY_FORM: FormState = {
   repName: "",
   repRole: "",
   course: "",
+  courseId: "",
   hours: "",
   scheduleText: "",
   language: "",
@@ -108,6 +112,9 @@ export function ContractsPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successContract, setSuccessContract] = useState<Contract | null>(null);
 
+  // INTEG-202: course list for the picker
+  const [courseItems, setCourseItems] = useState<CourseItem[]>([]);
+
   // OCR state
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrNote, setOcrNote] = useState<string | null>(null);
@@ -149,6 +156,16 @@ export function ContractsPage() {
       setLoadingRecent(false);
     }
   }, []);
+
+  // INTEG-202: load course list for picker (non-critical, graceful fallback)
+  useEffect(() => {
+    if (sessionStatus !== "authenticated") return;
+    listCourses()
+      .then(({ items }) => setCourseItems(items))
+      .catch(() => {
+        // non-critical — user can still type course name manually
+      });
+  }, [sessionStatus]);
 
   useEffect(() => {
     if (sessionStatus === "authenticated") loadRecent();

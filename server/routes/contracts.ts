@@ -12,7 +12,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { contracts, tenants } from "../db/schema";
+import { contracts, tenants, courses } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -87,6 +87,8 @@ const createContractSchema = z.object({
   // CRM links
   leadId: z.string().uuid().optional().nullable(),
   studentId: z.string().uuid().optional().nullable(),
+  /** INTEG-202: structural FK to courses (nullable, backward compat) */
+  courseId: z.string().uuid().optional().nullable(),
 });
 
 const listQuerySchema = z.object({
@@ -110,7 +112,7 @@ export const contractRoutes = new Hono<{ Variables: AuthVariables }>();
 
 contractRoutes.use("*", requireAuth);
 
-/** GET /api/contracts — list recent contracts for current tenant */
+/** GET /api/contracts — list recent contracts for current tenant with courseName */
 contractRoutes.get(
   "/",
   zValidator("query", listQuerySchema),
@@ -119,8 +121,41 @@ contractRoutes.get(
     const { limit, offset } = c.req.valid("query");
 
     const rows = await db
-      .select()
+      .select({
+        id: contracts.id,
+        tenantId: contracts.tenantId,
+        number: contracts.number,
+        prefix: contracts.prefix,
+        dailySeq: contracts.dailySeq,
+        contractDate: contracts.contractDate,
+        beneficiaryType: contracts.beneficiaryType,
+        beneficiaryName: contracts.beneficiaryName,
+        idn: contracts.idn,
+        companyName: contracts.companyName,
+        companyIdno: contracts.companyIdno,
+        repName: contracts.repName,
+        repRole: contracts.repRole,
+        course: contracts.course,
+        courseId: contracts.courseId,
+        courseName: courses.name,
+        hours: contracts.hours,
+        scheduleText: contracts.scheduleText,
+        language: contracts.language,
+        format: contracts.format,
+        location: contracts.location,
+        priceCents: contracts.priceCents,
+        currency: contracts.currency,
+        persons: contracts.persons,
+        leadId: contracts.leadId,
+        studentId: contracts.studentId,
+        pdfUrl: contracts.pdfUrl,
+        data: contracts.data,
+        createdBy: contracts.createdBy,
+        createdAt: contracts.createdAt,
+        updatedAt: contracts.updatedAt,
+      })
       .from(contracts)
+      .leftJoin(courses, eq(contracts.courseId, courses.id))
       .where(eq(contracts.tenantId, user.tenantId))
       .orderBy(desc(contracts.createdAt))
       .limit(limit)
@@ -182,6 +217,7 @@ contractRoutes.post(
         persons: body.persons,
         leadId: body.leadId ?? null,
         studentId: body.studentId ?? null,
+        courseId: body.courseId ?? null, // INTEG-202
         data,
         createdBy: user.id,
       })

@@ -32,6 +32,10 @@ export interface Contract {
   persons: number;
   leadId: string | null;
   studentId: string | null;
+  /** INTEG-202: structural FK to courses */
+  courseId?: string | null;
+  /** INTEG-202: denormalized course name returned by list endpoint via LEFT JOIN */
+  courseName?: string | null;
   pdfUrl: string | null;
   data: Record<string, unknown> | null;
   createdBy: string | null;
@@ -58,6 +62,8 @@ export interface CreateContractPayload {
   persons?: number;
   leadId?: string | null;
   studentId?: string | null;
+  /** INTEG-202: structural FK to courses */
+  courseId?: string | null;
 }
 
 export interface OcrResult {
