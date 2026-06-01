@@ -8,6 +8,8 @@ export interface Cohort {
   id: string;
   tenantId: string;
   courseId: string;
+  /** INTEG-203: denormalized course name from LEFT JOIN (list endpoint) */
+  courseName?: string | null;
   label: string;
   startDate: string;
   totalHours: number;

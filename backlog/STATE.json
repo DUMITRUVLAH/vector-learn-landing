@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "current_item": "INTEG-203",
-  "last_completed": "INTEG-202",
-  "iterations": 148,
-  "last_run_at": "2026-06-02T00:30:00Z",
+  "current_item": null,
+  "last_completed": "INTEG-203",
+  "iterations": 149,
+  "last_run_at": "2026-06-02T00:35:00Z",
   "milestone_status": "INTEG faza-1 done (INTEG-101..104, PR #112). INTEG faza-2 in progress.",
   "active_milestone": "INTEG",
   "items": {
@@ -1882,14 +1882,21 @@
       }
     },
     "INTEG-203": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "branch": "feat/INTEG-faza-2-ux-cross-module",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/113",
       "spec": "backlog/specs/INTEG-203-cx-course-name-participant-link.md",
       "milestone": "INTEG",
       "phase": "2",
-      "depends_on": ["INTEG-201"]
+      "depends_on": ["INTEG-201"],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     }
   }
 }

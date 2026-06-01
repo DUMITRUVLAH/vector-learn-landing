@@ -201,6 +201,19 @@ function CohortHeader({ cohort }: { cohort: Cohort }) {
     <div className="rounded-xl border border-border bg-card p-5 space-y-4">
       <div>
         <h2 className="text-lg font-semibold text-foreground">{cohort.label}</h2>
+        {/* INTEG-203: show courseName with link to courses page */}
+        {cohort.courseName && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Curs:{" "}
+            <a
+              href="#/app/courses"
+              className="text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              aria-label={`Navighează la cursul ${cohort.courseName}`}
+            >
+              {cohort.courseName}
+            </a>
+          </p>
+        )}
         <p className="text-sm text-muted-foreground mt-0.5">
           {startLabel} → {endLabel}
           {cohort.isOnline && (
