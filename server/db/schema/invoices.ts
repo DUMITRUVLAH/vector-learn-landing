@@ -11,6 +11,7 @@ import {
 import { tenants } from "./tenants";
 import { students } from "./students";
 import { payments } from "./payments";
+import { courses } from "./courses";
 
 export const invoiceStatusEnum = pgEnum("invoice_status", [
   "draft",
@@ -50,6 +51,8 @@ export const invoices = pgTable(
      * 'submitted' = sent to ANAF (future)
      */
     efacturaStatus: varchar("efactura_status", { length: 30 }),
+    /** INTEG-102: FK to courses — pentru revenue per curs */
+    courseId: uuid("course_id").references(() => courses.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

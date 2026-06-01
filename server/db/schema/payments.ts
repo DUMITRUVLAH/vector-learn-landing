@@ -1,6 +1,7 @@
 import { pgTable, uuid, varchar, integer, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { students } from "./students";
+import { courses } from "./courses";
 
 export const paymentStatusEnum = pgEnum("payment_status", [
   "pending",
@@ -26,6 +27,8 @@ export const payments = pgTable(
     dueDate: timestamp("due_date", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     description: varchar("description", { length: 500 }),
+    /** INTEG-102: FK to courses — pentru revenue per curs */
+    courseId: uuid("course_id").references(() => courses.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

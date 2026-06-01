@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { payments, students, invoices } from "../db/schema";
+import { payments, students, invoices, courses } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 const createPaymentSchema = z.object({
@@ -13,6 +13,8 @@ const createPaymentSchema = z.object({
   status: z.enum(["pending", "paid", "overdue", "refunded", "cancelled"]).default("pending"),
   dueDate: z.string().datetime().optional().nullable(),
   description: z.string().max(500).optional().nullable(),
+  /** INTEG-102: course FK */
+  courseId: z.string().uuid().optional().nullable(),
 });
 
 const updatePaymentSchema = createPaymentSchema.partial();
@@ -33,11 +35,15 @@ paymentRoutes.get("/", async (c) => {
       dueDate: payments.dueDate,
       paidAt: payments.paidAt,
       description: payments.description,
+      /** INTEG-102 */
+      courseId: payments.courseId,
       createdAt: payments.createdAt,
       studentName: students.fullName,
+      courseName: courses.name,
     })
     .from(payments)
     .innerJoin(students, eq(payments.studentId, students.id))
+    .leftJoin(courses, eq(payments.courseId, courses.id))
     .where(eq(payments.tenantId, tenantId))
     .orderBy(desc(payments.createdAt));
   return c.json({ items: rows });
@@ -90,6 +96,8 @@ paymentRoutes.post("/", zValidator("json", createPaymentSchema), async (c) => {
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
       paidAt: body.status === "paid" ? new Date() : null,
       description: body.description ?? null,
+      /** INTEG-102 */
+      courseId: body.courseId ?? null,
     })
     .returning();
   return c.json(created, 201);

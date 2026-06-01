@@ -18,6 +18,10 @@ export interface Invoice {
   dueDate: string | null;
   notes: string | null;
   pdfKey: string | null;
+  /** INTEG-102: course FK */
+  courseId?: string | null;
+  /** INTEG-102: course name resolved server-side */
+  courseName?: string | null;
   createdAt: string;
   studentName: string;
 }
@@ -46,6 +50,8 @@ export function createInvoice(input: {
   series?: string;
   dueDate?: string | null;
   notes?: string | null;
+  /** INTEG-102 */
+  courseId?: string | null;
 }): Promise<Invoice> {
   return api<Invoice>("/api/invoices", {
     method: "POST",

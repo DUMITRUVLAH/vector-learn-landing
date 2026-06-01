@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, desc, sql, lte } from "drizzle-orm";
 import { db } from "../db/client";
-import { invoices, students, subscriptions } from "../db/schema";
+import { invoices, students, subscriptions, courses } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { generateUBL21 } from "../lib/efactura";
 
@@ -15,6 +15,8 @@ const createInvoiceSchema = z.object({
   series: z.string().max(20).default("VECT"),
   dueDate: z.string().datetime().optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
+  /** INTEG-102: course FK */
+  courseId: z.string().uuid().optional().nullable(),
 });
 
 const updateInvoiceSchema = z.object({
@@ -62,11 +64,15 @@ invoiceRoutes.get("/", async (c) => {
       dueDate: invoices.dueDate,
       notes: invoices.notes,
       pdfKey: invoices.pdfKey,
+      /** INTEG-102 */
+      courseId: invoices.courseId,
       createdAt: invoices.createdAt,
       studentName: students.fullName,
+      courseName: courses.name,
     })
     .from(invoices)
     .innerJoin(students, eq(invoices.studentId, students.id))
+    .leftJoin(courses, eq(invoices.courseId, courses.id))
     .where(and(...conditions))
     .orderBy(desc(invoices.createdAt));
 
@@ -101,6 +107,8 @@ invoiceRoutes.post("/", zValidator("json", createInvoiceSchema), async (c) => {
       status: "draft",
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
       notes: body.notes ?? null,
+      /** INTEG-102 */
+      courseId: body.courseId ?? null,
     })
     .returning();
 
