@@ -40,6 +40,7 @@ import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // D
 import { enrollRoutes } from "./routes/enroll"; // GAP-011
 import { progressRoutes } from "./routes/progress"; // GAP-012
 import { makeupRoutes } from "./routes/makeup"; // GAP-013
+import { stripePaymentRoutes } from "./routes/stripePayments"; // GAP-014
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -127,6 +128,7 @@ app.route("/api/certificate-templates", certificateTemplatesRoutes);
 // GAP-012: Gradebook / student progress (public token route BEFORE tagRoutes)
 app.route("/api/progress", progressRoutes);
 app.route("/api/makeup", makeupRoutes); // GAP-013
+app.route("/api/payments/stripe", stripePaymentRoutes); // GAP-014
 
 app.get("/api/health/db", async (c) => {
   try {

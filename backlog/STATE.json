@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "GAP-012",
+  "last_completed": "GAP-013",
   "iterations": 106,
   "last_run_at": "2026-06-01T18:50:00Z",
   "milestone_status": "GAP faza-3 done (PR #100). GAP faza-4 started: GAP-011 done (PR #101). Next: GAP-012 pe feat/GAP-faza-4-analytics.",
@@ -1936,7 +1936,7 @@
       "pr": null
     },
     "GAP-013": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/GAP-013-makeup-lessons.md",

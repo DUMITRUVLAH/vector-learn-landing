@@ -218,6 +218,13 @@
       "when": 1780579200000,
       "tag": "0030_gap013_makeup_credits",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1780665600000,
+      "tag": "0031_gap014_stripe_invoices",
+      "breakpoints": true
     }
   ]
 }
