@@ -1,15 +1,23 @@
 /**
- * CX-703 — CohortStats bar
+ * CX-703/705 — CohortStats bar
  * Shows: Înscriși (N full, N ½) | Gratuit | Cont Plată | Încasat | Expected
+ *        + Break-even badge (CX-705): green profit / red loss
  * Semantic tokens, dark mode, responsive wrapping.
  */
 import type { CohortStats as Stats } from "@/lib/api/cohortParticipants";
 import { cn } from "@/lib/utils";
 
+export interface BreakevenData {
+  projectedProfitCents: number;
+  isProfit: boolean;
+}
+
 interface CohortStatsProps {
   stats: Stats;
   currency?: string;
   className?: string;
+  /** CX-705: if provided, renders the break-even badge */
+  breakeven?: BreakevenData | null;
 }
 
 function formatMoney(cents: number, currency: string): string {
@@ -17,10 +25,16 @@ function formatMoney(cents: number, currency: string): string {
   return `${val} ${currency}`;
 }
 
+function formatEur(cents: number): string {
+  const abs = Math.abs(Math.round(cents / 100));
+  return `€${abs}`;
+}
+
 export function CohortStats({
   stats,
   currency = "MDL",
   className,
+  breakeven = null,
 }: CohortStatsProps) {
   const {
     paidCount,
@@ -57,9 +71,46 @@ export function CohortStats({
         value={formatMoney(expectedCents, currency)}
         variant="muted"
       />
+
+      {/* CX-705 — Break-even badge */}
+      {breakeven !== null && breakeven !== undefined && (
+        <BreakevenBadge breakeven={breakeven} />
+      )}
     </div>
   );
 }
+
+// ─── Break-even badge (CX-705) ────────────────────────────────────────────────
+
+interface BreakevenBadgeProps {
+  breakeven: BreakevenData;
+}
+
+function BreakevenBadge({ breakeven }: BreakevenBadgeProps) {
+  const { projectedProfitCents, isProfit } = breakeven;
+  const label = isProfit ? "Profit proiectat" : "Sub break-even";
+  const prefix = isProfit ? "+" : "-";
+  const amount = formatEur(projectedProfitCents);
+
+  return (
+    <div className="flex flex-col min-w-[100px]">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span
+        className={cn(
+          "text-sm mt-0.5 font-semibold",
+          isProfit
+            ? "text-green-600 dark:text-green-400"
+            : "text-red-600 dark:text-red-400"
+        )}
+        aria-label={`${label}: ${prefix}${amount}`}
+      >
+        {prefix}{amount}
+      </span>
+    </div>
+  );
+}
+
+// ─── Stat chip ────────────────────────────────────────────────────────────────
 
 interface StatChipProps {
   label: string;

@@ -53,6 +53,8 @@ const cohortSchema = z.object({
     .nullable(),
   mentorCostCents: z.number().int().min(0).default(0),
   roomCostCents: z.number().int().min(0).default(0),
+  /** CX-705: optional marketing spend in cents */
+  marketingCostCents: z.number().int().min(0).default(0),
   driveFolderUrl: z.string().url().optional().nullable(),
 });
 
@@ -114,6 +116,7 @@ cohortRoutes.post("/", zValidator("json", cohortSchema), async (c) => {
       manualEndDate: body.manualEndDate ?? null,
       mentorCostCents: body.mentorCostCents,
       roomCostCents: body.roomCostCents,
+      marketingCostCents: body.marketingCostCents ?? 0,
       driveFolderUrl: body.driveFolderUrl ?? null,
     })
     .returning();

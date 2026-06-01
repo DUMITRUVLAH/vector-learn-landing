@@ -190,6 +190,13 @@
       "when": 1748736100000,
       "tag": "0026_cx703_cohort_participants",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1780303394592,
+      "tag": "0027_parched_arclight",
+      "breakpoints": true
     }
   ]
 }

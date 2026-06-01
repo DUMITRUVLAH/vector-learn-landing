@@ -53,6 +53,8 @@ export const cohorts = pgTable(
     mentorCostCents: integer("mentor_cost_cents").notNull().default(0),
     /** Room cost in cents */
     roomCostCents: integer("room_cost_cents").notNull().default(0),
+    /** Optional marketing spend in cents (CX-705 break-even). 0 until marketing sync module ships. */
+    marketingCostCents: integer("marketing_cost_cents").notNull().default(0),
     /** Optional Google Drive folder URL */
     driveFolderUrl: varchar("drive_folder_url", { length: 1000 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
