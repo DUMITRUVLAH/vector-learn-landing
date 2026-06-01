@@ -24,7 +24,7 @@ import {
   listContacts, createContact, updateContact, deleteContact,
   listTags, addTag, removeTag,
   listFieldValues, upsertFieldValue, listCustomFields,
-  getDedupBanner, matchCourses,
+  getDedupBanner, matchCourses, convertLeadFromTrial,
   type Lead, type LeadInteraction, type LeadContact, type CustomField, type LeadFieldValue, type CourseMatch,
 } from "@/lib/api/leads";
 import { fetchPipelineStages, type PipelineStage } from "@/lib/api/pipeline";
@@ -48,7 +48,7 @@ import { ScoreExplain } from "@/components/crm/ScoreExplain";
 // CRM-133: merge duplicate leads
 import { MergeLeadModal } from "@/components/crm/MergeLeadModal";
 // GAP-003: Trial lessons
-import { getTrialLessons, type Lesson } from "@/lib/api/lessons";
+import { getTrialLessons, listCourses, type Lesson, type Course } from "@/lib/api/lessons";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -139,6 +139,13 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
 
   // GAP-003: Trial lessons for this lead
   const [trialLessons, setTrialLessons] = useState<Lesson[]>([]);
+
+  // GAP-004: Convert-trial modal
+  const [convertTrialModal, setConvertTrialModal] = useState(false);
+  const [convertTrialCourseId, setConvertTrialCourseId] = useState("");
+  const [convertTrialPackage, setConvertTrialPackage] = useState(false);
+  const [convertTrialLoading, setConvertTrialLoading] = useState(false);
+  const [courses, setCourses] = useState<Course[]>([]);
 
   // CRM-145: score factors for explainer; auto-score if missing
   const [scoreFactors, setScoreFactors] = useState<ScoreFactor[]>([]);
@@ -395,6 +402,40 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
       message: `Convertit în student!${result.familyId ? " Familie creată." : ""}`,
     });
     void fetchAll();
+  };
+
+  // GAP-004: Convert-trial submit
+  const handleConvertTrialSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lead || !convertTrialCourseId) return;
+    setConvertTrialLoading(true);
+    try {
+      const res = await convertLeadFromTrial(lead.id, {
+        courseId: convertTrialCourseId,
+        createPackage: convertTrialPackage,
+      });
+      setConvertTrialModal(false);
+      setToast({
+        kind: "success",
+        message: `Convertit! Student înrolat în ${res.enrolledLessons} lecții.${res.packageCreated ? " Pachet creat." : ""}`,
+      });
+      void fetchAll();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Eroare la conversie";
+      setToast({ kind: "error", message: msg });
+    } finally {
+      setConvertTrialLoading(false);
+    }
+  };
+
+  // GAP-004: Load courses when modal opens
+  const handleOpenConvertTrialModal = () => {
+    setConvertTrialModal(true);
+    if (courses.length === 0) {
+      listCourses()
+        .then((res) => setCourses(res.items))
+        .catch(() => setCourses([]));
+    }
   };
 
   // ─── Revoke consent ───────────────────────────────────────────────────────
@@ -1096,10 +1137,21 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                 <Calendar className="h-4 w-4" />
                 Găsește grupă
               </button>
+              {/* GAP-004: Convert-from-trial button — visible only when lead has at least one trial lesson */}
+              {trialLessons.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleOpenConvertTrialModal}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-success px-4 py-2.5 text-sm font-semibold text-success-foreground hover:bg-success/90"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Convertește din Trial
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleConvert}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-success px-4 py-2.5 text-sm font-semibold text-success-foreground hover:bg-success/90 disabled:opacity-50"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-success/60 px-4 py-2.5 text-sm font-semibold text-success hover:bg-success/10 disabled:opacity-50"
               >
                 <UserPlus className="h-4 w-4" />
                 Convertește în Student
@@ -1563,6 +1615,81 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
           onSuccess={handleConvertSuccess}
           onCancel={() => setConvertModal(false)}
         />
+      )}
+
+      {/* GAP-004: Convert-from-trial modal */}
+      {convertTrialModal && lead && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Convertire din trial"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        >
+          <div className="absolute inset-0 bg-black/50" onClick={() => setConvertTrialModal(false)} />
+          <div className="relative w-full max-w-md rounded-2xl bg-card border border-border p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-base font-semibold">Convertește din Trial</h2>
+              <button
+                type="button"
+                onClick={() => setConvertTrialModal(false)}
+                aria-label="Închide"
+                className="rounded-md p-1 hover:bg-muted"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Lead-ul va fi convertit în student activ și înrolat în lecțiile viitoare ale grupei selectate.
+            </p>
+            <form onSubmit={handleConvertTrialSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label htmlFor="trial-course-select" className="text-sm font-medium">
+                  Grupă / Curs
+                </label>
+                <select
+                  id="trial-course-select"
+                  value={convertTrialCourseId}
+                  onChange={(e) => setConvertTrialCourseId(e.target.value)}
+                  required
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Selectează grupa...</option>
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}{c.level ? ` (${c.level})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={convertTrialPackage}
+                  onChange={(e) => setConvertTrialPackage(e.target.checked)}
+                  className="h-4 w-4 rounded"
+                />
+                <span className="text-sm">Creează pachet de 10 lecții la conversie</span>
+              </label>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setConvertTrialModal(false)}
+                  className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-muted"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  disabled={!convertTrialCourseId || convertTrialLoading}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-success px-4 py-2.5 text-sm font-semibold text-success-foreground hover:bg-success/90 disabled:opacity-50"
+                >
+                  {convertTrialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                  Convertește
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* CRM-133: Merge lead modal */}

@@ -352,6 +352,17 @@ export function logCall(
   });
 }
 
+/** GAP-004: Convert trial lead → active student with course enrollment */
+export function convertLeadFromTrial(
+  id: string,
+  input: { courseId: string; createPackage?: boolean }
+): Promise<{ studentId: string; enrolledLessons: number; packageCreated: boolean }> {
+  return api<{ studentId: string; enrolledLessons: number; packageCreated: boolean }>(
+    `/api/leads/${id}/convert-trial`,
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
 // ─── CRM-114: Lead contacts ───────────────────────────────────────────────────
 
 export interface LeadContact {
