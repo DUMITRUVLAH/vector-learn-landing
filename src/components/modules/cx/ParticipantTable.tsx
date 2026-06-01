@@ -9,7 +9,6 @@ import { useState } from "react";
 import { Trash2, Loader2, MessageCircle } from "lucide-react";
 import type {
   CohortParticipant,
-  PatchParticipantPayload,
 } from "@/lib/api/cohortParticipants";
 import { cn } from "@/lib/utils";
 
