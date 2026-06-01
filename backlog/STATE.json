@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "DIPLOMA-803",
-  "iterations": 92,
-  "last_run_at": "2026-06-01T13:00:00Z",
-  "milestone_status": "DIPLOMA Phase 1 in progress: DIPLOMA-801/802/803 done (PR #97). DIPLOMA-804/805 pending.",
+  "last_completed": "DIPLOMA-804",
+  "iterations": 94,
+  "last_run_at": "2026-06-01T13:30:00Z",
+  "milestone_status": "DIPLOMA Phase 1 in progress: DIPLOMA-801/802/803/804 done (PR #97). DIPLOMA-805 pending.",
   "active_milestone": "DIPLOMA",
   "items": {
     "M1-001": {
@@ -1490,15 +1490,23 @@
       }
     },
     "DIPLOMA-804": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DIPLOMA-804-bulk-zip.md",
       "milestone": "DIPLOMA",
       "phase": "1",
       "depends_on": [
         "DIPLOMA-803"
-      ]
+      ],
+      "branch": "feat/DIPLOMA-faza-1-schema-editor",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/97",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "DIPLOMA-805": {
       "status": "pending",

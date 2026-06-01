@@ -1,11 +1,10 @@
 /**
- * DIPLOMA-802/803 — /app/diplome
+ * DIPLOMA-802/803/804 — /app/diplome
  *
  * Section 1: cohort selector
  * Section 2: canvas editor with field drag&drop (DIPLOMA-802)
  * Section 3: participant preview + toggle PDF/JPG + single download (DIPLOMA-803)
- *
- * DIPLOMA-804 adds: bulk ZIP download (multi-select + section 3 extension).
+ *            multi-select + bulk ZIP download (DIPLOMA-804)
  */
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -19,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  PackageOpen,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -32,8 +32,9 @@ import {
   DEFAULT_FIELDS,
 } from "@/hooks/useCertificateTemplate";
 import type { FieldsConfig } from "@/lib/api/certificateTemplates";
-import { issueCertificate } from "@/lib/api/certificates";
+import { issueCertificate, issueCertificatesBulk } from "@/lib/api/certificates";
 import { generateCertificatePdf, downloadBlob, type ExportFormat } from "@/lib/certificateRender";
+import { generateBulkZip } from "@/lib/certificateZip";
 import { buildCertificateId } from "@/lib/certificateId";
 import { normalizeCertificateText } from "@/lib/certificateText";
 import { cn } from "@/lib/utils";
@@ -211,16 +212,26 @@ function ParticipantSection({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [format, setFormat] = useState<ExportFormat>("pdf");
   const [generating, setGenerating] = useState(false);
+  const [generatingBulk, setGeneratingBulk] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // DIPLOMA-804: multi-select state
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
 
   // Load participants when cohort changes
   useEffect(() => {
     if (!cohort) return;
     setLoading(true);
     setCurrentIndex(0);
+    setSelectedIndices(new Set());
     listParticipants(cohort.id)
-      .then(({ participants: p }) => setParticipants(p))
+      .then(({ participants: p }) => {
+        setParticipants(p);
+        // Select all by default
+        setSelectedIndices(new Set(p.map((_, i) => i)));
+      })
       .catch(() => setParticipants([]))
       .finally(() => setLoading(false));
   }, [cohort?.id]);
@@ -231,6 +242,21 @@ function ParticipantSection({
 
   const currentName = activeList[currentIndex] ?? null;
   const total = activeList.length;
+  const selectedCount = selectedIndices.size;
+
+  // Toggle individual selection
+  function toggleSelect(i: number) {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
+
+  // Select all / deselect all
+  function selectAll() { setSelectedIndices(new Set(activeList.map((_, i) => i))); }
+  function deselectAll() { setSelectedIndices(new Set()); }
 
   async function handleDownloadCurrent() {
     if (!currentName || !cohort) return;
@@ -270,6 +296,65 @@ function ParticipantSection({
     }
   }
 
+  // DIPLOMA-804: bulk download
+  async function handleDownloadBulkZip() {
+    if (!cohort || selectedCount === 0) return;
+    setError(null);
+    setGeneratingBulk(true);
+    setBulkProgress({ done: 0, total: selectedCount });
+    try {
+      const selectedList = activeList
+        .map((name, i) => ({ name, i }))
+        .filter(({ i }) => selectedIndices.has(i));
+
+      // Issue all certificates (one bulk API call)
+      const { issued } = await issueCertificatesBulk({
+        cohortId: cohort.id,
+        templateId,
+        courseName: cohort.label,
+        completionDate: cohort.endDate ?? null,
+        participants: selectedList.map(({ name, i }) => ({
+          certificateId: buildCertificateId("VA", cohort.label, cohort.label, i),
+          participantName: name,
+        })),
+      });
+
+      // Build token map
+      const tokenMap = new Map(issued.map((r) => [r.certificateId, r.verificationToken]));
+
+      // Generate ZIP
+      const bulkParticipants = selectedList.map(({ name, i }) => {
+        const certId = buildCertificateId("VA", cohort.label, cohort.label, i);
+        return {
+          index: i,
+          name,
+          certificateId: certId,
+          verificationToken: tokenMap.get(certId) ?? "",
+        };
+      });
+
+      const zipBlob = await generateBulkZip({
+        participants: bulkParticipants,
+        renderOptions: {
+          backgroundUrl,
+          fieldsConfig,
+          courseName: cohort.label,
+          completionDate: cohort.endDate ?? null,
+        },
+        format,
+        zipName: `Certificate_${cohort.label}.zip`,
+        onProgress: (done, total) => setBulkProgress({ done, total }),
+      });
+
+      downloadBlob(zipBlob, `Certificate_${cohort.label}.zip`);
+    } catch {
+      setError("Eroare la generarea ZIP. Încearcă din nou.");
+    } finally {
+      setGeneratingBulk(false);
+      setBulkProgress(null);
+    }
+  }
+
   return (
     <section className="rounded-lg border border-border p-4 flex flex-col gap-4">
       <h2 className="text-base font-semibold text-foreground">3. Generare certificate</h2>
@@ -277,7 +362,7 @@ function ParticipantSection({
       {/* Mode toggle */}
       <div className="flex gap-2">
         <button
-          onClick={() => { setManualMode(false); setCurrentIndex(0); }}
+          onClick={() => { setManualMode(false); setCurrentIndex(0); setSelectedIndices(new Set()); }}
           className={cn(
             "px-3 py-1.5 rounded-md text-sm border transition-colors",
             !manualMode ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:bg-muted"
@@ -287,7 +372,7 @@ function ParticipantSection({
           Din cohortă
         </button>
         <button
-          onClick={() => { setManualMode(true); setCurrentIndex(0); }}
+          onClick={() => { setManualMode(true); setCurrentIndex(0); setSelectedIndices(new Set()); }}
           className={cn(
             "px-3 py-1.5 rounded-md text-sm border transition-colors",
             manualMode ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:bg-muted"
@@ -313,6 +398,7 @@ function ParticipantSection({
               const parsed = parseManualNames(e.target.value);
               setManualNames(parsed);
               setCurrentIndex(0);
+              setSelectedIndices(new Set(parsed.map((_, i) => i)));
             }}
             placeholder={"Ion Popescu\nMaria Ionescu\nAndrei Vlad"}
           />
@@ -328,11 +414,59 @@ function ParticipantSection({
         </div>
       )}
 
-      {/* Participant navigator */}
+      {/* Participant list (DIPLOMA-804 multi-select) */}
       {!loading && total > 0 && (
-        <div className="flex flex-col gap-3">
-          {/* Name display + navigation */}
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-4">
+          {/* Select all / deselect all + badge */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={selectAll}
+              className="text-xs text-primary hover:underline"
+              aria-label="Selectează toți cursanții"
+            >
+              Selectează toți
+            </button>
+            <button
+              onClick={deselectAll}
+              className="text-xs text-muted-foreground hover:underline"
+              aria-label="Deselectează toți cursanții"
+            >
+              Deselectează toți
+            </button>
+            <span className="text-xs text-muted-foreground ml-auto">
+              {selectedCount}/{total} selectați
+            </span>
+          </div>
+
+          {/* Participant checkboxes */}
+          <div className="flex flex-col gap-1 max-h-48 overflow-y-auto border border-border rounded-md px-3 py-2">
+            {activeList.map((name, i) => (
+              <label key={i} className="flex items-center gap-2 cursor-pointer py-0.5 text-sm">
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={selectedIndices.has(i)}
+                  onChange={() => toggleSelect(i)}
+                  aria-label={`Selectează ${name}`}
+                />
+                <span
+                  className={cn(
+                    "text-foreground",
+                    currentIndex === i ? "font-semibold" : ""
+                  )}
+                  onClick={() => setCurrentIndex(i)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === "Enter" && setCurrentIndex(i)}
+                >
+                  {name}
+                </span>
+              </label>
+            ))}
+          </div>
+
+          {/* Single navigator */}
+          <div className="flex items-center gap-3 border-t border-border pt-3">
             <button
               onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
               disabled={currentIndex === 0}
@@ -341,12 +475,10 @@ function ParticipantSection({
             >
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </button>
-
             <div className="flex-1 text-center">
               <p className="text-base font-semibold text-foreground">{currentName}</p>
               <p className="text-xs text-muted-foreground">{currentIndex + 1} / {total}</p>
             </div>
-
             <button
               onClick={() => setCurrentIndex((i) => Math.min(total - 1, i + 1))}
               disabled={currentIndex === total - 1}
@@ -360,45 +492,60 @@ function ParticipantSection({
           {/* Format toggle */}
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Format:</span>
+            {(["pdf", "jpg"] as ExportFormat[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFormat(f)}
+                className={cn(
+                  "px-2.5 py-1 rounded text-xs border transition-colors",
+                  format === f ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:bg-muted"
+                )}
+                aria-pressed={format === f}
+              >
+                {f.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-2">
+            {/* Single download */}
             <button
-              onClick={() => setFormat("pdf")}
-              className={cn(
-                "px-2.5 py-1 rounded text-xs border transition-colors",
-                format === "pdf" ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:bg-muted"
-              )}
-              aria-pressed={format === "pdf"}
+              onClick={() => void handleDownloadCurrent()}
+              disabled={generating || generatingBulk || !currentName || !cohort}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              aria-label={`Descarcă certificat ${format.toUpperCase()} pentru ${currentName ?? ""}`}
             >
-              PDF
+              {generating ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Download className="h-4 w-4" aria-hidden="true" />
+              )}
+              {generating ? "Se generează..." : `Descarcă Curent (${format.toUpperCase()})`}
             </button>
+
+            {/* Bulk ZIP download — DIPLOMA-804 */}
             <button
-              onClick={() => setFormat("jpg")}
-              className={cn(
-                "px-2.5 py-1 rounded text-xs border transition-colors",
-                format === "jpg" ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground border-border hover:bg-muted"
-              )}
-              aria-pressed={format === "jpg"}
+              onClick={() => void handleDownloadBulkZip()}
+              disabled={generatingBulk || generating || selectedCount === 0 || !cohort}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm border border-primary text-primary hover:bg-primary/10 disabled:opacity-50 transition-colors"
+              aria-label={`Descarcă toate cele ${selectedCount} certificate selectate ca ZIP`}
             >
-              JPG
+              {generatingBulk ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <PackageOpen className="h-4 w-4" aria-hidden="true" />
+              )}
+              {generatingBulk
+                ? bulkProgress
+                  ? `Se generează ${bulkProgress.done}/${bulkProgress.total}...`
+                  : "Se pregătește..."
+                : `Descarcă Toate (${selectedCount}) — ZIP (${format.toUpperCase()})`}
             </button>
           </div>
 
-          {/* Download single button */}
-          <button
-            onClick={() => void handleDownloadCurrent()}
-            disabled={generating || !currentName || !cohort}
-            className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-md text-sm bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors max-w-xs"
-            aria-label={`Descarcă certificat ${format.toUpperCase()} pentru ${currentName ?? ""}`}
-          >
-            {generating ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Download className="h-4 w-4" aria-hidden="true" />
-            )}
-            {generating ? "Se generează..." : `Descarcă Certificat Curent (${format.toUpperCase()})`}
-          </button>
-
           {error && (
-            <p className="text-xs text-destructive flex items-center gap-1">
+            <p role="alert" className="text-xs text-destructive flex items-center gap-1">
               <AlertCircle className="h-3 w-3" aria-hidden="true" />
               {error}
             </p>
@@ -411,14 +558,6 @@ function ParticipantSection({
           {cohort ? "Nu există participanți în această cohortă." : "Selectează o cohortă mai sus."}
         </p>
       )}
-
-      {/* DIPLOMA-804 bulk section placeholder */}
-      <div
-        className="mt-2 rounded border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
-        aria-label="Generare bulk — disponibil după DIPLOMA-804"
-      >
-        Descarcă toate certificatele ca ZIP — disponibil după DIPLOMA-804.
-      </div>
     </section>
   );
 }
