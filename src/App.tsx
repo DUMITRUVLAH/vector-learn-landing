@@ -36,6 +36,7 @@ import { SignupPage } from "./pages/app/SignupPage";
 import { DashboardPage } from "./pages/app/DashboardPage";
 import { StudentsPage } from "./pages/app/StudentsPage";
 import { SchedulePage } from "./pages/app/SchedulePage";
+import { CheckInPage } from "./pages/app/CheckInPage"; // GAP-018
 import { TeachersPage } from "./pages/app/TeachersPage";
 import { PaymentsPage } from "./pages/app/PaymentsPage";
 import { LeadsPage } from "./pages/app/LeadsPage";
@@ -43,6 +44,7 @@ import { LeadCardPage } from "./pages/app/LeadCardPage";
 import { TemplatesPage } from "./pages/app/TemplatesPage";
 import { AutomationsPage } from "./pages/app/AutomationsPage";
 import { AnalyticsPage } from "./pages/app/AnalyticsPage";
+import { AdvancedAnalyticsPage } from "./pages/app/AdvancedAnalyticsPage"; // GAP-016
 import { PayrollPage } from "./pages/app/PayrollPage";
 import { TeacherStatsPage } from "./pages/app/TeacherStatsPage";
 import { AvailabilityPage } from "./pages/app/AvailabilityPage";
@@ -56,6 +58,9 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
+import { EnrollPage } from "./pages/enroll/EnrollPage";
+import { ProgressSkillsPage } from "./pages/app/ProgressSkillsPage"; // GAP-012
+import { ProgressPublicPage } from "./pages/app/ProgressPublicPage"; // GAP-012
 
 function HomePage() {
   return (
@@ -102,6 +107,11 @@ function Routes() {
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;
+  // GAP-018: /app/lessons/:id/check-in must be before /app/schedule
+  if (path.match(/^\/app\/lessons\/[^/]+\/check-in$/)) {
+    const lessonId = path.split("/")[3];
+    return <CheckInPage lessonId={lessonId} />;
+  }
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;
@@ -113,6 +123,7 @@ function Routes() {
     return <LeadCardPage leadId={id} />;
   }
   if (path.startsWith("/app/analytics/crm")) return <AnalyticsPage />;
+  if (path.startsWith("/app/analytics")) return <AdvancedAnalyticsPage />; // GAP-016
   if (path.startsWith("/app/hr/payroll")) return <PayrollPage />;
   // /app/hr/teachers/:id/stats
   if (path.match(/^\/app\/hr\/teachers\/[^/]+\/stats$/)) {
@@ -134,12 +145,23 @@ function Routes() {
   if (path.startsWith("/app/invoices")) return <InvoicesPage />;
   if (path.startsWith("/app/cx")) return <CXPage />;
   if (path.startsWith("/app/diplome")) return <DiplomaPage />;
+  if (path.startsWith("/app/progress")) return <ProgressSkillsPage />; // GAP-012
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students
   if (path.match(/^\/feedback\/[^/]+$/)) {
     const token = path.split("/")[2];
     return <FeedbackPublicPage token={token} />;
+  }
+  // GAP-011: /enroll/:slug — public enrollment page for a cohort
+  if (path.match(/^\/enroll\/[^/]+$/)) {
+    const slug = path.split("/")[2];
+    return <EnrollPage slug={slug} />;
+  }
+  // GAP-012: /progress/:token — public no-auth progress report for a student
+  if (path.match(/^\/progress\/[^/]+$/)) {
+    const token = path.split("/")[2];
+    return <ProgressPublicPage token={token} />;
   }
   return <HomePage />;
 }

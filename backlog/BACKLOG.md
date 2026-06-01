@@ -289,3 +289,15 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | KINDER-007 | 🟡 | Incident/accident reports + signature |
 | GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
 | CONSENT-001 | 🟡 | Consent/permission forms + e-signature |
+
+## Milestone: FORMS — Typeform-style form builder → CRM lead collection
+Requirements: `backlog/reports/REQ-FORMS-typeform-lead-collection-2026-06-01.md`. Reuses the
+FEEDBACK-601 typed-question foundation + the /api/leads/intake dedup path. Submissions become CRM leads.
+
+| ID | Value | Feature | Spec |
+|----|-------|---------|------|
+| FORMS-001 | 🔴 | Form engine: schema + typed fields + field→lead mapping + public submit (dedup) | full spec |
+| FORMS-002 | 🔴 | Visual builder: reorderable fields + per-field config + lead-mapping + publish/share | req doc |
+| FORMS-003 | 🔴 | Public conversational renderer (/f/:slug) one-question-at-a-time + UTM/hidden + thank-you | req doc |
+| FORMS-004 | 🟡 | Conditional logic / jump branching | req doc |
+| FORMS-005 | 🟡 | Embed snippet + per-form analytics (views/starts/completions/lead conversion) | req doc |

@@ -272,6 +272,15 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
   `src/__tests__/schema-drift.test.ts` gate fails CI if the code's schema has a table/column that
   the committed migrations don't create — catching the drift before it 500s in prod.
 
+### 3.5.1bis Backlog critic (don't build the first draft of a spec either)
+**Whenever new backlog features are written** (the PLAN step auto-generates a module, or new
+specs/items are added on owner request), the **`backlog-critic`** agent reviews them BEFORE any are
+built. It challenges scope, value, dependencies, and clarity; verifies the feature actually improves
+the product and doesn't reinvent existing code (reuse over rebuild); applies safe fixes to the
+specs/STATE directly (tighten acceptance criteria, fix `depends_on`, mark reuse, add missing blocking
+tests) and proposes 0–3 high-value enhancements. It writes `backlog/reports/<MODULE>-backlog-critique.md`.
+Never build a freshly-written item that hasn't passed the critic. (Wired into orchestrator PLAN step 8.)
+
 ### 3.5.2 Review → improve loop (don't ship the first draft)
 Each item goes through three reviewers, whose findings are handed to an **improver** pass
 (feature-builder) that applies the fixes; then it is re-reviewed. Repeat until clean (max 3
