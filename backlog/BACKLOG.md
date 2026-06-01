@@ -294,7 +294,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 
 | ID | Severity | Title | Status |
 |----|----------|-------|--------|
-| BRANCH-701 | 🔴 high | Schema branches + branch_id pe students/teachers/lessons | pending |
+| BRANCH-701 | 🔴 high | Schema branches + branch_id pe students/teachers/lessons | done ✅ |
 | BRANCH-702 | 🔴 high | Branch switcher UI + BranchContext | pending |
 | BRANCH-703 | 🔴 high | Branch-scoped permissions (branch_scope pe users) | pending |
 | BRANCH-704 | 🟡 normal | Rapoarte consolidate vs per-filială | pending |
