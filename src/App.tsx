@@ -1,4 +1,5 @@
 import { HashRouter, useRouter } from "./router/HashRouter";
+import { BranchProvider } from "./contexts/BranchContext";
 import { Navbar } from "./components/Navbar";
 import { Hero } from "./components/Hero";
 import { TrustBar } from "./components/TrustBar";
@@ -59,6 +60,7 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
+import BranchesPage from "./pages/app/BranchesPage";
 
 function HomePage() {
   return (
@@ -143,6 +145,8 @@ function Routes() {
     return <FormBuilderPage formId={id} />;
   }
   if (path.startsWith("/app/forms")) return <FormsPage />;
+  // BRANCH-702: Multi-branch management
+  if (path.startsWith("/app/branches")) return <BranchesPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students
@@ -161,8 +165,11 @@ function Routes() {
 export default function App() {
   return (
     <HashRouter>
-      <Routes />
-      {import.meta.env.DEV && <BackendStatusBadge />}
+      {/* BRANCH-702: BranchProvider gives all pages access to the active branch selection */}
+      <BranchProvider>
+        <Routes />
+        {import.meta.env.DEV && <BackendStatusBadge />}
+      </BranchProvider>
     </HashRouter>
   );
 }
