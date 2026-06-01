@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "BRANCH-702",
-  "last_completed": "BRANCH-701",
-  "iterations": 133,
+  "current_item": null,
+  "last_completed": "BRANCH-702",
+  "iterations": 134,
   "last_run_at": "2026-06-01T23:00:00Z",
   "milestone_status": "KINDER faza-1 COMPLETE (KINDER-001..007 all done, PR #108). BRANCH faza-1 starting: BRANCH-701..704 generated from user-stories/multifilale.md.",
   "active_milestone": "BRANCH",  "items": {
@@ -1823,8 +1823,10 @@
       "depends_on": []
     },
     "BRANCH-702": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
+      "branch": "feat/BRANCH-faza-1-multifiliale",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "N/A" },
       "blockers": [],
       "spec": "backlog/specs/BRANCH-702-switcher.md",
       "milestone": "BRANCH",
