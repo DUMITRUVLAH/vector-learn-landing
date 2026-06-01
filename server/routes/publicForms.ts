@@ -40,15 +40,10 @@ type HonoContext = Context;
 export async function publicFormGetHandler(c: HonoContext) {
   const slug = c.req.param("slug") ?? "";
 
-  // TEMP-DEBUG: surface the real error to diagnose the prod 500 (revert after).
-  let form;
-  try {
-    form = await db.query.forms.findFirst({
-      where: and(eq(forms.slug, slug), eq(forms.status, "published")),
-    });
-  } catch (err) {
-    return c.json({ debug: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack?.slice(0, 400) : undefined }, 500);
-  }
+  // Caută formularul published cu slug-ul dat (indiferent de tenant — URL-ul public e unic prin slug)
+  const form = await db.query.forms.findFirst({
+    where: and(eq(forms.slug, slug), eq(forms.status, "published")),
+  });
 
   if (!form) return c.json({ error: "not_found" }, 404);
 
