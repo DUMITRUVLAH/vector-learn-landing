@@ -1926,8 +1926,8 @@
       ]
     },
     "GAP-012": {
-      "status": "pending",
-      "attempts": 1,
+      "status": "in_progress",
+      "attempts": 2,
       "blockers": [],
       "spec": "backlog/specs/GAP-012-gradebook-progress.md",
       "milestone": "GAP",

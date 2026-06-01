@@ -57,6 +57,8 @@ import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { EnrollPage } from "./pages/enroll/EnrollPage";
+import { ProgressSkillsPage } from "./pages/app/ProgressSkillsPage"; // GAP-012
+import { ProgressPublicPage } from "./pages/app/ProgressPublicPage"; // GAP-012
 
 function HomePage() {
   return (
@@ -135,6 +137,7 @@ function Routes() {
   if (path.startsWith("/app/invoices")) return <InvoicesPage />;
   if (path.startsWith("/app/cx")) return <CXPage />;
   if (path.startsWith("/app/diplome")) return <DiplomaPage />;
+  if (path.startsWith("/app/progress")) return <ProgressSkillsPage />; // GAP-012
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students
@@ -146,6 +149,11 @@ function Routes() {
   if (path.match(/^\/enroll\/[^/]+$/)) {
     const slug = path.split("/")[2];
     return <EnrollPage slug={slug} />;
+  }
+  // GAP-012: /progress/:token — public no-auth progress report for a student
+  if (path.match(/^\/progress\/[^/]+$/)) {
+    const token = path.split("/")[2];
+    return <ProgressPublicPage token={token} />;
   }
   return <HomePage />;
 }
