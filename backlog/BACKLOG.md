@@ -142,9 +142,9 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 34 | `CRM-146` | Iconițe contact mai vizibile pe card + flag „fără telefon/email" | J | pending | [specs/CRM-146-contact-icons-missing-flag.md](specs/CRM-146-contact-icons-missing-flag.md) |
 | 35 | `CRM-147` | Badge restanță pe tab-ul Task-uri al cartonașului | J | pending | [specs/CRM-147-task-overdue-tab-badge.md](specs/CRM-147-task-overdue-tab-badge.md) |
 | 36 | `CRM-148` | „Convertit" duce la fișa studentului (link din cartonaș + card) | J | pending | [specs/CRM-148-converted-link-to-student.md](specs/CRM-148-converted-link-to-student.md) |
-| 37 | `CRM-149` | Pills cu filtrele active + „×" individual pe fiecare | J | pending | [specs/CRM-149-active-filter-pills.md](specs/CRM-149-active-filter-pills.md) |
-| 38 | `CRM-150` | Import CSV: mapare valoare/companie/tag + parser robust | J | pending | [specs/CRM-150-csv-import-fields-parser.md](specs/CRM-150-csv-import-fields-parser.md) |
-| 39 | `CRM-151` | Mobil: acțiuni secundare în meniu „⋯"; doar FAB pentru adăugare | J | pending | [specs/CRM-151-mobile-action-overflow-menu.md](specs/CRM-151-mobile-action-overflow-menu.md) |
+| 37 | `CRM-149` | Pills cu filtrele active + „×" individual pe fiecare | J | done | [specs/CRM-149-active-filter-pills.md](specs/CRM-149-active-filter-pills.md) |
+| 38 | `CRM-150` | Import CSV: mapare valoare/companie/tag + parser robust | J | done | [specs/CRM-150-csv-import-fields-parser.md](specs/CRM-150-csv-import-fields-parser.md) |
+| 39 | `CRM-151` | Mobil: acțiuni secundare în meniu „⋯"; doar FAB pentru adăugare | J | done | [specs/CRM-151-mobile-action-overflow-menu.md](specs/CRM-151-mobile-action-overflow-menu.md) |
 
 ## Active milestone: COMM — Modulul Comunicare (mesagerie reală backend)
 
