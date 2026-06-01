@@ -59,6 +59,7 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
+import { CoursesPage } from "./pages/app/CoursesPage"; // COURSE-101
 
 function HomePage() {
   return (
@@ -105,6 +106,7 @@ function Routes() {
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;
+  if (path.startsWith("/app/courses")) return <CoursesPage />; // COURSE-101
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;
