@@ -27,3 +27,4 @@ export * from "./contracts";
 export * from "./feedback";
 export * from "./invoices";
 export * from "./subscriptions";
+export * from "./cohorts";

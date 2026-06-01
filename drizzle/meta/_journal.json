@@ -176,6 +176,13 @@
       "when": 1780301485492,
       "tag": "0024_fin_invoices_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1748736000000,
+      "tag": "0025_cx701_cohorts",
+      "breakpoints": true
     }
   ]
 }

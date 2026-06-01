@@ -34,6 +34,7 @@ import { feedbackPublicRoutes } from "./routes/feedbackPublic";
 import { contactRoutes } from "./routes/contacts";
 import { teamRoutes } from "./routes/team";
 import { invoiceRoutes } from "./routes/invoices";
+import { cohortRoutes } from "./routes/cohorts";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -110,6 +111,8 @@ app.route("/api/contracts", contractRoutes);
 app.route("/api/invoices", invoiceRoutes);
 // CRM-137: team members endpoint for AssigneePicker
 app.route("/api/team", teamRoutes);
+// CX-701: Cohorts (course editions) CRUD
+app.route("/api/cohorts", cohortRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {
