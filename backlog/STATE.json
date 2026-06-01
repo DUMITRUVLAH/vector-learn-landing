@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "SET-802",
   "last_completed": "SET-801",
-  "iterations": 139,
+  "iterations": 140,
   "last_run_at": "2026-06-01T23:00:00Z",
   "milestone_status": "SET faza-1 starting: SET-801..804 generated from user-stories/settings.md. INTEG faza-1+2 queued (7 integration items from 2026-06-01 audit).",
   "active_milestone": "SET",
@@ -1985,8 +1985,8 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "N/A" }
     },
     "SET-802": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SET-802-notification-prefs.md",
       "milestone": "SET",
