@@ -32,3 +32,6 @@ yarn-debug.log*
 yarn-error.log*
 .vercel
 .env*
+
+# Material de referință local (proiecte portate, nu fac parte din app)
+reference/
