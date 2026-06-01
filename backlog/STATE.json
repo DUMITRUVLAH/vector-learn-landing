@@ -2158,8 +2158,8 @@
       }
     },
     "INTEG-104": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "branch": "feat/INTEG-faza-1-conectivitate-module",
       "spec": "backlog/specs/INTEG-104-analytics-endpoints.md"
