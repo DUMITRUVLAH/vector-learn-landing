@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, count, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { branches, students, teachers, payments } from "../db/schema";
+import { branches, students, teachers, payments, users } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 const createBranchSchema = z.object({
@@ -180,6 +180,23 @@ branchRoutes.patch("/:id", zValidator("json", updateBranchSchema), async (c) => 
     .set(updates)
     .where(and(eq(branches.id, id), eq(branches.tenantId, tenantId)))
     .returning();
+
+  // BRANCH-702: When assigning a manager, set their branch_scope to this branch
+  if (body.managerUserId !== undefined) {
+    if (body.managerUserId) {
+      // Assign scope to new manager
+      await db
+        .update(users)
+        .set({ branchScope: id })
+        .where(and(eq(users.id, body.managerUserId), eq(users.tenantId, tenantId)));
+    } else if (existing[0]?.managerUserId) {
+      // Remove scope from old manager (when managerUserId cleared to null)
+      await db
+        .update(users)
+        .set({ branchScope: null })
+        .where(and(eq(users.id, existing[0].managerUserId), eq(users.tenantId, tenantId)));
+    }
+  }
 
   return c.json(updated);
 });

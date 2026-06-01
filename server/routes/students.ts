@@ -43,9 +43,14 @@ studentRoutes.use("*", requireAuth);
 
 studentRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
   const { search, status, limit, offset } = c.req.valid("query");
-  const tenantId = c.get("user").tenantId;
+  const user = c.get("user");
+  const tenantId = user.tenantId;
 
   const conditions = [eq(students.tenantId, tenantId)];
+  // BRANCH-702: branch_manager sees only their branch's students
+  if (user.branchScope) {
+    conditions.push(eq(students.branchId, user.branchScope));
+  }
   if (status !== "all") {
     conditions.push(eq(students.status, status));
   }

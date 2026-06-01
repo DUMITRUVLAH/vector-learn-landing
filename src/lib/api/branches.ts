@@ -86,6 +86,10 @@ export async function updateBranch(
   return res.json() as Promise<Branch>;
 }
 
+export async function assignManager(branchId: string, managerUserId: string | null): Promise<Branch> {
+  return updateBranch(branchId, { managerUserId });
+}
+
 export async function deleteBranch(id: string): Promise<void> {
   const res = await fetch(`${BASE}/${id}`, {
     method: "DELETE",

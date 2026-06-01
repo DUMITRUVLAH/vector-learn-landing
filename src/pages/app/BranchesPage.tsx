@@ -3,7 +3,7 @@
  * Route: /app/branches
  */
 import { useEffect, useState } from "react";
-import { Plus, Building2, Users, GraduationCap, TrendingUp, Trash2 } from "lucide-react";
+import { Plus, Building2, Users, GraduationCap, TrendingUp, Trash2, UserCheck } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { cn } from "@/lib/utils";
 import {
@@ -12,13 +12,14 @@ import {
   getBranchRollup,
   createBranch,
   deleteBranch,
+  assignManager,
   type Branch,
   type BranchStats,
   type BranchRollup,
 } from "@/lib/api/branches";
 import { formatCents } from "@/lib/utils";
 
-type ViewMode = "consolidated" | "per-branch";
+type ViewMode = "consolidated" | "per-branch" | "managers";
 
 export function BranchesPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -30,6 +31,8 @@ export function BranchesPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Branch | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; email: string; role: string }[]>([]);
+  const [assignTarget, setAssignTarget] = useState<Branch | null>(null);
 
   const loadData = () => {
     setLoading(true);
@@ -44,8 +47,19 @@ export function BranchesPage() {
       .finally(() => setLoading(false));
   };
 
+  const loadTeam = () => {
+    if (typeof fetch === "undefined") return;
+    const p = fetch("/api/team/members", { credentials: "include" });
+    if (!p || typeof p.then !== "function") return;
+    p
+      .then((r) => r.ok ? r.json() as Promise<{ items: { id: string; name: string; email: string; role: string }[] }> : Promise.reject())
+      .then(({ items }) => setTeamMembers(items))
+      .catch(() => { /* silently ignore */ });
+  };
+
   useEffect(() => {
     loadData();
+    loadTeam();
   }, []);
 
   const handleDeleteBranch = async () => {
@@ -78,30 +92,21 @@ export function BranchesPage() {
       <div className="space-y-6">
         {/* View toggle */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setViewMode("consolidated")}
-            className={cn(
-              "px-3 py-1.5 text-sm rounded-md border transition-colors",
-              viewMode === "consolidated"
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background border-border hover:bg-muted"
-            )}
-          >
-            Consolidat
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("per-branch")}
-            className={cn(
-              "px-3 py-1.5 text-sm rounded-md border transition-colors",
-              viewMode === "per-branch"
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background border-border hover:bg-muted"
-            )}
-          >
-            Per filială
-          </button>
+          {(["consolidated", "per-branch", "managers"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewMode(mode)}
+              className={cn(
+                "px-3 py-1.5 text-sm rounded-md border transition-colors",
+                viewMode === mode
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background border-border hover:bg-muted"
+              )}
+            >
+              {mode === "consolidated" ? "Consolidat" : mode === "per-branch" ? "Per filială" : "Manageri"}
+            </button>
+          ))}
         </div>
 
         {loading && (
@@ -201,6 +206,61 @@ export function BranchesPage() {
           </div>
         )}
 
+        {/* Managers tab */}
+        {!loading && !error && viewMode === "managers" && (
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-4 py-3 border-b border-border">
+              <h2 className="text-sm font-semibold">Manageri per filială</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Filială</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Manager</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Acțiuni</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {branches.map((branch) => {
+                    const manager = teamMembers.find((m) => m.id === branch.managerUserId);
+                    return (
+                      <tr key={branch.id} className="hover:bg-muted/30">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <span className="font-medium">{branch.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {manager ? (
+                            <div className="flex items-center gap-2">
+                              <UserCheck className="h-4 w-4 text-green-600 shrink-0" />
+                              <span>{manager.name}</span>
+                              <span className="text-xs text-muted-foreground">({manager.email})</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">Neasignat</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setAssignTarget(branch)}
+                            className="px-2 py-1 text-xs rounded border border-border hover:bg-muted transition-colors"
+                          >
+                            Asignează manager
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {!loading && !error && branches.length === 0 && (
           <div className="text-center py-12 text-muted-foreground">
             <Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -235,6 +295,16 @@ export function BranchesPage() {
           error={deleteError}
           onCancel={() => { setDeleteTarget(null); setDeleteError(null); }}
           onConfirm={handleDeleteBranch}
+        />
+      )}
+
+      {/* Assign Manager modal */}
+      {assignTarget && (
+        <AssignManagerModal
+          branch={assignTarget}
+          teamMembers={teamMembers}
+          onClose={() => setAssignTarget(null)}
+          onAssigned={() => { setAssignTarget(null); loadData(); }}
         />
       )}
     </AppShell>
@@ -337,6 +407,80 @@ function AddBranchModal({ onClose, onCreated }: AddBranchModalProps) {
               className="px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               {saving ? "Se salvează..." : "Adaugă filială"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+interface AssignManagerModalProps {
+  branch: Branch;
+  teamMembers: { id: string; name: string; email: string; role: string }[];
+  onClose: () => void;
+  onAssigned: () => void;
+}
+
+function AssignManagerModal({ branch, teamMembers, onClose, onAssigned }: AssignManagerModalProps) {
+  const [selectedUserId, setSelectedUserId] = useState(branch.managerUserId ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await assignManager(branch.id, selectedUserId || null);
+      onAssigned();
+    } catch {
+      setError("Nu s-a putut asigna managerul. Încearcă din nou.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" data-testid="assign-manager-modal">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-card rounded-lg border border-border shadow-xl p-6 w-full max-w-sm mx-4 z-10">
+        <h2 className="text-base font-semibold mb-1">Asignează manager</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Filiala: <strong>{branch.name}</strong>
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label htmlFor="manager-select" className="text-sm font-medium">Utilizator manager</label>
+            <select
+              id="manager-select"
+              value={selectedUserId}
+              onChange={(e) => setSelectedUserId(e.target.value)}
+              disabled={saving}
+              className="w-full px-3 py-2 text-sm rounded-md border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+            >
+              <option value="">— Neasignat —</option>
+              {teamMembers.map((m) => (
+                <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
+              ))}
+            </select>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-muted transition-colors disabled:opacity-50"
+            >
+              Anulează
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {saving ? "Se salvează..." : "Salvează"}
             </button>
           </div>
         </form>

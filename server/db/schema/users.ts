@@ -21,12 +21,15 @@ export const users = pgTable(
     passwordHash: varchar("password_hash", { length: 255 }).notNull(),
     name: varchar("name", { length: 200 }).notNull(),
     role: userRoleEnum("role").notNull().default("manager"),
+    /** BRANCH-702: If set, this user is a branch manager scoped to this branch only */
+    branchScope: uuid("branch_scope"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     tenantIdx: index("users_tenant_idx").on(t.tenantId),
     emailUniq: uniqueIndex("users_tenant_email_uniq").on(t.tenantId, t.email),
+    branchScopeIdx: index("users_branch_scope_idx").on(t.tenantId, t.branchScope),
   })
 );
 

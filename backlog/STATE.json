@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "BRANCH-701",
-  "last_completed": "FIN-604",
-  "iterations": 102,
-  "last_run_at": "2026-06-02T05:30:00Z",
-  "milestone_status": "FIN done (built in previous run, marked). BRANCH faza-1 in progress.",
+  "current_item": "BRANCH-702",
+  "last_completed": "BRANCH-701",
+  "iterations": 103,
+  "last_run_at": "2026-06-02T06:00:00Z",
+  "milestone_status": "BRANCH faza-1 in progress: BRANCH-701 done, BRANCH-702/703 pending.",
   "active_milestone": "BRANCH",
   "items": {
     "M1-001": {
@@ -2291,13 +2291,20 @@
       }
     },
     "BRANCH-701": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BRANCH-701-schema-switcher.md",
       "milestone": "BRANCH",
       "phase": "1",
-      "depends_on": ["MVP-004", "MVP-005", "MVP-006"]
+      "depends_on": ["MVP-004", "MVP-005", "MVP-006"],
+      "branch": "feat/BRANCH-faza-1-branches",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "BRANCH-702": {
       "status": "pending",
