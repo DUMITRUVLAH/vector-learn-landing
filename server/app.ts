@@ -38,7 +38,11 @@ import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
 import { formRoutes } from "./routes/forms"; // FORMS-001
-import { publicFormGetHandler, publicFormSubmitHandler } from "./routes/publicForms"; // FORMS-001
+import {
+  publicFormGetHandler,
+  publicFormSubmitHandler,
+  publicFormPingHandler,
+} from "./routes/publicForms"; // FORMS-001/005
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -84,6 +88,8 @@ app.get("/api/health", async (c) => {
 // intercepts any path registered AFTER them, even direct app.get handlers.
 app.get("/api/public/forms/:slug", publicFormGetHandler);
 app.post("/api/public/forms/:slug/submit", publicFormSubmitHandler);
+// FORMS-005: analytics ping (no-auth, fire-and-forget from renderer)
+app.post("/api/public/forms/:slug/ping", publicFormPingHandler);
 
 app.route("/api/auth", authRoutes);
 app.route("/api/students", studentRoutes);

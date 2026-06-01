@@ -1,5 +1,5 @@
 /**
- * FORMS-001/004 — Rute admin autentificate pentru gestionarea formularelor
+ * FORMS-001/004/005 — Rute admin autentificate pentru gestionarea formularelor
  *
  * GET    /api/forms                            — lista formularelor tenantului
  * POST   /api/forms                            — creare formular
@@ -15,11 +15,12 @@
  * GET    /api/forms/:id/logic                  — FORMS-004: lista regulilor de logică
  * POST   /api/forms/:id/logic                  — FORMS-004: adăugare regulă
  * DELETE /api/forms/:id/logic/:ruleId          — FORMS-004: ștergere regulă
+ * GET    /api/forms/:id/analytics              — FORMS-005: statistici views/starts/completions
  */
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull } from "drizzle-orm";
 import { db } from "../db/client";
 import { forms, formFields, formSubmissions, formLogic } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -503,4 +504,42 @@ formRoutes.delete("/:id/logic/:ruleId", async (c) => {
     );
 
   return c.json({ ok: true });
+});
+
+// ─── FORMS-005: Analytics ──────────────────────────────────────────────────────
+
+// GET /api/forms/:id/analytics — statistici views/starts/completions/leadsCreated
+formRoutes.get("/:id/analytics", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const formId = c.req.param("id");
+
+  // Tenant-safe: verifică că formularul aparține tenantului curent
+  const form = await db.query.forms.findFirst({
+    where: and(eq(forms.id, formId), eq(forms.tenantId, tenantId)),
+  });
+  if (!form) return c.json({ error: "not_found" }, 404);
+
+  // Număr submisii cu leadId nenul (leaduri create din acest formular)
+  const leadsCreatedRows = await db
+    .select({ cnt: count() })
+    .from(formSubmissions)
+    .where(
+      and(
+        eq(formSubmissions.formId, formId),
+        eq(formSubmissions.tenantId, tenantId),
+        isNotNull(formSubmissions.leadId)
+      )
+    );
+
+  const leadsCreatedArr = Array.isArray(leadsCreatedRows)
+    ? leadsCreatedRows
+    : (leadsCreatedRows as unknown as { rows: typeof leadsCreatedRows }).rows ?? leadsCreatedRows;
+
+  const leadsCreated = Number(leadsCreatedArr[0]?.cnt ?? 0);
+  const views = form.views;
+  const starts = form.starts;
+  const completions = form.completions;
+  const completionRate = starts > 0 ? completions / starts : 0;
+
+  return c.json({ views, starts, completions, completionRate, leadsCreated });
 });

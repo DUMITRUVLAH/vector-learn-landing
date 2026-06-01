@@ -1,5 +1,5 @@
 /**
- * FORMS-003/004 — /f/:slug (public, fără autentificare)
+ * FORMS-003/004/005 — /f/:slug (public, fără autentificare)
  *
  * Renderer conversațional one-question-at-a-time:
  *   - Bară de progres
@@ -7,6 +7,7 @@
  *   - Buton Înapoi
  *   - Capturare UTM + câmpuri hidden din URL
  *   - FORMS-004: onorează regulile de logică condițională (jump_to_field / jump_to_end)
+ *   - FORMS-005: ping view la mount + ping start la prima interacțiune (fire-and-forget)
  *   - Submit → ecran thank-you / redirect
  */
 import { useEffect, useState, useCallback, useRef } from "react";
@@ -15,6 +16,7 @@ import { Logo } from "@/components/Logo";
 import {
   getPublicForm,
   submitPublicForm,
+  pingFormEvent,
   type PublicForm,
   type PublicFormField,
   type FormLogicRule,
@@ -87,6 +89,9 @@ export function FormPublicPage({ slug }: FormPublicPageProps) {
   // Ref for auto-focus on input
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
+  // FORMS-005: ping analytics (fire-and-forget, una singura per sesiune)
+  const startPingedRef = useRef(false);
+
   // ── Capture UTM at mount ──
 
   useEffect(() => {
@@ -124,6 +129,8 @@ export function FormPublicPage({ slug }: FormPublicPageProps) {
             }
           }
           setAnswers(initialAnswers);
+          // FORMS-005: ping view (fire-and-forget, nu blochează UX)
+          void pingFormEvent(slug, "view");
         }
       } catch (err: unknown) {
         if (cancelled) return;
@@ -219,6 +226,11 @@ export function FormPublicPage({ slug }: FormPublicPageProps) {
   function setAnswer(fieldId: string, value: unknown) {
     setAnswers((prev) => ({ ...prev, [fieldId]: value }));
     setFieldError(null);
+    // FORMS-005: ping start la prima interacțiune (o singură dată per sesiune)
+    if (!startPingedRef.current) {
+      startPingedRef.current = true;
+      void pingFormEvent(slug, "start");
+    }
   }
 
   // ── Submit ──

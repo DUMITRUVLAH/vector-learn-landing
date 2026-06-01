@@ -1,10 +1,10 @@
 /**
- * FORMS-002 — /app/forms/:id/edit
+ * FORMS-002/005 — /app/forms/:id/edit
  *
  * Builder vizual cu:
  *   - Stânga: lista câmpurilor reordonabile (↑/↓)
  *   - Centru: preview live
- *   - Dreapta: panou configurare câmp selectat / setări formular
+ *   - Dreapta: panou configurare câmp selectat / setări formular / analytics + embed
  */
 import { useEffect, useState, useCallback } from "react";
 import {
@@ -20,6 +20,8 @@ import {
   ExternalLink,
   Settings,
   GitBranch,
+  BarChart2,
+  RefreshCw,
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
@@ -36,6 +38,7 @@ import {
   listLogicRules,
   addLogicRule,
   deleteLogicRule,
+  getFormAnalytics,
   type Form,
   type FormField,
   type FormFieldType,
@@ -43,6 +46,7 @@ import {
   type FormLogicRule,
   type FormLogicCondition,
   type LogicAction,
+  type FormAnalytics,
 } from "@/lib/api/forms";
 import { cn } from "@/lib/utils";
 
@@ -420,6 +424,227 @@ function FormSettingsPanel({ form, onSave, saving }: FormSettingsPanelProps) {
   );
 }
 
+// ─── AnalyticsPanel (FORMS-005) ───────────────────────────────────────────────
+
+interface AnalyticsPanelProps {
+  formId: string;
+  formSlug: string;
+  formTitle: string;
+}
+
+function AnalyticsPanel({ formId, formSlug, formTitle }: AnalyticsPanelProps) {
+  const [analytics, setAnalytics] = useState<FormAnalytics | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [embedSubTab, setEmbedSubTab] = useState<"iframe" | "popup">("iframe");
+
+  const loadAnalytics = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getFormAnalytics(formId);
+      setAnalytics(data);
+    } catch {
+      setError("Nu s-au putut încărca statisticile.");
+    } finally {
+      setLoading(false);
+    }
+  }, [formId]);
+
+  useEffect(() => {
+    void loadAnalytics();
+  }, [loadAnalytics]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+  const iframeSnippet = `<!-- Vector Learn Forms — iframe embed -->
+<iframe
+  src="${origin}/#/f/${formSlug}"
+  width="100%"
+  height="600"
+  frameborder="0"
+  allowtransparency="true"
+  style="border:none;overflow:hidden"
+  title="${formTitle}"
+></iframe>`;
+
+  const popupSnippet = `<!-- Vector Learn Forms — popup embed -->
+<script>
+  (function(){
+    var s=document.createElement('script');
+    s.src='${origin}/embed.js';
+    s.dataset.formSlug='${formSlug}';
+    s.dataset.mode='popup';
+    s.dataset.buttonText='Înscrie-te';
+    s.async=true;
+    document.head.appendChild(s);
+  })();
+</script>`;
+
+  function copyToClipboard(text: string, label: string) {
+    navigator.clipboard.writeText(text).then(
+      () => setToast(`${label} copiat!`),
+      () => setToast("Nu s-a putut copia.")
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Toast */}
+      {toast && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 text-xs font-medium">
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+          {toast}
+        </div>
+      )}
+
+      {/* Statistici */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-sm flex items-center gap-1.5">
+            <BarChart2 className="w-4 h-4 text-primary" />
+            Statistici formular
+          </h3>
+          <button
+            onClick={() => void loadAnalytics()}
+            disabled={loading}
+            aria-label="Actualizează statisticile"
+            className="p-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 text-xs text-destructive py-2">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            {error}
+          </div>
+        )}
+
+        {analytics && !error && (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-border p-3 text-center">
+              <p className="text-xl font-bold text-foreground">{analytics.views}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Vizualizări</p>
+            </div>
+            <div className="rounded-lg border border-border p-3 text-center">
+              <p className="text-xl font-bold text-foreground">{analytics.starts}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Start-uri</p>
+            </div>
+            <div className="rounded-lg border border-border p-3 text-center">
+              <p className="text-xl font-bold text-foreground">{analytics.completions}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Completări</p>
+            </div>
+            <div className="rounded-lg border border-border p-3 text-center">
+              <p className="text-xl font-bold text-primary">
+                {analytics.starts > 0
+                  ? `${(analytics.completionRate * 100).toFixed(1)}%`
+                  : "—"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Rată completare</p>
+            </div>
+            <div className="col-span-2 rounded-lg border border-border p-3 text-center">
+              <p className="text-xl font-bold text-green-600 dark:text-green-400">
+                {analytics.leadsCreated}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Leaduri create</p>
+            </div>
+          </div>
+        )}
+
+        {loading && !analytics && (
+          <div className="flex justify-center py-4">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        )}
+      </div>
+
+      {/* Embed snippet */}
+      <div>
+        <h3 className="font-semibold text-sm mb-3">Embed pe site extern</h3>
+
+        {/* Sub-tabs */}
+        <div className="flex border border-border rounded-lg overflow-hidden mb-3">
+          <button
+            onClick={() => setEmbedSubTab("iframe")}
+            className={cn(
+              "flex-1 py-1.5 text-xs font-medium transition-colors",
+              embedSubTab === "iframe"
+                ? "bg-primary text-primary-foreground"
+                : "bg-background hover:bg-muted text-muted-foreground"
+            )}
+          >
+            Iframe
+          </button>
+          <button
+            onClick={() => setEmbedSubTab("popup")}
+            className={cn(
+              "flex-1 py-1.5 text-xs font-medium transition-colors",
+              embedSubTab === "popup"
+                ? "bg-primary text-primary-foreground"
+                : "bg-background hover:bg-muted text-muted-foreground"
+            )}
+          >
+            Popup
+          </button>
+        </div>
+
+        {embedSubTab === "iframe" && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Inserează formularul direct în pagina ta.
+            </p>
+            <textarea
+              readOnly
+              value={iframeSnippet}
+              className="w-full rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs font-mono resize-none focus:outline-none"
+              rows={8}
+              aria-label="Snippet iframe"
+            />
+            <button
+              onClick={() => copyToClipboard(iframeSnippet, "Snippet iframe")}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border text-xs hover:bg-muted transition-colors min-h-[36px]"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              Copiază snippet iframe
+            </button>
+          </div>
+        )}
+
+        {embedSubTab === "popup" && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Adaugă un buton pe site-ul tău care deschide formularul în popup.
+            </p>
+            <textarea
+              readOnly
+              value={popupSnippet}
+              className="w-full rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs font-mono resize-none focus:outline-none"
+              rows={9}
+              aria-label="Snippet popup"
+            />
+            <button
+              onClick={() => copyToClipboard(popupSnippet, "Snippet popup")}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border text-xs hover:bg-muted transition-colors min-h-[36px]"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              Copiază snippet popup
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── LogicModal ───────────────────────────────────────────────────────────────
 
 const LOGIC_OPERATORS: { value: string; label: string }[] = [
@@ -607,7 +832,7 @@ export function FormBuilderPage({ formId }: FormBuilderPageProps) {
   const [savingField, setSavingField] = useState(false);
   const [savingForm, setSavingForm] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [activeTab, setActiveTab] = useState<"fields" | "preview" | "config">("fields");
+  const [activeTab, setActiveTab] = useState<"fields" | "preview" | "config" | "analytics">("fields");
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
   // FORMS-004: logic rules state
@@ -968,19 +1193,25 @@ export function FormBuilderPage({ formId }: FormBuilderPageProps) {
           </div>
 
           {/* Mobile tabs */}
-          <div className="flex sm:hidden border-b border-border">
-            {(["fields", "preview", "config"] as const).map((tab) => (
+          <div className="flex sm:hidden border-b border-border overflow-x-auto">
+            {(["fields", "preview", "config", "analytics"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={cn(
-                  "flex-1 py-2.5 text-xs font-medium transition-colors",
+                  "flex-shrink-0 py-2.5 px-3 text-xs font-medium transition-colors",
                   activeTab === tab
                     ? "text-primary border-b-2 border-primary"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {tab === "fields" ? "Câmpuri" : tab === "preview" ? "Preview" : "Config"}
+                {tab === "fields"
+                  ? "Câmpuri"
+                  : tab === "preview"
+                    ? "Preview"
+                    : tab === "config"
+                      ? "Config"
+                      : "Analitics"}
               </button>
             ))}
           </div>
@@ -1096,13 +1327,26 @@ export function FormBuilderPage({ formId }: FormBuilderPageProps) {
                 </ul>
               )}
 
-              <div className="p-3 border-t border-border">
+              <div className="p-3 border-t border-border space-y-2">
                 <button
                   onClick={() => { setShowSettings(true); setSelectedFieldId(null); setActiveTab("config"); }}
                   className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs hover:bg-muted transition-colors min-h-[36px]"
                 >
                   <Settings className="w-3.5 h-3.5" />
                   Setări formular
+                </button>
+                {/* FORMS-005: Analytics button */}
+                <button
+                  onClick={() => { setSelectedFieldId(null); setShowSettings(false); setActiveTab("analytics"); }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-colors min-h-[36px]",
+                    activeTab === "analytics"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border hover:bg-muted"
+                  )}
+                >
+                  <BarChart2 className="w-3.5 h-3.5" />
+                  Analitics + Embed
                 </button>
               </div>
             </div>
@@ -1155,10 +1399,20 @@ export function FormBuilderPage({ formId }: FormBuilderPageProps) {
             {/* ── Dreapta: panou config ── */}
             <div className={cn(
               "w-full sm:w-72 sm:flex-none border-l border-border overflow-y-auto p-4",
-              activeTab !== "config" && "hidden sm:block"
+              activeTab !== "config" && activeTab !== "analytics" && "hidden sm:block"
             )}>
-              {panelContent}
+              {activeTab === "analytics" && form ? (
+                <AnalyticsPanel
+                  formId={form.id}
+                  formSlug={form.slug}
+                  formTitle={form.title}
+                />
+              ) : (
+                panelContent
+              )}
             </div>
+
+            {/* ── Desktop: Analytics tab ── (shown via a button in left panel bottom area or via right panel button) */}
           </div>
         </div>
       )}

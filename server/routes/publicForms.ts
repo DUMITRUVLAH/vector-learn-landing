@@ -1,8 +1,9 @@
 /**
- * FORMS-001 — Rute publice (FĂRĂ AUTENTIFICARE) pentru submit formulare
+ * FORMS-001/005 — Rute publice (FĂRĂ AUTENTIFICARE) pentru formulare
  *
  * GET  /api/public/forms/:slug         — formular published + câmpuri (404 dacă draft/closed)
  * POST /api/public/forms/:slug/submit  — submit → dedup lead → CRM
+ * POST /api/public/forms/:slug/ping    — FORMS-005: incrementare contor view/start
  *
  * NOTĂ DE IMPLEMENTARE: Hono 4.x aplică middleware-ul use("/*") din sub-routere ca middleware
  * global pentru întregul prefix (inclusiv tagRoutes.use("/*",requireAuth) → /api/*).
@@ -17,9 +18,8 @@
  *   - utmSource = 'form:<slug>' (varchar liber, nu enum)
  */
 import type { Context } from "hono";
-import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   forms,
@@ -38,7 +38,7 @@ type HonoContext = Context;
 // ─── GET /api/public/forms/:slug — formular published + câmpuri ───────────────
 
 export async function publicFormGetHandler(c: HonoContext) {
-  const slug = c.req.param("slug");
+  const slug = c.req.param("slug") ?? "";
 
   // Caută formularul published cu slug-ul dat (indiferent de tenant — URL-ul public e unic prin slug)
   const form = await db.query.forms.findFirst({
@@ -118,7 +118,7 @@ const submitSchema = z.object({
 });
 
 export async function publicFormSubmitHandler(c: HonoContext) {
-  const slug = c.req.param("slug");
+  const slug = c.req.param("slug") ?? "";
 
   // Validare body manual (fără zValidator decorator care nu funcționează pe handlers standalone)
   let rawBody: unknown;
@@ -288,4 +288,48 @@ export async function publicFormSubmitHandler(c: HonoContext) {
   });
 
   return c.json({ ok: true, leadCreated, leadId });
+}
+
+// ─── POST /api/public/forms/:slug/ping — FORMS-005: analytics event ──────────
+//
+// Body: { event: "view" | "start" }
+// Lightweight: incrementează contorul direct fără a verifica dacă slug-ul există.
+// 0 rânduri afectate (slug inexistent) → ignorat silențios, răspuns tot { ok: true }.
+// Rate-limit soft implicit: o singură UPDATE atomică, fără round-trip de SELECT.
+
+export async function publicFormPingHandler(c: HonoContext) {
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+
+  const parseResult = z
+    .object({ event: z.enum(["view", "start"]) })
+    .safeParse(rawBody);
+
+  if (!parseResult.success) {
+    return c.json({ error: "invalid_event", expected: "view|start" }, 400);
+  }
+
+  const { event } = parseResult.data;
+  const slug = c.req.param("slug") ?? "";
+
+  // Increment atomic — nu returnăm date, nu facem SELECT suplimentar
+  if (event === "view") {
+    await db
+      .update(forms)
+      .set({ views: sql`${forms.views} + 1` })
+      .where(eq(forms.slug, slug))
+      .catch(() => undefined); // bot spam → ignorat
+  } else {
+    await db
+      .update(forms)
+      .set({ starts: sql`${forms.starts} + 1` })
+      .where(eq(forms.slug, slug))
+      .catch(() => undefined);
+  }
+
+  return c.json({ ok: true });
 }

@@ -324,3 +324,37 @@ export async function submitPublicForm(
   }
   return res.json() as Promise<SubmitFormResult>;
 }
+
+// ─── FORMS-005: Analytics ─────────────────────────────────────────────────────
+
+export interface FormAnalytics {
+  views: number;
+  starts: number;
+  completions: number;
+  completionRate: number;
+  leadsCreated: number;
+}
+
+/**
+ * GET /api/forms/:id/analytics — statistici per formular (admin, auth)
+ */
+export async function getFormAnalytics(formId: string): Promise<FormAnalytics> {
+  return api<FormAnalytics>(`/api/forms/${formId}/analytics`);
+}
+
+/**
+ * POST /api/public/forms/:slug/ping — analytics event (fără auth, fire-and-forget)
+ * Nu aruncă — erorile de rețea sunt ignorate silențios.
+ */
+export async function pingFormEvent(slug: string, event: "view" | "start"): Promise<void> {
+  try {
+    await fetch(`/api/public/forms/${slug}/ping`, {
+      method: "POST",
+      credentials: "omit",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event }),
+    });
+  } catch {
+    // fire-and-forget — erori ignorate
+  }
+}
