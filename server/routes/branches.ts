@@ -38,12 +38,18 @@ branchRoutes.get("/", async (c) => {
 
 /** GET /api/branches/stats — per-branch KPI stats */
 branchRoutes.get("/stats", async (c) => {
-  const tenantId = c.get("user").tenantId;
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+
+  // BRANCH-703: branch_manager sees only their branch stats
+  const branchWhere = user.branchScope
+    ? and(eq(branches.tenantId, tenantId), eq(branches.id, user.branchScope))
+    : eq(branches.tenantId, tenantId);
 
   const branchList = await db
     .select()
     .from(branches)
-    .where(eq(branches.tenantId, tenantId));
+    .where(branchWhere);
 
   const stats = await Promise.all(
     branchList.map(async (branch) => {
@@ -88,17 +94,26 @@ branchRoutes.get("/stats", async (c) => {
 
 /** GET /api/branches/rollup — consolidated stats across all branches */
 branchRoutes.get("/rollup", async (c) => {
-  const tenantId = c.get("user").tenantId;
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+
+  // BRANCH-703: branch_manager rollup is scoped to their branch only
+  const studentWhere = user.branchScope
+    ? and(eq(students.tenantId, tenantId), eq(students.branchId, user.branchScope))
+    : eq(students.tenantId, tenantId);
+  const teacherWhere = user.branchScope
+    ? and(eq(teachers.tenantId, tenantId), eq(teachers.branchId, user.branchScope))
+    : eq(teachers.tenantId, tenantId);
 
   const [studentRes] = await db
     .select({ cnt: count() })
     .from(students)
-    .where(eq(students.tenantId, tenantId));
+    .where(studentWhere);
 
   const [teacherRes] = await db
     .select({ cnt: count() })
     .from(teachers)
-    .where(eq(teachers.tenantId, tenantId));
+    .where(teacherWhere);
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);

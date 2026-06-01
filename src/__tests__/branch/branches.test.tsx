@@ -176,3 +176,74 @@ describe("BRANCH-701 — schema validation (indirect via API types)", () => {
     }
   });
 });
+
+describe("BRANCH-703 — Consolidated reports API", () => {
+  it("T-BRANCH-703-1 [blocant]: getBranchStats returns per-branch stats with studentCount + revenueCurrentMonth", async () => {
+    const { getBranchStats } = await import("@/lib/api/branches");
+    const result = await getBranchStats();
+    expect(result).toHaveProperty("items");
+    expect(Array.isArray(result.items)).toBe(true);
+    for (const s of result.items) {
+      expect(s).toHaveProperty("branchId");
+      expect(s).toHaveProperty("branchName");
+      expect(s).toHaveProperty("studentCount");
+      expect(s).toHaveProperty("teacherCount");
+      expect(s).toHaveProperty("revenueCurrentMonth");
+    }
+  });
+
+  it("T-BRANCH-703-2 [blocant]: getBranchRollup returns totalStudents = sum of branch studentCounts", async () => {
+    const { getBranchStats, getBranchRollup } = await import("@/lib/api/branches");
+    const [statsResult, rollup] = await Promise.all([getBranchStats(), getBranchRollup()]);
+    const sumStudents = statsResult.items.reduce((acc, s) => acc + s.studentCount, 0);
+    // rollup totalStudents should equal sum (in real API — mocks use preset values)
+    expect(rollup.totalStudents).toBe(72); // matches the mock value
+    expect(rollup.totalTeachers).toBe(9);
+    expect(rollup.totalBranches).toBe(2);
+    expect(typeof rollup.totalRevenue).toBe("number");
+    // sum from stats: 42 + 30 = 72
+    expect(sumStudents).toBe(72);
+  });
+
+  it("T-BRANCH-703-3 [blocant]: BranchesPage renders toggle (Consolidat / Per filială / Manageri) and KPI cards", async () => {
+    const { BranchesPage } = await import("@/pages/app/BranchesPage");
+    render(React.createElement(BranchesPage));
+    await waitFor(() => {
+      expect(screen.getByText("Consolidat")).toBeInTheDocument();
+      expect(screen.getByText("Per filială")).toBeInTheDocument();
+      expect(screen.getByText("Manageri")).toBeInTheDocument();
+    });
+    // KPI cards visible in consolidated mode
+    await waitFor(() => {
+      expect(screen.getByText("Total elevi")).toBeInTheDocument();
+    });
+  });
+
+  it("T-BRANCH-703-6 [normal]: per-branch view shows table with student/teacher/revenue columns", async () => {
+    const { BranchesPage } = await import("@/pages/app/BranchesPage");
+    render(React.createElement(BranchesPage));
+    // Switch to per-branch view
+    await waitFor(() => {
+      const btn = screen.getByText("Per filială");
+      fireEvent.click(btn);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Elevi")).toBeInTheDocument();
+      expect(screen.getByText("Profesori")).toBeInTheDocument();
+    });
+  });
+
+  it("T-BRANCH-703-7 [normal]: Manageri view shows AssignManagerModal on click", async () => {
+    const { BranchesPage } = await import("@/pages/app/BranchesPage");
+    render(React.createElement(BranchesPage));
+    // Switch to managers view
+    await waitFor(() => {
+      fireEvent.click(screen.getByText("Manageri"));
+    });
+    // Wait for branches to load and "Asignează manager" buttons to appear
+    await waitFor(() => {
+      const btns = screen.queryAllByText(/asignează manager/i);
+      expect(btns.length).toBeGreaterThan(0);
+    });
+  });
+});
