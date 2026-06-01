@@ -58,6 +58,7 @@ import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { SchoolClassesPage } from "./pages/app/SchoolClassesPage"; // SCHOOL-001
 import { SchoolAttendancePage } from "./pages/app/SchoolAttendancePage"; // SCHOOL-003
+import { SchoolGradebookPage } from "./pages/app/SchoolGradebookPage"; // SCHOOL-002
 
 function HomePage() {
   return (
@@ -137,6 +138,7 @@ function Routes() {
   if (path.startsWith("/app/cx")) return <CXPage />;
   if (path.startsWith("/app/diplome")) return <DiplomaPage />;
   if (path.startsWith("/app/school/attendance")) return <SchoolAttendancePage />; // SCHOOL-003
+  if (path.startsWith("/app/school/gradebook")) return <SchoolGradebookPage />; // SCHOOL-002
   if (path.startsWith("/app/school/classes") || path === "/app/school") return <SchoolClassesPage />; // SCHOOL-001
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;

@@ -1647,15 +1647,16 @@
       }
     },
     "SCHOOL-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHOOL-002-gradebook-report-cards.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "high",
       "title": "Gradebook + report cards (weighted grades, term PDF for parents)",
-      "depends_on": ["SCHOOL-001"]
+      "depends_on": ["SCHOOL-001"],
+      "branch": "feat/SCHOOL-faza-1-fundatie"
     },
     "SCHOOL-003": {
       "status": "done",

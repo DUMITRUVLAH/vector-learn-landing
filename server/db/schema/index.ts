@@ -32,3 +32,4 @@ export * from "./cohortParticipants";
 export * from "./certificates";
 export * from "./school";
 export * from "./schoolAttendance";
+export * from "./schoolGrades";
