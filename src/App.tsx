@@ -64,6 +64,7 @@ import { SchoolAdmissionsPage } from "./pages/app/SchoolAdmissionsPage"; // SCHO
 import { SchoolTimetablePage } from "./pages/app/SchoolTimetablePage"; // SCHOOL-006
 import { ParentPortalPage } from "./pages/app/ParentPortalPage"; // SCHOOL-007
 import { SchoolConsentPage } from "./pages/app/SchoolConsentPage"; // CONSENT-001
+import { GamificationPage } from "./pages/app/GamificationPage"; // GAP-020
 
 function HomePage() {
   return (
@@ -110,6 +111,7 @@ function Routes() {
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;
+  if (path.startsWith("/app/gamification")) return <GamificationPage />; // GAP-020
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;
