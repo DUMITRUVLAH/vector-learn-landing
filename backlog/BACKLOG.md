@@ -289,3 +289,23 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | KINDER-007 | 🟡 | Incident/accident reports + signature |
 | GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
 | CONSENT-001 | 🟡 | Consent/permission forms + e-signature |
+
+## Milestone: INTEG — Integrare inter-module (audit 2026-06-01)
+Audit complet: `backlog/reports/AUDIT-INTEG-2026-06-01.md`. Module deconectate: leads fără curs/filială, analytics cu 4 endpoints lipsă, plăți fără courseId, cohorte fără branchId, UX fragmentat cross-module.
+
+### INTEG faza-1 — FK-uri lipsă + endpoints analytics rupte
+
+| ID | Severity | Title | Status |
+|----|----------|-------|--------|
+| INTEG-101 | 🔴 high | leads.courseId + leads.branchId FK + course picker în LeadCard | pending |
+| INTEG-102 | 🔴 high | payments.courseId + invoices.courseId FK | pending |
+| INTEG-103 | 🔴 high | cohorts.branchId FK + branch filter pe cohorts route | pending |
+| INTEG-104 | 🔴 high | Implementează 4 endpoints analytics lipsă (KPI, revenue, LTV) | pending |
+
+### INTEG faza-2 — UX cross-module
+
+| ID | Severity | Title | Status |
+|----|----------|-------|--------|
+| INTEG-201 | 🔴 high | Lead→cohort auto-enroll la conversie | pending |
+| INTEG-202 | 🟡 normal | ContractsPage — picker curs real (contracts.courseId FK) | pending |
+| INTEG-203 | 🟡 normal | CX — course name real în export + link participant→student | pending |
