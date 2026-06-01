@@ -211,6 +211,13 @@
       "when": 1780341531396,
       "tag": "0029_kinder002_diary",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1780341788431,
+      "tag": "0030_kinder003_ratio",
+      "breakpoints": true
     }
   ]
 }

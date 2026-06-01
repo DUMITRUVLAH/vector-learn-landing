@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "KINDER-002",
-  "last_completed": "KINDER-001",
-  "iterations": 122,
+  "current_item": "KINDER-003",
+  "last_completed": "KINDER-002",
+  "iterations": 123,
   "last_run_at": "2026-06-01T23:00:00Z",
   "milestone_status": "KINDER faza-1 in-progress: check-in/diary/ratio pentru gradinite. PAY-901..LESSON-907 marcate done (acoperite de GAP milestone).",
   "active_milestone": "KINDER",
@@ -1742,7 +1742,7 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "KINDER-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/KINDER-002-daily-report.md",
@@ -1751,11 +1751,12 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "severity": "high",
       "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
-      "depends_on": ["KINDER-001"]
+      "depends_on": ["KINDER-001"],
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "KINDER-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/KINDER-003-ratio-monitoring.md",
       "milestone": "KINDER",

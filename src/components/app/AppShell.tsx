@@ -31,6 +31,7 @@ const NAV = [
   { label: "Prezență", href: "/app/school/attendance", icon: ClipboardList }, // SCHOOL-003
   { label: "Check-in Grăd.", href: "/app/kinder/checkin", icon: Baby }, // KINDER-001
   { label: "Jurnal copil", href: "/app/kinder/diary", icon: FileText }, // KINDER-002
+  { label: "Raport personal", href: "/app/kinder/ratio", icon: Shield }, // KINDER-003
   { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
   { label: "Analytics", href: "/app/analytics/crm", icon: BarChart3 },
   { label: "Cadences", href: "/app/cadences", icon: ListChecks },

@@ -141,3 +141,62 @@ export function addDiaryEvent(payload: AddDiaryEventPayload): Promise<{ ok: bool
 export function deleteDiaryEvent(eventId: string): Promise<{ ok: boolean }> {
   return api<{ ok: boolean }>(`/api/kinder/diary/${eventId}`, { method: "DELETE" });
 }
+
+// ─── KINDER-003: Staff-to-child ratio monitoring ──────────────────────────────
+
+export type RatioStatus = "ok" | "warning" | "over" | "unconfigured";
+
+export interface RoomRatioStatus {
+  roomId: string;
+  roomName: string;
+  childrenCount: number;
+  staffCount: number;
+  ratioLimit: number | null;
+  ageGroupLabel: string | null;
+  status: RatioStatus;
+}
+
+export interface LiveRatioResponse {
+  date: string;
+  hasOverCapacity: boolean;
+  rooms: RoomRatioStatus[];
+}
+
+export interface RatioLimit {
+  id: string;
+  tenantId: string;
+  roomId: string;
+  ageGroupLabel: string | null;
+  maxChildrenPerStaff: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateRatioLimitPayload {
+  roomId: string;
+  maxChildrenPerStaff: number;
+  ageGroupLabel?: string;
+}
+
+/** GET /api/kinder/ratio/live */
+export function getLiveRatio(): Promise<LiveRatioResponse> {
+  return api<LiveRatioResponse>("/api/kinder/ratio/live");
+}
+
+/** GET /api/kinder/ratio/limits */
+export function getRatioLimits(): Promise<RatioLimit[]> {
+  return api<RatioLimit[]>("/api/kinder/ratio/limits");
+}
+
+/** POST /api/kinder/ratio/limits */
+export function createRatioLimit(payload: CreateRatioLimitPayload): Promise<{ ok: boolean; limit: RatioLimit }> {
+  return api<{ ok: boolean; limit: RatioLimit }>("/api/kinder/ratio/limits", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** DELETE /api/kinder/ratio/limits/:id */
+export function deleteRatioLimit(limitId: string): Promise<{ ok: boolean }> {
+  return api<{ ok: boolean }>(`/api/kinder/ratio/limits/${limitId}`, { method: "DELETE" });
+}

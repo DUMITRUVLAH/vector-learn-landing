@@ -59,6 +59,7 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { KinderCheckinPage } from "./pages/app/KinderCheckinPage";
 import { KinderPickupsPage } from "./pages/app/KinderPickupsPage";
 import { KinderDiaryPage } from "./pages/app/KinderDiaryPage";
+import { KinderRatioPage } from "./pages/app/KinderRatioPage";
 
 function HomePage() {
   return (
@@ -142,6 +143,8 @@ function Routes() {
   if (path.startsWith("/app/kinder/checkin")) return <KinderCheckinPage />;
   // KINDER-002: daily diary
   if (path.startsWith("/app/kinder/diary")) return <KinderDiaryPage />;
+  // KINDER-003: staff-to-child ratio
+  if (path.startsWith("/app/kinder/ratio")) return <KinderRatioPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students

@@ -32,3 +32,4 @@ export * from "./cohortParticipants";
 export * from "./certificates";
 export * from "./kinder";
 export * from "./kinderDiary";
+export * from "./kinderRatio";
