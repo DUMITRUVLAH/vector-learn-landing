@@ -4,8 +4,8 @@
   "last_completed": "CONSENT-001",
   "iterations": 91,
   "last_run_at": "2026-06-01T12:30:00Z",
-  "milestone_status": "DIPLOMA Phase 1 in progress: DIPLOMA-801/802 done (PR #97). DIPLOMA-803..805 pending.",
-  "active_milestone": "DIPLOMA",
+  "milestone_status": "GAP backlog HOLLIHOP: 20 itemi pending, pornit automat 2026-06-01",
+  "active_milestone": "GAP",
   "items": {
     "M1-001": {
       "status": "done",
@@ -1655,7 +1655,9 @@
       "phase": "1",
       "severity": "high",
       "title": "Gradebook + report cards (weighted grades, term PDF for parents)",
-      "depends_on": ["SCHOOL-001"],
+      "depends_on": [
+        "SCHOOL-001"
+      ],
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -1673,7 +1675,9 @@
       "phase": "1",
       "severity": "high",
       "title": "Daily/class attendance register + absence reasons + parent alerts",
-      "depends_on": ["SCHOOL-001"],
+      "depends_on": [
+        "SCHOOL-001"
+      ],
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -1727,7 +1731,10 @@
       "phase": "1",
       "severity": "normal",
       "title": "Master timetable (class\u00d7subject\u00d7teacher\u00d7room grid)",
-      "depends_on": ["SCHOOL-001", "SCHOOL-002"],
+      "depends_on": [
+        "SCHOOL-001",
+        "SCHOOL-002"
+      ],
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -1745,7 +1752,12 @@
       "phase": "1",
       "severity": "normal",
       "title": "Portal parinte: note, prezenta, fisa situatie, sold taxe + stiri scoala",
-      "depends_on": ["SCHOOL-002", "SCHOOL-003", "SCHOOL-004", "GUARDIAN-001"],
+      "depends_on": [
+        "SCHOOL-002",
+        "SCHOOL-003",
+        "SCHOOL-004",
+        "GUARDIAN-001"
+      ],
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -1840,7 +1852,9 @@
       "phase": "1",
       "severity": "high",
       "title": "Tutori autorizati \u2014 mai multi tutori per elev, flag-uri custodie/permisiuni",
-      "depends_on": ["SCHOOL-001"],
+      "depends_on": [
+        "SCHOOL-001"
+      ],
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -1858,7 +1872,10 @@
       "phase": "1",
       "severity": "normal",
       "title": "Consent/permission forms (photo, trips, medical) with e-signature",
-      "depends_on": ["SCHOOL-001", "GUARDIAN-001"],
+      "depends_on": [
+        "SCHOOL-001",
+        "GUARDIAN-001"
+      ],
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "reports": [
         "backlog/reports/CONSENT-001-integration.md",
@@ -1871,6 +1888,166 @@
         "manager": "BUY",
         "student": "OK"
       }
+    },
+    "GAP-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-005": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-006": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-007": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-008": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-009": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-010": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-011": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-012": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-013": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-014": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-015": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-016": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-017": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-018": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-019": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-020": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
     }
   }
 }
