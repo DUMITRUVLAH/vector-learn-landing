@@ -56,6 +56,7 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
+import { EnrollPage } from "./pages/enroll/EnrollPage";
 
 function HomePage() {
   return (
@@ -140,6 +141,11 @@ function Routes() {
   if (path.match(/^\/feedback\/[^/]+$/)) {
     const token = path.split("/")[2];
     return <FeedbackPublicPage token={token} />;
+  }
+  // GAP-011: /enroll/:slug — public enrollment page for a cohort
+  if (path.match(/^\/enroll\/[^/]+$/)) {
+    const slug = path.split("/")[2];
+    return <EnrollPage slug={slug} />;
   }
   return <HomePage />;
 }

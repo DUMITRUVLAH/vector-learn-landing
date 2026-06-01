@@ -37,6 +37,7 @@ import { invoiceRoutes } from "./routes/invoices";
 import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
+import { enrollRoutes } from "./routes/enroll"; // GAP-011
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -93,6 +94,8 @@ app.route("/api", contactRoutes);
 app.route("/api/templates", templateRoutes);
 app.route("/api/automations", automationRoutes);
 app.route("/api/analytics", analyticsRoutes);
+// GAP-011: Public enrollment (BEFORE tagRoutes — no auth required)
+app.route("/api/enroll", enrollRoutes);
 // FEEDBACK-601: public (no-auth) routes must be registered BEFORE tagRoutes because tagRoutes
 // is mounted at "/api" with a global requireAuth that otherwise intercepts all /api/* requests.
 app.route("/api/feedback-public", feedbackPublicRoutes);

@@ -15,6 +15,7 @@ import {
   boolean,
   jsonb,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { courses } from "./courses";
@@ -55,12 +56,22 @@ export const cohorts = pgTable(
     roomCostCents: integer("room_cost_cents").notNull().default(0),
     /** Optional Google Drive folder URL */
     driveFolderUrl: varchar("drive_folder_url", { length: 1000 }),
+    /**
+     * GAP-011: URL-safe slug for public enrollment page, e.g. "engleza-a2-mai-2026".
+     * Unique per tenant. Null = not publicly enrollable.
+     */
+    slug: varchar("slug", { length: 200 }),
+    /**
+     * GAP-011: Maximum number of participants (seats). 0 = unlimited.
+     */
+    maxParticipants: integer("max_participants").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     tenantCourseIdx: index("cohorts_tenant_course_idx").on(t.tenantId, t.courseId),
     tenantStartIdx: index("cohorts_tenant_start_idx").on(t.tenantId, t.startDate),
+    slugIdx: uniqueIndex("cohorts_tenant_slug_uniq").on(t.tenantId, t.slug),
   })
 );
 
