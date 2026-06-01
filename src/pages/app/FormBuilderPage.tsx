@@ -19,6 +19,8 @@ import {
   CheckCircle2,
   ExternalLink,
   Settings,
+  GitBranch,
+  X,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -31,10 +33,16 @@ import {
   deleteField,
   reorderFields,
   publishForm,
+  listLogicRules,
+  addLogicRule,
+  deleteLogicRule,
   type Form,
   type FormField,
   type FormFieldType,
   type LeadMapping,
+  type FormLogicRule,
+  type FormLogicCondition,
+  type LogicAction,
 } from "@/lib/api/forms";
 import { cn } from "@/lib/utils";
 
@@ -412,6 +420,174 @@ function FormSettingsPanel({ form, onSave, saving }: FormSettingsPanelProps) {
   );
 }
 
+// ─── LogicModal ───────────────────────────────────────────────────────────────
+
+const LOGIC_OPERATORS: { value: string; label: string }[] = [
+  { value: "eq", label: "Egal cu" },
+  { value: "neq", label: "Diferit de" },
+  { value: "contains", label: "Conține" },
+  { value: "gt", label: "Mai mare decât" },
+  { value: "lt", label: "Mai mic decât" },
+  { value: "is_empty", label: "Este gol" },
+  { value: "is_not_empty", label: "Nu este gol" },
+];
+
+const NO_VALUE_OPERATORS = ["is_empty", "is_not_empty"];
+
+interface LogicModalProps {
+  field: FormField;
+  allFields: FormField[];
+  rules: FormLogicRule[];
+  onClose: () => void;
+  onAddRule: (fromFieldId: string, condition: FormLogicCondition, action: LogicAction, targetFieldId: string | null) => Promise<void>;
+  onDeleteRule: (ruleId: string) => Promise<void>;
+}
+
+function LogicModal({ field, allFields, rules, onClose, onAddRule, onDeleteRule }: LogicModalProps) {
+  const [operator, setOperator] = useState<string>("eq");
+  const [condValue, setCondValue] = useState("");
+  const [action, setAction] = useState<LogicAction>("jump_to_field");
+  const [targetFieldId, setTargetFieldId] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+
+  const fieldRules = rules.filter((r) => r.fromFieldId === field.id);
+  const otherFields = allFields.filter((f) => f.id !== field.id);
+  const showValueInput = !NO_VALUE_OPERATORS.includes(operator);
+
+  async function handleAdd() {
+    if (action === "jump_to_field" && !targetFieldId) return;
+    setSaving(true);
+    try {
+      const condition: FormLogicCondition = {
+        operator: operator as FormLogicCondition["operator"],
+        ...(showValueInput && condValue ? { value: condValue } : {}),
+      };
+      await onAddRule(field.id, condition, action, action === "jump_to_field" ? targetFieldId : null);
+      setOperator("eq");
+      setCondValue("");
+      setTargetFieldId("");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-card border border-border rounded-xl w-full max-w-md p-5 shadow-2xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <GitBranch className="w-4 h-4 text-primary" />
+            Logică condițională: <span className="text-primary">{field.label}</span>
+          </h3>
+          <button onClick={onClose} aria-label="Închide" className="p-1 rounded hover:bg-muted transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Existing rules */}
+        {fieldRules.length > 0 && (
+          <div className="mb-4 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Reguli existente</p>
+            {fieldRules.map((rule) => (
+              <div key={rule.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-muted/50 text-xs">
+                <span>
+                  Dacă <strong>{rule.condition.operator}</strong>
+                  {rule.condition.value !== undefined ? ` "${rule.condition.value}"` : ""} →{" "}
+                  {rule.action === "jump_to_end"
+                    ? "termină formularul"
+                    : `sari la: ${allFields.find((f) => f.id === rule.targetFieldId)?.label ?? "câmp necunoscut"}`}
+                </span>
+                <button
+                  onClick={() => onDeleteRule(rule.id)}
+                  aria-label="Șterge regula"
+                  className="shrink-0 p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add rule form */}
+        <div className="space-y-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Adaugă regulă</p>
+
+          <div>
+            <label className="block text-xs font-medium mb-1" htmlFor="logic-operator">Condiție</label>
+            <select
+              id="logic-operator"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              value={operator}
+              onChange={(e) => setOperator(e.target.value)}
+            >
+              {LOGIC_OPERATORS.map((op) => (
+                <option key={op.value} value={op.value}>{op.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {showValueInput && (
+            <div>
+              <label className="block text-xs font-medium mb-1" htmlFor="logic-value">Valoare</label>
+              <input
+                id="logic-value"
+                type="text"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                value={condValue}
+                onChange={(e) => setCondValue(e.target.value)}
+                placeholder="ex: Da, 5, test@email.com"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium mb-1" htmlFor="logic-action">Acțiune</label>
+            <select
+              id="logic-action"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              value={action}
+              onChange={(e) => setAction(e.target.value as LogicAction)}
+            >
+              <option value="jump_to_field">Sari la câmpul...</option>
+              <option value="jump_to_end">Termină formularul</option>
+            </select>
+          </div>
+
+          {action === "jump_to_field" && (
+            <div>
+              <label className="block text-xs font-medium mb-1" htmlFor="logic-target">Câmp destinație</label>
+              <select
+                id="logic-target"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                value={targetFieldId}
+                onChange={(e) => setTargetFieldId(e.target.value)}
+              >
+                <option value="">Selectează câmpul...</option>
+                {otherFields.map((f) => (
+                  <option key={f.id} value={f.id}>{f.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <button
+            onClick={handleAdd}
+            disabled={saving || (action === "jump_to_field" && !targetFieldId)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-[44px]"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Adaugă regulă
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Componenta principală ────────────────────────────────────────────────────
 
 interface FormBuilderPageProps {
@@ -434,6 +610,10 @@ export function FormBuilderPage({ formId }: FormBuilderPageProps) {
   const [activeTab, setActiveTab] = useState<"fields" | "preview" | "config">("fields");
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
+  // FORMS-004: logic rules state
+  const [logicRules, setLogicRules] = useState<FormLogicRule[]>([]);
+  const [logicModalFieldId, setLogicModalFieldId] = useState<string | null>(null);
+
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
   }, [sessionStatus, navigate]);
@@ -441,9 +621,13 @@ export function FormBuilderPage({ formId }: FormBuilderPageProps) {
   const loadForm = useCallback(async () => {
     setLoading(true);
     try {
-      const { form: f, fields: flds } = await getForm(formId);
+      const [{ form: f, fields: flds }, { rules }] = await Promise.all([
+        getForm(formId),
+        listLogicRules(formId).catch(() => ({ rules: [] as FormLogicRule[] })),
+      ]);
       setForm(f);
       setFields(flds.sort((a, b) => a.position - b.position));
+      setLogicRules(rules);
     } catch {
       setToast({ kind: "error", message: "Nu s-a putut încărca formularul." });
     } finally {
@@ -601,6 +785,34 @@ export function FormBuilderPage({ formId }: FormBuilderPageProps) {
       setForm(updated);
     } catch {
       setToast({ kind: "error", message: "Nu s-a putut salva titlul." });
+    }
+  }
+
+  // ── FORMS-004: Logic handlers ──
+
+  async function handleAddLogicRule(
+    fromFieldId: string,
+    condition: FormLogicCondition,
+    action: LogicAction,
+    targetFieldId: string | null
+  ) {
+    if (!form) return;
+    try {
+      const { rule } = await addLogicRule(form.id, { fromFieldId, condition, action, targetFieldId });
+      setLogicRules((prev) => [...prev, rule]);
+      setToast({ kind: "success", message: "Regulă adăugată." });
+    } catch {
+      setToast({ kind: "error", message: "Nu s-a putut adăuga regula." });
+    }
+  }
+
+  async function handleDeleteLogicRule(ruleId: string) {
+    if (!form) return;
+    try {
+      await deleteLogicRule(form.id, ruleId);
+      setLogicRules((prev) => prev.filter((r) => r.id !== ruleId));
+    } catch {
+      setToast({ kind: "error", message: "Nu s-a putut șterge regula." });
     }
   }
 
@@ -864,6 +1076,19 @@ export function FormBuilderPage({ formId }: FormBuilderPageProps) {
                           >
                             <ChevronDown className="w-3.5 h-3.5" />
                           </button>
+                          {/* FORMS-004: Logic button */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setLogicModalFieldId(field.id); }}
+                            aria-label="Configurează logică condițională"
+                            className={cn(
+                              "p-0.5 rounded transition-colors",
+                              logicRules.some((r) => r.fromFieldId === field.id)
+                                ? "text-primary hover:bg-primary/10"
+                                : "hover:bg-muted text-muted-foreground"
+                            )}
+                          >
+                            <GitBranch className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
                     </li>
@@ -937,6 +1162,22 @@ export function FormBuilderPage({ formId }: FormBuilderPageProps) {
           </div>
         </div>
       )}
+
+      {/* FORMS-004: Logic modal */}
+      {logicModalFieldId && (() => {
+        const logicField = fields.find((f) => f.id === logicModalFieldId);
+        if (!logicField) return null;
+        return (
+          <LogicModal
+            field={logicField}
+            allFields={fields}
+            rules={logicRules}
+            onClose={() => setLogicModalFieldId(null)}
+            onAddRule={handleAddLogicRule}
+            onDeleteRule={handleDeleteLogicRule}
+          />
+        );
+      })()}
     </AppShell>
   );
 }

@@ -25,6 +25,7 @@ import {
   forms,
   formFields,
   formSubmissions,
+  formLogic,
   leads,
   leadInteractions,
   leadTags,
@@ -56,6 +57,16 @@ export async function publicFormGetHandler(c: HonoContext) {
     ? fieldRows
     : (fieldRows as unknown as { rows: typeof fieldRows }).rows ?? fieldRows;
 
+  // FORMS-004: include logic rules in public response
+  const logicRows = await db
+    .select()
+    .from(formLogic)
+    .where(and(eq(formLogic.formId, form.id), eq(formLogic.tenantId, form.tenantId)));
+
+  const logicArr = Array.isArray(logicRows)
+    ? logicRows
+    : (logicRows as unknown as { rows: typeof logicRows }).rows ?? logicRows;
+
   return c.json({
     form: {
       id: form.id,
@@ -74,6 +85,15 @@ export async function publicFormGetHandler(c: HonoContext) {
         leadMapping: f.leadMapping,
         hidden: f.hidden,
         hiddenSourceParam: f.hiddenSourceParam,
+      })),
+      logic: logicArr.map((r) => ({
+        id: r.id,
+        formId: r.formId,
+        fromFieldId: r.fromFieldId,
+        condition: r.condition,
+        action: r.action,
+        targetFieldId: r.targetFieldId,
+        position: r.position,
       })),
     },
   });

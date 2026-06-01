@@ -1,24 +1,27 @@
 /**
- * FORMS-001 — Rute admin autentificate pentru gestionarea formularelor
+ * FORMS-001/004 — Rute admin autentificate pentru gestionarea formularelor
  *
- * GET    /api/forms                        — lista formularelor tenantului
- * POST   /api/forms                        — creare formular
- * GET    /api/forms/:id                    — detalii formular + câmpuri
- * PATCH  /api/forms/:id                    — actualizare formular
- * DELETE /api/forms/:id                    — ștergere formular
- * POST   /api/forms/:id/fields             — adăugare câmp
- * PATCH  /api/forms/:id/fields/:fieldId    — actualizare câmp
- * DELETE /api/forms/:id/fields/:fieldId    — ștergere câmp
- * PUT    /api/forms/:id/fields/reorder     — reordonare câmpuri
- * POST   /api/forms/:id/publish            — publicare formular
- * GET    /api/forms/:id/submissions        — lista submisiilor
+ * GET    /api/forms                            — lista formularelor tenantului
+ * POST   /api/forms                            — creare formular
+ * GET    /api/forms/:id                        — detalii formular + câmpuri
+ * PATCH  /api/forms/:id                        — actualizare formular
+ * DELETE /api/forms/:id                        — ștergere formular
+ * POST   /api/forms/:id/fields                 — adăugare câmp
+ * PATCH  /api/forms/:id/fields/:fieldId        — actualizare câmp
+ * DELETE /api/forms/:id/fields/:fieldId        — ștergere câmp
+ * PUT    /api/forms/:id/fields/reorder         — reordonare câmpuri
+ * POST   /api/forms/:id/publish                — publicare formular
+ * GET    /api/forms/:id/submissions            — lista submisiilor
+ * GET    /api/forms/:id/logic                  — FORMS-004: lista regulilor de logică
+ * POST   /api/forms/:id/logic                  — FORMS-004: adăugare regulă
+ * DELETE /api/forms/:id/logic/:ruleId          — FORMS-004: ștergere regulă
  */
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { forms, formFields, formSubmissions } from "../db/schema";
+import { forms, formFields, formSubmissions, formLogic } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const formRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -386,4 +389,118 @@ formRoutes.get("/:id/submissions", async (c) => {
 
   const items = toRows(rows);
   return c.json({ items });
+});
+
+// ─── FORMS-004: logică condițională ───────────────────────────────────────────
+
+const createLogicRuleSchema = z.object({
+  fromFieldId: z.string().uuid(),
+  condition: z.object({
+    operator: z.enum(["eq", "neq", "contains", "gt", "lt", "is_empty", "is_not_empty"]),
+    value: z.union([z.string(), z.number()]).optional(),
+  }),
+  action: z.enum(["jump_to_field", "jump_to_end"]),
+  targetFieldId: z.string().uuid().optional().nullable(),
+  position: z.number().int().min(0).default(0),
+});
+
+// GET /api/forms/:id/logic — lista regulilor
+formRoutes.get("/:id/logic", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const formId = c.req.param("id");
+
+  const formExists = await db.query.forms.findFirst({
+    where: and(eq(forms.id, formId), eq(forms.tenantId, tenantId)),
+  });
+  if (!formExists) return c.json({ error: "not_found" }, 404);
+
+  const rules = await db
+    .select()
+    .from(formLogic)
+    .where(and(eq(formLogic.formId, formId), eq(formLogic.tenantId, tenantId)))
+    .orderBy(asc(formLogic.position));
+
+  return c.json({ rules: toRows(rules) });
+});
+
+// POST /api/forms/:id/logic — adăugare regulă
+formRoutes.post("/:id/logic", zValidator("json", createLogicRuleSchema), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const formId = c.req.param("id");
+  const body = c.req.valid("json");
+
+  // Validare: jump_to_field necesită targetFieldId
+  if (body.action === "jump_to_field" && !body.targetFieldId) {
+    return c.json({ error: "target_field_required_for_jump" }, 400);
+  }
+
+  const formExists = await db.query.forms.findFirst({
+    where: and(eq(forms.id, formId), eq(forms.tenantId, tenantId)),
+  });
+  if (!formExists) return c.json({ error: "not_found" }, 404);
+
+  // Validare: fromFieldId aparține formularului
+  const fromField = await db.query.formFields.findFirst({
+    where: and(
+      eq(formFields.id, body.fromFieldId),
+      eq(formFields.formId, formId),
+      eq(formFields.tenantId, tenantId)
+    ),
+  });
+  if (!fromField) return c.json({ error: "from_field_not_found" }, 400);
+
+  // Validare: targetFieldId aparține formularului (dacă e prezent)
+  if (body.targetFieldId) {
+    const targetField = await db.query.formFields.findFirst({
+      where: and(
+        eq(formFields.id, body.targetFieldId),
+        eq(formFields.formId, formId),
+        eq(formFields.tenantId, tenantId)
+      ),
+    });
+    if (!targetField) return c.json({ error: "target_field_not_found" }, 400);
+  }
+
+  const [rule] = await db
+    .insert(formLogic)
+    .values({
+      tenantId,
+      formId,
+      fromFieldId: body.fromFieldId,
+      condition: body.condition,
+      action: body.action,
+      targetFieldId: body.targetFieldId ?? null,
+      position: body.position ?? 0,
+    })
+    .returning();
+
+  return c.json({ rule: toRows([rule])[0] }, 201);
+});
+
+// DELETE /api/forms/:id/logic/:ruleId — ștergere regulă
+formRoutes.delete("/:id/logic/:ruleId", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const formId = c.req.param("id");
+  const ruleId = c.req.param("ruleId");
+
+  const existing = await db.query.formLogic.findFirst({
+    where: and(
+      eq(formLogic.id, ruleId),
+      eq(formLogic.formId, formId),
+      eq(formLogic.tenantId, tenantId)
+    ),
+  });
+  if (!existing) return c.json({ error: "not_found" }, 404);
+
+  await db
+    .delete(formLogic)
+    .where(
+      and(
+        eq(formLogic.id, ruleId),
+        eq(formLogic.formId, formId),
+        eq(formLogic.tenantId, tenantId)
+      )
+    );
+
+  return c.json({ ok: true });
 });

@@ -88,6 +88,26 @@ export interface PublicFormField {
   hiddenSourceParam: string | null;
 }
 
+// ─── FORMS-004: Logică condițională ───────────────────────────────────────────
+
+export type LogicOperator = "eq" | "neq" | "contains" | "gt" | "lt" | "is_empty" | "is_not_empty";
+export type LogicAction = "jump_to_field" | "jump_to_end";
+
+export interface FormLogicCondition {
+  operator: LogicOperator;
+  value?: string | number;
+}
+
+export interface FormLogicRule {
+  id: string;
+  formId: string;
+  fromFieldId: string;
+  condition: FormLogicCondition;
+  action: LogicAction;
+  targetFieldId: string | null;
+  position: number;
+}
+
 export interface PublicForm {
   id: string;
   title: string;
@@ -95,6 +115,8 @@ export interface PublicForm {
   thankYouMessage: string | null;
   redirectUrl: string | null;
   fields: PublicFormField[];
+  /** FORMS-004: reguli de logică incluse în răspunsul public */
+  logic?: FormLogicRule[];
 }
 
 // ─── Payloads ─────────────────────────────────────────────────────────────────
@@ -232,6 +254,39 @@ export async function getFormSubmissions(
   formId: string
 ): Promise<{ items: FormSubmission[] }> {
   return api<{ items: FormSubmission[] }>(`/api/forms/${formId}/submissions`);
+}
+
+// ─── FORMS-004: Admin API pentru logică condițională ─────────────────────────
+
+export async function listLogicRules(formId: string): Promise<{ rules: FormLogicRule[] }> {
+  return api<{ rules: FormLogicRule[] }>(`/api/forms/${formId}/logic`);
+}
+
+export interface CreateLogicRulePayload {
+  fromFieldId: string;
+  condition: FormLogicCondition;
+  action: LogicAction;
+  targetFieldId?: string | null;
+  position?: number;
+}
+
+export async function addLogicRule(
+  formId: string,
+  payload: CreateLogicRulePayload
+): Promise<{ rule: FormLogicRule }> {
+  return api<{ rule: FormLogicRule }>(`/api/forms/${formId}/logic`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteLogicRule(
+  formId: string,
+  ruleId: string
+): Promise<{ ok: boolean }> {
+  return api<{ ok: boolean }>(`/api/forms/${formId}/logic/${ruleId}`, {
+    method: "DELETE",
+  });
 }
 
 // ─── Public API (fără autentificare) ─────────────────────────────────────────

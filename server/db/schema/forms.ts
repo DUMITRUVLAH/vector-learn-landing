@@ -153,3 +153,44 @@ export const formSubmissions = pgTable(
 
 export type FormSubmission = typeof formSubmissions.$inferSelect;
 export type NewFormSubmission = typeof formSubmissions.$inferInsert;
+
+// ─── Tabel: reguli de logică condițională ─────────────────────────────────────
+
+/**
+ * FORMS-004 — Reguli de salt condițional.
+ *
+ * `condition`: { operator: "eq"|"neq"|"contains"|"gt"|"lt"|"is_empty"|"is_not_empty", value?: string|number }
+ * `action`: "jump_to_field" (targetFieldId obligatoriu) | "jump_to_end"
+ * `targetFieldId`: null când action="jump_to_end"
+ */
+export const formLogic = pgTable(
+  "form_logic",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    formId: uuid("form_id")
+      .notNull()
+      .references(() => forms.id, { onDelete: "cascade" }),
+    fromFieldId: uuid("from_field_id")
+      .notNull()
+      .references(() => formFields.id, { onDelete: "cascade" }),
+    condition: jsonb("condition")
+      .notNull()
+      .$type<{ operator: "eq" | "neq" | "contains" | "gt" | "lt" | "is_empty" | "is_not_empty"; value?: string | number }>(),
+    action: varchar("action", { length: 50 }).notNull(),
+    targetFieldId: uuid("target_field_id").references(() => formFields.id, { onDelete: "set null" }),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    formIdx: index("form_logic_form_idx").on(t.formId),
+    tenantIdx: index("form_logic_tenant_idx").on(t.tenantId),
+    fromFieldIdx: index("form_logic_from_field_idx").on(t.fromFieldId),
+  })
+);
+
+export type FormLogicRule = typeof formLogic.$inferSelect;
+export type NewFormLogicRule = typeof formLogic.$inferInsert;

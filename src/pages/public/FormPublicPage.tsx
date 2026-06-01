@@ -1,11 +1,12 @@
 /**
- * FORMS-003 — /f/:slug (public, fără autentificare)
+ * FORMS-003/004 — /f/:slug (public, fără autentificare)
  *
  * Renderer conversațional one-question-at-a-time:
  *   - Bară de progres
  *   - Un câmp pe ecran, Enter avansează (sau Ctrl+Enter pentru long_text)
  *   - Buton Înapoi
  *   - Capturare UTM + câmpuri hidden din URL
+ *   - FORMS-004: onorează regulile de logică condițională (jump_to_field / jump_to_end)
  *   - Submit → ecran thank-you / redirect
  */
 import { useEffect, useState, useCallback, useRef } from "react";
@@ -16,7 +17,9 @@ import {
   submitPublicForm,
   type PublicForm,
   type PublicFormField,
+  type FormLogicRule,
 } from "@/lib/api/forms";
+import { getNextFieldIndex } from "@/lib/formLogic";
 import { cn } from "@/lib/utils";
 
 // ─── Tipuri ───────────────────────────────────────────────────────────────────
@@ -64,6 +67,7 @@ function extractUtm(params: Record<string, string>): UtmParams {
 export function FormPublicPage({ slug }: FormPublicPageProps) {
   const [form, setForm] = useState<PublicForm | null>(null);
   const [fields, setFields] = useState<PublicFormField[]>([]);
+  const [logicRules, setLogicRules] = useState<FormLogicRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -109,6 +113,8 @@ export function FormPublicPage({ slug }: FormPublicPageProps) {
           // Sort by position, exclude hidden from visible flow
           const sorted = [...(f.fields ?? [])].sort((a, b) => a.position - b.position);
           setFields(sorted);
+          // FORMS-004: store logic rules
+          setLogicRules(f.logic ?? []);
           // Pre-populate hidden fields from URL params
           const initialAnswers: Record<string, unknown> = {};
           for (const field of sorted) {
@@ -188,14 +194,16 @@ export function FormPublicPage({ slug }: FormPublicPageProps) {
 
   const handleAdvance = useCallback(() => {
     if (!validateCurrent()) return;
-    if (isLastStep) {
+    // FORMS-004: compute next index via logic rules
+    const next = getNextFieldIndex(currentIdx, visibleFields, logicRules, answers);
+    if (next === "end") {
       handleSubmit();
     } else {
-      setCurrentIdx((i) => i + 1);
+      setCurrentIdx(next);
       setFieldError(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIdx, answers, isLastStep, currentField]);
+  }, [currentIdx, answers, visibleFields, logicRules, currentField]);
 
   // ── Back ──
 
