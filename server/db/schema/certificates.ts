@@ -30,6 +30,7 @@ export type FieldConfig = {
   color?: string;
   align?: "left" | "center" | "right";
   maxWidth?: number;
+  bold?: boolean;
 };
 
 export type FieldsConfig = {
