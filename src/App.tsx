@@ -56,6 +56,8 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
+import { StudentDetailPage } from "./pages/app/StudentDetailPage"; // GAP-019
+import { GamificationPage } from "./pages/app/GamificationPage"; // GAP-020
 
 function HomePage() {
   return (
@@ -101,7 +103,13 @@ function Routes() {
   if (path.startsWith("/calculator/pricing")) return <PricingConfiguratorPage />;
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
+  // GAP-019: /app/students/:id detail page must come before /app/students list
+  if (path.match(/^\/app\/students\/[^/]+$/)) {
+    const studentId = path.split("/")[3];
+    return <StudentDetailPage studentId={studentId} />;
+  }
   if (path.startsWith("/app/students")) return <StudentsPage />;
+  if (path.startsWith("/app/gamification")) return <GamificationPage />; // GAP-020
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;
