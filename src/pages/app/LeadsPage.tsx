@@ -900,9 +900,15 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick, stages,
       )}
       <div className="flex items-center justify-between gap-2 mt-2">
         <span className="text-[10px] text-muted-foreground">{SOURCE_LABEL[lead.source] ?? lead.source}</span>
-        <div className="flex gap-1.5 text-muted-foreground/60">
-          {lead.phone && <Phone className="h-2.5 w-2.5" aria-label="Are telefon" />}
-          {lead.email && <Mail className="h-2.5 w-2.5" aria-label="Are email" />}
+        {/* CRM-146: visible contact icons ≥ h-3.5, contrast ≥ 4.5:1, "Fără contact" badge */}
+        <div className="flex gap-1.5 text-muted-foreground">
+          {lead.phone && <Phone className="h-3.5 w-3.5" aria-label="Are telefon" />}
+          {lead.email && <Mail className="h-3.5 w-3.5" aria-label="Are email" />}
+          {!lead.phone && !lead.email && (
+            <span className="text-[9px] font-semibold text-destructive bg-destructive/10 rounded px-1 py-0.5" aria-label="Fără date de contact">
+              Fără contact
+            </span>
+          )}
         </div>
       </div>
       {/* CRM-137: show assignee name instead of UUID fragment */}
@@ -1145,9 +1151,15 @@ function LeadListView({ items, total, page, pageSize, totalPages, sort, dir, loa
                   <td className="px-3 py-2.5 max-w-[200px]">
                     <p className="font-semibold truncate">{lead.dealName ?? lead.fullName}</p>
                     {lead.company && <p className="text-[11px] text-muted-foreground truncate italic">{lead.company}</p>}
+                    {/* CRM-146: visible contact icons + "Fără contact" badge */}
                     <div className="flex items-center gap-2 mt-0.5">
-                      {lead.phone && <Phone className="h-2.5 w-2.5 text-muted-foreground/60" aria-label="Are telefon" />}
-                      {lead.email && <Mail className="h-2.5 w-2.5 text-muted-foreground/60" aria-label="Are email" />}
+                      {lead.phone && <Phone className="h-3.5 w-3.5 text-muted-foreground" aria-label="Are telefon" />}
+                      {lead.email && <Mail className="h-3.5 w-3.5 text-muted-foreground" aria-label="Are email" />}
+                      {!lead.phone && !lead.email && (
+                        <span className="text-[9px] font-semibold text-destructive bg-destructive/10 rounded px-1 py-0.5" aria-label="Fără date de contact">
+                          Fără contact
+                        </span>
+                      )}
                     </div>
                   </td>
 
