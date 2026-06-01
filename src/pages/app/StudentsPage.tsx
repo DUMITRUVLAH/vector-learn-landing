@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare } from "lucide-react";
+import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare, Globe, Copy, Check } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { StudentForm } from "@/components/app/StudentForm";
 import { useSession } from "@/hooks/useSession";
@@ -11,6 +11,7 @@ import {
   type ListStudentsParams,
 } from "@/lib/api/students";
 import { listFeedbackForms, sendFeedbackToStudent, type FeedbackForm } from "@/lib/api/feedback";
+import { generatePortalToken } from "@/lib/api/portal";
 import { cn } from "@/lib/utils";
 
 const STATUS_BADGE: Record<Student["status"], { label: string; cls: string }> = {
@@ -48,6 +49,8 @@ export function StudentsPage() {
   const [feedbackFormId, setFeedbackFormId] = useState<string>("");
   const [feedbackSending, setFeedbackSending] = useState(false);
   const [feedbackLink, setFeedbackLink] = useState<string | null>(null);
+  // GAP-010: portal link
+  const [portalCopied, setPortalCopied] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -274,6 +277,25 @@ export function StudentsPage() {
                               className="touch-target rounded-md hover:bg-primary/10 hover:text-primary flex items-center justify-center"
                             >
                               <MessageSquare className="h-3.5 w-3.5" />
+                            </button>
+                            {/* GAP-010: portal link */}
+                            <button
+                              type="button"
+                              aria-label={`Copiază link portal pentru ${s.fullName}`}
+                              onClick={async () => {
+                                try {
+                                  const { portalUrl } = await generatePortalToken(s.id);
+                                  const fullUrl = `${window.location.origin}/${portalUrl}`;
+                                  await navigator.clipboard.writeText(fullUrl);
+                                  setPortalCopied(s.id);
+                                  setTimeout(() => setPortalCopied(null), 2000);
+                                } catch {
+                                  setToast({ kind: "error", message: "Nu am putut genera link-ul portalului." });
+                                }
+                              }}
+                              className="touch-target rounded-md hover:bg-primary/10 hover:text-primary flex items-center justify-center"
+                            >
+                              {portalCopied === s.id ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Globe className="h-3.5 w-3.5" />}
                             </button>
                             <button
                               type="button"

@@ -56,6 +56,7 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
+import { StudentPortalPage } from "./pages/portal/StudentPortalPage";
 
 function HomePage() {
   return (
@@ -140,6 +141,11 @@ function Routes() {
   if (path.match(/^\/feedback\/[^/]+$/)) {
     const token = path.split("/")[2];
     return <FeedbackPublicPage token={token} />;
+  }
+  // GAP-010: /portal/:token — public self-service student portal
+  if (path.match(/^\/portal\/[^/]+$/)) {
+    const token = path.split("/")[2];
+    return <StudentPortalPage token={token} />;
   }
   return <HomePage />;
 }
