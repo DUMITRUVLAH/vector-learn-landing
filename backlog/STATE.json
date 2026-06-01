@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "SCHOOL-005",
+  "last_completed": "SCHOOL-007",
   "iterations": 91,
   "last_run_at": "2026-06-01T12:30:00Z",
   "milestone_status": "DIPLOMA Phase 1 in progress: DIPLOMA-801/802 done (PR #97). DIPLOMA-803..805 pending.",
@@ -1737,7 +1737,7 @@
       }
     },
     "SCHOOL-007": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHOOL-007-parent-portal.md",
@@ -1746,7 +1746,13 @@
       "severity": "normal",
       "title": "Portal parinte: note, prezenta, fisa situatie, sold taxe + stiri scoala",
       "depends_on": ["SCHOOL-002", "SCHOOL-003", "SCHOOL-004", "GUARDIAN-001"],
-      "branch": "feat/SCHOOL-faza-1-fundatie"
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "KINDER-001": {
       "status": "pending",
