@@ -26,7 +26,17 @@ Read one spec from `backlog/specs/<ID>.md`, implement it completely, and report 
    - Touch targets minimum 44×44px (`touch-target` utility)
 9. **Romanian copy.** All user-facing strings in Romanian, consistent with existing landing tone.
 10. **Routing:** Use simple hash-based routing (`window.location.hash`) or install `react-router-dom` if not present. The page must be accessible at the declared path. In-app links must use real app routes (e.g. `#/app/login`), never dead anchors like `#login`.
-11. **Schema changes → migrations (non-negotiable).** If you touch `server/db/schema/*`, run `npm run db:generate`, **commit the generated migration**, and verify `npm run db:reset && npm run db:seed` succeed. A schema change without a committed migration is INCOMPLETE — it breaks every fresh deploy.
+11. **Schema changes → migrations (non-negotiable).** If you touch `server/db/schema/*`: first
+    `git fetch origin main -q`, then `npm run db:generate`, **commit the generated migration**, and
+    verify `npm run db:reset && npm run db:seed` succeed. A schema change without a committed migration
+    is INCOMPLETE — it breaks every fresh deploy.
+    - **Prefix collision is the #1 prod-breaker.** drizzle numbers migrations from YOUR branch point,
+      so parallel branches all mint the same `0016_`. Before committing, ensure the new migration's
+      prefix is **greater than the max prefix on `origin/main`**:
+      `git ls-tree origin/main drizzle/ --name-only | grep -oE '[0-9]{4}' | sort -n | tail -1`.
+      If your generated migration is ≤ that, **renumber it** to (max-on-main + 1): rename the
+      `NNNN_*.sql`, rename `meta/NNNN_snapshot.json`, and fix the `idx`+`tag` in `meta/_journal.json`.
+      Then re-run `db:reset && db:seed`. (test-runner's gate 4a-bis will FAIL the item otherwise.)
 12. **DB portability.** Prod runs Postgres (Supabase); local/tests may run PGlite. Result shapes differ — never rely on raw `db.execute(...).rows`. Prefer the query builder (`db.select` / `db.query`); if you must use raw execute, handle both: `const rows = Array.isArray(r) ? r : r.rows`.
 13. **API endpoints must be smoke-tested live.** Boot the server, log in, and curl the endpoints you added/changed — they must return 200 with the expected shape before you claim success.
 

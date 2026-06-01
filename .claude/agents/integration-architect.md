@@ -55,6 +55,7 @@ Every module shares `tenant_id` (row-level isolation) and links via foreign keys
 
 ```
 INTEGRATION_RESULT: <CONNECTED | GAPS_FOUND | BROKEN>
+# BROKEN includes COMPETING_SYSTEM (duplicates infra already on origin/main)
 ID: <CRM-XXX>
 CHECKED:
 - db_relations: <ok | issues>
@@ -76,7 +77,18 @@ VERDICT: <one sentence: does this feature integrate with the rest of the app or 
 ## Verdicts
 - `CONNECTED` = all relevant seams wired; data flows across modules; tenant-safe.
 - `GAPS_FOUND` = works alone but missing cross-module links → improver must wire them before done.
-- `BROKEN` = a cross-module contract is violated (wrong FK, type mismatch, orphaning) → must fix.
+- `BROKEN` = a cross-module contract is violated (wrong FK, type mismatch, orphaning), OR this work
+  **duplicates a system that already exists on `origin/main`** → must fix.
+
+## Duplicate-system check (catches the competing-implementation collision)
+Before approving, `git fetch origin main -q` and check whether this feature re-creates infrastructure
+main already has. The real failure: #89/#90 each built a parallel `in_app_notifications` system
+because they branched before main grew its own — merging them would mean two notification tables.
+- Does this PR add a `server/db/schema/<X>.ts` / route / table whose responsibility already exists on
+  main under a different name? (e.g. another `notifications`, `audit_log`, `settings` system.)
+  Compare `git ls-tree origin/main server/db/schema/ --name-only` and the route list.
+- If yes → `BROKEN` with `COMPETING_SYSTEM`: name both implementations and recommend rebuilding this
+  feature ON TOP of main's existing one, not merging a second parallel system.
 
 ## Rules
 - Be concrete: name the exact module pair, the mechanism (FK / route write / api type / nav link),

@@ -139,35 +139,73 @@ Always save the manager report to `backlog/reports/<ID>-manager.md`.
 ### Step 6 — PERSONA_STUDENT
 Invoke `persona-student`. Pass the ID. Save report. Always continue.
 
-### Step 7 — COMMIT
-1. Create branch: `feat/<ID>-<slug>` (slug from spec frontmatter)
-2. Stage all changes: `git add .`
-3. Commit with conventional commit format:
+### Step 7 — COMMIT (one PHASE = one branch = one PR — §0.2)
+**Branch discipline (this is how we avoid 30 open PRs of sprawl):**
+1. **One branch per PHASE, not per item.** At the START of a phase, create `feat/<MODUL>-faza-<X>-<slug>`
+   **off the latest `origin/main`** (`git fetch origin main && git checkout -b feat/... origin/main`).
+   For every subsequent item of the SAME phase, stay on that branch — do NOT create a new branch.
+   A standalone item with no phase may use `feat/<ID>-<slug>`.
+2. **Always branch off fresh `origin/main`, never off another feature branch or a `preview/*` branch.**
+   Branching off a sibling feature branch is what produced the competing-notifications collision
+   (#89/#90 each built a parallel notifications system because they drifted off a stale base).
+3. Stage changes: `git add .`
+4. Commit per item with conventional format (commit-per-item even on a shared phase branch, for traceability):
    ```
    feat(<id>): <title from spec>
 
    <one-paragraph summary>
 
-   - Acceptance criteria: <N/N>
-   - Reviewer: APPROVED
-   - Tests: <pass count>
-   - Manager persona: <BUY|MAYBE|PASS>
-   - Student persona: <LOVES|OK|DISLIKES>
-   - Lighthouse: perf=X a11y=Y bp=Z seo=W (or "skipped" if unavailable)
+   - Acceptance criteria: <N/N>   - Reviewer: APPROVED   - Tests: <pass count>
+   - Manager: <BUY|MAYBE|PASS>   - Student: <LOVES|OK|DISLIKES>
+   - Lighthouse: perf=X a11y=Y bp=Z seo=W (or "skipped")
 
    Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
    ```
-4. Push branch to origin
+5. **Rebase onto current main BEFORE pushing (keeps PRs mergeable, prevents drift-rot):**
+   ```bash
+   git fetch origin main -q
+   git rebase origin/main          # resolve conflicts now, while the diff is small
+   ```
+   If the rebase hits a conflict you can resolve cleanly → resolve, re-run the item's tests, continue.
+   If it hits a STRUCTURAL conflict (a competing implementation of the same feature, e.g. two
+   notifications systems) → do NOT force it. Mark the phase `blocked` with `backlog/reports/<ID>-blocked.md`
+   describing the competing surface, and move on. Forcing such a merge breaks prod.
+6. After the LAST item of the phase: re-run the full gate on the whole branch (build+typecheck+lint+test+
+   migration+migration-collision green), then push.
 
-### Step 8 — PR
-`gh pr create --title "feat(<ID>): <title>" --body "<body>"`
+### Step 8 — PR (one per phase, always based on main, always fresh)
+Open the PR only once per phase, after the phase's last item:
+```bash
+gh pr create --base main --title "feat(<MODUL>-faza-<X>): <phase title>" --body "<body>"
+```
+- **`--base main` is mandatory.** Never open a PR against `preview/*` or another feature branch —
+  that makes GitHub report false conflicts and the PR can't auto-merge.
+- If a PR already exists for the phase, just push more commits to its branch; don't open a second PR.
 
-Body must include:
-- Summary
-- Acceptance criteria checklist
-- Links to reports in `backlog/reports/<ID>-*.md`
-- Persona quotes
-- Test gate results
+Body must include: Summary · Acceptance-criteria checklist (all items in the phase) ·
+Links to `backlog/reports/<ID>-*.md` · Persona quotes · Test gate results (incl. MIGRATION_COLLISION).
+
+### Step 8b — MERGE HYGIENE (don't let PRs pile up and rot)
+Open PRs that are never merged drift until they conflict irreconcilably — that is how this repo
+reached 30+ open PRs with colliding migrations. Apply this discipline:
+
+**Default: the orchestrator opens PRs; the owner merges them.** Do NOT auto-merge to `main` (= auto-deploy
+to the paying client's prod) unless the owner has explicitly said "merge"/"deploy"/"push to prod"
+for this run. Merging is outward-facing and hard to reverse — it stays the owner's call.
+
+**When the owner DID authorize merging, merge SAFELY in this order:**
+1. **Triage first — classify every candidate PR before touching anything:**
+   - `git fetch origin <branch>` then `git rev-list --count origin/main..origin/<branch>`.
+     **0 commits ahead = STALE** (work already on main) → `gh pr close` with a note, do not merge.
+   - `gh pr view <n> --json baseRefName` → if base ≠ `main`, `gh pr edit <n> --base main` first.
+   - Check migration prefixes vs main (test-runner gate 4a-bis). Collision → renumber before merge.
+2. **Merge the clean, collision-free, migration-free PRs first** (lowest risk), oldest-first.
+3. **After each merge, main moves** — re-check the next PR's mergeability; rebase it onto the new main
+   if needed. Sequential merges of overlapping PRs will conflict; rebase, don't force.
+4. **Verify after the batch:** `npm run db:reset && npm run db:seed` succeed, full test suite green,
+   `_journal.json` has no duplicate idx. If any fails → the last merge broke main; fix forward.
+5. **Never** `--force` push `main`, never merge a PR whose migration collides, never merge a PR with a
+   red blocking gate.
 
 ### Step 9 — MARK_DONE
 Update `backlog/STATE.json`: set item status to `done`, set `last_completed = <ID>`, clear `current_item`.

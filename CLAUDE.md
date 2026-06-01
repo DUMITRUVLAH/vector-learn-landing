@@ -244,6 +244,19 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
   leave NO uncommitted migration, and `npm run db:reset && npm run db:seed` must succeed.
   A schema change without a committed migration breaks every fresh deploy. (This is how the
   `pipeline_stages`/`lead_tasks`/`message_templates` tables almost shipped with no migration.)
+- **Migration prefix collision (the #1 prod-breaker):** drizzle numbers migrations from the branch
+  point, so parallel branches all mint the same `0016_`. Every migration prefix a branch adds must be
+  **> the max prefix on `origin/main`**; if not, renumber (rename `.sql` + `meta/<idx>_snapshot.json`,
+  fix `idx`+`tag` in `meta/_journal.json`). `_journal.json` must never have a duplicate `idx`.
+  test-runner gate 4a-bis enforces this; merging a colliding migration 500s every DB route in prod.
+- **Branch off fresh `origin/main`, rebase before push, base PRs on `main`.** Never branch off a
+  sibling feature branch or `preview/*` — that drift produced two competing notifications systems
+  (#89/#90) that couldn't be merged. One phase = one branch = one PR (§0.2). integration-architect
+  flags `COMPETING_SYSTEM` when a PR re-creates infra main already has.
+- **Don't let PRs pile up.** Open PRs that are never merged rot into irreconcilable conflicts
+  (this repo hit 30+). Merging to `main` (= auto-deploy to the paying client's prod) stays the
+  owner's call unless they explicitly authorize it; when they do, triage stale-vs-real + collisions
+  first, merge clean ones oldest-first, rebase between merges (orchestrator Step 8b).
 - **Live API integration smoke:** boot the server, `POST /api/auth/login`, then hit the
   endpoints the item touched → all 200 with expected JSON. Catches route wiring, auth, and
   DB-result bugs that unit tests miss.

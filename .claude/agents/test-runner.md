@@ -67,6 +67,25 @@ npm run db:seed                # must exit 0
 - If `git status drizzle` is non-empty after `db:generate` → **FAIL**: "schema changed without a committed migration". The builder must commit the generated migration.
 - If `db:reset` or `db:seed` fails → **FAIL**.
 
+### 4a-bis. Migration prefix collision gate (BLOCKING — catches the #1 prod-breaker)
+A branch that rebuilds fine *on itself* can still 500 prod after merge, because it minted a
+migration prefix (e.g. `0016_`) that ALREADY EXISTS on `main` with different content. This is
+the collision that broke routes before (see migration-prefix-collisions). Check it explicitly:
+```bash
+git fetch origin main -q
+# Every migration prefix added on this branch must be > the max prefix on origin/main.
+MAIN_MAX=$(git ls-tree origin/main drizzle/ --name-only | grep -oE '[0-9]{4}' | sort -n | tail -1)
+BRANCH_MIN_NEW=$(git diff --name-only origin/main...HEAD | grep -oE 'drizzle/[0-9]{4}' | grep -oE '[0-9]{4}' | sort -n | head -1)
+# If BRANCH_MIN_NEW is non-empty AND <= MAIN_MAX → COLLISION (renumber to MAIN_MAX+1).
+# Journal must have NO duplicate idx:
+node -e "const j=require('./drizzle/meta/_journal.json');const i=j.entries.map(e=>e.idx);const d=i.filter((x,n)=>i.indexOf(x)!==n);if(d.length){console.error('DUP journal idx:',d);process.exit(1)}else console.log('journal idx OK')"
+```
+- If any migration prefix added on the branch is **≤ the max prefix on `origin/main`** → **FAIL** with
+  `MIGRATION_COLLISION`: the builder/improver must renumber the migration to the next free index
+  (max-on-main + 1), rename its `meta/<idx>_snapshot.json`, fix `meta/_journal.json` (`idx` + `tag`),
+  then re-run 4a. Never merge a colliding migration — it corrupts the journal and 500s prod.
+- If `_journal.json` has any duplicate `idx` → **FAIL** (`DUP journal idx`).
+
 ### 4b. API integration smoke (BLOCKING — catches route/DB/auth breaks)
 Boot the real server and exercise the live API end-to-end (not just unit mocks).
 ```bash
@@ -119,6 +138,7 @@ TYPECHECK: <pass|fail>
 LINT: <pass|fail|skipped>
 UNIT_TESTS: <X/Y passed>
 MIGRATION_GATE: <pass|fail>        # db:generate clean + db:reset + db:seed
+MIGRATION_COLLISION: <pass|fail>   # no prefix ≤ max-on-main; no duplicate journal idx
 INTEGRATION_SMOKE: <pass|fail>     # health/db + login + feature endpoints
 PORTABILITY: <pass|fail>           # no raw .execute().rows
 COVERAGE: <XX% | fail>             # ≥ 80% on new code (BLOCKING)
@@ -141,8 +161,8 @@ VERDICT: <one sentence>
 ```
 
 ## Rules
-- `PASS` = all runnable gates green AND **migration gate + integration smoke + portability + coverage ≥ 80% + all E2E pass** AND lighthouse ≥ 0.9 each AND axe critical+serious = 0
-- `FAIL` = any runnable gate fails. Migration, integration smoke, portability, coverage, and E2E are **BLOCKING** and can never be skipped.
+- `PASS` = all runnable gates green AND **migration gate + migration-collision + integration smoke + portability + coverage ≥ 80% + all E2E pass** AND lighthouse ≥ 0.9 each AND axe critical+serious = 0
+- `FAIL` = any runnable gate fails. Migration, migration-collision, integration smoke, portability, coverage, and E2E are **BLOCKING** and can never be skipped.
 - A `skipped` gate (lighthouse/axe only, when Chrome is unavailable) does NOT cause a fail, but it must be reported. The five blocking gates are never "skipped".
 - Never silently ignore an error. Always log it (include response bodies for integration failures).
 - Clean up any background processes you start (kill the API/dev server PIDs).
