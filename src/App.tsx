@@ -43,6 +43,7 @@ import { LeadCardPage } from "./pages/app/LeadCardPage";
 import { TemplatesPage } from "./pages/app/TemplatesPage";
 import { AutomationsPage } from "./pages/app/AutomationsPage";
 import { AnalyticsPage } from "./pages/app/AnalyticsPage";
+import { AdvancedAnalyticsPage } from "./pages/app/AdvancedAnalyticsPage"; // GAP-016
 import { PayrollPage } from "./pages/app/PayrollPage";
 import { TeacherStatsPage } from "./pages/app/TeacherStatsPage";
 import { AvailabilityPage } from "./pages/app/AvailabilityPage";
@@ -116,6 +117,7 @@ function Routes() {
     return <LeadCardPage leadId={id} />;
   }
   if (path.startsWith("/app/analytics/crm")) return <AnalyticsPage />;
+  if (path.startsWith("/app/analytics")) return <AdvancedAnalyticsPage />; // GAP-016
   if (path.startsWith("/app/hr/payroll")) return <PayrollPage />;
   // /app/hr/teachers/:id/stats
   if (path.match(/^\/app\/hr\/teachers\/[^/]+\/stats$/)) {
