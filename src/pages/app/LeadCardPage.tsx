@@ -24,8 +24,8 @@ import {
   listContacts, createContact, updateContact, deleteContact,
   listTags, addTag, removeTag,
   listFieldValues, upsertFieldValue, listCustomFields,
-  getDedupBanner,
-  type Lead, type LeadInteraction, type LeadContact, type CustomField, type LeadFieldValue,
+  getDedupBanner, matchCourses,
+  type Lead, type LeadInteraction, type LeadContact, type CustomField, type LeadFieldValue, type CourseMatch,
 } from "@/lib/api/leads";
 import { fetchPipelineStages, type PipelineStage } from "@/lib/api/pipeline";
 import { AssigneePicker, useAssigneeName } from "@/components/crm/AssigneePicker";
@@ -129,6 +129,11 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
 
   // CRM-111: Enhanced convert modal
   const [convertModal, setConvertModal] = useState(false);
+
+  // GAP-002: Course matching panel
+  const [matchPanel, setMatchPanel] = useState(false);
+  const [matchResults, setMatchResults] = useState<CourseMatch[]>([]);
+  const [matchLoading, setMatchLoading] = useState(false);
 
   // CRM-145: score factors for explainer; auto-score if missing
   const [scoreFactors, setScoreFactors] = useState<ScoreFactor[]>([]);
@@ -348,6 +353,21 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     setLead(keptLead);
     setToast({ kind: "success", message: "Leaduri fuzionate. Istoricul a fost transferat." });
     void fetchAll();
+  };
+
+  // ─── GAP-002: Match courses ────────────────────────────────────────────────
+  const handleFindCourse = async () => {
+    if (!lead) return;
+    setMatchPanel(true);
+    setMatchLoading(true);
+    try {
+      const res = await matchCourses(lead.id);
+      setMatchResults(res.matches);
+    } catch {
+      setMatchResults([]);
+    } finally {
+      setMatchLoading(false);
+    }
   };
 
   // ─── Convert (CRM-111: open modal instead of confirm) ────────────────────
@@ -1055,6 +1075,15 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
           {/* Action buttons */}
           {!lead.convertedToStudentId && lead.stage !== "lost" && (
             <div className="space-y-2">
+              {/* GAP-002: Find matching course */}
+              <button
+                type="button"
+                onClick={handleFindCourse}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-primary/40 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10"
+              >
+                <Calendar className="h-4 w-4" />
+                Găsește grupă
+              </button>
               <button
                 type="button"
                 onClick={handleConvert}
@@ -1071,6 +1100,56 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                 <X className="h-4 w-4" />
                 Marchează pierdut
               </button>
+            </div>
+          )}
+
+          {/* GAP-002: Match panel */}
+          {matchPanel && (
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Grupe compatibile</p>
+                <button
+                  type="button"
+                  onClick={() => setMatchPanel(false)}
+                  aria-label="Închide panoul de potrivire"
+                  className="rounded-md hover:bg-muted p-1"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {matchLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Se caută grupe...
+                </div>
+              ) : matchResults.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nu s-au găsit grupe compatibile. Adaugă curs de interes și disponibilitate preferată pe lead.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {matchResults.map((m) => (
+                    <li key={m.courseId} className="rounded-lg border border-border bg-background p-3 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold truncate">{m.courseName}</p>
+                        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                          Scor {m.compatibilityScore}
+                        </span>
+                      </div>
+                      {m.level && <p className="text-xs text-muted-foreground">Nivel: {m.level}</p>}
+                      {m.teacherName && <p className="text-xs text-muted-foreground">Profesor: {m.teacherName}</p>}
+                      {m.nextSlot && (
+                        <p className="text-xs text-muted-foreground">
+                          Următor slot: {new Date(m.nextSlot).toLocaleDateString("ro-RO", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      )}
+                      {m.vacancies !== null && (
+                        <p className={cn("text-xs font-medium", m.vacancies > 0 ? "text-success" : "text-warning")}>
+                          {m.vacancies > 0 ? `${m.vacancies} locuri libere` : "Grupă plină"}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
           {/* CRM-148: converted block → link to student */}

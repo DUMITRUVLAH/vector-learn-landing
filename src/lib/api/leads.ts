@@ -534,3 +534,19 @@ export function mergeLead(
     body: JSON.stringify(input),
   });
 }
+
+// ─── GAP-002: Course matching ─────────────────────────────────────────────────
+
+export interface CourseMatch {
+  courseId: string;
+  courseName: string;
+  level: string | null;
+  teacherName: string | null;
+  nextSlot: string | null;
+  compatibilityScore: number;
+  vacancies: number | null;
+}
+
+export function matchCourses(leadId: string): Promise<{ matches: CourseMatch[] }> {
+  return api<{ matches: CourseMatch[] }>(`/api/courses/match?leadId=${leadId}`);
+}

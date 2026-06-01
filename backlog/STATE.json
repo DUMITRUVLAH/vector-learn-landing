@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "GAP-002",
-  "last_completed": "GAP-001",
-  "iterations": 92,
-  "last_run_at": "2026-06-01T13:10:00Z",
-  "milestone_status": "GAP faza-1 in progress: GAP-001 done, GAP-002 building",
+  "current_item": "GAP-003",
+  "last_completed": "GAP-002",
+  "iterations": 93,
+  "last_run_at": "2026-06-01T13:20:00Z",
+  "milestone_status": "GAP faza-1 in progress: GAP-001/002 done, GAP-003 building",
   "active_milestone": "GAP",
   "items": {
     "M1-001": {
@@ -1907,18 +1907,27 @@
       }
     },
     "GAP-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "branch": "feat/GAP-faza-1-trial-flow",
       "pr": null,
-      "reports": []
+      "reports": [
+        "backlog/reports/GAP-002-manager.md",
+        "backlog/reports/GAP-002-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "GAP-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
-      "branch": null,
+      "branch": "feat/GAP-faza-1-trial-flow",
       "pr": null,
       "reports": []
     },
