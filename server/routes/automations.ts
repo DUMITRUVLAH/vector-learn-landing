@@ -204,6 +204,12 @@ automationRoutes.post("/:id/test", async (c) => {
     lostReason: null,
     convertedToStudentId: null,
     convertedAt: null,
+    // CRM-111/113 fields added later
+    company: null,
+    valueCents: 0,
+    debtCents: 0,
+    dealName: null,
+    score: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

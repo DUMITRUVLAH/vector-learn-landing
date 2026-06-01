@@ -289,3 +289,26 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | KINDER-007 | 🟡 | Incident/accident reports + signature |
 | GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
 | CONSENT-001 | 🟡 | Consent/permission forms + e-signature |
+
+## Milestone: SET — Settings/Users (NIGHT-PLAN §7)
+
+Platform administration: team management, branding, audit log, GDPR compliance, onboarding.
+
+| ID | Priority | Feature | Status |
+|----|----------|---------|--------|
+| SET-801 | P0 | Team management — invite/disable/role matrix | pending |
+| SET-802 | P0 | Tenant branding + locale/timezone settings | pending |
+| SET-803 | P0 | Audit log + GDPR (DPA download, data retention) | pending |
+| SET-804 | P0 | Onboarding wizard (logo→course→teacher→students) | pending |
+| SET-805 | P1 | Notification preferences + /status public page | pending |
+
+## Milestone: AI — AI Assistant module (NIGHT-PLAN §9)
+
+AI-powered features: lesson summary, churn prediction, lead qualification, usage dashboard.
+
+| ID | Priority | Feature | Status |
+|----|----------|---------|--------|
+| AI-A01 | P0 | AI lesson summary + GDPR pseudonymization layer | pending |
+| AI-A02 | P0 | Churn prediction — students at risk + suggested actions | pending |
+| AI-A03 | P1 | Lead qualification hot/warm/cold + WhatsApp reply suggestion | pending |
+| AI-A04 | P1 | AI dashboard — cost cap, usage stats, feature flags | pending |

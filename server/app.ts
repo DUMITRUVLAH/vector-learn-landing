@@ -38,6 +38,7 @@ import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
 import { formRoutes } from "./routes/forms"; // FORMS-001
+import { aiRoutes } from "./routes/ai"; // AI-A01: lesson summary + AI infrastructure
 import {
   publicFormGetHandler,
   publicFormSubmitHandler,
@@ -136,6 +137,8 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
+// AI-A01: AI assistant — lesson summary, churn, lead qualification
+app.route("/api/ai", aiRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {
@@ -143,7 +146,8 @@ app.get("/api/health/db", async (c) => {
       sql`SELECT count(*)::int as table_count FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE '\\_\\_%' ESCAPE '\\'`
     );
     // postgres-js returns the rows array directly; PGlite wraps them in `.rows`.
-    const tableRows = (Array.isArray(tablesResult) ? tablesResult : tablesResult.rows) as
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tableRows = (Array.isArray(tablesResult) ? tablesResult : (tablesResult as any).rows) as
       | Array<{ table_count: number }>
       | undefined;
     const tableRow = tableRows?.[0];

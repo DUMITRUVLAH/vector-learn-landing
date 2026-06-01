@@ -59,6 +59,7 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
+import { AiAssistantPage } from "./pages/app/AiAssistantPage"; // AI-A01
 
 function HomePage() {
   return (
@@ -143,6 +144,7 @@ function Routes() {
     return <FormBuilderPage formId={id} />;
   }
   if (path.startsWith("/app/forms")) return <FormsPage />;
+  if (path.startsWith("/app/ai")) return <AiAssistantPage />; // AI-A01
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students
