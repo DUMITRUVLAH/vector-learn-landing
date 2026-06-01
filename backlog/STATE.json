@@ -1894,7 +1894,7 @@
       "attempts": 1,
       "blockers": [],
       "branch": "feat/GAP-faza-1-trial-flow",
-      "pr": null,
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
       "reports": [
         "backlog/reports/GAP-001-manager.md",
         "backlog/reports/GAP-001-student.md"
@@ -1911,7 +1911,7 @@
       "attempts": 1,
       "blockers": [],
       "branch": "feat/GAP-faza-1-trial-flow",
-      "pr": null,
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
       "reports": [
         "backlog/reports/GAP-002-manager.md",
         "backlog/reports/GAP-002-student.md"
@@ -1928,7 +1928,7 @@
       "attempts": 1,
       "blockers": [],
       "branch": "feat/GAP-faza-1-trial-flow",
-      "pr": null,
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
       "reports": [
         "backlog/reports/GAP-003-manager.md",
         "backlog/reports/GAP-003-student.md"
