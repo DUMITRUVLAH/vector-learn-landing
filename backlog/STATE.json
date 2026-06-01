@@ -1719,7 +1719,7 @@
       }
     },
     "SCHOOL-006": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHOOL-006-master-timetable.md",
@@ -1728,7 +1728,13 @@
       "severity": "normal",
       "title": "Master timetable (class\u00d7subject\u00d7teacher\u00d7room grid)",
       "depends_on": ["SCHOOL-001", "SCHOOL-002"],
-      "branch": "feat/SCHOOL-faza-1-fundatie"
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-007": {
       "status": "pending",
@@ -1819,15 +1825,16 @@
       "depends_on": []
     },
     "GUARDIAN-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/GUARDIAN-001-authorized-guardians.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "high",
       "title": "Tutori autorizati \u2014 mai multi tutori per elev, flag-uri custodie/permisiuni",
-      "depends_on": ["SCHOOL-001"]
+      "depends_on": ["SCHOOL-001"],
+      "branch": "feat/SCHOOL-faza-1-fundatie"
     },
     "CONSENT-001": {
       "status": "pending",

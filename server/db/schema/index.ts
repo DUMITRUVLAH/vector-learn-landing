@@ -36,3 +36,4 @@ export * from "./schoolGrades";
 export * from "./tuition";
 export * from "./admissions";
 export * from "./timetable";
+export * from "./guardians";
