@@ -1,15 +1,14 @@
 /**
- * CX-702 — /app/cx
+ * CX-702/703 — /app/cx
  *
  * Customer Experience module: cohort board with Active/Viitoare/Trecute tabs,
- * horizontal cohort selector, and a progress header for the selected cohort.
- * Participants (CX-703), Export CSV (CX-704), and Break-even (CX-705) come next.
+ * horizontal cohort selector, progress header, and 3 participant tables
+ * (Înscriși / Gratuit / Cont de Plată) with stats bar.
  */
 import { useEffect, useState, useCallback } from "react";
 import {
   Loader2,
   AlertCircle,
-  BookOpen,
   Download,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
@@ -18,13 +17,20 @@ import { useRouter } from "@/router/HashRouter";
 import { listCohorts, type Cohort } from "@/lib/api/cohorts";
 import { CohortTabs } from "@/components/modules/cx/CohortTabs";
 import { CohortProgress } from "@/components/modules/cx/CohortProgress";
+import { CohortStats } from "@/components/modules/cx/CohortStats";
+import { ParticipantTable } from "@/components/modules/cx/ParticipantTable";
+import { useCohortParticipants } from "@/hooks/useCohortParticipants";
+import type { AddParticipantPayload } from "@/lib/api/cohortParticipants";
 import { cn } from "@/lib/utils";
 
 /** Format "YYYY-MM-DD" → "d Mon YYYY" */
 function fmtDate(iso: string): string {
-  const [yyyy, mm, dd] = iso.split("-").map(Number);
+  const parts = iso.split("-").map(Number);
+  const yyyy = parts[0] ?? 2026;
+  const mm = parts[1] ?? 1;
+  const dd = parts[2] ?? 1;
   const MON = ["Ian", "Feb", "Mar", "Apr", "Mai", "Iun", "Iul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${dd} ${MON[(mm ?? 1) - 1]} ${yyyy}`;
+  return `${dd} ${MON[mm - 1]} ${yyyy}`;
 }
 
 type TabKey = "active" | "upcoming" | "past";
@@ -51,7 +57,6 @@ export function CXPage() {
     try {
       const { cohorts: c } = await listCohorts();
       setCohorts(c);
-      // Auto-select first cohort in the active tab if nothing selected
       const activeOnes = c.filter((x) => x.category === "active");
       if (activeOnes.length > 0) {
         setSelectedId(activeOnes[0].id);
@@ -73,7 +78,6 @@ export function CXPage() {
     if (sessionStatus === "authenticated") load();
   }, [sessionStatus, load]);
 
-  // When tab changes, auto-select first cohort in that tab
   function handleTabChange(tab: TabKey) {
     setActiveTab(tab);
     const first = cohorts.filter((c) => c.category === tab)[0];
@@ -101,7 +105,6 @@ export function CXPage() {
         </button>
       }
     >
-      {/* Loading skeleton */}
       {loading && (
         <div
           className="flex items-center justify-center py-16 text-muted-foreground"
@@ -113,7 +116,6 @@ export function CXPage() {
         </div>
       )}
 
-      {/* Error state */}
       {!loading && error && (
         <div
           role="alert"
@@ -132,10 +134,8 @@ export function CXPage() {
         </div>
       )}
 
-      {/* Main content */}
       {!loading && !error && (
         <div className="space-y-6">
-          {/* Tab bar + cohort selector */}
           <CohortTabs
             cohorts={cohorts}
             activeTab={activeTab}
@@ -144,31 +144,17 @@ export function CXPage() {
             onCohortSelect={setSelectedId}
           />
 
-          {/* Cohort header + progress widget */}
           {selectedCohort ? (
-            <CohortHeader cohort={selectedCohort} />
+            <>
+              <CohortHeader cohort={selectedCohort} />
+              <ParticipantsSection cohortId={selectedCohort.id} />
+            </>
           ) : (
             cohorts.length > 0 && (
               <div className="text-sm text-muted-foreground py-4" role="status">
                 Selectează o cohortă din lista de mai sus.
               </div>
             )
-          )}
-
-          {/* Placeholder for CX-703 participants */}
-          {selectedCohort && (
-            <div
-              className="rounded-xl border border-dashed border-border p-8 text-center"
-              aria-label="Secțiune participanți — vine în CX-703"
-            >
-              <BookOpen
-                className="h-8 w-8 mx-auto mb-3 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <p className="text-sm font-medium text-muted-foreground">
-                Participanții cohortei vor apărea aici (CX-703)
-              </p>
-            </div>
           )}
         </div>
       )}
@@ -178,17 +164,12 @@ export function CXPage() {
 
 // ─── Cohort header ────────────────────────────────────────────────────────────
 
-interface CohortHeaderProps {
-  cohort: Cohort;
-}
-
-function CohortHeader({ cohort }: CohortHeaderProps) {
+function CohortHeader({ cohort }: { cohort: Cohort }) {
   const startLabel = fmtDate(cohort.startDate);
   const endLabel = fmtDate(cohort.endDate);
 
   return (
     <div className="rounded-xl border border-border bg-card p-5 space-y-4">
-      {/* Title row */}
       <div>
         <h2 className="text-lg font-semibold text-foreground">{cohort.label}</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
@@ -200,11 +181,7 @@ function CohortHeader({ cohort }: CohortHeaderProps) {
           )}
         </p>
       </div>
-
-      {/* Progress widget */}
       <CohortProgress progress={cohort.progress} />
-
-      {/* Meta row */}
       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
         <span>
           <span className="font-medium text-foreground">{cohort.totalHours}h</span> total
@@ -216,6 +193,97 @@ function CohortHeader({ cohort }: CohortHeaderProps) {
           <span>{cohort.scheduleDays.join(", ")}</span>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Participants section ─────────────────────────────────────────────────────
+
+function ParticipantsSection({ cohortId }: { cohortId: string }) {
+  const {
+    participants,
+    stats,
+    loading,
+    error,
+    handleAdd,
+    handleToggleWhatsapp,
+    handleDelete,
+  } = useCohortParticipants(cohortId);
+
+  const enrolled = participants.filter(
+    (p) => p.paymentStatus === "full" || p.paymentStatus === "half"
+  );
+  const free = participants.filter((p) => p.paymentStatus === "free");
+  const pending = participants.filter(
+    (p) => p.paymentStatus === "pending" || p.paymentStatus === null
+  );
+
+  async function handleAddEnrolled(data: {
+    fullName: string;
+    email?: string;
+    phone?: string;
+  }) {
+    const payload: AddParticipantPayload = {
+      ...data,
+      paymentStatus: "pending",
+      amountCents: 0,
+    };
+    await handleAdd(payload);
+  }
+
+  if (loading) {
+    return (
+      <div
+        className="flex items-center gap-2 text-muted-foreground text-sm py-4"
+        role="status"
+      >
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        Se încarcă participanții…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div role="alert" className="text-sm text-destructive">
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Stats bar */}
+      <CohortStats stats={stats} />
+
+      {/* Table 1: Înscriși (full + half) */}
+      <ParticipantTable
+        title="Cursanți Înscriși"
+        participants={enrolled}
+        cohortId={cohortId}
+        onToggleWhatsapp={handleToggleWhatsapp}
+        onDelete={handleDelete}
+        showAddRow
+        onAdd={handleAddEnrolled}
+      />
+
+      {/* Table 2: Gratuit */}
+      <ParticipantTable
+        title="Gratuit"
+        participants={free}
+        cohortId={cohortId}
+        onToggleWhatsapp={handleToggleWhatsapp}
+        onDelete={handleDelete}
+      />
+
+      {/* Table 3: Cont de Plată */}
+      <ParticipantTable
+        title="Cont de Plată"
+        participants={pending}
+        cohortId={cohortId}
+        onToggleWhatsapp={handleToggleWhatsapp}
+        onDelete={handleDelete}
+      />
     </div>
   );
 }

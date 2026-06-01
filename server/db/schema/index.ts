@@ -28,3 +28,4 @@ export * from "./feedback";
 export * from "./invoices";
 export * from "./subscriptions";
 export * from "./cohorts";
+export * from "./cohortParticipants";

@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "CX-703",
-  "last_completed": "CX-702",
-  "iterations": 84,
+  "current_item": null,
+  "last_completed": "CX-703",
+  "iterations": 85,
   "last_run_at": "2026-05-31T04:45:00Z",
-  "milestone_status": "CRM Phase J COMPLETE (PR#95 — CRM-137..151, 15 items). SCHED done. CONTRACT-501 done (PR#93). FEEDBACK-601 done (PR#94). | Next: CX (701-705) + DIPLOMA (801-805) pending.",
+  "milestone_status": "CX Phase 1: CX-701/702/703 done (PR pending). CX-704/705 + DIPLOMA-801-805 pending.",
   "active_milestone": "CX",
   "items": {
     "M1-001": {
@@ -1388,7 +1388,7 @@
       }
     },
     "CX-703": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CX-703-participants-tables.md",
@@ -1397,7 +1397,14 @@
       "depends_on": [
         "CX-702",
         "CRM-111"
-      ]
+      ],
+      "branch": "feat/CX-faza-1-cohorts",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CX-704": {
       "status": "pending",
