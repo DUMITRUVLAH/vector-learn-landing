@@ -34,6 +34,8 @@ export interface Lead {
   lostReason: string | null;
   /** CRM-111: Lead score 0-100 (hot ≥70, warm ≥40, cold <40) */
   score?: number | null;
+  /** AI-A03: AI qualification bucket — hot | warm | cold */
+  qualification?: "hot" | "warm" | "cold" | null;
   /** CRM-113: Deal value in euro-cents */
   valueCents: number;
   /** CRM-113: Remaining debt in euro-cents */

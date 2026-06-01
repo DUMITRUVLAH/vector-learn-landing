@@ -126,3 +126,40 @@ export function resolveChurnScore(studentId: string): Promise<{ ok: boolean }> {
     method: "DELETE",
   });
 }
+
+// ─── AI-A03: Lead qualification ───────────────────────────────────────────────
+
+export type Qualification = "hot" | "warm" | "cold";
+
+/**
+ * Bulk qualify all leads for the current tenant.
+ */
+export function qualifyAllLeads(): Promise<{ updated: number }> {
+  return api<{ updated: number }>("/ai/qualify-leads", { method: "POST" });
+}
+
+/**
+ * Qualify a single lead and return the computed qualification.
+ */
+export function qualifyLead(leadId: string): Promise<{ qualification: Qualification }> {
+  return api<{ qualification: Qualification }>(`/ai/leads/${leadId}/qualify`, {
+    method: "PATCH",
+  });
+}
+
+/**
+ * Generate a WhatsApp reply suggestion for a lead message (human-in-loop).
+ */
+export function getReplyDraft(params: {
+  leadId?: string;
+  messageText: string;
+  conversationHistory?: string[];
+}): Promise<{ draft: string; auditId: string; isStub: boolean }> {
+  return api<{ draft: string; auditId: string; isStub: boolean }>(
+    "/ai/reply-suggestion",
+    {
+      method: "POST",
+      body: JSON.stringify(params),
+    }
+  );
+}

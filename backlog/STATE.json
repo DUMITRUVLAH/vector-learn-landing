@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "AI-A03",
-  "last_completed": "AI-A02",
-  "iterations": 109,
-  "last_run_at": "2026-06-02T09:30:00Z",
-  "milestone_status": "AI faza-1 in_progress: AI-A01/A02 done, building AI-A03 (lead qualification)",
+  "current_item": "AI-A04",
+  "last_completed": "AI-A03",
+  "iterations": 110,
+  "last_run_at": "2026-06-02T10:00:00Z",
+  "milestone_status": "AI faza-1 in_progress: AI-A01/A02/A03 done, AI-A04 pending (next run)",
   "active_milestone": "AI",
   "items": {
     "M1-001": {
@@ -2459,13 +2459,20 @@
       }
     },
     "AI-A03": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/AI-A03-lead-qualification.md",
       "milestone": "AI",
       "phase": "1",
-      "depends_on": ["AI-A01", "CRM-105"]
+      "depends_on": ["AI-A01", "CRM-105"],
+      "branch": "feat/AI-faza-1-assistant",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "AI-A04": {
       "status": "pending",

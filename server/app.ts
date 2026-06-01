@@ -40,6 +40,7 @@ import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // D
 import { formRoutes } from "./routes/forms"; // FORMS-001
 import { aiRoutes } from "./routes/ai"; // AI-A01: lesson summary + AI infrastructure
 import { aiChurnRoutes } from "./routes/aiChurn"; // AI-A02: churn prediction
+import { aiLeadsRoutes } from "./routes/aiLeads"; // AI-A03: lead qualification + reply suggestion
 import {
   publicFormGetHandler,
   publicFormSubmitHandler,
@@ -142,6 +143,8 @@ app.route("/api/certificate-templates", certificateTemplatesRoutes);
 app.route("/api/ai", aiRoutes);
 // AI-A02: churn prediction — /api/ai/churn-score + /api/ai/churn-scores
 app.route("/api/ai/churn", aiChurnRoutes);
+// AI-A03: lead qualification + reply suggestion
+app.route("/api/ai", aiLeadsRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

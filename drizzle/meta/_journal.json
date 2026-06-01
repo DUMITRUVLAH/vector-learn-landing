@@ -232,6 +232,13 @@
       "when": 1780354331978,
       "tag": "0032_ai_a02_churn_scores",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780354669300,
+      "tag": "0033_ai_a03_lead_qualification",
+      "breakpoints": true
     }
   ]
 }

@@ -54,6 +54,8 @@ export const leads = pgTable(
     lostReason: varchar("lost_reason", { length: 500 }),
     /** CRM-111: Lead score 0-100 derived from source signals — hot/warm/cold */
     score: integer("score"),
+    /** AI-A03: AI qualification bucket — hot | warm | cold (rule-based, cached) */
+    qualification: varchar("qualification", { length: 10 }),
     /** CRM-113: Deal value in euro-cents (e.g. 36000 = €360.00) */
     valueCents: integer("value_cents").notNull().default(0),
     /** CRM-113: Remaining debt in euro-cents (shown on card only when > 0) */
@@ -70,6 +72,7 @@ export const leads = pgTable(
     stageIdx: index("leads_stage_idx").on(t.tenantId, t.stage),
     phoneIdx: index("leads_phone_idx").on(t.tenantId, t.phoneNormalized),
     emailIdx: index("leads_email_idx").on(t.tenantId, t.emailNormalized),
+    qualIdx: index("leads_qual_idx").on(t.tenantId, t.qualification),
   })
 );
 

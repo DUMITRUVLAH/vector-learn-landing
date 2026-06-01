@@ -969,6 +969,24 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick, stages,
         )}
         aria-label={`Deschide lead ${lead.dealName ?? lead.fullName}`}
       >
+      {/* AI-A03: qualification badge */}
+      {lead.qualification && (
+        <div className="mb-1">
+          <span
+            className={[
+              "inline-flex items-center rounded-sm px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide",
+              lead.qualification === "hot"
+                ? "bg-destructive/10 text-destructive"
+                : lead.qualification === "warm"
+                ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                : "bg-muted text-muted-foreground",
+            ].join(" ")}
+            aria-label={`Lead ${lead.qualification}`}
+          >
+            {lead.qualification}
+          </span>
+        </div>
+      )}
       {/* CRM-114: Use dealName as title if set */}
       <p className="text-xs font-semibold truncate">{lead.dealName ?? lead.fullName}</p>
       {/* CRM-114: Company under name */}
