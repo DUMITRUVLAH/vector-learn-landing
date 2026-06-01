@@ -4,7 +4,7 @@
   "last_completed": "GAP-011",
   "iterations": 105,
   "last_run_at": "2026-06-01T18:50:00Z",
-  "milestone_status": "GAP faza-3 done (PR #100). GAP-011 in_progress on feat/GAP-faza-4-analytics.",
+  "milestone_status": "GAP faza-3 done (PR #100). GAP faza-4 started: GAP-011 done (PR #101). Next: GAP-012 pe feat/GAP-faza-4-analytics.",
   "active_milestone": "GAP",
   "items": {
     "M1-001": {
@@ -1814,7 +1814,7 @@
     "GAP-008": { "status": "done", "attempts": 1, "blockers": [], "branch": "feat/GAP-faza-2-abonamente-waitlist", "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/99", "milestone": "GAP", "phase": "2" },
     "GAP-009": { "status": "done", "attempts": 1, "blockers": [], "branch": "feat/GAP-faza-1-trial-flow", "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98", "milestone": "GAP", "phase": "1" },
     "GAP-010": { "status": "done", "attempts": 1, "blockers": [], "spec": "backlog/specs/GAP-010-student-portal.md", "milestone": "GAP", "phase": "3", "branch": "feat/GAP-faza-3-portal-notificari", "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/100", "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "LOVES" }, "reports": ["backlog/reports/GAP-010-manager.md", "backlog/reports/GAP-010-student.md"] },
-    "GAP-011": { "status": "done", "attempts": 1, "blockers": [], "spec": "backlog/specs/GAP-011-enrollment-public.md", "milestone": "GAP", "phase": "4", "branch": "feat/GAP-faza-4-analytics", "pr": null, "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "LOVES" }, "reports": ["backlog/reports/GAP-011-manager.md", "backlog/reports/GAP-011-student.md"] },
+    "GAP-011": { "status": "done", "attempts": 1, "blockers": [], "spec": "backlog/specs/GAP-011-enrollment-public.md", "milestone": "GAP", "phase": "4", "branch": "feat/GAP-faza-4-analytics", "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/101", "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "LOVES" }, "reports": ["backlog/reports/GAP-011-manager.md", "backlog/reports/GAP-011-student.md"] },
     "GAP-012": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/GAP-012-gradebook-progress.md", "milestone": "GAP", "phase": "4", "branch": null, "pr": null },
     "GAP-013": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/GAP-013-makeup-lessons.md", "milestone": "GAP", "phase": "4", "branch": null, "pr": null },
     "GAP-014": { "status": "pending", "attempts": 0, "blockers": [], "spec": "backlog/specs/GAP-014-stripe-online-payments.md", "milestone": "GAP", "phase": "4", "branch": null, "pr": null },
