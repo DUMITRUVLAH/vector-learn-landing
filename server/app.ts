@@ -44,6 +44,7 @@ import { tuitionRoutes } from "./routes/tuition"; // SCHOOL-004
 import { admissionsRoutes } from "./routes/admissions"; // SCHOOL-005
 import { timetableRoutes } from "./routes/timetable"; // SCHOOL-006
 import { guardianRoutes } from "./routes/guardians"; // GUARDIAN-001
+import { parentPortalRoutes, schoolNewsAdminRoutes } from "./routes/parentPortal"; // SCHOOL-007
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -141,6 +142,10 @@ app.route("/api/school/admissions", admissionsRoutes);
 app.route("/api/school/timetable", timetableRoutes);
 // GUARDIAN-001: Authorized guardians — /api/students/:studentId/guardians
 app.route("/api/students", guardianRoutes);
+// SCHOOL-007: Parent portal (role=parent only) — /api/parent/*
+app.route("/api/parent", parentPortalRoutes);
+// SCHOOL-007: School news admin — POST /api/school/news (admin/manager)
+app.route("/api/school/news", schoolNewsAdminRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

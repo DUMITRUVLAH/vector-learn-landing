@@ -1737,15 +1737,16 @@
       }
     },
     "SCHOOL-007": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHOOL-007-parent-portal.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "normal",
       "title": "Portal parinte: note, prezenta, fisa situatie, sold taxe + stiri scoala",
-      "depends_on": ["SCHOOL-002", "SCHOOL-003", "SCHOOL-004", "GUARDIAN-001"]
+      "depends_on": ["SCHOOL-002", "SCHOOL-003", "SCHOOL-004", "GUARDIAN-001"],
+      "branch": "feat/SCHOOL-faza-1-fundatie"
     },
     "KINDER-001": {
       "status": "pending",
@@ -1825,7 +1826,7 @@
       "depends_on": []
     },
     "GUARDIAN-001": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/GUARDIAN-001-authorized-guardians.md",
@@ -1834,7 +1835,13 @@
       "severity": "high",
       "title": "Tutori autorizati \u2014 mai multi tutori per elev, flag-uri custodie/permisiuni",
       "depends_on": ["SCHOOL-001"],
-      "branch": "feat/SCHOOL-faza-1-fundatie"
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CONSENT-001": {
       "status": "pending",

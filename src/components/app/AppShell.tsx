@@ -33,6 +33,7 @@ const NAV = [
   { label: "Taxe", href: "/app/school/tuition", icon: Banknote }, // SCHOOL-004
   { label: "Admitere", href: "/app/school/admissions", icon: ClipboardCheck }, // SCHOOL-005
   { label: "Orar", href: "/app/school/timetable", icon: CalendarDays }, // SCHOOL-006
+  { label: "Portal Părinți", href: "/app/parent/portal", icon: Users }, // SCHOOL-007
   { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
   { label: "Analytics", href: "/app/analytics/crm", icon: BarChart3 },
   { label: "Cadences", href: "/app/cadences", icon: ListChecks },
