@@ -1,11 +1,11 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "CX-703",
-  "iterations": 85,
-  "last_run_at": "2026-05-31T04:45:00Z",
-  "milestone_status": "CX Phase 1: CX-701/702/703 done (PR pending). CX-704/705 + DIPLOMA-801-805 pending.",
-  "active_milestone": "CX",
+  "last_completed": "CX-705",
+  "iterations": 87,
+  "last_run_at": "2026-06-01T11:45:00Z",
+  "milestone_status": "CX Phase 1 complete (CX-701..705 done, PR #96). DIPLOMA Phase 1 (DIPLOMA-801..805) pending — start on branch feat/DIPLOMA-faza-1-schema-editor.",
+  "active_milestone": "DIPLOMA",
   "items": {
     "M1-001": {
       "status": "done",
@@ -1410,26 +1410,42 @@
       }
     },
     "CX-704": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CX-704-export-csv.md",
       "milestone": "CX",
       "phase": "1",
       "depends_on": [
         "CX-703"
-      ]
+      ],
+      "branch": "feat/CX-faza-1-cohorts",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/96",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CX-705": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CX-705-breakeven-badge.md",
       "milestone": "CX",
       "phase": "1",
       "depends_on": [
         "CX-703"
-      ]
+      ],
+      "branch": "feat/CX-faza-1-cohorts",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/96",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "DIPLOMA-801": {
       "status": "pending",
