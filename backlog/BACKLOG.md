@@ -265,3 +265,27 @@ See `backlog/reports/COMPETITOR-RESEARCH-2026-06-01.md`. Features leading platfo
 | PROG-905 | 🟡 normal | Gradebook / student progress reports | pending |
 | ENROLL-906 | 🟡 normal | Public online enrollment + pay | pending |
 | LESSON-907 | 🟢 minor | Homework / assignments per lesson | pending |
+
+## Milestone: SCHOOL + KINDER — new segment (private schools & kindergartens)
+Research: `backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md`. Verified gaps vs
+Gradelink/FACTS (schools) and Brightwheel/Famly/Procare (daycare). Bigger than a feature set —
+a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for the fastest MVP.
+
+| ID | Value | Feature |
+|----|-------|---------|
+| SCHOOL-001 | 🔴 | Academic year + terms + permanent classes |
+| SCHOOL-002 | 🔴 | Gradebook + report cards |
+| SCHOOL-003 | 🔴 | Daily/class attendance register |
+| SCHOOL-004 | 🔴 | Tuition billing (annual/term plans) |
+| SCHOOL-005 | 🟡 | Admissions/enrollment workflow |
+| SCHOOL-006 | 🟡 | Master timetable grid |
+| SCHOOL-007 | 🟡 | Parent portal (grades/attendance/report cards) |
+| KINDER-001 | 🔴 | Check-in/sign-out + authorized pickup + e-signature |
+| KINDER-002 | 🔴 | Daily report / child diary (meals/naps/photos) |
+| KINDER-003 | 🔴 | Staff-to-child ratio monitoring + alerts |
+| KINDER-004 | 🔴 | Medical (allergies/immunization/medication) |
+| KINDER-005 | 🟡 | Parent app feed + messaging |
+| KINDER-006 | 🟡 | Licensing/compliance reports |
+| KINDER-007 | 🟡 | Incident/accident reports + signature |
+| GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
+| CONSENT-001 | 🟡 | Consent/permission forms + e-signature |

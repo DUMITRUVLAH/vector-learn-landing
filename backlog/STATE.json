@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "DIPLOMA-803",
   "last_completed": "DIPLOMA-802",
-  "iterations": 90,
+  "iterations": 91,
   "last_run_at": "2026-06-01T12:30:00Z",
   "milestone_status": "DIPLOMA Phase 1 in progress: DIPLOMA-801/802 done (PR #97). DIPLOMA-803..805 pending.",
   "active_milestone": "DIPLOMA",
@@ -1470,8 +1470,8 @@
       }
     },
     "DIPLOMA-803": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DIPLOMA-803-generate-qr.md",
       "milestone": "DIPLOMA",
@@ -1626,6 +1626,182 @@
       "phase": "1",
       "severity": "minor",
       "title": "Homework / assignments per lesson + submission",
+      "depends_on": []
+    },
+    "SCHOOL-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "SCHOOL",
+      "phase": "1",
+      "severity": "high",
+      "title": "Academic year + terms + permanent classes/sections (foundation)",
+      "depends_on": []
+    },
+    "SCHOOL-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "SCHOOL",
+      "phase": "1",
+      "severity": "high",
+      "title": "Gradebook + report cards (weighted grades, term PDF for parents)",
+      "depends_on": []
+    },
+    "SCHOOL-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "SCHOOL",
+      "phase": "1",
+      "severity": "high",
+      "title": "Daily/class attendance register + absence reasons + parent alerts",
+      "depends_on": []
+    },
+    "SCHOOL-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "SCHOOL",
+      "phase": "1",
+      "severity": "high",
+      "title": "Tuition billing \u2014 annual/term plans, installments, sibling discount, financial aid",
+      "depends_on": []
+    },
+    "SCHOOL-005": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "SCHOOL",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Admissions workflow \u2014 application\u2192documents\u2192acceptance\u2192enrollment",
+      "depends_on": []
+    },
+    "SCHOOL-006": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "SCHOOL",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Master timetable (class\u00d7subject\u00d7teacher\u00d7room grid)",
+      "depends_on": []
+    },
+    "SCHOOL-007": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "SCHOOL",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Parent portal: grades, attendance, report cards, alerts",
+      "depends_on": []
+    },
+    "KINDER-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "KINDER",
+      "phase": "1",
+      "severity": "high",
+      "title": "Digital check-in/sign-out + authorized-pickup + e-signature",
+      "depends_on": []
+    },
+    "KINDER-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "KINDER",
+      "phase": "1",
+      "severity": "high",
+      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
+      "depends_on": []
+    },
+    "KINDER-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "KINDER",
+      "phase": "1",
+      "severity": "high",
+      "title": "Staff-to-child ratio monitoring + licensing-limit alerts",
+      "depends_on": []
+    },
+    "KINDER-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "KINDER",
+      "phase": "1",
+      "severity": "high",
+      "title": "Medical \u2014 allergies, immunization records, medication log",
+      "depends_on": []
+    },
+    "KINDER-005": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "KINDER",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Parent app feed (photos/updates) + messaging",
+      "depends_on": []
+    },
+    "KINDER-006": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "KINDER",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Licensing/compliance reports (ratio, immunization, subsidy attendance)",
+      "depends_on": []
+    },
+    "KINDER-007": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "KINDER",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Incident/accident reports + parent acknowledgment signature",
+      "depends_on": []
+    },
+    "GUARDIAN-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "SCHOOL",
+      "phase": "1",
+      "severity": "high",
+      "title": "Authorized-guardian model \u2014 multiple guardians per child, custody/permission flags",
+      "depends_on": []
+    },
+    "CONSENT-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "milestone": "SCHOOL",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Consent/permission forms (photo, trips, medical) with e-signature",
       "depends_on": []
     }
   }
