@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "KINDER-005",
-  "last_completed": "KINDER-004",
-  "iterations": 126,
+  "current_item": null,
+  "last_completed": "KINDER-005",
+  "iterations": 127,
   "last_run_at": "2026-06-01T23:00:00Z",
   "milestone_status": "KINDER faza-1 COMPLETE: KINDER-001 (check-in/pickup/semnatura), KINDER-002 (jurnal zilnic), KINDER-003 (raport personal/copii). PR #108. PAY-901..LESSON-907 done (GAP milestone).",
   "active_milestone": "KINDER",
@@ -1785,7 +1785,7 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "KINDER-005": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/KINDER-005-parent-feed.md",
@@ -1794,7 +1794,9 @@
       "severity": "normal",
       "title": "Parent app feed (photos/updates) + messaging",
       "depends_on": [],
-      "branch": "feat/KINDER-faza-1-checkin-diary-ratio"
+      "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "LOVES" }
     },
     "KINDER-006": {
       "status": "pending",
