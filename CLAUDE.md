@@ -264,6 +264,13 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
   differ. Never use raw `db.execute(...).rows`; use the query builder, or handle both with
   `Array.isArray(r) ? r : r.rows`. (This is the `.rows` bug that broke `/api/health/db`.)
 - **In-app links** must point to real routes (`#/app/login`), never dead anchors (`#login`).
+- **Migrations must run on prod at deploy (the #1 client-facing 500 cause).** Vercel auto-deploys
+  CODE but NOT DB migrations — so new code expecting a column/table (e.g. `students.debt_cents`,
+  the `invoices` table) reaches the paying client BEFORE the schema exists → every query 500s.
+  This is now automated: `vercel.json` runs `scripts/vercel-migrate.mjs` (→ `db:migrate` on Supabase)
+  BEFORE the build, so code + schema ship together. Never remove that build step. The
+  `src/__tests__/schema-drift.test.ts` gate fails CI if the code's schema has a table/column that
+  the committed migrations don't create — catching the drift before it 500s in prod.
 
 ### 3.5.2 Review → improve loop (don't ship the first draft)
 Each item goes through three reviewers, whose findings are handed to an **improver** pass

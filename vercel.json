@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "vite build && node scripts/build-vercel.mjs",
+  "buildCommand": "node scripts/vercel-migrate.mjs && vite build && node scripts/build-vercel.mjs",
   "framework": null
 }
