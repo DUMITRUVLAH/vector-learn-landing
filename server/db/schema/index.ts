@@ -33,3 +33,4 @@ export * from "./certificates";
 export * from "./school";
 export * from "./schoolAttendance";
 export * from "./schoolGrades";
+export * from "./tuition";

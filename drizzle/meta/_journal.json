@@ -218,6 +218,13 @@
       "when": 1748822600000,
       "tag": "0030_school002_gradebook",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1748822700000,
+      "tag": "0031_school004_tuition",
+      "breakpoints": true
     }
   ]
 }

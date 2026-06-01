@@ -40,6 +40,7 @@ import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // D
 import { schoolRoutes } from "./routes/school"; // SCHOOL-001
 import { attendanceRoutes } from "./routes/attendance"; // SCHOOL-003
 import { gradesRoutes } from "./routes/grades"; // SCHOOL-002
+import { tuitionRoutes } from "./routes/tuition"; // SCHOOL-004
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -129,6 +130,8 @@ app.route("/api/school", schoolRoutes);
 app.route("/api/school/attendance", attendanceRoutes);
 // SCHOOL-002: Gradebook (grades + subjects) — /api/school/subjects, /api/school/grades/...
 app.route("/api/school", gradesRoutes);
+// SCHOOL-004: Tuition billing — /api/school/tuition/...
+app.route("/api/school/tuition", tuitionRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

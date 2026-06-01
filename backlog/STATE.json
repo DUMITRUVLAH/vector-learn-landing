@@ -1647,7 +1647,7 @@
       }
     },
     "SCHOOL-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHOOL-002-gradebook-report-cards.md",
@@ -1656,7 +1656,13 @@
       "severity": "high",
       "title": "Gradebook + report cards (weighted grades, term PDF for parents)",
       "depends_on": ["SCHOOL-001"],
-      "branch": "feat/SCHOOL-faza-1-fundatie"
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-003": {
       "status": "done",
@@ -1677,15 +1683,22 @@
       }
     },
     "SCHOOL-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/SCHOOL-004-tuition-billing.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "high",
       "title": "Tuition billing \u2014 annual/term plans, installments, sibling discount, financial aid",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-005": {
       "status": "pending",
