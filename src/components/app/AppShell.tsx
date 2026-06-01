@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, ClipboardCheck, UserCog, Bell } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, ClipboardCheck, UserCog, Bell, Palette } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { Link, useRouter } from "@/router/HashRouter";
@@ -32,6 +32,7 @@ const NAV = [
   { label: "Formulare", href: "/app/forms", icon: ClipboardCheck }, // FORMS-002
   { label: "Echipă", href: "/app/settings/team", icon: UserCog }, // SET-801
   { label: "Notificări", href: "/app/settings/notifications", icon: Bell }, // SET-802
+  { label: "Branding", href: "/app/settings/branding", icon: Palette }, // SET-803
   { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
   { label: "Analytics", href: "/app/analytics/crm", icon: BarChart3 },
   { label: "Cadences", href: "/app/cadences", icon: ListChecks },
