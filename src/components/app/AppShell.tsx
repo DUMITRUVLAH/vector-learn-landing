@@ -19,6 +19,7 @@ const NAV = [
   { label: "Leads", href: "/app/leads", icon: TrendingUp },
   { label: "Elevi", href: "/app/students", icon: Users },
   { label: "Cursuri", href: "/app/courses", icon: Library }, // COURSE-101
+  { label: "Grupe", href: "/app/groups", icon: Users }, // COURSE-102
   { label: "Orar", href: "/app/schedule", icon: Calendar },
   { label: "Profesori", href: "/app/teachers", icon: GraduationCap },
   { label: "Plăți", href: "/app/payments", icon: CreditCard },

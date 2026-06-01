@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "COURSE-102",
-  "last_completed": "COURSE-101",
-  "iterations": 114,
-  "last_run_at": "2026-06-02T13:00:00Z",
-  "milestone_status": "COURSE faza-1: COURSE-101 done, COURSE-102/103 pending",
+  "current_item": "COURSE-103",
+  "last_completed": "COURSE-102",
+  "iterations": 115,
+  "last_run_at": "2026-06-02T14:00:00Z",
+  "milestone_status": "COURSE faza-1: COURSE-101/102 done, COURSE-103 pending",
   "active_milestone": "COURSE",
   "items": {
     "M1-001": {
@@ -2556,7 +2556,7 @@
       }
     },
     "COURSE-102": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/COURSE-102-groups-classes.md",
@@ -2564,11 +2564,18 @@
       "phase": "1",
       "depends_on": [
         "COURSE-101"
-      ]
+      ],
+      "branch": "feat/COURSE-faza-1-management",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "COURSE-103": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/COURSE-103-student-enrollment.md",
       "milestone": "COURSE",

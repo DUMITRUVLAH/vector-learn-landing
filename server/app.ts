@@ -38,6 +38,7 @@ import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
 import { formRoutes } from "./routes/forms"; // FORMS-001
+import { groupRoutes } from "./routes/groups"; // COURSE-102
 import {
   publicFormGetHandler,
   publicFormSubmitHandler,
@@ -136,6 +137,8 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
+// COURSE-102: Groups (classes/recurring groups)
+app.route("/api/groups", groupRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {
