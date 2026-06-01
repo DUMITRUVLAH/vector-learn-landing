@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "GAP-017",
-  "last_completed": "GAP-010",
-  "iterations": 103,
+  "current_item": "GAP-011",
+  "last_completed": "GAP-017",
+  "iterations": 104,
   "last_run_at": "2026-06-01T18:00:00Z",
   "milestone_status": "GAP faza-3 started: GAP-010 portal student in_progress. Branch: feat/GAP-faza-3-portal-notificari.",
   "active_milestone": "GAP",
@@ -1981,15 +1981,24 @@
       "reports": []
     },
     "GAP-017": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/GAP-017-portal-notificari-push.md",
       "milestone": "GAP",
       "phase": "3",
       "branch": "feat/GAP-faza-3-portal-notificari",
       "pr": null,
-      "reports": []
+      "reports": [
+        "backlog/reports/GAP-017-manager.md",
+        "backlog/reports/GAP-017-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "GAP-018": {
       "status": "pending",

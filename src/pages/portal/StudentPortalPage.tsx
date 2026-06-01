@@ -15,10 +15,18 @@ import {
   Video,
   MapPin,
   User,
+  Bell,
+  BellOff,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { getPortalData, type PortalData } from "@/lib/api/portal";
 import { cn } from "@/lib/utils";
+
+interface NotifPrefs {
+  lessonReminder: boolean;
+  debtAlert: boolean;
+  packageLowAlert: boolean;
+}
 
 interface StudentPortalPageProps {
   token: string;
@@ -69,6 +77,12 @@ export function StudentPortalPage({ token }: StudentPortalPageProps) {
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>({
+    lessonReminder: true,
+    debtAlert: true,
+    packageLowAlert: true,
+  });
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,6 +90,21 @@ export function StudentPortalPage({ token }: StudentPortalPageProps) {
       try {
         const result = await getPortalData(token);
         if (!cancelled) setData(result);
+        // Load notification prefs (non-blocking)
+        try {
+          const prefsRes = await fetch(`/api/portal/${token}/prefs`);
+          if (prefsRes.ok && !cancelled) {
+            const { prefs } = (await prefsRes.json()) as { prefs: NotifPrefs };
+            setNotifPrefs({
+              lessonReminder: prefs.lessonReminder,
+              debtAlert: prefs.debtAlert,
+              packageLowAlert: prefs.packageLowAlert,
+            });
+            setPrefsLoaded(true);
+          }
+        } catch {
+          // prefs load failure is non-blocking
+        }
       } catch {
         if (!cancelled) setError("Linkul de acces nu este valid sau a expirat.");
       } finally {
@@ -329,6 +358,67 @@ export function StudentPortalPage({ token }: StudentPortalPageProps) {
             </ul>
           </section>
         )}
+        {/* GAP-017: Notification preferences */}
+        <section aria-label="Preferințe notificări">
+          <div className="flex items-center gap-2 mb-3">
+            <Bell className="size-5 text-primary" />
+            <h2 className="font-semibold text-base text-foreground">Notificări</h2>
+          </div>
+          <div className="rounded-xl border border-border bg-card divide-y divide-border">
+            {[
+              { key: "lessonReminder" as keyof NotifPrefs, label: "Reminder lecție (cu o zi înainte)", description: "Primești un SMS/email cu 24h înainte de fiecare lecție" },
+              { key: "debtAlert" as keyof NotifPrefs, label: "Alertă sold datorat", description: "Primești o notificare când soldul depășește pragul setat" },
+              { key: "packageLowAlert" as keyof NotifPrefs, label: "Pachet pe terminate", description: "Primești un alert când mai ai 2 sau mai puține ore" },
+            ].map(({ key, label, description }) => (
+              <div key={key} className="flex items-start justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">{label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={notifPrefs[key]}
+                  aria-label={label}
+                  disabled={!prefsLoaded}
+                  onClick={async () => {
+                    const newValue = !notifPrefs[key];
+                    setNotifPrefs((prev) => ({ ...prev, [key]: newValue }));
+                    try {
+                      await fetch(`/api/portal/${token}/prefs`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ [key]: newValue }),
+                      });
+                    } catch {
+                      // Revert on failure
+                      setNotifPrefs((prev) => ({ ...prev, [key]: !newValue }));
+                    }
+                  }}
+                  className={cn(
+                    "relative flex-shrink-0 inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring touch-target",
+                    notifPrefs[key] ? "bg-primary" : "bg-muted",
+                    !prefsLoaded && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform",
+                      notifPrefs[key] ? "translate-x-6" : "translate-x-1"
+                    )}
+                  />
+                  <span className="sr-only">{notifPrefs[key] ? "Activat" : "Dezactivat"}</span>
+                </button>
+              </div>
+            ))}
+          </div>
+          {!prefsLoaded && (
+            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+              <BellOff className="size-3" />
+              Se încarcă preferințele...
+            </div>
+          )}
+        </section>
       </main>
 
       {/* Footer */}

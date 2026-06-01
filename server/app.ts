@@ -38,6 +38,7 @@ import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
 import { portalRoutes, portalAdminRoutes } from "./routes/portal"; // GAP-010
+import { portalNotifsRoutes, portalNotifsAdminRoutes, portalCronRoutes } from "./routes/portalNotifs"; // GAP-017
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -102,6 +103,12 @@ app.route("/api/feedback", feedbackRoutes);
 app.route("/api/portal", portalRoutes);
 // GAP-010: Student portal admin (generate token) — requires auth
 app.route("/api/portal", portalAdminRoutes);
+// GAP-017: Portal notification prefs — public token routes (BEFORE tagRoutes)
+app.route("/api/portal", portalNotifsRoutes);
+// GAP-017: Portal notification admin routes
+app.route("/api/portal", portalNotifsAdminRoutes);
+// GAP-017: Cron routes for proactive alerts (internal, no auth — call from scheduler)
+app.route("/api/portal", portalCronRoutes);
 app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
 app.route("/api/hr/payroll", payrollRoutes);
 app.route("/api/hr/teacher-stats", hrTeacherRoutes);
