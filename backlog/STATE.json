@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "current_item": "INTEG-103",
-  "last_completed": "INTEG-102",
-  "iterations": 143,
-  "last_run_at": "2026-06-01T23:58:00Z",
+  "current_item": "INTEG-104",
+  "last_completed": "INTEG-103",
+  "iterations": 145,
+  "last_run_at": "2026-06-02T00:15:00Z",
   "milestone_status": "SET faza-1 starting: SET-801..804 generated from user-stories/settings.md. INTEG faza-1+2 queued (7 integration items from 2026-06-01 audit).",
   "active_milestone": "SET",
   "items": {
@@ -2142,11 +2142,20 @@
       }
     },
     "INTEG-103": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "branch": "feat/INTEG-faza-1-conectivitate-module",
-      "spec": "backlog/specs/INTEG-103-cohorts-branch-fk.md"
+      "spec": "backlog/specs/INTEG-103-cohorts-branch-fk.md",
+      "milestone": "INTEG",
+      "phase": "1",
+      "depends_on": ["BRANCH-701", "INTEG-102"],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "INTEG-104": {
       "status": "pending",

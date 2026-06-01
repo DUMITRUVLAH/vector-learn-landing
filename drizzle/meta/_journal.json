@@ -232,6 +232,13 @@
       "when": 1780501000000,
       "tag": "0032_integ102_payments_invoices_course",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780502000000,
+      "tag": "0033_integ103_cohorts_branch_id",
+      "breakpoints": true
     }
   ]
 }
