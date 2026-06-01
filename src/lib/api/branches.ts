@@ -61,3 +61,22 @@ export function deleteBranch(id: string): Promise<{ deleted: boolean }> {
     method: "DELETE",
   });
 }
+
+/**
+ * BRANCH-703: PUT /api/branches/:branchId/users/:userId/scope
+ * Set or clear branch_scope for a user.
+ * scope = UUID → restrict user to that branch. scope = null → global access.
+ */
+export function setUserBranchScope(
+  branchId: string,
+  userId: string,
+  scope: string | null
+): Promise<{ user: { id: string; branchScope: string | null } }> {
+  return api<{ user: { id: string; branchScope: string | null } }>(
+    `/api/branches/${branchId}/users/${userId}/scope`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ scope }),
+    }
+  );
+}

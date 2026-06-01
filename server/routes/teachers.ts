@@ -6,6 +6,7 @@ import { db } from "../db/client";
 import { teachers, users } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { writeAuditLog } from "../lib/auditLogger";
+import { withBranchFilter } from "../middleware/branchScope";
 
 export const teacherRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -17,7 +18,11 @@ const updateTeacherSchema = z.object({
 });
 
 teacherRoutes.get("/", async (c) => {
-  const tenantId = c.get("user").tenantId;
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  // BRANCH-703: apply branch scope filter for branch-restricted managers
+  const conditions = [eq(teachers.tenantId, tenantId)];
+  withBranchFilter(user, conditions, teachers.branchId);
   const rows = await db
     .select({
       id: teachers.id,
@@ -29,7 +34,7 @@ teacherRoutes.get("/", async (c) => {
     })
     .from(teachers)
     .innerJoin(users, eq(teachers.userId, users.id))
-    .where(eq(teachers.tenantId, tenantId))
+    .where(and(...conditions))
     .orderBy(desc(teachers.createdAt));
   return c.json({ items: rows });
 });

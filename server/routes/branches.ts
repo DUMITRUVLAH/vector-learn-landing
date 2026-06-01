@@ -14,6 +14,7 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { branches } from "../db/schema/branches";
+import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const branchRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -162,3 +163,52 @@ branchRoutes.delete("/:id", async (c) => {
 
   return c.json({ deleted: true });
 });
+
+// ─── PUT /api/branches/:id/users/:userId/scope ────────────────────────────────
+// BRANCH-703: Set or clear branch_scope for a user (owner/admin only).
+// scope = UUID → restrict user to that branch. scope = null → global access.
+const scopeSchema = z.object({
+  scope: z.string().uuid().nullable(),
+});
+
+branchRoutes.put(
+  "/:id/users/:userId/scope",
+  zValidator("json", scopeSchema),
+  async (c) => {
+    const actor = c.get("user");
+
+    // Only owner or admin may change branch scope
+    if (actor.role !== "admin" && actor.role !== "manager") {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const branchId = c.req.param("id");
+    const userId = c.req.param("userId");
+    const { scope } = c.req.valid("json");
+
+    // Verify branch belongs to tenant
+    const [branch] = await db
+      .select()
+      .from(branches)
+      .where(and(eq(branches.id, branchId), eq(branches.tenantId, actor.tenantId)));
+
+    if (!branch) return c.json({ error: "branch_not_found" }, 404);
+
+    // Verify user belongs to tenant
+    const [targetUser] = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.id, userId), eq(users.tenantId, actor.tenantId)));
+
+    if (!targetUser) return c.json({ error: "user_not_found" }, 404);
+
+    // Update branch_scope
+    const [updated] = await db
+      .update(users)
+      .set({ branchScope: scope, updatedAt: new Date() })
+      .where(and(eq(users.id, userId), eq(users.tenantId, actor.tenantId)))
+      .returning({ id: users.id, branchScope: users.branchScope });
+
+    return c.json({ user: updated });
+  }
+);

@@ -225,6 +225,13 @@
       "when": 1780344399598,
       "tag": "0031_branch701_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1780345201832,
+      "tag": "0032_branch703_user_branch_scope",
+      "breakpoints": true
     }
   ]
 }

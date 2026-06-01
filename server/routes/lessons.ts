@@ -5,6 +5,7 @@ import { and, eq, gte, lt, ne, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { lessons, courses, teachers, users, rooms, students, studentLessons } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { withBranchFilter } from "../middleware/branchScope";
 
 const createLessonSchema = z.object({
   courseId: z.string().uuid(),
@@ -85,8 +86,11 @@ async function findConflict(
 
 lessonRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
   const { from, to } = c.req.valid("query");
-  const tenantId = c.get("user").tenantId;
+  const user = c.get("user");
+  const tenantId = user.tenantId;
   const conditions = [eq(lessons.tenantId, tenantId)];
+  // BRANCH-703: restrict to user's branch scope
+  withBranchFilter(user, conditions, lessons.branchId);
   if (from) conditions.push(gte(lessons.scheduledAt, new Date(from)));
   if (to) conditions.push(lt(lessons.scheduledAt, new Date(to)));
 
