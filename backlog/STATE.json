@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "AI-A04",
+  "current_item": null,
   "last_completed": "AI-A03",
   "iterations": 110,
   "last_run_at": "2026-06-02T10:00:00Z",
-  "milestone_status": "AI faza-1 in_progress: AI-A01/A02/A03 done, AI-A04 pending (next run)",
+  "milestone_status": "AI faza-1: A01/A02/A03 done PR#116. AI-A04 pending. Batch complete (3 items).",
   "active_milestone": "AI",
   "items": {
     "M1-001": {
@@ -2435,6 +2435,7 @@
       "phase": "1",
       "depends_on": ["MVP-005", "COMM-201"],
       "branch": "feat/AI-faza-1-assistant",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/116",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
@@ -2451,6 +2452,7 @@
       "phase": "1",
       "depends_on": ["AI-A01", "MVP-004", "SCHED-503"],
       "branch": "feat/AI-faza-1-assistant",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/116",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
@@ -2467,6 +2469,7 @@
       "phase": "1",
       "depends_on": ["AI-A01", "CRM-105"],
       "branch": "feat/AI-faza-1-assistant",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/116",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
