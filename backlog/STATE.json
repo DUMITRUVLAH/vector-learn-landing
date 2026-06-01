@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "KINDER-003",
-  "last_completed": "KINDER-002",
-  "iterations": 123,
+  "current_item": null,
+  "last_completed": "KINDER-003",
+  "iterations": 124,
   "last_run_at": "2026-06-01T23:00:00Z",
   "milestone_status": "KINDER faza-1 in-progress: check-in/diary/ratio pentru gradinite. PAY-901..LESSON-907 marcate done (acoperite de GAP milestone).",
   "active_milestone": "KINDER",
@@ -1755,7 +1755,7 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "KINDER-003": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/KINDER-003-ratio-monitoring.md",
@@ -1764,7 +1764,8 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "severity": "high",
       "title": "Staff-to-child ratio monitoring + licensing-limit alerts",
-      "depends_on": ["KINDER-001"]
+      "depends_on": ["KINDER-001"],
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "KINDER-004": {
       "status": "pending",
