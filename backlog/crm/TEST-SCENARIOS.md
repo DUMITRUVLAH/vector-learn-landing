@@ -176,6 +176,18 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-121-9** Given filtre active, Then lista mobilă arată leadurile filtrate.
 - **T-CRM-121-10** `[blocant]` 0 axe violations; dark mode OK.
 
+## CRM-122 — Quick-add mobil {#crm-122}
+
+- **T-CRM-122-1** `[blocant]` Given utilizatorul apasă FAB pe mobil, Then se deschide bottom-sheet cu `role="dialog"` și câmpurile Nume + Telefon vizibile; al treilea tap pe „Salvează lead" creează lead-ul.
+- **T-CRM-122-2** `[blocant]` Given butonul Salvează apăsat cu Nume < 2 chars, Then `disabled=true`, niciun request.
+- **T-CRM-122-3** `[blocant]` Given introducere telefon ce există deja (debounce 500ms), Then banner „Există deja: {nume}" cu opțiuni „Deschide" / „Creează oricum".
+- **T-CRM-122-4** `[blocant]` Given submit cu Nume valid, Then `POST /api/leads` cu `source=manual`; toast „Lead adăugat".
+- **T-CRM-122-5** `[blocant]` Given toggle „Mai multe câmpuri", Then câmpurile opționale (curs, note) apar.
+- **T-CRM-122-7** `[blocant]` Given QuickCallLogSheet cu outcome „interested", Then `POST /api/leads/:id/log-call` cu `outcome=interested`.
+- **T-CRM-122-8** Given QuickCallLogSheet fără outcome selectat, Then butonul „Salvează apel" e disabled.
+- **T-CRM-122-9** `[blocant]` Touch targets: FAB h-14 w-14 (56px ≥ 44px); butoanele din sheet au `min-h-[44px]`.
+- **T-CRM-122-10** `[blocant]` 0 axe violations; dark mode OK.
+
 ---
 
 ## Scenarii transversale (rulate la fiecare item)
