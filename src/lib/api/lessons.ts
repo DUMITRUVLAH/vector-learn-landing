@@ -14,6 +14,10 @@ export interface Lesson {
   teacherName: string;
   /** SCHED-501: Optional room assignment */
   roomId?: string | null;
+  /** GAP-003: Trial lesson */
+  isTrial?: boolean;
+  trialLeadId?: string | null;
+  trialResult?: "interested" | "not_interested" | "no_show" | null;
 }
 
 export interface Teacher {
@@ -40,6 +44,11 @@ export function listLessons(from?: string, to?: string): Promise<{ items: Lesson
   if (to) qs.set("to", to);
   const query = qs.toString();
   return api<{ items: Lesson[] }>(`/api/lessons${query ? `?${query}` : ""}`);
+}
+
+/** GAP-003: Get trial lessons for a specific lead */
+export function getTrialLessons(leadId: string): Promise<{ items: Lesson[] }> {
+  return api<{ items: Lesson[] }>(`/api/lessons?leadId=${leadId}`);
 }
 
 export function createLesson(input: {

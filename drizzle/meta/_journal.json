@@ -204,6 +204,13 @@
       "when": 1780319050576,
       "tag": "0028_gap001_preferred_schedule",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1780319726622,
+      "tag": "0029_gap003_trial_lessons",
+      "breakpoints": true
     }
   ]
 }

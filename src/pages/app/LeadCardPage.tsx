@@ -47,6 +47,8 @@ import { CopyButton } from "@/components/crm/CopyButton";
 import { ScoreExplain } from "@/components/crm/ScoreExplain";
 // CRM-133: merge duplicate leads
 import { MergeLeadModal } from "@/components/crm/MergeLeadModal";
+// GAP-003: Trial lessons
+import { getTrialLessons, type Lesson } from "@/lib/api/lessons";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -135,6 +137,9 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   const [matchResults, setMatchResults] = useState<CourseMatch[]>([]);
   const [matchLoading, setMatchLoading] = useState(false);
 
+  // GAP-003: Trial lessons for this lead
+  const [trialLessons, setTrialLessons] = useState<Lesson[]>([]);
+
   // CRM-145: score factors for explainer; auto-score if missing
   const [scoreFactors, setScoreFactors] = useState<ScoreFactor[]>([]);
   const [scoreLoading, setScoreLoading] = useState(false);
@@ -200,6 +205,13 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   }, [leadId]);
 
   useEffect(() => { void fetchAll(); }, [fetchAll]);
+
+  // GAP-003: Load trial lessons for this lead
+  useEffect(() => {
+    getTrialLessons(leadId)
+      .then((res) => setTrialLessons(res.items))
+      .catch(() => setTrialLessons([]));
+  }, [leadId]);
 
   // CRM-145: auto-score once when lead loads with no score (never loops)
   const autoScoreFiredRef = useRef(false);
@@ -1152,6 +1164,41 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               )}
             </div>
           )}
+          {/* GAP-003: Trial lessons section */}
+          {(trialLessons.length > 0 || lead.stage === "trial") && (
+            <section className="rounded-xl border border-border bg-card p-4 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Lecții Trial ({trialLessons.length})
+              </p>
+              {trialLessons.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nicio lecție trial programată.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {trialLessons.map((l) => (
+                    <li key={l.id} className="rounded-lg border border-border bg-background p-2.5 text-xs space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold truncate">{l.courseName}</p>
+                        <span className={cn(
+                          "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                          l.trialResult === "interested" ? "bg-success/15 text-success"
+                            : l.trialResult === "not_interested" ? "bg-destructive/15 text-destructive"
+                            : l.trialResult === "no_show" ? "bg-muted text-muted-foreground"
+                            : "bg-warning/15 text-warning"
+                        )}>
+                          {l.trialResult === "interested" ? "Interesat"
+                            : l.trialResult === "not_interested" ? "Neinteresat"
+                            : l.trialResult === "no_show" ? "Neprezent"
+                            : "În așteptare"}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground">{l.teacherName} · {new Date(l.scheduledAt).toLocaleDateString("ro-RO", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           {/* CRM-148: converted block → link to student */}
           {lead.convertedToStudentId && (
             <div className="rounded-xl bg-success/10 border border-success/30 px-4 py-3 text-sm text-success flex items-center justify-between gap-2">
