@@ -15,6 +15,8 @@ export const tenants = pgTable("tenants", {
   slaDefaultHours: integer("sla_default_hours").notNull().default(24),
   /** CRM-124: Lead-rot — days without contact before "neglected" (default 7) */
   rotDays: integer("rot_days").notNull().default(7),
+  /** AI-A04: Monthly AI cost cap in USD cents (null = unlimited) */
+  aiMonthlyBudgetUsdCents: integer("ai_monthly_budget_usd_cents"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

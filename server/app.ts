@@ -41,6 +41,7 @@ import { formRoutes } from "./routes/forms"; // FORMS-001
 import { aiRoutes } from "./routes/ai"; // AI-A01: lesson summary + AI infrastructure
 import { aiChurnRoutes } from "./routes/aiChurn"; // AI-A02: churn prediction
 import { aiLeadsRoutes } from "./routes/aiLeads"; // AI-A03: lead qualification + reply suggestion
+import { aiSettingsRoutes } from "./routes/aiSettings"; // AI-A04: budget cap + feature flags
 import {
   publicFormGetHandler,
   publicFormSubmitHandler,
@@ -145,6 +146,8 @@ app.route("/api/ai", aiRoutes);
 app.route("/api/ai/churn", aiChurnRoutes);
 // AI-A03: lead qualification + reply suggestion
 app.route("/api/ai", aiLeadsRoutes);
+// AI-A04: AI usage dashboard, budget cap, feature flags
+app.route("/api/settings/ai", aiSettingsRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

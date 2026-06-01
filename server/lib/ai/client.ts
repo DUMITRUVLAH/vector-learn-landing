@@ -5,10 +5,17 @@
  * when AI_API_KEY is not set in env so the app remains functional without
  * an AI subscription.
  *
+ * AI-A04: Integrated budget guard + feature flags. When the monthly budget is
+ * exceeded OR the feature is disabled, returns a graceful degradation stub
+ * and logs "ai_budget_exceeded" / "ai_feature_disabled" to ai_audit_log.
+ *
  * Every call is logged to ai_audit_log for GDPR audit purposes.
  */
 import { db } from "../../db/client";
 import { aiAuditLog } from "../../db/schema";
+import { checkBudget } from "./budgetGuard";
+import { isEnabled } from "./featureFlags";
+import type { AiFeature } from "./featureFlags";
 
 const API_KEY = process.env.AI_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? "";
 const MODEL = process.env.AI_MODEL ?? "claude-3-haiku-20240307";
@@ -62,6 +69,7 @@ const STUB_RESPONSES: Record<string, string> = {
 /**
  * Make an AI completion call, log it to ai_audit_log, and return the result.
  * Falls back to stub if no API key is configured.
+ * AI-A04: Checks budget cap and feature flags before calling the LLM.
  */
 export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
   const {
@@ -74,6 +82,77 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
     entityId,
     maxTokens = 512,
   } = opts;
+
+  // --- AI-A04: Feature-disabled gate ---
+  // Only check known AI features (skip unknown/system actions)
+  const KNOWN_FEATURES = ["lesson_summary", "churn_prediction", "lead_qualification", "reply_suggestion"] as const;
+  type KnownFeature = typeof KNOWN_FEATURES[number];
+  if (KNOWN_FEATURES.includes(action as KnownFeature)) {
+    const featureEnabled = await isEnabled(tenantId, action as AiFeature);
+    if (!featureEnabled) {
+      const stubText = "[AI dezactivat de admin]";
+      const [auditRow] = await db
+        .insert(aiAuditLog)
+        .values({
+          tenantId,
+          userId,
+          action,
+          model: "stub",
+          promptTokens: 0,
+          completionTokens: 0,
+          costUsdMicro: 0,
+          pseudonymized: false,
+          entityType,
+          entityId,
+          status: "feature_disabled",
+          note: `Feature "${action}" disabled by admin`,
+        })
+        .returning({ id: aiAuditLog.id });
+
+      return {
+        text: stubText,
+        auditId: auditRow.id,
+        model: "stub",
+        promptTokens: 0,
+        completionTokens: 0,
+        isStub: true,
+      };
+    }
+  }
+
+  // --- AI-A04: Budget-exceeded gate ---
+  const withinBudget = await checkBudget(tenantId);
+  if (!withinBudget) {
+    const stubText =
+      "Bugetul lunar AI al organizației tale a fost depășit. " +
+      "Contactează administratorul pentru a mări limita.";
+    const [auditRow] = await db
+      .insert(aiAuditLog)
+      .values({
+        tenantId,
+        userId,
+        action,
+        model: "stub",
+        promptTokens: 0,
+        completionTokens: 0,
+        costUsdMicro: 0,
+        pseudonymized: false,
+        entityType,
+        entityId,
+        status: "budget_exceeded",
+        note: "Monthly AI budget exceeded",
+      })
+      .returning({ id: aiAuditLog.id });
+
+    return {
+      text: stubText,
+      auditId: auditRow.id,
+      model: "stub",
+      promptTokens: 0,
+      completionTokens: 0,
+      isStub: true,
+    };
+  }
 
   // --- Stub path (no API key) ---
   if (!API_KEY) {

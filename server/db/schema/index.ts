@@ -33,3 +33,4 @@ export * from "./certificates";
 export * from "./forms";
 export * from "./aiAuditLog";
 export * from "./churnScores";
+export * from "./aiFeatureFlags";
