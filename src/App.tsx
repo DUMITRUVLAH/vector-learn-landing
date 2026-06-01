@@ -63,6 +63,7 @@ import { SchoolTuitionPage } from "./pages/app/SchoolTuitionPage"; // SCHOOL-004
 import { SchoolAdmissionsPage } from "./pages/app/SchoolAdmissionsPage"; // SCHOOL-005
 import { SchoolTimetablePage } from "./pages/app/SchoolTimetablePage"; // SCHOOL-006
 import { ParentPortalPage } from "./pages/app/ParentPortalPage"; // SCHOOL-007
+import { SchoolConsentPage } from "./pages/app/SchoolConsentPage"; // CONSENT-001
 
 function HomePage() {
   return (
@@ -146,6 +147,7 @@ function Routes() {
   if (path.startsWith("/app/school/tuition")) return <SchoolTuitionPage />; // SCHOOL-004
   if (path.startsWith("/app/school/admissions")) return <SchoolAdmissionsPage />; // SCHOOL-005
   if (path.startsWith("/app/school/timetable")) return <SchoolTimetablePage />; // SCHOOL-006
+  if (path.startsWith("/app/school/consent")) return <SchoolConsentPage />; // CONSENT-001
   if (path.startsWith("/app/parent/portal") || path === "/app/parent") return <ParentPortalPage />; // SCHOOL-007
   if (path.startsWith("/app/school/classes") || path === "/app/school") return <SchoolClassesPage />; // SCHOOL-001
   if (path.startsWith("/app/leads")) return <LeadsPage />;
