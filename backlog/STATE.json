@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "SCHOOL-007",
+  "last_completed": "CONSENT-001",
   "iterations": 91,
   "last_run_at": "2026-06-01T12:30:00Z",
   "milestone_status": "DIPLOMA Phase 1 in progress: DIPLOMA-801/802 done (PR #97). DIPLOMA-803..805 pending.",
@@ -1850,7 +1850,7 @@
       }
     },
     "CONSENT-001": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CONSENT-001-consent-forms-esignature.md",
@@ -1859,7 +1859,18 @@
       "severity": "normal",
       "title": "Consent/permission forms (photo, trips, medical) with e-signature",
       "depends_on": ["SCHOOL-001", "GUARDIAN-001"],
-      "branch": "feat/SCHOOL-faza-1-fundatie"
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "reports": [
+        "backlog/reports/CONSENT-001-integration.md",
+        "backlog/reports/CONSENT-001-manager.md",
+        "backlog/reports/CONSENT-001-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     }
   }
 }
