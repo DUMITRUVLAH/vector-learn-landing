@@ -28,6 +28,7 @@ import {
   type Lead, type LeadInteraction, type LeadContact, type CustomField, type LeadFieldValue,
 } from "@/lib/api/leads";
 import { fetchPipelineStages, type PipelineStage } from "@/lib/api/pipeline";
+import { listCourses, type Course } from "@/lib/api/lessons";
 import { AssigneePicker, useAssigneeName } from "@/components/crm/AssigneePicker";
 import {
   listTasks, createTask, updateTask, deleteTask,
@@ -154,6 +155,12 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     open: false, duplicate: null,
   });
 
+  // INTEG-101: course options for selector
+  const [courseOptions, setCourseOptions] = useState<Course[]>([]);
+  useEffect(() => {
+    listCourses().then((r) => setCourseOptions(r.items)).catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
   }, [sessionStatus, navigate]);
@@ -230,6 +237,8 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
       debtCents: lead.debtCents,
       company: lead.company,
       dealName: lead.dealName,
+      /** INTEG-101 */
+      courseId: lead.courseId ?? null,
     });
     setEditing(true);
   };
@@ -865,20 +874,40 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               )}
             </div>
 
-            {/* Interest course */}
+            {/* INTEG-101: Curs de interes — selector din lista de cursuri reale */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Curs de interes</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Curs (din catalog)</p>
+              {editing ? (
+                <select
+                  value={editDraft.courseId ?? ""}
+                  onChange={(e) => setEditDraft((d) => ({ ...d, courseId: e.target.value || null }))}
+                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Curs de interes (catalog)"
+                >
+                  <option value="">— Neselectat —</option>
+                  {courseOptions.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm">{lead.courseName ?? (lead.courseId ? lead.courseId.slice(0, 8) + "…" : "—")}</p>
+              )}
+            </div>
+
+            {/* Interest course — text fallback / notes */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Alte mențiuni curs</p>
               {editing ? (
                 <input
                   type="text"
                   value={editDraft.interestCourse ?? lead.interestCourse ?? ""}
                   onChange={(e) => setEditDraft((d) => ({ ...d, interestCourse: e.target.value || null }))}
-                  placeholder="ex: Engleză B2"
+                  placeholder="ex: Engleză B2 (notițe libere)"
                   className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                  aria-label="Curs de interes"
+                  aria-label="Alte mențiuni curs"
                 />
               ) : (
-                <p className="text-sm">{lead.interestCourse ?? "—"}</p>
+                <p className="text-sm text-muted-foreground">{lead.interestCourse ?? "—"}</p>
               )}
             </div>
 
