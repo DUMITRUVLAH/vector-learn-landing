@@ -1,7 +1,8 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, ClipboardCheck } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, ClipboardCheck, Building2 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
+import { BranchSwitcher } from "@/components/app/BranchSwitcher";
 import { Link, useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ const NAV = [
   { label: "Clase", href: "/app/school/classes", icon: School }, // SCHOOL-001
   { label: "Prezență", href: "/app/school/attendance", icon: ClipboardList }, // SCHOOL-003
   { label: "Formulare", href: "/app/forms", icon: ClipboardCheck }, // FORMS-002
+  { label: "Filiale", href: "/app/branches", icon: Building2 }, // BRANCH-702
   { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
   { label: "Analytics", href: "/app/analytics/crm", icon: BarChart3 },
   { label: "Cadences", href: "/app/cadences", icon: ListChecks },
@@ -99,6 +101,8 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
                     .slice(0, 2)
                     .join("")}
                 </div>
+                {/* BRANCH-702: Branch switcher */}
+                <BranchSwitcher />
                 {/* CRM-123: Notification bell */}
                 <NotificationBell />
                 <button
