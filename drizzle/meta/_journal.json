@@ -169,6 +169,13 @@
       "when": 1780151700000,
       "tag": "0023_feedback601_forms",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1780301485492,
+      "tag": "0024_fin_invoices_subscriptions",
+      "breakpoints": true
     }
   ]
 }

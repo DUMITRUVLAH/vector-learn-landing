@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { Link, useRouter } from "@/router/HashRouter";
@@ -22,6 +22,7 @@ const NAV = [
   { label: "Profesori", href: "/app/teachers", icon: GraduationCap },
   { label: "Plăți", href: "/app/payments", icon: CreditCard },
   { label: "Salarizare", href: "/app/hr/payroll", icon: DollarSign },
+  { label: "Facturi", href: "/app/invoices", icon: Receipt },
   { label: "Contracte", href: "/app/contracts", icon: FileText },
   { label: "Feedback", href: "/app/feedback", icon: MessageSquare },
   { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },

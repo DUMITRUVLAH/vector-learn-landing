@@ -33,6 +33,7 @@ import { feedbackRoutes } from "./routes/feedback";
 import { feedbackPublicRoutes } from "./routes/feedbackPublic";
 import { contactRoutes } from "./routes/contacts";
 import { teamRoutes } from "./routes/team";
+import { invoiceRoutes } from "./routes/invoices";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -105,6 +106,8 @@ app.route("/api/notifications", notificationRoutes);
 app.route("/api/cadences", cadenceRoutes);
 app.route("/api/audit-log", auditRoutes);
 app.route("/api/contracts", contractRoutes);
+// FIN-601..604: invoices, debt reconciliation, recurring billing, e-Factura export
+app.route("/api/invoices", invoiceRoutes);
 // CRM-137: team members endpoint for AssigneePicker
 app.route("/api/team", teamRoutes);
 

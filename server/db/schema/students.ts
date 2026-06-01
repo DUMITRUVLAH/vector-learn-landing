@@ -26,6 +26,8 @@ export const students = pgTable(
     notes: varchar("notes", { length: 1000 }),
     /** CRM-111: Link to payer family — plătitor↔elevi relationship */
     familyId: uuid("family_id").references(() => families.id, { onDelete: "set null" }),
+    /** FIN-602: Total outstanding debt in cents (floored at 0) */
+    debtCents: integer("debt_cents").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -33,6 +35,7 @@ export const students = pgTable(
     tenantIdx: index("students_tenant_idx").on(t.tenantId),
     statusIdx: index("students_status_idx").on(t.tenantId, t.status),
     nameIdx: index("students_name_idx").on(t.tenantId, t.fullName),
+    debtIdx: index("students_debt_idx").on(t.tenantId, t.debtCents),
   })
 );
 

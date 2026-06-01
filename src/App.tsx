@@ -53,6 +53,7 @@ import { LeadAuditLogPage } from "./pages/app/LeadAuditLogPage";
 import { ContractsPage } from "./pages/app/ContractsPage";
 import { FeedbackPage } from "./pages/app/FeedbackPage";
 import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
+import { InvoicesPage } from "./pages/app/InvoicesPage";
 
 function HomePage() {
   return (
@@ -128,6 +129,7 @@ function Routes() {
   if (path.startsWith("/app/audit-log")) return <LeadAuditLogPage />;
   if (path.startsWith("/app/contracts")) return <ContractsPage />;
   if (path.startsWith("/app/feedback")) return <FeedbackPage />;
+  if (path.startsWith("/app/invoices")) return <InvoicesPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students
