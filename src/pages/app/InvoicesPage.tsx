@@ -110,7 +110,9 @@ export function InvoicesPage() {
           month: filterMonth || undefined,
         }),
         listSubscriptions(),
-        listStudents({ status: "active", limit: 200 }),
+        // Server caps limit at 100 (see students route Zod schema). Requesting 200
+        // returned a 400 ZodError → page wrongly showed "Niciun elev activ".
+        listStudents({ status: "active", limit: 100 }),
         listPayments(),
       ]);
       setItems(inv.items);
