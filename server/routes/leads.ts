@@ -9,6 +9,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 import { fireTrigger } from "../lib/automationEngine";
 import { createNotification, notifyManagersAndOwners } from "../lib/createNotification";
+import { dispatchWebhook } from "../lib/webhookDispatch"; // INT-902
 import { enrollLeadInCadences, pauseEnrollmentsOnReply } from "./cadences";
 import { crmAuditLog } from "../db/schema";
 
@@ -600,6 +601,9 @@ leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
 
   // Fire automation trigger (fire-and-forget — don't block response)
   void fireTrigger(tenantId, "lead.created", created).catch(() => undefined);
+
+  // INT-902: Dispatch outbound webhook for lead.created (fire-and-forget)
+  void dispatchWebhook(tenantId, "lead.created", created as unknown as Record<string, unknown>).catch(() => undefined);
 
   // CRM-127: Audit log
   void auditLog({ tenantId, actorId: userId, entityId: created.id, action: "lead.created", after: created as unknown as Record<string, unknown> }).catch(() => undefined);

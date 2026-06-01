@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "INT-901",
-  "last_completed": "INTEG-203",
-  "iterations": 96,
+  "current_item": "INT-902",
+  "last_completed": "INT-901",
+  "iterations": 97,
   "last_run_at": "2026-06-02T01:00:00Z",
   "milestone_status": "INT faza-3 api-keys/webhooks/zapier: INT-901..903 building on feat/INT-faza-3-api-keys",
   "active_milestone": "INT",
@@ -2168,17 +2168,24 @@
       }
     },
     "INT-901": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/INT-901-api-keys.md",
       "milestone": "INT",
       "phase": "3",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/INT-faza-3-api-keys",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "INT-902": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/INT-902-webhooks.md",
       "milestone": "INT",

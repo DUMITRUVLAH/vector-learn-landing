@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, ClipboardCheck, Key } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, ClipboardCheck, Key, Webhook } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { Link, useRouter } from "@/router/HashRouter";
@@ -35,6 +35,7 @@ const NAV = [
   { label: "Cadences", href: "/app/cadences", icon: ListChecks },
   { label: "Audit Log", href: "/app/audit-log", icon: Shield },
   { label: "API Keys", href: "/app/settings/api-keys", icon: Key }, // INT-901
+  { label: "Webhooks", href: "/app/settings/webhooks", icon: Webhook }, // INT-902
 ];
 
 export function AppShell({ children, pageTitle, pageDescription, actions }: AppShellProps) {
