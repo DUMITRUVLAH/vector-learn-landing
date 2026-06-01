@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, LayoutList, KanbanSquare, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, LayoutList, KanbanSquare, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Tag, UserCog, ArrowRightLeft } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -12,6 +12,7 @@ import {
   listInteractions,
   addInteraction,
   checkDuplicate,
+  bulkAction,
   type Lead,
   type LeadStage,
   type LeadInteraction,
@@ -121,6 +122,31 @@ export function LeadsPage() {
       void fetchList({ page: 1 });
     }
   }, [viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // CRM-118: Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [showBulkStage, setShowBulkStage] = useState(false);
+  const [showBulkTag, setShowBulkTag] = useState(false);
+  const [showBulkAssign, setShowBulkAssign] = useState(false);
+
+  const handleBulkAction = async (action: "stage" | "assign" | "tag" | "delete", payload?: Record<string, unknown>) => {
+    if (selectedIds.size === 0) return;
+    setBulkLoading(true);
+    try {
+      const result = await bulkAction({ ids: Array.from(selectedIds), action, payload });
+      setSelectedIds(new Set());
+      setShowBulkStage(false);
+      setShowBulkTag(false);
+      setShowBulkAssign(false);
+      setToast({ kind: "success", message: `${result.processed} lead-uri actualizate${result.failed > 0 ? ` (${result.failed} sărite)` : ""}` });
+      void fetchList({ page: 1 });
+    } catch (err) {
+      setToast({ kind: "error", message: err instanceof ApiError ? `Eroare: ${err.code}` : "Acțiune bulk eșuată" });
+    } finally {
+      setBulkLoading(false);
+    }
+  };
 
   // Modals
   const [showCreate, setShowCreate] = useState(false);
@@ -381,30 +407,73 @@ export function LeadsPage() {
       </div>
 
       {viewMode === "list" ? (
-        <LeadListView
-          items={listItems}
-          total={listTotal}
-          page={listPage}
-          pageSize={listPageSize}
-          totalPages={listTotalPages}
-          sort={listSort}
-          dir={listDir}
-          loading={listLoading}
-          stages={stages}
-          onSort={(col, dir) => {
-            setListSort(col);
-            setListDir(dir);
-            void fetchList({ sort: col, dir, page: 1 });
-          }}
-          onPage={(p) => { setListPage(p); void fetchList({ page: p }); }}
-          onRowClick={(id) => navigate(`/app/leads/${id}`)}
-          onStageChange={async (id, stage) => {
-            try {
-              await moveLeadStage(id, stage);
-              void fetchList({ page: listPage });
-            } catch { /* ignore */ }
-          }}
-        />
+        <>
+          <LeadListView
+            items={listItems}
+            total={listTotal}
+            page={listPage}
+            pageSize={listPageSize}
+            totalPages={listTotalPages}
+            sort={listSort}
+            dir={listDir}
+            loading={listLoading}
+            stages={stages}
+            selectedIds={selectedIds}
+            onSelectChange={(id, checked) => {
+              setSelectedIds((prev) => {
+                const next = new Set(prev);
+                if (checked) next.add(id); else next.delete(id);
+                return next;
+              });
+            }}
+            onSelectAll={(checked) => {
+              if (checked) {
+                setSelectedIds(new Set(listItems.map((l) => l.id)));
+              } else {
+                setSelectedIds(new Set());
+              }
+            }}
+            onSort={(col, dir) => {
+              setListSort(col);
+              setListDir(dir);
+              setSelectedIds(new Set());
+              void fetchList({ sort: col, dir, page: 1 });
+            }}
+            onPage={(p) => { setListPage(p); setSelectedIds(new Set()); void fetchList({ page: p }); }}
+            onRowClick={(id) => navigate(`/app/leads/${id}`)}
+            onStageChange={async (id, stage) => {
+              try {
+                await moveLeadStage(id, stage);
+                void fetchList({ page: listPage });
+              } catch { /* ignore */ }
+            }}
+          />
+          {/* CRM-118: Bulk action toolbar */}
+          {selectedIds.size > 0 && (
+            <BulkActionToolbar
+              count={selectedIds.size}
+              stages={stages}
+              loading={bulkLoading}
+              showStagePanel={showBulkStage}
+              showTagPanel={showBulkTag}
+              showAssignPanel={showBulkAssign}
+              onToggleStage={() => { setShowBulkStage((v) => !v); setShowBulkTag(false); setShowBulkAssign(false); }}
+              onToggleTag={() => { setShowBulkTag((v) => !v); setShowBulkStage(false); setShowBulkAssign(false); }}
+              onToggleAssign={() => { setShowBulkAssign((v) => !v); setShowBulkStage(false); setShowBulkTag(false); }}
+              onStageConfirm={(stage, lostReason) => void handleBulkAction("stage", { stage, lostReason })}
+              onTagConfirm={(tag) => void handleBulkAction("tag", { tag })}
+              onAssignConfirm={(assignedTo) => void handleBulkAction("assign", { assignedTo })}
+              onDelete={() => {
+                if (confirm(`Ștergi ireversibil ${selectedIds.size} lead-uri (GDPR)? Această acțiune nu poate fi anulată.`)) {
+                  if (confirm(`Confirmare finală: ștergi ${selectedIds.size} lead-uri?`)) {
+                    void handleBulkAction("delete");
+                  }
+                }
+              }}
+              onClearSelection={() => setSelectedIds(new Set())}
+            />
+          )}
+        </>
       ) : loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -637,6 +706,10 @@ interface LeadListViewProps {
   dir: "asc" | "desc";
   loading: boolean;
   stages: import("@/lib/api/pipeline").PipelineStage[];
+  /** CRM-118: bulk selection */
+  selectedIds?: Set<string>;
+  onSelectChange?: (id: string, checked: boolean) => void;
+  onSelectAll?: (checked: boolean) => void;
   onSort: (col: ListSortCol, dir: "asc" | "desc") => void;
   onPage: (p: number) => void;
   onRowClick: (id: string) => void;
@@ -647,7 +720,7 @@ const STAGE_LABEL: Record<string, string> = {
   new: "Lead nou", contacted: "Contactat", trial: "Trial", paid: "Client", lost: "Pierdut",
 };
 
-function LeadListView({ items, total, page, pageSize, totalPages, sort, dir, loading, stages, onSort, onPage, onRowClick, onStageChange }: LeadListViewProps) {
+function LeadListView({ items, total, page, pageSize, totalPages, sort, dir, loading, stages, selectedIds = new Set(), onSelectChange, onSelectAll, onSort, onPage, onRowClick, onStageChange }: LeadListViewProps) {
   const [stageEditing, setStageEditing] = useState<string | null>(null);
 
   const handleSort = (col: ListSortCol) => {
@@ -712,6 +785,18 @@ function LeadListView({ items, total, page, pageSize, totalPages, sort, dir, loa
         <table className="w-full text-sm" aria-label={`Lista leaduri — ${total} total`}>
           <thead>
             <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
+              {/* CRM-118: Select-all checkbox */}
+              {onSelectChange && (
+                <th className="px-3 py-2 w-8">
+                  <input
+                    type="checkbox"
+                    checked={items.length > 0 && items.every((l) => selectedIds.has(l.id))}
+                    onChange={(e) => onSelectAll?.(e.target.checked)}
+                    aria-label="Selectează toate lead-urile de pe pagină"
+                    className="h-4 w-4 rounded accent-primary"
+                  />
+                </th>
+              )}
               <ThSort col="fullName">Nume / Companie</ThSort>
               <ThSort col="stage">Stadiu</ThSort>
               <ThSort col="source">Sursă</ThSort>
@@ -727,13 +812,29 @@ function LeadListView({ items, total, page, pageSize, totalPages, sort, dir, loa
               const daysOverdue = isOverdue
                 ? Math.floor((Date.now() - new Date(lead.nextTask!.dueAt!).getTime()) / 86400000)
                 : 0;
+              const isSelected = selectedIds.has(lead.id);
 
               return (
                 <tr
                   key={lead.id}
-                  className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer transition-colors group"
+                  className={cn(
+                    "border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer transition-colors group",
+                    isSelected && "bg-primary/5"
+                  )}
                   onClick={() => onRowClick(lead.id)}
                 >
+                  {/* CRM-118: Row checkbox */}
+                  {onSelectChange && (
+                    <td className="px-3 py-2.5 w-8" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => onSelectChange(lead.id, e.target.checked)}
+                        aria-label={`Selectează ${lead.fullName}`}
+                        className="h-4 w-4 rounded accent-primary"
+                      />
+                    </td>
+                  )}
                   {/* Name / company */}
                   <td className="px-3 py-2.5 max-w-[200px]">
                     <p className="font-semibold truncate">{lead.dealName ?? lead.fullName}</p>
@@ -860,6 +961,209 @@ function LeadListView({ items, total, page, pageSize, totalPages, sort, dir, loa
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CRM-118: Bulk Action Toolbar ─────────────────────────────────────────────
+
+interface BulkActionToolbarProps {
+  count: number;
+  stages: import("@/lib/api/pipeline").PipelineStage[];
+  loading: boolean;
+  showStagePanel: boolean;
+  showTagPanel: boolean;
+  showAssignPanel: boolean;
+  onToggleStage: () => void;
+  onToggleTag: () => void;
+  onToggleAssign: () => void;
+  onStageConfirm: (stage: string, lostReason?: string | null) => void;
+  onTagConfirm: (tag: string) => void;
+  onAssignConfirm: (assignedTo: string | null) => void;
+  onDelete: () => void;
+  onClearSelection: () => void;
+}
+
+function BulkActionToolbar({
+  count, stages, loading, showStagePanel, showTagPanel, showAssignPanel,
+  onToggleStage, onToggleTag, onToggleAssign,
+  onStageConfirm, onTagConfirm, onAssignConfirm,
+  onDelete, onClearSelection,
+}: BulkActionToolbarProps) {
+  const [stageValue, setStageValue] = useState("");
+  const [lostReason, setLostReason] = useState("");
+  const [tagValue, setTagValue] = useState("");
+  const [assignValue, setAssignValue] = useState("");
+
+  const DEFAULT_STAGES = [
+    { key: "new", label: "Lead nou", isLost: false },
+    { key: "contacted", label: "Contactat", isLost: false },
+    { key: "trial", label: "Trial", isLost: false },
+    { key: "paid", label: "Client", isLost: false },
+    { key: "lost", label: "Pierdut", isLost: true },
+  ];
+  const allStages = stages.length > 0 ? stages : DEFAULT_STAGES;
+  const selectedStageIsLost = (allStages as Array<{ key: string; label: string; isLost?: boolean }>).find((s) => s.key === stageValue)?.isLost ?? stageValue === "lost";
+
+  return (
+    <div
+      role="toolbar"
+      aria-label={`Acțiuni pentru ${count} lead-uri selectate`}
+      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-2xl"
+    >
+      <div className="rounded-2xl border border-border bg-card/95 backdrop-blur shadow-xl p-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-bold text-primary mr-1">{count} selectate</span>
+
+          <button
+            type="button"
+            onClick={onToggleStage}
+            disabled={loading}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold border transition-colors",
+              showStagePanel ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"
+            )}
+          >
+            <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            Schimbă stadiu
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleAssign}
+            disabled={loading}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold border transition-colors",
+              showAssignPanel ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"
+            )}
+          >
+            <UserCog className="h-3.5 w-3.5" aria-hidden="true" />
+            Reasignează
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleTag}
+            disabled={loading}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold border transition-colors",
+              showTagPanel ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"
+            )}
+          >
+            <Tag className="h-3.5 w-3.5" aria-hidden="true" />
+            Tag
+          </button>
+
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold border border-destructive/50 text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Șterge (GDPR)
+          </button>
+
+          <button
+            type="button"
+            onClick={onClearSelection}
+            disabled={loading}
+            className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted border border-transparent"
+            aria-label="Anulează selecția"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Stage panel */}
+        {showStagePanel && (
+          <div className="mt-3 pt-3 border-t border-border flex items-end gap-2 flex-wrap">
+            <div className="flex-1 min-w-[140px]">
+              <label htmlFor="bulk-stage" className="block text-xs font-semibold mb-1">Stadiu nou</label>
+              <select
+                id="bulk-stage"
+                value={stageValue}
+                onChange={(e) => { setStageValue(e.target.value); setLostReason(""); }}
+                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+              >
+                <option value="">— alege —</option>
+                {allStages.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </div>
+            {selectedStageIsLost && (
+              <div className="flex-1 min-w-[140px]">
+                <label htmlFor="bulk-lost-reason" className="block text-xs font-semibold mb-1">Motiv pierdere *</label>
+                <input
+                  id="bulk-lost-reason"
+                  type="text"
+                  value={lostReason}
+                  onChange={(e) => setLostReason(e.target.value)}
+                  placeholder="ex: Preț prea mare"
+                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                />
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={!stageValue || loading || (selectedStageIsLost && !lostReason.trim())}
+              onClick={() => { onStageConfirm(stageValue, selectedStageIsLost ? lostReason : null); setStageValue(""); setLostReason(""); }}
+              className="rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aplică"}
+            </button>
+          </div>
+        )}
+
+        {/* Tag panel */}
+        {showTagPanel && (
+          <div className="mt-3 pt-3 border-t border-border flex items-end gap-2">
+            <div className="flex-1">
+              <label htmlFor="bulk-tag" className="block text-xs font-semibold mb-1">Tag nou</label>
+              <input
+                id="bulk-tag"
+                type="text"
+                value={tagValue}
+                onChange={(e) => setTagValue(e.target.value)}
+                placeholder="ex: urgent, vip"
+                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={!tagValue.trim() || loading}
+              onClick={() => { onTagConfirm(tagValue.trim()); setTagValue(""); }}
+              className="rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aplică"}
+            </button>
+          </div>
+        )}
+
+        {/* Assign panel */}
+        {showAssignPanel && (
+          <div className="mt-3 pt-3 border-t border-border flex items-end gap-2">
+            <div className="flex-1">
+              <label htmlFor="bulk-assign" className="block text-xs font-semibold mb-1">UUID responsabil (gol = elimină)</label>
+              <input
+                id="bulk-assign"
+                type="text"
+                value={assignValue}
+                onChange={(e) => setAssignValue(e.target.value)}
+                placeholder="UUID utilizator sau gol"
+                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm font-mono"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => { onAssignConfirm(assignValue.trim() || null); setAssignValue(""); }}
+              className="rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aplică"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

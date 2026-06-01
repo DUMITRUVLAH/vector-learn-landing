@@ -400,3 +400,27 @@ export function upsertFieldValue(
     body: JSON.stringify(input),
   });
 }
+
+// ─── CRM-118: Bulk actions ────────────────────────────────────────────────────
+
+export interface BulkActionResult {
+  processed: number;
+  failed: number;
+  errors?: string[];
+}
+
+export function bulkAction(input: {
+  ids: string[];
+  action: "stage" | "assign" | "tag" | "delete";
+  payload?: {
+    stage?: string;
+    lostReason?: string | null;
+    assignedTo?: string | null;
+    tag?: string;
+  };
+}): Promise<BulkActionResult> {
+  return api<BulkActionResult>("/api/leads/bulk-action", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
