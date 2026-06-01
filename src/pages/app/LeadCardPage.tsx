@@ -6,6 +6,7 @@
  * CRM-113: Valoare deal + datorie (inline edit)
  * CRM-114: Companie + deal_name + contacte multiple (tab Contacte)
  * CRM-115: Tag-uri libere + câmpuri custom (tab Custom Fields)
+ * CRM-133: Duplicate detection banner + MergeLeadModal
  */
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -23,6 +24,7 @@ import {
   listContacts, createContact, updateContact, deleteContact,
   listTags, addTag, removeTag,
   listFieldValues, upsertFieldValue, listCustomFields,
+  getDedupBanner,
   type Lead, type LeadInteraction, type LeadContact, type CustomField, type LeadFieldValue,
 } from "@/lib/api/leads";
 import { fetchPipelineStages, type PipelineStage } from "@/lib/api/pipeline";
@@ -43,6 +45,8 @@ import { crmDeleteLead } from "@/lib/api/audit";
 import { CopyButton } from "@/components/crm/CopyButton";
 // CRM-145: score explainer with factors breakdown
 import { ScoreExplain } from "@/components/crm/ScoreExplain";
+// CRM-133: merge duplicate leads
+import { MergeLeadModal } from "@/components/crm/MergeLeadModal";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -144,6 +148,12 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     finally { setScoreLoading(false); }
   };
 
+  // CRM-133: Duplicate detection banner
+  const [duplicates, setDuplicates] = useState<Lead[]>([]);
+  const [mergeModal, setMergeModal] = useState<{ open: boolean; duplicate: Lead | null }>({
+    open: false, duplicate: null,
+  });
+
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
   }, [sessionStatus, navigate]);
@@ -194,6 +204,18 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     void runScore(lead.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead]);
+
+  // CRM-133: Check for duplicates after lead is loaded
+  useEffect(() => {
+    if (!lead || (!lead.phone && !lead.email)) return;
+    // Defensive: wrap in Promise.resolve so a malformed/empty response never crashes the card.
+    Promise.resolve(getDedupBanner({ phone: lead.phone, email: lead.email, excludeId: lead.id }))
+      .then((res) => setDuplicates(res?.duplicates ?? []))
+      .catch(() => {
+        // Fail silently — banner doesn't appear on error (AC9)
+        setDuplicates([]);
+      });
+  }, [lead?.id, lead?.phone, lead?.email]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Edit helpers ─────────────────────────────────────────────────────────
   const startEdit = () => {
@@ -314,6 +336,15 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     setInteractions((prev) => [interaction, ...prev]);
     setLogCallModal(false);
     setToast({ kind: "success", message: "Apel logat în timeline!" });
+  };
+
+  // CRM-133: Merge lead success
+  const handleMergeSuccess = (keptLead: Lead) => {
+    setMergeModal({ open: false, duplicate: null });
+    setDuplicates([]);
+    setLead(keptLead);
+    setToast({ kind: "success", message: "Leaduri fuzionate. Istoricul a fost transferat." });
+    void fetchAll();
   };
 
   // ─── Convert (CRM-111: open modal instead of confirm) ────────────────────
@@ -602,6 +633,43 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         <div role="alert" className="mb-4 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive font-semibold">
           <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
           Consimțământ retras {lead.consentRevokedAt ? `pe ${new Date(lead.consentRevokedAt).toLocaleDateString("ro-RO")}` : ""} — acțiunile outbound sunt dezactivate
+        </div>
+      )}
+
+      {/* CRM-133: Duplicate detection banner */}
+      {duplicates.length > 0 && duplicates[0] && (
+        <div
+          role="alert"
+          className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-300"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+          <span className="font-semibold">Posibil duplicat:</span>
+          <span>{duplicates[0].fullName}</span>
+          <span className="text-amber-600 dark:text-amber-400">·</span>
+          <span>{duplicates[0].stage}</span>
+          {duplicates[0].createdAt && (
+            <span className="text-xs text-amber-600 dark:text-amber-400">
+              · {new Date(duplicates[0].createdAt).toLocaleDateString("ro-RO")}
+            </span>
+          )}
+          <div className="flex gap-2 ml-auto">
+            <button
+              type="button"
+              onClick={() => navigate(`/app/leads/${duplicates[0]!.id}`)}
+              className="rounded-md border border-amber-400/60 bg-amber-100 dark:bg-amber-900/30 px-3 py-1 text-xs font-semibold hover:bg-amber-200 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-200"
+              aria-label={`Vezi cartonașul lead-ului duplicat ${duplicates[0].fullName}`}
+            >
+              Vezi cartonașul
+            </button>
+            <button
+              type="button"
+              onClick={() => setMergeModal({ open: true, duplicate: duplicates[0]! })}
+              className="rounded-md bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-700"
+              aria-label="Fuzionează cu lead-ul duplicat"
+            >
+              Fuzionează
+            </button>
+          </div>
         </div>
       )}
 
@@ -1284,6 +1352,16 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
           lead={lead}
           onSuccess={handleConvertSuccess}
           onCancel={() => setConvertModal(false)}
+        />
+      )}
+
+      {/* CRM-133: Merge lead modal */}
+      {mergeModal.open && mergeModal.duplicate && lead && (
+        <MergeLeadModal
+          currentLead={lead}
+          duplicateLead={mergeModal.duplicate}
+          onSuccess={handleMergeSuccess}
+          onCancel={() => setMergeModal({ open: false, duplicate: null })}
         />
       )}
 

@@ -33,6 +33,8 @@ vi.mock("@/lib/api/leads", () => ({
   addInteraction: vi.fn(),
   checkDuplicate: vi.fn().mockResolvedValue({ duplicate: null }),
   bulkAction: vi.fn(),
+  getDedupBanner: vi.fn(),
+  mergeLead: vi.fn(),
 }));
 vi.mock("@/lib/api/pipeline", () => ({
   fetchPipelineStages: vi.fn().mockResolvedValue({ stages: [] }),

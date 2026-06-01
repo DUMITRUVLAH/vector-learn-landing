@@ -30,6 +30,9 @@ vi.mock("@/lib/api/leads", () => ({
   listFieldValues: vi.fn(),
   upsertFieldValue: vi.fn(),
   listCustomFields: vi.fn(),
+  // CRM-133: lead card now checks for duplicates on mount
+  getDedupBanner: vi.fn(),
+  mergeLead: vi.fn(),
 }));
 
 vi.mock("@/lib/api/pipeline", () => ({
@@ -121,6 +124,8 @@ describe("CRM-106 — Lead card page", () => {
     vi.mocked(leadsApi.listContacts).mockResolvedValue({ items: [] });
     vi.mocked(leadsApi.listTags).mockResolvedValue({ tags: [] });
     vi.mocked(leadsApi.listFieldValues).mockResolvedValue({ values: [], fields: [] });
+    // CRM-133: dedup check runs on mount — default to no duplicates so the banner stays hidden.
+    vi.mocked(leadsApi.getDedupBanner).mockResolvedValue({ duplicates: [] });
   });
 
   /**
