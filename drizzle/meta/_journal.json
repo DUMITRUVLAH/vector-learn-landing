@@ -232,6 +232,13 @@
       "when": 1748822800000,
       "tag": "0032_school005_admissions",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1748908800000,
+      "tag": "0033_school006_timetable",
+      "breakpoints": true
     }
   ]
 }

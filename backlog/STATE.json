@@ -1719,26 +1719,27 @@
       }
     },
     "SCHOOL-006": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/SCHOOL-006-master-timetable.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "normal",
       "title": "Master timetable (class\u00d7subject\u00d7teacher\u00d7room grid)",
-      "depends_on": []
+      "depends_on": ["SCHOOL-001", "SCHOOL-002"],
+      "branch": "feat/SCHOOL-faza-1-fundatie"
     },
     "SCHOOL-007": {
       "status": "pending",
       "attempts": 0,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/SCHOOL-007-parent-portal.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "normal",
-      "title": "Parent portal: grades, attendance, report cards, alerts",
-      "depends_on": []
+      "title": "Portal parinte: note, prezenta, fisa situatie, sold taxe + stiri scoala",
+      "depends_on": ["SCHOOL-002", "SCHOOL-003", "SCHOOL-004", "GUARDIAN-001"]
     },
     "KINDER-001": {
       "status": "pending",
@@ -1821,12 +1822,12 @@
       "status": "pending",
       "attempts": 0,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/GUARDIAN-001-authorized-guardians.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "high",
-      "title": "Authorized-guardian model \u2014 multiple guardians per child, custody/permission flags",
-      "depends_on": []
+      "title": "Tutori autorizati \u2014 mai multi tutori per elev, flag-uri custodie/permisiuni",
+      "depends_on": ["SCHOOL-001"]
     },
     "CONSENT-001": {
       "status": "pending",
