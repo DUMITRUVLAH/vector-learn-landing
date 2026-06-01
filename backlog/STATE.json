@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "FEEDBACK-601",
-  "iterations": 71,
+  "last_completed": "CRM-151",
+  "iterations": 81,
   "last_run_at": "2026-05-31T04:45:00Z",
-  "milestone_status": "CRM done. SCHED done. CONTRACT-501 done (PR#93). CRM-134/135/136 done (PR#89/90/91). FEEDBACK-601 done (PR#94). | Added CX (701-705) + DIPLOMA (801-805) — ported from copy-roas, pending.",
+  "milestone_status": "CRM Phase J COMPLETE (PR#95 — CRM-137..151, 15 items). SCHED done. CONTRACT-501 done (PR#93). FEEDBACK-601 done (PR#94). | Next: CX (701-705) + DIPLOMA (801-805) pending.",
   "active_milestone": "CX",
   "items": {
     "M1-001": {
@@ -1033,8 +1033,8 @@
       }
     },
     "CRM-137": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-137-assignee-picker.md",
       "milestone": "CRM",
@@ -1044,8 +1044,8 @@
       ]
     },
     "CRM-138": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-138-card-stage-menu-desktop.md",
       "milestone": "CRM",
@@ -1055,8 +1055,8 @@
       ]
     },
     "CRM-139": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-139-debounced-search.md",
       "milestone": "CRM",
@@ -1067,30 +1067,46 @@
       ]
     },
     "CRM-140": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-140-open-duplicate-fix.md",
       "milestone": "CRM",
       "phase": "J",
       "depends_on": [
         "CRM-102"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-141": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-141-add-lead-in-empty-column.md",
       "milestone": "CRM",
       "phase": "J",
       "depends_on": [
         "CRM-105"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "CRM-142": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-142-kanban-column-sort.md",
       "milestone": "CRM",
@@ -1098,11 +1114,19 @@
       "depends_on": [
         "CRM-105",
         "CRM-124"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-143": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-143-undo-stage-move.md",
       "milestone": "CRM",
@@ -1110,44 +1134,76 @@
       "depends_on": [
         "CRM-105",
         "CRM-127"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-144": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-144-copy-contact.md",
       "milestone": "CRM",
       "phase": "J",
       "depends_on": [
         "CRM-106"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-145": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-145-auto-score-explained.md",
       "milestone": "CRM",
       "phase": "J",
       "depends_on": [
         "CRM-111"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-146": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-146-contact-icons-missing-flag.md",
       "milestone": "CRM",
       "phase": "J",
       "depends_on": [
         "CRM-105"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-147": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-147-task-overdue-tab-badge.md",
       "milestone": "CRM",
@@ -1155,33 +1211,57 @@
       "depends_on": [
         "CRM-107",
         "CRM-116"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-148": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-148-converted-link-to-student.md",
       "milestone": "CRM",
       "phase": "J",
       "depends_on": [
         "CRM-111"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-149": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-149-active-filter-pills.md",
       "milestone": "CRM",
       "phase": "J",
       "depends_on": [
         "CRM-119"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-150": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-150-csv-import-fields-parser.md",
       "milestone": "CRM",
@@ -1190,18 +1270,34 @@
         "CRM-103",
         "CRM-113",
         "CRM-115"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CRM-151": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CRM-151-mobile-action-overflow-menu.md",
       "milestone": "CRM",
       "phase": "J",
       "depends_on": [
         "CRM-122"
-      ]
+      ],
+      "branch": "feat/CRM-faza-J-lead-ux",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/95",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "CONTRACT-501": {
       "status": "done",

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, LayoutList, KanbanSquare, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Tag, UserCog, ArrowRightLeft } from "lucide-react";
+import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, LayoutList, KanbanSquare, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Tag, UserCog, ArrowRightLeft, SortAsc, MoreHorizontal } from "lucide-react";
 import { MobileLeadList } from "@/components/crm/MobileLeadList";
 import { QuickAddSheet } from "@/components/crm/QuickAddSheet";
 import { AppShell } from "@/components/app/AppShell";
@@ -35,6 +35,19 @@ import { getForecast } from "@/lib/api/analytics";
 import { cn } from "@/lib/utils";
 import { EmptyLeads } from "@/components/crm/EmptyLeads";
 import { OnboardingChecklist } from "@/components/crm/OnboardingChecklist";
+// CRM-137: AssigneePicker + display name hook
+import { AssigneePicker, useAssigneeName } from "@/components/crm/AssigneePicker";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
+// CRM-138: StageMenu for keyboard-accessible stage switching on KanbanCard
+import { StageMenu } from "@/components/crm/StageMenu";
+// CRM-139: debounced search
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+// CRM-143: undo toast for stage moves
+import { StageMoveUndoToast } from "@/components/crm/StageMoveUndoToast";
+// CRM-149: active filter pills row
+import { ActiveFilterPills } from "@/components/crm/ActiveFilterPills";
+// CRM-150: RFC-4180 CSV parser + currency/tag helpers
+import { parseCsv, parseCurrencyToCents, parseTags } from "@/lib/csv";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web",
@@ -63,6 +76,8 @@ const LOST_REASON_PRESETS = [
 export function LeadsPage() {
   const { status: sessionStatus, data: sessionData } = useSession();
   const { navigate } = useRouter();
+  // CRM-149: resolve assignee id → full name for pill labels
+  const { members: teamMembers } = useTeamMembers();
 
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [grouped, setGrouped] = useState<Record<string, Lead[]>>({});
@@ -85,6 +100,13 @@ export function LeadsPage() {
   const [filterNoTask, setFilterNoTask] = useState(false);
   const [filterOverdue, setFilterOverdue] = useState(false);
 
+  // CRM-139: debounced filter values for auto-trigger in list view
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
+  const debouncedSource = useDebouncedValue(filterSource, 300);
+  const debouncedAssigned = useDebouncedValue(filterAssigned, 300);
+  const debouncedNoTask = useDebouncedValue(filterNoTask, 300);
+  const debouncedOverdue = useDebouncedValue(filterOverdue, 300);
+
   // CRM-117: view toggle — persisted in localStorage
   const [viewMode, setViewMode] = useState<"kanban" | "list">(() => {
     try { return (localStorage.getItem("crm_view_mode") as "kanban" | "list") ?? "kanban"; } catch { return "kanban"; }
@@ -93,6 +115,16 @@ export function LeadsPage() {
   const handleViewMode = (mode: "kanban" | "list") => {
     setViewMode(mode);
     try { localStorage.setItem("crm_view_mode", mode); } catch { /* ignore */ }
+  };
+
+  // CRM-142: Kanban column sort — persisted in localStorage
+  type KanbanSort = "recent" | "oldest" | "value_desc" | "sla_first";
+  const [kanbanSort, setKanbanSort] = useState<KanbanSort>(() => {
+    try { return (localStorage.getItem("crm_kanban_sort") as KanbanSort) ?? "recent"; } catch { return "recent"; }
+  });
+  const handleKanbanSort = (sort: KanbanSort) => {
+    setKanbanSort(sort);
+    try { localStorage.setItem("crm_kanban_sort", sort); } catch { /* ignore */ }
   };
 
   // CRM-117: list view state
@@ -131,6 +163,15 @@ export function LeadsPage() {
     }
   }, [viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // CRM-139: auto-trigger list re-fetch on debounced filter changes
+  useEffect(() => {
+    if (viewMode === "list") {
+      void fetchList({ page: 1 });
+    }
+    // We intentionally only fire when debounced values change (not on every render)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, debouncedSource, debouncedAssigned, debouncedNoTask, debouncedOverdue]);
+
   // CRM-118: Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -158,13 +199,23 @@ export function LeadsPage() {
 
   // Modals
   const [showCreate, setShowCreate] = useState(false);
+  /** CRM-141: stage pre-selected when opening CreateLeadModal from a kanban column */
+  const [createDefaultStage, setCreateDefaultStage] = useState<string>("new");
   const [showImport, setShowImport] = useState(false);
   const [showStagesEditor, setShowStagesEditor] = useState(false);
   const [lostReasonFor, setLostReasonFor] = useState<{ leadId: string; targetStage: string } | null>(null);
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  /** CRM-143: undo toast for stage moves */
+  const [stageMoveUndo, setStageMoveUndo] = useState<{
+    message: string;
+    onUndo: () => Promise<void>;
+  } | null>(null);
   /** CRM-122: Quick-add mobile bottom sheet */
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  /** CRM-151: Mobile overflow menu state */
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  const overflowMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -175,6 +226,25 @@ export function LeadsPage() {
     const t = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // CRM-151: close overflow menu on outside click or Esc
+  useEffect(() => {
+    if (!showOverflowMenu) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowOverflowMenu(false);
+    };
+    const handleClick = (e: MouseEvent) => {
+      if (overflowMenuRef.current && !overflowMenuRef.current.contains(e.target as Node)) {
+        setShowOverflowMenu(false);
+      }
+    };
+    document.addEventListener("keydown", handleKey);
+    document.addEventListener("mousedown", handleClick);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      document.removeEventListener("mousedown", handleClick);
+    };
+  }, [showOverflowMenu]);
 
   const fetchStages = useCallback(async () => {
     try {
@@ -215,7 +285,7 @@ export function LeadsPage() {
   // Client-side filtering
   const getFilteredLeads = (stageKey: string): Lead[] => {
     const all = grouped[stageKey] ?? [];
-    return all.filter((lead) => {
+    const filtered = all.filter((lead) => {
       if (filterSource !== "all" && lead.source !== filterSource) return false;
       if (filterAssigned !== "all" && lead.assignedTo !== filterAssigned) return false;
       if (searchQuery.trim()) {
@@ -236,6 +306,25 @@ export function LeadsPage() {
         if (!isOverdue) return false;
       }
       return true;
+    });
+    // CRM-142: client-side kanban sort
+    return [...filtered].sort((a, b) => {
+      if (kanbanSort === "oldest") {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+      if (kanbanSort === "value_desc") {
+        return (b.valueCents ?? 0) - (a.valueCents ?? 0);
+      }
+      if (kanbanSort === "sla_first") {
+        const slaOrder: Record<string, number> = { red: 0, yellow: 1, green: 2 };
+        const aOrd = slaOrder[a.slaBadge ?? "green"] ?? 2;
+        const bOrd = slaOrder[b.slaBadge ?? "green"] ?? 2;
+        if (aOrd !== bOrd) return aOrd - bOrd;
+        // secondary: oldest first (longest waiting)
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+      // "recent" (default): newest first
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
   };
 
@@ -261,10 +350,19 @@ export function LeadsPage() {
       return;
     }
 
+    const prevStage = lead.stage;
+
     try {
       await moveLeadStage(lead.id, toStageKey as LeadStage);
-      setToast({ kind: "success", message: `Lead mutat la "${targetStage?.label ?? toStageKey}"` });
       void fetchAll();
+      // CRM-143: show undo toast
+      setStageMoveUndo({
+        message: `Mutat la "${targetStage?.label ?? toStageKey}"`,
+        onUndo: async () => {
+          await moveLeadStage(lead.id, prevStage as LeadStage);
+          void fetchAll();
+        },
+      });
     } catch {
       setToast({ kind: "error", message: "Nu pot muta lead-ul" });
     }
@@ -273,11 +371,23 @@ export function LeadsPage() {
   const handleLostReasonConfirm = async (lostReason: string) => {
     if (!lostReasonFor) return;
     const { leadId, targetStage } = lostReasonFor;
+    const allLeads = Object.values(grouped).flat();
+    const movedLead = allLeads.find((l) => l.id === leadId);
+    const prevStage = movedLead?.stage;
     setLostReasonFor(null);
     try {
       await moveLeadStage(leadId, targetStage as LeadStage, lostReason);
-      setToast({ kind: "success", message: "Lead marcat ca pierdut" });
       void fetchAll();
+      // CRM-143: undo lost-stage move
+      if (prevStage) {
+        setStageMoveUndo({
+          message: "Lead marcat ca pierdut",
+          onUndo: async () => {
+            await moveLeadStage(leadId, prevStage as LeadStage);
+            void fetchAll();
+          },
+        });
+      }
     } catch {
       setToast({ kind: "error", message: "Nu pot muta lead-ul" });
     }
@@ -293,7 +403,7 @@ export function LeadsPage() {
       pageDescription={[`${totalLeads} lead-uri`, `conversie: ${conversionRate}%`, totalValueCents > 0 ? formatEur(totalValueCents) : null, totalWeightedCents > 0 ? `Forecast: ${formatEur(totalWeightedCents)}` : null].filter(Boolean).join(" · ")}
       actions={
         <div className="flex gap-2 items-center">
-          {/* CRM-117: Kanban / List toggle */}
+          {/* CRM-117: Kanban / List toggle — always visible */}
           <div className="inline-flex rounded-md border border-border bg-card overflow-hidden" role="group" aria-label="Alegere vedere">
             <button
               type="button"
@@ -326,28 +436,74 @@ export function LeadsPage() {
               <span className="hidden sm:inline">Listă</span>
             </button>
           </div>
+
+          {/* CRM-151: Desktop — Stadii + Import direct; Mobile — inside "⋯" overflow menu */}
+          {/* Desktop buttons (lg+) */}
           <button
             type="button"
             onClick={() => setShowStagesEditor(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
+            className="hidden lg:inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
             aria-label="Configurează stadii pipeline"
           >
             <Settings className="h-4 w-4" />
-            <span className="hidden sm:inline">Stadii</span>
+            Stadii
           </button>
           <button
             type="button"
             onClick={() => setShowImport(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
+            className="hidden lg:inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
             aria-label="Import CSV"
           >
             <Upload className="h-4 w-4" />
-            <span className="hidden sm:inline">Import</span>
+            Import
           </button>
+
+          {/* CRM-151: Mobile overflow "⋯" menu (< lg) */}
+          <div ref={overflowMenuRef} className="relative lg:hidden">
+            <button
+              type="button"
+              onClick={() => setShowOverflowMenu((v) => !v)}
+              aria-label="Mai multe acțiuni"
+              aria-haspopup="true"
+              aria-expanded={showOverflowMenu}
+              className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-md border border-border bg-card p-2 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+            </button>
+            {showOverflowMenu && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-xl border border-border bg-card shadow-xl py-1"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setShowStagesEditor(true); setShowOverflowMenu(false); }}
+                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:bg-muted"
+                  aria-label="Configurează stadii pipeline"
+                >
+                  <Settings className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  Stadii
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setShowImport(true); setShowOverflowMenu(false); }}
+                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:bg-muted"
+                  aria-label="Import CSV"
+                >
+                  <Upload className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  Import
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* CRM-151: "Adaugă lead" hidden on mobile (FAB covers it); shown on desktop */}
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            className="hidden lg:inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
             Adaugă lead
@@ -379,15 +535,11 @@ export function LeadsPage() {
           {Object.entries(SOURCE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
 
-        <select
+        {/* CRM-137: real team members for filter */}
+        <AssigneeFilterSelect
           value={filterAssigned}
-          onChange={(e) => setFilterAssigned(e.target.value)}
-          className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-          aria-label="Filtrează după responsabil"
-        >
-          <option value="all">Toți responsabilii</option>
-          <option value="">Neasignat</option>
-        </select>
+          onChange={setFilterAssigned}
+        />
 
         {/* CRM-116: task signal filters */}
         <label className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs text-muted-foreground cursor-pointer hover:bg-muted select-none">
@@ -399,16 +551,32 @@ export function LeadsPage() {
           Restanțe
         </label>
 
-        {/* List view: apply filters button */}
-        {viewMode === "list" && (
-          <button
-            type="button"
-            onClick={() => void fetchList({ page: 1 })}
-            className="inline-flex items-center gap-1 rounded-md border border-primary bg-primary/10 px-2 py-1.5 text-xs text-primary font-semibold hover:bg-primary/20"
-          >
-            <Search className="h-3 w-3" />
-            Aplică filtre
-          </button>
+        {/* CRM-142: kanban column sort — only visible in kanban mode */}
+        {viewMode === "kanban" && (
+          <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="sr-only">Sortare kanban</span>
+            <SortAsc className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <select
+              id="kanban-sort"
+              value={kanbanSort}
+              onChange={(e) => handleKanbanSort(e.target.value as KanbanSort)}
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Sortare carduri kanban"
+            >
+              <option value="recent">Recente</option>
+              <option value="oldest">Cele mai vechi</option>
+              <option value="value_desc">Valoare desc.</option>
+              <option value="sla_first">SLA intai</option>
+            </select>
+          </label>
+        )}
+
+        {/* CRM-139: list view auto-applies via debounce; spinner shows re-fetch in progress */}
+        {viewMode === "list" && listLoading && (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" aria-live="polite" aria-label="Se filtrează...">
+            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+            <span className="sr-only">Se filtrează...</span>
+          </span>
         )}
         {(filterSource !== "all" || filterAssigned !== "all" || searchQuery || filterNoTask || filterOverdue) && (
           <button
@@ -437,6 +605,25 @@ export function LeadsPage() {
           />
         </div>
       </div>
+
+      {/* CRM-149: Active filter pills — shows one pill per active filter */}
+      <ActiveFilterPills
+        filters={{
+          source: filterSource !== "all" ? filterSource : undefined,
+          assignedTo: filterAssigned !== "all" ? filterAssigned : undefined,
+          searchQuery: searchQuery || undefined,
+          filterNoTask: filterNoTask || undefined,
+          filterOverdue: filterOverdue || undefined,
+        }}
+        sourceLabel={(key) => SOURCE_LABEL[key] ?? key}
+        assignedLabel={(id) => teamMembers.find((m) => m.id === id)?.fullName ?? id}
+        onClearSource={() => setFilterSource("all")}
+        onClearAssigned={() => setFilterAssigned("all")}
+        onClearSearch={() => setSearchQuery("")}
+        onClearNoTask={() => setFilterNoTask(false)}
+        onClearOverdue={() => setFilterOverdue(false)}
+        className="mb-3"
+      />
 
       {viewMode === "list" ? (
         <>
@@ -474,9 +661,22 @@ export function LeadsPage() {
             onPage={(p) => { setListPage(p); setSelectedIds(new Set()); void fetchList({ page: p }); }}
             onRowClick={(id) => navigate(`/app/leads/${id}`)}
             onStageChange={async (id, stage) => {
+              // CRM-143: capture prev stage for undo
+              const prevLead = listItems.find((l) => l.id === id);
+              const prevStage = prevLead?.stage;
               try {
                 await moveLeadStage(id, stage);
                 void fetchList({ page: listPage });
+                if (prevStage && prevStage !== stage) {
+                  const targetLabel = stages.find((s) => s.key === stage)?.label ?? stage;
+                  setStageMoveUndo({
+                    message: `Mutat la "${targetLabel}"`,
+                    onUndo: async () => {
+                      await moveLeadStage(id, prevStage as LeadStage);
+                      void fetchList({ page: listPage });
+                    },
+                  });
+                }
               } catch { /* ignore */ }
             }}
           />
@@ -590,8 +790,19 @@ export function LeadsPage() {
 
                 <div className="flex flex-col gap-2">
                   {leadsHere.length === 0 ? (
-                    <div className="flex items-center justify-center h-24 rounded-lg border border-dashed border-border text-[11px] text-muted-foreground">
-                      Trage aici
+                    /* CRM-141: empty column invites direct lead creation */
+                    <div className="flex flex-col items-center justify-center gap-2 h-24 rounded-lg border border-dashed border-border text-[11px] text-muted-foreground">
+                      <span>Trage aici</span>
+                      <button
+                        type="button"
+                        onClick={() => { setCreateDefaultStage(stage.key); setShowCreate(true); }}
+                        className="min-h-[44px] min-w-[44px] flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={`Adauga lead in stadiul ${stage.label}`}
+                        data-testid={`add-lead-in-${stage.key}`}
+                      >
+                        <Plus className="h-3 w-3" aria-hidden="true" />
+                        {`Adauga in ${stage.label}`}
+                      </button>
                     </div>
                   ) : (
                     leadsHere.map((lead) => (
@@ -602,6 +813,16 @@ export function LeadsPage() {
                         onDragStart={() => setDraggedId(lead.id)}
                         onDragEnd={() => { setDraggedId(null); setHoverStage(null); }}
                         onClick={() => navigate(`/app/leads/${lead.id}`)}
+                        stages={stages}
+                        onStageMove={async (stageKey) => {
+                          try {
+                            await moveLeadStage(lead.id, stageKey as LeadStage);
+                            const target = stages.find((s) => s.key === stageKey);
+                            setToast({ kind: "success", message: `Lead mutat la "${target?.label ?? stageKey}"` });
+                            void fetchAll();
+                          } catch { setToast({ kind: "error", message: "Nu pot muta lead-ul" }); }
+                        }}
+                        onStageLost={(stageKey) => setLostReasonFor({ leadId: lead.id, targetStage: stageKey })}
                       />
                     ))
                   )}
@@ -619,6 +840,8 @@ export function LeadsPage() {
           onClose={() => setShowCreate(false)}
           onSaved={() => { setShowCreate(false); setToast({ kind: "success", message: "Lead adăugat în pipeline" }); void fetchAll(); }}
           onError={(m) => setToast({ kind: "error", message: m })}
+          onOpenDuplicate={(id) => { setShowCreate(false); navigate(`/app/leads/${id}`); }}
+          defaultStage={createDefaultStage}
         />
       )}
 
@@ -676,6 +899,15 @@ export function LeadsPage() {
         />
       )}
 
+      {/* CRM-143: stage-move undo toast */}
+      {stageMoveUndo && (
+        <StageMoveUndoToast
+          message={stageMoveUndo.message}
+          onUndo={stageMoveUndo.onUndo}
+          onDismiss={() => setStageMoveUndo(null)}
+        />
+      )}
+
       {toast && (
         <div
           role="status"
@@ -709,23 +941,34 @@ interface KanbanCardProps {
   onDragStart: () => void;
   onDragEnd: () => void;
   onClick: () => void;
+  // CRM-138: stage navigation
+  stages: PipelineStage[];
+  onStageMove: (stageKey: string) => void;
+  onStageLost: (stageKey: string) => void;
 }
 
-function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: KanbanCardProps) {
+function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick, stages, onStageMove, onStageLost }: KanbanCardProps) {
+  // CRM-148: navigate to student from the "Convertit" badge
+  const { navigate: navToStudent } = useRouter();
   return (
-    <button
-      type="button"
+    <div
       draggable
       onDragStart={(e) => { onDragStart(); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", lead.id); }}
       onDragEnd={onDragEnd}
-      onClick={onClick}
       className={cn(
-        "text-left rounded-lg border border-border bg-card p-2.5 cursor-move shadow-sm transition-all",
+        "relative rounded-lg border border-border bg-card p-2.5 cursor-move shadow-sm transition-all",
         "hover:shadow-md hover:-translate-y-0.5",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isDragging && "opacity-50"
       )}
     >
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+        )}
+        aria-label={`Deschide lead ${lead.dealName ?? lead.fullName}`}
+      >
       {/* CRM-114: Use dealName as title if set */}
       <p className="text-xs font-semibold truncate">{lead.dealName ?? lead.fullName}</p>
       {/* CRM-114: Company under name */}
@@ -752,11 +995,19 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
       )}
       <div className="flex items-center justify-between gap-2 mt-2">
         <span className="text-[10px] text-muted-foreground">{SOURCE_LABEL[lead.source] ?? lead.source}</span>
-        <div className="flex gap-1.5 text-muted-foreground/60">
-          {lead.phone && <Phone className="h-2.5 w-2.5" aria-label="Are telefon" />}
-          {lead.email && <Mail className="h-2.5 w-2.5" aria-label="Are email" />}
+        {/* CRM-146: visible contact icons ≥ h-3.5, contrast ≥ 4.5:1, "Fără contact" badge */}
+        <div className="flex gap-1.5 text-muted-foreground">
+          {lead.phone && <Phone className="h-3.5 w-3.5" aria-label="Are telefon" />}
+          {lead.email && <Mail className="h-3.5 w-3.5" aria-label="Are email" />}
+          {!lead.phone && !lead.email && (
+            <span className="text-[9px] font-semibold text-destructive bg-destructive/10 rounded px-1 py-0.5" aria-label="Fără date de contact">
+              Fără contact
+            </span>
+          )}
         </div>
       </div>
+      {/* CRM-137: show assignee name instead of UUID fragment */}
+      {lead.assignedTo && <KanbanCardAssigneeName assignedTo={lead.assignedTo} />}
       {/* CRM-116: Task signal badges */}
       {lead.nextTask ? (
         (() => {
@@ -783,11 +1034,20 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
           Fără task
         </div>
       )}
+      {/* CRM-148: "Convertit" → clickable link to student (stopPropagation so card doesn't open) */}
       {lead.convertedToStudentId && (
-        <div className="mt-1.5 text-[9px] font-bold text-success inline-flex items-center gap-1">
-          <CheckCircle2 className="h-2.5 w-2.5" />
-          Convertit
-        </div>
+        <button
+          type="button"
+          className="mt-1.5 text-[9px] font-bold text-success inline-flex items-center gap-1 hover:opacity-80 underline underline-offset-1 min-h-[44px]"
+          aria-label="Convertit — deschide fișa studentului"
+          onClick={(e) => {
+            e.stopPropagation();
+            navToStudent(`/app/students/${lead.convertedToStudentId}`);
+          }}
+        >
+          <CheckCircle2 className="h-2.5 w-2.5" aria-hidden="true" />
+          Convertit →
+        </button>
       )}
       {/* CRM-124: SLA badge — show only for active non-converted leads */}
       {!lead.convertedToStudentId && lead.slaBadge && lead.slaBadge !== "green" && (
@@ -800,7 +1060,53 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
           SLA {lead.slaBadge === "red" ? "!!!" : "!"}
         </div>
       )}
-    </button>
+      </button>
+      {/* CRM-138: Stage menu — keyboard-accessible alternative to drag */}
+      <div className="absolute top-1.5 right-1.5">
+        <StageMenu
+          currentStageKey={lead.stage}
+          stages={stages}
+          onMove={onStageMove}
+          onMoveLost={onStageLost}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── CRM-137: KanbanCardAssigneeName — resolves UUID to name on KanbanCard ──
+
+function KanbanCardAssigneeName({ assignedTo }: { assignedTo: string }) {
+  const name = useAssigneeName(assignedTo);
+  return (
+    <p className="text-[9px] text-muted-foreground truncate mt-0.5" aria-label={`Responsabil: ${name}`}>
+      {name}
+    </p>
+  );
+}
+
+// ─── CRM-137: AssigneeFilterSelect — filter bar dropdown with real members ───
+
+interface AssigneeFilterSelectProps {
+  value: string;
+  onChange: (v: string) => void;
+}
+
+function AssigneeFilterSelect({ value, onChange }: AssigneeFilterSelectProps) {
+  const { members } = useTeamMembers();
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+      aria-label="Filtrează după responsabil"
+    >
+      <option value="all">Toți responsabilii</option>
+      <option value="">Neasignat</option>
+      {members.map((m) => (
+        <option key={m.id} value={m.id}>{m.fullName}</option>
+      ))}
+    </select>
   );
 }
 
@@ -949,9 +1255,15 @@ function LeadListView({ items, total, page, pageSize, totalPages, sort, dir, loa
                   <td className="px-3 py-2.5 max-w-[200px]">
                     <p className="font-semibold truncate">{lead.dealName ?? lead.fullName}</p>
                     {lead.company && <p className="text-[11px] text-muted-foreground truncate italic">{lead.company}</p>}
+                    {/* CRM-146: visible contact icons + "Fără contact" badge */}
                     <div className="flex items-center gap-2 mt-0.5">
-                      {lead.phone && <Phone className="h-2.5 w-2.5 text-muted-foreground/60" aria-label="Are telefon" />}
-                      {lead.email && <Mail className="h-2.5 w-2.5 text-muted-foreground/60" aria-label="Are email" />}
+                      {lead.phone && <Phone className="h-3.5 w-3.5 text-muted-foreground" aria-label="Are telefon" />}
+                      {lead.email && <Mail className="h-3.5 w-3.5 text-muted-foreground" aria-label="Are email" />}
+                      {!lead.phone && !lead.email && (
+                        <span className="text-[9px] font-semibold text-destructive bg-destructive/10 rounded px-1 py-0.5" aria-label="Fără date de contact">
+                          Fără contact
+                        </span>
+                      )}
                     </div>
                   </td>
 
@@ -1250,18 +1562,17 @@ function BulkActionToolbar({
           </div>
         )}
 
-        {/* Assign panel */}
+        {/* Assign panel — CRM-137: dropdown with names instead of UUID */}
         {showAssignPanel && (
           <div className="mt-3 pt-3 border-t border-border flex items-end gap-2">
             <div className="flex-1">
-              <label htmlFor="bulk-assign" className="block text-xs font-semibold mb-1">UUID responsabil (gol = elimină)</label>
-              <input
+              <label htmlFor="bulk-assign" className="block text-xs font-semibold mb-1">Responsabil (— elimină —)</label>
+              <AssigneePicker
                 id="bulk-assign"
-                type="text"
-                value={assignValue}
-                onChange={(e) => setAssignValue(e.target.value)}
-                placeholder="UUID utilizator sau gol"
-                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm font-mono"
+                value={assignValue || null}
+                onChange={(v) => setAssignValue(v ?? "")}
+                ariaLabel="Responsabil bulk"
+                className="w-full"
               />
             </div>
             <button
@@ -1498,7 +1809,16 @@ function StagesEditorModal({
 
 // ─── Create Lead Modal ────────────────────────────────────────────────────────
 
-function CreateLeadModal({ onClose, onSaved, onError }: { onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
+interface CreateLeadModalProps {
+  onClose: () => void;
+  onSaved: () => void;
+  onError: (m: string) => void;
+  onOpenDuplicate: (id: string) => void;
+  /** CRM-141: pre-select a pipeline stage when opening from an empty column */
+  defaultStage?: string;
+}
+
+function CreateLeadModal({ onClose, onSaved, onError, onOpenDuplicate, defaultStage }: CreateLeadModalProps) {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -1508,6 +1828,7 @@ function CreateLeadModal({ onClose, onSaved, onError }: { onClose: () => void; o
   const [assignedTo, setAssignedTo] = useState("");
   const [valueEur, setValueEur] = useState("");
   const [company, setCompany] = useState("");
+  const [selectedStage, setSelectedStage] = useState<string>(defaultStage ?? "new");
   const [submitting, setSubmitting] = useState(false);
   const [dedupResult, setDedupResult] = useState<DedupResult["duplicate"] | null>(null);
   const [forceCreate, setForceCreate] = useState(false);
@@ -1541,7 +1862,7 @@ function CreateLeadModal({ onClose, onSaved, onError }: { onClose: () => void; o
     setSubmitting(true);
     try {
       const valueCents = valueEur.trim() ? Math.round(parseFloat(valueEur.replace(",", ".")) * 100) : 0;
-      await createLead({ fullName, phone: phone || null, email: email || null, interestCourse: interestCourse || null, source, assignedTo: assignedTo || null, notes: notes || null, valueCents: isNaN(valueCents) ? 0 : valueCents, company: company || null } as Parameters<typeof createLead>[0]);
+      await createLead({ fullName, phone: phone || null, email: email || null, interestCourse: interestCourse || null, source, assignedTo: assignedTo || null, notes: notes || null, valueCents: isNaN(valueCents) ? 0 : valueCents, company: company || null, stage: selectedStage });
       onSaved();
     } catch (err) {
       onError(err instanceof ApiError ? `Eroare: ${err.code}` : "Nu pot salva lead-ul");
@@ -1559,7 +1880,7 @@ function CreateLeadModal({ onClose, onSaved, onError }: { onClose: () => void; o
             <p className="font-semibold">Există deja: {dedupResult.fullName}</p>
             <p className="text-xs opacity-75 mt-0.5">Stadiu: {STAGES_LOCAL.find((s) => s.id === dedupResult.stage)?.label ?? dedupResult.stage}</p>
             <div className="flex gap-2 mt-2">
-              <button type="button" onClick={() => onError(`Deschide lead: ${dedupResult.id}`)} className="text-xs font-semibold text-primary hover:underline">Deschide</button>
+              <button type="button" onClick={() => onOpenDuplicate(dedupResult.id)} className="text-xs font-semibold text-primary hover:underline">Deschide</button>
               <span className="text-amber-400">·</span>
               <button type="button" onClick={() => setForceCreate(true)} className="text-xs text-muted-foreground hover:text-foreground">Creează oricum</button>
             </div>
@@ -1592,12 +1913,26 @@ function CreateLeadModal({ onClose, onSaved, onError }: { onClose: () => void; o
             <option value="other">Altul</option>
           </select>
         </FormField>
+        {/* CRM-141: stage picker so lead lands in the right column on creation */}
+        <FormField id="l-stage" label="Stadiu inițial">
+          <select id="l-stage" value={selectedStage} onChange={(e) => setSelectedStage(e.target.value)} className="input-base">
+            {STAGES_LOCAL.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </FormField>
         <FormField id="l-company" label="Companie (opțional)">
           <input id="l-company" type="text" value={company} onChange={(e) => setCompany(e.target.value)} className="input-base" placeholder="ex: S.R.L. Acme" />
         </FormField>
-        <FormField id="l-assigned" label="Responsabil (ID)">
-          <input id="l-assigned" type="text" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className="input-base" placeholder="UUID (opțional)" aria-describedby="l-assigned-hint" />
-          <p id="l-assigned-hint" className="text-[11px] text-muted-foreground mt-1">Filtru Responsabil disponibil în kanban.</p>
+        {/* CRM-137: AssigneePicker replaces UUID text input */}
+        <FormField id="l-assigned" label="Responsabil">
+          <AssigneePicker
+            id="l-assigned"
+            value={assignedTo || null}
+            onChange={(v) => setAssignedTo(v ?? "")}
+            ariaLabel="Responsabil"
+            className="input-base"
+          />
         </FormField>
         <FormField id="l-value" label="Valoare deal (€)">
           <input id="l-value" type="number" min="0" step="0.01" value={valueEur} onChange={(e) => setValueEur(e.target.value)} className="input-base" placeholder="ex: 360" />
@@ -1633,12 +1968,16 @@ function CsvImportModal({ onClose, onImported, onError }: { onClose: () => void;
   const fileRef = useRef<HTMLInputElement>(null);
   const [, setCsvText] = useState("");
 
+  // CRM-150: extended field list — includes valueCents, company, tags
   const OUR_FIELDS = [
     { key: "fullName", label: "Nume complet *" },
     { key: "phone", label: "Telefon" },
     { key: "email", label: "Email" },
     { key: "interestCourse", label: "Curs de interes" },
     { key: "source", label: "Sursă" },
+    { key: "value", label: "Valoare (€)" },
+    { key: "company", label: "Companie" },
+    { key: "tags", label: "Tag-uri (;-sep.)" },
   ] as const;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1648,7 +1987,8 @@ function CsvImportModal({ onClose, onImported, onError }: { onClose: () => void;
     reader.onload = (evt) => {
       const text = evt.target?.result as string;
       setCsvText(text);
-      const parsed = text.trim().split("\n").map((l) => l.split(",").map((c) => c.trim().replace(/^"|"$/g, "")));
+      // CRM-150: use RFC-4180 parser instead of naïve split(",")
+      const parsed = parseCsv(text);
       if (parsed.length < 2) { onError("CSV trebuie să aibă header + date."); return; }
       setHeaders(parsed[0]);
       setRows(parsed.slice(1));
@@ -1659,6 +1999,9 @@ function CsvImportModal({ onClose, onImported, onError }: { onClose: () => void;
         else if (lh.includes("tel") || lh.includes("phone")) auto["phone"] = i;
         else if (lh.includes("email")) auto["email"] = i;
         else if (lh.includes("curs") || lh.includes("course")) auto["interestCourse"] = i;
+        else if (lh.includes("valoa") || lh.includes("value")) auto["value"] = i;
+        else if (lh.includes("compan") || lh.includes("firma")) auto["company"] = i;
+        else if (lh.includes("tag")) auto["tags"] = i;
       });
       setMapping(auto);
       setStep("map");
@@ -1668,10 +2011,23 @@ function CsvImportModal({ onClose, onImported, onError }: { onClose: () => void;
 
   const buildMapped = () => rows.map((row) => Object.fromEntries(OUR_FIELDS.map(({ key }) => [key, mapping[key] !== undefined ? (row[mapping[key]] ?? "") : ""])));
 
+  /** CRM-150: convert the mapped row into the API payload shape */
+  const toApiRow = (r: Record<string, string>) => ({
+    fullName: r.fullName || "",
+    phone: r.phone || null,
+    email: r.email || null,
+    interestCourse: r.interestCourse || null,
+    source: r.source || "import",
+    // Extended fields:
+    valueCents: r.value ? parseCurrencyToCents(r.value) : undefined,
+    company: r.company || null,
+    tags: r.tags ? parseTags(r.tags) : undefined,
+  });
+
   const handlePreview = async () => {
     setSubmitting(true);
     try {
-      const res = await api<{ summary: ImportSummary }>("/api/leads/import", { method: "POST", body: JSON.stringify({ rows: buildMapped().map((r) => ({ fullName: r.fullName || "", phone: r.phone || null, email: r.email || null, interestCourse: r.interestCourse || null, source: r.source || "import" })), dryRun: true }) });
+      const res = await api<{ summary: ImportSummary }>("/api/leads/import", { method: "POST", body: JSON.stringify({ rows: buildMapped().map(toApiRow), dryRun: true }) });
       setPreviewRows(buildMapped().slice(0, 5));
       setPreviewSummary(res.summary);
       setStep("preview");
@@ -1681,7 +2037,7 @@ function CsvImportModal({ onClose, onImported, onError }: { onClose: () => void;
   const handleCommit = async () => {
     setSubmitting(true);
     try {
-      const res = await api<{ summary: ImportSummary }>("/api/leads/import", { method: "POST", body: JSON.stringify({ rows: buildMapped().map((r) => ({ fullName: r.fullName || "", phone: r.phone || null, email: r.email || null, interestCourse: r.interestCourse || null, source: r.source || "import" })), dryRun: false }) });
+      const res = await api<{ summary: ImportSummary }>("/api/leads/import", { method: "POST", body: JSON.stringify({ rows: buildMapped().map(toApiRow), dryRun: false }) });
       onImported(res.summary);
     } catch { onError("Importul a eșuat."); } finally { setSubmitting(false); }
   };

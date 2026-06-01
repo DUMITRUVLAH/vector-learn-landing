@@ -215,6 +215,8 @@ export function createLead(input: {
   debtCents?: number;
   company?: string | null;
   dealName?: string | null;
+  /** CRM-141: initial pipeline stage for direct-to-column creation */
+  stage?: string;
 }): Promise<Lead> {
   return api<Lead>("/api/leads", {
     method: "POST",
@@ -298,9 +300,10 @@ export function assignLead(
   });
 }
 
-/** CRM-111: Calculate and save lead score */
-export function scoreLead(id: string): Promise<{ lead: Lead; score: number; badge: "hot" | "warm" | "cold" }> {
-  return api<{ lead: Lead; score: number; badge: "hot" | "warm" | "cold" }>(
+/** CRM-111/CRM-145: Calculate and save lead score. Returns factors for the explainer UI. */
+export interface ScoreFactor { label: string; points: number; }
+export function scoreLead(id: string): Promise<{ lead: Lead; score: number; badge: "hot" | "warm" | "cold"; factors: ScoreFactor[] }> {
+  return api<{ lead: Lead; score: number; badge: "hot" | "warm" | "cold"; factors: ScoreFactor[] }>(
     `/api/leads/${id}/score`,
     { method: "POST" }
   );

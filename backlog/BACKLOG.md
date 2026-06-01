@@ -130,9 +130,9 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 25 | `CRM-137` | Selector responsabil cu nume (înlocuiește input UUID) — peste tot | J | pending | [specs/CRM-137-assignee-picker.md](specs/CRM-137-assignee-picker.md) |
-| 26 | `CRM-138` | Meniu „mută în stadiu" pe cardul kanban (desktop) — alternativă la drag, tastatură | J | pending | [specs/CRM-138-card-stage-menu-desktop.md](specs/CRM-138-card-stage-menu-desktop.md) |
-| 27 | `CRM-139` | Search auto-aplicat (debounced) în vederea Listă — consistent cu Kanban | J | pending | [specs/CRM-139-debounced-search.md](specs/CRM-139-debounced-search.md) |
+| 25 | `CRM-137` | Selector responsabil cu nume (înlocuiește input UUID) — peste tot | J | done ✅ | [specs/CRM-137-assignee-picker.md](specs/CRM-137-assignee-picker.md) |
+| 26 | `CRM-138` | Meniu „mută în stadiu" pe cardul kanban (desktop) — alternativă la drag, tastatură | J | done ✅ | [specs/CRM-138-card-stage-menu-desktop.md](specs/CRM-138-card-stage-menu-desktop.md) |
+| 27 | `CRM-139` | Search auto-aplicat (debounced) în vederea Listă — consistent cu Kanban | J | done ✅ | [specs/CRM-139-debounced-search.md](specs/CRM-139-debounced-search.md) |
 | 28 | `CRM-140` | Fix: „Deschide" din alerta de duplicat navighează la lead (bug) | J | pending | [specs/CRM-140-open-duplicate-fix.md](specs/CRM-140-open-duplicate-fix.md) |
 | 29 | `CRM-141` | „+ Adaugă lead" direct în coloana goală a kanban-ului | J | pending | [specs/CRM-141-add-lead-in-empty-column.md](specs/CRM-141-add-lead-in-empty-column.md) |
 | 30 | `CRM-142` | Sortare per-coloană în kanban (recent / vechi / valoare / SLA) | J | pending | [specs/CRM-142-kanban-column-sort.md](specs/CRM-142-kanban-column-sort.md) |
@@ -142,9 +142,9 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 34 | `CRM-146` | Iconițe contact mai vizibile pe card + flag „fără telefon/email" | J | pending | [specs/CRM-146-contact-icons-missing-flag.md](specs/CRM-146-contact-icons-missing-flag.md) |
 | 35 | `CRM-147` | Badge restanță pe tab-ul Task-uri al cartonașului | J | pending | [specs/CRM-147-task-overdue-tab-badge.md](specs/CRM-147-task-overdue-tab-badge.md) |
 | 36 | `CRM-148` | „Convertit" duce la fișa studentului (link din cartonaș + card) | J | pending | [specs/CRM-148-converted-link-to-student.md](specs/CRM-148-converted-link-to-student.md) |
-| 37 | `CRM-149` | Pills cu filtrele active + „×" individual pe fiecare | J | pending | [specs/CRM-149-active-filter-pills.md](specs/CRM-149-active-filter-pills.md) |
-| 38 | `CRM-150` | Import CSV: mapare valoare/companie/tag + parser robust | J | pending | [specs/CRM-150-csv-import-fields-parser.md](specs/CRM-150-csv-import-fields-parser.md) |
-| 39 | `CRM-151` | Mobil: acțiuni secundare în meniu „⋯"; doar FAB pentru adăugare | J | pending | [specs/CRM-151-mobile-action-overflow-menu.md](specs/CRM-151-mobile-action-overflow-menu.md) |
+| 37 | `CRM-149` | Pills cu filtrele active + „×" individual pe fiecare | J | done | [specs/CRM-149-active-filter-pills.md](specs/CRM-149-active-filter-pills.md) |
+| 38 | `CRM-150` | Import CSV: mapare valoare/companie/tag + parser robust | J | done | [specs/CRM-150-csv-import-fields-parser.md](specs/CRM-150-csv-import-fields-parser.md) |
+| 39 | `CRM-151` | Mobil: acțiuni secundare în meniu „⋯"; doar FAB pentru adăugare | J | done | [specs/CRM-151-mobile-action-overflow-menu.md](specs/CRM-151-mobile-action-overflow-menu.md) |
 
 ## Active milestone: COMM — Modulul Comunicare (mesagerie reală backend)
 

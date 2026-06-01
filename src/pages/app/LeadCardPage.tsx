@@ -7,7 +7,7 @@
  * CRM-114: Companie + deal_name + contacte multiple (tab Contacte)
  * CRM-115: Tag-uri libere + câmpuri custom (tab Custom Fields)
  */
-import { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   Loader2, ArrowLeft, Pencil, Check, X, ChevronDown,
   Phone, Mail, Globe, Calendar, MessageCircle, UserPlus,
@@ -26,6 +26,7 @@ import {
   type Lead, type LeadInteraction, type LeadContact, type CustomField, type LeadFieldValue,
 } from "@/lib/api/leads";
 import { fetchPipelineStages, type PipelineStage } from "@/lib/api/pipeline";
+import { AssigneePicker, useAssigneeName } from "@/components/crm/AssigneePicker";
 import {
   listTasks, createTask, updateTask, deleteTask,
   listAttachments, createAttachment, deleteAttachment,
@@ -33,11 +34,15 @@ import {
 } from "@/lib/api/tasks";
 import { cn } from "@/lib/utils";
 import { SendMessageModal, LogCallModal, type SendChannel } from "@/components/crm/CommModal";
-import { ConvertModal, getScoreBadge, SCORE_BADGE_STYLES, SCORE_BADGE_LABELS } from "@/components/crm/ConvertModal";
-import { scoreLead } from "@/lib/api/leads";
+import { ConvertModal } from "@/components/crm/ConvertModal";
+import { scoreLead, type ScoreFactor } from "@/lib/api/leads";
 import { CadencePanel } from "@/components/crm/CadencePanel";
 import { UndoToast } from "@/components/crm/UndoToast";
 import { crmDeleteLead } from "@/lib/api/audit";
+// CRM-144: copy-to-clipboard button for phone / email
+import { CopyButton } from "@/components/crm/CopyButton";
+// CRM-145: score explainer with factors breakdown
+import { ScoreExplain } from "@/components/crm/ScoreExplain";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -121,6 +126,20 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   // CRM-111: Enhanced convert modal
   const [convertModal, setConvertModal] = useState(false);
 
+  // CRM-145: score factors for explainer; auto-score if missing
+  const [scoreFactors, setScoreFactors] = useState<ScoreFactor[]>([]);
+  const [scoreLoading, setScoreLoading] = useState(false);
+
+  const runScore = async (id: string) => {
+    setScoreLoading(true);
+    try {
+      const res = await scoreLead(id);
+      setLead((prev) => prev ? { ...prev, score: res.score } : prev);
+      setScoreFactors(res.factors ?? []);
+    } catch { /* ignore — user can retry manually */ }
+    finally { setScoreLoading(false); }
+  };
+
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
   }, [sessionStatus, navigate]);
@@ -162,6 +181,15 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   }, [leadId]);
 
   useEffect(() => { void fetchAll(); }, [fetchAll]);
+
+  // CRM-145: auto-score once when lead loads with no score (never loops)
+  const autoScoreFiredRef = useRef(false);
+  useEffect(() => {
+    if (!lead || lead.score != null || autoScoreFiredRef.current) return;
+    autoScoreFiredRef.current = true;
+    void runScore(lead.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead]);
 
   // ─── Edit helpers ─────────────────────────────────────────────────────────
   const startEdit = () => {
@@ -610,28 +638,22 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               )}
             </div>
 
-            {/* Score badge (CRM-111) */}
+            {/* Score badge (CRM-111, CRM-145: auto-score + explainer) */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Scor lead</p>
               {lead.score != null ? (
-                <div className="flex items-center gap-2">
-                  <span className={cn(
-                    "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold",
-                    SCORE_BADGE_STYLES[getScoreBadge(lead.score)]
-                  )}>
-                    {SCORE_BADGE_LABELS[getScoreBadge(lead.score)]} {lead.score}
-                  </span>
-                </div>
+                <ScoreExplain
+                  score={lead.score}
+                  factors={scoreFactors}
+                  recalculating={scoreLoading}
+                  onRecalculate={() => void runScore(lead.id)}
+                />
+              ) : scoreLoading ? (
+                <p className="text-xs text-muted-foreground">Se calculează...</p>
               ) : (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!lead) return;
-                    void scoreLead(lead.id).then((res) => {
-                      setLead((prev) => prev ? { ...prev, score: res.score } : prev);
-                      setToast({ kind: "success", message: `Scor calculat: ${res.score} (${res.badge})` });
-                    });
-                  }}
+                  onClick={() => void runScore(lead.id)}
                   className="text-xs text-primary hover:underline"
                 >
                   Calculează scor
@@ -639,20 +661,19 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               )}
             </div>
 
-            {/* Assigned to */}
+            {/* Assigned to — CRM-137: AssigneePicker replaces UUID text input */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Responsabil</p>
               {editing ? (
-                <input
-                  type="text"
-                  value={editDraft.assignedTo ?? lead.assignedTo ?? ""}
-                  onChange={(e) => setEditDraft((d) => ({ ...d, assignedTo: e.target.value || null }))}
-                  placeholder="UUID responsabil (opțional)"
-                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs font-mono"
-                  aria-label="Responsabil (UUID)"
+                <AssigneePicker
+                  id="lead-assignee"
+                  value={editDraft.assignedTo ?? lead.assignedTo}
+                  onChange={(userId) => setEditDraft((d) => ({ ...d, assignedTo: userId }))}
+                  ariaLabel="Responsabil"
+                  className="w-full"
                 />
               ) : (
-                <p className="text-sm text-muted-foreground">{lead.assignedTo ? `${lead.assignedTo.slice(0, 8)}…` : "Neasignat"}</p>
+                <AssigneeDisplay assignedTo={lead.assignedTo} />
               )}
             </div>
           </section>
@@ -698,7 +719,9 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                     <Phone className="h-3.5 w-3.5" aria-hidden="true" />
                     {lead.phone}
                   </a>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 items-center">
+                    {/* CRM-144: copy phone to clipboard */}
+                    <CopyButton value={lead.phone} ariaLabel="Copiază telefonul" />
                     <button
                       type="button"
                       onClick={handleOpenCall}
@@ -749,17 +772,21 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                     <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     <span className="truncate">{lead.email}</span>
                   </a>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenSend("email")}
-                    disabled={consentRevoked}
-                    className="shrink-0 inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted disabled:opacity-40"
-                    aria-label="Trimite email"
-                    title="Trimite email"
-                  >
-                    <Mail className="h-3 w-3" aria-hidden="true" />
-                    Email
-                  </button>
+                  <div className="flex gap-1 items-center shrink-0">
+                    {/* CRM-144: copy email to clipboard */}
+                    <CopyButton value={lead.email} ariaLabel="Copiază email-ul" />
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSend("email")}
+                      disabled={consentRevoked}
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted disabled:opacity-40"
+                      aria-label="Trimite email"
+                      title="Trimite email"
+                    >
+                      <Mail className="h-3 w-3" aria-hidden="true" />
+                      Email
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">—</p>
@@ -890,10 +917,21 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               </button>
             </div>
           )}
+          {/* CRM-148: converted block → link to student */}
           {lead.convertedToStudentId && (
-            <div className="rounded-xl bg-success/10 border border-success/30 px-4 py-3 text-sm text-success flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              Convertit la {lead.convertedAt ? new Date(lead.convertedAt).toLocaleDateString("ro-RO") : "—"}
+            <div className="rounded-xl bg-success/10 border border-success/30 px-4 py-3 text-sm text-success flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                Convertit la {lead.convertedAt ? new Date(lead.convertedAt).toLocaleDateString("ro-RO") : "—"}
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate(`/app/students/${lead.convertedToStudentId}`)}
+                className="text-success underline underline-offset-2 font-semibold hover:opacity-80 whitespace-nowrap min-h-[44px] flex items-center"
+                aria-label="Vezi fișa studentului"
+              >
+                Vezi studentul →
+              </button>
             </div>
           )}
 
@@ -909,32 +947,59 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         {/* ─── RIGHT COLUMN ────────────────────────────────────────────── */}
         <main>
           {/* Tab bar */}
-          <div role="tablist" className="flex gap-1 border-b border-border mb-4 overflow-x-auto">
-            {([
-              ["activity", "Activitate"],
-              ["tasks", tasks.length > 0 ? `Task-uri (${tasks.filter((t) => t.status === "open").length})` : "Task-uri"],
-              ["files", `Fișiere${attachments.length > 0 ? ` (${attachments.length})` : ""}`],
-              ["contacts", `Contacte${contacts.length > 0 ? ` (${contacts.length})` : ""}`],
-              ["fields", `Câmpuri${fieldValues.length > 0 ? ` (${fieldValues.length})` : ""}`],
-              ["gdpr", "GDPR"],
-            ] as [Tab, string][]).map(([t, label]) => (
-              <button
-                key={t}
-                role="tab"
-                type="button"
-                aria-selected={activeTab === t}
-                onClick={() => setActiveTab(t)}
-                className={cn(
-                  "whitespace-nowrap px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors shrink-0",
-                  activeTab === t
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
+          {/* CRM-147: compute overdue task count for tab badge */}
+          {(() => {
+            const now = new Date();
+            const overdueCount = tasks.filter(
+              (t) => t.status === "open" && t.dueAt != null && new Date(t.dueAt) < now
+            ).length;
+            const openCount = tasks.filter((t) => t.status === "open").length;
+
+            const taskTabLabel = (
+              <span className="inline-flex items-center gap-1">
+                {tasks.length > 0 ? `Task-uri (${openCount})` : "Task-uri"}
+                {overdueCount > 0 && (
+                  <span
+                    className="inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold min-w-[16px] h-4 px-1"
+                    aria-label={`${overdueCount} task${overdueCount > 1 ? "-uri" : ""} restant${overdueCount > 1 ? "e" : ""}`}
+                    data-testid="overdue-badge"
+                  >
+                    {overdueCount}
+                  </span>
                 )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+              </span>
+            );
+
+            return (
+              <div role="tablist" className="flex gap-1 border-b border-border mb-4 overflow-x-auto">
+                {([
+                  ["activity", "Activitate"],
+                  ["tasks", taskTabLabel],
+                  ["files", `Fișiere${attachments.length > 0 ? ` (${attachments.length})` : ""}`],
+                  ["contacts", `Contacte${contacts.length > 0 ? ` (${contacts.length})` : ""}`],
+                  ["fields", `Câmpuri${fieldValues.length > 0 ? ` (${fieldValues.length})` : ""}`],
+                  ["gdpr", "GDPR"],
+                ] as [Tab, React.ReactNode][]).map(([t, label]) => (
+                  <button
+                    key={t}
+                    role="tab"
+                    type="button"
+                    aria-selected={activeTab === t}
+                    onClick={() => setActiveTab(t)}
+                    className={cn(
+                      "whitespace-nowrap px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors shrink-0",
+                      activeTab === t
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
+
 
           {/* Tab content */}
           {activeTab === "activity" && (
@@ -1632,4 +1697,10 @@ function FieldsTab({ leadId, customFields, fieldValues, setFieldValues }: Fields
       ))}
     </div>
   );
+}
+
+// CRM-137: Inline helper — reads name from team cache, falls back gracefully.
+function AssigneeDisplay({ assignedTo }: { assignedTo: string | null | undefined }) {
+  const name = useAssigneeName(assignedTo);
+  return <p className="text-sm text-muted-foreground">{name}</p>;
 }

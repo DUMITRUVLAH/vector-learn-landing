@@ -32,6 +32,7 @@ import { contractRoutes } from "./routes/contracts";
 import { feedbackRoutes } from "./routes/feedback";
 import { feedbackPublicRoutes } from "./routes/feedbackPublic";
 import { contactRoutes } from "./routes/contacts";
+import { teamRoutes } from "./routes/team";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -104,6 +105,8 @@ app.route("/api/notifications", notificationRoutes);
 app.route("/api/cadences", cadenceRoutes);
 app.route("/api/audit-log", auditRoutes);
 app.route("/api/contracts", contractRoutes);
+// CRM-137: team members endpoint for AssigneePicker
+app.route("/api/team", teamRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {
