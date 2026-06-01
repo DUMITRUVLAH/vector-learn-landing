@@ -75,7 +75,8 @@ export function SchoolClassesPage() {
     try {
       const [{ years: ys }, studentsResp] = await Promise.all([
         listAcademicYears(),
-        listStudents({ limit: 500, status: "active" }),
+        // Server caps limit at 100 (students Zod schema). 500 → 400, would break the enroll picker.
+        listStudents({ limit: 100, status: "active" }),
       ]);
       setYears(ys);
       setStudents(studentsResp.items);
