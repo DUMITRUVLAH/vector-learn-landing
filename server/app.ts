@@ -40,6 +40,7 @@ import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // D
 import { formRoutes } from "./routes/forms"; // FORMS-001
 import { notificationSettingsRoutes } from "./routes/notificationSettings"; // SET-802
 import { brandingSettingsRoutes } from "./routes/brandingSettings"; // SET-803
+import { auditLogSettingsRoutes } from "./routes/auditLogSettings"; // SET-804
 import {
   publicFormGetHandler,
   publicFormSubmitHandler,
@@ -136,6 +137,8 @@ app.route("/api/team", teamRoutes);
 app.route("/api/settings/notifications", notificationSettingsRoutes);
 // SET-803: Branding — logo + colors per tenant
 app.route("/api/settings/branding", brandingSettingsRoutes);
+// SET-804: Aggregated audit log — admin/owner only
+app.route("/api/settings/audit-log", auditLogSettingsRoutes);
 // CX-701: Cohorts (course editions) CRUD
 app.route("/api/cohorts", cohortRoutes);
 // CX-703: Cohort participants (must be mounted at /api/cohorts for /:cohortId/participants)

@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "current_item": "SET-804",
-  "last_completed": "SET-803",
+  "current_item": "INTEG-101",
+  "last_completed": "SET-804",
   "iterations": 142,
   "last_run_at": "2026-06-01T23:00:00Z",
   "milestone_status": "SET faza-1 starting: SET-801..804 generated from user-stories/settings.md. INTEG faza-1+2 queued (7 integration items from 2026-06-01 audit).",
@@ -2031,15 +2031,27 @@
       }
     },
     "SET-804": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SET-804-audit-log-page.md",
       "milestone": "SET",
       "phase": "1",
-      "depends_on": [
-        "SET-801"
-      ]
+      "depends_on": ["SET-801"],
+      "branch": "feat/SET-faza-1-settings",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/111",
+      "reports": [
+        "backlog/reports/SET-804-reviewer.md",
+        "backlog/reports/SET-804-integration.md",
+        "backlog/reports/SET-804-manager.md",
+        "backlog/reports/SET-804-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "KINDER-007": {
       "status": "done",
