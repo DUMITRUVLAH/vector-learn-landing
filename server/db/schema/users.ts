@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, pgEnum, index, uniqueIndex, boolean } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 
 export const userRoleEnum = pgEnum("user_role", [
@@ -21,12 +21,18 @@ export const users = pgTable(
     passwordHash: varchar("password_hash", { length: 255 }).notNull(),
     name: varchar("name", { length: 200 }).notNull(),
     role: userRoleEnum("role").notNull().default("manager"),
+    /**
+     * SET-801: is_active = false blocks login. Soft-delete for departed staff.
+     * Default true; only admins can set false; owners cannot be deactivated.
+     */
+    isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     tenantIdx: index("users_tenant_idx").on(t.tenantId),
     emailUniq: uniqueIndex("users_tenant_email_uniq").on(t.tenantId, t.email),
+    isActiveIdx: index("users_is_active_idx").on(t.tenantId, t.isActive),
   })
 );
 

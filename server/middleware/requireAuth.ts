@@ -17,6 +17,10 @@ export const requireAuth: MiddlewareHandler<{ Variables: AuthVariables }> = asyn
   if (!result) {
     return c.json({ error: "invalid_session" }, 401);
   }
+  // SET-801: Disabled users (is_active = false) are blocked from all authenticated endpoints.
+  if (result.user.isActive === false) {
+    return c.json({ error: "account_disabled" }, 401);
+  }
   c.set("user", result.user);
   c.set("sessionToken", token);
   await next();

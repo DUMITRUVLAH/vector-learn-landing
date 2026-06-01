@@ -59,6 +59,7 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
+import TeamPage from "./pages/app/settings/TeamPage"; // SET-801
 
 function HomePage() {
   return (
@@ -128,6 +129,8 @@ function Routes() {
     return <AvailabilityPage teacherId={id} />;
   }
   if (path.startsWith("/app/hr/audit")) return <AuditLogPage />;
+  // SET-801: Team management — must be before /app/settings/crm
+  if (path.startsWith("/app/settings/team")) return <TeamPage />;
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
   if (path.startsWith("/app/cadences")) return <CadencesPage />;
