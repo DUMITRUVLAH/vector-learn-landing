@@ -40,7 +40,7 @@ export interface CreateCohortPayload {
   driveFolderUrl?: string | null;
 }
 
-export interface PatchCohortPayload extends Partial<CreateCohortPayload> {}
+export type PatchCohortPayload = Partial<CreateCohortPayload>;
 
 export async function listCohorts(): Promise<{ cohorts: Cohort[] }> {
   return api<{ cohorts: Cohort[] }>("/api/cohorts");

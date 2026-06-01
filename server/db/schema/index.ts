@@ -32,3 +32,4 @@ export * from "./cohortParticipants";
 export * from "./certificates";
 export * from "./forms";
 export * from "./invitations"; // SET-801
+export * from "./notificationPreferences"; // SET-802

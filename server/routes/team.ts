@@ -151,7 +151,7 @@ teamRoutes.post("/invite", zValidator("json", inviteSchema), async (c) => {
   const inviteUrl = `/app/signup?invite=${token}`;
 
   // Stub log (no email sent)
-  console.log(`[INVITE STUB] To: ${email}, Role: ${role}, URL: ${inviteUrl}`);
+  console.warn(`[INVITE STUB] To: ${email}, Role: ${role}, URL: ${inviteUrl}`);
 
   return c.json({ inviteUrl, token, expiresAt: expiresAt.toISOString() }, 201);
 });

@@ -60,6 +60,7 @@ import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
 import TeamPage from "./pages/app/settings/TeamPage"; // SET-801
+import NotificationPrefsPage from "./pages/app/settings/NotificationPrefsPage"; // SET-802
 
 function HomePage() {
   return (
@@ -131,6 +132,8 @@ function Routes() {
   if (path.startsWith("/app/hr/audit")) return <AuditLogPage />;
   // SET-801: Team management — must be before /app/settings/crm
   if (path.startsWith("/app/settings/team")) return <TeamPage />;
+  // SET-802: Notification preferences
+  if (path.startsWith("/app/settings/notifications")) return <NotificationPrefsPage />;
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
   if (path.startsWith("/app/cadences")) return <CadencesPage />;

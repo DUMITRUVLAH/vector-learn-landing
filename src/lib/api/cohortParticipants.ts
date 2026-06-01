@@ -34,7 +34,7 @@ export interface AddParticipantPayload {
   studentId?: string | null;
 }
 
-export interface PatchParticipantPayload extends Partial<AddParticipantPayload> {}
+export type PatchParticipantPayload = Partial<AddParticipantPayload>;
 
 export async function listParticipants(
   cohortId: string
