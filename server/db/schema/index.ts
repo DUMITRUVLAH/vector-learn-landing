@@ -34,3 +34,4 @@ export * from "./kinder";
 export * from "./kinderDiary";
 export * from "./kinderRatio";
 export * from "./kinderMedical";
+export * from "./kinderMessages";

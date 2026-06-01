@@ -62,6 +62,7 @@ import { KinderDiaryPage } from "./pages/app/KinderDiaryPage";
 import { KinderRatioPage } from "./pages/app/KinderRatioPage";
 import { KinderMedicalPage } from "./pages/app/KinderMedicalPage";
 import { KinderImmunizationReportPage } from "./pages/app/KinderImmunizationReportPage";
+import { KinderParentFeedPage } from "./pages/app/KinderParentFeedPage";
 
 function HomePage() {
   return (
@@ -150,6 +151,8 @@ function Routes() {
   // KINDER-004: medical — allergies, immunization records, medication log
   if (path.match(/^\/app\/kinder\/students\/[^/]+\/medical$/)) return <KinderMedicalPage />;
   if (path.startsWith("/app/kinder/immunization-report")) return <KinderImmunizationReportPage />;
+  // KINDER-005: parent app feed + messaging
+  if (path.match(/^\/app\/kinder\/students\/[^/]+\/feed$/)) return <KinderParentFeedPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students

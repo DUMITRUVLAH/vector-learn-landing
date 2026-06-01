@@ -344,3 +344,68 @@ export function logMedication(
 export function getImmunizationStatus(): Promise<ImmunizationStatusResponse> {
   return api<ImmunizationStatusResponse>("/api/kinder/immunization-status");
 }
+
+// ─── KINDER-005: Parent app feed + messaging ──────────────────────────────────
+
+export type FeedItemType = "checkin" | "checkout" | "diary" | "message";
+
+export interface FeedItem {
+  type: FeedItemType;
+  timestamp: string;
+  data: Record<string, unknown>;
+}
+
+export interface ParentFeedResponse {
+  date: string;
+  studentId: string;
+  fullName: string;
+  items: FeedItem[];
+  totalMessages: number;
+}
+
+export type MessageDirection = "staff_to_parent" | "parent_to_staff";
+
+export interface KinderMessage {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  senderUserId: string | null;
+  direction: MessageDirection;
+  body: string;
+  sentAt: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
+/** GET /api/kinder/parent-feed/:studentId?date=YYYY-MM-DD */
+export function getParentFeed(studentId: string, date?: string): Promise<ParentFeedResponse> {
+  const params = date ? `?date=${date}` : "";
+  return api<ParentFeedResponse>(`/api/kinder/parent-feed/${studentId}${params}`);
+}
+
+/** GET /api/kinder/messages/:studentId */
+export function getKinderMessages(studentId: string): Promise<KinderMessage[]> {
+  return api<KinderMessage[]>(`/api/kinder/messages/${studentId}`);
+}
+
+/** POST /api/kinder/messages/:studentId */
+export function sendKinderMessage(
+  studentId: string,
+  payload: { body: string; direction: MessageDirection }
+): Promise<KinderMessage> {
+  return api<KinderMessage>(`/api/kinder/messages/${studentId}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** PATCH /api/kinder/messages/:studentId/:messageId/read */
+export function markMessageRead(
+  studentId: string,
+  messageId: string
+): Promise<{ ok: boolean; readAt: string }> {
+  return api<{ ok: boolean; readAt: string }>(
+    `/api/kinder/messages/${studentId}/${messageId}/read`,
+    { method: "PATCH" }
+  );
+}
