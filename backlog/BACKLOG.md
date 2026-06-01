@@ -286,6 +286,6 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | KINDER-004 | 🔴 | Medical (allergies/immunization/medication) |
 | KINDER-005 | 🟡 | Parent app feed + messaging |
 | KINDER-006 | 🟡 | Licensing/compliance reports |
-| KINDER-007 | 🟡 | Incident/accident reports + signature |
+| KINDER-007 | ✅ | Incident/accident reports + signature |
 | GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
 | CONSENT-001 | 🟡 | Consent/permission forms + e-signature |

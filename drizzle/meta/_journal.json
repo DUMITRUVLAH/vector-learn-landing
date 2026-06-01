@@ -197,6 +197,48 @@
       "when": 1780304207442,
       "tag": "0027_fearless_orphan",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1780340892198,
+      "tag": "0028_kinder001_checkin",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1780341531396,
+      "tag": "0029_kinder002_diary",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1780341788431,
+      "tag": "0030_kinder003_ratio",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1780342221389,
+      "tag": "0031_kinder004_medical",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1780342742444,
+      "tag": "0032_kinder005_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780343635345,
+      "tag": "0033_kinder007_incidents",
+      "breakpoints": true
     }
   ]
 }

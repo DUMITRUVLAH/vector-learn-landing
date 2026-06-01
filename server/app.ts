@@ -37,6 +37,13 @@ import { invoiceRoutes } from "./routes/invoices";
 import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
+import { kinderRoutes } from "./routes/kinder"; // KINDER-001
+import { kinderDiaryRoutes } from "./routes/kinderDiary"; // KINDER-002
+import { kinderRatioRoutes } from "./routes/kinderRatio"; // KINDER-003
+import { kinderMedicalRoutes } from "./routes/kinderMedical"; // KINDER-004
+import { kinderParentFeedRoutes } from "./routes/kinderParentFeed"; // KINDER-005
+import { kinderComplianceRoutes } from "./routes/kinderCompliance"; // KINDER-006
+import { kinderIncidentsRoutes } from "./routes/kinderIncidents"; // KINDER-007
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -119,6 +126,20 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
+// KINDER-001: Kindergarten check-in / sign-out + authorized pickups
+app.route("/api/kinder", kinderRoutes);
+// KINDER-002: Daily report / child diary events
+app.route("/api/kinder", kinderDiaryRoutes);
+// KINDER-003: Staff-to-child ratio monitoring
+app.route("/api/kinder", kinderRatioRoutes);
+// KINDER-004: Medical — allergies, immunization records, medication log
+app.route("/api/kinder", kinderMedicalRoutes);
+// KINDER-005: Parent feed + messaging
+app.route("/api/kinder", kinderParentFeedRoutes);
+// KINDER-006: Licensing/compliance reports (no new migrations)
+app.route("/api/kinder", kinderComplianceRoutes);
+// KINDER-007: Incident/accident reports + parent acknowledgment
+app.route("/api/kinder", kinderIncidentsRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

@@ -56,6 +56,15 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
+import { KinderCheckinPage } from "./pages/app/KinderCheckinPage";
+import { KinderPickupsPage } from "./pages/app/KinderPickupsPage";
+import { KinderDiaryPage } from "./pages/app/KinderDiaryPage";
+import { KinderRatioPage } from "./pages/app/KinderRatioPage";
+import { KinderMedicalPage } from "./pages/app/KinderMedicalPage";
+import { KinderImmunizationReportPage } from "./pages/app/KinderImmunizationReportPage";
+import { KinderParentFeedPage } from "./pages/app/KinderParentFeedPage";
+import { KinderCompliancePage } from "./pages/app/KinderCompliancePage";
+import KinderIncidentsPage from "./pages/app/KinderIncidentsPage";
 
 function HomePage() {
   return (
@@ -134,6 +143,22 @@ function Routes() {
   if (path.startsWith("/app/invoices")) return <InvoicesPage />;
   if (path.startsWith("/app/cx")) return <CXPage />;
   if (path.startsWith("/app/diplome")) return <DiplomaPage />;
+  // KINDER-001: /app/kinder/students/:id/pickups must be before /app/kinder/checkin
+  if (path.match(/^\/app\/kinder\/students\/[^/]+\/pickups$/)) return <KinderPickupsPage />;
+  if (path.startsWith("/app/kinder/checkin")) return <KinderCheckinPage />;
+  // KINDER-002: daily diary
+  if (path.startsWith("/app/kinder/diary")) return <KinderDiaryPage />;
+  // KINDER-003: staff-to-child ratio
+  if (path.startsWith("/app/kinder/ratio")) return <KinderRatioPage />;
+  // KINDER-004: medical — allergies, immunization records, medication log
+  if (path.match(/^\/app\/kinder\/students\/[^/]+\/medical$/)) return <KinderMedicalPage />;
+  if (path.startsWith("/app/kinder/immunization-report")) return <KinderImmunizationReportPage />;
+  // KINDER-005: parent app feed + messaging
+  if (path.match(/^\/app\/kinder\/students\/[^/]+\/feed$/)) return <KinderParentFeedPage />;
+  // KINDER-006: licensing/compliance reports
+  if (path.startsWith("/app/kinder/compliance")) return <KinderCompliancePage />;
+  // KINDER-007: incident/accident reports + parent acknowledgment
+  if (path.startsWith("/app/kinder/incidents")) return <KinderIncidentsPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students
