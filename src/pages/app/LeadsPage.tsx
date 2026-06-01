@@ -504,6 +504,17 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
           Convertit
         </div>
       )}
+      {/* CRM-124: SLA badge — show only for active non-converted leads */}
+      {!lead.convertedToStudentId && lead.slaBadge && lead.slaBadge !== "green" && (
+        <div className={cn(
+          "mt-1 text-[9px] font-bold inline-flex items-center rounded px-1.5 py-0.5",
+          lead.slaBadge === "red"
+            ? "bg-destructive/10 text-destructive"
+            : "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
+        )} aria-label={`SLA ${lead.slaBadge === "red" ? "depășit" : "atenție"}`}>
+          SLA {lead.slaBadge === "red" ? "!!!" : "!"}
+        </div>
+      )}
     </button>
   );
 }

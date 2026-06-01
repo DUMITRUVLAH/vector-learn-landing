@@ -3,7 +3,7 @@
  * Afișează: task-uri scadente, leaduri noi necontactate, follow-up necesar, Next Best Action.
  */
 import { useEffect, useState } from "react";
-import { Loader2, Phone, Clock, AlertTriangle, Zap, Users, MessageCircle, ChevronRight } from "lucide-react";
+import { Loader2, Phone, Clock, AlertTriangle, Zap, Users, MessageCircle, ChevronRight, ShieldAlert } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -13,6 +13,7 @@ import {
   type TodayDashboardTask,
   type TodayDashboardItem,
   type TodayNBAItem,
+  type SlaBadge,
 } from "@/lib/api/leads";
 import { cn } from "@/lib/utils";
 
@@ -77,8 +78,14 @@ export function TodayDashboardPage() {
                 Ai {totalActions} acțiuni de făcut azi —{" "}
                 {data!.overdueOrDueToday.length > 0 && `${data!.overdueOrDueToday.length} task-uri scadente, `}
                 {data!.newUncontacted.length > 0 && `${data!.newUncontacted.length} leaduri noi, `}
-                {data!.followUpNeeded.length > 0 && `${data!.followUpNeeded.length} follow-up`}
+                {data!.followUpNeeded.length > 0 && `${data!.followUpNeeded.length} follow-up, `}
+                {(data!.neglected?.length ?? 0) > 0 && `${data!.neglected!.length} neglijate`}
               </p>
+              {data!.slaConfig && (
+                <p className="text-[11px] text-amber-600/70 dark:text-amber-400/70 mt-1">
+                  SLA: {data!.slaConfig.slaHotMinutes}min hot · {data!.slaConfig.slaDefaultHours}h default · rot {data!.slaConfig.rotDays}z
+                </p>
+              )}
             </div>
           )}
 
@@ -130,6 +137,24 @@ export function TodayDashboardPage() {
                 <LeadRow
                   key={l.id}
                   item={l}
+                  onClick={() => navigate(`/app/leads/${l.id}`)}
+                />
+              ))}
+            </Section>
+          )}
+
+          {/* Section 3b: CRM-124 Neglected leads */}
+          {(data!.neglected?.length ?? 0) > 0 && (
+            <Section
+              title="Atenție necesară — leaduri neglijate"
+              icon={<ShieldAlert className="h-4 w-4 text-destructive" />}
+              count={data!.neglected!.length}
+              accent="destructive"
+            >
+              {data!.neglected!.map((l) => (
+                <LeadRow
+                  key={l.id}
+                  item={{ ...l, reason: `Neglijat ${l.daysSinceCreated}z` }}
                   onClick={() => navigate(`/app/leads/${l.id}`)}
                 />
               ))}
@@ -262,7 +287,15 @@ interface LeadRowItem {
   valueCents: number;
   reason: string;
   source?: string;
+  /** CRM-124: SLA badge */
+  slaBadge?: SlaBadge;
 }
+
+const SLA_BADGE_COLORS: Record<SlaBadge, string> = {
+  green: "bg-success/10 text-success border-success/30",
+  yellow: "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-300/30",
+  red: "bg-destructive/10 text-destructive border-destructive/30",
+};
 
 function LeadRow({ item, onClick }: { item: LeadRowItem; onClick: () => void }) {
   return (
@@ -272,8 +305,11 @@ function LeadRow({ item, onClick }: { item: LeadRowItem; onClick: () => void }) 
       className="w-full flex items-center gap-3 px-4 py-3 text-left border-b border-border last:border-0 hover:bg-muted/30 transition-colors group"
       aria-label={`Lead ${item.fullName}: ${item.reason}`}
     >
-      <div className="flex-shrink-0 h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-        {item.fullName.charAt(0).toUpperCase()}
+      <div className={cn(
+        "flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold border",
+        item.slaBadge ? SLA_BADGE_COLORS[item.slaBadge] : "bg-muted text-muted-foreground border-transparent"
+      )}>
+        {item.slaBadge ? (item.slaBadge === "green" ? "✓" : item.slaBadge === "yellow" ? "!" : "!!") : item.fullName.charAt(0).toUpperCase()}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold truncate">{item.fullName}</p>
@@ -285,7 +321,20 @@ function LeadRow({ item, onClick }: { item: LeadRowItem; onClick: () => void }) 
             <span className="text-[11px] text-muted-foreground/70 truncate">{item.interestCourse}</span>
           )}
         </div>
-        <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5">{item.reason}</p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">{item.reason}</p>
+          {item.slaBadge && (
+            <span
+              className={cn(
+                "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold border",
+                SLA_BADGE_COLORS[item.slaBadge]
+              )}
+              aria-label={`SLA: ${item.slaBadge}`}
+            >
+              SLA {item.slaBadge === "green" ? "OK" : item.slaBadge === "yellow" ? "Atenție" : "Depășit"}
+            </span>
+          )}
+        </div>
       </div>
       <div className="flex-shrink-0 flex items-center gap-2">
         {item.valueCents > 0 && (
