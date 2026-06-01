@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "DIPLOMA-802",
   "last_completed": "DIPLOMA-801",
-  "iterations": 88,
+  "iterations": 89,
   "last_run_at": "2026-06-01T12:00:00Z",
   "milestone_status": "DIPLOMA Phase 1 in progress: DIPLOMA-801 done (PR #97). DIPLOMA-802..805 pending.",
   "active_milestone": "DIPLOMA",
@@ -1451,8 +1451,8 @@
       }
     },
     "DIPLOMA-802": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DIPLOMA-802-canvas-editor.md",
       "milestone": "DIPLOMA",
@@ -1494,6 +1494,50 @@
       "depends_on": [
         "DIPLOMA-803"
       ]
+    },
+    "BUGFIX-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/PROD-TEST-2026-06-01-buguri.md",
+      "milestone": "BUGFIX",
+      "phase": "1",
+      "severity": "high",
+      "title": "CX cohorts 500 + DIPLOMA certificate-templates 404 on prod (missing migrations / unmounted module)",
+      "depends_on": []
+    },
+    "BUGFIX-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/PROD-TEST-2026-06-01-buguri.md",
+      "milestone": "BUGFIX",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Payments default currency EUR but invoices default RON \u2014 inconsistent for RO client",
+      "depends_on": []
+    },
+    "BUGFIX-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/PROD-TEST-2026-06-01-buguri.md",
+      "milestone": "BUGFIX",
+      "phase": "1",
+      "severity": "minor",
+      "title": "Invoice dueDate requires ISO datetime; HTML date input would 400 if field added to UI",
+      "depends_on": []
+    },
+    "BUGFIX-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/PROD-TEST-2026-06-01-buguri.md",
+      "milestone": "BUGFIX",
+      "phase": "1",
+      "severity": "minor",
+      "title": "Confirm students list default view does not mix archived with active",
+      "depends_on": []
     }
   }
 }

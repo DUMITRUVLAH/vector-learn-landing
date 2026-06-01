@@ -241,3 +241,13 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 Gates 5–7 are **repair-don't-skip** (CLAUDE.md §0.2): a red gate triggers a fix loop, not an
 instant block. Only block if a real fix attempt fails and the cause is clearly structural →
 write `backlog/reports/<ID>-blocked.md`, move to the next item. Never halt the loop.
+
+## Milestone: BUGFIX — found in 2026-06-01 prod functional test
+See `backlog/reports/PROD-TEST-2026-06-01-buguri.md` for full reproduction.
+
+| ID | Severity | Title | Status |
+|----|----------|-------|--------|
+| BUGFIX-001 | 🔴 high | CX cohorts 500 + DIPLOMA certificate-templates 404 on prod (missing migrations / unmounted module) | pending |
+| BUGFIX-002 | 🟡 normal | Payments default EUR but invoices default RON — inconsistent for RO client | pending |
+| BUGFIX-003 | 🟢 minor | Invoice dueDate requires ISO datetime (would 400 if date field added to UI) | pending |
+| BUGFIX-004 | 🟢 minor | Confirm students list default view doesn't mix archived with active | pending |
