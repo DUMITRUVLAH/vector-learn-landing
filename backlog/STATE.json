@@ -2,9 +2,9 @@
   "version": 1,
   "current_item": null,
   "last_completed": "INT-903",
-  "iterations": 99,
+  "iterations": 100,
   "last_run_at": "2026-06-02T01:00:00Z",
-  "milestone_status": "INT faza-3 COMPLETE: INT-901/902/903 done on feat/INT-faza-3-api-keys. PR pending.",
+  "milestone_status": "INT faza-3 COMPLETE: INT-901/902/903 done, PR #114 open. All items done/blocked.",
   "active_milestone": "INT",
   "items": {
     "M1-001": {
@@ -2181,7 +2181,8 @@
         "integration": "CONNECTED",
         "manager": "BUY",
         "student": "PASS"
-      }
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/114"
     },
     "INT-902": {
       "status": "done",
@@ -2199,7 +2200,8 @@
         "integration": "CONNECTED",
         "manager": "BUY",
         "student": "PASS"
-      }
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/114"
     },
     "INT-903": {
       "status": "done",
@@ -2217,7 +2219,8 @@
         "integration": "CONNECTED",
         "manager": "BUY",
         "student": "PASS"
-      }
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/114"
     }
   }
 }
