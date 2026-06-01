@@ -855,6 +855,8 @@ interface KanbanCardProps {
 }
 
 function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick, stages, onStageMove, onStageLost }: KanbanCardProps) {
+  // CRM-148: navigate to student from the "Convertit" badge
+  const { navigate: navToStudent } = useRouter();
   return (
     <div
       draggable
@@ -939,11 +941,20 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick, stages,
           Fără task
         </div>
       )}
+      {/* CRM-148: "Convertit" → clickable link to student (stopPropagation so card doesn't open) */}
       {lead.convertedToStudentId && (
-        <div className="mt-1.5 text-[9px] font-bold text-success inline-flex items-center gap-1">
-          <CheckCircle2 className="h-2.5 w-2.5" />
-          Convertit
-        </div>
+        <button
+          type="button"
+          className="mt-1.5 text-[9px] font-bold text-success inline-flex items-center gap-1 hover:opacity-80 underline underline-offset-1 min-h-[44px]"
+          aria-label="Convertit — deschide fișa studentului"
+          onClick={(e) => {
+            e.stopPropagation();
+            navToStudent(`/app/students/${lead.convertedToStudentId}`);
+          }}
+        >
+          <CheckCircle2 className="h-2.5 w-2.5" aria-hidden="true" />
+          Convertit →
+        </button>
       )}
       {/* CRM-124: SLA badge — show only for active non-converted leads */}
       {!lead.convertedToStudentId && lead.slaBadge && lead.slaBadge !== "green" && (

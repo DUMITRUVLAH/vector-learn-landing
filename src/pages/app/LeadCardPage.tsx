@@ -917,10 +917,21 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               </button>
             </div>
           )}
+          {/* CRM-148: converted block → link to student */}
           {lead.convertedToStudentId && (
-            <div className="rounded-xl bg-success/10 border border-success/30 px-4 py-3 text-sm text-success flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              Convertit la {lead.convertedAt ? new Date(lead.convertedAt).toLocaleDateString("ro-RO") : "—"}
+            <div className="rounded-xl bg-success/10 border border-success/30 px-4 py-3 text-sm text-success flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                Convertit la {lead.convertedAt ? new Date(lead.convertedAt).toLocaleDateString("ro-RO") : "—"}
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate(`/app/students/${lead.convertedToStudentId}`)}
+                className="text-success underline underline-offset-2 font-semibold hover:opacity-80 whitespace-nowrap min-h-[44px] flex items-center"
+                aria-label="Vezi fișa studentului"
+              >
+                Vezi studentul →
+              </button>
             </div>
           )}
 
