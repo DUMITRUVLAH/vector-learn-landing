@@ -1979,7 +1979,10 @@
       "spec": "backlog/specs/SET-801-team-management.md",
       "milestone": "SET",
       "phase": "1",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/SET-faza-1-settings",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/111",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "N/A" }
     },
     "SET-802": {
       "status": "pending",
