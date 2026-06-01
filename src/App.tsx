@@ -56,6 +56,7 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
+import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
 
 function HomePage() {
   return (
@@ -140,6 +141,11 @@ function Routes() {
   if (path.match(/^\/feedback\/[^/]+$/)) {
     const token = path.split("/")[2];
     return <FeedbackPublicPage token={token} />;
+  }
+  // /verify/:token — DIPLOMA-805: public certificate verification (no auth)
+  if (path.match(/^\/verify\/[^/]+$/)) {
+    const token = path.split("/")[2];
+    return <VerifyCertificatePage token={token} />;
   }
   return <HomePage />;
 }
