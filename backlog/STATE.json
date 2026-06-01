@@ -1538,6 +1538,87 @@
       "severity": "minor",
       "title": "Confirm students list default view does not mix archived with active",
       "depends_on": []
+    },
+    "PAY-901": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/COMPETITOR-RESEARCH-2026-06-01.md",
+      "milestone": "GAP",
+      "phase": "1",
+      "severity": "high",
+      "title": "Online card payments (Stripe) \u2014 collect card, auto-reconcile invoices",
+      "depends_on": []
+    },
+    "PORTAL-902": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/COMPETITOR-RESEARCH-2026-06-01.md",
+      "milestone": "GAP",
+      "phase": "1",
+      "severity": "high",
+      "title": "Parent/Student self-service portal (schedule, balance, pay, book/cancel)",
+      "depends_on": [
+        "PAY-901"
+      ]
+    },
+    "PKG-903": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/COMPETITOR-RESEARCH-2026-06-01.md",
+      "milestone": "GAP",
+      "phase": "1",
+      "severity": "high",
+      "title": "Lesson packages / prepaid credits \u2014 sell N hours, auto-deduct per lesson, low-balance alerts",
+      "depends_on": []
+    },
+    "SCHED-904": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/COMPETITOR-RESEARCH-2026-06-01.md",
+      "milestone": "GAP",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Makeup lessons + cancellation credits \u2014 cancelled lesson \u2192 credit \u2192 rebook free",
+      "depends_on": []
+    },
+    "PROG-905": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/COMPETITOR-RESEARCH-2026-06-01.md",
+      "milestone": "GAP",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Gradebook / student progress reports \u2014 skills, milestones, parent-facing progress",
+      "depends_on": []
+    },
+    "ENROLL-906": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/COMPETITOR-RESEARCH-2026-06-01.md",
+      "milestone": "GAP",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Public online enrollment \u2014 self-enroll into course/cohort + pay in one flow",
+      "depends_on": [
+        "PAY-901"
+      ]
+    },
+    "LESSON-907": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/COMPETITOR-RESEARCH-2026-06-01.md",
+      "milestone": "GAP",
+      "phase": "1",
+      "severity": "minor",
+      "title": "Homework / assignments per lesson + submission",
+      "depends_on": []
     }
   }
 }

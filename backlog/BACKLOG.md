@@ -251,3 +251,17 @@ See `backlog/reports/PROD-TEST-2026-06-01-buguri.md` for full reproduction.
 | BUGFIX-002 | 🟡 normal | Payments default EUR but invoices default RON — inconsistent for RO client | pending |
 | BUGFIX-003 | 🟢 minor | Invoice dueDate requires ISO datetime (would 400 if date field added to UI) | pending |
 | BUGFIX-004 | 🟢 minor | Confirm students list default view doesn't mix archived with active | pending |
+
+## Milestone: GAP — competitor feature gaps (2026-06-01 research)
+See `backlog/reports/COMPETITOR-RESEARCH-2026-06-01.md`. Features leading platforms
+(Teachworks, Jackrabbit, Classe365, Tutorbase) have that we verified we lack.
+
+| ID | Value | Feature | Status |
+|----|-------|---------|--------|
+| PAY-901 | 🔴 high | Online card payments (Stripe) + auto-reconcile | pending |
+| PORTAL-902 | 🔴 high | Parent/Student self-service portal | pending |
+| PKG-903 | 🔴 high | Lesson packages / prepaid credits | pending |
+| SCHED-904 | 🟡 normal | Makeup lessons + cancellation credits | pending |
+| PROG-905 | 🟡 normal | Gradebook / student progress reports | pending |
+| ENROLL-906 | 🟡 normal | Public online enrollment + pay | pending |
+| LESSON-907 | 🟢 minor | Homework / assignments per lesson | pending |
