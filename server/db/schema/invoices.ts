@@ -50,6 +50,10 @@ export const invoices = pgTable(
      * 'submitted' = sent to ANAF (future)
      */
     efacturaStatus: varchar("efactura_status", { length: 30 }),
+    // GAP-014: Stripe Checkout fields
+    stripeSessionId: varchar("stripe_session_id", { length: 255 }),
+    stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
+    paidOnline: varchar("paid_online", { length: 5 }).default("false"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
