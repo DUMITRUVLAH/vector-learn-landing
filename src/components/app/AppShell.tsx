@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { Link, useRouter } from "@/router/HashRouter";
@@ -29,6 +29,7 @@ const NAV = [
   { label: "Diplome", href: "/app/diplome", icon: Award }, // DIPLOMA-802
   { label: "Clase", href: "/app/school/classes", icon: School }, // SCHOOL-001
   { label: "Prezență", href: "/app/school/attendance", icon: ClipboardList }, // SCHOOL-003
+  { label: "Check-in Grăd.", href: "/app/kinder/checkin", icon: Baby }, // KINDER-001
   { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
   { label: "Analytics", href: "/app/analytics/crm", icon: BarChart3 },
   { label: "Cadences", href: "/app/cadences", icon: ListChecks },
