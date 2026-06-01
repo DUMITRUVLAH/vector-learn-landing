@@ -99,6 +99,10 @@ const updateLeadSchema = z.object({
   debtCents: z.number().int().min(0).optional(),
   company: z.string().max(300).optional().nullable(),
   dealName: z.string().max(300).optional().nullable(),
+  /** GAP-001: Preferred schedule */
+  preferredDays: z.array(z.number().int().min(1).max(7)).optional().nullable(),
+  preferredTimeStart: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  preferredTimeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
 });
 
 const stageChangeSchema = z.object({

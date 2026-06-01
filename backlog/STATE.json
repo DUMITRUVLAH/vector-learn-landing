@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": "DIPLOMA-803",
-  "last_completed": "DIPLOMA-802",
-  "iterations": 91,
-  "last_run_at": "2026-06-01T12:30:00Z",
-  "milestone_status": "DIPLOMA Phase 1 in progress: DIPLOMA-801/802 done (PR #97). DIPLOMA-803..805 pending.",
-  "active_milestone": "DIPLOMA",
+  "current_item": "GAP-002",
+  "last_completed": "GAP-001",
+  "iterations": 92,
+  "last_run_at": "2026-06-01T13:10:00Z",
+  "milestone_status": "GAP faza-1 in progress: GAP-001 done, GAP-002 building",
+  "active_milestone": "GAP",
   "items": {
     "M1-001": {
       "status": "done",
@@ -1629,81 +1629,142 @@
       "depends_on": []
     },
     "SCHOOL-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/SCHOOL-001-academic-year-classes.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "high",
       "title": "Academic year + terms + permanent classes/sections (foundation)",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/SCHOOL-002-gradebook-report-cards.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "high",
       "title": "Gradebook + report cards (weighted grades, term PDF for parents)",
-      "depends_on": []
+      "depends_on": [
+        "SCHOOL-001"
+      ],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/SCHOOL-003-attendance-register.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "high",
       "title": "Daily/class attendance register + absence reasons + parent alerts",
-      "depends_on": []
+      "depends_on": [
+        "SCHOOL-001"
+      ],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/SCHOOL-004-tuition-billing.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "high",
       "title": "Tuition billing \u2014 annual/term plans, installments, sibling discount, financial aid",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-005": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/SCHOOL-005-admissions.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "normal",
       "title": "Admissions workflow \u2014 application\u2192documents\u2192acceptance\u2192enrollment",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-006": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/SCHOOL-006-master-timetable.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "normal",
       "title": "Master timetable (class\u00d7subject\u00d7teacher\u00d7room grid)",
-      "depends_on": []
+      "depends_on": [
+        "SCHOOL-001",
+        "SCHOOL-002"
+      ],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-007": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/SCHOOL-007-parent-portal.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "normal",
-      "title": "Parent portal: grades, attendance, report cards, alerts",
-      "depends_on": []
+      "title": "Portal parinte: note, prezenta, fisa situatie, sold taxe + stiri scoala",
+      "depends_on": [
+        "SCHOOL-002",
+        "SCHOOL-003",
+        "SCHOOL-004",
+        "GUARDIAN-001"
+      ],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "KINDER-001": {
       "status": "pending",
@@ -1783,26 +1844,219 @@
       "depends_on": []
     },
     "GUARDIAN-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/GUARDIAN-001-authorized-guardians.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "high",
-      "title": "Authorized-guardian model \u2014 multiple guardians per child, custody/permission flags",
-      "depends_on": []
+      "title": "Tutori autorizati \u2014 mai multi tutori per elev, flag-uri custodie/permisiuni",
+      "depends_on": [
+        "SCHOOL-001"
+      ],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CONSENT-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/CONSENT-001-consent-forms-esignature.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "normal",
       "title": "Consent/permission forms (photo, trips, medical) with e-signature",
-      "depends_on": []
+      "depends_on": [
+        "SCHOOL-001",
+        "GUARDIAN-001"
+      ],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "reports": [
+        "backlog/reports/CONSENT-001-integration.md",
+        "backlog/reports/CONSENT-001-manager.md",
+        "backlog/reports/CONSENT-001-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "GAP-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/GAP-faza-1-trial-flow",
+      "pr": null,
+      "reports": [
+        "backlog/reports/GAP-001-manager.md",
+        "backlog/reports/GAP-001-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "GAP-002": {
+      "status": "in_progress",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/GAP-faza-1-trial-flow",
+      "pr": null,
+      "reports": []
+    },
+    "GAP-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-005": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-006": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-007": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-008": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-009": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-010": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-011": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-012": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-013": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-014": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-015": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-016": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-017": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-018": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-019": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-020": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
     }
   }
 }

@@ -230,6 +230,9 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
       debtCents: lead.debtCents,
       company: lead.company,
       dealName: lead.dealName,
+      preferredDays: (lead as unknown as Record<string, unknown>).preferredDays as number[] | null ?? null,
+      preferredTimeStart: (lead as unknown as Record<string, unknown>).preferredTimeStart as string | null ?? null,
+      preferredTimeEnd: (lead as unknown as Record<string, unknown>).preferredTimeEnd as string | null ?? null,
     });
     setEditing(true);
   };
@@ -918,6 +921,87 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                 <input type="text" value={editDraft.dealName ?? lead.dealName ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, dealName: e.target.value || null }))} placeholder="opțional, override full_name" className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Titlu deal" />
               ) : (
                 <p className="text-sm text-muted-foreground">{lead.dealName ?? "—"}</p>
+              )}
+            </div>
+
+            {/* GAP-001: Slot preferat orar */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Disponibilitate preferată</p>
+              {editing ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1" role="group" aria-label="Zile preferate">
+                    {[
+                      { label: "L", full: "Luni", val: 1 },
+                      { label: "M", full: "Marți", val: 2 },
+                      { label: "Mi", full: "Miercuri", val: 3 },
+                      { label: "J", full: "Joi", val: 4 },
+                      { label: "V", full: "Vineri", val: 5 },
+                      { label: "S", full: "Sâmbătă", val: 6 },
+                      { label: "D", full: "Duminică", val: 7 },
+                    ].map(({ label, full, val }) => {
+                      const days = (editDraft.preferredDays as number[] | null | undefined) ?? [];
+                      const active = days.includes(val);
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          aria-label={full}
+                          aria-pressed={active}
+                          onClick={() => {
+                            const cur = (editDraft.preferredDays as number[] | null | undefined) ?? [];
+                            const next = active ? cur.filter((d) => d !== val) : [...cur, val].sort((a, b) => a - b);
+                            setEditDraft((d) => ({ ...d, preferredDays: next.length > 0 ? next : null }));
+                          }}
+                          className={cn(
+                            "h-7 w-7 rounded-full text-xs font-medium border transition-colors",
+                            active
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background text-muted-foreground border-input hover:border-primary"
+                          )}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <label className="text-xs text-muted-foreground w-12 shrink-0">De la:</label>
+                    <input
+                      type="time"
+                      value={(editDraft.preferredTimeStart as string | null | undefined) ?? ""}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, preferredTimeStart: e.target.value || null }))}
+                      className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+                      aria-label="Ora de start preferată"
+                    />
+                    <label className="text-xs text-muted-foreground w-12 shrink-0">Până la:</label>
+                    <input
+                      type="time"
+                      value={(editDraft.preferredTimeEnd as string | null | undefined) ?? ""}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, preferredTimeEnd: e.target.value || null }))}
+                      className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+                      aria-label="Ora de sfârșit preferată"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  {(() => {
+                    const days = (lead as unknown as Record<string, unknown>).preferredDays as number[] | null;
+                    const start = (lead as unknown as Record<string, unknown>).preferredTimeStart as string | null;
+                    const end = (lead as unknown as Record<string, unknown>).preferredTimeEnd as string | null;
+                    const dayNames = ["", "Luni", "Marți", "Miercuri", "Joi", "Vineri", "Sâmbătă", "Duminică"];
+                    const hasDays = days && days.length > 0;
+                    const hasTime = start || end;
+                    if (!hasDays && !hasTime) return "—";
+                    return (
+                      <>
+                        {hasDays && <span>{days!.map((d) => dayNames[d]).join(", ")}</span>}
+                        {hasDays && hasTime && <span className="mx-1">·</span>}
+                        {hasTime && <span>{start ?? "—"}–{end ?? "—"}</span>}
+                      </>
+                    );
+                  })()}
+                </div>
               )}
             </div>
 

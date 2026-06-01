@@ -46,6 +46,10 @@ export interface Lead {
   nextTask?: { dueAt: string | null; title: string } | null;
   /** CRM-124: SLA response time badge — computed server-side */
   slaBadge?: "green" | "yellow" | "red" | null;
+  /** GAP-001: Preferred schedule */
+  preferredDays?: number[] | null;
+  preferredTimeStart?: string | null;
+  preferredTimeEnd?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -261,7 +265,7 @@ export function addInteraction(
 
 export function updateLead(
   id: string,
-  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo" | "valueCents" | "debtCents" | "company" | "dealName">>
+  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo" | "valueCents" | "debtCents" | "company" | "dealName" | "preferredDays" | "preferredTimeStart" | "preferredTimeEnd">>
 ): Promise<Lead> {
   return api<Lead>(`/api/leads/${id}`, {
     method: "PATCH",
