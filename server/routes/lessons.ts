@@ -5,6 +5,8 @@ import { and, eq, gte, lt, ne, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { lessons, courses, teachers, users, rooms, students, studentLessons } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+// GAP-009: recovery hook
+import { createRecoveryRequestIfAbsent } from "./recovery";
 
 const createLessonSchema = z.object({
   courseId: z.string().uuid(),
@@ -319,6 +321,7 @@ lessonRoutes.patch(
       ),
     });
 
+    let resultSl: typeof studentLessons.$inferSelect;
     if (existing) {
       const [updated] = await db
         .update(studentLessons)
@@ -329,7 +332,7 @@ lessonRoutes.patch(
         })
         .where(eq(studentLessons.id, existing.id))
         .returning();
-      return c.json(updated);
+      resultSl = updated;
     } else {
       // Auto-enroll: create the student_lessons record if it doesn't exist
       const [created] = await db
@@ -343,7 +346,20 @@ lessonRoutes.patch(
           markedAt: now,
         })
         .returning();
-      return c.json(created, 201);
+      resultSl = created;
     }
+
+    // GAP-009: fire-and-forget recovery request creation when absent
+    // Also skip if this is a trial lesson (trials never generate recovery)
+    if (attendanceStatus === "absent" && !lesson.isTrial) {
+      void createRecoveryRequestIfAbsent({
+        tenantId,
+        studentLessonId: resultSl.id,
+        lessonId,
+        studentId,
+      }).catch(() => undefined);
+    }
+
+    return existing ? c.json(resultSl) : c.json(resultSl, 201);
   }
 );

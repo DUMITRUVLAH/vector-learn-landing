@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "GAP-004",
-  "last_completed": "GAP-003",
-  "iterations": 95,
+  "current_item": "GAP-009",
+  "last_completed": "GAP-004",
+  "iterations": 96,
   "last_run_at": "2026-06-01T13:30:00Z",
   "milestone_status": "GAP faza-1: GAP-001/002/003 done. GAP-004/009 pending (Faza 1). PR open.",
   "active_milestone": "GAP",
@@ -1941,12 +1941,18 @@
       }
     },
     "GAP-004": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "branch": "feat/GAP-faza-1-trial-flow",
-      "pr": null,
-      "reports": []
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
+      "reports": [],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "GAP-005": {
       "status": "pending",
@@ -1981,10 +1987,10 @@
       "reports": []
     },
     "GAP-009": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
-      "branch": null,
+      "branch": "feat/GAP-faza-1-trial-flow",
       "pr": null,
       "reports": []
     },
