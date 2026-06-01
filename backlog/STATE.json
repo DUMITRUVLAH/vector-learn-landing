@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "current_item": "KINDER-006",
-  "last_completed": "KINDER-005",
+  "current_item": null,
+  "last_completed": "KINDER-006",
   "iterations": 128,
   "last_run_at": "2026-06-01T23:00:00Z",
   "milestone_status": "KINDER faza-1 COMPLETE: KINDER-001 (check-in/pickup/semnatura), KINDER-002 (jurnal zilnic), KINDER-003 (raport personal/copii). PR #108. PAY-901..LESSON-907 done (GAP milestone).",
@@ -1799,7 +1799,7 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "LOVES" }
     },
     "KINDER-006": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/KINDER-006-compliance-reports.md",
@@ -1808,7 +1808,9 @@
       "severity": "normal",
       "title": "Licensing/compliance reports (ratio, immunization, subsidy attendance)",
       "depends_on": [],
-      "branch": "feat/KINDER-faza-1-checkin-diary-ratio"
+      "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "KINDER-007": {
       "status": "pending",
