@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": "DIPLOMA-803",
-  "last_completed": "DIPLOMA-802",
-  "iterations": 91,
-  "last_run_at": "2026-06-01T12:30:00Z",
-  "milestone_status": "DIPLOMA Phase 1 in progress: DIPLOMA-801/802 done (PR #97). DIPLOMA-803..805 pending.",
-  "active_milestone": "DIPLOMA",
+  "current_item": null,
+  "last_completed": "GAP-008",
+  "iterations": 101,
+  "last_run_at": "2026-06-01T17:00:00Z",
+  "milestone_status": "GAP faza-2 complete: GAP-005/006/007/008 done. PR open. Next: GAP-010 portal student (faza-3).",
+  "active_milestone": "GAP",
   "items": {
     "M1-001": {
       "status": "done",
@@ -1802,7 +1802,249 @@
       "phase": "1",
       "severity": "normal",
       "title": "Consent/permission forms (photo, trips, medical) with e-signature",
+<<<<<<< Updated upstream
       "depends_on": []
+=======
+      "depends_on": [
+        "SCHOOL-001",
+        "GUARDIAN-001"
+      ],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "reports": [
+        "backlog/reports/CONSENT-001-integration.md",
+        "backlog/reports/CONSENT-001-manager.md",
+        "backlog/reports/CONSENT-001-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "GAP-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/GAP-faza-1-trial-flow",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
+      "reports": [
+        "backlog/reports/GAP-001-manager.md",
+        "backlog/reports/GAP-001-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "GAP-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/GAP-faza-1-trial-flow",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
+      "reports": [
+        "backlog/reports/GAP-002-manager.md",
+        "backlog/reports/GAP-002-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "GAP-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/GAP-faza-1-trial-flow",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
+      "reports": [
+        "backlog/reports/GAP-003-manager.md",
+        "backlog/reports/GAP-003-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "GAP-004": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/GAP-faza-1-trial-flow",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
+      "reports": [],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "GAP-005": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/GAP-faza-2-abonamente-waitlist",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/99",
+      "reports": [],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "GAP-006": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/GAP-faza-2-abonamente-waitlist",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/99",
+      "reports": [],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "GAP-007": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/GAP-faza-2-abonamente-waitlist",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/99",
+      "reports": [],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "GAP-008": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/GAP-faza-2-abonamente-waitlist",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/99",
+      "reports": [],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "GAP-009": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/GAP-faza-1-trial-flow",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
+      "reports": [],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
+    },
+    "GAP-010": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-011": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-012": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-013": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-014": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-015": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-016": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-017": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-018": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-019": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+    },
+    "GAP-020": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": null,
+      "pr": null,
+      "reports": []
+>>>>>>> Stashed changes
     }
   }
 }
