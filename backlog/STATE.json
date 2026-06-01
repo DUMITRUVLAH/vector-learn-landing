@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "GAP-018",
-  "last_completed": "GAP-016",
-  "iterations": 109,
-  "last_run_at": "2026-06-01T20:00:00Z",
-  "milestone_status": "GAP Faza 5 in progress: GAP-015/016 done, GAP-018 (mobile check-in) in progress.",
+  "current_item": null,
+  "last_completed": "GAP-018",
+  "iterations": 110,
+  "last_run_at": "2026-06-01T20:30:00Z",
+  "milestone_status": "GAP Faza 5 complete: GAP-015/016/018 done on feat/GAP-faza-5-operational. PR pending. GAP-019/020 (gamification) next.",
   "active_milestone": "GAP",
   "items": {
     "M1-001": {
@@ -2008,14 +2008,20 @@
       ]
     },
     "GAP-018": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/GAP-018-mobile-check-in.md",
       "milestone": "GAP",
       "phase": "5",
       "branch": "feat/GAP-faza-5-operational",
-      "pr": null
+      "pr": null,
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "GAP-019": {
       "status": "pending",
