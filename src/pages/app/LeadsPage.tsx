@@ -46,6 +46,8 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { StageMoveUndoToast } from "@/components/crm/StageMoveUndoToast";
 // CRM-149: active filter pills row
 import { ActiveFilterPills } from "@/components/crm/ActiveFilterPills";
+// CRM-150: RFC-4180 CSV parser + currency/tag helpers
+import { parseCsv, parseCurrencyToCents, parseTags } from "@/lib/csv";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web",
@@ -1898,12 +1900,16 @@ function CsvImportModal({ onClose, onImported, onError }: { onClose: () => void;
   const fileRef = useRef<HTMLInputElement>(null);
   const [, setCsvText] = useState("");
 
+  // CRM-150: extended field list — includes valueCents, company, tags
   const OUR_FIELDS = [
     { key: "fullName", label: "Nume complet *" },
     { key: "phone", label: "Telefon" },
     { key: "email", label: "Email" },
     { key: "interestCourse", label: "Curs de interes" },
     { key: "source", label: "Sursă" },
+    { key: "value", label: "Valoare (€)" },
+    { key: "company", label: "Companie" },
+    { key: "tags", label: "Tag-uri (;-sep.)" },
   ] as const;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1913,7 +1919,8 @@ function CsvImportModal({ onClose, onImported, onError }: { onClose: () => void;
     reader.onload = (evt) => {
       const text = evt.target?.result as string;
       setCsvText(text);
-      const parsed = text.trim().split("\n").map((l) => l.split(",").map((c) => c.trim().replace(/^"|"$/g, "")));
+      // CRM-150: use RFC-4180 parser instead of naïve split(",")
+      const parsed = parseCsv(text);
       if (parsed.length < 2) { onError("CSV trebuie să aibă header + date."); return; }
       setHeaders(parsed[0]);
       setRows(parsed.slice(1));
@@ -1924,6 +1931,9 @@ function CsvImportModal({ onClose, onImported, onError }: { onClose: () => void;
         else if (lh.includes("tel") || lh.includes("phone")) auto["phone"] = i;
         else if (lh.includes("email")) auto["email"] = i;
         else if (lh.includes("curs") || lh.includes("course")) auto["interestCourse"] = i;
+        else if (lh.includes("valoa") || lh.includes("value")) auto["value"] = i;
+        else if (lh.includes("compan") || lh.includes("firma")) auto["company"] = i;
+        else if (lh.includes("tag")) auto["tags"] = i;
       });
       setMapping(auto);
       setStep("map");
@@ -1933,10 +1943,23 @@ function CsvImportModal({ onClose, onImported, onError }: { onClose: () => void;
 
   const buildMapped = () => rows.map((row) => Object.fromEntries(OUR_FIELDS.map(({ key }) => [key, mapping[key] !== undefined ? (row[mapping[key]] ?? "") : ""])));
 
+  /** CRM-150: convert the mapped row into the API payload shape */
+  const toApiRow = (r: Record<string, string>) => ({
+    fullName: r.fullName || "",
+    phone: r.phone || null,
+    email: r.email || null,
+    interestCourse: r.interestCourse || null,
+    source: r.source || "import",
+    // Extended fields:
+    valueCents: r.value ? parseCurrencyToCents(r.value) : undefined,
+    company: r.company || null,
+    tags: r.tags ? parseTags(r.tags) : undefined,
+  });
+
   const handlePreview = async () => {
     setSubmitting(true);
     try {
-      const res = await api<{ summary: ImportSummary }>("/api/leads/import", { method: "POST", body: JSON.stringify({ rows: buildMapped().map((r) => ({ fullName: r.fullName || "", phone: r.phone || null, email: r.email || null, interestCourse: r.interestCourse || null, source: r.source || "import" })), dryRun: true }) });
+      const res = await api<{ summary: ImportSummary }>("/api/leads/import", { method: "POST", body: JSON.stringify({ rows: buildMapped().map(toApiRow), dryRun: true }) });
       setPreviewRows(buildMapped().slice(0, 5));
       setPreviewSummary(res.summary);
       setStep("preview");
@@ -1946,7 +1969,7 @@ function CsvImportModal({ onClose, onImported, onError }: { onClose: () => void;
   const handleCommit = async () => {
     setSubmitting(true);
     try {
-      const res = await api<{ summary: ImportSummary }>("/api/leads/import", { method: "POST", body: JSON.stringify({ rows: buildMapped().map((r) => ({ fullName: r.fullName || "", phone: r.phone || null, email: r.email || null, interestCourse: r.interestCourse || null, source: r.source || "import" })), dryRun: false }) });
+      const res = await api<{ summary: ImportSummary }>("/api/leads/import", { method: "POST", body: JSON.stringify({ rows: buildMapped().map(toApiRow), dryRun: false }) });
       onImported(res.summary);
     } catch { onError("Importul a eșuat."); } finally { setSubmitting(false); }
   };

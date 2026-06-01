@@ -457,6 +457,105 @@ leadRoutes.get("/pipeline", async (c) => {
   return c.json({ grouped, counts, valueSums, totalValueCents });
 });
 
+// CRM-150: POST /api/leads/import — bulk import from CSV (dryRun + commit)
+const importRowSchema = z.object({
+  fullName: z.string().min(1).max(200),
+  phone: z.string().max(32).optional().nullable(),
+  email: z.string().max(255).optional().nullable(),
+  interestCourse: z.string().max(200).optional().nullable(),
+  source: z.string().max(64).optional().nullable(),
+  valueCents: z.number().int().min(0).optional(),
+  company: z.string().max(300).optional().nullable(),
+  tags: z.array(z.string().max(80)).optional(),
+});
+
+const importSchema = z.object({
+  rows: z.array(importRowSchema).max(5000),
+  dryRun: z.boolean().default(false),
+});
+
+leadRoutes.post("/import", zValidator("json", importSchema), async (c) => {
+  const { rows, dryRun } = c.req.valid("json");
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+
+  let created = 0;
+  let duplicates = 0;
+  let errors = 0;
+
+  // Resolve valid source values
+  const validSources = new Set<string>(SOURCES);
+
+  for (const row of rows) {
+    if (!row.fullName?.trim()) { errors++; continue; }
+
+    // Normalise contact info
+    const phoneNorm = normalizePhone(row.phone ?? null);
+    const emailNorm = normalizeEmail(row.email ?? null);
+
+    // Dedup: same tenant + same phone OR email
+    if (phoneNorm || emailNorm) {
+      const existing = await db.query.leads.findFirst({
+        where: and(
+          eq(leads.tenantId, tenantId),
+          or(
+            phoneNorm ? eq(leads.phoneNormalized, phoneNorm) : undefined,
+            emailNorm ? eq(leads.emailNormalized, emailNorm) : undefined
+          )
+        ),
+        columns: { id: true },
+      });
+      if (existing) { duplicates++; continue; }
+    }
+
+    if (dryRun) { created++; continue; }
+
+    try {
+      const src = row.source && validSources.has(row.source)
+        ? (row.source as typeof SOURCES[number])
+        : "import";
+
+      const [lead] = await db
+        .insert(leads)
+        .values({
+          tenantId,
+          fullName: row.fullName.trim(),
+          phone: row.phone ?? null,
+          phoneNormalized: phoneNorm,
+          email: row.email ?? null,
+          emailNormalized: emailNorm,
+          interestCourse: row.interestCourse ?? null,
+          source: src,
+          valueCents: row.valueCents ?? 0,
+          company: row.company ?? null,
+          consentText: "CSV import",
+          consentAt: new Date(),
+        })
+        .returning({ id: leads.id });
+
+      if (!lead) { errors++; continue; }
+
+      // Attach tags if provided (leadTags.tag is a varchar — no separate tags table)
+      if (row.tags && row.tags.length > 0) {
+        const tagValues = row.tags
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .map((tag) => ({ tenantId, leadId: lead.id, tag }));
+        if (tagValues.length > 0) {
+          await db.insert(leadTags).values(tagValues).onConflictDoNothing().catch(() => undefined);
+        }
+      }
+
+      void auditLog({ tenantId, actorId: userId, entityId: lead.id, action: "lead.imported", after: { fullName: row.fullName } }).catch(() => undefined);
+      created++;
+    } catch {
+      errors++;
+    }
+  }
+
+  return c.json({ summary: { created, duplicates, errors } });
+});
+
 leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
   const body = nullify(c.req.valid("json"));
   const tenantId = c.get("user").tenantId;
