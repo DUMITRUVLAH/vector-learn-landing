@@ -409,3 +409,68 @@ export function markMessageRead(
     { method: "PATCH" }
   );
 }
+
+// ─── KINDER-006: Licensing/compliance reports ─────────────────────────────────
+
+export interface RatioHistoryEntry {
+  date: string;
+  presentChildren: number;
+  staffNeeded: number;
+  ratioLimit: number;
+  ratioOk: boolean;
+}
+
+export interface RatioHistoryResponse {
+  from: string;
+  to: string;
+  history: RatioHistoryEntry[];
+}
+
+export interface StudentAttendance {
+  studentId: string;
+  fullName: string;
+  daysPresent: number;
+  daysInRange: number;
+  attendanceRate: number;
+}
+
+export interface AttendanceSummaryResponse {
+  from: string;
+  to: string;
+  daysInRange: number;
+  students: StudentAttendance[];
+}
+
+export interface ImmunizationOverviewResponse {
+  totalStudents: number;
+  fullyVaccinated: number;
+  overdue: number;
+  dueSoon: number;
+  noRecord: number;
+  complianceRate: number;
+  today: string;
+  threshold: string;
+}
+
+/** GET /api/kinder/compliance/ratio-history?from=&to= */
+export function getRatioHistory(from?: string, to?: string): Promise<RatioHistoryResponse> {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return api<RatioHistoryResponse>(`/api/kinder/compliance/ratio-history${query}`);
+}
+
+/** GET /api/kinder/compliance/attendance-summary?from=&to= */
+export function getAttendanceSummary(from?: string, to?: string): Promise<AttendanceSummaryResponse> {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return api<AttendanceSummaryResponse>(`/api/kinder/compliance/attendance-summary${query}`);
+}
+
+/** GET /api/kinder/compliance/immunization-overview */
+export function getImmunizationOverview(): Promise<ImmunizationOverviewResponse> {
+  return api<ImmunizationOverviewResponse>("/api/kinder/compliance/immunization-overview");
+}
