@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "current_item": "INTEG-201",
-  "last_completed": "INTEG-104",
+  "current_item": "INTEG-202",
+  "last_completed": "INTEG-201",
   "iterations": 147,
-  "last_run_at": "2026-06-02T00:22:00Z",
+  "last_run_at": "2026-06-02T00:25:00Z",
   "milestone_status": "INTEG faza-1 done (INTEG-101..104, PR #112). INTEG faza-2 in progress.",
   "active_milestone": "INTEG",
   "items": {
@@ -1857,6 +1857,7 @@
       "attempts": 1,
       "blockers": [],
       "branch": "feat/INTEG-faza-2-ux-cross-module",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/113",
       "spec": "backlog/specs/INTEG-201-lead-cohort-autoenroll.md",
       "milestone": "INTEG",
       "phase": "2",
