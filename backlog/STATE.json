@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "current_item": "INTEG-101",
+  "current_item": null,
   "last_completed": "SET-804",
-  "iterations": 142,
-  "last_run_at": "2026-06-01T23:00:00Z",
+  "iterations": 143,
+  "last_run_at": "2026-06-01T23:58:00Z",
   "milestone_status": "SET faza-1 starting: SET-801..804 generated from user-stories/settings.md. INTEG faza-1+2 queued (7 integration items from 2026-06-01 audit).",
   "active_milestone": "SET",
   "items": {
