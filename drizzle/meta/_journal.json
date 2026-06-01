@@ -232,6 +232,13 @@
       "when": 1780500200000,
       "tag": "0032_set802_notification_preferences",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780500300000,
+      "tag": "0033_set803_branding",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, pgEnum, integer } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, pgEnum, integer, jsonb } from "drizzle-orm/pg-core";
 
 export const planEnum = pgEnum("plan", ["starter", "growth", "pro", "enterprise"]);
 
@@ -15,6 +15,10 @@ export const tenants = pgTable("tenants", {
   slaDefaultHours: integer("sla_default_hours").notNull().default(24),
   /** CRM-124: Lead-rot — days without contact before "neglected" (default 7) */
   rotDays: integer("rot_days").notNull().default(7),
+  /** SET-803: Tenant logo stored as base64 data URL or external URL */
+  logoUrl: varchar("logo_url", { length: 500 }),
+  /** SET-803: Branding JSON — { primaryColor, accentColor } (valid hex strings) */
+  brandingJson: jsonb("branding_json").$type<{ primaryColor?: string; accentColor?: string }>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
