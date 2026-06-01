@@ -35,7 +35,7 @@ describe("T-INTEG-203-1 [blocant]: Cohort type includes courseName", () => {
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
       endDate: "2026-03-05",
-      progress: { percent: 50, lessonsCompleted: 8, lessonsTotal: 16 },
+      progress: { progressPercent: 50, daysRemaining: 30, daysUntilStart: 0, isCompleted: false, isUpcoming: false, isActive: true },
       category: "active",
     };
     expect(cohort.courseName).toBe("Engleză Avansat");
@@ -60,7 +60,7 @@ describe("T-INTEG-203-1 [blocant]: Cohort type includes courseName", () => {
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
       endDate: "2026-04-01",
-      progress: { percent: 0, lessonsCompleted: 0, lessonsTotal: 16 },
+      progress: { progressPercent: 0, daysRemaining: 60, daysUntilStart: 5, isCompleted: false, isUpcoming: true, isActive: false },
       category: "upcoming",
     };
     expect(cohort.courseName).toBeNull();
@@ -95,7 +95,7 @@ describe("T-INTEG-203-2 [blocant]: courseName renders in CohortHeader", () => {
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
       endDate: "2026-05-01",
-      progress: { percent: 25, lessonsCompleted: 4, lessonsTotal: 16 },
+      progress: { progressPercent: 25, daysRemaining: 45, daysUntilStart: 0, isCompleted: false, isUpcoming: false, isActive: true },
       category: "active",
     };
     // courseName is available on the typed object
@@ -196,7 +196,7 @@ describe("T-INTEG-203-5: Cohort without courseName — graceful render", () => {
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
       endDate: "2026-05-01",
-      progress: { percent: 0, lessonsCompleted: 0, lessonsTotal: 8 },
+      progress: { progressPercent: 0, daysRemaining: 30, daysUntilStart: 10, isCompleted: false, isUpcoming: true, isActive: false },
       category: "upcoming",
     };
     // No crash — courseName is null, CohortHeader should render nothing for it
