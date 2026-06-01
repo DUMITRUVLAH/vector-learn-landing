@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock } from "lucide-react";
+import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, LayoutGrid, LayoutList } from "lucide-react";
+import { useKanbanDensity, type KanbanDensity } from "@/hooks/useKanbanDensity";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -81,6 +82,8 @@ export function LeadsPage() {
   const [lostReasonFor, setLostReasonFor] = useState<{ leadId: string; targetStage: string } | null>(null);
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  // CRM-136: kanban card density — 'comfortable' | 'compact', persisted in localStorage
+  const [density, setDensity] = useKanbanDensity();
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -203,6 +206,37 @@ export function LeadsPage() {
       pageDescription={[`${totalLeads} lead-uri`, `conversie: ${conversionRate}%`, totalValueCents > 0 ? formatEur(totalValueCents) : null].filter(Boolean).join(" · ")}
       actions={
         <div className="flex gap-2">
+          {/* CRM-136: Density toggle — compact / comfortable */}
+          <div className="inline-flex rounded-md border border-border overflow-hidden" role="group" aria-label="Densitate kanban">
+            <button
+              type="button"
+              onClick={() => setDensity("comfortable")}
+              aria-pressed={density === "comfortable"}
+              aria-label="Vizualizare normală"
+              className={cn(
+                "inline-flex items-center px-2.5 py-2 text-sm transition-colors",
+                density === "comfortable"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card text-muted-foreground hover:bg-muted"
+              )}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDensity("compact")}
+              aria-pressed={density === "compact"}
+              aria-label="Vizualizare compactă"
+              className={cn(
+                "inline-flex items-center px-2.5 py-2 text-sm transition-colors border-l border-border",
+                density === "compact"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card text-muted-foreground hover:bg-muted"
+              )}
+            >
+              <LayoutList className="h-4 w-4" />
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => setShowStagesEditor(true)}
@@ -339,6 +373,7 @@ export function LeadsPage() {
                         key={lead.id}
                         lead={lead}
                         isDragging={draggedId === lead.id}
+                        density={density}
                         onDragStart={() => setDraggedId(lead.id)}
                         onDragEnd={() => { setDraggedId(null); setHoverStage(null); }}
                         onClick={() => navigate(`/app/leads/${lead.id}`)}
@@ -421,12 +456,16 @@ export function LeadsPage() {
 interface KanbanCardProps {
   lead: Lead;
   isDragging: boolean;
+  /** CRM-136: compact shows minimal info; comfortable (default) shows full card */
+  density?: KanbanDensity;
   onDragStart: () => void;
   onDragEnd: () => void;
   onClick: () => void;
 }
 
-function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: KanbanCardProps) {
+function KanbanCard({ lead, isDragging, density = "comfortable", onDragStart, onDragEnd, onClick }: KanbanCardProps) {
+  const isCompact = density === "compact";
+
   return (
     <button
       type="button"
@@ -435,74 +474,93 @@ function KanbanCard({ lead, isDragging, onDragStart, onDragEnd, onClick }: Kanba
       onDragEnd={onDragEnd}
       onClick={onClick}
       className={cn(
-        "text-left rounded-lg border border-border bg-card p-2.5 cursor-move shadow-sm transition-all",
+        "text-left rounded-lg border border-border bg-card cursor-move shadow-sm transition-all",
         "hover:shadow-md hover:-translate-y-0.5",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        isCompact ? "py-1 px-2" : "p-2.5",
         isDragging && "opacity-50"
       )}
     >
       {/* CRM-114: Use dealName as title if set */}
-      <p className="text-xs font-semibold truncate">{lead.dealName ?? lead.fullName}</p>
-      {/* CRM-114: Company under name */}
-      {lead.company && (
-        <p className="text-[10px] text-muted-foreground truncate mt-0.5 italic">{lead.company}</p>
-      )}
-      {lead.interestCourse && !lead.company && (
-        <p className="text-[10px] text-muted-foreground truncate mt-0.5">{lead.interestCourse}</p>
-      )}
-      {/* CRM-113: value / debt */}
-      {((lead.valueCents ?? 0) > 0 || (lead.debtCents ?? 0) > 0) && (
-        <div className="flex items-center gap-2 mt-1">
+      <p className={cn("font-semibold truncate", isCompact ? "text-[11px]" : "text-xs")}>
+        {lead.dealName ?? lead.fullName}
+      </p>
+
+      {/* Compact mode: only show deal value if > 0, then stop */}
+      {isCompact ? (
+        /* Compact mode: only name + optional deal value */
+        <>
           {(lead.valueCents ?? 0) > 0 && (
             <span className="text-[10px] font-bold text-foreground tabular-nums">
               {new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format((lead.valueCents ?? 0) / 100)}
             </span>
           )}
-          {(lead.debtCents ?? 0) > 0 && (
-            <span className="text-[10px] font-semibold text-destructive tabular-nums">
-              Datorie {new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format((lead.debtCents ?? 0) / 100)}
-            </span>
-          )}
-        </div>
-      )}
-      <div className="flex items-center justify-between gap-2 mt-2">
-        <span className="text-[10px] text-muted-foreground">{SOURCE_LABEL[lead.source] ?? lead.source}</span>
-        <div className="flex gap-1.5 text-muted-foreground/60">
-          {lead.phone && <Phone className="h-2.5 w-2.5" aria-label="Are telefon" />}
-          {lead.email && <Mail className="h-2.5 w-2.5" aria-label="Are email" />}
-        </div>
-      </div>
-      {/* CRM-116: Task signal badges */}
-      {lead.nextTask ? (
-        (() => {
-          const isOverdue = lead.nextTask.dueAt != null && new Date(lead.nextTask.dueAt) < new Date();
-          const daysOverdue = isOverdue
-            ? Math.floor((Date.now() - new Date(lead.nextTask.dueAt!).getTime()) / 86400000)
-            : 0;
-          return (
-            <div className={cn(
-              "mt-1.5 text-[9px] font-semibold inline-flex items-center gap-1",
-              isOverdue ? "text-destructive" : "text-amber-600 dark:text-amber-400"
-            )} aria-label={isOverdue ? `Task restant ${daysOverdue} zile` : "Următor task"}>
-              <Clock className="h-2.5 w-2.5" aria-hidden="true" />
-              {isOverdue
-                ? `${daysOverdue}d`
-                : lead.nextTask.dueAt
-                  ? new Date(lead.nextTask.dueAt).toLocaleDateString("ro-RO", { day: "2-digit", month: "short" })
-                  : lead.nextTask.title.slice(0, 20)}
-            </div>
-          );
-        })()
+        </>
       ) : (
-        <div className="mt-1.5 text-[9px] font-semibold inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded px-1.5 py-0.5" aria-label="Lead fără task deschis">
-          Fără task
-        </div>
-      )}
-      {lead.convertedToStudentId && (
-        <div className="mt-1.5 text-[9px] font-bold text-success inline-flex items-center gap-1">
-          <CheckCircle2 className="h-2.5 w-2.5" />
-          Convertit
-        </div>
+        /* Comfortable mode: full card details */
+        <>
+          {/* CRM-114: Company under name */}
+          {lead.company && (
+            <p className="text-[10px] text-muted-foreground truncate mt-0.5 italic">{lead.company}</p>
+          )}
+          {lead.interestCourse && !lead.company && (
+            <p className="text-[10px] text-muted-foreground truncate mt-0.5">{lead.interestCourse}</p>
+          )}
+          {/* CRM-113: value / debt */}
+          {((lead.valueCents ?? 0) > 0 || (lead.debtCents ?? 0) > 0) && (
+            <div className="flex items-center gap-2 mt-1">
+              {(lead.valueCents ?? 0) > 0 && (
+                <span className="text-[10px] font-bold text-foreground tabular-nums">
+                  {new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format((lead.valueCents ?? 0) / 100)}
+                </span>
+              )}
+              {(lead.debtCents ?? 0) > 0 && (
+                <span className="text-[10px] font-semibold text-destructive tabular-nums">
+                  Datorie {new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format((lead.debtCents ?? 0) / 100)}
+                </span>
+              )}
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <span className="text-[10px] text-muted-foreground">{SOURCE_LABEL[lead.source] ?? lead.source}</span>
+            <div className="flex gap-1.5 text-muted-foreground/60">
+              {lead.phone && <Phone className="h-2.5 w-2.5" aria-label="Are telefon" />}
+              {lead.email && <Mail className="h-2.5 w-2.5" aria-label="Are email" />}
+            </div>
+          </div>
+          {/* CRM-116: Task signal badges */}
+          {lead.nextTask ? (
+            (() => {
+              const isOverdue = lead.nextTask.dueAt != null && new Date(lead.nextTask.dueAt) < new Date();
+              const daysOverdue = isOverdue
+                ? Math.floor((Date.now() - new Date(lead.nextTask.dueAt!).getTime()) / 86400000)
+                : 0;
+              return (
+                <div className={cn(
+                  "mt-1.5 text-[9px] font-semibold inline-flex items-center gap-1",
+                  isOverdue ? "text-destructive" : "text-amber-600 dark:text-amber-400"
+                )} aria-label={isOverdue ? `Task restant ${daysOverdue} zile` : "Următor task"}>
+                  <Clock className="h-2.5 w-2.5" aria-hidden="true" />
+                  {isOverdue
+                    ? `${daysOverdue}d`
+                    : lead.nextTask.dueAt
+                      ? new Date(lead.nextTask.dueAt).toLocaleDateString("ro-RO", { day: "2-digit", month: "short" })
+                      : lead.nextTask.title.slice(0, 20)}
+                </div>
+              );
+            })()
+          ) : (
+            <div className="mt-1.5 text-[9px] font-semibold inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 rounded px-1.5 py-0.5" aria-label="Lead fără task deschis">
+              Fără task
+            </div>
+          )}
+          {lead.convertedToStudentId && (
+            <div className="mt-1.5 text-[9px] font-bold text-success inline-flex items-center gap-1">
+              <CheckCircle2 className="h-2.5 w-2.5" />
+              Convertit
+            </div>
+          )}
+        </>
       )}
     </button>
   );

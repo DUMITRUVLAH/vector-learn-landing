@@ -175,6 +175,40 @@ scenariu marcat `[blocant]` nu poate rămâne roșu.
 - **T-CRM-133-4** `[blocant]` Given click „Fuzionează", Then `MergeLeadModal` se deschide cu 2 opțiuni radio.
 - **T-CRM-133-5** Given confirmare merge, Then `POST /api/leads/:id/merge` e apelat o singură dată cu parametrii corecți.
 
+## CRM-134 — @mentions in note-uri + notificări {#crm-134}
+
+- **T-CRM-134-1** `[blocant]` Given `MentionTextarea` randat cu lista `[{id:'u1', name:'Ana Moraru'}]`, When tastez `@Ana`, Then popover vizibil cu opțiunea „Ana Moraru".
+- **T-CRM-134-2** `[blocant]` Given popover deschis, When click pe „Ana Moraru", Then textarea conține `@Ana Moraru` și popover-ul e închis.
+- **T-CRM-134-3** `[blocant]` Given `parseMentions('@Ana Moraru text', [{id:'u1',name:'Ana Moraru'}])`, Then returnează `['u1']`.
+- **T-CRM-134-4** `[blocant]` Given `POST /api/leads/:id/interactions` cu body `"@Ana Moraru nota"` și Ana e în tenant, Then `lead_mentions` are 1 rând nou cu `mentioned_user_id = u1`.
+- **T-CRM-134-5** `[blocant]` Given aceeași cerere, Then `notification_queue` are 1 rând nou cu `channel='in_app'` și `recipient_id = u1`.
+- **T-CRM-134-6** `[blocant]` Given `GET /api/notifications/unread-count` cu 2 notificări unread, Then `{ count: 2 }`.
+- **T-CRM-134-7** `[blocant]` Given `PATCH /api/notifications/mark-read`, Then toate notificările unread ale utilizatorului curent au `sent_at` setat.
+- **T-CRM-134-8** `[blocant]` Given `NotificationBell` cu `count=3`, Then badge cu textul „3" vizibil.
+- **T-CRM-134-9** Given `NotificationBell` cu `count=0`, Then badge nu e vizibil.
+- **T-CRM-134-10** `[blocant]` Multi-tenant: `GET /api/notifications/unread-count` cu token tenant B returnează 0 chiar dacă există notificări în tenant A.
+
+## CRM-135 — Round-robin auto-assign {#crm-135}
+
+- **T-CRM-135-1** `[blocant]` Given `autoAssign` cu `rr_enabled=false`, When called, Then returnează `null` (neschimbat).
+- **T-CRM-135-2** `[blocant]` Given `rr_enabled=true`, `rr_user_ids=['u1','u2']`, `rr_index=0`, `currentAssignedTo=null`, When `autoAssign`, Then returnează `'u1'` și `rr_index` devine `1`.
+- **T-CRM-135-3** `[blocant]` Given `rr_index=1`, `rr_user_ids=['u1','u2']`, When `autoAssign`, Then returnează `'u2'` și `rr_index` devine `2`.
+- **T-CRM-135-4** `[blocant]` Given `rr_index=2` și `len=2` (wrap-around), When `autoAssign`, Then returnează `'u1'` (index % 2 = 0).
+- **T-CRM-135-5** `[blocant]` Given `currentAssignedTo='u3'` + RR activ, When `autoAssign`, Then returnează `'u3'` (no override).
+- **T-CRM-135-6** `[blocant]` Given `POST /api/leads` fără `assignedTo` + RR activ cu `['u1']`, Then lead creat cu `assignedTo='u1'`.
+- **T-CRM-135-7** `[blocant]` Given `PATCH /api/settings/rr-assign` cu rol `teacher` (non-admin), Then `403`.
+- **T-CRM-135-8** Multi-tenant: lead creat în tenant A nu consumă RR-ul tenantului B.
+
+## CRM-136 — Kanban density toggle {#crm-136}
+
+- **T-CRM-136-1** `[blocant]` Given `useKanbanDensity` montat fără `localStorage`, Then returnează `'comfortable'` (default).
+- **T-CRM-136-2** `[blocant]` Given `localStorage['crm_density'] = 'compact'`, When `useKanbanDensity` montat, Then returnează `'compact'`.
+- **T-CRM-136-3** `[blocant]` Given `setDensity('compact')` apelat, Then `localStorage['crm_density']` este `'compact'` și state-ul e `'compact'`.
+- **T-CRM-136-4** `[blocant]` Given `KanbanCard` cu `density='compact'`, Then render-ul conține clasă `py-1` și NU conține avatar element.
+- **T-CRM-136-5** `[blocant]` Given `KanbanCard` cu `density='comfortable'`, Then render-ul conține avatar element.
+- **T-CRM-136-6** `[blocant]` Given `DensityToggle` randat cu `density='compact'`, Then butonul compact are `aria-pressed='true'`.
+- **T-CRM-136-7** Given `DensityToggle` cu `density='comfortable'`, When click pe butonul compact, Then `setDensity` e apelat cu `'compact'`.
+
 ---
 
 ## Scenarii transversale (rulate la fiecare item)
