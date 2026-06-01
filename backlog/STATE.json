@@ -1632,7 +1632,7 @@
       "status": "pending",
       "attempts": 0,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/SCHOOL-001-academic-year-classes.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "high",
