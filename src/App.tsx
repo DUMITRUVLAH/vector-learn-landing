@@ -56,6 +56,7 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
+import { SchoolClassesPage } from "./pages/app/SchoolClassesPage"; // SCHOOL-001
 
 function HomePage() {
   return (
@@ -134,6 +135,7 @@ function Routes() {
   if (path.startsWith("/app/invoices")) return <InvoicesPage />;
   if (path.startsWith("/app/cx")) return <CXPage />;
   if (path.startsWith("/app/diplome")) return <DiplomaPage />;
+  if (path.startsWith("/app/school")) return <SchoolClassesPage />; // SCHOOL-001
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students

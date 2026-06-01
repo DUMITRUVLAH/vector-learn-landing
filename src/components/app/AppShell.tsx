@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { Link, useRouter } from "@/router/HashRouter";
@@ -26,6 +26,7 @@ const NAV = [
   { label: "Contracte", href: "/app/contracts", icon: FileText },
   { label: "Feedback", href: "/app/feedback", icon: MessageSquare },
   { label: "CX Cohorte", href: "/app/cx", icon: BookOpen }, // CX-702
+  { label: "Clase", href: "/app/school", icon: School }, // SCHOOL-001
   { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
   { label: "Analytics", href: "/app/analytics/crm", icon: BarChart3 },
   { label: "Cadences", href: "/app/cadences", icon: ListChecks },

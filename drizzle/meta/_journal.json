@@ -197,6 +197,13 @@
       "when": 1780304207442,
       "tag": "0027_fearless_orphan",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1748822400000,
+      "tag": "0028_school001_academic_years_classes",
+      "breakpoints": true
     }
   ]
 }
