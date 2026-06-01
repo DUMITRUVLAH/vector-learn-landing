@@ -1,11 +1,13 @@
 /**
- * CX-702/703 — /app/cx
+ * CX-702/703/704 — /app/cx
  *
  * Customer Experience module: cohort board with Active/Viitoare/Trecute tabs,
  * horizontal cohort selector, progress header, and 3 participant tables
  * (Înscriși / Gratuit / Cont de Plată) with stats bar.
+ *
+ * CX-704: Export CSV button wired to downloadCsv util.
  */
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Loader2,
   AlertCircle,
@@ -20,7 +22,8 @@ import { CohortProgress } from "@/components/modules/cx/CohortProgress";
 import { CohortStats } from "@/components/modules/cx/CohortStats";
 import { ParticipantTable } from "@/components/modules/cx/ParticipantTable";
 import { useCohortParticipants } from "@/hooks/useCohortParticipants";
-import type { AddParticipantPayload } from "@/lib/api/cohortParticipants";
+import type { AddParticipantPayload, CohortParticipant } from "@/lib/api/cohortParticipants";
+import { downloadCsv } from "@/lib/exportCsv";
 import { cn } from "@/lib/utils";
 
 /** Format "YYYY-MM-DD" → "d Mon YYYY" */
@@ -46,6 +49,10 @@ export function CXPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("active");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Ref to hold the latest participants list for the selected cohort.
+  // Updated by ParticipantsSection via onParticipantsChange callback.
+  const participantsRef = useRef<CohortParticipant[]>([]);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -86,18 +93,35 @@ export function CXPage() {
 
   const selectedCohort = cohorts.find((c) => c.id === selectedId) ?? null;
 
+  function handleExport() {
+    if (!selectedCohort) return;
+    downloadCsv({
+      courseName: selectedCohort.label,
+      editionLabel: fmtDate(selectedCohort.startDate),
+      participants: participantsRef.current,
+    });
+  }
+
   return (
     <AppShell
       pageTitle="Customer Experience (CX)"
       pageDescription="Urmărire cohorte cursanți pe ediții"
       actions={
         <button
-          disabled
-          aria-disabled="true"
-          title="Export CSV — disponibil în CX-704"
+          onClick={handleExport}
+          disabled={!selectedCohort}
+          aria-disabled={!selectedCohort}
+          title={
+            selectedCohort
+              ? `Descarcă CSV pentru ${selectedCohort.label}`
+              : "Selectează o cohortă pentru a exporta"
+          }
           className={cn(
             "inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium",
-            "border border-border text-muted-foreground opacity-50 cursor-not-allowed"
+            "border border-border transition-colors",
+            selectedCohort
+              ? "text-foreground bg-card hover:bg-muted cursor-pointer"
+              : "text-muted-foreground opacity-50 cursor-not-allowed"
           )}
         >
           <Download className="h-4 w-4" aria-hidden="true" />
@@ -147,7 +171,12 @@ export function CXPage() {
           {selectedCohort ? (
             <>
               <CohortHeader cohort={selectedCohort} />
-              <ParticipantsSection cohortId={selectedCohort.id} />
+              <ParticipantsSection
+                cohortId={selectedCohort.id}
+                onParticipantsChange={(ps) => {
+                  participantsRef.current = ps;
+                }}
+              />
             </>
           ) : (
             cohorts.length > 0 && (
@@ -199,7 +228,12 @@ function CohortHeader({ cohort }: { cohort: Cohort }) {
 
 // ─── Participants section ─────────────────────────────────────────────────────
 
-function ParticipantsSection({ cohortId }: { cohortId: string }) {
+interface ParticipantsSectionProps {
+  cohortId: string;
+  onParticipantsChange: (participants: CohortParticipant[]) => void;
+}
+
+function ParticipantsSection({ cohortId, onParticipantsChange }: ParticipantsSectionProps) {
   const {
     participants,
     stats,
@@ -209,6 +243,11 @@ function ParticipantsSection({ cohortId }: { cohortId: string }) {
     handleToggleWhatsapp,
     handleDelete,
   } = useCohortParticipants(cohortId);
+
+  // Sync participants to parent ref whenever they change
+  useEffect(() => {
+    onParticipantsChange(participants);
+  }, [participants, onParticipantsChange]);
 
   const enrolled = participants.filter(
     (p) => p.paymentStatus === "full" || p.paymentStatus === "half"
