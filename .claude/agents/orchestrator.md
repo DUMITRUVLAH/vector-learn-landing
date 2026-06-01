@@ -68,7 +68,23 @@ Triggered only when no `pending` item exists and no `blocked` item is retryable.
 5. Add each item to `backlog/STATE.json` (`status: "pending"`, `attempts: 0`, `blockers: []`, `spec`, `milestone`, `phase`, `depends_on`) and a row to `backlog/BACKLOG.md` under a new "Active milestone" heading.
 6. Append ONE line to `## Progress log` in `backlog/NIGHT-PLAN.md`: `- planner: generated <MODULE> items <ID..ID> from user-stories/<module>.md`.
 7. Set `active_milestone` + update `milestone_status` in STATE.json.
-8. GOTO Step 1 and pick the first new item.
+8. **CRITIC PASS (mandatory — never skip).** Invoke the `backlog-critic` agent, passing the new item
+   IDs + spec paths + module context. It challenges scope/value/dependencies/clarity, checks the
+   feature actually improves the product and doesn't reinvent existing code, and applies safe fixes
+   to the specs/STATE directly (tightens acceptance criteria, fixes `depends_on`, marks reuse, adds
+   missing blocking tests, proposes 0–3 high-value enhancements). It writes
+   `backlog/reports/<MODULE>-backlog-critique.md`. Wait for `BACKLOG_CRITIQUE_RESULT`:
+   - `clean` or `improved(N)` → proceed (specs are now build-ready).
+   - `needs-owner-decision` → record the recommendation in the critique report; pick the next
+     UNAFFECTED item to build and leave the contested one `pending` with a note (don't block the loop).
+   The critic runs ONCE per PLAN batch (it doesn't count toward the 3-item build cap).
+9. GOTO Step 1 and pick the first new item.
+
+> **Also run the critic when items are added OUTSIDE the PLAN step** — e.g. when the orchestrator (or
+> the owner via a request the orchestrator handles) writes new feature specs/items into the backlog
+> for any reason. The rule is: *whenever new backlog features are written, the backlog-critic reviews
+> and improves them before they are built.* Never build a freshly-written item that hasn't passed the
+> critic.
 
 **Genuine ALL_DONE:** if every module in NIGHT-PLAN already has items in STATE.json → exit with `ORCHESTRATOR_RUN_SUMMARY`, `stop_reason: all_done`.
 
