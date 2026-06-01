@@ -38,6 +38,7 @@ import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
 import { enrollRoutes } from "./routes/enroll"; // GAP-011
+import { progressRoutes } from "./routes/progress"; // GAP-012
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -122,6 +123,8 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
+// GAP-012: Gradebook / student progress (public token route BEFORE tagRoutes)
+app.route("/api/progress", progressRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {
