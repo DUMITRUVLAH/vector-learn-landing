@@ -286,6 +286,15 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | KINDER-004 | 🔴 | Medical (allergies/immunization/medication) |
 | KINDER-005 | 🟡 | Parent app feed + messaging |
 | KINDER-006 | 🟡 | Licensing/compliance reports |
-| KINDER-007 | 🟡 | Incident/accident reports + signature |
+| KINDER-007 | ✅ | Incident/accident reports + signature |
 | GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
 | CONSENT-001 | 🟡 | Consent/permission forms + e-signature |
+
+## Active milestone: BRANCH faza-1 — Multifiliale
+
+| ID | Severity | Title | Status |
+|----|----------|-------|--------|
+| BRANCH-701 | 🔴 high | Schema branches + branch_id pe students/teachers/lessons | pending |
+| BRANCH-702 | 🔴 high | Branch switcher UI + BranchContext | pending |
+| BRANCH-703 | 🔴 high | Branch-scoped permissions (branch_scope pe users) | pending |
+| BRANCH-704 | 🟡 normal | Rapoarte consolidate vs per-filială | pending |
