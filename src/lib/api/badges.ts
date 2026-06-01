@@ -41,31 +41,23 @@ export interface BadgeStats {
 }
 
 /** Fetch badges for a student */
-export async function getStudentBadges(studentId: string): Promise<StudentBadge[]> {
-  const res = await api.get(`/api/badges/students/${studentId}`);
-  if (!res.ok) throw new Error(`Failed to fetch badges: ${res.status}`);
-  return res.json() as Promise<StudentBadge[]>;
+export function getStudentBadges(studentId: string): Promise<StudentBadge[]> {
+  return api<StudentBadge[]>(`/api/badges/students/${studentId}`);
 }
 
 /** Trigger badge awarding check for a student */
-export async function checkBadges(studentId: string): Promise<CheckBadgesResult> {
-  const res = await api.post(`/api/badges/check/${studentId}`);
-  if (!res.ok) throw new Error(`Failed to check badges: ${res.status}`);
-  return res.json() as Promise<CheckBadgesResult>;
+export function checkBadges(studentId: string): Promise<CheckBadgesResult> {
+  return api<CheckBadgesResult>(`/api/badges/check/${studentId}`, { method: "POST" });
 }
 
 /** Fetch leaderboard (top students by badge count) */
-export async function getLeaderboard(limit = 10): Promise<LeaderboardEntry[]> {
-  const res = await api.get(`/api/badges/leaderboard?limit=${limit}`);
-  if (!res.ok) throw new Error(`Failed to fetch leaderboard: ${res.status}`);
-  return res.json() as Promise<LeaderboardEntry[]>;
+export function getLeaderboard(limit = 10): Promise<LeaderboardEntry[]> {
+  return api<LeaderboardEntry[]>(`/api/badges/leaderboard?limit=${limit}`);
 }
 
 /** Fetch global badge stats */
-export async function getBadgeStats(): Promise<BadgeStats> {
-  const res = await api.get(`/api/badges/stats`);
-  if (!res.ok) throw new Error(`Failed to fetch badge stats: ${res.status}`);
-  return res.json() as Promise<BadgeStats>;
+export function getBadgeStats(): Promise<BadgeStats> {
+  return api<BadgeStats>(`/api/badges/stats`);
 }
 
 /** Human-readable labels for each badge type (Romanian) */

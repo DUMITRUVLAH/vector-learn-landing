@@ -10,7 +10,7 @@ import { AppShell } from "@/components/app/AppShell";
 import { StudentBadgesSection } from "@/components/app/StudentBadgesSection";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { Student } from "@/lib/api/students";
 import { cn } from "@/lib/utils";
 
@@ -36,22 +36,20 @@ export function StudentDetailPage({ studentId }: StudentDetailPageProps) {
     if (sessionStatus !== "authenticated") return;
     let cancelled = false;
     setLoading(true);
-    api
-      .get(`/api/students/${studentId}`)
-      .then(async (res) => {
+    api<Student>(`/api/students/${studentId}`)
+      .then((data) => {
         if (!cancelled) {
-          if (res.ok) {
-            const data = (await res.json()) as Student;
-            setStudent(data);
-          } else {
-            setError("Elevul nu a fost găsit.");
-          }
+          setStudent(data);
           setLoading(false);
         }
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (!cancelled) {
-          setError("Eroare la încărcarea datelor.");
+          if (err instanceof ApiError && err.status === 404) {
+            setError("Elevul nu a fost găsit.");
+          } else {
+            setError("Eroare la încărcarea datelor.");
+          }
           setLoading(false);
         }
       });
