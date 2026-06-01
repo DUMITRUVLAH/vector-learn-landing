@@ -37,6 +37,12 @@ import { invoiceRoutes } from "./routes/invoices";
 import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
+import { formRoutes } from "./routes/forms"; // FORMS-001
+import {
+  publicFormGetHandler,
+  publicFormSubmitHandler,
+  publicFormPingHandler,
+} from "./routes/publicForms"; // FORMS-001/005
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -76,6 +82,15 @@ app.get("/api/health", async (c) => {
   }
 });
 
+// FORMS-001: public (no-auth) form routes — registered as DIRECT app handlers immediately
+// after /api/health, before ANY sub-router mounted at "/api" (contactRoutes, tagRoutes, etc.)
+// because those sub-routers use("/*", requireAuth) which becomes ALL /api/* middleware and
+// intercepts any path registered AFTER them, even direct app.get handlers.
+app.get("/api/public/forms/:slug", publicFormGetHandler);
+app.post("/api/public/forms/:slug/submit", publicFormSubmitHandler);
+// FORMS-005: analytics ping (no-auth, fire-and-forget from renderer)
+app.post("/api/public/forms/:slug/ping", publicFormPingHandler);
+
 app.route("/api/auth", authRoutes);
 app.route("/api/students", studentRoutes);
 app.route("/api/teachers", teacherRoutes);
@@ -97,6 +112,8 @@ app.route("/api/analytics", analyticsRoutes);
 // is mounted at "/api" with a global requireAuth that otherwise intercepts all /api/* requests.
 app.route("/api/feedback-public", feedbackPublicRoutes);
 app.route("/api/feedback", feedbackRoutes);
+// FORMS-001: admin (auth) routes for form CRUD + fields + submissions.
+app.route("/api/forms", formRoutes);
 app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
 app.route("/api/hr/payroll", payrollRoutes);
 app.route("/api/hr/teacher-stats", hrTeacherRoutes);

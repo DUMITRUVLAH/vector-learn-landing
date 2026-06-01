@@ -56,6 +56,9 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
+import { FormsPage } from "./pages/app/FormsPage";
+import { FormBuilderPage } from "./pages/app/FormBuilderPage";
+import { FormPublicPage } from "./pages/public/FormPublicPage";
 
 function HomePage() {
   return (
@@ -134,12 +137,23 @@ function Routes() {
   if (path.startsWith("/app/invoices")) return <InvoicesPage />;
   if (path.startsWith("/app/cx")) return <CXPage />;
   if (path.startsWith("/app/diplome")) return <DiplomaPage />;
+  // FORMS-002: /app/forms/:id/edit must be checked before /app/forms
+  if (path.match(/^\/app\/forms\/[^/]+\/edit$/)) {
+    const id = path.split("/")[3];
+    return <FormBuilderPage formId={id} />;
+  }
+  if (path.startsWith("/app/forms")) return <FormsPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students
   if (path.match(/^\/feedback\/[^/]+$/)) {
     const token = path.split("/")[2];
     return <FeedbackPublicPage token={token} />;
+  }
+  // FORMS-003: /f/:slug — public conversational form renderer (no auth)
+  if (path.match(/^\/f\/[^/]+$/)) {
+    const slug = path.split("/")[2];
+    return <FormPublicPage slug={slug} />;
   }
   return <HomePage />;
 }
