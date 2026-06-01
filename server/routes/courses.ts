@@ -12,6 +12,8 @@ const createCourseSchema = z.object({
   level: z.string().max(32).optional().nullable(),
   defaultPriceCents: z.number().int().min(0).default(0),
   durationMinutes: z.number().int().min(15).max(480).default(60),
+  /** GAP-005: Maximum students per course (null = unlimited) */
+  maxStudents: z.number().int().min(1).max(500).optional().nullable(),
 });
 
 export const courseRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -36,6 +38,28 @@ courseRoutes.post("/", zValidator("json", createCourseSchema), async (c) => {
     .values({ ...body, tenantId })
     .returning();
   return c.json(created, 201);
+});
+
+/** PATCH /api/courses/:id — update course including maxStudents */
+const patchCourseSchema = createCourseSchema.partial();
+
+courseRoutes.patch("/:id", zValidator("json", patchCourseSchema), async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+  const body = c.req.valid("json");
+
+  const existing = await db.query.courses.findFirst({
+    where: and(eq(courses.id, id), eq(courses.tenantId, tenantId)),
+  });
+  if (!existing) return c.json({ error: "not_found" }, 404);
+
+  const [updated] = await db
+    .update(courses)
+    .set({ ...body, updatedAt: new Date() })
+    .where(and(eq(courses.id, id), eq(courses.tenantId, tenantId)))
+    .returning();
+
+  return c.json(updated);
 });
 
 courseRoutes.delete("/:id", async (c) => {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare } from "lucide-react";
+import { Plus, Search, Loader2, Pencil, Archive, X, FilePlus, MessageSquare, BookOpen } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { StudentForm } from "@/components/app/StudentForm";
 import { useSession } from "@/hooks/useSession";
@@ -11,6 +11,7 @@ import {
   type ListStudentsParams,
 } from "@/lib/api/students";
 import { listFeedbackForms, sendFeedbackToStudent, type FeedbackForm } from "@/lib/api/feedback";
+import { listLessonPackages, type LessonPackage } from "@/lib/api/lessonPackages";
 import { cn } from "@/lib/utils";
 
 const STATUS_BADGE: Record<Student["status"], { label: string; cls: string }> = {
@@ -48,6 +49,8 @@ export function StudentsPage() {
   const [feedbackFormId, setFeedbackFormId] = useState<string>("");
   const [feedbackSending, setFeedbackSending] = useState(false);
   const [feedbackLink, setFeedbackLink] = useState<string | null>(null);
+  // GAP-006: lesson packages per student (map studentId → packages)
+  const [packageMap, setPackageMap] = useState<Map<string, LessonPackage[]>>(new Map());
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -65,6 +68,20 @@ export function StudentsPage() {
       const res = await listStudents({ search: debouncedSearch, status: statusFilter, limit: 100 });
       setItems(res.items);
       setTotal(res.total);
+
+      // GAP-006: load active packages for all returned students
+      try {
+        const pkgRes = await listLessonPackages({ status: "active" });
+        const map = new Map<string, LessonPackage[]>();
+        for (const pkg of pkgRes.items) {
+          const arr = map.get(pkg.studentId) ?? [];
+          arr.push(pkg);
+          map.set(pkg.studentId, arr);
+        }
+        setPackageMap(map);
+      } catch {
+        // non-blocking — package badges are informational
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare la încărcare");
     } finally {
@@ -246,6 +263,25 @@ export function StudentsPage() {
                                 Datorie: {new Intl.NumberFormat("ro-RO", { style: "currency", currency: "RON", maximumFractionDigits: 0 }).format((s.debtCents ?? 0) / 100)}
                               </span>
                             )}
+                            {/* GAP-006: lesson package balance badge */}
+                            {(packageMap.get(s.id) ?? []).map((pkg) => {
+                              const isLow = pkg.unitsRemaining <= 2;
+                              return (
+                                <span
+                                  key={pkg.id}
+                                  className={cn(
+                                    "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-bold",
+                                    isLow
+                                      ? "bg-warning/15 text-warning"
+                                      : "bg-success/15 text-success"
+                                  )}
+                                  title={`Pachet lecții: ${pkg.unitsRemaining} din ${pkg.unitsTotal} rămase`}
+                                >
+                                  <BookOpen className="h-2.5 w-2.5" />
+                                  {pkg.unitsRemaining} lecții
+                                </span>
+                              );
+                            })}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right">

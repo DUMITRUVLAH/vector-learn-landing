@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, integer, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, integer, boolean, timestamp, index } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 
 export const courses = pgTable(
@@ -13,6 +13,10 @@ export const courses = pgTable(
     level: varchar("level", { length: 32 }),
     defaultPriceCents: integer("default_price_cents").notNull().default(0),
     durationMinutes: integer("duration_minutes").notNull().default(60),
+    /** GAP-005: Maximum students per course (null = unlimited) */
+    maxStudents: integer("max_students"),
+    /** GAP-009: If true, make-up lessons do not consume a unit from lesson_packages */
+    recoveryIncluded: boolean("recovery_included").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

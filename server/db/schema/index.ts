@@ -30,3 +30,5 @@ export * from "./subscriptions";
 export * from "./cohorts";
 export * from "./cohortParticipants";
 export * from "./certificates";
+export * from "./courseWaitlist";
+export * from "./lessonPackages";

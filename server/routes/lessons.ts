@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, gte, lt, ne, sql } from "drizzle-orm";
+import { and, eq, gte, lt, ne, sql, asc } from "drizzle-orm";
 import { db } from "../db/client";
-import { lessons, courses, teachers, users, rooms, students, studentLessons } from "../db/schema";
+import { lessons, courses, teachers, users, students, studentLessons, lessonPackages, auditLog } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { scheduleExhaustionAlert } from "./lessonPackages";
 
 const createLessonSchema = z.object({
   courseId: z.string().uuid(),
@@ -299,6 +300,9 @@ lessonRoutes.patch(
       ),
     });
 
+    const previousStatus = existing?.attendanceStatus ?? null;
+
+    let result;
     if (existing) {
       const [updated] = await db
         .update(studentLessons)
@@ -309,7 +313,7 @@ lessonRoutes.patch(
         })
         .where(eq(studentLessons.id, existing.id))
         .returning();
-      return c.json(updated);
+      result = updated;
     } else {
       // Auto-enroll: create the student_lessons record if it doesn't exist
       const [created] = await db
@@ -323,7 +327,138 @@ lessonRoutes.patch(
           markedAt: now,
         })
         .returning();
-      return c.json(created, 201);
+      result = created;
     }
+
+    // ── GAP-007: Unit deduction hook ─────────────────────────────────────────
+    // Skip deduction for trial lessons (GAP-003).
+    // Only touch packages when transitioning TO or FROM 'present'.
+    const isTrialLesson = (lesson as unknown as Record<string, unknown>).isTrial === true;
+
+    if (!isTrialLesson) {
+      const wasPresent = previousStatus === "present";
+      const nowPresent = attendanceStatus === "present";
+
+      if (nowPresent && !wasPresent) {
+        // Mark present → deduct 1 unit from oldest active package (FIFO on validFrom)
+        await deductUnit(tenantId, studentId, lesson.courseId, lessonId, user.id);
+      } else if (!nowPresent && wasPresent) {
+        // Un-mark present → restore 1 unit (reverse deduction)
+        await restoreUnit(tenantId, studentId, lesson.courseId, lessonId, user.id);
+      }
+    }
+
+    return existing ? c.json(result) : c.json(result, 201);
   }
 );
+
+/**
+ * GAP-007: Atomically deduct 1 unit from the oldest active lesson package for
+ * (studentId, courseId). No-op if no active package exists.
+ */
+async function deductUnit(
+  tenantId: string,
+  studentId: string,
+  courseId: string,
+  lessonId: string,
+  actorId: string
+) {
+  // Find oldest active package (FIFO on validFrom)
+  const activePackages = await db
+    .select()
+    .from(lessonPackages)
+    .where(
+      and(
+        eq(lessonPackages.tenantId, tenantId),
+        eq(lessonPackages.studentId, studentId),
+        eq(lessonPackages.courseId, courseId),
+        eq(lessonPackages.status, "active"),
+      )
+    )
+    .orderBy(asc(lessonPackages.validFrom))
+    .limit(1);
+
+  const pkg = activePackages[0];
+  if (!pkg) return; // No active package — no-op
+
+  const newRemaining = pkg.unitsRemaining - 1;
+  const newStatus = newRemaining <= 0 ? "exhausted" as const : "active" as const;
+
+  await db
+    .update(lessonPackages)
+    .set({
+      unitsRemaining: newRemaining,
+      status: newStatus,
+      updatedAt: new Date(),
+    })
+    .where(eq(lessonPackages.id, pkg.id));
+
+  // Log to audit_log
+  await db.insert(auditLog).values({
+    tenantId,
+    actorId,
+    actionType: "unit_deducted",
+    targetType: "lesson_package",
+    targetId: pkg.id,
+    oldValue: { unitsRemaining: pkg.unitsRemaining, status: pkg.status },
+    newValue: { unitsRemaining: newRemaining, status: newStatus, studentId, lessonId },
+  });
+
+  // Low-balance alert (≤ 2 remaining) or exhausted
+  if (newRemaining <= 2) {
+    await scheduleExhaustionAlert(tenantId, pkg.id, studentId, newRemaining);
+  }
+}
+
+/**
+ * GAP-007: Reverse deduction — add 1 unit back to the most recent active or exhausted package.
+ * Called when a 'present' mark is changed back to absent/excused/late.
+ */
+async function restoreUnit(
+  tenantId: string,
+  studentId: string,
+  courseId: string,
+  lessonId: string,
+  actorId: string
+) {
+  // Find the most recently updated package (the one that was just decremented)
+  const packages = await db
+    .select()
+    .from(lessonPackages)
+    .where(
+      and(
+        eq(lessonPackages.tenantId, tenantId),
+        eq(lessonPackages.studentId, studentId),
+        eq(lessonPackages.courseId, courseId),
+        // Can restore from active or exhausted (the deduction may have just exhausted it)
+        sql`${lessonPackages.status} IN ('active', 'exhausted')`,
+      )
+    )
+    .orderBy(asc(lessonPackages.validFrom))
+    .limit(1);
+
+  const pkg = packages[0];
+  if (!pkg) return;
+
+  const newRemaining = pkg.unitsRemaining + 1;
+  const newStatus = newRemaining > 0 ? "active" as const : "exhausted" as const;
+
+  await db
+    .update(lessonPackages)
+    .set({
+      unitsRemaining: newRemaining,
+      status: newStatus,
+      updatedAt: new Date(),
+    })
+    .where(eq(lessonPackages.id, pkg.id));
+
+  await db.insert(auditLog).values({
+    tenantId,
+    actorId,
+    actionType: "unit_restored",
+    targetType: "lesson_package",
+    targetId: pkg.id,
+    oldValue: { unitsRemaining: pkg.unitsRemaining, status: pkg.status },
+    newValue: { unitsRemaining: newRemaining, status: newStatus, studentId, lessonId },
+  });
+}
