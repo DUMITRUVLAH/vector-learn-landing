@@ -37,7 +37,7 @@ export function StudentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ListStudentsParams["status"]>("all");
+  const [statusFilter, setStatusFilter] = useState<ListStudentsParams["status"]>("active");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<Student | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
