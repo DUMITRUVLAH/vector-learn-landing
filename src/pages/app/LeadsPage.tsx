@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, LayoutList, KanbanSquare, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Tag, UserCog, ArrowRightLeft, SortAsc } from "lucide-react";
+import { Loader2, Plus, X, Phone, Mail, ArrowRight, CheckCircle2, UserPlus, MessageCircle, Upload, AlertTriangle, Search, Settings, GripVertical, Trash2, Clock, LayoutList, KanbanSquare, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Tag, UserCog, ArrowRightLeft, SortAsc, MoreHorizontal } from "lucide-react";
 import { MobileLeadList } from "@/components/crm/MobileLeadList";
 import { QuickAddSheet } from "@/components/crm/QuickAddSheet";
 import { AppShell } from "@/components/app/AppShell";
@@ -213,6 +213,9 @@ export function LeadsPage() {
   } | null>(null);
   /** CRM-122: Quick-add mobile bottom sheet */
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  /** CRM-151: Mobile overflow menu state */
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  const overflowMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -223,6 +226,25 @@ export function LeadsPage() {
     const t = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // CRM-151: close overflow menu on outside click or Esc
+  useEffect(() => {
+    if (!showOverflowMenu) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowOverflowMenu(false);
+    };
+    const handleClick = (e: MouseEvent) => {
+      if (overflowMenuRef.current && !overflowMenuRef.current.contains(e.target as Node)) {
+        setShowOverflowMenu(false);
+      }
+    };
+    document.addEventListener("keydown", handleKey);
+    document.addEventListener("mousedown", handleClick);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      document.removeEventListener("mousedown", handleClick);
+    };
+  }, [showOverflowMenu]);
 
   const fetchStages = useCallback(async () => {
     try {
@@ -381,7 +403,7 @@ export function LeadsPage() {
       pageDescription={[`${totalLeads} lead-uri`, `conversie: ${conversionRate}%`, totalValueCents > 0 ? formatEur(totalValueCents) : null, totalWeightedCents > 0 ? `Forecast: ${formatEur(totalWeightedCents)}` : null].filter(Boolean).join(" · ")}
       actions={
         <div className="flex gap-2 items-center">
-          {/* CRM-117: Kanban / List toggle */}
+          {/* CRM-117: Kanban / List toggle — always visible */}
           <div className="inline-flex rounded-md border border-border bg-card overflow-hidden" role="group" aria-label="Alegere vedere">
             <button
               type="button"
@@ -414,28 +436,74 @@ export function LeadsPage() {
               <span className="hidden sm:inline">Listă</span>
             </button>
           </div>
+
+          {/* CRM-151: Desktop — Stadii + Import direct; Mobile — inside "⋯" overflow menu */}
+          {/* Desktop buttons (lg+) */}
           <button
             type="button"
             onClick={() => setShowStagesEditor(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
+            className="hidden lg:inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
             aria-label="Configurează stadii pipeline"
           >
             <Settings className="h-4 w-4" />
-            <span className="hidden sm:inline">Stadii</span>
+            Stadii
           </button>
           <button
             type="button"
             onClick={() => setShowImport(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
+            className="hidden lg:inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
             aria-label="Import CSV"
           >
             <Upload className="h-4 w-4" />
-            <span className="hidden sm:inline">Import</span>
+            Import
           </button>
+
+          {/* CRM-151: Mobile overflow "⋯" menu (< lg) */}
+          <div ref={overflowMenuRef} className="relative lg:hidden">
+            <button
+              type="button"
+              onClick={() => setShowOverflowMenu((v) => !v)}
+              aria-label="Mai multe acțiuni"
+              aria-haspopup="true"
+              aria-expanded={showOverflowMenu}
+              className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-md border border-border bg-card p-2 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+            </button>
+            {showOverflowMenu && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-xl border border-border bg-card shadow-xl py-1"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setShowStagesEditor(true); setShowOverflowMenu(false); }}
+                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:bg-muted"
+                  aria-label="Configurează stadii pipeline"
+                >
+                  <Settings className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  Stadii
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setShowImport(true); setShowOverflowMenu(false); }}
+                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:bg-muted"
+                  aria-label="Import CSV"
+                >
+                  <Upload className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  Import
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* CRM-151: "Adaugă lead" hidden on mobile (FAB covers it); shown on desktop */}
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            className="hidden lg:inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
             Adaugă lead
