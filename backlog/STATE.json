@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "CX-705",
+  "last_completed": "DIPLOMA-801",
   "iterations": 88,
   "last_run_at": "2026-06-01T12:00:00Z",
   "milestone_status": "CX Phase 1 done (CX-701..705, PR #96). DIPLOMA Phase 1 in progress on feat/DIPLOMA-faza-1-schema-editor.",
@@ -1432,15 +1432,23 @@
       ]
     },
     "DIPLOMA-801": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DIPLOMA-801-schema-templates.md",
       "milestone": "DIPLOMA",
       "phase": "1",
       "depends_on": [
         "CX-701"
-      ]
+      ],
+      "branch": "feat/DIPLOMA-faza-1-schema-editor",
+      "pr": "pending-open",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "DIPLOMA-802": {
       "status": "pending",
