@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, BookMarked, Banknote, ClipboardCheck, CalendarDays } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, BookMarked, Banknote, ClipboardCheck, CalendarDays, FileCheck } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { Link, useRouter } from "@/router/HashRouter";
@@ -33,6 +33,7 @@ const NAV = [
   { label: "Taxe", href: "/app/school/tuition", icon: Banknote }, // SCHOOL-004
   { label: "Admitere", href: "/app/school/admissions", icon: ClipboardCheck }, // SCHOOL-005
   { label: "Orar", href: "/app/school/timetable", icon: CalendarDays }, // SCHOOL-006
+  { label: "Consimțământ", href: "/app/school/consent", icon: FileCheck }, // CONSENT-001
   { label: "Portal Părinți", href: "/app/parent/portal", icon: Users }, // SCHOOL-007
   { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
   { label: "Analytics", href: "/app/analytics/crm", icon: BarChart3 },

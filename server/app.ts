@@ -45,6 +45,7 @@ import { admissionsRoutes } from "./routes/admissions"; // SCHOOL-005
 import { timetableRoutes } from "./routes/timetable"; // SCHOOL-006
 import { guardianRoutes } from "./routes/guardians"; // GUARDIAN-001
 import { parentPortalRoutes, schoolNewsAdminRoutes } from "./routes/parentPortal"; // SCHOOL-007
+import { consentRoutes } from "./routes/consent"; // CONSENT-001
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -146,6 +147,8 @@ app.route("/api/students", guardianRoutes);
 app.route("/api/parent", parentPortalRoutes);
 // SCHOOL-007: School news admin — POST /api/school/news (admin/manager)
 app.route("/api/school/news", schoolNewsAdminRoutes);
+// CONSENT-001: Consent forms + e-signature — /api/school/consent/*
+app.route("/api/school/consent", consentRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

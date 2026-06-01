@@ -1850,15 +1850,16 @@
       }
     },
     "CONSENT-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/CONSENT-001-consent-forms-esignature.md",
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "normal",
       "title": "Consent/permission forms (photo, trips, medical) with e-signature",
-      "depends_on": []
+      "depends_on": ["SCHOOL-001", "GUARDIAN-001"],
+      "branch": "feat/SCHOOL-faza-1-fundatie"
     }
   }
 }

@@ -38,3 +38,4 @@ export * from "./admissions";
 export * from "./timetable";
 export * from "./guardians";
 export * from "./schoolNews";
+export * from "./consent"; // CONSENT-001
