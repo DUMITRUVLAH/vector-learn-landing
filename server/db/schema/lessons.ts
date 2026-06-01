@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, integer, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, integer, timestamp, pgEnum, index, boolean } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { courses } from "./courses";
 import { teachers } from "./teachers";
@@ -6,12 +6,20 @@ import { students } from "./students";
 import { users } from "./users";
 import { rooms } from "./rooms";
 import { lessonSeries } from "./lessonSeries";
+import { leads } from "./leads";
 
 export const lessonStatusEnum = pgEnum("lesson_status", [
   "scheduled",
   "completed",
   "cancelled",
   "rescheduled",
+]);
+
+/** GAP-003: Trial lesson result recorded by teacher */
+export const trialResultEnum = pgEnum("trial_result", [
+  "interested",
+  "not_interested",
+  "no_show",
 ]);
 
 export const attendanceStatusEnum = pgEnum("attendance_status", [
@@ -44,6 +52,12 @@ export const lessons = pgTable(
     roomId: uuid("room_id").references(() => rooms.id, { onDelete: "set null" }),
     /** SCHED-502: Links this lesson to a recurring series */
     seriesId: uuid("series_id").references(() => lessonSeries.id, { onDelete: "set null" }),
+    /** GAP-003: Trial lesson flag — true for prospect trial lessons */
+    isTrial: boolean("is_trial").notNull().default(false),
+    /** GAP-003: FK to lead when this is a trial lesson */
+    trialLeadId: uuid("trial_lead_id").references(() => leads.id, { onDelete: "set null" }),
+    /** GAP-003: Teacher-recorded result of the trial */
+    trialResult: trialResultEnum("trial_result"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

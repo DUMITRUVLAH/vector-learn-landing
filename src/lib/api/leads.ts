@@ -46,6 +46,10 @@ export interface Lead {
   nextTask?: { dueAt: string | null; title: string } | null;
   /** CRM-124: SLA response time badge — computed server-side */
   slaBadge?: "green" | "yellow" | "red" | null;
+  /** GAP-001: Preferred schedule */
+  preferredDays?: number[] | null;
+  preferredTimeStart?: string | null;
+  preferredTimeEnd?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -261,7 +265,7 @@ export function addInteraction(
 
 export function updateLead(
   id: string,
-  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo" | "valueCents" | "debtCents" | "company" | "dealName">>
+  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo" | "valueCents" | "debtCents" | "company" | "dealName" | "preferredDays" | "preferredTimeStart" | "preferredTimeEnd">>
 ): Promise<Lead> {
   return api<Lead>(`/api/leads/${id}`, {
     method: "PATCH",
@@ -346,6 +350,17 @@ export function logCall(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/** GAP-004: Convert trial lead → active student with course enrollment */
+export function convertLeadFromTrial(
+  id: string,
+  input: { courseId: string; createPackage?: boolean }
+): Promise<{ studentId: string; enrolledLessons: number; packageCreated: boolean }> {
+  return api<{ studentId: string; enrolledLessons: number; packageCreated: boolean }>(
+    `/api/leads/${id}/convert-trial`,
+    { method: "POST", body: JSON.stringify(input) }
+  );
 }
 
 // ─── CRM-114: Lead contacts ───────────────────────────────────────────────────
@@ -529,4 +544,20 @@ export function mergeLead(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+// ─── GAP-002: Course matching ─────────────────────────────────────────────────
+
+export interface CourseMatch {
+  courseId: string;
+  courseName: string;
+  level: string | null;
+  teacherName: string | null;
+  nextSlot: string | null;
+  compatibilityScore: number;
+  vacancies: number | null;
+}
+
+export function matchCourses(leadId: string): Promise<{ matches: CourseMatch[] }> {
+  return api<{ matches: CourseMatch[] }>(`/api/courses/match?leadId=${leadId}`);
 }

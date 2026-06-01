@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, pgEnum, index, jsonb, integer } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, pgEnum, index, jsonb, integer, time } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { students } from "./students";
 import { users } from "./users";
@@ -58,6 +58,12 @@ export const leads = pgTable(
     valueCents: integer("value_cents").notNull().default(0),
     /** CRM-113: Remaining debt in euro-cents (shown on card only when > 0) */
     debtCents: integer("debt_cents").notNull().default(0),
+    /** GAP-001: Preferred days of week (array of ints 1–7, Mon=1) */
+    preferredDays: jsonb("preferred_days").$type<number[]>(),
+    /** GAP-001: Preferred time window start (e.g. "17:00") */
+    preferredTimeStart: time("preferred_time_start"),
+    /** GAP-001: Preferred time window end (e.g. "19:00") */
+    preferredTimeEnd: time("preferred_time_end"),
     /** CRM-114: Company name for B2B leads */
     company: varchar("company", { length: 300 }),
     /** CRM-114: Optional deal name — if set, used as title instead of full_name */

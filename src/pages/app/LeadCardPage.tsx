@@ -24,8 +24,8 @@ import {
   listContacts, createContact, updateContact, deleteContact,
   listTags, addTag, removeTag,
   listFieldValues, upsertFieldValue, listCustomFields,
-  getDedupBanner,
-  type Lead, type LeadInteraction, type LeadContact, type CustomField, type LeadFieldValue,
+  getDedupBanner, matchCourses, convertLeadFromTrial,
+  type Lead, type LeadInteraction, type LeadContact, type CustomField, type LeadFieldValue, type CourseMatch,
 } from "@/lib/api/leads";
 import { fetchPipelineStages, type PipelineStage } from "@/lib/api/pipeline";
 import { AssigneePicker, useAssigneeName } from "@/components/crm/AssigneePicker";
@@ -47,6 +47,8 @@ import { CopyButton } from "@/components/crm/CopyButton";
 import { ScoreExplain } from "@/components/crm/ScoreExplain";
 // CRM-133: merge duplicate leads
 import { MergeLeadModal } from "@/components/crm/MergeLeadModal";
+// GAP-003: Trial lessons
+import { getTrialLessons, listCourses, type Lesson, type Course } from "@/lib/api/lessons";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -130,6 +132,21 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   // CRM-111: Enhanced convert modal
   const [convertModal, setConvertModal] = useState(false);
 
+  // GAP-002: Course matching panel
+  const [matchPanel, setMatchPanel] = useState(false);
+  const [matchResults, setMatchResults] = useState<CourseMatch[]>([]);
+  const [matchLoading, setMatchLoading] = useState(false);
+
+  // GAP-003: Trial lessons for this lead
+  const [trialLessons, setTrialLessons] = useState<Lesson[]>([]);
+
+  // GAP-004: Convert-trial modal
+  const [convertTrialModal, setConvertTrialModal] = useState(false);
+  const [convertTrialCourseId, setConvertTrialCourseId] = useState("");
+  const [convertTrialPackage, setConvertTrialPackage] = useState(false);
+  const [convertTrialLoading, setConvertTrialLoading] = useState(false);
+  const [courses, setCourses] = useState<Course[]>([]);
+
   // CRM-145: score factors for explainer; auto-score if missing
   const [scoreFactors, setScoreFactors] = useState<ScoreFactor[]>([]);
   const [scoreLoading, setScoreLoading] = useState(false);
@@ -196,6 +213,13 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
 
   useEffect(() => { void fetchAll(); }, [fetchAll]);
 
+  // GAP-003: Load trial lessons for this lead
+  useEffect(() => {
+    getTrialLessons(leadId)
+      .then((res) => setTrialLessons(res.items))
+      .catch(() => setTrialLessons([]));
+  }, [leadId]);
+
   // CRM-145: auto-score once when lead loads with no score (never loops)
   const autoScoreFiredRef = useRef(false);
   useEffect(() => {
@@ -230,6 +254,9 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
       debtCents: lead.debtCents,
       company: lead.company,
       dealName: lead.dealName,
+      preferredDays: (lead as unknown as Record<string, unknown>).preferredDays as number[] | null ?? null,
+      preferredTimeStart: (lead as unknown as Record<string, unknown>).preferredTimeStart as string | null ?? null,
+      preferredTimeEnd: (lead as unknown as Record<string, unknown>).preferredTimeEnd as string | null ?? null,
     });
     setEditing(true);
   };
@@ -347,6 +374,21 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     void fetchAll();
   };
 
+  // ─── GAP-002: Match courses ────────────────────────────────────────────────
+  const handleFindCourse = async () => {
+    if (!lead) return;
+    setMatchPanel(true);
+    setMatchLoading(true);
+    try {
+      const res = await matchCourses(lead.id);
+      setMatchResults(res.matches);
+    } catch {
+      setMatchResults([]);
+    } finally {
+      setMatchLoading(false);
+    }
+  };
+
   // ─── Convert (CRM-111: open modal instead of confirm) ────────────────────
   const handleConvert = () => {
     if (!lead) return;
@@ -360,6 +402,40 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
       message: `Convertit în student!${result.familyId ? " Familie creată." : ""}`,
     });
     void fetchAll();
+  };
+
+  // GAP-004: Convert-trial submit
+  const handleConvertTrialSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lead || !convertTrialCourseId) return;
+    setConvertTrialLoading(true);
+    try {
+      const res = await convertLeadFromTrial(lead.id, {
+        courseId: convertTrialCourseId,
+        createPackage: convertTrialPackage,
+      });
+      setConvertTrialModal(false);
+      setToast({
+        kind: "success",
+        message: `Convertit! Student înrolat în ${res.enrolledLessons} lecții.${res.packageCreated ? " Pachet creat." : ""}`,
+      });
+      void fetchAll();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Eroare la conversie";
+      setToast({ kind: "error", message: msg });
+    } finally {
+      setConvertTrialLoading(false);
+    }
+  };
+
+  // GAP-004: Load courses when modal opens
+  const handleOpenConvertTrialModal = () => {
+    setConvertTrialModal(true);
+    if (courses.length === 0) {
+      listCourses()
+        .then((res) => setCourses(res.items))
+        .catch(() => setCourses([]));
+    }
   };
 
   // ─── Revoke consent ───────────────────────────────────────────────────────
@@ -921,6 +997,87 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               )}
             </div>
 
+            {/* GAP-001: Slot preferat orar */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Disponibilitate preferată</p>
+              {editing ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1" role="group" aria-label="Zile preferate">
+                    {[
+                      { label: "L", full: "Luni", val: 1 },
+                      { label: "M", full: "Marți", val: 2 },
+                      { label: "Mi", full: "Miercuri", val: 3 },
+                      { label: "J", full: "Joi", val: 4 },
+                      { label: "V", full: "Vineri", val: 5 },
+                      { label: "S", full: "Sâmbătă", val: 6 },
+                      { label: "D", full: "Duminică", val: 7 },
+                    ].map(({ label, full, val }) => {
+                      const days = (editDraft.preferredDays as number[] | null | undefined) ?? [];
+                      const active = days.includes(val);
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          aria-label={full}
+                          aria-pressed={active}
+                          onClick={() => {
+                            const cur = (editDraft.preferredDays as number[] | null | undefined) ?? [];
+                            const next = active ? cur.filter((d) => d !== val) : [...cur, val].sort((a, b) => a - b);
+                            setEditDraft((d) => ({ ...d, preferredDays: next.length > 0 ? next : null }));
+                          }}
+                          className={cn(
+                            "h-7 w-7 rounded-full text-xs font-medium border transition-colors",
+                            active
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background text-muted-foreground border-input hover:border-primary"
+                          )}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <label className="text-xs text-muted-foreground w-12 shrink-0">De la:</label>
+                    <input
+                      type="time"
+                      value={(editDraft.preferredTimeStart as string | null | undefined) ?? ""}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, preferredTimeStart: e.target.value || null }))}
+                      className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+                      aria-label="Ora de start preferată"
+                    />
+                    <label className="text-xs text-muted-foreground w-12 shrink-0">Până la:</label>
+                    <input
+                      type="time"
+                      value={(editDraft.preferredTimeEnd as string | null | undefined) ?? ""}
+                      onChange={(e) => setEditDraft((d) => ({ ...d, preferredTimeEnd: e.target.value || null }))}
+                      className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+                      aria-label="Ora de sfârșit preferată"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  {(() => {
+                    const days = (lead as unknown as Record<string, unknown>).preferredDays as number[] | null;
+                    const start = (lead as unknown as Record<string, unknown>).preferredTimeStart as string | null;
+                    const end = (lead as unknown as Record<string, unknown>).preferredTimeEnd as string | null;
+                    const dayNames = ["", "Luni", "Marți", "Miercuri", "Joi", "Vineri", "Sâmbătă", "Duminică"];
+                    const hasDays = days && days.length > 0;
+                    const hasTime = start || end;
+                    if (!hasDays && !hasTime) return "—";
+                    return (
+                      <>
+                        {hasDays && <span>{days!.map((d) => dayNames[d]).join(", ")}</span>}
+                        {hasDays && hasTime && <span className="mx-1">·</span>}
+                        {hasTime && <span>{start ?? "—"}–{end ?? "—"}</span>}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+
             {/* Notes */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Note</p>
@@ -971,10 +1128,30 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
           {/* Action buttons */}
           {!lead.convertedToStudentId && lead.stage !== "lost" && (
             <div className="space-y-2">
+              {/* GAP-002: Find matching course */}
+              <button
+                type="button"
+                onClick={handleFindCourse}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-primary/40 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10"
+              >
+                <Calendar className="h-4 w-4" />
+                Găsește grupă
+              </button>
+              {/* GAP-004: Convert-from-trial button — visible only when lead has at least one trial lesson */}
+              {trialLessons.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleOpenConvertTrialModal}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-success px-4 py-2.5 text-sm font-semibold text-success-foreground hover:bg-success/90"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Convertește din Trial
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleConvert}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-success px-4 py-2.5 text-sm font-semibold text-success-foreground hover:bg-success/90 disabled:opacity-50"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-success/60 px-4 py-2.5 text-sm font-semibold text-success hover:bg-success/10 disabled:opacity-50"
               >
                 <UserPlus className="h-4 w-4" />
                 Convertește în Student
@@ -989,6 +1166,91 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               </button>
             </div>
           )}
+
+          {/* GAP-002: Match panel */}
+          {matchPanel && (
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Grupe compatibile</p>
+                <button
+                  type="button"
+                  onClick={() => setMatchPanel(false)}
+                  aria-label="Închide panoul de potrivire"
+                  className="rounded-md hover:bg-muted p-1"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {matchLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Se caută grupe...
+                </div>
+              ) : matchResults.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nu s-au găsit grupe compatibile. Adaugă curs de interes și disponibilitate preferată pe lead.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {matchResults.map((m) => (
+                    <li key={m.courseId} className="rounded-lg border border-border bg-background p-3 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold truncate">{m.courseName}</p>
+                        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                          Scor {m.compatibilityScore}
+                        </span>
+                      </div>
+                      {m.level && <p className="text-xs text-muted-foreground">Nivel: {m.level}</p>}
+                      {m.teacherName && <p className="text-xs text-muted-foreground">Profesor: {m.teacherName}</p>}
+                      {m.nextSlot && (
+                        <p className="text-xs text-muted-foreground">
+                          Următor slot: {new Date(m.nextSlot).toLocaleDateString("ro-RO", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      )}
+                      {m.vacancies !== null && (
+                        <p className={cn("text-xs font-medium", m.vacancies > 0 ? "text-success" : "text-warning")}>
+                          {m.vacancies > 0 ? `${m.vacancies} locuri libere` : "Grupă plină"}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {/* GAP-003: Trial lessons section */}
+          {(trialLessons.length > 0 || lead.stage === "trial") && (
+            <section className="rounded-xl border border-border bg-card p-4 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Lecții Trial ({trialLessons.length})
+              </p>
+              {trialLessons.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nicio lecție trial programată.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {trialLessons.map((l) => (
+                    <li key={l.id} className="rounded-lg border border-border bg-background p-2.5 text-xs space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold truncate">{l.courseName}</p>
+                        <span className={cn(
+                          "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                          l.trialResult === "interested" ? "bg-success/15 text-success"
+                            : l.trialResult === "not_interested" ? "bg-destructive/15 text-destructive"
+                            : l.trialResult === "no_show" ? "bg-muted text-muted-foreground"
+                            : "bg-warning/15 text-warning"
+                        )}>
+                          {l.trialResult === "interested" ? "Interesat"
+                            : l.trialResult === "not_interested" ? "Neinteresat"
+                            : l.trialResult === "no_show" ? "Neprezent"
+                            : "În așteptare"}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground">{l.teacherName} · {new Date(l.scheduledAt).toLocaleDateString("ro-RO", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           {/* CRM-148: converted block → link to student */}
           {lead.convertedToStudentId && (
             <div className="rounded-xl bg-success/10 border border-success/30 px-4 py-3 text-sm text-success flex items-center justify-between gap-2">
@@ -1353,6 +1615,81 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
           onSuccess={handleConvertSuccess}
           onCancel={() => setConvertModal(false)}
         />
+      )}
+
+      {/* GAP-004: Convert-from-trial modal */}
+      {convertTrialModal && lead && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Convertire din trial"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        >
+          <div className="absolute inset-0 bg-black/50" onClick={() => setConvertTrialModal(false)} />
+          <div className="relative w-full max-w-md rounded-2xl bg-card border border-border p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-base font-semibold">Convertește din Trial</h2>
+              <button
+                type="button"
+                onClick={() => setConvertTrialModal(false)}
+                aria-label="Închide"
+                className="rounded-md p-1 hover:bg-muted"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Lead-ul va fi convertit în student activ și înrolat în lecțiile viitoare ale grupei selectate.
+            </p>
+            <form onSubmit={handleConvertTrialSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label htmlFor="trial-course-select" className="text-sm font-medium">
+                  Grupă / Curs
+                </label>
+                <select
+                  id="trial-course-select"
+                  value={convertTrialCourseId}
+                  onChange={(e) => setConvertTrialCourseId(e.target.value)}
+                  required
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Selectează grupa...</option>
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}{c.level ? ` (${c.level})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={convertTrialPackage}
+                  onChange={(e) => setConvertTrialPackage(e.target.checked)}
+                  className="h-4 w-4 rounded"
+                />
+                <span className="text-sm">Creează pachet de 10 lecții la conversie</span>
+              </label>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setConvertTrialModal(false)}
+                  className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-muted"
+                >
+                  Anulează
+                </button>
+                <button
+                  type="submit"
+                  disabled={!convertTrialCourseId || convertTrialLoading}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-success px-4 py-2.5 text-sm font-semibold text-success-foreground hover:bg-success/90 disabled:opacity-50"
+                >
+                  {convertTrialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                  Convertește
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* CRM-133: Merge lead modal */}
