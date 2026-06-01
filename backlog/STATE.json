@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "CX-704",
   "last_completed": "DIPLOMA-805",
-  "iterations": 94,
-  "last_run_at": "2026-06-01T13:30:00Z",
-  "milestone_status": "DIPLOMA Phase 1 COMPLETE: DIPLOMA-801/802/803/804/805 done (PR #97).",
+  "iterations": 113,
+  "last_run_at": "2026-06-01T21:00:00Z",
+  "milestone_status": "DIPLOMA faza-1 COMPLETE: 803/804/805 built + PR #105. Starting CX-704 export-csv.",
   "active_milestone": "DIPLOMA",
   "items": {
     "M1-001": {
@@ -1481,7 +1481,7 @@
         "CX-703"
       ],
       "branch": "feat/DIPLOMA-faza-1-schema-editor",
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/97",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/105",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
@@ -1500,7 +1500,7 @@
         "DIPLOMA-803"
       ],
       "branch": "feat/DIPLOMA-faza-1-schema-editor",
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/97",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/105",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
@@ -1519,7 +1519,7 @@
         "DIPLOMA-803"
       ],
       "branch": "feat/DIPLOMA-faza-1-schema-editor",
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/97",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/105",
       "reports": [
         "backlog/reports/DIPLOMA-805-reviewer.md",
         "backlog/reports/DIPLOMA-805-integration.md",
