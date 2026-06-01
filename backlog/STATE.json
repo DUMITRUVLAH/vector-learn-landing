@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "AI-A02",
-  "last_completed": "AI-A01",
-  "iterations": 108,
-  "last_run_at": "2026-06-02T09:00:00Z",
-  "milestone_status": "AI faza-1 in_progress: AI-A01 done, building AI-A02 (churn prediction)",
+  "current_item": "AI-A03",
+  "last_completed": "AI-A02",
+  "iterations": 109,
+  "last_run_at": "2026-06-02T09:30:00Z",
+  "milestone_status": "AI faza-1 in_progress: AI-A01/A02 done, building AI-A03 (lead qualification)",
   "active_milestone": "AI",
   "items": {
     "M1-001": {
@@ -2443,13 +2443,20 @@
       }
     },
     "AI-A02": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/AI-A02-churn-prediction.md",
       "milestone": "AI",
       "phase": "1",
-      "depends_on": ["AI-A01", "MVP-004", "SCHED-503"]
+      "depends_on": ["AI-A01", "MVP-004", "SCHED-503"],
+      "branch": "feat/AI-faza-1-assistant",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "AI-A03": {
       "status": "pending",
