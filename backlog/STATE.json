@@ -4,7 +4,7 @@
   "last_completed": "DIPLOMA-801",
   "iterations": 88,
   "last_run_at": "2026-06-01T12:00:00Z",
-  "milestone_status": "CX Phase 1 done (CX-701..705, PR #96). DIPLOMA Phase 1 in progress on feat/DIPLOMA-faza-1-schema-editor.",
+  "milestone_status": "DIPLOMA Phase 1 in progress: DIPLOMA-801 done (PR #97). DIPLOMA-802..805 pending.",
   "active_milestone": "DIPLOMA",
   "items": {
     "M1-001": {
@@ -1442,7 +1442,7 @@
         "CX-701"
       ],
       "branch": "feat/DIPLOMA-faza-1-schema-editor",
-      "pr": "pending-open",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/97",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
