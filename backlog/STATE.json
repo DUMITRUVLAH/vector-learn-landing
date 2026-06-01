@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "GAP-016",
-  "last_completed": "GAP-015",
-  "iterations": 108,
-  "last_run_at": "2026-06-01T19:30:00Z",
-  "milestone_status": "GAP Faza 5 in progress: GAP-015 done, GAP-016 (analytics) in progress, GAP-018 pending.",
+  "current_item": "GAP-018",
+  "last_completed": "GAP-016",
+  "iterations": 109,
+  "last_run_at": "2026-06-01T20:00:00Z",
+  "milestone_status": "GAP Faza 5 in progress: GAP-015/016 done, GAP-018 (mobile check-in) in progress.",
   "active_milestone": "GAP",
   "items": {
     "M1-001": {
@@ -1972,14 +1972,20 @@
       }
     },
     "GAP-016": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/GAP-016-advanced-analytics.md",
       "milestone": "GAP",
       "phase": "5",
       "branch": "feat/GAP-faza-5-operational",
-      "pr": null
+      "pr": null,
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "GAP-017": {
       "status": "done",
@@ -2002,13 +2008,13 @@
       ]
     },
     "GAP-018": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/GAP-018-mobile-check-in.md",
       "milestone": "GAP",
       "phase": "5",
-      "branch": null,
+      "branch": "feat/GAP-faza-5-operational",
       "pr": null
     },
     "GAP-019": {

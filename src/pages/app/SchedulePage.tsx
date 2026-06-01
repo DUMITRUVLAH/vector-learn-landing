@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, Fragment } from "react";
-import { Loader2, Plus, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw, Users, Lock, BookOpen } from "lucide-react";
+import { Loader2, Plus, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw, Users, Lock, BookOpen, CheckCircle2 as CheckIcon } from "lucide-react";
 import { HomeworkTab } from "@/components/app/HomeworkTab";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -656,6 +656,17 @@ function ViewLessonModal({
         <Row label="Status" value={lesson.status} />
         {lesson.courseLevel && <Row label="Nivel" value={lesson.courseLevel} />}
         {lesson.notes && <Row label="Note" value={lesson.notes} />}
+      </div>
+      {/* GAP-018: Quick check-in link */}
+      <div className="mt-3 pt-3 border-t border-border/50">
+        <a
+          href={`#/app/lessons/${lesson.id}/check-in`}
+          className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+          aria-label="Deschide pagina de check-in rapid pentru această lecție"
+        >
+          <CheckIcon className="h-3.5 w-3.5" />
+          Check-in rapid (mobil)
+        </a>
       </div>
       <AttendancePanel lesson={lesson} onError={onError} />
       {/* GAP-015: Homework tab in lesson view */}

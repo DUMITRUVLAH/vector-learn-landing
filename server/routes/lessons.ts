@@ -327,3 +327,65 @@ lessonRoutes.patch(
     }
   }
 );
+
+// ─── GAP-018: Batch attendance update (mobile check-in) ──────────────────────
+// PATCH /api/lessons/:id/attendance
+// Body: { updates: [{ studentId, status }] }
+// Upserts attendance for multiple students at once — for the mobile check-in page.
+
+const batchAttendanceSchema = z.object({
+  updates: z.array(
+    z.object({
+      studentId: z.string().uuid(),
+      status: z.enum(["present", "absent", "late", "excused"]),
+    })
+  ).min(1).max(200),
+});
+
+lessonRoutes.patch(
+  "/:id/attendance",
+  zValidator("json", batchAttendanceSchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const { id: lessonId } = c.req.param();
+    const { updates } = c.req.valid("json");
+    const now = new Date();
+
+    const lesson = await db.query.lessons.findFirst({
+      where: and(eq(lessons.id, lessonId), eq(lessons.tenantId, tenantId)),
+    });
+    if (!lesson) return c.json({ error: "lesson_not_found" }, 404);
+
+    let updatedCount = 0;
+
+    for (const { studentId, status } of updates) {
+      const existing = await db.query.studentLessons.findFirst({
+        where: and(
+          eq(studentLessons.lessonId, lessonId),
+          eq(studentLessons.studentId, studentId),
+          eq(studentLessons.tenantId, tenantId)
+        ),
+      });
+
+      if (existing) {
+        await db
+          .update(studentLessons)
+          .set({ attendanceStatus: status, markedBy: user.id, markedAt: now })
+          .where(eq(studentLessons.id, existing.id));
+      } else {
+        await db.insert(studentLessons).values({
+          tenantId,
+          lessonId,
+          studentId,
+          attendanceStatus: status,
+          markedBy: user.id,
+          markedAt: now,
+        });
+      }
+      updatedCount++;
+    }
+
+    return c.json({ updated: updatedCount });
+  }
+);

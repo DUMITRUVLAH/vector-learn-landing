@@ -36,6 +36,7 @@ import { SignupPage } from "./pages/app/SignupPage";
 import { DashboardPage } from "./pages/app/DashboardPage";
 import { StudentsPage } from "./pages/app/StudentsPage";
 import { SchedulePage } from "./pages/app/SchedulePage";
+import { CheckInPage } from "./pages/app/CheckInPage"; // GAP-018
 import { TeachersPage } from "./pages/app/TeachersPage";
 import { PaymentsPage } from "./pages/app/PaymentsPage";
 import { LeadsPage } from "./pages/app/LeadsPage";
@@ -106,6 +107,11 @@ function Routes() {
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;
+  // GAP-018: /app/lessons/:id/check-in must be before /app/schedule
+  if (path.match(/^\/app\/lessons\/[^/]+\/check-in$/)) {
+    const lessonId = path.split("/")[3];
+    return <CheckInPage lessonId={lessonId} />;
+  }
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;
