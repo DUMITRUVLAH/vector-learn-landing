@@ -44,6 +44,8 @@ import { StageMenu } from "@/components/crm/StageMenu";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 // CRM-143: undo toast for stage moves
 import { StageMoveUndoToast } from "@/components/crm/StageMoveUndoToast";
+// CRM-149: active filter pills row
+import { ActiveFilterPills } from "@/components/crm/ActiveFilterPills";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web",
@@ -72,6 +74,8 @@ const LOST_REASON_PRESETS = [
 export function LeadsPage() {
   const { status: sessionStatus, data: sessionData } = useSession();
   const { navigate } = useRouter();
+  // CRM-149: resolve assignee id → full name for pill labels
+  const { members: teamMembers } = useTeamMembers();
 
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [grouped, setGrouped] = useState<Record<string, Lead[]>>({});
@@ -531,6 +535,25 @@ export function LeadsPage() {
           />
         </div>
       </div>
+
+      {/* CRM-149: Active filter pills — shows one pill per active filter */}
+      <ActiveFilterPills
+        filters={{
+          source: filterSource !== "all" ? filterSource : undefined,
+          assignedTo: filterAssigned !== "all" ? filterAssigned : undefined,
+          searchQuery: searchQuery || undefined,
+          filterNoTask: filterNoTask || undefined,
+          filterOverdue: filterOverdue || undefined,
+        }}
+        sourceLabel={(key) => SOURCE_LABEL[key] ?? key}
+        assignedLabel={(id) => teamMembers.find((m) => m.id === id)?.fullName ?? id}
+        onClearSource={() => setFilterSource("all")}
+        onClearAssigned={() => setFilterAssigned("all")}
+        onClearSearch={() => setSearchQuery("")}
+        onClearNoTask={() => setFilterNoTask(false)}
+        onClearOverdue={() => setFilterOverdue(false)}
+        className="mb-3"
+      />
 
       {viewMode === "list" ? (
         <>
