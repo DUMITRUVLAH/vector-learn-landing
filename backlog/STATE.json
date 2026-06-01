@@ -1470,8 +1470,8 @@
       }
     },
     "DIPLOMA-803": {
-      "status": "in_progress",
-      "attempts": 1,
+      "status": "pending",
+      "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/DIPLOMA-803-generate-qr.md",
       "milestone": "DIPLOMA",
