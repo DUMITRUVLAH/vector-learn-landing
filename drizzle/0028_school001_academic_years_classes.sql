@@ -2,7 +2,10 @@
 -- Tabele noi: academic_years, academic_terms, school_classes, class_enrollments
 -- Enum nou: class_enrollment_status (distinct de enrollment_status din cadences)
 
-CREATE TYPE "public"."class_enrollment_status" AS ENUM('active', 'transferred', 'withdrawn');--> statement-breakpoint
+DO $$ BEGIN
+  CREATE TYPE "public"."class_enrollment_status" AS ENUM('active', 'transferred', 'withdrawn');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;--> statement-breakpoint
 
 CREATE TABLE "academic_years" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
