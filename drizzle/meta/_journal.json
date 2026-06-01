@@ -225,6 +225,13 @@
       "when": 1748822700000,
       "tag": "0031_school004_tuition",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1748822800000,
+      "tag": "0032_school005_admissions",
+      "breakpoints": true
     }
   ]
 }
