@@ -474,3 +474,96 @@ export function getAttendanceSummary(from?: string, to?: string): Promise<Attend
 export function getImmunizationOverview(): Promise<ImmunizationOverviewResponse> {
   return api<ImmunizationOverviewResponse>("/api/kinder/compliance/immunization-overview");
 }
+
+// ─── KINDER-007: Incident/accident reports ────────────────────────────────────
+
+export type IncidentType = "fall" | "bite" | "cut" | "allergy" | "behavioral" | "other";
+export type IncidentStatus = "open" | "parent_notified" | "acknowledged" | "closed";
+
+export interface IncidentReport {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  studentName?: string | null;
+  reportedByUserId: string | null;
+  incidentDate: string;
+  incidentTime: string | null;
+  type: IncidentType;
+  description: string;
+  injuryLocation: string | null;
+  firstAidGiven: string | null;
+  witnessName: string | null;
+  parentNotifiedAt: string | null;
+  parentSignatureUrl: string | null;
+  parentAcknowledgedAt: string | null;
+  status: IncidentStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateIncidentPayload {
+  studentId: string;
+  incidentDate: string;
+  incidentTime?: string;
+  type?: IncidentType;
+  description: string;
+  injuryLocation?: string;
+  firstAidGiven?: string;
+  witnessName?: string;
+}
+
+/** GET /api/kinder/incidents?from=&to=&studentId= */
+export function getIncidents(params?: {
+  from?: string;
+  to?: string;
+  studentId?: string;
+}): Promise<{ incidents: IncidentReport[] }> {
+  const qp = new URLSearchParams();
+  if (params?.from) qp.set("from", params.from);
+  if (params?.to) qp.set("to", params.to);
+  if (params?.studentId) qp.set("studentId", params.studentId);
+  const query = qp.toString() ? `?${qp.toString()}` : "";
+  return api<{ incidents: IncidentReport[] }>(`/api/kinder/incidents${query}`);
+}
+
+/** POST /api/kinder/incidents */
+export function createIncident(payload: CreateIncidentPayload): Promise<{ incident: IncidentReport }> {
+  return api<{ incident: IncidentReport }>("/api/kinder/incidents", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** GET /api/kinder/incidents/:id */
+export function getIncident(id: string): Promise<{ incident: IncidentReport }> {
+  return api<{ incident: IncidentReport }>(`/api/kinder/incidents/${id}`);
+}
+
+/** PUT /api/kinder/incidents/:id */
+export function updateIncident(
+  id: string,
+  payload: Partial<CreateIncidentPayload> & { status?: IncidentStatus }
+): Promise<{ incident: IncidentReport }> {
+  return api<{ incident: IncidentReport }>(`/api/kinder/incidents/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** POST /api/kinder/incidents/:id/notify */
+export function notifyParent(id: string): Promise<{ incident: IncidentReport }> {
+  return api<{ incident: IncidentReport }>(`/api/kinder/incidents/${id}/notify`, {
+    method: "POST",
+  });
+}
+
+/** POST /api/kinder/incidents/:id/acknowledge */
+export function acknowledgeIncident(
+  id: string,
+  signatureDataUrl: string
+): Promise<{ incident: IncidentReport }> {
+  return api<{ incident: IncidentReport }>(`/api/kinder/incidents/${id}/acknowledge`, {
+    method: "POST",
+    body: JSON.stringify({ signatureDataUrl }),
+  });
+}

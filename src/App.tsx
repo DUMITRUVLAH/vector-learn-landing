@@ -64,6 +64,7 @@ import { KinderMedicalPage } from "./pages/app/KinderMedicalPage";
 import { KinderImmunizationReportPage } from "./pages/app/KinderImmunizationReportPage";
 import { KinderParentFeedPage } from "./pages/app/KinderParentFeedPage";
 import { KinderCompliancePage } from "./pages/app/KinderCompliancePage";
+import KinderIncidentsPage from "./pages/app/KinderIncidentsPage";
 
 function HomePage() {
   return (
@@ -156,6 +157,8 @@ function Routes() {
   if (path.match(/^\/app\/kinder\/students\/[^/]+\/feed$/)) return <KinderParentFeedPage />;
   // KINDER-006: licensing/compliance reports
   if (path.startsWith("/app/kinder/compliance")) return <KinderCompliancePage />;
+  // KINDER-007: incident/accident reports + parent acknowledgment
+  if (path.startsWith("/app/kinder/incidents")) return <KinderIncidentsPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students

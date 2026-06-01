@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "KINDER-007",
   "last_completed": "KINDER-006",
-  "iterations": 128,
+  "iterations": 129,
   "last_run_at": "2026-06-01T23:00:00Z",
   "milestone_status": "KINDER faza-1 COMPLETE: KINDER-001 (check-in/pickup/semnatura), KINDER-002 (jurnal zilnic), KINDER-003 (raport personal/copii). PR #108. PAY-901..LESSON-907 done (GAP milestone).",
   "active_milestone": "KINDER",
@@ -1813,15 +1813,15 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "KINDER-007": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
-      "spec": "backlog/reports/RESEARCH-schools-kindergartens-2026-06-01.md",
+      "spec": "backlog/specs/KINDER-007-incident-reports.md",
       "milestone": "KINDER",
       "phase": "1",
       "severity": "normal",
       "title": "Incident/accident reports + parent acknowledgment signature",
-      "depends_on": []
+      "depends_on": ["KINDER-001", "KINDER-004"]
     },
     "GUARDIAN-001": {
       "status": "done",
