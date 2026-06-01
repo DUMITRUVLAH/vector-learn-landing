@@ -238,7 +238,12 @@ export async function getFormSubmissions(
 
 export async function getPublicForm(slug: string): Promise<{ form: PublicForm }> {
   const res = await fetch(`/api/public/forms/${slug}`, { credentials: "omit" });
-  if (!res.ok) throw new Error(`Formularul nu a fost găsit: ${res.status}`);
+  if (!res.ok) {
+    const err = Object.assign(new Error(`Formularul nu a fost găsit: ${res.status}`), {
+      status: res.status,
+    });
+    throw err;
+  }
   return res.json() as Promise<{ form: PublicForm }>;
 }
 

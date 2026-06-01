@@ -58,6 +58,7 @@ import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
+import { FormPublicPage } from "./pages/public/FormPublicPage";
 
 function HomePage() {
   return (
@@ -148,6 +149,11 @@ function Routes() {
   if (path.match(/^\/feedback\/[^/]+$/)) {
     const token = path.split("/")[2];
     return <FeedbackPublicPage token={token} />;
+  }
+  // FORMS-003: /f/:slug — public conversational form renderer (no auth)
+  if (path.match(/^\/f\/[^/]+$/)) {
+    const slug = path.split("/")[2];
+    return <FormPublicPage slug={slug} />;
   }
   return <HomePage />;
 }
