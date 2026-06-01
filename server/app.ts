@@ -45,6 +45,7 @@ import {
 } from "./routes/publicForms"; // FORMS-001/005
 import { apiKeyRoutes } from "./routes/apiKeys"; // INT-901
 import { webhookRoutes } from "./routes/webhooks"; // INT-902
+import { integrationTriggersRoutes } from "./routes/integrationTriggers"; // INT-903
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -142,6 +143,8 @@ app.route("/api/certificate-templates", certificateTemplatesRoutes);
 app.route("/api/settings/api-keys", apiKeyRoutes);
 // INT-902: Outbound webhooks
 app.route("/api/settings/webhooks", webhookRoutes);
+// INT-903: Zapier-compatible REST triggers (X-API-Key auth)
+app.route("/api/integrations/triggers", integrationTriggersRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

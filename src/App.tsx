@@ -61,6 +61,7 @@ import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
 import { ApiKeysPage } from "./pages/app/settings/ApiKeysPage"; // INT-901
 import { WebhooksPage } from "./pages/app/settings/WebhooksPage"; // INT-902
+import { IntegrationsPage } from "./pages/app/settings/IntegrationsPage"; // INT-903
 
 function HomePage() {
   return (
@@ -132,6 +133,7 @@ function Routes() {
   if (path.startsWith("/app/hr/audit")) return <AuditLogPage />;
   if (path.startsWith("/app/settings/api-keys")) return <ApiKeysPage />; // INT-901
   if (path.startsWith("/app/settings/webhooks")) return <WebhooksPage />; // INT-902
+  if (path.startsWith("/app/settings/integrations")) return <IntegrationsPage />; // INT-903
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
   if (path.startsWith("/app/cadences")) return <CadencesPage />;

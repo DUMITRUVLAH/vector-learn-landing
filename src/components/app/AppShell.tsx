@@ -36,6 +36,7 @@ const NAV = [
   { label: "Audit Log", href: "/app/audit-log", icon: Shield },
   { label: "API Keys", href: "/app/settings/api-keys", icon: Key }, // INT-901
   { label: "Webhooks", href: "/app/settings/webhooks", icon: Webhook }, // INT-902
+  { label: "Integrari", href: "/app/settings/integrations", icon: Zap }, // INT-903
 ];
 
 export function AppShell({ children, pageTitle, pageDescription, actions }: AppShellProps) {
