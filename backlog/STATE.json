@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": "DIPLOMA-803",
-  "last_completed": "DIPLOMA-802",
-  "iterations": 91,
-  "last_run_at": "2026-06-01T12:30:00Z",
-  "milestone_status": "DIPLOMA Phase 1 in progress: DIPLOMA-801/802 done (PR #97). DIPLOMA-803..805 pending.",
-  "active_milestone": "DIPLOMA",
+  "current_item": "INTEG-201",
+  "last_completed": "INTEG-104",
+  "iterations": 147,
+  "last_run_at": "2026-06-02T00:22:00Z",
+  "milestone_status": "INTEG faza-1 done (INTEG-101..104, PR #112). INTEG faza-2 in progress.",
+  "active_milestone": "INTEG",
   "items": {
     "M1-001": {
       "status": "done",
@@ -1803,6 +1803,85 @@
       "severity": "normal",
       "title": "Consent/permission forms (photo, trips, medical) with e-signature",
       "depends_on": []
+    },
+    "INTEG-101": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/INTEG-faza-1-conectivitate-module",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/112",
+      "spec": "backlog/specs/INTEG-101-leads-course-branch-fk.md",
+      "milestone": "INTEG",
+      "phase": "1",
+      "depends_on": ["BRANCH-701"],
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "INTEG-102": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/INTEG-faza-1-conectivitate-module",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/112",
+      "spec": "backlog/specs/INTEG-102-payments-invoices-course-fk.md",
+      "milestone": "INTEG",
+      "phase": "1",
+      "depends_on": ["INTEG-101"],
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "INTEG-103": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/INTEG-faza-1-conectivitate-module",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/112",
+      "spec": "backlog/specs/INTEG-103-cohorts-branch-fk.md",
+      "milestone": "INTEG",
+      "phase": "1",
+      "depends_on": ["BRANCH-701", "INTEG-102"],
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "INTEG-104": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/INTEG-faza-1-conectivitate-module",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/112",
+      "spec": "backlog/specs/INTEG-104-analytics-endpoints.md",
+      "milestone": "INTEG",
+      "phase": "1",
+      "depends_on": ["INTEG-102", "INTEG-103"],
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "INTEG-201": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "branch": "feat/INTEG-faza-2-ux-cross-module",
+      "spec": "backlog/specs/INTEG-201-lead-cohort-autoenroll.md",
+      "milestone": "INTEG",
+      "phase": "2",
+      "depends_on": ["CRM-111", "CX-703", "INTEG-101"],
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "INTEG-202": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": "feat/INTEG-faza-2-ux-cross-module",
+      "spec": "backlog/specs/INTEG-202-contracts-course-picker.md",
+      "milestone": "INTEG",
+      "phase": "2",
+      "depends_on": ["INTEG-201"]
+    },
+    "INTEG-203": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "branch": "feat/INTEG-faza-2-ux-cross-module",
+      "spec": "backlog/specs/INTEG-203-cx-course-name-participant-link.md",
+      "milestone": "INTEG",
+      "phase": "2",
+      "depends_on": ["INTEG-201"]
     }
   }
 }

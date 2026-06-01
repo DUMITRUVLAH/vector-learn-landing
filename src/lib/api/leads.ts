@@ -282,8 +282,19 @@ export function convertLead(
     birthDate?: string | null;
     studentStatus?: "active" | "trial";
   }
-): Promise<{ lead: Lead; student: { id: string; fullName: string; familyId?: string | null }; familyId: string | null }> {
-  return api<{ lead: Lead; student: { id: string; fullName: string; familyId?: string | null }; familyId: string | null }>(
+): Promise<{
+  lead: Lead;
+  student: { id: string; fullName: string; familyId?: string | null };
+  familyId: string | null;
+  /** INTEG-201: auto-enrolled cohort id, or null if no cohort found/applicable */
+  autoEnrolledCohortId: string | null;
+}> {
+  return api<{
+    lead: Lead;
+    student: { id: string; fullName: string; familyId?: string | null };
+    familyId: string | null;
+    autoEnrolledCohortId: string | null;
+  }>(
     `/api/leads/${id}/convert`,
     { method: "POST", body: JSON.stringify(input ?? {}) }
   );
