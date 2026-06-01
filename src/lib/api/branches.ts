@@ -62,6 +62,42 @@ export function deleteBranch(id: string): Promise<{ deleted: boolean }> {
   });
 }
 
+// ─── BRANCH-704: KPI Reports ──────────────────────────────────────────────────
+
+export interface BranchKPI {
+  branchId: string;
+  branchName: string;
+  activeStudents: number;
+  monthlyRevenue: number;
+  retentionRate: number;
+}
+
+export interface NetworkKPI {
+  activeStudents: number;
+  monthlyRevenue: number;
+  retentionRate: number;
+}
+
+export interface BranchKPIResponse {
+  consolidated: NetworkKPI;
+  byBranch: BranchKPI[];
+}
+
+/**
+ * GET /api/branches/reports/kpi?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * Returns consolidated + per-branch KPIs for the authenticated tenant.
+ */
+export function getBranchKPI(params?: {
+  from?: string;
+  to?: string;
+}): Promise<BranchKPIResponse> {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set("from", params.from);
+  if (params?.to) qs.set("to", params.to);
+  const query = qs.toString() ? `?${qs.toString()}` : "";
+  return api<BranchKPIResponse>(`/api/branches/reports/kpi${query}`);
+}
+
 /**
  * BRANCH-703: PUT /api/branches/:branchId/users/:userId/scope
  * Set or clear branch_scope for a user.

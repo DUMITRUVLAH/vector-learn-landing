@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "current_item": "BRANCH-703",
-  "last_completed": "BRANCH-702",
-  "iterations": 135,
+  "current_item": null,
+  "last_completed": "BRANCH-704",
+  "iterations": 137,
   "last_run_at": "2026-06-01T23:00:00Z",
-  "milestone_status": "KINDER faza-1 COMPLETE (KINDER-001..007 all done, PR #108). BRANCH faza-1 starting: BRANCH-701..704 generated from user-stories/multifilale.md.",
-  "active_milestone": "BRANCH",  "items": {
-    "M1-001": {
+  "milestone_status": "BRANCH faza-1 COMPLETE (BRANCH-701..704 all done). Next: auto-generate SET-8xx or INT-9xx from NIGHT-PLAN.",
+  "active_milestone": "BRANCH",
+  "items": {    "M1-001": {
       "status": "done",
       "attempts": 1,
       "blockers": [],
@@ -1834,22 +1834,26 @@
       "depends_on": ["BRANCH-701"]
     },
     "BRANCH-703": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BRANCH-703-permissions.md",
       "milestone": "BRANCH",
       "phase": "1",
-      "depends_on": ["BRANCH-701"]
+      "depends_on": ["BRANCH-701"],
+      "branch": "feat/BRANCH-faza-1-multifiliale",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "BRANCH-704": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BRANCH-704-reports.md",
       "milestone": "BRANCH",
       "phase": "1",
-      "depends_on": ["BRANCH-701", "BRANCH-702"]
+      "depends_on": ["BRANCH-701", "BRANCH-702"],
+      "branch": "feat/BRANCH-faza-1-multifiliale",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "KINDER-007": {
       "status": "done",

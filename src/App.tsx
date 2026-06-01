@@ -61,6 +61,7 @@ import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
 import BranchesPage from "./pages/app/BranchesPage";
+import BranchReportsPage from "./pages/app/BranchReportsPage"; // BRANCH-704
 
 function HomePage() {
   return (
@@ -145,6 +146,8 @@ function Routes() {
     return <FormBuilderPage formId={id} />;
   }
   if (path.startsWith("/app/forms")) return <FormsPage />;
+  // BRANCH-704: Branch reports must be checked before /app/branches (more specific)
+  if (path.startsWith("/app/branches/reports")) return <BranchReportsPage />;
   // BRANCH-702: Multi-branch management
   if (path.startsWith("/app/branches")) return <BranchesPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
