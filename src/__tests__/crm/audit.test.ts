@@ -108,14 +108,14 @@ describe("CRM-127 — AuditEntry shape", () => {
 // ─── T-CRM-127-7: Migration file exists ───────────────────────────────────────
 
 describe("CRM-127 — Migration file", () => {
-  it("T-CRM-127-7: 0010_crm127_audit_log.sql exists and is committed", () => {
-    const migrationPath = path.resolve(
-      import.meta.dirname ?? __dirname,
-      "../../../drizzle/0010_crm127_audit_log.sql"
-    );
-    expect(fs.existsSync(migrationPath), `Migration file should exist at ${migrationPath}`).toBe(true);
+  it("T-CRM-127-7: crm127_audit_log migration exists and is committed", () => {
+    // Match by content suffix, not exact index — migrations get renumbered on merge
+    // to avoid prefix collisions between parallel branches.
+    const drizzleDir = path.resolve(import.meta.dirname ?? __dirname, "../../../drizzle");
+    const match = fs.readdirSync(drizzleDir).find((f) => /_crm127_audit_log\.sql$/.test(f));
+    expect(match, "A *_crm127_audit_log.sql migration should exist in drizzle/").toBeTruthy();
 
-    const content = fs.readFileSync(migrationPath, "utf8");
+    const content = fs.readFileSync(path.join(drizzleDir, match!), "utf8");
     expect(content).toContain("CREATE TABLE");
     expect(content).toContain("crm_audit_log");
     expect(content).toContain("before_snapshot");

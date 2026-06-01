@@ -134,8 +134,12 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     setScoreLoading(true);
     try {
       const res = await scoreLead(id);
-      setLead((prev) => prev ? { ...prev, score: res.score } : prev);
-      setScoreFactors(res.factors ?? []);
+      // Defensive: a malformed/empty response must never crash the card.
+      // The auto-score effect fires on mount for many existing flows.
+      if (res && typeof res.score === "number") {
+        setLead((prev) => prev ? { ...prev, score: res.score } : prev);
+        setScoreFactors(res.factors ?? []);
+      }
     } catch { /* ignore — user can retry manually */ }
     finally { setScoreLoading(false); }
   };

@@ -99,14 +99,14 @@ describe("CRM-126 — CadenceStep validation", () => {
 // ─── T-CRM-126-7: Migration file exists ───────────────────────────────────────
 
 describe("CRM-126 — Migration file", () => {
-  it("T-CRM-126-7: 0009_crm126_cadences.sql exists and is committed", () => {
-    const migrationPath = path.resolve(
-      import.meta.dirname ?? __dirname,
-      "../../../drizzle/0009_crm126_cadences.sql"
-    );
-    expect(fs.existsSync(migrationPath), `Migration file should exist at ${migrationPath}`).toBe(true);
+  it("T-CRM-126-7: crm126_cadences migration exists and is committed", () => {
+    // Match by content suffix, not exact index — migrations get renumbered on merge
+    // to avoid prefix collisions between parallel branches.
+    const drizzleDir = path.resolve(import.meta.dirname ?? __dirname, "../../../drizzle");
+    const match = fs.readdirSync(drizzleDir).find((f) => /_crm126_cadences\.sql$/.test(f));
+    expect(match, "A *_crm126_cadences.sql migration should exist in drizzle/").toBeTruthy();
 
-    const content = fs.readFileSync(migrationPath, "utf8");
+    const content = fs.readFileSync(path.join(drizzleDir, match!), "utf8");
     expect(content).toContain("CREATE TABLE");
     expect(content).toContain("cadences");
     expect(content).toContain("lead_cadence_enrollments");
