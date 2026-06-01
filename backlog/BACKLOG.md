@@ -220,7 +220,7 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 2 | `DIPLOMA-802` | Editor vizual canvas drag&drop câmpuri + salvare template | 1 | pending | [specs/DIPLOMA-802-canvas-editor.md](specs/DIPLOMA-802-canvas-editor.md) |
 | 3 | `DIPLOMA-803` | Generare PDF/JPG per cursant + QR + persistă certificat | 1 | pending | [specs/DIPLOMA-803-generate-qr.md](specs/DIPLOMA-803-generate-qr.md) |
 | 4 | `DIPLOMA-804` | Generare bulk pe cohortă + download ZIP | 1 | pending | [specs/DIPLOMA-804-bulk-zip.md](specs/DIPLOMA-804-bulk-zip.md) |
-| 5 | `DIPLOMA-805` | Pagină publică verificare `/verify/:token` (no-auth) | 1 | pending | [specs/DIPLOMA-805-public-verify.md](specs/DIPLOMA-805-public-verify.md) |
+| 5 | `DIPLOMA-805` | Pagină publică verificare `/verify/:token` (no-auth) | 1 | done | [specs/DIPLOMA-805-public-verify.md](specs/DIPLOMA-805-public-verify.md) |
 
 ## Quality gates (required before status → `done`)
 
