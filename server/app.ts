@@ -37,6 +37,7 @@ import { invoiceRoutes } from "./routes/invoices";
 import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
+import { portalRoutes, portalAdminRoutes } from "./routes/portal"; // GAP-010
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -97,6 +98,10 @@ app.route("/api/analytics", analyticsRoutes);
 // is mounted at "/api" with a global requireAuth that otherwise intercepts all /api/* requests.
 app.route("/api/feedback-public", feedbackPublicRoutes);
 app.route("/api/feedback", feedbackRoutes);
+// GAP-010: Student portal — public token access (BEFORE tagRoutes which has global requireAuth)
+app.route("/api/portal", portalRoutes);
+// GAP-010: Student portal admin (generate token) — requires auth
+app.route("/api/portal", portalAdminRoutes);
 app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
 app.route("/api/hr/payroll", payrollRoutes);
 app.route("/api/hr/teacher-stats", hrTeacherRoutes);
