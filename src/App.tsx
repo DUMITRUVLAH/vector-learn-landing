@@ -59,6 +59,7 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
+import { ApiKeysPage } from "./pages/app/settings/ApiKeysPage"; // INT-901
 
 function HomePage() {
   return (
@@ -128,6 +129,7 @@ function Routes() {
     return <AvailabilityPage teacherId={id} />;
   }
   if (path.startsWith("/app/hr/audit")) return <AuditLogPage />;
+  if (path.startsWith("/app/settings/api-keys")) return <ApiKeysPage />; // INT-901
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
   if (path.startsWith("/app/cadences")) return <CadencesPage />;
