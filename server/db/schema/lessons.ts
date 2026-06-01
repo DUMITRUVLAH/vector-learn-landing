@@ -44,6 +44,8 @@ export const lessons = pgTable(
     roomId: uuid("room_id").references(() => rooms.id, { onDelete: "set null" }),
     /** SCHED-502: Links this lesson to a recurring series */
     seriesId: uuid("series_id").references(() => lessonSeries.id, { onDelete: "set null" }),
+    /** BRANCH-701: Optional branch assignment for lesson location */
+    branchId: uuid("branch_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -51,6 +53,7 @@ export const lessons = pgTable(
     tenantIdx: index("lessons_tenant_idx").on(t.tenantId),
     teacherTimeIdx: index("lessons_teacher_time_idx").on(t.teacherId, t.scheduledAt),
     timeIdx: index("lessons_time_idx").on(t.tenantId, t.scheduledAt),
+    branchIdx: index("lessons_branch_idx").on(t.tenantId, t.branchId),
   })
 );
 

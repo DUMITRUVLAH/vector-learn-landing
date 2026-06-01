@@ -59,6 +59,7 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
+import { BranchesPage } from "./pages/app/BranchesPage";
 
 function HomePage() {
   return (
@@ -143,6 +144,7 @@ function Routes() {
     return <FormBuilderPage formId={id} />;
   }
   if (path.startsWith("/app/forms")) return <FormsPage />;
+  if (path.startsWith("/app/branches")) return <BranchesPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students
