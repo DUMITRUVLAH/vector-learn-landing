@@ -13,14 +13,14 @@ const createInvoiceSchema = z.object({
   amountCents: z.number().int().min(0),
   currency: z.enum(["EUR", "RON", "USD"]).default("RON"),
   series: z.string().max(20).default("VECT"),
-  dueDate: z.string().datetime().optional().nullable(),
+  dueDate: z.union([z.string().datetime(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
 });
 
 const updateInvoiceSchema = z.object({
   status: z.enum(["draft", "issued", "paid", "cancelled"]),
   notes: z.string().max(2000).optional().nullable(),
-  dueDate: z.string().datetime().optional().nullable(),
+  dueDate: z.union([z.string().datetime(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional().nullable(),
 });
 
 export const invoiceRoutes = new Hono<{ Variables: AuthVariables }>();
