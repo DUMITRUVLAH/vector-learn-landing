@@ -7,7 +7,7 @@
  * CRM-114: Companie + deal_name + contacte multiple (tab Contacte)
  * CRM-115: Tag-uri libere + câmpuri custom (tab Custom Fields)
  */
-import { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   Loader2, ArrowLeft, Pencil, Check, X, ChevronDown,
   Phone, Mail, Globe, Calendar, MessageCircle, UserPlus,
@@ -936,32 +936,59 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         {/* ─── RIGHT COLUMN ────────────────────────────────────────────── */}
         <main>
           {/* Tab bar */}
-          <div role="tablist" className="flex gap-1 border-b border-border mb-4 overflow-x-auto">
-            {([
-              ["activity", "Activitate"],
-              ["tasks", tasks.length > 0 ? `Task-uri (${tasks.filter((t) => t.status === "open").length})` : "Task-uri"],
-              ["files", `Fișiere${attachments.length > 0 ? ` (${attachments.length})` : ""}`],
-              ["contacts", `Contacte${contacts.length > 0 ? ` (${contacts.length})` : ""}`],
-              ["fields", `Câmpuri${fieldValues.length > 0 ? ` (${fieldValues.length})` : ""}`],
-              ["gdpr", "GDPR"],
-            ] as [Tab, string][]).map(([t, label]) => (
-              <button
-                key={t}
-                role="tab"
-                type="button"
-                aria-selected={activeTab === t}
-                onClick={() => setActiveTab(t)}
-                className={cn(
-                  "whitespace-nowrap px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors shrink-0",
-                  activeTab === t
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
+          {/* CRM-147: compute overdue task count for tab badge */}
+          {(() => {
+            const now = new Date();
+            const overdueCount = tasks.filter(
+              (t) => t.status === "open" && t.dueAt != null && new Date(t.dueAt) < now
+            ).length;
+            const openCount = tasks.filter((t) => t.status === "open").length;
+
+            const taskTabLabel = (
+              <span className="inline-flex items-center gap-1">
+                {tasks.length > 0 ? `Task-uri (${openCount})` : "Task-uri"}
+                {overdueCount > 0 && (
+                  <span
+                    className="inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold min-w-[16px] h-4 px-1"
+                    aria-label={`${overdueCount} task${overdueCount > 1 ? "-uri" : ""} restant${overdueCount > 1 ? "e" : ""}`}
+                    data-testid="overdue-badge"
+                  >
+                    {overdueCount}
+                  </span>
                 )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+              </span>
+            );
+
+            return (
+              <div role="tablist" className="flex gap-1 border-b border-border mb-4 overflow-x-auto">
+                {([
+                  ["activity", "Activitate"],
+                  ["tasks", taskTabLabel],
+                  ["files", `Fișiere${attachments.length > 0 ? ` (${attachments.length})` : ""}`],
+                  ["contacts", `Contacte${contacts.length > 0 ? ` (${contacts.length})` : ""}`],
+                  ["fields", `Câmpuri${fieldValues.length > 0 ? ` (${fieldValues.length})` : ""}`],
+                  ["gdpr", "GDPR"],
+                ] as [Tab, React.ReactNode][]).map(([t, label]) => (
+                  <button
+                    key={t}
+                    role="tab"
+                    type="button"
+                    aria-selected={activeTab === t}
+                    onClick={() => setActiveTab(t)}
+                    className={cn(
+                      "whitespace-nowrap px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors shrink-0",
+                      activeTab === t
+                        ? "border-primary text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
+
 
           {/* Tab content */}
           {activeTab === "activity" && (
