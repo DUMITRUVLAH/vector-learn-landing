@@ -29,3 +29,4 @@ export * from "./invoices";
 export * from "./subscriptions";
 export * from "./cohorts";
 export * from "./cohortParticipants";
+export * from "./certificates";

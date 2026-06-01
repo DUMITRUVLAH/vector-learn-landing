@@ -36,6 +36,7 @@ import { teamRoutes } from "./routes/team";
 import { invoiceRoutes } from "./routes/invoices";
 import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
+import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -116,6 +117,8 @@ app.route("/api/team", teamRoutes);
 app.route("/api/cohorts", cohortRoutes);
 // CX-703: Cohort participants (must be mounted at /api/cohorts for /:cohortId/participants)
 app.route("/api/cohorts", cohortParticipantsRoutes);
+// DIPLOMA-801: Certificate templates
+app.route("/api/certificate-templates", certificateTemplatesRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {
