@@ -38,6 +38,7 @@ import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
 import { schoolRoutes } from "./routes/school"; // SCHOOL-001
+import { attendanceRoutes } from "./routes/attendance"; // SCHOOL-003
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -123,6 +124,8 @@ app.route("/api/certificate-templates", certificateTemplatesRoutes);
 // SCHOOL-001: School module (academic years + terms + classes + enrollment)
 // Mounted BEFORE tagRoutes' global requireAuth to ensure correct route resolution
 app.route("/api/school", schoolRoutes);
+// SCHOOL-003: Attendance register — /api/school/attendance/...
+app.route("/api/school/attendance", attendanceRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

@@ -204,6 +204,13 @@
       "when": 1748822400000,
       "tag": "0028_school001_academic_years_classes",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1748822500000,
+      "tag": "0029_school003_attendance",
+      "breakpoints": true
     }
   ]
 }
