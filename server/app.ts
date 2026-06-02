@@ -18,6 +18,8 @@ import { automationRoutes } from "./routes/automations";
 import { analyticsRoutes } from "./routes/analytics";
 import { tagRoutes } from "./routes/tags";
 import { messageRoutes } from "./routes/messages";
+import { broadcastRoutes } from "./routes/broadcasts";
+import { notificationRoutes } from "./routes/notifications";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -56,6 +58,8 @@ app.route("/api/automations", automationRoutes);
 app.route("/api/analytics", analyticsRoutes);
 app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
 app.route("/api/messages", messageRoutes);
+app.route("/api/broadcasts", broadcastRoutes);
+app.route("/api/notifications", notificationRoutes);
 
 app.get("/api/health", async (c) => {
   try {

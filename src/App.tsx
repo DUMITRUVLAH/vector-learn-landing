@@ -46,6 +46,7 @@ import { TemplatesPage } from "./pages/app/TemplatesPage";
 import { AutomationsPage } from "./pages/app/AutomationsPage";
 import { AnalyticsPage } from "./pages/app/AnalyticsPage";
 import { InboxPage } from "./pages/app/InboxPage";
+import { BroadcastsPage } from "./pages/app/BroadcastsPage";
 
 function HomePage() {
   return (
@@ -152,6 +153,7 @@ function Routes() {
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
   if (path.startsWith("/app/inbox")) return <InboxPage />;
+  if (path.startsWith("/app/broadcasts")) return <BroadcastsPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // PAY-003: /portal/invoice/:id — parent-facing invoice portal (no auth)

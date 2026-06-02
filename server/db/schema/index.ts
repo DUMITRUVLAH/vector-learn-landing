@@ -14,3 +14,5 @@ export * from "./automations";
 export * from "./families";
 export * from "./analytics";
 export * from "./messages";
+export * from "./broadcasts";
+export * from "./notifications";
