@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "PAY-005",
-  "last_completed": "PAY-004",
-  "iterations": 135,
-  "last_run_at": "2026-06-02T10:40:00Z",
-  "milestone_status": "PAY faza-3: PAY-004 done, building PAY-005",
+  "current_item": "PAY-006",
+  "last_completed": "PAY-005",
+  "iterations": 136,
+  "last_run_at": "2026-06-02T10:50:00Z",
+  "milestone_status": "PAY faza-3: PAY-004..005 done, building PAY-006",
   "active_milestone": "PAY",
   "items": {
     "M1-001": {
@@ -3026,17 +3026,24 @@
       }
     },
     "PAY-005": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAY-005-debt-reminders.md",
       "milestone": "PAY",
       "phase": "3",
-      "depends_on": ["PAY-004", "COMM-201"]
+      "depends_on": ["PAY-004", "COMM-201"],
+      "branch": "feat/PAY-faza-3-stripe-reminders-refunds",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "PAY-006": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAY-006-installment-plans.md",
       "milestone": "PAY",

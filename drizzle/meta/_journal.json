@@ -232,6 +232,13 @@
       "when": 1780501000000,
       "tag": "0033_pay005_invoice_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1780502000000,
+      "tag": "0034_pay006_payment_plans",
+      "breakpoints": true
     }
   ]
 }

@@ -147,6 +147,10 @@ app.route("/api", stripeWebhookRoutes);
 // PAY-005: Debt reminders — admin trigger + invoice reminder history + overdue summary
 app.route("/api", reminderRoutes);
 
+// PAY-006: Payment plans (N installments with auto-invoices)
+import { paymentPlanRoutes } from "./routes/paymentPlans"; // PAY-006
+app.route("/api/payment-plans", paymentPlanRoutes);
+
 app.get("/api/health/db", async (c) => {
   try {
     const tablesResult = await db.execute(
