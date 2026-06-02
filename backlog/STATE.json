@@ -2108,53 +2108,67 @@
       }
     },
     "INTEG-101": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "branch": "feat/INTEG-faza-1-conectivitate-module",
-      "spec": "backlog/specs/INTEG-101-leads-course-branch-fk.md"
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/112",
+      "spec": "backlog/specs/INTEG-101-leads-course-branch-fk.md",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "INTEG-102": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "branch": "feat/INTEG-faza-1-conectivitate-module",
-      "spec": "backlog/specs/INTEG-102-payments-invoices-course-fk.md"
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/112",
+      "spec": "backlog/specs/INTEG-102-payments-invoices-course-fk.md",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "INTEG-103": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "branch": "feat/INTEG-faza-1-conectivitate-module",
-      "spec": "backlog/specs/INTEG-103-cohorts-branch-fk.md"
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/112",
+      "spec": "backlog/specs/INTEG-103-cohorts-branch-fk.md",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "INTEG-104": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "branch": "feat/INTEG-faza-1-conectivitate-module",
-      "spec": "backlog/specs/INTEG-104-analytics-endpoints.md"
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/112",
+      "spec": "backlog/specs/INTEG-104-analytics-endpoints.md",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "INTEG-201": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "branch": "feat/INTEG-faza-2-ux-cross-module",
-      "spec": "backlog/specs/INTEG-201-lead-cohort-autoenroll.md"
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/113",
+      "spec": "backlog/specs/INTEG-201-lead-cohort-autoenroll.md",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "INTEG-202": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "branch": "feat/INTEG-faza-2-ux-cross-module",
-      "spec": "backlog/specs/INTEG-202-contracts-course-picker.md"
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/113",
+      "spec": "backlog/specs/INTEG-202-contracts-course-picker.md",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "INTEG-203": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "branch": "feat/INTEG-faza-2-ux-cross-module",
-      "spec": "backlog/specs/INTEG-203-cx-course-name-participant-link.md"
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/113",
+      "spec": "backlog/specs/INTEG-203-cx-course-name-participant-link.md",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     }
   }
 }
