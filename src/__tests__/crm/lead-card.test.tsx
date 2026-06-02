@@ -50,6 +50,14 @@ vi.mock("@/lib/api/tasks", () => ({
   getNextTask: vi.fn(),
 }));
 
+// CRM-134: mock notifications API so LeadCardPage can load tenant members
+vi.mock("@/lib/api/notifications", () => ({
+  getTenantMembers: vi.fn().mockResolvedValue({ members: [] }),
+  getUnreadCount: vi.fn().mockResolvedValue({ count: 0 }),
+  listNotifications: vi.fn().mockResolvedValue({ items: [] }),
+  markAllRead: vi.fn().mockResolvedValue({ updated: 0 }),
+}));
+
 vi.mock("@/hooks/useSession", () => ({
   useSession: () => ({ status: "authenticated", user: { id: "u1", tenantId: "t1", role: "owner" } }),
 }));
@@ -190,9 +198,12 @@ describe("CRM-106 — Lead card page", () => {
    */
   it("T-CRM-106-4: adding a note appears immediately in timeline", async () => {
     renderLeadCard();
-    await waitFor(() => expect(screen.getByLabelText("Notă internă")).toBeInTheDocument());
+    // CRM-134: note field is now MentionTextarea with updated aria-label
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: /notă/i })).toBeInTheDocument()
+    );
 
-    const noteInput = screen.getByLabelText("Notă internă");
+    const noteInput = screen.getByRole("textbox", { name: /notă/i });
     const submitBtn = screen.getByRole("button", { name: "Adaugă" });
 
     fireEvent.change(noteInput, { target: { value: "Notă nouă" } });

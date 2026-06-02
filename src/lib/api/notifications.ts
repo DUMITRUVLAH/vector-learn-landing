@@ -1,33 +1,47 @@
+/**
+ * CRM-134: In-app notifications API helpers
+ */
 import { api } from "../api";
 
-export type NotificationType = "task_due" | "lead_converted" | "lead_created" | "system";
+export interface InAppNotificationPayload {
+  body: string;
+  lead_id?: string;
+  interaction_id?: string;
+  actor_name?: string;
+}
 
-export interface AppNotification {
+export interface InAppNotification {
   id: string;
   tenantId: string;
-  userId: string;
-  type: NotificationType;
-  title: string;
-  body: string | null;
-  link: string | null;
-  isRead: boolean;
-  metadata?: Record<string, unknown> | null;
+  recipientUserId: string;
+  payload: InAppNotificationPayload;
+  kind: string;
+  readAt: string | null;
   createdAt: string;
 }
 
-export interface NotificationsResponse {
-  items: AppNotification[];
-  unreadCount: number;
+export interface TenantMember {
+  id: string;
+  name: string;
+  role: string;
 }
 
-export function listNotifications(): Promise<NotificationsResponse> {
-  return api<NotificationsResponse>("/api/notifications");
+/** Returns count of unread in-app notifications for the current user. */
+export async function getUnreadCount(): Promise<{ count: number }> {
+  return api<{ count: number }>("/api/notifications/unread-count");
 }
 
-export function markRead(id: string): Promise<{ ok: boolean }> {
-  return api<{ ok: boolean }>(`/api/notifications/${id}/read`, { method: "PATCH" });
+/** Returns last 20 notifications (read + unread) for the current user. */
+export async function listNotifications(): Promise<{ items: InAppNotification[] }> {
+  return api<{ items: InAppNotification[] }>("/api/notifications");
 }
 
-export function markAllRead(): Promise<{ ok: boolean }> {
-  return api<{ ok: boolean }>("/api/notifications/read-all", { method: "POST" });
+/** Marks all unread notifications as read. */
+export async function markAllRead(): Promise<{ updated: number }> {
+  return api<{ updated: number }>("/api/notifications/mark-read", { method: "PATCH" });
+}
+
+/** Returns all users in the current tenant (for @mention autocomplete). */
+export async function getTenantMembers(): Promise<{ members: TenantMember[] }> {
+  return api<{ members: TenantMember[] }>("/api/users/tenant-members");
 }

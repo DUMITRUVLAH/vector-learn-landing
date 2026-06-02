@@ -540,6 +540,13 @@
       "when": 1780145179788,
       "tag": "0076_branch703_user_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1780151646940,
+      "tag": "0077_glorious_bug",
+      "breakpoints": true
     }
   ]
 }

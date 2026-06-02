@@ -39,8 +39,8 @@ import { cn } from "@/lib/utils";
 import { SendMessageModal, LogCallModal, type SendChannel } from "@/components/crm/CommModal";
 import { ConvertModal, getScoreBadge, SCORE_BADGE_STYLES, SCORE_BADGE_LABELS } from "@/components/crm/ConvertModal";
 import { scoreLead } from "@/lib/api/leads";
-import { listMessages, sendMessage, type Message as CommMessage, type MessageChannel } from "@/lib/api/messages";
-import { listTemplates, type MessageTemplate } from "@/lib/api/templates";
+import { MentionTextarea } from "@/components/crm/MentionTextarea";
+import { getTenantMembers, type TenantMember } from "@/lib/api/notifications";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -103,6 +103,8 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   // Note compose
   const [noteBody, setNoteBody] = useState("");
   const [submittingNote, setSubmittingNote] = useState(false);
+  // CRM-134: tenant members for @mention autocomplete
+  const [tenantMembers, setTenantMembers] = useState<TenantMember[]>([]);
 
   // Modals
   const [lostReasonModal, setLostReasonModal] = useState(false);
@@ -142,7 +144,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     setLoading(true);
     setError(null);
     try {
-      const [leadRes, stagesRes, interRes, tasksRes, attRes, contactsRes, tagsRes, fieldValuesRes, msgsRes] = await Promise.all([
+      const [leadRes, stagesRes, interRes, tasksRes, attRes, contactsRes, tagsRes, fieldValuesRes, membersRes] = await Promise.all([
         getLead(leadId),
         fetchPipelineStages(),
         listInteractions(leadId),
@@ -151,7 +153,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         listContacts(leadId),
         listTags(leadId),
         listFieldValues(leadId),
-        listMessages({ lead_id: leadId }),
+        getTenantMembers().catch(() => ({ members: [] })),
       ]);
       setLead(leadRes);
       setStages(stagesRes.stages);
@@ -162,7 +164,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
       setTags(tagsRes.tags);
       setCustomFields(fieldValuesRes.fields);
       setFieldValues(fieldValuesRes.values);
-      setCommMessages(msgsRes.items);
+      setTenantMembers(membersRes.members);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare");
     } finally {
@@ -1077,22 +1079,26 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
           {activeTab === "activity" && (
             <div role="tabpanel" aria-label="Activitate">
               {/* Note compose */}
-              <form onSubmit={(e) => void addNote(e)} className="mb-4 flex gap-2">
-                <input
-                  type="text"
+              <form onSubmit={(e) => void addNote(e)} className="mb-4">
+                <MentionTextarea
+                  id="note-input"
                   value={noteBody}
-                  onChange={(e) => setNoteBody(e.target.value)}
-                  placeholder="Adaugă o notă internă…"
-                  className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  aria-label="Notă internă"
+                  onChange={setNoteBody}
+                  members={tenantMembers}
+                  placeholder="Adaugă o notă internă… (@ pentru a menționa un coleg)"
+                  disabled={submittingNote}
+                  rows={2}
+                  className="mb-2"
                 />
-                <button
-                  type="submit"
-                  disabled={submittingNote || !noteBody.trim()}
-                  className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {submittingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : "Adaugă"}
-                </button>
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={submittingNote || !noteBody.trim()}
+                    className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {submittingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : "Adaugă"}
+                  </button>
+                </div>
               </form>
 
               {/* Timeline */}
@@ -1423,6 +1429,20 @@ const INTERACTION_ICON: Record<string, React.ReactNode> = {
   system: <AlertTriangle className="h-3 w-3 text-muted-foreground" aria-hidden="true" />,
 };
 
+/** CRM-134: Renders note body with @mentions highlighted. */
+function renderBodyWithMentions(body: string): React.ReactNode {
+  const parts = body.split(/(@[A-Za-zÀ-ž]+(?: [A-Za-zÀ-ž]+)*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("@") ? (
+      <span key={i} className="text-primary font-semibold">
+        {part}
+      </span>
+    ) : (
+      part
+    )
+  );
+}
+
 function TimelineItem({ item }: { item: LeadInteraction }) {
   const meta = item.metadata;
 
@@ -1447,7 +1467,9 @@ function TimelineItem({ item }: { item: LeadInteraction }) {
           </time>
         </div>
         {item.body && (
-          <p className="text-sm text-foreground/80 whitespace-pre-wrap">{item.body}</p>
+          <p className="text-sm text-foreground/80 whitespace-pre-wrap">
+            {renderBodyWithMentions(item.body)}
+          </p>
         )}
         {/* Metadata badges */}
         {meta && (

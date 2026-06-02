@@ -6,6 +6,7 @@ import { BranchSwitcher } from "@/components/app/BranchSwitcher";
 import { Link, useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "@/components/NotificationBell";
 
 interface AppShellProps {
   children: ReactNode;
@@ -99,9 +100,6 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
                     .slice(0, 2)
                     .join("")}
                 </div>
-                {/* BRANCH-701: Branch switcher */}
-                <BranchSwitcher />
-                {/* CRM-123: Notification bell */}
                 <NotificationBell />
                 <button
                   type="button"
