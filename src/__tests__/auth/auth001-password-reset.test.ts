@@ -148,8 +148,8 @@ describe("AUTH-001 — ForgotPasswordPage & ResetPasswordPage (pure logic)", () 
   });
 
   it("T-AUTH-001-page-3: password mismatch is detected client-side", () => {
-    const newPassword = "mypassword";
-    const confirm = "differentpassword";
+    const newPassword: string = "mypassword";
+    const confirm: string = "differentpassword";
     const mismatch = newPassword !== confirm;
     expect(mismatch).toBe(true);
   });

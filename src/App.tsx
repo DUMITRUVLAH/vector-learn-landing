@@ -61,6 +61,7 @@ import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
 import { ForgotPasswordPage } from "./pages/app/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/app/ResetPasswordPage";
+import { AcceptInvitationPage } from "./pages/app/AcceptInvitationPage";
 
 function HomePage() {
   return (
@@ -109,6 +110,8 @@ function Routes() {
   // AUTH-001: password reset pages (must be before /app catch-all)
   if (path.startsWith("/app/forgot-password")) return <ForgotPasswordPage />;
   if (path.startsWith("/app/reset")) return <ResetPasswordPage />;
+  // AUTH-002: accept team invitation (public, no auth required)
+  if (path.startsWith("/app/accept-invitation")) return <AcceptInvitationPage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;

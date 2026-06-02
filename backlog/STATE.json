@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "AUTH-002",
-  "last_completed": "AUTH-001",
-  "iterations": 93,
-  "last_run_at": "2026-06-02T20:30:00Z",
-  "milestone_status": "AUTH faza-1: AUTH-001 done, AUTH-002 in progress",
+  "current_item": "AUTH-003",
+  "last_completed": "AUTH-002",
+  "iterations": 94,
+  "last_run_at": "2026-06-02T21:00:00Z",
+  "milestone_status": "AUTH faza-1: AUTH-001/002 done, AUTH-003 next",
   "active_milestone": "AUTH",
   "items": {
     "M1-001": {
@@ -1825,13 +1825,24 @@
       }
     },
     "AUTH-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/AUTH-002-team-invitations.md",
       "milestone": "AUTH",
       "phase": "1",
-      "depends_on": ["AUTH-001"]
+      "depends_on": ["AUTH-001"],
+      "branch": "feat/AUTH-faza-1-security",
+      "reports": [
+        "backlog/reports/AUTH-002-manager.md",
+        "backlog/reports/AUTH-002-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "AUTH-003": {
       "status": "pending",

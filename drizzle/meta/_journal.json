@@ -225,6 +225,13 @@
       "when": 1780394861238,
       "tag": "0031_auth001_password_reset_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1780395301976,
+      "tag": "0032_auth002_user_invitations",
+      "breakpoints": true
     }
   ]
 }
