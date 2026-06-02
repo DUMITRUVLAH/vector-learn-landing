@@ -37,7 +37,8 @@ import { invoiceRoutes } from "./routes/invoices";
 import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
-import { badgesRoutes } from "./routes/badges"; // GAP-019
+import { certificatesIssueRoutes } from "./routes/certificatesIssue"; // DIPLOMA-803
+import { certificatesPublicRoutes } from "./routes/certificatesPublic"; // DIPLOMA-805
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -126,6 +127,9 @@ app.route("/api/enroll", enrollRoutes);
 // FEEDBACK-601: public (no-auth) routes must be registered BEFORE tagRoutes because tagRoutes
 // is mounted at "/api" with a global requireAuth that otherwise intercepts all /api/* requests.
 app.route("/api/feedback-public", feedbackPublicRoutes);
+// DIPLOMA-805: public certificate verification — no auth required.
+// Must be BEFORE tagRoutes (which mounts global requireAuth at "/api").
+app.route("/api/public/certificates", certificatesPublicRoutes);
 app.route("/api/feedback", feedbackRoutes);
 // GAP-010: Student portal — public token access (BEFORE tagRoutes which has global requireAuth)
 app.route("/api/portal", portalRoutes);
@@ -161,8 +165,8 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
-// GAP-019/020: Badges (gamification) + leaderboard
-app.route("/api/badges", badgesRoutes);
+// DIPLOMA-803: Certificate issue (single + bulk)
+app.route("/api/certificates", certificatesIssueRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

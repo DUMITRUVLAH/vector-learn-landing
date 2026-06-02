@@ -60,8 +60,7 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
-import { StudentDetailPage } from "./pages/app/StudentDetailPage"; // GAP-019
-import { GamificationPage } from "./pages/app/GamificationPage"; // GAP-020
+import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
 
 function HomePage() {
   return (
@@ -185,15 +184,10 @@ function Routes() {
     const token = path.split("/")[2];
     return <FeedbackPublicPage token={token} />;
   }
-  // GAP-011: /enroll/:slug — public enrollment page for a cohort
-  if (path.match(/^\/enroll\/[^/]+$/)) {
-    const slug = path.split("/")[2];
-    return <EnrollPage slug={slug} />;
-  }
-  // GAP-012: /progress/:token — public no-auth progress report for a student
-  if (path.match(/^\/progress\/[^/]+$/)) {
+  // /verify/:token — DIPLOMA-805: public certificate verification (no auth)
+  if (path.match(/^\/verify\/[^/]+$/)) {
     const token = path.split("/")[2];
-    return <ProgressPublicPage token={token} />;
+    return <VerifyCertificatePage token={token} />;
   }
   return <HomePage />;
 }

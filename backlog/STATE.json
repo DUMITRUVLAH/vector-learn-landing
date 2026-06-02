@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "GAP-020",
-  "iterations": 112,
-  "last_run_at": "2026-06-01T20:30:00Z",
-  "milestone_status": "GAP milestone COMPLETE: all 20 items done (faza 1-6). PR #104 open for faza-6 (GAP-019/020 gamification).",
-  "active_milestone": "GAP",
+  "current_item": "BUGFIX-001",
+  "last_completed": "CX-705",
+  "iterations": 115,
+  "last_run_at": "2026-06-01T21:15:00Z",
+  "milestone_status": "CX + DIPLOMA faza-1 COMPLETE. PR #105 (DIPLOMA-803/804/805), PR #106 (CX-705). Next: BUGFIX-001.",
+  "active_milestone": "DIPLOMA",
   "items": {
     "M1-001": {
       "status": "done",
@@ -1410,26 +1410,42 @@
       }
     },
     "CX-704": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CX-704-export-csv.md",
       "milestone": "CX",
       "phase": "1",
       "depends_on": [
         "CX-703"
-      ]
+      ],
+      "branch": "feat/CX-faza-1-cohorts",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/106",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CX-705": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CX-705-breakeven-badge.md",
       "milestone": "CX",
       "phase": "1",
       "depends_on": [
         "CX-703"
-      ]
+      ],
+      "branch": "feat/CX-faza-1-cohorts",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/106",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "DIPLOMA-801": {
       "status": "done",
@@ -1470,7 +1486,7 @@
       }
     },
     "DIPLOMA-803": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DIPLOMA-803-generate-qr.md",
@@ -1479,29 +1495,59 @@
       "depends_on": [
         "DIPLOMA-802",
         "CX-703"
-      ]
+      ],
+      "branch": "feat/DIPLOMA-faza-1-schema-editor",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/105",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "DIPLOMA-804": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DIPLOMA-804-bulk-zip.md",
       "milestone": "DIPLOMA",
       "phase": "1",
       "depends_on": [
         "DIPLOMA-803"
-      ]
+      ],
+      "branch": "feat/DIPLOMA-faza-1-schema-editor",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/105",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "DIPLOMA-805": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DIPLOMA-805-public-verify.md",
       "milestone": "DIPLOMA",
       "phase": "1",
       "depends_on": [
         "DIPLOMA-803"
-      ]
+      ],
+      "branch": "feat/DIPLOMA-faza-1-schema-editor",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/105",
+      "reports": [
+        "backlog/reports/DIPLOMA-805-reviewer.md",
+        "backlog/reports/DIPLOMA-805-integration.md",
+        "backlog/reports/DIPLOMA-805-manager.md",
+        "backlog/reports/DIPLOMA-805-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "BUGFIX-001": {
       "status": "pending",

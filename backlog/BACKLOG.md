@@ -205,10 +205,24 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 1 | `BRANCH-701` | Branches schema + branch_id pe entități | 1 | done ✅ | [specs/BRANCH-701-schema.md](specs/BRANCH-701-schema.md) · [PR #80](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/80) |
-| 2 | `BRANCH-702` | Branch switcher UI + filtrare globală | 2 | pending | [specs/BRANCH-702-switcher.md](specs/BRANCH-702-switcher.md) |
-| 3 | `BRANCH-703` | Roluri scoped pe filială — manager vede doar filiala lui | 3 | pending | [specs/BRANCH-703-scoped-roles.md](specs/BRANCH-703-scoped-roles.md) |
-| 4 | `BRANCH-704` | Rapoarte per filială + consolidat | 4 | pending | [specs/BRANCH-704-reports.md](specs/BRANCH-704-reports.md) |
+| 1 | `CX-701` | Model ediție/cohortă + funcții end-date/progress (din `useCXData`) | 1 | pending | [specs/CX-701-edition-model.md](specs/CX-701-edition-model.md) |
+| 2 | `CX-702` | Pagină cohorte: tab-uri Active/Viitoare/Trecute + progres | 1 | pending | [specs/CX-702-cohort-board.md](specs/CX-702-cohort-board.md) |
+| 3 | `CX-703` | Participanți per cohortă (CRM + manual) cu 3 tabele + stat | 1 | pending | [specs/CX-703-participants-tables.md](specs/CX-703-participants-tables.md) |
+| 4 | `CX-704` | Export CSV participanți cohortă | 1 | pending | [specs/CX-704-export-csv.md](specs/CX-704-export-csv.md) |
+| 5 | `CX-705` | Break-even + profit proiectat per cohortă (din `useProfitability`) | 1 | pending | [specs/CX-705-breakeven-badge.md](specs/CX-705-breakeven-badge.md) |
+
+## Milestone: DIPLOMA — Generare diplome/certificate
+
+> Portat din `copy-roas` (`DiplomaGenerator.tsx` + `VerifyCertificate.tsx`). Editor canvas
+> drag&drop, QR de verificare, export PDF/JPG bulk. Branch: `feat/DIPLOMA-faza-1-certificates`.
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `DIPLOMA-801` | Schema templates + certificate emise + token verificare | 1 | pending | [specs/DIPLOMA-801-schema-templates.md](specs/DIPLOMA-801-schema-templates.md) |
+| 2 | `DIPLOMA-802` | Editor vizual canvas drag&drop câmpuri + salvare template | 1 | pending | [specs/DIPLOMA-802-canvas-editor.md](specs/DIPLOMA-802-canvas-editor.md) |
+| 3 | `DIPLOMA-803` | Generare PDF/JPG per cursant + QR + persistă certificat | 1 | pending | [specs/DIPLOMA-803-generate-qr.md](specs/DIPLOMA-803-generate-qr.md) |
+| 4 | `DIPLOMA-804` | Generare bulk pe cohortă + download ZIP | 1 | pending | [specs/DIPLOMA-804-bulk-zip.md](specs/DIPLOMA-804-bulk-zip.md) |
+| 5 | `DIPLOMA-805` | Pagină publică verificare `/verify/:token` (no-auth) | 1 | done | [specs/DIPLOMA-805-public-verify.md](specs/DIPLOMA-805-public-verify.md) |
 
 ## Quality gates (required before status → `done`)
 
