@@ -1,5 +1,7 @@
 import { HashRouter, useRouter } from "./router/HashRouter";
 import { BranchProvider } from "./contexts/BranchContext";
+import { CommandPalette } from "./components/CommandPalette";
+import { useCommandPalette } from "./hooks/useCommandPalette";
 import { Navbar } from "./components/Navbar";
 import { Hero } from "./components/Hero";
 import { TrustBar } from "./components/TrustBar";
@@ -69,6 +71,30 @@ import { KinderImmunizationReportPage } from "./pages/app/KinderImmunizationRepo
 import { KinderParentFeedPage } from "./pages/app/KinderParentFeedPage";
 import { KinderCompliancePage } from "./pages/app/KinderCompliancePage";
 import KinderIncidentsPage from "./pages/app/KinderIncidentsPage";
+// MOB-101..105: Mobile PWA pages
+import { StudentDashboardPage } from "./pages/app/mobile/StudentDashboardPage";
+import { MobileSchedulePage } from "./pages/app/mobile/MobileSchedulePage";
+import { HomeworkPage } from "./pages/app/mobile/HomeworkPage";
+import { NotificationsSettingsPage } from "./pages/app/mobile/NotificationsSettingsPage";
+import { ParentDashboardPage } from "./pages/app/mobile/ParentDashboardPage";
+import { ChatPage } from "./pages/app/mobile/ChatPage";
+import { XpPage } from "./pages/app/mobile/XpPage";
+import { LeaderboardPage } from "./pages/app/mobile/LeaderboardPage";
+import { GamificationPage } from "./pages/app/GamificationPage"; // GAP-020
+import { GradingPage } from "./pages/app/GradingPage"; // MOB-102
+// INT-901..903: API keys, webhooks, integrations settings
+import { ApiKeysPage } from "./pages/app/settings/ApiKeysPage";
+import { WebhooksPage } from "./pages/app/settings/WebhooksPage";
+import { IntegrationsPage } from "./pages/app/settings/IntegrationsPage";
+// REP-301..304: Reports pages
+import { KpiDashboardPage } from "./pages/app/KpiDashboardPage";
+import { RevenueChartsPage } from "./pages/app/RevenueChartsPage";
+import { StudentRetentionPage } from "./pages/app/StudentRetentionPage";
+import { ExportPage } from "./pages/app/ExportPage";
+// Portal + public pages
+import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
+import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
+import { FeatureTreePage } from "./pages/app/FeatureTreePage";
 
 function HomePage() {
   return (
@@ -208,13 +234,25 @@ function Routes() {
   return <HomePage />;
 }
 
+/** POLISH-001: AppWithCommandPalette — wraps app with the global command palette (Cmd+K). */
+function AppWithCommandPalette() {
+  const { isOpen, close } = useCommandPalette();
+  return (
+    <>
+      <Routes />
+      {import.meta.env.DEV && <BackendStatusBadge />}
+      {/* POLISH-001: Command palette — mounted at app root so Cmd+K works from any page */}
+      <CommandPalette isOpen={isOpen} onClose={close} />
+    </>
+  );
+}
+
 export default function App() {
   return (
     <HashRouter>
       {/* BRANCH-702: BranchProvider wraps all app routes so useBranch() works from any page */}
       <BranchProvider>
-        <Routes />
-        {import.meta.env.DEV && <BackendStatusBadge />}
+        <AppWithCommandPalette />
       </BranchProvider>
     </HashRouter>
   );

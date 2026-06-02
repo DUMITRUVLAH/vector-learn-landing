@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "POLISH-001",
   "last_completed": "BRANCH-704",
-  "iterations": 144,
-  "last_run_at": "2026-06-02T16:00:00Z",
-  "milestone_status": "State sync: BRANCH-701..704 done (merged PR #110). FIN/INT/AI/WAVE2 items added as done. Planning next module.",
-  "active_milestone": "NEXT",
+  "iterations": 145,
+  "last_run_at": "2026-06-02T16:05:00Z",
+  "milestone_status": "POLISH faza-1 starting: POLISH-001 command palette in_progress.",
+  "active_milestone": "POLISH",
   "items": {
     "M1-001": {
       "status": "done",
@@ -2170,8 +2170,8 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "POLISH-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-001-nav-quick-search.md",
       "milestone": "POLISH",
