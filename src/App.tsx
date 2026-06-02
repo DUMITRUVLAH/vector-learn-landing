@@ -85,6 +85,7 @@ import { IntegrationsPage } from "./pages/app/settings/IntegrationsPage";
 import TeamPage from "./pages/app/settings/TeamPage";
 import BrandingPage from "./pages/app/settings/BrandingPage";
 import AuditLogSettingsPage from "./pages/app/settings/AuditLogPage";
+import GdprPage from "./pages/app/settings/GdprPage";
 import NotificationPrefsPage from "./pages/app/settings/NotificationPrefsPage";
 // Reports pages
 import { KpiDashboardPage } from "./pages/app/KpiDashboardPage";
@@ -190,6 +191,7 @@ function Routes() {
   if (path.startsWith("/app/settings/team")) return <TeamPage />;
   if (path.startsWith("/app/settings/branding")) return <BrandingPage />;
   if (path.startsWith("/app/settings/audit-log")) return <AuditLogSettingsPage />;
+  if (path.startsWith("/app/settings/gdpr")) return <GdprPage />;
   if (path.startsWith("/app/settings/notifications")) return <NotificationPrefsPage />;
   if (path.startsWith("/app/settings/api-keys")) return <ApiKeysPage />; // INT-901
   if (path.startsWith("/app/settings/webhooks")) return <WebhooksPage />; // INT-902

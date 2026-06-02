@@ -316,4 +316,4 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 |----|----------|-------|--------|------|
 | SET-801 | P0 | Team management — invite, roles, disable users | done ✅ | [specs/SET-801-team-management.md](specs/SET-801-team-management.md) |
 | SET-802 | P0 | Tenant branding + locale/timezone settings | done ✅ | [specs/SET-802-branding-locale.md](specs/SET-802-branding-locale.md) |
-| SET-803 | P0 | Audit log + GDPR compliance (DPA download, data retention) | pending | [specs/SET-803-audit-log-gdpr.md](specs/SET-803-audit-log-gdpr.md) |
+| SET-803 | P0 | Audit log + GDPR compliance (DPA download, data retention) | done ✅ | [specs/SET-803-audit-log-gdpr.md](specs/SET-803-audit-log-gdpr.md) |

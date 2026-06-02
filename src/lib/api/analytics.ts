@@ -114,3 +114,45 @@ export function getBranchKpis(period?: "month" | "quarter"): Promise<BranchKpiRe
   const qs = period ? `?period=${period}` : "";
   return api<BranchKpiResponse>(`/api/analytics/branches${qs}`);
 }
+
+// ─── BRANCH-KPI: Global KPI dashboard ────────────────────────────────────────
+
+export type KpiPeriod = "7d" | "30d" | "90d" | "12m";
+
+export interface KpiData {
+  mrrCents: number;
+  prevMrrCents: number;
+  activeStudents: number;
+  prevActiveStudents: number;
+  newStudents: number;
+  churnRatePct: number;
+  arpuCents: number;
+}
+
+export function getKpi(period: KpiPeriod): Promise<KpiData> {
+  return api<KpiData>(`/api/analytics/kpi?period=${period}`);
+}
+
+// ─── Revenue charts ───────────────────────────────────────────────────────────
+
+export interface RevenueMonth {
+  month: string;
+  totalCents: number;
+  count: number;
+}
+
+export interface RevenueCourse {
+  courseId: string;
+  courseName: string;
+  totalCents: number;
+}
+
+export interface RevenueOverTimeResponse {
+  months: RevenueMonth[];
+  byCourse: RevenueCourse[];
+}
+
+export function getRevenueOverTime(months?: number): Promise<RevenueOverTimeResponse> {
+  const qs = months ? `?months=${months}` : "";
+  return api<RevenueOverTimeResponse>(`/api/analytics/revenue-over-time${qs}`);
+}

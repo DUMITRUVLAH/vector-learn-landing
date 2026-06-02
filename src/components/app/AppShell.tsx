@@ -50,6 +50,7 @@ const NAV = [
   { label: "Echipă", href: "/app/settings/team", icon: Users },
   { label: "Branding", href: "/app/settings/branding", icon: Award },
   { label: "Audit Log", href: "/app/settings/audit-log", icon: ClipboardList },
+  { label: "GDPR", href: "/app/settings/gdpr", icon: ShieldCheck },
   { label: "Notificări", href: "/app/settings/notifications", icon: Bell },
 ];
 
