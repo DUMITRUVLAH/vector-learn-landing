@@ -84,3 +84,10 @@ export async function archiveCourse(id: string): Promise<{ ok: boolean }> {
   if (!res.ok) throw new Error(`archiveCourse: ${res.status}`);
   return res.json() as Promise<{ ok: boolean }>;
 }
+
+/**
+ * CourseItem — lightweight course reference used by pickers (e.g. ContractsPage).
+ * Shape is a subset of Course; listCourses already returns full Course objects
+ * so CourseItem is just a named alias for the picker-relevant fields.
+ */
+export type CourseItem = Pick<Course, "id" | "name" | "status" | "defaultPriceCents">;
