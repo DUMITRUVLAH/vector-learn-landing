@@ -22,11 +22,6 @@ export interface Invoice {
   studentName: string;
 }
 
-export interface InvoicePdfResult {
-  invoiceNumber: string;
-  html: string;
-}
-
 export function listInvoices(params?: {
   status?: InvoiceStatus;
   month?: string;
@@ -53,8 +48,13 @@ export function createInvoice(input: {
   });
 }
 
-export function getInvoicePdf(id: string): Promise<InvoicePdfResult> {
-  return api<InvoicePdfResult>(`/api/invoices/${id}/pdf`);
+/**
+ * Triggers a direct HTML download of the invoice PDF.
+ * The server returns text/html with Content-Disposition: attachment,
+ * which browsers download and can print to PDF using the print dialog.
+ */
+export function downloadInvoicePdf(id: string): void {
+  window.location.href = `/api/invoices/${id}/pdf`;
 }
 
 export function updateInvoiceStatus(

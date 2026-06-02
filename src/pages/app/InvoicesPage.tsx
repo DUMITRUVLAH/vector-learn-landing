@@ -18,7 +18,7 @@ import { useRouter } from "@/router/HashRouter";
 import {
   listInvoices,
   createInvoice,
-  getInvoicePdf,
+  downloadInvoicePdf,
   updateInvoiceStatus,
   listSubscriptions,
   updateSubscription,
@@ -33,6 +33,7 @@ import {
 } from "@/lib/api/invoices";
 import { listStudents, type Student } from "@/lib/api/students";
 import { listPayments, type Payment } from "@/lib/api/payments";
+import { getTenantSettings, updateTenantSettings, type TenantSettings } from "@/lib/api/tenantSettings";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { SubscriptionTable } from "@/components/invoices/SubscriptionTable";
@@ -65,7 +66,7 @@ function formatDate(iso: string): string {
   });
 }
 
-type Tab = "invoices" | "subscriptions";
+type Tab = "invoices" | "subscriptions" | "settings";
 
 // ──────────────────────────────────────────────
 // Main page
@@ -89,6 +90,10 @@ export function InvoicesPage() {
   const [filterMonth, setFilterMonth] = useState<string>("");
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [runningBilling, setRunningBilling] = useState(false);
+  const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [invoicePrefixDraft, setInvoicePrefixDraft] = useState("");
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -130,6 +135,19 @@ export function InvoicesPage() {
     void fetchAll();
   }, [fetchAll]);
 
+  // Load tenant settings when settings tab is active
+  useEffect(() => {
+    if (activeTab !== "settings" || tenantSettings) return;
+    setSettingsLoading(true);
+    getTenantSettings()
+      .then((s) => {
+        setTenantSettings(s);
+        setInvoicePrefixDraft(s.invoicePrefix);
+      })
+      .catch(() => setToast({ kind: "error", message: "Nu pot încărca setările" }))
+      .finally(() => setSettingsLoading(false));
+  }, [activeTab, tenantSettings]);
+
   const handleMarkPaid = async (id: string) => {
     try {
       await updateInvoiceStatus(id, "paid");
@@ -140,19 +158,9 @@ export function InvoicesPage() {
     }
   };
 
-  const handleDownloadPdf = async (id: string, invoiceNumber: string) => {
-    try {
-      const result = await getInvoicePdf(id);
-      const win = window.open("", "_blank");
-      if (win) {
-        win.document.write(result.html);
-        win.document.close();
-      } else {
-        setToast({ kind: "error", message: "Permite pop-up-uri pentru a descărca PDF-ul" });
-      }
-    } catch {
-      setToast({ kind: "error", message: `Nu pot genera PDF pentru ${invoiceNumber}` });
-    }
+  const handleDownloadPdf = (id: string, _invoiceNumber: string) => {
+    // Triggers direct HTML file download — browser can print to PDF via Ctrl+P
+    downloadInvoicePdf(id);
   };
 
   const handleSubStatusChange = async (id: string, status: SubscriptionStatus) => {
@@ -178,6 +186,23 @@ export function InvoicesPage() {
       setToast({ kind: "error", message: "Eroare la rularea facturării" });
     } finally {
       setRunningBilling(false);
+    }
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const prefix = invoicePrefixDraft.trim();
+    if (!prefix) return;
+    setSettingsSaving(true);
+    try {
+      const updated = await updateTenantSettings({ invoicePrefix: prefix });
+      setTenantSettings(updated);
+      setInvoicePrefixDraft(updated.invoicePrefix);
+      setToast({ kind: "success", message: "Setări salvate" });
+    } catch {
+      setToast({ kind: "error", message: "Nu pot salva setările" });
+    } finally {
+      setSettingsSaving(false);
     }
   };
 
@@ -263,6 +288,9 @@ export function InvoicesPage() {
         </TabButton>
         <TabButton active={activeTab === "subscriptions"} onClick={() => setActiveTab("subscriptions")}>
           Abonamente
+        </TabButton>
+        <TabButton active={activeTab === "settings"} onClick={() => setActiveTab("settings")}>
+          Setări facturare
         </TabButton>
       </div>
 
@@ -473,6 +501,49 @@ export function InvoicesPage() {
             </div>
           ) : (
             <SubscriptionTable items={subs} onStatusChange={handleSubStatusChange} />
+          )}
+        </div>
+      )}
+
+      {activeTab === "settings" && (
+        <div className="rounded-2xl border border-border bg-card p-6 max-w-lg">
+          <h2 className="text-base font-semibold mb-1">Setări facturare</h2>
+          <p className="text-sm text-muted-foreground mb-5">
+            Configurați seria facturilor emise de centrul dumneavoastră.
+          </p>
+          {settingsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Se încarcă…
+            </div>
+          ) : (
+            <form onSubmit={(e) => { void handleSaveSettings(e); }} className="space-y-4">
+              <div>
+                <label htmlFor="invoice-prefix" className="block text-sm font-medium mb-1">
+                  Prefix serie factură
+                </label>
+                <input
+                  id="invoice-prefix"
+                  type="text"
+                  value={invoicePrefixDraft}
+                  onChange={(e) => setInvoicePrefixDraft(e.target.value.toUpperCase())}
+                  maxLength={20}
+                  placeholder="VECT"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Facturile vor fi numerotate: <span className="font-mono font-semibold">{invoicePrefixDraft || "VECT"}-{new Date().getFullYear()}-0001</span>
+                </p>
+              </div>
+              <button
+                type="submit"
+                disabled={settingsSaving || !invoicePrefixDraft.trim()}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {settingsSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+                Salvează
+              </button>
+            </form>
           )}
         </div>
       )}

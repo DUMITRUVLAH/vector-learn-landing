@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, desc, sql, lte } from "drizzle-orm";
 import { db } from "../db/client";
-import { invoices, students, subscriptions } from "../db/schema";
+import { invoices, students, subscriptions, tenants } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { generateUBL21 } from "../lib/efactura";
 
@@ -77,15 +77,26 @@ invoiceRoutes.post("/", zValidator("json", createInvoiceSchema), async (c) => {
   const body = c.req.valid("json");
   const tenantId = c.get("user").tenantId;
 
+  // Use the body series if provided, otherwise fall back to the tenant's invoicePrefix
+  let effectiveSeries = body.series;
+  if (effectiveSeries === "VECT") {
+    // If caller didn't override, use tenant's configured prefix
+    const [t] = await db
+      .select({ invoicePrefix: tenants.invoicePrefix })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId));
+    if (t?.invoicePrefix) effectiveSeries = t.invoicePrefix;
+  }
+
   // Auto-increment invoice number per tenant (atomic: SELECT MAX + 1 in transaction)
   const [maxRow] = await db
     .select({ maxNum: sql<number>`coalesce(max(${invoices.number}), 0)` })
     .from(invoices)
-    .where(and(eq(invoices.tenantId, tenantId), eq(invoices.series, body.series)));
+    .where(and(eq(invoices.tenantId, tenantId), eq(invoices.series, effectiveSeries)));
 
   const nextNumber = (maxRow?.maxNum ?? 0) + 1;
   const year = new Date().getFullYear();
-  const invoiceNumber = `${body.series}-${year}-${String(nextNumber).padStart(4, "0")}`;
+  const invoiceNumber = `${effectiveSeries}-${year}-${String(nextNumber).padStart(4, "0")}`;
 
   const [created] = await db
     .insert(invoices)
@@ -93,7 +104,7 @@ invoiceRoutes.post("/", zValidator("json", createInvoiceSchema), async (c) => {
       tenantId,
       studentId: body.studentId,
       paymentId: body.paymentId ?? null,
-      series: body.series,
+      series: effectiveSeries,
       number: nextNumber,
       invoiceNumber,
       amountCents: body.amountCents,
@@ -111,10 +122,12 @@ invoiceRoutes.get("/:id/pdf", async (c) => {
   const id = c.req.param("id");
   const tenantId = c.get("user").tenantId;
 
-  const [invoice] = await db
+  const [row] = await db
     .select({
       id: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
+      series: invoices.series,
+      number: invoices.number,
       amountCents: invoices.amountCents,
       currency: invoices.currency,
       status: invoices.status,
@@ -122,65 +135,123 @@ invoiceRoutes.get("/:id/pdf", async (c) => {
       dueDate: invoices.dueDate,
       notes: invoices.notes,
       studentName: students.fullName,
+      tenantName: tenants.name,
+      invoicePrefix: tenants.invoicePrefix,
     })
     .from(invoices)
     .innerJoin(students, eq(invoices.studentId, students.id))
+    .innerJoin(tenants, eq(invoices.tenantId, tenants.id))
     .where(and(eq(invoices.id, id), eq(invoices.tenantId, tenantId)));
 
-  if (!invoice) return c.json({ error: "not_found" }, 404);
+  if (!row) return c.json({ error: "not_found" }, 404);
 
   const fmt = (cents: number, currency: string) =>
     new Intl.NumberFormat("ro-RO", { style: "currency", currency, maximumFractionDigits: 0 }).format(
       cents / 100
     );
 
-  const issueStr = new Date(invoice.issueDate).toLocaleDateString("ro-RO");
-  const dueStr = invoice.dueDate
-    ? new Date(invoice.dueDate).toLocaleDateString("ro-RO")
+  const issueStr = new Date(row.issueDate).toLocaleDateString("ro-RO");
+  const dueStr = row.dueDate
+    ? new Date(row.dueDate).toLocaleDateString("ro-RO")
     : "La cerere";
+
+  const statusLabel: Record<string, string> = {
+    draft: "Ciornă",
+    issued: "Emisă",
+    paid: "Plătită",
+    cancelled: "Anulată",
+  };
 
   const html = `<!DOCTYPE html>
 <html lang="ro">
 <head>
   <meta charset="UTF-8"/>
-  <title>Factură ${invoice.invoiceNumber}</title>
+  <title>Factură ${row.invoiceNumber}</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 40px; color: #1a1a1a; }
-    h1 { font-size: 1.5rem; margin-bottom: 0; }
-    .meta { margin-top: 4px; font-size: 0.85rem; color: #555; }
-    table { width: 100%; border-collapse: collapse; margin-top: 24px; }
-    th { text-align: left; padding: 8px 12px; background: #f3f4f6; font-size: 0.8rem; }
-    td { padding: 8px 12px; border-bottom: 1px solid #e5e7eb; font-size: 0.9rem; }
-    .total { font-weight: bold; font-size: 1rem; }
-    .footer { margin-top: 32px; font-size: 0.75rem; color: #888; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; margin: 48px; color: #1a1a1a; font-size: 14px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; }
+    .header h1 { font-size: 28px; font-weight: 900; letter-spacing: -0.5px; }
+    .header-right { text-align: right; }
+    .series { font-size: 13px; color: #555; margin-top: 4px; }
+    .section { margin-bottom: 20px; }
+    .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin-bottom: 6px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 28px; }
+    .info-box { border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 0; }
+    thead tr { background: #f3f4f6; }
+    th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #555; border-bottom: 2px solid #e5e7eb; }
+    th:last-child { text-align: right; }
+    td { padding: 12px 14px; border-bottom: 1px solid #f3f4f6; }
+    td:last-child { text-align: right; font-weight: 700; }
+    .total-row td { font-size: 15px; font-weight: 900; border-top: 2px solid #1a1a1a; border-bottom: none; }
+    .status-badge { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 11px; font-weight: 700; background: #f3f4f6; }
+    .footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #999; display: flex; justify-content: space-between; }
+    @media print {
+      body { margin: 0; }
+      @page { margin: 20mm; size: A4; }
+    }
   </style>
 </head>
 <body>
-  <h1>FACTURĂ FISCALĂ</h1>
-  <div class="meta">Seria: ${invoice.invoiceNumber} &nbsp;|&nbsp; Data: ${issueStr} &nbsp;|&nbsp; Scadență: ${dueStr}</div>
+  <div class="header">
+    <div>
+      <h1>FACTURĂ FISCALĂ</h1>
+      <div class="series">Nr. ${row.invoiceNumber}</div>
+    </div>
+    <div class="header-right">
+      <div style="font-size:20px;font-weight:800">${row.tenantName}</div>
+      <div class="series">Data emiterii: ${issueStr}</div>
+      <div class="series">Scadență: ${dueStr}</div>
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-box">
+      <div class="section-title">Furnizor</div>
+      <div style="font-weight:600">${row.tenantName}</div>
+      <div style="color:#555;font-size:13px">Vector Learn</div>
+    </div>
+    <div class="info-box">
+      <div class="section-title">Client</div>
+      <div style="font-weight:600">${row.studentName}</div>
+      <div style="color:#555;font-size:13px">Elev înregistrat</div>
+    </div>
+  </div>
+
   <table>
     <thead>
       <tr>
-        <th>Client</th>
-        <th>Descriere</th>
-        <th style="text-align:right">Valoare</th>
+        <th style="width:50%">Descriere serviciu</th>
         <th>Status</th>
+        <th>Valoare</th>
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td>${invoice.studentName}</td>
-        <td>${invoice.notes ?? "Servicii educaționale"}</td>
-        <td class="total" style="text-align:right">${fmt(invoice.amountCents, invoice.currency)}</td>
-        <td>${invoice.status}</td>
+        <td>${row.notes ?? "Servicii educaționale"}</td>
+        <td><span class="status-badge">${statusLabel[row.status] ?? row.status}</span></td>
+        <td>${fmt(row.amountCents, row.currency)}</td>
+      </tr>
+      <tr class="total-row">
+        <td colspan="2">Total de plată</td>
+        <td>${fmt(row.amountCents, row.currency)}</td>
       </tr>
     </tbody>
   </table>
-  <div class="footer">Vector Learn &bull; Generat automat &bull; ${new Date().toISOString()}</div>
+
+  <div class="footer">
+    <span>${row.tenantName} &bull; Vector Learn Platform</span>
+    <span>Generat automat &bull; ${new Date().toLocaleDateString("ro-RO")}</span>
+  </div>
 </body>
 </html>`;
 
-  return c.json({ invoiceNumber: invoice.invoiceNumber, html });
+  const filename = `${row.invoiceNumber.replace(/[^a-zA-Z0-9-]/g, "_")}.html`;
+  c.header("Content-Type", "text/html; charset=utf-8");
+  c.header("Content-Disposition", `attachment; filename="${filename}"`);
+  c.header("X-Invoice-Number", row.invoiceNumber);
+  return c.body(html);
 });
 
 invoiceRoutes.patch("/:id", zValidator("json", updateInvoiceSchema), async (c) => {
