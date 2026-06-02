@@ -46,8 +46,9 @@ import {
   publicFormSubmitHandler,
   publicFormPingHandler,
 } from "./routes/publicForms"; // FORMS-001/005
-import { branchRoutes } from "./routes/branches"; // BRANCH-701
-import { branchReportsRoutes } from "./routes/branchReports"; // BRANCH-704
+import { apiKeyRoutes } from "./routes/apiKeys"; // INT-901
+import { webhookRoutes } from "./routes/webhooks"; // INT-902
+import { integrationTriggersRoutes } from "./routes/integrationTriggers"; // INT-903
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -147,11 +148,12 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
-// BRANCH-704: Branch KPI reports — mounted BEFORE branchRoutes so /api/branches/reports/kpi
-// is resolved before the /:id wildcard in branchRoutes catches it as an ID.
-app.route("/api/branches/reports", branchReportsRoutes);
-// BRANCH-701: Multi-branch schema + CRUD
-app.route("/api/branches", branchRoutes);
+// INT-901: API Keys for external integrations
+app.route("/api/settings/api-keys", apiKeyRoutes);
+// INT-902: Outbound webhooks
+app.route("/api/settings/webhooks", webhookRoutes);
+// INT-903: Zapier-compatible REST triggers (X-API-Key auth)
+app.route("/api/integrations/triggers", integrationTriggersRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

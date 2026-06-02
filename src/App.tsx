@@ -60,10 +60,9 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
-import TeamPage from "./pages/app/settings/TeamPage"; // SET-801
-import NotificationPrefsPage from "./pages/app/settings/NotificationPrefsPage"; // SET-802
-import BrandingPage from "./pages/app/settings/BrandingPage"; // SET-803
-import SettingsAuditLogPage from "./pages/app/settings/AuditLogPage"; // SET-804
+import { ApiKeysPage } from "./pages/app/settings/ApiKeysPage"; // INT-901
+import { WebhooksPage } from "./pages/app/settings/WebhooksPage"; // INT-902
+import { IntegrationsPage } from "./pages/app/settings/IntegrationsPage"; // INT-903
 
 function HomePage() {
   return (
@@ -133,14 +132,9 @@ function Routes() {
     return <AvailabilityPage teacherId={id} />;
   }
   if (path.startsWith("/app/hr/audit")) return <AuditLogPage />;
-  // SET-801: Team management — must be before /app/settings/crm
-  if (path.startsWith("/app/settings/team")) return <TeamPage />;
-  // SET-802: Notification preferences
-  if (path.startsWith("/app/settings/notifications")) return <NotificationPrefsPage />;
-  // SET-803: Branding — logo + colors
-  if (path.startsWith("/app/settings/branding")) return <BrandingPage />;
-  // SET-804: Aggregated audit log (admin/owner only)
-  if (path.startsWith("/app/settings/audit-log")) return <SettingsAuditLogPage />;
+  if (path.startsWith("/app/settings/api-keys")) return <ApiKeysPage />; // INT-901
+  if (path.startsWith("/app/settings/webhooks")) return <WebhooksPage />; // INT-902
+  if (path.startsWith("/app/settings/integrations")) return <IntegrationsPage />; // INT-903
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
   if (path.startsWith("/app/cadences")) return <CadencesPage />;

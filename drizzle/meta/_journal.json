@@ -281,6 +281,20 @@
       "when": 1780503000000,
       "tag": "0039_integ202_contracts_course_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1780350459525,
+      "tag": "0040_int901_api_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780350909866,
+      "tag": "0041_int902_webhooks",
+      "breakpoints": true
     }
   ]
 }
