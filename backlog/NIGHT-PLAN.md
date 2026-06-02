@@ -38,3 +38,4 @@ Each module → 3–5 items. Source of behavior: the matching `backlog/user-stor
 - (start) all CRM done (101–116). Beginning Comunicare module.
 - planner: generated FIN items FIN-601..FIN-604 from user-stories/payments.md + NIGHT-PLAN Finanțe description
 - planner: generated STUDENTS items STU-201..STU-205 from user-stories/students.md (faza-2: profile full, notes timeline, CSV import, export, duplicate detection)
+- planner: generated COURSE items COURSE-201..COURSE-203 from user-stories/courses.md (faza-2: edit/archive, groups capacity+waitlist, promo codes)

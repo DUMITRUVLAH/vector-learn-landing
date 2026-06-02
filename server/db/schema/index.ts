@@ -32,4 +32,5 @@ export * from "./cohorts";
 export * from "./cohortParticipants";
 export * from "./certificates";
 export * from "./forms";
-export * from "./studentNotes"; // STU-202
+export * from "./groups";
+export * from "./promoCodes";

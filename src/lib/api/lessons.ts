@@ -27,11 +27,16 @@ export interface Teacher {
 
 export interface Course {
   id: string;
+  tenantId: string;
   name: string;
   description: string | null;
   level: string | null;
   defaultPriceCents: number;
   durationMinutes: number;
+  // COURSE-201: soft-delete support
+  status: "active" | "archived";
+  createdAt: string;
+  updatedAt: string;
 }
 
 export function listLessons(from?: string, to?: string): Promise<{ items: Lesson[] }> {
@@ -63,8 +68,31 @@ export function listTeachers(): Promise<{ items: Teacher[] }> {
   return api<{ items: Teacher[] }>("/api/teachers");
 }
 
-export function listCourses(): Promise<{ items: Course[] }> {
-  return api<{ items: Course[] }>("/api/courses");
+export function listCourses(showArchived?: boolean): Promise<{ items: Course[] }> {
+  const qs = showArchived ? "?showArchived=true" : "";
+  return api<{ items: Course[] }>(`/api/courses${qs}`);
+}
+
+// COURSE-201: update a course
+export function updateCourse(
+  id: string,
+  input: {
+    name?: string;
+    description?: string | null;
+    level?: string | null;
+    defaultPriceCents?: number;
+    durationMinutes?: number;
+  }
+): Promise<Course> {
+  return api<Course>(`/api/courses/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+// COURSE-201: soft-delete (archive) a course
+export function archiveCourse(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/courses/${id}`, { method: "DELETE" });
 }
 
 export type AttendanceStatus = "present" | "absent" | "late" | "excused" | "pending";

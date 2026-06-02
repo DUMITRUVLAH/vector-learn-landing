@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "STU-205",
+  "last_completed": "COURSE-201",
   "iterations": 123,
   "last_run_at": "2026-06-02T08:00:00Z",
   "milestone_status": "STUDENTS faza-2: all done — STU-201..205",
@@ -2799,6 +2799,67 @@
         "manager": "BUY",
         "student": "OK"
       }
+    },
+    "COURSE-201": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/COURSE-201-edit-archive.md",
+      "milestone": "COURSE",
+      "phase": "2",
+      "depends_on": ["COURSE-101"],
+      "title": "Editare și arhivare cursuri",
+      "branch": "feat/COURSE-faza-2-edit-archive",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "COURSE-202": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/COURSE-202-groups-capacity.md",
+      "milestone": "COURSE",
+      "phase": "2",
+      "depends_on": ["COURSE-201"],
+      "title": "Grupe cu capacitate maximă și waitlist",
+      "branch": "feat/COURSE-faza-2-edit-archive",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/120",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "reports": [
+        "backlog/reports/COURSE-202-manager.md",
+        "backlog/reports/COURSE-202-student.md"
+      ]
+    },
+    "COURSE-203": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/COURSE-203-promo-codes.md",
+      "milestone": "COURSE",
+      "phase": "2",
+      "depends_on": ["COURSE-201"],
+      "title": "Coduri promo cu discount (%) sau sumă fixă",
+      "branch": "feat/COURSE-faza-2-edit-archive",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/120",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "reports": [
+        "backlog/reports/COURSE-203-manager.md",
+        "backlog/reports/COURSE-203-student.md"
+      ]
     }
   }
 }
