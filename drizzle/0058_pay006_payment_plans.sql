@@ -1,9 +1,8 @@
--- PAY-006: Payment plans table
--- Migration 0034
-
-DO $$ BEGIN
+DO $$
+BEGIN
   CREATE TYPE "payment_plan_status" AS ENUM ('active', 'completed', 'cancelled');
-EXCEPTION WHEN duplicate_object THEN null; END $$;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "payment_plans" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),

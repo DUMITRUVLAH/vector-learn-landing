@@ -1,13 +1,10 @@
--- SCHOOL-004: Schema taxe școlare (tuition billing)
--- Tabele noi: tuition_plans, tuition_installments, student_tuition
--- Enum nou: billing_cycle
-
-DO $$ BEGIN
+DO $$
+BEGIN
   CREATE TYPE "public"."billing_cycle" AS ENUM('annual', 'per_term', 'monthly');
-EXCEPTION WHEN duplicate_object THEN null;
-END $$;--> statement-breakpoint
-
-CREATE TABLE "tuition_plans" (
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "tuition_plans" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"academic_year_id" uuid NOT NULL,
@@ -20,8 +17,7 @@ CREATE TABLE "tuition_plans" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-
-CREATE TABLE "tuition_installments" (
+CREATE TABLE IF NOT EXISTS "tuition_installments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"plan_id" uuid NOT NULL,
@@ -33,8 +29,7 @@ CREATE TABLE "tuition_installments" (
 	CONSTRAINT "tuition_installments_plan_order_unique" UNIQUE("plan_id","order_index")
 );
 --> statement-breakpoint
-
-CREATE TABLE "student_tuition" (
+CREATE TABLE IF NOT EXISTS "student_tuition" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"student_id" uuid NOT NULL,
@@ -49,16 +44,56 @@ CREATE TABLE "student_tuition" (
 	CONSTRAINT "student_tuition_student_plan_unique" UNIQUE("student_id","plan_id")
 );
 --> statement-breakpoint
-
-ALTER TABLE "tuition_plans" ADD CONSTRAINT "tuition_plans_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "tuition_plans" ADD CONSTRAINT "tuition_plans_academic_year_id_academic_years_id_fk" FOREIGN KEY ("academic_year_id") REFERENCES "public"."academic_years"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "tuition_installments" ADD CONSTRAINT "tuition_installments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "tuition_installments" ADD CONSTRAINT "tuition_installments_plan_id_tuition_plans_id_fk" FOREIGN KEY ("plan_id") REFERENCES "public"."tuition_plans"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "student_tuition" ADD CONSTRAINT "student_tuition_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "student_tuition" ADD CONSTRAINT "student_tuition_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "student_tuition" ADD CONSTRAINT "student_tuition_plan_id_tuition_plans_id_fk" FOREIGN KEY ("plan_id") REFERENCES "public"."tuition_plans"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "student_tuition" ADD CONSTRAINT "student_tuition_class_id_school_classes_id_fk" FOREIGN KEY ("class_id") REFERENCES "public"."school_classes"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-
-CREATE INDEX "tuition_plans_tenant_year_idx" ON "tuition_plans" USING btree ("tenant_id","academic_year_id");--> statement-breakpoint
-CREATE INDEX "tuition_installments_tenant_plan_idx" ON "tuition_installments" USING btree ("tenant_id","plan_id");--> statement-breakpoint
-CREATE INDEX "student_tuition_tenant_student_idx" ON "student_tuition" USING btree ("tenant_id","student_id");
+DO $$
+BEGIN
+  ALTER TABLE "tuition_plans" ADD CONSTRAINT "tuition_plans_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "tuition_plans" ADD CONSTRAINT "tuition_plans_academic_year_id_academic_years_id_fk" FOREIGN KEY ("academic_year_id") REFERENCES "public"."academic_years"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "tuition_installments" ADD CONSTRAINT "tuition_installments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "tuition_installments" ADD CONSTRAINT "tuition_installments_plan_id_tuition_plans_id_fk" FOREIGN KEY ("plan_id") REFERENCES "public"."tuition_plans"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "student_tuition" ADD CONSTRAINT "student_tuition_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "student_tuition" ADD CONSTRAINT "student_tuition_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "student_tuition" ADD CONSTRAINT "student_tuition_plan_id_tuition_plans_id_fk" FOREIGN KEY ("plan_id") REFERENCES "public"."tuition_plans"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "student_tuition" ADD CONSTRAINT "student_tuition_class_id_school_classes_id_fk" FOREIGN KEY ("class_id") REFERENCES "public"."school_classes"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "tuition_plans_tenant_year_idx" ON "tuition_plans" USING btree ("tenant_id","academic_year_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "tuition_installments_tenant_plan_idx" ON "tuition_installments" USING btree ("tenant_id","plan_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "student_tuition_tenant_student_idx" ON "student_tuition" USING btree ("tenant_id","student_id");

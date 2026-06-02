@@ -2,10 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, Loader2, Check, CheckCheck, UserPlus, CalendarClock, Info } from "lucide-react";
 import {
   listNotifications,
-  markRead,
   markAllRead,
-  type AppNotification,
-  type NotificationType,
+  type InAppNotification,
 } from "@/lib/api/notifications";
 import { useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
@@ -17,8 +15,8 @@ interface NotificationBellProps {
   onUnreadChange?: (count: number) => void;
 }
 
-function typeIcon(type: NotificationType) {
-  switch (type) {
+function kindIcon(kind: string) {
+  switch (kind) {
     case "lead_created":
       return <UserPlus className="h-3.5 w-3.5 text-primary" aria-hidden="true" />;
     case "lead_converted":
@@ -41,10 +39,11 @@ function timeAgo(dateStr: string): string {
 }
 
 /**
- * CRM-123 — Notification Bell icon with badge + dropdown feed.
+ * CRM-123 / SET-805 — Notification Bell icon with badge + dropdown feed.
+ * Uses InAppNotification shape from /api/notifications.
  */
 export function NotificationBell({ onUnreadChange }: NotificationBellProps) {
-  const [items, setItems] = useState<AppNotification[]>([]);
+  const [items, setItems] = useState<InAppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -57,8 +56,9 @@ export function NotificationBell({ onUnreadChange }: NotificationBellProps) {
     try {
       const res = await listNotifications();
       setItems(res.items);
-      setUnreadCount(res.unreadCount);
-      onUnreadChange?.(res.unreadCount);
+      const count = res.items.filter((n) => !n.readAt).length;
+      setUnreadCount(count);
+      onUnreadChange?.(count);
     } catch {
       // Silently ignore — notifications are best-effort
     } finally {
@@ -94,30 +94,19 @@ export function NotificationBell({ onUnreadChange }: NotificationBellProps) {
     if (!open) void load();
   };
 
-  const handleMarkOne = async (notif: AppNotification) => {
-    if (notif.isRead) {
-      // Navigate only
-      if (notif.link) navigate(notif.link.replace(/^#/, ""));
-      setOpen(false);
-      return;
+  const handleClickNotif = (notif: InAppNotification) => {
+    // Navigate if lead_id present
+    if (notif.payload.lead_id) {
+      navigate(`/app/leads/${notif.payload.lead_id}`);
     }
-    try {
-      await markRead(notif.id);
-      setItems((prev) => prev.map((n) => n.id === notif.id ? { ...n, isRead: true } : n));
-      setUnreadCount((c) => Math.max(0, c - 1));
-      onUnreadChange?.(Math.max(0, unreadCount - 1));
-      if (notif.link) navigate(notif.link.replace(/^#/, ""));
-      setOpen(false);
-    } catch {
-      // ignore
-    }
+    setOpen(false);
   };
 
   const handleMarkAll = async () => {
     setMarkingAll(true);
     try {
       await markAllRead();
-      setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      setItems((prev) => prev.map((n) => ({ ...n, readAt: new Date().toISOString() })));
       setUnreadCount(0);
       onUnreadChange?.(0);
     } catch {
@@ -190,29 +179,29 @@ export function NotificationBell({ onUnreadChange }: NotificationBellProps) {
                     key={notif.id}
                     type="button"
                     role="menuitem"
-                    onClick={() => void handleMarkOne(notif)}
+                    onClick={() => handleClickNotif(notif)}
                     className={cn(
                       "w-full text-left px-4 py-3 border-b border-border last:border-0",
                       "hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted transition-colors",
-                      !notif.isRead && "bg-primary/5"
+                      !notif.readAt && "bg-primary/5"
                     )}
-                    aria-label={notif.title + (notif.body ? `: ${notif.body}` : "")}
+                    aria-label={notif.payload.body}
                   >
                     <div className="flex items-start gap-2">
-                      <div className="mt-0.5 shrink-0">{typeIcon(notif.type)}</div>
+                      <div className="mt-0.5 shrink-0">{kindIcon(notif.kind)}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1">
                           <p className={cn(
                             "text-xs font-semibold truncate",
-                            !notif.isRead ? "text-foreground" : "text-muted-foreground"
+                            !notif.readAt ? "text-foreground" : "text-muted-foreground"
                           )}>
-                            {notif.title}
+                            {notif.kind.replace(/_/g, " ")}
                           </p>
                           <div className="flex items-center gap-1.5 shrink-0">
                             <span className="text-[10px] text-muted-foreground tabular-nums">
                               {timeAgo(notif.createdAt)}
                             </span>
-                            {!notif.isRead && (
+                            {!notif.readAt && (
                               <span
                                 className="h-1.5 w-1.5 rounded-full bg-primary"
                                 aria-label="Necitit"
@@ -220,9 +209,9 @@ export function NotificationBell({ onUnreadChange }: NotificationBellProps) {
                             )}
                           </div>
                         </div>
-                        {notif.body && (
+                        {notif.payload.body && (
                           <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                            {notif.body}
+                            {notif.payload.body}
                           </p>
                         )}
                       </div>

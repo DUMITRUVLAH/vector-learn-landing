@@ -1,6 +1,3 @@
--- PAY-005: Invoice reminders table
--- Migration 0033
-
 CREATE TABLE IF NOT EXISTS "invoice_reminders" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE CASCADE,

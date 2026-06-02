@@ -20,6 +20,10 @@ export interface Invoice {
   pdfKey: string | null;
   createdAt: string;
   studentName: string;
+  /** GAP refunds: amount already refunded in cents */
+  refundedAmountCents?: number;
+  /** Stripe payment intent ID for partial refunds */
+  stripePaymentIntentId?: string | null;
 }
 
 export interface InvoicePdfResult {

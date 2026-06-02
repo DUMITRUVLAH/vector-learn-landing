@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { db, closeDb } from "./client";
-import { tenants, users, students, teachers, courses, lessons, branches } from "./schema";
+import { tenants, users, students, teachers, courses, lessons, branches, leads } from "./schema";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 

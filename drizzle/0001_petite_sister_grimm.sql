@@ -1,8 +1,25 @@
-CREATE TYPE "public"."interaction_direction" AS ENUM('inbound', 'outbound', 'internal');--> statement-breakpoint
-CREATE TYPE "public"."interaction_type" AS ENUM('note', 'call', 'email', 'whatsapp', 'sms', 'meeting', 'stage_change', 'system');--> statement-breakpoint
-CREATE TYPE "public"."lead_source" AS ENUM('webform', 'manual', 'facebook_ad', 'google_ads', 'referral', 'phone_in', 'instagram', 'import', 'other');--> statement-breakpoint
-CREATE TYPE "public"."lead_stage" AS ENUM('new', 'contacted', 'trial', 'paid', 'lost');--> statement-breakpoint
-CREATE TABLE "lead_interactions" (
+DO $$
+BEGIN
+  CREATE TYPE "public"."interaction_direction" AS ENUM('inbound', 'outbound', 'internal');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."interaction_type" AS ENUM('note', 'call', 'email', 'whatsapp', 'sms', 'meeting', 'stage_change', 'system');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."lead_source" AS ENUM('webform', 'manual', 'facebook_ad', 'google_ads', 'referral', 'phone_in', 'instagram', 'import', 'other');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."lead_stage" AS ENUM('new', 'contacted', 'trial', 'paid', 'lost');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "lead_interactions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"lead_id" uuid NOT NULL,
@@ -13,7 +30,7 @@ CREATE TABLE "lead_interactions" (
 	"occurred_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "leads" (
+CREATE TABLE IF NOT EXISTS "leads" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"full_name" varchar(200) NOT NULL,
@@ -40,14 +57,44 @@ CREATE TABLE "leads" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "lead_interactions" ADD CONSTRAINT "lead_interactions_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_interactions" ADD CONSTRAINT "lead_interactions_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_interactions" ADD CONSTRAINT "lead_interactions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "leads" ADD CONSTRAINT "leads_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "leads" ADD CONSTRAINT "leads_converted_to_student_id_students_id_fk" FOREIGN KEY ("converted_to_student_id") REFERENCES "public"."students"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "li_tenant_idx" ON "lead_interactions" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "li_lead_idx" ON "lead_interactions" USING btree ("lead_id","occurred_at");--> statement-breakpoint
-CREATE INDEX "leads_tenant_idx" ON "leads" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "leads_stage_idx" ON "leads" USING btree ("tenant_id","stage");--> statement-breakpoint
-CREATE INDEX "leads_phone_idx" ON "leads" USING btree ("tenant_id","phone_normalized");--> statement-breakpoint
-CREATE INDEX "leads_email_idx" ON "leads" USING btree ("tenant_id","email_normalized");
+DO $$
+BEGIN
+  ALTER TABLE "lead_interactions" ADD CONSTRAINT "lead_interactions_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "lead_interactions" ADD CONSTRAINT "lead_interactions_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "lead_interactions" ADD CONSTRAINT "lead_interactions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "leads" ADD CONSTRAINT "leads_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "leads" ADD CONSTRAINT "leads_converted_to_student_id_students_id_fk" FOREIGN KEY ("converted_to_student_id") REFERENCES "public"."students"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "li_tenant_idx" ON "lead_interactions" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "li_lead_idx" ON "lead_interactions" USING btree ("lead_id","occurred_at");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "leads_tenant_idx" ON "leads" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "leads_stage_idx" ON "leads" USING btree ("tenant_id","stage");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "leads_phone_idx" ON "leads" USING btree ("tenant_id","phone_normalized");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "leads_email_idx" ON "leads" USING btree ("tenant_id","email_normalized");

@@ -18,6 +18,55 @@ export interface Group {
   enrolled: number;
   /** Enriched: current waitlist count */
   waitlisted: number;
+  /** Enriched: spots remaining (maxStudents - enrolled) */
+  spotsRemaining?: number;
+  /** Optional: schedule template JSON */
+  scheduleTemplate?: string | null;
+}
+
+export type CreateGroupBody = {
+  courseId: string;
+  name: string;
+  teacherId?: string | null;
+  maxStudents?: number;
+  scheduleTemplate?: string | null;
+};
+
+export type PatchGroupBody = Partial<CreateGroupBody>;
+
+export async function patchGroup(id: string, body: PatchGroupBody): Promise<Group> {
+  const { api } = await import("../api");
+  return api<Group>(`/api/groups/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export interface StudentInGroup {
+  id: string;
+  name: string;
+  email: string;
+  enrolledAt: string;
+  status: "enrolled" | "waitlisted";
+}
+
+export async function listGroupEnrollments(groupId: string): Promise<StudentInGroup[]> {
+  const { api } = await import("../api");
+  return api<StudentInGroup[]>(`/api/groups/${groupId}/students`);
+}
+
+export interface StudentGroupEntry {
+  groupId: string;
+  groupName: string;
+  courseId: string;
+  courseName: string;
+  status: "enrolled" | "waitlisted";
+  enrolledAt: string;
+}
+
+export async function listStudentGroups(studentId: string): Promise<StudentGroupEntry[]> {
+  const { api } = await import("../api");
+  return api<StudentGroupEntry[]>(`/api/students/${studentId}/groups`);
 }
 
 export interface GroupCapacity {

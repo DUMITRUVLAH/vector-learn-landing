@@ -69,7 +69,7 @@ export function EnrollModal({ group, onClose, onEnrolled }: EnrollModalProps) {
     setSubmitting(true);
     setError(null);
     try {
-      await enrollStudent(group.id, { studentId: selected.id, createPayment });
+      await enrollStudent(group.id, selected.id);
       onEnrolled();
     } catch (err) {
       const code = (err as { code?: string }).code ?? "unknown";

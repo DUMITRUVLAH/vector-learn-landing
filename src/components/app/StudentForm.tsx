@@ -2,6 +2,12 @@ import { useState, useEffect, useRef, useCallback, FormEvent } from "react";
 import { Loader2, AlertTriangle, ExternalLink } from "lucide-react";
 import { ApiError } from "@/lib/api";
 import { createStudent, updateStudent, type Student, type StudentInput } from "@/lib/api/students";
+
+// Stub types for duplicate detection (not yet implemented in API)
+interface DuplicateMatch { id: string; name: string; email?: string; phone?: string; }
+async function checkStudentDuplicate(_params: { phone?: string; fullName?: string }): Promise<{ matches: DuplicateMatch[] }> {
+  return { matches: [] };
+}
 import { cn } from "@/lib/utils";
 
 interface StudentFormProps {

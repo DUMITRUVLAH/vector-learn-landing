@@ -1,1 +1,1 @@
-ALTER TABLE "users" ADD COLUMN "branch_scope" uuid;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "branch_scope" uuid;

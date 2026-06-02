@@ -292,11 +292,28 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
 | CONSENT-001 | 🟡 | Consent/permission forms + e-signature |
 
-## Active milestone: BRANCH faza-1 — Multifiliale
+## Milestone: BRANCH faza-1 — Multifiliale (done)
 
 | ID | Severity | Title | Status |
 |----|----------|-------|--------|
-| BRANCH-701 | 🔴 high | Schema branches + branch_id pe students/teachers/lessons | pending |
-| BRANCH-702 | 🔴 high | Branch switcher UI + BranchContext | pending |
-| BRANCH-703 | 🔴 high | Branch-scoped permissions (branch_scope pe users) | pending |
-| BRANCH-704 | 🟡 normal | Rapoarte consolidate vs per-filială | pending |
+| BRANCH-701 | 🔴 high | Schema branches + branch_id pe students/teachers/lessons | done ✅ |
+| BRANCH-702 | 🔴 high | Branch switcher UI + BranchContext | done ✅ |
+| BRANCH-703 | 🔴 high | Branch-scoped permissions (branch_scope pe users) | done ✅ |
+| BRANCH-704 | 🟡 normal | Rapoarte consolidate vs per-filială | done ✅ |
+
+## Milestone: AUTH faza-1 — Autentificare avansată (done — PR #125 merged)
+
+| ID | Severity | Title | Status |
+|----|----------|-------|--------|
+| AUTH-001 | 🔴 high | Resetare parolă prin email — forgot-password flow | done ✅ |
+| AUTH-002 | 🔴 high | Invitații echipă + verificare email signup | done ✅ |
+| AUTH-003 | 🔴 high | Profil utilizator + schimbare parolă + GDPR export/ștergere | done ✅ |
+| AUTH-004 | 🔴 high | 2FA TOTP + session management (revoke sessions) | done ✅ |
+
+## Active milestone: SET faza-1 — Settings & Admin
+
+| ID | Priority | Title | Status | Spec |
+|----|----------|-------|--------|------|
+| SET-801 | P0 | Team management — invite, roles, disable users | pending | [specs/SET-801-team-management.md](specs/SET-801-team-management.md) |
+| SET-802 | P0 | Tenant branding + locale/timezone settings | pending | [specs/SET-802-branding-locale.md](specs/SET-802-branding-locale.md) |
+| SET-803 | P0 | Audit log + GDPR compliance (DPA download, data retention) | pending | [specs/SET-803-audit-log-gdpr.md](specs/SET-803-audit-log-gdpr.md) |

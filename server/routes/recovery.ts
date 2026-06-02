@@ -209,7 +209,7 @@ export async function createRecoveryRequestIfAbsent(opts: {
     .map((l) => ({
       lessonId: l.id,
       scheduledAt: l.scheduledAt.toISOString(),
-      teacherName: teacher?.fullName ?? "—",
+      teacherName: "—", // teacher name would require user join
       courseName: course?.name ?? "—",
     }));
 

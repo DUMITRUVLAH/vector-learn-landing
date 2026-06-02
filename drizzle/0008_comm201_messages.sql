@@ -1,7 +1,20 @@
-CREATE TYPE "public"."message_channel" AS ENUM('email', 'sms', 'whatsapp');--> statement-breakpoint
-CREATE TYPE "public"."message_direction" AS ENUM('outbound', 'inbound');--> statement-breakpoint
-CREATE TYPE "public"."message_status" AS ENUM('queued', 'sent', 'delivered', 'failed');--> statement-breakpoint
-CREATE TABLE "messages" (
+DO $$
+BEGIN
+  CREATE TYPE "public"."message_channel" AS ENUM('email', 'sms', 'whatsapp');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."message_direction" AS ENUM('outbound', 'inbound');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."message_status" AS ENUM('queued', 'sent', 'delivered', 'failed');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "messages" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"lead_id" uuid,
@@ -21,12 +34,32 @@ CREATE TABLE "messages" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "messages" ADD CONSTRAINT "messages_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "messages" ADD CONSTRAINT "messages_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "messages" ADD CONSTRAINT "messages_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "messages" ADD CONSTRAINT "messages_template_id_message_templates_id_fk" FOREIGN KEY ("template_id") REFERENCES "public"."message_templates"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "msg_tenant_idx" ON "messages" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "msg_lead_idx" ON "messages" USING btree ("lead_id");--> statement-breakpoint
-CREATE INDEX "msg_student_idx" ON "messages" USING btree ("student_id");--> statement-breakpoint
-CREATE INDEX "msg_status_idx" ON "messages" USING btree ("tenant_id","status");--> statement-breakpoint
-CREATE INDEX "msg_created_idx" ON "messages" USING btree ("tenant_id","created_at");
+DO $$
+BEGIN
+  ALTER TABLE "messages" ADD CONSTRAINT "messages_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "messages" ADD CONSTRAINT "messages_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "messages" ADD CONSTRAINT "messages_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "messages" ADD CONSTRAINT "messages_template_id_message_templates_id_fk" FOREIGN KEY ("template_id") REFERENCES "public"."message_templates"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "msg_tenant_idx" ON "messages" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "msg_lead_idx" ON "messages" USING btree ("lead_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "msg_student_idx" ON "messages" USING btree ("student_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "msg_status_idx" ON "messages" USING btree ("tenant_id","status");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "msg_created_idx" ON "messages" USING btree ("tenant_id","created_at");

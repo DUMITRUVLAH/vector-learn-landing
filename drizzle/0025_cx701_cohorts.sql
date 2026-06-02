@@ -1,7 +1,7 @@
 -- CX-701: Cohort (edition) model
 -- A cohort is a concrete run of a course with schedule and cost info.
 
-CREATE TABLE "cohorts" (
+CREATE TABLE IF NOT EXISTS "cohorts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"course_id" uuid NOT NULL,
@@ -19,7 +19,17 @@ CREATE TABLE "cohorts" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "cohorts" ADD CONSTRAINT "cohorts_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "cohorts" ADD CONSTRAINT "cohorts_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "cohorts_tenant_course_idx" ON "cohorts" USING btree ("tenant_id","course_id");--> statement-breakpoint
-CREATE INDEX "cohorts_tenant_start_idx" ON "cohorts" USING btree ("tenant_id","start_date");
+DO $$
+BEGIN
+  ALTER TABLE "cohorts" ADD CONSTRAINT "cohorts_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "cohorts" ADD CONSTRAINT "cohorts_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cohorts_tenant_course_idx" ON "cohorts" USING btree ("tenant_id","course_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cohorts_tenant_start_idx" ON "cohorts" USING btree ("tenant_id","start_date");

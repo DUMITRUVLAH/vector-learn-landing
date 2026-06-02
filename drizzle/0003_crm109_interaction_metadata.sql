@@ -1,1 +1,1 @@
-ALTER TABLE "lead_interactions" ADD COLUMN "metadata" jsonb;
+ALTER TABLE "lead_interactions" ADD COLUMN IF NOT EXISTS "metadata" jsonb;

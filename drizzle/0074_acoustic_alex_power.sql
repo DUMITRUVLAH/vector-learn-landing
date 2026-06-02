@@ -1,1 +1,1 @@
-ALTER TABLE "invoices" ADD COLUMN "efactura_status" varchar(30);
+ALTER TABLE "invoices" ADD COLUMN IF NOT EXISTS "efactura_status" varchar(30);

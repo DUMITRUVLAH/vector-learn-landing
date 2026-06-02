@@ -43,3 +43,39 @@ export function archiveBranch(id: string): Promise<{ ok: true; id: string; statu
     method: "DELETE",
   });
 }
+
+/** Alias for archiveBranch (used by BranchesPage) */
+export const deleteBranch = archiveBranch;
+
+export interface BranchStats {
+  branchId: string;
+  name: string;
+  studentCount: number;
+  teacherCount: number;
+  lessonCountThisMonth: number;
+  revenueThisMonthCents: number;
+}
+
+export interface BranchRollup {
+  totalStudents: number;
+  totalTeachers: number;
+  totalRevenueCents: number;
+  branches: BranchStats[];
+}
+
+export interface BranchKPIResponse extends BranchStats {}
+
+export function getBranchStats(): Promise<{ items: BranchStats[] }> {
+  return api<{ items: BranchStats[] }>("/api/branches/stats");
+}
+
+export function getBranchRollup(): Promise<BranchRollup> {
+  return api<BranchRollup>("/api/branches/rollup");
+}
+
+export function setUserBranchScope(userId: string, branchId: string | null): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/settings/team/${userId}/branch-scope`, {
+    method: "PATCH",
+    body: JSON.stringify({ branchId }),
+  });
+}

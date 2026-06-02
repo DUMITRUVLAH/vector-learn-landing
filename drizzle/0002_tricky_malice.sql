@@ -1,6 +1,15 @@
-CREATE TYPE "public"."task_status" AS ENUM('open', 'done', 'snoozed');--> statement-breakpoint
-CREATE TYPE "public"."template_channel" AS ENUM('email', 'whatsapp', 'sms');--> statement-breakpoint
-CREATE TABLE "pipeline_stages" (
+DO $$
+BEGIN
+  CREATE TYPE "public"."task_status" AS ENUM('open', 'done', 'snoozed');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."template_channel" AS ENUM('email', 'whatsapp', 'sms');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "pipeline_stages" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"key" varchar(64) NOT NULL,
@@ -14,7 +23,7 @@ CREATE TABLE "pipeline_stages" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "lead_attachments" (
+CREATE TABLE IF NOT EXISTS "lead_attachments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"lead_id" uuid NOT NULL,
@@ -26,7 +35,7 @@ CREATE TABLE "lead_attachments" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "lead_tasks" (
+CREATE TABLE IF NOT EXISTS "lead_tasks" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"lead_id" uuid NOT NULL,
@@ -40,7 +49,7 @@ CREATE TABLE "lead_tasks" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "message_templates" (
+CREATE TABLE IF NOT EXISTS "message_templates" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"name" varchar(200) NOT NULL,
@@ -52,24 +61,84 @@ CREATE TABLE "message_templates" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "leads" ADD COLUMN "assigned_to" uuid;--> statement-breakpoint
-ALTER TABLE "leads" ADD COLUMN "consent_revoked_at" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "pipeline_stages" ADD CONSTRAINT "pipeline_stages_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_attachments" ADD CONSTRAINT "lead_attachments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_attachments" ADD CONSTRAINT "lead_attachments_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_attachments" ADD CONSTRAINT "lead_attachments_uploaded_by_users_id_fk" FOREIGN KEY ("uploaded_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_tasks" ADD CONSTRAINT "lead_tasks_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_tasks" ADD CONSTRAINT "lead_tasks_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_tasks" ADD CONSTRAINT "lead_tasks_assigned_to_users_id_fk" FOREIGN KEY ("assigned_to") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_tasks" ADD CONSTRAINT "lead_tasks_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "message_templates" ADD CONSTRAINT "message_templates_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "ps_tenant_idx" ON "pipeline_stages" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "ps_key_idx" ON "pipeline_stages" USING btree ("tenant_id","key");--> statement-breakpoint
-CREATE INDEX "la_tenant_idx" ON "lead_attachments" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "la_lead_idx" ON "lead_attachments" USING btree ("lead_id");--> statement-breakpoint
-CREATE INDEX "lt_tenant_idx" ON "lead_tasks" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "lt_lead_idx" ON "lead_tasks" USING btree ("lead_id");--> statement-breakpoint
-CREATE INDEX "lt_status_idx" ON "lead_tasks" USING btree ("tenant_id","status");--> statement-breakpoint
-CREATE INDEX "mt_tenant_idx" ON "message_templates" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "mt_channel_idx" ON "message_templates" USING btree ("tenant_id","channel");--> statement-breakpoint
-ALTER TABLE "leads" ADD CONSTRAINT "leads_assigned_to_users_id_fk" FOREIGN KEY ("assigned_to") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "assigned_to" uuid;
+--> statement-breakpoint
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "consent_revoked_at" timestamp with time zone;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "pipeline_stages" ADD CONSTRAINT "pipeline_stages_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "lead_attachments" ADD CONSTRAINT "lead_attachments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "lead_attachments" ADD CONSTRAINT "lead_attachments_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "lead_attachments" ADD CONSTRAINT "lead_attachments_uploaded_by_users_id_fk" FOREIGN KEY ("uploaded_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "lead_tasks" ADD CONSTRAINT "lead_tasks_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "lead_tasks" ADD CONSTRAINT "lead_tasks_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "lead_tasks" ADD CONSTRAINT "lead_tasks_assigned_to_users_id_fk" FOREIGN KEY ("assigned_to") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "lead_tasks" ADD CONSTRAINT "lead_tasks_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "message_templates" ADD CONSTRAINT "message_templates_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ps_tenant_idx" ON "pipeline_stages" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ps_key_idx" ON "pipeline_stages" USING btree ("tenant_id","key");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "la_tenant_idx" ON "lead_attachments" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "la_lead_idx" ON "lead_attachments" USING btree ("lead_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lt_tenant_idx" ON "lead_tasks" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lt_lead_idx" ON "lead_tasks" USING btree ("lead_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lt_status_idx" ON "lead_tasks" USING btree ("tenant_id","status");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "mt_tenant_idx" ON "message_templates" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "mt_channel_idx" ON "message_templates" USING btree ("tenant_id","channel");
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "leads" ADD CONSTRAINT "leads_assigned_to_users_id_fk" FOREIGN KEY ("assigned_to") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
