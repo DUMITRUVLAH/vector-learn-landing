@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "STU-201",
-  "iterations": 121,
+  "last_completed": "STU-202",
+  "iterations": 122,
   "last_run_at": "2026-06-02T08:00:00Z",
   "milestone_status": "STUDENTS faza-2: STU-201..205 pending",
   "active_milestone": "STUDENTS",
@@ -2717,8 +2717,8 @@
       ]
     },
     "STU-202": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/STU-202-student-notes-timeline.md",
       "milestone": "STUDENTS",
@@ -2726,7 +2726,14 @@
       "depends_on": [
         "STU-201"
       ],
-      "title": "Student notes timeline cu autor (profesori, manageri)"
+      "title": "Student notes timeline cu autor (profesori, manageri)",
+      "branch": "feat/STUDENTS-faza-2-profile",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "STU-203": {
       "status": "pending",

@@ -12,6 +12,7 @@ import {
   users,
   teachers,
   courses,
+  studentNotes,
 } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
@@ -244,4 +245,88 @@ studentRoutes.get("/:id/origin-lead", async (c) => {
   });
 
   return c.json({ lead: lead ?? null });
+});
+
+// ─── STU-202: Student notes CRUD ─────────────────────────────────────────────
+
+const createNoteSchema = z.object({
+  body: z.string().min(1).max(5000),
+  noteType: z.enum(["general", "pedagogical", "parent_comm"]).default("general"),
+});
+
+// POST /:id/notes — create a note
+studentRoutes.post("/:id/notes", zValidator("json", createNoteSchema), async (c) => {
+  const studentId = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+  const { body, noteType } = c.req.valid("json");
+  const authUser = c.get("user");
+
+  const student = await db.query.students.findFirst({
+    where: and(eq(students.id, studentId), eq(students.tenantId, tenantId)),
+    columns: { id: true },
+  });
+  if (!student) return c.json({ error: "not_found" }, 404);
+
+  const [note] = await db
+    .insert(studentNotes)
+    .values({
+      tenantId,
+      studentId,
+      authorId: authUser.id,
+      authorName: authUser.name ?? authUser.email ?? "Anonim",
+      body,
+      noteType,
+    })
+    .returning();
+
+  return c.json(note, 201);
+});
+
+// GET /:id/notes — list notes for a student
+studentRoutes.get("/:id/notes", async (c) => {
+  const studentId = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+
+  const student = await db.query.students.findFirst({
+    where: and(eq(students.id, studentId), eq(students.tenantId, tenantId)),
+    columns: { id: true },
+  });
+  if (!student) return c.json({ error: "not_found" }, 404);
+
+  const notes = await db
+    .select()
+    .from(studentNotes)
+    .where(and(eq(studentNotes.tenantId, tenantId), eq(studentNotes.studentId, studentId)))
+    .orderBy(desc(studentNotes.createdAt))
+    .limit(50);
+
+  return c.json({ items: notes });
+});
+
+// DELETE /:id/notes/:noteId — delete a note (own note or admin/manager)
+studentRoutes.delete("/:id/notes/:noteId", async (c) => {
+  const studentId = c.req.param("id");
+  const noteId = c.req.param("noteId");
+  const tenantId = c.get("user").tenantId;
+  const authUser = c.get("user");
+
+  const note = await db.query.studentNotes.findFirst({
+    where: and(
+      eq(studentNotes.id, noteId),
+      eq(studentNotes.tenantId, tenantId),
+      eq(studentNotes.studentId, studentId)
+    ),
+  });
+  if (!note) return c.json({ error: "not_found" }, 404);
+
+  // Only the author or admin/manager can delete
+  const canDelete =
+    note.authorId === authUser.id ||
+    authUser.role === "admin" ||
+    authUser.role === "manager";
+
+  if (!canDelete) return c.json({ error: "forbidden" }, 403);
+
+  await db.delete(studentNotes).where(eq(studentNotes.id, noteId));
+  return c.json({ ok: true });
 });

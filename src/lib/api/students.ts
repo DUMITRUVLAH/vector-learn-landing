@@ -131,3 +131,43 @@ export interface OriginLeadResponse {
 export function getStudentOriginLead(id: string): Promise<OriginLeadResponse> {
   return api<OriginLeadResponse>(`/api/students/${id}/origin-lead`);
 }
+
+// STU-202: Student notes timeline
+export type NoteType = "general" | "pedagogical" | "parent_comm";
+
+export interface StudentNote {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  authorId: string | null;
+  authorName: string;
+  body: string;
+  noteType: NoteType;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentNotesResponse {
+  items: StudentNote[];
+}
+
+export function getStudentNotes(studentId: string): Promise<StudentNotesResponse> {
+  return api<StudentNotesResponse>(`/api/students/${studentId}/notes`);
+}
+
+export function createStudentNote(
+  studentId: string,
+  body: string,
+  noteType: NoteType = "general"
+): Promise<StudentNote> {
+  return api<StudentNote>(`/api/students/${studentId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body, noteType }),
+  });
+}
+
+export function deleteStudentNote(studentId: string, noteId: string): Promise<{ ok: boolean }> {
+  return api<{ ok: boolean }>(`/api/students/${studentId}/notes/${noteId}`, {
+    method: "DELETE",
+  });
+}
