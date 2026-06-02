@@ -71,3 +71,63 @@ export function archiveStudent(id: string): Promise<{ ok: true; id: string }> {
     method: "DELETE",
   });
 }
+
+export function getStudent(id: string): Promise<Student> {
+  return api<Student>(`/api/students/${id}`);
+}
+
+// STU-201: Student payment history
+export interface StudentPayment {
+  id: string;
+  amountCents: number;
+  currency: string;
+  status: "pending" | "paid" | "overdue" | "refunded" | "cancelled";
+  dueDate: string | null;
+  paidAt: string | null;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface StudentPaymentsResponse {
+  items: StudentPayment[];
+  totalPaidCents: number;
+}
+
+export function getStudentPayments(id: string): Promise<StudentPaymentsResponse> {
+  return api<StudentPaymentsResponse>(`/api/students/${id}/payments`);
+}
+
+// STU-201: Student lesson attendance history
+export interface StudentLesson {
+  id: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  lessonStatus: string;
+  attendanceStatus: "present" | "absent" | "late" | "excused" | "pending";
+  courseName: string;
+  teacherName: string;
+}
+
+export interface StudentLessonsResponse {
+  items: StudentLesson[];
+}
+
+export function getStudentLessons(id: string): Promise<StudentLessonsResponse> {
+  return api<StudentLessonsResponse>(`/api/students/${id}/lessons`);
+}
+
+// STU-201: Origin lead lookup
+export interface OriginLead {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+}
+
+export interface OriginLeadResponse {
+  lead: OriginLead | null;
+}
+
+export function getStudentOriginLead(id: string): Promise<OriginLeadResponse> {
+  return api<OriginLeadResponse>(`/api/students/${id}/origin-lead`);
+}

@@ -222,7 +222,15 @@ export function StudentsPage() {
                                 .join("")}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-medium truncate">{s.fullName}</p>
+                              {/* STU-201: link to student detail page */}
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/app/students/${s.id}`)}
+                                className="font-medium truncate hover:text-primary hover:underline text-left"
+                                aria-label={`Deschide profilul lui ${s.fullName}`}
+                              >
+                                {s.fullName}
+                              </button>
                               <p className="text-[10px] text-muted-foreground sm:hidden">{s.phone}</p>
                             </div>
                           </div>

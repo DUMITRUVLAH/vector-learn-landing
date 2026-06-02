@@ -3,7 +3,16 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { students } from "../db/schema";
+import {
+  students,
+  payments,
+  lessons,
+  studentLessons,
+  leads,
+  users,
+  teachers,
+  courses,
+} from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 const studentBaseSchema = z.object({
@@ -122,4 +131,117 @@ studentRoutes.delete("/:id", async (c) => {
     .returning({ id: students.id });
   if (!archived) return c.json({ error: "not_found" }, 404);
   return c.json({ ok: true, id: archived.id });
+});
+
+// STU-201: GET /:id/payments — payment history for a student
+studentRoutes.get("/:id/payments", async (c) => {
+  const studentId = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+
+  // Verify student belongs to this tenant
+  const student = await db.query.students.findFirst({
+    where: and(eq(students.id, studentId), eq(students.tenantId, tenantId)),
+    columns: { id: true },
+  });
+  if (!student) return c.json({ error: "not_found" }, 404);
+
+  const rows = await db
+    .select({
+      id: payments.id,
+      amountCents: payments.amountCents,
+      currency: payments.currency,
+      status: payments.status,
+      dueDate: payments.dueDate,
+      paidAt: payments.paidAt,
+      description: payments.description,
+      createdAt: payments.createdAt,
+    })
+    .from(payments)
+    .where(and(eq(payments.tenantId, tenantId), eq(payments.studentId, studentId)))
+    .orderBy(desc(payments.createdAt));
+
+  const totalPaidCents = rows
+    .filter((r) => r.status === "paid")
+    .reduce((sum, r) => sum + r.amountCents, 0);
+
+  return c.json({ items: rows, totalPaidCents });
+});
+
+// STU-201: GET /:id/lessons — lesson attendance history for a student
+studentRoutes.get("/:id/lessons", async (c) => {
+  const studentId = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+
+  // Verify student belongs to this tenant
+  const student = await db.query.students.findFirst({
+    where: and(eq(students.id, studentId), eq(students.tenantId, tenantId)),
+    columns: { id: true },
+  });
+  if (!student) return c.json({ error: "not_found" }, 404);
+
+  const rows = await db
+    .select({
+      id: lessons.id,
+      scheduledAt: lessons.scheduledAt,
+      durationMinutes: lessons.durationMinutes,
+      status: lessons.status,
+      attendanceStatus: studentLessons.attendanceStatus,
+      courseName: courses.name,
+      teacherUserId: teachers.userId,
+    })
+    .from(studentLessons)
+    .innerJoin(lessons, eq(studentLessons.lessonId, lessons.id))
+    .innerJoin(courses, eq(lessons.courseId, courses.id))
+    .innerJoin(teachers, eq(lessons.teacherId, teachers.id))
+    .where(and(eq(studentLessons.tenantId, tenantId), eq(studentLessons.studentId, studentId)))
+    .orderBy(desc(lessons.scheduledAt))
+    .limit(60);
+
+  // Get teacher names using a subquery join approach (avoids IN with dynamic UUIDs)
+  const teacherUserIdSet = new Set(rows.map((r) => r.teacherUserId));
+  const teacherUsers: { id: string; name: string }[] = [];
+  for (const uid of teacherUserIdSet) {
+    const u = await db.query.users.findFirst({
+      where: and(eq(users.id, uid), eq(users.tenantId, tenantId)),
+      columns: { id: true, name: true },
+    });
+    if (u) teacherUsers.push(u);
+  }
+
+  const teacherMap = new Map(teacherUsers.map((u) => [u.id, u.name]));
+
+  const items = rows.map((r) => ({
+    id: r.id,
+    scheduledAt: r.scheduledAt,
+    durationMinutes: r.durationMinutes,
+    lessonStatus: r.status,
+    attendanceStatus: r.attendanceStatus,
+    courseName: r.courseName,
+    teacherName: teacherMap.get(r.teacherUserId) ?? "—",
+  }));
+
+  return c.json({ items });
+});
+
+// STU-201: GET /:id/origin-lead — find the lead that was converted to this student
+studentRoutes.get("/:id/origin-lead", async (c) => {
+  const studentId = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+
+  // Verify student belongs to this tenant
+  const student = await db.query.students.findFirst({
+    where: and(eq(students.id, studentId), eq(students.tenantId, tenantId)),
+    columns: { id: true },
+  });
+  if (!student) return c.json({ error: "not_found" }, 404);
+
+  const lead = await db.query.leads.findFirst({
+    where: and(
+      eq(leads.tenantId, tenantId),
+      eq(leads.convertedToStudentId, studentId)
+    ),
+    columns: { id: true, fullName: true, phone: true, email: true },
+  });
+
+  return c.json({ lead: lead ?? null });
 });

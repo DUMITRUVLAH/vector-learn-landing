@@ -35,6 +35,7 @@ import { LoginPage } from "./pages/app/LoginPage";
 import { SignupPage } from "./pages/app/SignupPage";
 import { DashboardPage } from "./pages/app/DashboardPage";
 import { StudentsPage } from "./pages/app/StudentsPage";
+import { StudentDetailPage } from "./pages/app/StudentDetailPage"; // STU-201
 import { SchedulePage } from "./pages/app/SchedulePage";
 import { TeachersPage } from "./pages/app/TeachersPage";
 import { PaymentsPage } from "./pages/app/PaymentsPage";
@@ -104,6 +105,11 @@ function Routes() {
   if (path.startsWith("/calculator/pricing")) return <PricingConfiguratorPage />;
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
+  // STU-201: /app/students/:id — student detail page (before /app/students list)
+  if (path.match(/^\/app\/students\/[^/]+$/)) {
+    const id = path.split("/").pop()!;
+    return <StudentDetailPage studentId={id} />;
+  }
   if (path.startsWith("/app/students")) return <StudentsPage />;
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
