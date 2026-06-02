@@ -332,6 +332,53 @@ studentRoutes.delete("/:id/notes/:noteId", async (c) => {
   return c.json({ ok: true });
 });
 
+// ─── STU-205: Duplicate detection ────────────────────────────────────────────
+
+const checkDuplicateQuerySchema = z.object({
+  phone: z.string().optional(),
+  fullName: z.string().optional(),
+});
+
+/** STU-205: GET /api/students/check-duplicate — live duplicate check */
+studentRoutes.get("/check-duplicate", zValidator("query", checkDuplicateQuerySchema), async (c) => {
+  const { phone, fullName } = c.req.valid("query");
+  const tenantId = c.get("user").tenantId;
+
+  if (!phone && !fullName) {
+    return c.json({ matches: [] });
+  }
+
+  const results: Array<{ id: string; fullName: string; phone: string | null; email: string | null; status: string }> = [];
+
+  if (phone && phone.trim().length > 0) {
+    // Normalize: strip non-digits, take last 9
+    const phoneNorm = normalizePhone(phone.trim());
+    if (phoneNorm) {
+      const last9 = phoneNorm.replace(/\D/g, "").slice(-9);
+      const rows = await db
+        .select({ id: students.id, fullName: students.fullName, phone: students.phone, email: students.email, status: students.status })
+        .from(students)
+        .where(and(
+          eq(students.tenantId, tenantId),
+          sql`regexp_replace(${students.phone}, '[^0-9]', '', 'g') LIKE ${"%" + last9}`
+        ))
+        .limit(5);
+      results.push(...rows);
+    }
+  } else if (fullName && fullName.trim().length >= 3) {
+    // Fuzzy ILIKE search
+    const q = `%${fullName.trim()}%`;
+    const rows = await db
+      .select({ id: students.id, fullName: students.fullName, phone: students.phone, email: students.email, status: students.status })
+      .from(students)
+      .where(and(eq(students.tenantId, tenantId), ilike(students.fullName, q)))
+      .limit(5);
+    results.push(...rows);
+  }
+
+  return c.json({ matches: results });
+});
+
 // ─── STU-204: CSV export ──────────────────────────────────────────────────────
 
 const exportQuerySchema = z.object({

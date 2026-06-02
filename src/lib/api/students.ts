@@ -171,3 +171,26 @@ export function deleteStudentNote(studentId: string, noteId: string): Promise<{ 
     method: "DELETE",
   });
 }
+
+// STU-205: Duplicate detection at student creation
+export interface DuplicateMatch {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+  status: string;
+}
+
+export interface CheckDuplicateResponse {
+  matches: DuplicateMatch[];
+}
+
+export function checkStudentDuplicate(params: {
+  phone?: string;
+  fullName?: string;
+}): Promise<CheckDuplicateResponse> {
+  const qs = new URLSearchParams();
+  if (params.phone) qs.set("phone", params.phone);
+  if (params.fullName) qs.set("fullName", params.fullName);
+  return api<CheckDuplicateResponse>(`/api/students/check-duplicate?${qs.toString()}`);
+}

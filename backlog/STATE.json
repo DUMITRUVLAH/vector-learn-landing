@@ -2762,7 +2762,7 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/119"
     },
     "STU-204": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/STU-204-student-export.md",
@@ -2771,11 +2771,18 @@
       "depends_on": [
         "STU-203"
       ],
-      "title": "Export elevi in CSV/Excel"
+      "title": "Export elevi in CSV/Excel",
+      "branch": "feat/STUDENTS-faza-2-profile",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "STU-205": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/STU-205-duplicate-detection-create.md",
       "milestone": "STUDENTS",
