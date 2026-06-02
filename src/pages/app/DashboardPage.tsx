@@ -2,6 +2,7 @@ import { Users, Calendar, CreditCard, GraduationCap, LogOut, Loader2 } from "luc
 import { useSession } from "@/hooks/useSession";
 import { Logo } from "@/components/Logo";
 import { Link, useRouter } from "@/router/HashRouter";
+import { OnboardingBanner } from "@/components/app/OnboardingBanner"; // ONBOARD-001
 
 export function DashboardPage() {
   const { status, data, logout } = useSession();
@@ -72,6 +73,9 @@ export function DashboardPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
+        {/* ONBOARD-001: First-run onboarding checklist */}
+        <OnboardingBanner />
+
         <div className="mb-8">
           <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight">
             Salut, {user.name.split(" ")[0]} 👋
