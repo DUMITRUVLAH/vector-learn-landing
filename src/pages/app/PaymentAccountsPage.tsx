@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Landmark, Eye, Trash2 } from "lucide-react";
+import { Loader2, Plus, Landmark, Eye, Trash2, Building2 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -73,12 +73,20 @@ export function PaymentAccountsPage() {
       pageTitle="Cont de plată"
       pageDescription="Generează conturi de plată standardizate cu date din registru"
       actions={
-        <button
-          onClick={() => navigate("/app/conturi-plata/nou")}
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus className="size-4" /> Cont nou
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/app/conturi-plata/setari")}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+          >
+            <Building2 className="size-4" /> Profil emitent
+          </button>
+          <button
+            onClick={() => navigate("/app/conturi-plata/nou")}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="size-4" /> Cont nou
+          </button>
+        </div>
       }
     >
       <div className="mb-4 flex flex-wrap gap-2">

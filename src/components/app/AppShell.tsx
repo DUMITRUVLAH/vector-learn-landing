@@ -14,40 +14,101 @@ interface AppShellProps {
   actions?: ReactNode;
 }
 
-const NAV = [
-  { label: "Dashboard", href: "/app", icon: LayoutDashboard },
-  { label: "Azi", href: "/app/leads/today", icon: Sun }, // CRM-120: Today dashboard
-  { label: "Leads", href: "/app/leads", icon: TrendingUp },
-  { label: "Elevi", href: "/app/students", icon: Users },
-  { label: "Clasament", href: "/app/gamification", icon: Medal }, // GAP-020
-  { label: "Orar", href: "/app/schedule", icon: Calendar },
-  { label: "Profesori", href: "/app/teachers", icon: GraduationCap },
-  { label: "Plăți", href: "/app/payments", icon: CreditCard },
-  { label: "Salarizare", href: "/app/hr/payroll", icon: DollarSign },
-  { label: "Facturi", href: "/app/invoices", icon: Receipt },
-  { label: "Cont de plată", href: "/app/conturi-plata", icon: Landmark }, // CONT-PLATA
-  { label: "Contracte", href: "/app/contracts", icon: FileText },
-  { label: "Feedback", href: "/app/feedback", icon: MessageSquare },
-  { label: "CX Cohorte", href: "/app/cx", icon: BookOpen }, // CX-702
-  { label: "Diplome", href: "/app/diplome", icon: Award }, // DIPLOMA-802
-  { label: "Clase", href: "/app/school/classes", icon: School }, // SCHOOL-001
-  { label: "Prezență", href: "/app/school/attendance", icon: ClipboardList }, // SCHOOL-003
-  { label: "Check-in Grăd.", href: "/app/kinder/checkin", icon: Baby }, // KINDER-001
-  { label: "Jurnal copil", href: "/app/kinder/diary", icon: FileText }, // KINDER-002
-  { label: "Raport personal", href: "/app/kinder/ratio", icon: Shield }, // KINDER-003
-  { label: "Vaccinuri", href: "/app/kinder/immunization-report", icon: Syringe }, // KINDER-004
-  { label: "Feed parental", href: "/app/kinder/students", icon: MessageCircle }, // KINDER-005
-  { label: "Conformitate", href: "/app/kinder/compliance", icon: ShieldCheck }, // KINDER-006
-  { label: "Incidente", href: "/app/kinder/incidents", icon: AlertTriangle }, // KINDER-007
-  { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
-  { label: "Analytics CRM", href: "/app/analytics/crm", icon: BarChart3 },
-  { label: "Analytics", href: "/app/analytics", icon: TrendingUp }, // GAP-016
-  { label: "Cadences", href: "/app/cadences", icon: ListChecks },
-  { label: "Audit Log", href: "/app/audit-log", icon: Shield },
-  // AUTH-003/004: user profile + security settings
-  { label: "Profil", href: "/app/settings/profile", icon: Shield },
-  { label: "Securitate", href: "/app/settings/security", icon: Shield },
+interface NavItem {
+  label: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+}
+
+interface NavGroup {
+  /** Section heading shown in the sidebar; `null` = no heading (top-level items). */
+  section: string | null;
+  items: NavItem[];
+}
+
+/**
+ * Sidebar navigation grouped per module. Each section is one product area so
+ * the (now 28-item) menu reads as distinct modules instead of one flat list.
+ * Grădinița is its own self-contained module; CX cohorts are surfaced as
+ * "Grupe" under Școală (terminology: cohorte → grupe/clase).
+ */
+const NAV_GROUPS: NavGroup[] = [
+  {
+    section: null,
+    items: [
+      { label: "Dashboard", href: "/app", icon: LayoutDashboard },
+      { label: "Azi", href: "/app/leads/today", icon: Sun }, // CRM-120: Today dashboard
+    ],
+  },
+  {
+    section: "CRM & Vânzări",
+    items: [
+      { label: "Leads", href: "/app/leads", icon: TrendingUp },
+      { label: "Cadences", href: "/app/cadences", icon: ListChecks },
+      { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
+      { label: "Feedback", href: "/app/feedback", icon: MessageSquare },
+      { label: "Analytics CRM", href: "/app/analytics/crm", icon: BarChart3 },
+    ],
+  },
+  {
+    section: "Școală",
+    items: [
+      { label: "Elevi", href: "/app/students", icon: Users },
+      { label: "Grupe", href: "/app/cx", icon: BookOpen }, // CX-702 (fost „CX Cohorte")
+      { label: "Clase", href: "/app/school/classes", icon: School }, // SCHOOL-001
+      { label: "Orar", href: "/app/schedule", icon: Calendar },
+      { label: "Prezență", href: "/app/school/attendance", icon: ClipboardList }, // SCHOOL-003
+      { label: "Profesori", href: "/app/teachers", icon: GraduationCap },
+      { label: "Clasament", href: "/app/gamification", icon: Medal }, // GAP-020
+      { label: "Diplome", href: "/app/diplome", icon: Award }, // DIPLOMA-802
+    ],
+  },
+  {
+    section: "Finanțe",
+    items: [
+      { label: "Plăți", href: "/app/payments", icon: CreditCard },
+      { label: "Facturi", href: "/app/invoices", icon: Receipt },
+      { label: "Cont de plată", href: "/app/conturi-plata", icon: Landmark }, // CONT-PLATA
+      { label: "Contracte", href: "/app/contracts", icon: FileText },
+      { label: "Salarizare", href: "/app/hr/payroll", icon: DollarSign },
+    ],
+  },
+  {
+    section: "Grădiniță",
+    items: [
+      { label: "Check-in", href: "/app/kinder/checkin", icon: Baby }, // KINDER-001
+      { label: "Jurnal copil", href: "/app/kinder/diary", icon: FileText }, // KINDER-002
+      { label: "Raport personal", href: "/app/kinder/ratio", icon: Shield }, // KINDER-003
+      { label: "Vaccinuri", href: "/app/kinder/immunization-report", icon: Syringe }, // KINDER-004
+      { label: "Feed parental", href: "/app/kinder/students", icon: MessageCircle }, // KINDER-005
+      { label: "Conformitate", href: "/app/kinder/compliance", icon: ShieldCheck }, // KINDER-006
+      { label: "Incidente", href: "/app/kinder/incidents", icon: AlertTriangle }, // KINDER-007
+    ],
+  },
+  {
+    section: "Analiză & Securitate",
+    items: [
+      { label: "Analytics", href: "/app/analytics", icon: TrendingUp }, // GAP-016
+      { label: "Audit Log", href: "/app/audit-log", icon: Shield },
+    ],
+  },
+  {
+    section: "Setări",
+    items: [
+      // AUTH-003/004: user profile + security settings
+      { label: "Profil", href: "/app/settings/profile", icon: Shield },
+      { label: "Securitate", href: "/app/settings/security", icon: Shield },
+    ],
+  },
 ];
+
+/** Flat list of every nav item (handy for lookups). */
+const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
+
+/** The 5 primary destinations shown in the mobile bottom bar. */
+const MOBILE_NAV: NavItem[] = ["/app", "/app/leads/today", "/app/leads", "/app/students", "/app/payments"]
+  .map((href) => NAV.find((i) => i.href === href))
+  .filter((i): i is NavItem => Boolean(i));
 
 export function AppShell({ children, pageTitle, pageDescription, actions }: AppShellProps) {
   const { data, logout } = useSession();
@@ -131,36 +192,45 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
 
       <div className="flex-1 flex">
         <aside className="hidden md:flex w-56 flex-col border-r border-border bg-card/40 p-4">
-          <nav className="space-y-1">
-            {NAV.map((item) => {
-              const Icon = item.icon;
-              const active = item.href === "/app" ? path === "/app" || path === "/app/" : path.startsWith(item.href);
-              const isTodayItem = item.href === "/app/leads/today";
-              return (
-                <Link
-                  key={item.href}
-                  to={item.href}
-                  className={cn(
-                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    active
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="flex-1">{item.label}</span>
-                  {/* CRM-120: badge counter for Today dashboard */}
-                  {isTodayItem && todayCount !== null && todayCount > 0 && (
-                    <span
-                      className="ml-auto inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold min-w-[18px] h-[18px] px-1"
-                      aria-label={`${todayCount} acțiuni de azi`}
+          <nav className="space-y-4">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.section ?? "_top"} className="space-y-1">
+                {group.section && (
+                  <p className="px-3 pt-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    {group.section}
+                  </p>
+                )}
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = item.href === "/app" ? path === "/app" || path === "/app/" : path.startsWith(item.href);
+                  const isTodayItem = item.href === "/app/leads/today";
+                  return (
+                    <Link
+                      key={item.href}
+                      to={item.href}
+                      className={cn(
+                        "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        active
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
                     >
-                      {todayCount > 99 ? "99+" : todayCount}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="flex-1">{item.label}</span>
+                      {/* CRM-120: badge counter for Today dashboard */}
+                      {isTodayItem && todayCount !== null && todayCount > 0 && (
+                        <span
+                          className="ml-auto inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold min-w-[18px] h-[18px] px-1"
+                          aria-label={`${todayCount} acțiuni de azi`}
+                        >
+                          {todayCount > 99 ? "99+" : todayCount}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
         </aside>
 
@@ -184,7 +254,7 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
 
       <nav className="md:hidden border-t border-border bg-card sticky bottom-0 z-20" aria-label="Navigare mobilă">
         <div className="grid grid-cols-5 overflow-x-auto">
-          {NAV.slice(0, 5).map((item) => {
+          {MOBILE_NAV.map((item) => {
             const Icon = item.icon;
             const active = item.href === "/app" ? path === "/app" || path === "/app/" : path.startsWith(item.href);
             const isTodayItem = item.href === "/app/leads/today";
