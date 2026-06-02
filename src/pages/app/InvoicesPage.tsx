@@ -11,6 +11,7 @@ import {
   PlayCircle,
   FileCode,
   Table2,
+  CreditCard,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -37,6 +38,7 @@ import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { SubscriptionTable } from "@/components/invoices/SubscriptionTable";
 import { AddSubscriptionModal } from "@/components/invoices/AddSubscriptionModal";
+import { StripeLinkModal } from "@/components/invoices/StripeLinkModal"; // PAY-004
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -89,6 +91,12 @@ export function InvoicesPage() {
   const [filterMonth, setFilterMonth] = useState<string>("");
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [runningBilling, setRunningBilling] = useState(false);
+  // PAY-004: Stripe link modal state
+  const [stripeModal, setStripeModal] = useState<{
+    invoiceId: string;
+    invoiceNumber: string;
+    amountFormatted: string;
+  } | null>(null);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -441,15 +449,36 @@ export function InvoicesPage() {
                                 </button>
                               )}
                               {(inv.status === "draft" || inv.status === "issued") && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleMarkPaid(inv.id)}
-                                  aria-label={`Marchează factură ${inv.invoiceNumber} ca plătită`}
-                                  className="inline-flex items-center gap-1 rounded-md bg-success/10 text-success px-2 py-1 text-[11px] font-semibold hover:bg-success/20"
-                                >
-                                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                                  Plătit
-                                </button>
+                                <>
+                                  {/* PAY-004: Stripe payment link button */}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setStripeModal({
+                                        invoiceId: inv.id,
+                                        invoiceNumber: inv.invoiceNumber,
+                                        amountFormatted: formatCurrency(
+                                          inv.amountCents,
+                                          inv.currency
+                                        ),
+                                      })
+                                    }
+                                    aria-label={`Trimite link plată card pentru ${inv.invoiceNumber}`}
+                                    className="inline-flex items-center gap-1 rounded-md bg-primary/10 text-primary px-2 py-1 text-[11px] font-semibold hover:bg-primary/20 transition-colors"
+                                  >
+                                    <CreditCard className="h-3 w-3" aria-hidden="true" />
+                                    Card
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkPaid(inv.id)}
+                                    aria-label={`Marchează factură ${inv.invoiceNumber} ca plătită`}
+                                    className="inline-flex items-center gap-1 rounded-md bg-success/10 text-success px-2 py-1 text-[11px] font-semibold hover:bg-success/20"
+                                  >
+                                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                                    Plătit
+                                  </button>
+                                </>
                               )}
                             </div>
                           </td>
@@ -503,6 +532,16 @@ export function InvoicesPage() {
             void fetchAll();
           }}
           onError={(m) => setToast({ kind: "error", message: m })}
+        />
+      )}
+
+      {/* PAY-004: Stripe link modal */}
+      {stripeModal && (
+        <StripeLinkModal
+          invoiceId={stripeModal.invoiceId}
+          invoiceNumber={stripeModal.invoiceNumber}
+          amountFormatted={stripeModal.amountFormatted}
+          onClose={() => setStripeModal(null)}
         />
       )}
 

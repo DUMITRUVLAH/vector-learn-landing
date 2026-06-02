@@ -43,6 +43,7 @@ import {
   publicFormSubmitHandler,
   publicFormPingHandler,
 } from "./routes/publicForms"; // FORMS-001/005
+import { stripeRoutes, stripeWebhookRoutes } from "./routes/stripe"; // PAY-004
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -136,6 +137,11 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
+
+// PAY-004: Stripe settings + invoice payment links (auth-protected)
+app.route("/api", stripeRoutes);
+// PAY-004: Stripe webhooks (public, signature-verified)
+app.route("/api", stripeWebhookRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

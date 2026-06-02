@@ -59,6 +59,7 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
+import { StripeSettingsPage } from "./pages/app/StripeSettingsPage"; // PAY-004
 
 function HomePage() {
   return (
@@ -130,6 +131,7 @@ function Routes() {
   if (path.startsWith("/app/hr/audit")) return <AuditLogPage />;
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
+  if (path.startsWith("/app/settings/integrations/stripe")) return <StripeSettingsPage />; // PAY-004
   if (path.startsWith("/app/cadences")) return <CadencesPage />;
   if (path.startsWith("/app/audit-log")) return <LeadAuditLogPage />;
   if (path.startsWith("/app/contracts")) return <ContractsPage />;

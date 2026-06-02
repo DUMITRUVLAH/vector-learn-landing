@@ -50,6 +50,21 @@ export const invoices = pgTable(
      * 'submitted' = sent to ANAF (future)
      */
     efacturaStatus: varchar("efactura_status", { length: 30 }),
+    /**
+     * PAY-004: Stripe Payment Intent ID — set when a payment link is created.
+     * Used to reconcile the webhook `payment_intent.succeeded` event.
+     */
+    stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 100 }),
+    /**
+     * PAY-004: Stripe Checkout/Payment Link URL — stored so we can display or
+     * re-send the same link without creating a new one.
+     */
+    stripePaymentLinkUrl: varchar("stripe_payment_link_url", { length: 2048 }),
+    /**
+     * PAY-004: How the invoice was paid — 'card' (Stripe), 'cash', 'transfer', etc.
+     * Null if not yet paid.
+     */
+    paymentMethod: varchar("payment_method", { length: 20 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
