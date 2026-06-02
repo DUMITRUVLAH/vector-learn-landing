@@ -37,6 +37,4 @@ Each module → 3–5 items. Source of behavior: the matching `backlog/user-stor
 ## Progress log (orchestrator appends one line per item)
 - (start) all CRM done (101–116). Beginning Comunicare module.
 - planner: generated FIN items FIN-601..FIN-604 from user-stories/payments.md + NIGHT-PLAN Finanțe description
-- planner: generated SET items SET-801..SET-805 from user-stories/settings.md (NIGHT-PLAN §7 Settings/Users)
-- planner: generated AI items AI-A01..AI-A04 from user-stories/ai.md (NIGHT-PLAN §9 AI)
-- planner: generated COURSE items COURSE-101..COURSE-103 from user-stories/courses.md + user-stories/students.md (NIGHT-PLAN post-AI extension: course management, groups, enrollment)
+- planner: generated STUDENTS items STU-201..STU-205 from user-stories/students.md (faza-2: profile full, notes timeline, CSV import, export, duplicate detection)

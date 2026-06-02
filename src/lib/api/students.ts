@@ -75,3 +75,122 @@ export function archiveStudent(id: string): Promise<{ ok: true; id: string }> {
 export function getStudent(id: string): Promise<Student> {
   return api<Student>(`/api/students/${id}`);
 }
+
+// STU-201: Student payment history
+export interface StudentPayment {
+  id: string;
+  amountCents: number;
+  currency: string;
+  status: "pending" | "paid" | "overdue" | "refunded" | "cancelled";
+  dueDate: string | null;
+  paidAt: string | null;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface StudentPaymentsResponse {
+  items: StudentPayment[];
+  totalPaidCents: number;
+}
+
+export function getStudentPayments(id: string): Promise<StudentPaymentsResponse> {
+  return api<StudentPaymentsResponse>(`/api/students/${id}/payments`);
+}
+
+// STU-201: Student lesson attendance history
+export interface StudentLesson {
+  id: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  lessonStatus: string;
+  attendanceStatus: "present" | "absent" | "late" | "excused" | "pending";
+  courseName: string;
+  teacherName: string;
+}
+
+export interface StudentLessonsResponse {
+  items: StudentLesson[];
+}
+
+export function getStudentLessons(id: string): Promise<StudentLessonsResponse> {
+  return api<StudentLessonsResponse>(`/api/students/${id}/lessons`);
+}
+
+// STU-201: Origin lead lookup
+export interface OriginLead {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+}
+
+export interface OriginLeadResponse {
+  lead: OriginLead | null;
+}
+
+export function getStudentOriginLead(id: string): Promise<OriginLeadResponse> {
+  return api<OriginLeadResponse>(`/api/students/${id}/origin-lead`);
+}
+
+// STU-202: Student notes timeline
+export type NoteType = "general" | "pedagogical" | "parent_comm";
+
+export interface StudentNote {
+  id: string;
+  tenantId: string;
+  studentId: string;
+  authorId: string | null;
+  authorName: string;
+  body: string;
+  noteType: NoteType;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentNotesResponse {
+  items: StudentNote[];
+}
+
+export function getStudentNotes(studentId: string): Promise<StudentNotesResponse> {
+  return api<StudentNotesResponse>(`/api/students/${studentId}/notes`);
+}
+
+export function createStudentNote(
+  studentId: string,
+  body: string,
+  noteType: NoteType = "general"
+): Promise<StudentNote> {
+  return api<StudentNote>(`/api/students/${studentId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body, noteType }),
+  });
+}
+
+export function deleteStudentNote(studentId: string, noteId: string): Promise<{ ok: boolean }> {
+  return api<{ ok: boolean }>(`/api/students/${studentId}/notes/${noteId}`, {
+    method: "DELETE",
+  });
+}
+
+// STU-205: Duplicate detection at student creation
+export interface DuplicateMatch {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  email: string | null;
+  status: string;
+}
+
+export interface CheckDuplicateResponse {
+  matches: DuplicateMatch[];
+}
+
+export function checkStudentDuplicate(params: {
+  phone?: string;
+  fullName?: string;
+}): Promise<CheckDuplicateResponse> {
+  const qs = new URLSearchParams();
+  if (params.phone) qs.set("phone", params.phone);
+  if (params.fullName) qs.set("fullName", params.fullName);
+  return api<CheckDuplicateResponse>(`/api/students/check-duplicate?${qs.toString()}`);
+}

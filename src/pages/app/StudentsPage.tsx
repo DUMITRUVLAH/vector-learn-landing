@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare } from "lucide-react";
+import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare, Upload, Download } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { StudentForm } from "@/components/app/StudentForm";
+import { ImportStudentsModal } from "@/components/app/ImportStudentsModal"; // STU-203
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -42,6 +43,8 @@ export function StudentsPage() {
   const [editing, setEditing] = useState<Student | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [confirmArchive, setConfirmArchive] = useState<Student | null>(null);
+  // STU-203: import CSV modal
+  const [importOpen, setImportOpen] = useState(false);
   // FEEDBACK-601: send feedback modal
   const [feedbackTarget, setFeedbackTarget] = useState<Student | null>(null);
   const [feedbackForms, setFeedbackForms] = useState<FeedbackForm[]>([]);
@@ -120,14 +123,42 @@ export function StudentsPage() {
       pageTitle="Elevi"
       pageDescription={`${total} ${total === 1 ? "elev" : "elevi"} în baza ta de date · ${activeCount} activi în vizualizarea curentă`}
       actions={
-        <button
-          type="button"
-          onClick={openAdd}
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          Adaugă elev
-        </button>
+        <div className="flex gap-2">
+          {/* STU-204: Export CSV — sends current filters */}
+          <button
+            type="button"
+            onClick={() => {
+              const qs = new URLSearchParams();
+              if (statusFilter && statusFilter !== "all") qs.set("status", statusFilter);
+              if (debouncedSearch) qs.set("search", debouncedSearch);
+              const query = qs.toString();
+              window.location.href = `/api/students/export${query ? `?${query}` : ""}`;
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+            aria-label="Exportă lista curentă în CSV"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </button>
+          {/* STU-203: Import CSV */}
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+            aria-label="Import studenți din CSV"
+          >
+            <Upload className="h-4 w-4" />
+            Import CSV
+          </button>
+          <button
+            type="button"
+            onClick={openAdd}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            Adaugă elev
+          </button>
+        </div>
       }
     >
       <div className="space-y-4">
@@ -222,7 +253,15 @@ export function StudentsPage() {
                                 .join("")}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-medium truncate">{s.fullName}</p>
+                              {/* STU-201: link to student detail page */}
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/app/students/${s.id}`)}
+                                className="font-medium truncate hover:text-primary hover:underline text-left"
+                                aria-label={`Deschide profilul lui ${s.fullName}`}
+                              >
+                                {s.fullName}
+                              </button>
                               <p className="text-[10px] text-muted-foreground sm:hidden">{s.phone}</p>
                             </div>
                           </div>
@@ -454,6 +493,18 @@ export function StudentsPage() {
         >
           {toast.message}
         </div>
+      )}
+
+      {/* STU-203: Import CSV modal */}
+      {importOpen && (
+        <ImportStudentsModal
+          onClose={() => setImportOpen(false)}
+          onImported={() => {
+            setImportOpen(false);
+            void fetchList();
+            setToast({ kind: "success", message: "Import finalizat. Lista a fost reîncărcată." });
+          }}
+        />
       )}
     </AppShell>
   );

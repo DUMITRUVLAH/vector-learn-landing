@@ -1,7 +1,14 @@
-import { useState, useEffect, FormEvent } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, useEffect, useRef, useCallback, FormEvent } from "react";
+import { Loader2, AlertTriangle, ExternalLink } from "lucide-react";
 import { ApiError } from "@/lib/api";
-import { createStudent, updateStudent, type Student, type StudentInput } from "@/lib/api/students";
+import {
+  createStudent,
+  updateStudent,
+  checkStudentDuplicate,
+  type Student,
+  type StudentInput,
+  type DuplicateMatch,
+} from "@/lib/api/students";
 
 interface StudentFormProps {
   initial?: Student | null;
@@ -28,6 +35,50 @@ export function StudentForm({ initial, onSuccess, onCancel }: StudentFormProps) 
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // STU-205: duplicate detection state
+  const [phoneDupMatches, setPhoneDupMatches] = useState<DuplicateMatch[]>([]);
+  const [nameDupMatches, setNameDupMatches] = useState<DuplicateMatch[]>([]);
+  const [phoneDupDismissed, setPhoneDupDismissed] = useState(false);
+  const [nameDupDismissed, setNameDupDismissed] = useState(false);
+  const phoneDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nameDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const checkPhoneDuplicate = useCallback((val: string) => {
+    if (initial) return; // Don't show duplicate banner when editing
+    if (phoneDebounceRef.current) clearTimeout(phoneDebounceRef.current);
+    if (val.replace(/\D/g, "").length < 9) {
+      setPhoneDupMatches([]);
+      return;
+    }
+    phoneDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await checkStudentDuplicate({ phone: val });
+        setPhoneDupMatches(res.matches);
+        setPhoneDupDismissed(false);
+      } catch {
+        // Silently ignore — duplicate check is non-blocking
+      }
+    }, 400);
+  }, [initial]);
+
+  const checkNameDuplicate = useCallback((val: string) => {
+    if (initial) return;
+    if (nameDebounceRef.current) clearTimeout(nameDebounceRef.current);
+    if (val.trim().length < 5) {
+      setNameDupMatches([]);
+      return;
+    }
+    nameDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await checkStudentDuplicate({ fullName: val });
+        setNameDupMatches(res.matches);
+        setNameDupDismissed(false);
+      } catch {
+        // Silently ignore
+      }
+    }, 400);
+  }, [initial]);
 
   useEffect(() => {
     setFullName(initial?.fullName ?? "");
@@ -81,9 +132,16 @@ export function StudentForm({ initial, onSuccess, onCancel }: StudentFormProps) 
           minLength={2}
           maxLength={200}
           value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
+          onChange={(e) => { setFullName(e.target.value); checkNameDuplicate(e.target.value); }}
           className="input-base"
         />
+        {/* STU-205: name duplicate banner */}
+        {nameDupMatches.length > 0 && !nameDupDismissed && (
+          <DuplicateBanner
+            matches={nameDupMatches}
+            onDismiss={() => setNameDupDismissed(true)}
+          />
+        )}
       </Field>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -92,10 +150,17 @@ export function StudentForm({ initial, onSuccess, onCancel }: StudentFormProps) 
             id="sf-phone"
             type="tel"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => { setPhone(e.target.value); checkPhoneDuplicate(e.target.value); }}
             className="input-base"
             placeholder="+40 7XX XXX XXX"
           />
+          {/* STU-205: phone duplicate banner */}
+          {phoneDupMatches.length > 0 && !phoneDupDismissed && (
+            <DuplicateBanner
+              matches={phoneDupMatches}
+              onDismiss={() => setPhoneDupDismissed(true)}
+            />
+          )}
         </Field>
         <Field id="sf-email" label="Email elev">
           <input
@@ -223,6 +288,52 @@ function Field({ id, label, required, children }: FieldProps) {
         {label} {required && <span className="text-destructive">*</span>}
       </label>
       {children}
+    </div>
+  );
+}
+
+// STU-205: Duplicate detection banner component
+interface DuplicateBannerProps {
+  matches: DuplicateMatch[];
+  onDismiss: () => void;
+}
+
+function DuplicateBanner({ matches, onDismiss }: DuplicateBannerProps) {
+  const first = matches[0];
+  return (
+    <div
+      role="alert"
+      aria-live="polite"
+      className="mt-2 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning"
+    >
+      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden="true" />
+      <div className="flex-1 min-w-0">
+        <span className="font-semibold">Posibil duplicat: </span>
+        <span className="truncate">{first.fullName}</span>
+        {first.phone && <span className="text-warning/80"> ({first.phone})</span>}
+        {" "}
+        <a
+          href={`#/app/students/${first.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-0.5 underline hover:text-warning/80"
+          aria-label={`Deschide profilul existent al lui ${first.fullName}`}
+        >
+          Deschide profilul existent
+          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+        </a>
+        {matches.length > 1 && (
+          <span className="text-warning/70"> (+{matches.length - 1} altele)</span>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Continuă oricum, ignoră posibilul duplicat"
+        className="flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold border border-warning/40 hover:bg-warning/20 transition-colors"
+      >
+        Continuă oricum
+      </button>
     </div>
   );
 }
