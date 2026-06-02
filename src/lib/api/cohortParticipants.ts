@@ -75,6 +75,24 @@ export async function deleteParticipant(
   );
 }
 
+// ─── Break-even API (CX-705) ─────────────────────────────────────────────────
+
+export interface CohortBreakeven {
+  totalCostCents: number;
+  revenueCents: number;
+  projectedProfitCents: number;
+  breakEvenDistanceCents: number;
+  isProfit: boolean;
+}
+
+export async function getCohortBreakeven(
+  cohortId: string
+): Promise<{ breakeven: CohortBreakeven }> {
+  return api<{ breakeven: CohortBreakeven }>(
+    `/api/cohorts/${cohortId}/breakeven`
+  );
+}
+
 /** Compute cohort stats from a participants list */
 export interface CohortStats {
   /** full + half count */

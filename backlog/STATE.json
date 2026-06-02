@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "BUGFIX-001",
+  "current_item": null,
   "last_completed": "CX-705",
-  "iterations": 115,
-  "last_run_at": "2026-06-01T21:15:00Z",
-  "milestone_status": "CX + DIPLOMA faza-1 COMPLETE. PR #105 (DIPLOMA-803/804/805), PR #106 (CX-705). Next: BUGFIX-001.",
+  "iterations": 87,
+  "last_run_at": "2026-06-01T11:45:00Z",
+  "milestone_status": "CX Phase 1 complete (CX-701..705 done, PR #96). DIPLOMA Phase 1 (DIPLOMA-801..805) pending — start on branch feat/DIPLOMA-faza-1-schema-editor.",
   "active_milestone": "DIPLOMA",
   "items": {
     "M1-001": {
@@ -1420,7 +1420,7 @@
         "CX-703"
       ],
       "branch": "feat/CX-faza-1-cohorts",
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/106",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/96",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
@@ -1439,7 +1439,7 @@
         "CX-703"
       ],
       "branch": "feat/CX-faza-1-cohorts",
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/106",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/96",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",

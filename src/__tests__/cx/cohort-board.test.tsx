@@ -28,6 +28,7 @@ function makeCohort(
     manualEndDate: null,
     mentorCostCents: 0,
     roomCostCents: 0,
+    marketingCostCents: 0,
     driveFolderUrl: null,
     createdAt: "2026-06-01T00:00:00Z",
     updatedAt: "2026-06-01T00:00:00Z",

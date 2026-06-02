@@ -19,6 +19,8 @@ export interface Cohort {
   manualEndDate: string | null;
   mentorCostCents: number;
   roomCostCents: number;
+  /** CX-705: optional marketing spend in cents for break-even calculation */
+  marketingCostCents: number;
   driveFolderUrl: string | null;
   /** INTEG-103: branch_id (soft-ref, nullable UUID) */
   branchId?: string | null;

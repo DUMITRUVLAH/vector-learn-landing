@@ -19,12 +19,39 @@ import { useRouter } from "@/router/HashRouter";
 import { listCohorts, type Cohort } from "@/lib/api/cohorts";
 import { CohortTabs } from "@/components/modules/cx/CohortTabs";
 import { CohortProgress } from "@/components/modules/cx/CohortProgress";
-import { CohortStats } from "@/components/modules/cx/CohortStats";
+import { CohortStats, type BreakevenData } from "@/components/modules/cx/CohortStats";
 import { ParticipantTable } from "@/components/modules/cx/ParticipantTable";
 import { useCohortParticipants } from "@/hooks/useCohortParticipants";
 import type { AddParticipantPayload, CohortParticipant } from "@/lib/api/cohortParticipants";
 import { downloadCsv } from "@/lib/exportCsv";
+import { computeCohortBreakeven } from "@/lib/cohortBreakeven";
 import { cn } from "@/lib/utils";
+
+// ─── Break-even computation (client-side, CX-705) ────────────────────────────
+
+interface CohortCosts {
+  mentorCostCents: number;
+  roomCostCents: number;
+  marketingCostCents: number;
+}
+
+function computeBreakeven(
+  incasatCents: number,
+  expectedCents: number,
+  costs: CohortCosts
+): BreakevenData {
+  const result = computeCohortBreakeven({
+    incasatCents,
+    expectedCents,
+    mentorCostCents: costs.mentorCostCents,
+    roomCostCents: costs.roomCostCents,
+    marketingCostCents: costs.marketingCostCents,
+  });
+  return {
+    projectedProfitCents: result.projectedProfitCents,
+    isProfit: result.isProfit,
+  };
+}
 
 /** Format "YYYY-MM-DD" → "d Mon YYYY" */
 function fmtDate(iso: string): string {
@@ -173,6 +200,11 @@ export function CXPage() {
               <CohortHeader cohort={selectedCohort} />
               <ParticipantsSection
                 cohortId={selectedCohort.id}
+                cohortCosts={{
+                  mentorCostCents: selectedCohort.mentorCostCents,
+                  roomCostCents: selectedCohort.roomCostCents,
+                  marketingCostCents: selectedCohort.marketingCostCents,
+                }}
                 onParticipantsChange={(ps) => {
                   participantsRef.current = ps;
                 }}
@@ -243,10 +275,11 @@ function CohortHeader({ cohort }: { cohort: Cohort }) {
 
 interface ParticipantsSectionProps {
   cohortId: string;
+  cohortCosts: CohortCosts;
   onParticipantsChange: (participants: CohortParticipant[]) => void;
 }
 
-function ParticipantsSection({ cohortId, onParticipantsChange }: ParticipantsSectionProps) {
+function ParticipantsSection({ cohortId, cohortCosts, onParticipantsChange }: ParticipantsSectionProps) {
   const {
     participants,
     stats,
@@ -303,10 +336,16 @@ function ParticipantsSection({ cohortId, onParticipantsChange }: ParticipantsSec
     );
   }
 
+  const breakeven = computeBreakeven(
+    stats.incasatCents,
+    stats.expectedCents,
+    cohortCosts
+  );
+
   return (
     <div className="space-y-6">
       {/* Stats bar */}
-      <CohortStats stats={stats} />
+      <CohortStats stats={stats} breakeven={breakeven} />
 
       {/* Table 1: Înscriși (full + half) */}
       <ParticipantTable

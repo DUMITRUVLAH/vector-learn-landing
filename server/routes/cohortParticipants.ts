@@ -1,7 +1,8 @@
 /**
- * CX-703 — Cohort participants API
+ * CX-703/705 — Cohort participants API
  *
  * GET    /api/cohorts/:cohortId/participants   — list (CRM + manual merged)
+ * GET    /api/cohorts/:cohortId/breakeven      — break-even / projected profit (CX-705)
  * POST   /api/cohorts/:cohortId/participants   — add manual participant
  * PATCH  /api/cohorts/:cohortId/participants/:id — update participant
  * DELETE /api/cohorts/:cohortId/participants/:id — remove manual participant
@@ -17,6 +18,7 @@ import {
   students,
 } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { computeCohortBreakeven } from "../lib/cohortBreakeven";
 
 export const cohortParticipantsRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -104,6 +106,78 @@ cohortParticipantsRoutes.get("/:cohortId/participants", async (c) => {
   }));
 
   return c.json({ participants: enriched });
+});
+
+// ─── GET /api/cohorts/:cohortId/breakeven ─────────────────────────────────────
+// CX-705: returns projected profit / break-even data for the cohort.
+// Reads cohort costs from the cohorts table; participant revenue from cohort_participants.
+
+cohortParticipantsRoutes.get("/:cohortId/breakeven", async (c) => {
+  const user = c.get("user");
+  const cohortId = c.req.param("cohortId");
+
+  // Fetch cohort (includes cost fields)
+  const cohortRows = await db
+    .select()
+    .from(cohorts)
+    .where(and(eq(cohorts.id, cohortId), eq(cohorts.tenantId, user.tenantId)));
+  const cohortList =
+    Array.isArray(cohortRows)
+      ? cohortRows
+      : (cohortRows as unknown as { rows: typeof cohortRows }).rows ?? cohortRows;
+
+  if (cohortList.length === 0) {
+    return c.json({ error: "not_found" }, 404);
+  }
+  const cohort = cohortList[0]!;
+
+  // Fetch participants to compute revenue
+  const partRows = await db
+    .select()
+    .from(cohortParticipants)
+    .where(
+      and(
+        eq(cohortParticipants.cohortId, cohortId),
+        eq(cohortParticipants.tenantId, user.tenantId)
+      )
+    );
+  const partList =
+    Array.isArray(partRows)
+      ? partRows
+      : (partRows as unknown as { rows: typeof partRows }).rows ?? partRows;
+
+  // Compute revenue totals
+  let incasatCents = 0;
+  let expectedCents = 0;
+  for (const p of partList) {
+    switch (p.paymentStatus) {
+      case "full":
+        incasatCents += p.amountCents;
+        expectedCents += p.amountCents;
+        break;
+      case "half":
+        incasatCents += p.amountCents;
+        expectedCents += p.amountCents * 2;
+        break;
+      case "pending":
+        expectedCents += p.amountCents;
+        break;
+      case "free":
+      default:
+        break;
+    }
+  }
+
+  const result = computeCohortBreakeven({
+    incasatCents,
+    expectedCents,
+    mentorCostCents: cohort.mentorCostCents,
+    roomCostCents: cohort.roomCostCents,
+    marketingCostCents: cohort.marketingCostCents ?? 0,
+    allocatedFixedCostCents: 0, // fixed costs module TBD
+  });
+
+  return c.json({ breakeven: result });
 });
 
 // ─── POST /api/cohorts/:cohortId/participants ─────────────────────────────────

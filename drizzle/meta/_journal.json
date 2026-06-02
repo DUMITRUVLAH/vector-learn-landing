@@ -708,6 +708,13 @@
       "when": 1780338758904,
       "tag": "0100_gap019_badges",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1780303394592,
+      "tag": "0101_parched_arclight",
+      "breakpoints": true
     }
   ]
 }
