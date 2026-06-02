@@ -29,11 +29,11 @@ export const users = pgTable(
      * circular import (branches → users → branches) by not importing branches here.
      */
     branchScope: uuid("branch_scope"),
-* SET-801: is_active = false blocks login. Soft-delete for departed staff.
+    /**
+     * SET-801: is_active = false blocks login. Soft-delete for departed staff.
      * Default true; only admins can set false; owners cannot be deactivated.
      */
-    isActive: boolean("is_active").notNull().default(true),    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    /** BRANCH-702: If set, this user is a branch manager scoped to this branch only */
+    isActive: boolean("is_active").notNull().default(true),
     // AUTH-003: extended profile fields
     phone: varchar("phone", { length: 50 }),
     avatarUrl: varchar("avatar_url", { length: 2048 }),
@@ -50,9 +50,8 @@ export const users = pgTable(
   (t) => ({
     tenantIdx: index("users_tenant_idx").on(t.tenantId),
     emailUniq: uniqueIndex("users_tenant_email_uniq").on(t.tenantId, t.email),
-    branchScopeIdx: index("users_branch_scope_idx").on(t.branchScope),
-isActiveIdx: index("users_is_active_idx").on(t.tenantId, t.isActive),  })
     branchScopeIdx: index("users_branch_scope_idx").on(t.tenantId, t.branchScope),
+    isActiveIdx: index("users_is_active_idx").on(t.tenantId, t.isActive),
   })
 );
 
