@@ -239,6 +239,13 @@
       "when": 1780395542946,
       "tag": "0033_auth003_user_profile_gdpr",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1780396027309,
+      "tag": "0034_auth004_2fa_sessions",
+      "breakpoints": true
     }
   ]
 }

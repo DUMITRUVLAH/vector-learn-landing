@@ -5,10 +5,12 @@ import { z } from "zod";
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { randomBytes, createHash } from "node:crypto";
 import { db } from "../db/client";
-import { tenants, users, sessions, passwordResetTokens } from "../db/schema";
+import { tenants, users, sessions, passwordResetTokens, twoFactorSettings } from "../db/schema";
 import { hashPassword, verifyPassword } from "../auth/password";
 import { createSession, revokeSession, SESSION_COOKIE } from "../auth/session";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { twoFactorRoutes } from "./auth/twoFactor";
+import { sessionMgmtRoutes } from "./auth/sessions";
 
 const signupSchema = z.object({
   tenantName: z.string().min(2).max(200),
@@ -105,7 +107,30 @@ authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, user.tenantId) });
   if (!tenant) return c.json({ error: "tenant_not_found" }, 500);
 
-  const { token, expiresAt } = await createSession(user.id);
+  // AUTH-004: check if 2FA is enabled for this user
+  const tfRow = await db.query.twoFactorSettings.findFirst({
+    where: eq(twoFactorSettings.userId, user.id),
+  });
+  const has2FA = !!(tfRow && tfRow.enabledAt);
+
+  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? null;
+  const userAgent = c.req.header("user-agent") ?? null;
+
+  if (has2FA) {
+    // Create a pending session — user must verify TOTP next
+    const { token, expiresAt } = await createSession(user.id, {
+      ipAddress: ipAddress ?? undefined,
+      userAgent: userAgent ?? undefined,
+      twoFactorPending: true,
+    });
+    setSessionCookie(c, token, expiresAt);
+    return c.json({ requiresTwoFactor: true });
+  }
+
+  const { token, expiresAt } = await createSession(user.id, {
+    ipAddress: ipAddress ?? undefined,
+    userAgent: userAgent ?? undefined,
+  });
   setSessionCookie(c, token, expiresAt);
 
   return c.json({
@@ -379,3 +404,7 @@ authRoutes.post("/__dev__/setup-demo-password", async (c) => {
     .returning({ id: users.id });
   return c.json({ updated: updated.length, password: "demo123456" });
 });
+
+// AUTH-004: mount 2FA and session-management sub-routes
+authRoutes.route("/2fa", twoFactorRoutes);
+authRoutes.route("/sessions", sessionMgmtRoutes);

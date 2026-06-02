@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, pgEnum, index, uniqueIndex, boolean } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 
 export const userRoleEnum = pgEnum("user_role", [
@@ -49,6 +49,12 @@ export const sessions = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     token: varchar("token", { length: 128 }).notNull().unique(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    // AUTH-004: device + activity tracking for session management UI
+    ipAddress: varchar("ip_address", { length: 64 }),
+    userAgent: varchar("user_agent", { length: 512 }),
+    lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
+    // AUTH-004: when 2FA is required but not yet verified, session is incomplete
+    twoFactorPending: boolean("two_factor_pending").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

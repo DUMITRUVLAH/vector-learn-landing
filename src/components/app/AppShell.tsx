@@ -34,6 +34,9 @@ const NAV = [
   { label: "Analytics", href: "/app/analytics/crm", icon: BarChart3 },
   { label: "Cadences", href: "/app/cadences", icon: ListChecks },
   { label: "Audit Log", href: "/app/audit-log", icon: Shield },
+  // AUTH-003/004: user profile + security settings
+  { label: "Profil", href: "/app/settings/profile", icon: Shield },
+  { label: "Securitate", href: "/app/settings/security", icon: Shield },
 ];
 
 export function AppShell({ children, pageTitle, pageDescription, actions }: AppShellProps) {

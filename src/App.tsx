@@ -63,6 +63,8 @@ import { ForgotPasswordPage } from "./pages/app/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/app/ResetPasswordPage";
 import { AcceptInvitationPage } from "./pages/app/AcceptInvitationPage";
 import { ProfilePage } from "./pages/settings/ProfilePage";
+import { SecurityPage } from "./pages/settings/SecurityPage";
+import { Verify2FAPage } from "./pages/auth/Verify2FAPage";
 
 function HomePage() {
   return (
@@ -115,6 +117,10 @@ function Routes() {
   if (path.startsWith("/app/accept-invitation")) return <AcceptInvitationPage />;
   // AUTH-003: user profile + GDPR settings
   if (path.startsWith("/app/settings/profile")) return <ProfilePage />;
+  // AUTH-004: security settings (2FA + session management)
+  if (path.startsWith("/app/settings/security")) return <SecurityPage />;
+  // AUTH-004: 2FA verification step (shown after password login when 2FA is enabled)
+  if (path.startsWith("/app/verify-2fa")) return <Verify2FAPage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
