@@ -44,6 +44,16 @@ import { kinderMedicalRoutes } from "./routes/kinderMedical"; // KINDER-004
 import { kinderParentFeedRoutes } from "./routes/kinderParentFeed"; // KINDER-005
 import { kinderComplianceRoutes } from "./routes/kinderCompliance"; // KINDER-006
 import { kinderIncidentsRoutes } from "./routes/kinderIncidents"; // KINDER-007
+import { publicFormGetHandler, publicFormSubmitHandler, publicFormPingHandler } from "./routes/publicForms";
+import { enrollRoutes } from "./routes/enroll";
+import { certificatesPublicRoutes } from "./routes/certificatesPublic";
+import { portalRoutes, portalAdminRoutes } from "./routes/portal";
+import { portalNotifsRoutes, portalNotifsAdminRoutes, portalCronRoutes } from "./routes/portalNotifs";
+import { publicTeamRoutes } from "./routes/team";
+// SET-801..805: Settings routes
+import { brandingSettingsRoutes } from "./routes/brandingSettings"; // SET-802
+import { auditLogSettingsRoutes } from "./routes/auditLogSettings"; // SET-803/804
+import { notificationSettingsRoutes } from "./routes/notificationSettings"; // SET-805
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -52,6 +62,12 @@ import { kinderIncidentsRoutes } from "./routes/kinderIncidents"; // KINDER-007
  *   - server/vercel-entry.ts → Vercel serverless function (bundled by build-vercel.mjs).
  */
 export const app = new Hono();
+
+// Temporary error handler — exposes error message to diagnose prod 500s
+app.onError((err, c) => {
+  console.error("[UNHANDLED]", err);
+  return c.json({ error: "internal_error", message: err.message, stack: err.stack?.split("\n").slice(0, 5) }, 500);
+});
 
 app.use("*", logger());
 
@@ -67,39 +83,6 @@ app.use(
     credentials: true,
   })
 );
-
-app.route("/api/auth", authRoutes);
-app.route("/api/students", studentRoutes);
-app.route("/api/teachers", teacherRoutes);
-app.route("/api/courses", courseRoutes);
-app.route("/api/lessons", lessonRoutes);
-app.route("/api/payments", paymentRoutes);
-app.route("/api/leads", leadRoutes);
-app.route("/api/pipeline-stages", pipelineRoutes);
-app.route("/api/leads", taskRoutes); // tasks/attachments under /api/leads/:leadId/...
-app.route("/api/templates", templateRoutes);
-app.route("/api/automations", automationRoutes);
-app.route("/api/analytics", analyticsRoutes);
-app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
-app.route("/api/hr/payroll", payrollRoutes);
-app.route("/api/hr/teacher-stats", hrTeacherRoutes);
-app.route("/api/hr/teachers", availabilityRoutes);
-app.route("/api/hr/audit-log", auditLogRoutes);
-app.route("/api/rooms", roomRoutes);
-app.route("/api/lessons", recurringRoutes); // /api/lessons/recurring + /api/lessons/series/:id/future
-app.route("/api/settings", settingsRoutes);
-
-app.get("/api/health", async (c) => {
-  try {
-    await db.execute(sql`SELECT 1 as ping`);
-    return c.json({ ok: true, db: "connected", time: new Date().toISOString() });
-  } catch (error) {
-    return c.json(
-      { ok: false, db: "disconnected", error: error instanceof Error ? error.message : "unknown" },
-      503
-    );
-  }
-});
 
 // FORMS-001: public (no-auth) form routes — registered as DIRECT app handlers immediately
 // after /api/health, before ANY sub-router mounted at "/api" (contactRoutes, tagRoutes, etc.)
@@ -184,6 +167,24 @@ app.route("/api/kinder", kinderParentFeedRoutes);
 app.route("/api/kinder", kinderComplianceRoutes);
 // KINDER-007: Incident/accident reports + parent acknowledgment
 app.route("/api/kinder", kinderIncidentsRoutes);
+// SET-802: Branding settings (logo, colors, tenant name)
+app.route("/api/settings/branding", brandingSettingsRoutes);
+// SET-803/804: Audit log settings
+app.route("/api/settings/audit-log", auditLogSettingsRoutes);
+// SET-805: Notification preferences per user
+app.route("/api/settings/notifications", notificationSettingsRoutes);
+
+app.get("/api/health", async (c) => {
+  try {
+    await db.execute(sql`SELECT 1 as ping`);
+    return c.json({ ok: true, db: "connected", time: new Date().toISOString() });
+  } catch (error) {
+    return c.json(
+      { ok: false, db: "disconnected", error: error instanceof Error ? error.message : "unknown" },
+      503
+    );
+  }
+});
 
 app.get("/api/health/db", async (c) => {
   try {
