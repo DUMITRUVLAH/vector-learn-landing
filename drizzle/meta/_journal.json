@@ -554,6 +554,34 @@
       "when": 1780151883806,
       "tag": "0078_slim_luke_cage",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1780319050576,
+      "tag": "0079_gap001_preferred_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1780319726622,
+      "tag": "0080_gap003_trial_lessons",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1780320158523,
+      "tag": "0081_gap004_lesson_packages",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1780320602367,
+      "tag": "0082_gap009_recovery_requests",
+      "breakpoints": true
     }
   ]
 }

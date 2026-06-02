@@ -23,7 +23,22 @@ import { availabilityRoutes } from "./routes/availability";
 import { auditLogRoutes } from "./routes/auditLog";
 import { roomRoutes } from "./routes/rooms";
 import { recurringRoutes } from "./routes/recurring";
-import { settingsRoutes } from "./routes/settings";
+import { savedViewsRoutes } from "./routes/saved-views";
+import { leadsTodayRoutes } from "./routes/leads-today";
+import { notificationRoutes } from "./routes/notifications";
+import { cadenceRoutes } from "./routes/cadences";
+import { auditRoutes } from "./routes/audit";
+import { contractRoutes } from "./routes/contracts";
+import { feedbackRoutes } from "./routes/feedback";
+import { feedbackPublicRoutes } from "./routes/feedbackPublic";
+import { contactRoutes } from "./routes/contacts";
+import { teamRoutes } from "./routes/team";
+import { invoiceRoutes } from "./routes/invoices";
+import { cohortRoutes } from "./routes/cohorts";
+import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
+import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
+import { lessonPackageRoutes } from "./routes/lessonPackages"; // GAP-004/GAP-006
+import { recoveryRoutes, internalRecoveryRoutes } from "./routes/recovery"; // GAP-009
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -137,8 +152,12 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
-// MOB-101..103: Mobile PWA API — student dashboard, schedule, homework, push notifications
-app.route("/api/m", mobileRoutes);
+// GAP-004/GAP-006: Lesson packages (prepay bundles)
+app.route("/api/lesson-packages", lessonPackageRoutes);
+// GAP-009: Recovery requests — public (no-auth) and internal (auth)
+// Public routes MUST be registered before tagRoutes/requireAuth global middleware
+app.route("/api/recovery", recoveryRoutes);
+app.route("/api/recovery-requests", internalRecoveryRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

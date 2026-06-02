@@ -13,6 +13,10 @@ export interface Student {
   notes: string | null;
   /** FIN-602: Outstanding debt in cents */
   debtCents?: number;
+  /** GAP-001: Preferred schedule */
+  preferredDays?: number[] | null;
+  preferredTimeStart?: string | null;
+  preferredTimeEnd?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -42,6 +46,10 @@ export interface StudentInput {
   birthDate?: string | null;
   status?: "active" | "trial" | "paused" | "archived";
   notes?: string | null;
+  /** GAP-001: Preferred schedule */
+  preferredDays?: number[] | null;
+  preferredTimeStart?: string | null;
+  preferredTimeEnd?: string | null;
 }
 
 export function listStudents(params: ListStudentsParams = {}): Promise<ListStudentsResponse> {

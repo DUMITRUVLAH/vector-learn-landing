@@ -342,38 +342,31 @@ export function SchedulePage() {
                           void handleDrop(dayIdx, hour);
                         }}
                       >
-                        {cellLessons.map((l) => {
-                          const isMoving = rescheduling === l.id;
-                          const canDrag = l.status !== "completed" && l.status !== "cancelled";
-                          return (
-                            <button
-                              key={l.id}
-                              type="button"
-                              draggable={canDrag}
-                              onDragStart={() => {
-                                if (canDrag) draggingLessonId.current = l.id;
-                              }}
-                              onDragEnd={() => {
-                                draggingLessonId.current = null;
-                                setDragOver(null);
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setModal({ kind: "view", lesson: l });
-                              }}
-                              aria-label={`${l.courseName} – ${l.teacherName}. Trage pentru a reprograma.`}
-                              className={cn(
-                                "block w-full text-left rounded-md p-1.5 text-[10px] mb-0.5 hover:shadow-md transition-all",
-                                courseColor(l.courseId),
-                                canDrag && "cursor-grab active:cursor-grabbing",
-                                isMoving && "opacity-50"
+                        {cellLessons.map((l) => (
+                          <button
+                            key={l.id}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setModal({ kind: "view", lesson: l });
+                            }}
+                            className={cn(
+                              "block w-full text-left rounded-md p-1.5 text-[10px] mb-0.5 hover:shadow-md transition-all",
+                              courseColor(l.courseId)
+                            )}
+                          >
+                            <div className="flex items-center gap-1">
+                              <p className="font-bold truncate flex-1">{l.courseName}</p>
+                              {/* GAP-003: Trial badge */}
+                              {l.isTrial && (
+                                <span className="shrink-0 rounded px-1 py-0.5 bg-warning/20 text-warning text-[9px] font-semibold leading-none">
+                                  Trial
+                                </span>
                               )}
-                            >
-                              <p className="font-bold truncate">{l.courseName}</p>
-                              <p className="opacity-80 truncate">{l.teacherName}</p>
-                            </button>
-                          );
-                        })}
+                            </div>
+                            <p className="opacity-80 truncate">{l.teacherName}</p>
+                          </button>
+                        ))}
                       </div>
                     );
                   })}
@@ -791,6 +784,19 @@ function ViewLessonModal({
         <Row label="Status" value={lesson.status} />
         {lesson.courseLevel && <Row label="Nivel" value={lesson.courseLevel} />}
         {lesson.notes && <Row label="Note" value={lesson.notes} />}
+        {/* GAP-003: Trial badge + result */}
+        {lesson.isTrial && (
+          <div className="rounded-md bg-warning/10 border border-warning/30 px-3 py-2 space-y-1">
+            <p className="text-xs font-semibold text-warning">Lecție Trial</p>
+            {lesson.trialResult && (
+              <p className="text-xs text-muted-foreground">
+                Rezultat: <span className="font-medium text-foreground">
+                  {lesson.trialResult === "interested" ? "Interesat" : lesson.trialResult === "not_interested" ? "Neinteresat" : "Neprezent"}
+                </span>
+              </p>
+            )}
+          </div>
+        )}
       </div>
       <AttendancePanel lesson={lesson} onError={onError} />
       <div className="flex flex-wrap justify-end gap-2 pt-4 mt-4 border-t border-border">

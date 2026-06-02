@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, integer, timestamp, index, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, integer, boolean, timestamp, index } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { branches } from "./branches";
 
@@ -25,8 +25,8 @@ export const courses = pgTable(
     cefrLevel: varchar("cefr_level", { length: 4 }),
     defaultPriceCents: integer("default_price_cents").notNull().default(0),
     durationMinutes: integer("duration_minutes").notNull().default(60),
-    /** BRANCH-701: Branch offering this course (nullable = global catalog) */
-    branchId: uuid("branch_id"),
+    /** GAP-009: If true, make-up lessons do not consume a unit from lesson_packages */
+    recoveryIncluded: boolean("recovery_included").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

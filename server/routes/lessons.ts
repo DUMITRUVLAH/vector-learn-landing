@@ -5,7 +5,8 @@ import { and, eq, gte, lt, ne, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { lessons, courses, teachers, users, students, studentLessons } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
-import { getBranchScope } from "../middleware/branchScope";
+// GAP-009: recovery hook
+import { createRecoveryRequestIfAbsent } from "./recovery";
 
 const createLessonSchema = z.object({
   courseId: z.string().uuid(),
@@ -16,6 +17,12 @@ const createLessonSchema = z.object({
   notes: z.string().max(2000).optional().nullable(),
   /** SCHED-501: Optional room assignment */
   roomId: z.string().uuid().optional().nullable(),
+  /** GAP-003: Trial lesson flag */
+  isTrial: z.boolean().optional().default(false),
+  /** GAP-003: Lead FK when isTrial = true */
+  trialLeadId: z.string().uuid().optional().nullable(),
+  /** GAP-003: Teacher-recorded result */
+  trialResult: z.enum(["interested", "not_interested", "no_show"]).optional().nullable(),
 });
 
 const updateLessonSchema = createLessonSchema.partial();
@@ -23,8 +30,8 @@ const updateLessonSchema = createLessonSchema.partial();
 const listQuerySchema = z.object({
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
-  /** BRANCH-702: optional filter by branch UUID */
-  branch_id: z.string().uuid().optional(),
+  /** GAP-003: Filter by trial lead */
+  leadId: z.string().uuid().optional(),
 });
 
 export const lessonRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -87,21 +94,15 @@ async function findConflict(
 }
 
 lessonRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
-  const { from, to, branch_id } = c.req.valid("query");
+  const { from, to, leadId } = c.req.valid("query");
   const tenantId = c.get("user").tenantId;
   const conditions = [eq(lessons.tenantId, tenantId)];
   // BRANCH-703: restrict to user's branch scope
   withBranchFilter(user, conditions, lessons.branchId);
   if (from) conditions.push(gte(lessons.scheduledAt, new Date(from)));
   if (to) conditions.push(lt(lessons.scheduledAt, new Date(to)));
-  // BRANCH-703: server-side branch scope enforcement
-  const scope = getBranchScope(c);
-  if (scope) {
-    conditions.push(eq(lessons.branchId, scope));
-  } else if (branch_id) {
-    // BRANCH-702: optional client-side filter (full-access users only)
-    conditions.push(eq(lessons.branchId, branch_id));
-  }
+  // GAP-003: filter by trial lead
+  if (leadId) conditions.push(eq(lessons.trialLeadId, leadId));
 
   const rows = await db
     .select({
@@ -116,6 +117,9 @@ lessonRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
       courseName: courses.name,
       courseLevel: courses.level,
       teacherName: users.name,
+      isTrial: lessons.isTrial,
+      trialLeadId: lessons.trialLeadId,
+      trialResult: lessons.trialResult,
     })
     .from(lessons)
     .innerJoin(courses, eq(lessons.courseId, courses.id))
@@ -166,6 +170,9 @@ lessonRoutes.post("/", zValidator("json", createLessonSchema), async (c) => {
       meetingUrl: body.meetingUrl || null,
       notes: body.notes || null,
       roomId: body.roomId ?? null,
+      isTrial: body.isTrial ?? false,
+      trialLeadId: body.trialLeadId ?? null,
+      trialResult: body.trialResult ?? null,
     })
     .returning();
   return c.json(created, 201);
@@ -205,6 +212,10 @@ lessonRoutes.patch("/:id", zValidator("json", updateLessonSchema), async (c) => 
   if (body.meetingUrl !== undefined) patch.meetingUrl = body.meetingUrl || null;
   if (body.notes !== undefined) patch.notes = body.notes || null;
   if (body.roomId !== undefined) patch.roomId = body.roomId ?? null;
+  // GAP-003: Trial lesson fields
+  if (body.isTrial !== undefined) patch.isTrial = body.isTrial;
+  if (body.trialLeadId !== undefined) patch.trialLeadId = body.trialLeadId ?? null;
+  if (body.trialResult !== undefined) patch.trialResult = body.trialResult ?? null;
 
   // SCHED-501: Room conflict check on patch
   if (body.roomId && (body.scheduledAt || body.durationMinutes)) {
@@ -336,6 +347,7 @@ lessonRoutes.patch(
       ),
     });
 
+    let resultSl: typeof studentLessons.$inferSelect;
     if (existing) {
       const [updated] = await db
         .update(studentLessons)
@@ -346,7 +358,7 @@ lessonRoutes.patch(
         })
         .where(eq(studentLessons.id, existing.id))
         .returning();
-      return c.json(updated);
+      resultSl = updated;
     } else {
       // Auto-enroll: create the student_lessons record if it doesn't exist
       const [created] = await db
@@ -360,8 +372,21 @@ lessonRoutes.patch(
           markedAt: now,
         })
         .returning();
-      return c.json(created, 201);
+      resultSl = created;
     }
+
+    // GAP-009: fire-and-forget recovery request creation when absent
+    // Also skip if this is a trial lesson (trials never generate recovery)
+    if (attendanceStatus === "absent" && !lesson.isTrial) {
+      void createRecoveryRequestIfAbsent({
+        tenantId,
+        studentLessonId: resultSl.id,
+        lessonId,
+        studentId,
+      }).catch(() => undefined);
+    }
+
+    return existing ? c.json(resultSl) : c.json(resultSl, 201);
   }
 );
 

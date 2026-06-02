@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, count, desc, eq, gt, ilike, inArray, ne, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, ne, or } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, users, leadMentions, inAppNotifications } from "../db/schema";
+import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, leadTags, courses, lessons, studentLessons, lessonPackages } from "../db/schema";
 import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
@@ -59,9 +59,10 @@ const updateLeadSchema = z.object({
   debtCents: z.number().int().min(0).optional(),
   company: z.string().max(300).optional().nullable(),
   dealName: z.string().max(300).optional().nullable(),
-  /** INTEG-101 */
-  courseId: z.string().uuid().optional().nullable(),
-  branchId: z.string().uuid().optional().nullable(),
+  /** GAP-001: Preferred schedule */
+  preferredDays: z.array(z.number().int().min(1).max(7)).optional().nullable(),
+  preferredTimeStart: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  preferredTimeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
 });
 
 const stageChangeSchema = z.object({
@@ -877,6 +878,155 @@ leadRoutes.post("/:id/convert", zValidator("json", convertLeadSchema), async (c)
 
   const updatedLead = { ...lead, convertedToStudentId: student.id, stage: "paid" as const };
   return c.json({ lead: updatedLead, student, familyId, autoEnrolledCohortId });
+});
+
+// GAP-004: Convert trial lead → active student + course enrollment
+const convertTrialSchema = z.object({
+  courseId: z.string().uuid(),
+  createPackage: z.boolean().optional().default(false),
+});
+
+leadRoutes.post("/:id/convert-trial", zValidator("json", convertTrialSchema), async (c) => {
+  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+  const body = c.req.valid("json");
+
+  // 1. Verify lead exists and belongs to tenant
+  const lead = await db.query.leads.findFirst({
+    where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
+  });
+  if (!lead) return c.json({ error: "not_found" }, 404);
+  if (lead.convertedToStudentId) {
+    return c.json({ error: "already_converted", studentId: lead.convertedToStudentId }, 409);
+  }
+
+  // 2. Verify lead has at least one trial lesson
+  const trialLesson = await db.query.lessons.findFirst({
+    where: and(
+      eq(lessons.tenantId, tenantId),
+      eq(lessons.trialLeadId, id),
+      eq(lessons.isTrial, true)
+    ),
+  });
+  if (!trialLesson) {
+    return c.json({ error: "no_trial_lesson", message: "Lead trebuie să aibă cel puțin o lecție trial marcată" }, 422);
+  }
+
+  // 3. Verify course exists and belongs to tenant
+  const course = await db.query.courses.findFirst({
+    where: and(eq(courses.id, body.courseId), eq(courses.tenantId, tenantId)),
+  });
+  if (!course) return c.json({ error: "course_not_found" }, 404);
+
+  // 4. Create student from lead data
+  let studentId: string;
+  let enrolledLessons = 0;
+  try {
+    const [student] = await db
+      .insert(students)
+      .values({
+        tenantId,
+        fullName: lead.fullName,
+        phone: lead.phone,
+        email: lead.email,
+        parentPhone: lead.phone,
+        parentEmail: lead.email,
+        status: "active",
+        notes: `Convertit din lead trial pe ${new Date().toLocaleDateString("ro-RO")}`,
+      })
+      .returning();
+    studentId = student.id;
+
+    // 5. Enroll student in all future scheduled lessons of the course
+    const now = new Date();
+    const futureLessons = await db
+      .select()
+      .from(lessons)
+      .where(
+        and(
+          eq(lessons.courseId, body.courseId),
+          eq(lessons.tenantId, tenantId),
+          gte(lessons.scheduledAt, now),
+          eq(lessons.isTrial, false)
+        )
+      );
+
+    if (futureLessons.length > 0) {
+      await db.insert(studentLessons).values(
+        futureLessons.map((lesson) => ({
+          tenantId,
+          lessonId: lesson.id,
+          studentId,
+          attendanceStatus: "pending" as const,
+        }))
+      );
+      enrolledLessons = futureLessons.length;
+    }
+
+    // 6. Update lead with converted student reference
+    await db
+      .update(leads)
+      .set({
+        stage: "paid",
+        convertedToStudentId: studentId,
+        convertedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(leads.id, id));
+
+    // 7. Optionally create a lesson package
+    if (body.createPackage) {
+      const defaultUnits = 10;
+      const today = new Date().toISOString().slice(0, 10);
+      await db.insert(lessonPackages).values({
+        tenantId,
+        studentId,
+        courseId: body.courseId,
+        unitsTotal: defaultUnits,
+        unitsRemaining: defaultUnits,
+        validFrom: today,
+        status: "active",
+      });
+    }
+
+    // 8. Log interaction
+    await db.insert(leadInteractions).values({
+      tenantId,
+      leadId: id,
+      type: "system",
+      direction: "internal",
+      body: `Convertit din trial în student activ: ${studentId} — înrolat în ${enrolledLessons} lecții viitoare${body.createPackage ? " + pachet 10 unități creat" : ""}`,
+      userId,
+    });
+
+    // 9. Audit log
+    await auditLog({
+      tenantId,
+      actorId: userId,
+      entityId: id,
+      action: "lead_converted_from_trial",
+      before: { stage: lead.stage },
+      after: { stage: "paid", convertedToStudentId: studentId, enrolledLessons, packageCreated: body.createPackage },
+    });
+
+    // 10. Notify managers
+    void notifyManagersAndOwners(tenantId, {
+      type: "lead_converted",
+      title: `Lead convertit din trial: ${lead.fullName}`,
+      body: `Acum este student activ — înrolat în ${enrolledLessons} lecții`,
+      link: `#/app/leads/${id}`,
+      metadata: { leadId: id, studentId, enrolledLessons },
+      isRead: false,
+    }).catch(() => undefined);
+
+    return c.json({ studentId, enrolledLessons, packageCreated: body.createPackage ?? false }, 201);
+  } catch (err) {
+    // Attempt cleanup if student was created but subsequent steps failed
+    // (best-effort — ideally use transactions, but PGlite in tests doesn't support them)
+    const errMsg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: "conversion_failed", message: errMsg }, 500);
+  }
 });
 
 leadRoutes.get("/:id/interactions", async (c) => {

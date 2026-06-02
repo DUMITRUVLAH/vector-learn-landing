@@ -27,6 +27,10 @@ const studentBaseSchema = z.object({
   birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable().or(z.literal("")),
   status: z.enum(["active", "trial", "paused", "archived"]).optional(),
   notes: z.string().max(1000).optional().nullable(),
+  /** GAP-001: Preferred schedule */
+  preferredDays: z.array(z.number().int().min(1).max(7)).optional().nullable(),
+  preferredTimeStart: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  preferredTimeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
 });
 
 const createStudentSchema = studentBaseSchema;

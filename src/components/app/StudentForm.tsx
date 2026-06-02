@@ -1,14 +1,8 @@
 import { useState, useEffect, useRef, useCallback, FormEvent } from "react";
 import { Loader2, AlertTriangle, ExternalLink } from "lucide-react";
 import { ApiError } from "@/lib/api";
-import {
-  createStudent,
-  updateStudent,
-  checkStudentDuplicate,
-  type Student,
-  type StudentInput,
-  type DuplicateMatch,
-} from "@/lib/api/students";
+import { createStudent, updateStudent, type Student, type StudentInput } from "@/lib/api/students";
+import { cn } from "@/lib/utils";
 
 interface StudentFormProps {
   initial?: Student | null;
@@ -24,6 +18,16 @@ const STATUS_LABEL: Record<Student["status"], string> = {
   archived: "Arhivat",
 };
 
+const DAY_OPTIONS = [
+  { label: "L", full: "Luni", val: 1 },
+  { label: "M", full: "Marți", val: 2 },
+  { label: "Mi", full: "Miercuri", val: 3 },
+  { label: "J", full: "Joi", val: 4 },
+  { label: "V", full: "Vineri", val: 5 },
+  { label: "S", full: "Sâmbătă", val: 6 },
+  { label: "D", full: "Duminică", val: 7 },
+];
+
 export function StudentForm({ initial, onSuccess, onCancel }: StudentFormProps) {
   const [fullName, setFullName] = useState(initial?.fullName ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
@@ -33,6 +37,9 @@ export function StudentForm({ initial, onSuccess, onCancel }: StudentFormProps) 
   const [birthDate, setBirthDate] = useState(initial?.birthDate ?? "");
   const [status, setStatus] = useState<Student["status"]>(initial?.status ?? "trial");
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [preferredDays, setPreferredDays] = useState<number[]>(initial?.preferredDays ?? []);
+  const [preferredTimeStart, setPreferredTimeStart] = useState(initial?.preferredTimeStart ?? "");
+  const [preferredTimeEnd, setPreferredTimeEnd] = useState(initial?.preferredTimeEnd ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,8 +96,17 @@ export function StudentForm({ initial, onSuccess, onCancel }: StudentFormProps) 
     setBirthDate(initial?.birthDate ?? "");
     setStatus(initial?.status ?? "trial");
     setNotes(initial?.notes ?? "");
+    setPreferredDays(initial?.preferredDays ?? []);
+    setPreferredTimeStart(initial?.preferredTimeStart ?? "");
+    setPreferredTimeEnd(initial?.preferredTimeEnd ?? "");
     setError(null);
   }, [initial]);
+
+  const toggleDay = (val: number) => {
+    setPreferredDays((prev) =>
+      prev.includes(val) ? prev.filter((d) => d !== val) : [...prev, val].sort((a, b) => a - b)
+    );
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -105,6 +121,9 @@ export function StudentForm({ initial, onSuccess, onCancel }: StudentFormProps) 
       birthDate: birthDate || null,
       status,
       notes: notes || null,
+      preferredDays: preferredDays.length > 0 ? preferredDays : null,
+      preferredTimeStart: preferredTimeStart || null,
+      preferredTimeEnd: preferredTimeEnd || null,
     };
     try {
       const saved = initial
@@ -231,6 +250,54 @@ export function StudentForm({ initial, onSuccess, onCancel }: StudentFormProps) 
           className="input-base resize-none"
         />
       </Field>
+
+      {/* GAP-001: Preferred schedule */}
+      <div>
+        <p className="block text-sm font-semibold mb-1.5">Disponibilitate preferată</p>
+        <div className="flex flex-wrap gap-1 mb-2" role="group" aria-label="Zile preferate">
+          {DAY_OPTIONS.map(({ label, full, val }) => (
+            <button
+              key={val}
+              type="button"
+              aria-label={full}
+              aria-pressed={preferredDays.includes(val)}
+              onClick={() => toggleDay(val)}
+              className={cn(
+                "h-8 w-8 rounded-full text-xs font-medium border transition-colors",
+                preferredDays.includes(val)
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-muted-foreground border-input hover:border-primary"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="sf-time-start" className="text-xs text-muted-foreground whitespace-nowrap">De la:</label>
+            <input
+              id="sf-time-start"
+              type="time"
+              value={preferredTimeStart}
+              onChange={(e) => setPreferredTimeStart(e.target.value)}
+              className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+              aria-label="Ora de start preferată"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="sf-time-end" className="text-xs text-muted-foreground whitespace-nowrap">Până la:</label>
+            <input
+              id="sf-time-end"
+              type="time"
+              value={preferredTimeEnd}
+              onChange={(e) => setPreferredTimeEnd(e.target.value)}
+              className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+              aria-label="Ora de sfârșit preferată"
+            />
+          </div>
+        </div>
+      </div>
 
       {error && (
         <div role="alert" className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
