@@ -1,5 +1,5 @@
 /**
- * CRM-134: In-app notifications API helpers
+ * CRM-134/135: Notifications and tenant members API helpers
  */
 import { api } from "../api";
 
@@ -41,7 +41,7 @@ export async function markAllRead(): Promise<{ updated: number }> {
   return api<{ updated: number }>("/api/notifications/mark-read", { method: "PATCH" });
 }
 
-/** Returns all users in the current tenant (for @mention autocomplete). */
+/** Returns all users in the current tenant (for @mention autocomplete and RR settings). */
 export async function getTenantMembers(): Promise<{ members: TenantMember[] }> {
   return api<{ members: TenantMember[] }>("/api/users/tenant-members");
 }

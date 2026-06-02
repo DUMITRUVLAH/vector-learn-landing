@@ -547,6 +547,13 @@
       "when": 1780151646940,
       "tag": "0077_glorious_bug",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1780151883806,
+      "tag": "0078_slim_luke_cage",
+      "breakpoints": true
     }
   ]
 }

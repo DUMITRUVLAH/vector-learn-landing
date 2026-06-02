@@ -47,7 +47,12 @@ import { AutomationsPage } from "./pages/app/AutomationsPage";
 import { AnalyticsPage } from "./pages/app/AnalyticsPage";
 import { CadencesPage } from "./pages/app/CadencesPage";
 import { AuditLogPage } from "./pages/app/AuditLogPage";
-import { InvoicesPage } from "./pages/app/InvoicesPage";
+import { FeatureTreePage } from "./pages/app/FeatureTreePage";
+import { KpiDashboardPage } from "./pages/app/KpiDashboardPage";
+import { RevenueChartsPage } from "./pages/app/RevenueChartsPage";
+import { StudentRetentionPage } from "./pages/app/StudentRetentionPage";
+import { ExportPage } from "./pages/app/ExportPage";
+import { CRMSettingsPage } from "./pages/app/CRMSettingsPage";
 
 function HomePage() {
   return (
@@ -153,10 +158,13 @@ function Routes() {
   if (path.startsWith("/app/settings/integrations")) return <IntegrationsPage />; // INT-903
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
-  if (path.startsWith("/app/cadences")) return <CadencesPage />;
-  if (path.startsWith("/app/audit-log")) return <AuditLogPage />;
-  if (path.startsWith("/app/invoices")) return <InvoicesPage />;
+  if (path.startsWith("/app/settings/crm")) return <CRMSettingsPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
+  if (path.startsWith("/app/reports/kpi")) return <KpiDashboardPage />;
+  if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
+  if (path.startsWith("/app/reports/retention")) return <StudentRetentionPage />;
+  if (path.startsWith("/app/reports/export")) return <ExportPage />;
+  if (path.startsWith("/app/features")) return <FeatureTreePage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // PAY-003: /portal/invoice/:id — parent-facing invoice portal (no auth)
   if (path.match(/^\/portal\/invoice\/[^/]+$/)) return <InvoicePortalPage />;
