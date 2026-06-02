@@ -1,5 +1,5 @@
-import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, ClipboardCheck, BookMarked } from "lucide-react";
+import { ReactNode } from "react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, Inbox } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { BranchSwitcher } from "@/components/app/BranchSwitcher";
@@ -24,20 +24,7 @@ const NAV = [
   { label: "Orar", href: "/app/schedule", icon: Calendar },
   { label: "Profesori", href: "/app/teachers", icon: GraduationCap },
   { label: "Plăți", href: "/app/payments", icon: CreditCard },
-  { label: "Salarizare", href: "/app/hr/payroll", icon: DollarSign },
-  { label: "Facturi", href: "/app/invoices", icon: Receipt },
-  { label: "Contracte", href: "/app/contracts", icon: FileText },
-  { label: "Feedback", href: "/app/feedback", icon: MessageSquare },
-  { label: "CX Cohorte", href: "/app/cx", icon: BookOpen }, // CX-702
-  { label: "Diplome", href: "/app/diplome", icon: Award }, // DIPLOMA-802
-  { label: "Grupe", href: "/app/groups", icon: Users }, // COURSE-202
-  { label: "Promo Coduri", href: "/app/promo-codes", icon: Tag }, // COURSE-203
-  { label: "Clase", href: "/app/school/classes", icon: School }, // SCHOOL-001
-  { label: "Prezență", href: "/app/school/attendance", icon: ClipboardList }, // SCHOOL-003
-  { label: "Formulare", href: "/app/forms", icon: ClipboardCheck }, // FORMS-002
-  { label: "Stripe", href: "/app/settings/integrations/stripe", icon: CreditCard }, // PAY-004
-  { label: "Rate", href: "/app/payment-plans", icon: Receipt }, // PAY-006
-  { label: "Contabilitate", href: "/app/accounting", icon: BookMarked }, // PAY-008
+  { label: "Inbox", href: "/app/inbox", icon: Inbox },
   { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
   { label: "Analytics", href: "/app/analytics/crm", icon: BarChart3 },
   { label: "Cadences", href: "/app/cadences", icon: ListChecks },

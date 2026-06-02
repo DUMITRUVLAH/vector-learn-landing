@@ -45,28 +45,7 @@ import { LeadCardPage } from "./pages/app/LeadCardPage";
 import { TemplatesPage } from "./pages/app/TemplatesPage";
 import { AutomationsPage } from "./pages/app/AutomationsPage";
 import { AnalyticsPage } from "./pages/app/AnalyticsPage";
-import { PayrollPage } from "./pages/app/PayrollPage";
-import { TeacherStatsPage } from "./pages/app/TeacherStatsPage";
-import { AvailabilityPage } from "./pages/app/AvailabilityPage";
-import { AuditLogPage } from "./pages/app/AuditLogPage";
-import { TodayDashboardPage } from "./pages/app/TodayDashboardPage";
-import { CadencesPage } from "./pages/app/CadencesPage";
-import { LeadAuditLogPage } from "./pages/app/LeadAuditLogPage";
-import { ContractsPage } from "./pages/app/ContractsPage";
-import { FeedbackPage } from "./pages/app/FeedbackPage";
-import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
-import { InvoicesPage } from "./pages/app/InvoicesPage";
-import { CXPage } from "./pages/app/CXPage";
-import { DiplomaPage } from "./pages/app/DiplomaPage";
-import { FormsPage } from "./pages/app/FormsPage";
-import { FormBuilderPage } from "./pages/app/FormBuilderPage";
-import { FormPublicPage } from "./pages/public/FormPublicPage";
-import { ForgotPasswordPage } from "./pages/app/ForgotPasswordPage";
-import { ResetPasswordPage } from "./pages/app/ResetPasswordPage";
-import { AcceptInvitationPage } from "./pages/app/AcceptInvitationPage";
-import { ProfilePage } from "./pages/settings/ProfilePage";
-import { SecurityPage } from "./pages/settings/SecurityPage";
-import { Verify2FAPage } from "./pages/auth/Verify2FAPage";
+import { InboxPage } from "./pages/app/InboxPage";
 
 function HomePage() {
   return (
@@ -172,24 +151,7 @@ function Routes() {
   if (path.startsWith("/app/settings/integrations")) return <IntegrationsPage />; // INT-903
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
-  if (path.startsWith("/app/settings/integrations/stripe")) return <StripeSettingsPage />; // PAY-004
-  if (path.startsWith("/app/payment-plans")) return <PaymentPlansPage />; // PAY-006
-  if (path.startsWith("/app/accounting")) return <AccountingPage />; // PAY-008
-  if (path.startsWith("/app/cadences")) return <CadencesPage />;
-  if (path.startsWith("/app/audit-log")) return <LeadAuditLogPage />;
-  if (path.startsWith("/app/contracts")) return <ContractsPage />;
-  if (path.startsWith("/app/feedback")) return <FeedbackPage />;
-  if (path.startsWith("/app/invoices")) return <InvoicesPage />;
-  if (path.startsWith("/app/cx")) return <CXPage />;
-  if (path.startsWith("/app/diplome")) return <DiplomaPage />;
-  // FORMS-002: /app/forms/:id/edit must be checked before /app/forms
-  if (path.match(/^\/app\/forms\/[^/]+\/edit$/)) {
-    const id = path.split("/")[3];
-    return <FormBuilderPage formId={id} />;
-  }
-  if (path.startsWith("/app/forms")) return <FormsPage />;
-  if (path.startsWith("/app/groups")) return <GroupsPage />;
-  if (path.startsWith("/app/promo-codes")) return <PromoCodesPage />;
+  if (path.startsWith("/app/inbox")) return <InboxPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // PAY-003: /portal/invoice/:id — parent-facing invoice portal (no auth)
