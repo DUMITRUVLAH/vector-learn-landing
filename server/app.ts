@@ -55,6 +55,10 @@ import { brandingSettingsRoutes } from "./routes/brandingSettings"; // SET-802
 import { auditLogSettingsRoutes } from "./routes/auditLogSettings"; // SET-803/804
 import { notificationSettingsRoutes } from "./routes/notificationSettings"; // SET-805
 import { badgesRoutes } from "./routes/badges"; // GAP-019/020 gamification
+import { companyRegistryRoutes } from "./routes/companyRegistry"; // CONT-PLATA: contafirm.md registry proxy
+import { sellerProfileRoutes } from "./routes/sellerProfile"; // CONT-PLATA: issuer details
+import { companyClientRoutes } from "./routes/companyClients"; // CONT-PLATA: saved counterparties
+import { paymentAccountRoutes } from "./routes/paymentAccounts"; // CONT-PLATA: payment accounts
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -170,6 +174,11 @@ app.route("/api/kinder", kinderIncidentsRoutes);
 // GAP-019/020: Gamification badges + leaderboard
 app.route("/api/badges", badgesRoutes);
 // SET-802: Branding settings (logo, colors, tenant name)
+// CONT-PLATA: company registry (contafirm.md proxy) + payment accounts ("cont de plată")
+app.route("/api/registry", companyRegistryRoutes);
+app.route("/api/seller-profile", sellerProfileRoutes);
+app.route("/api/company-clients", companyClientRoutes);
+app.route("/api/payment-accounts", paymentAccountRoutes);
 app.route("/api/settings/branding", brandingSettingsRoutes);
 // SET-803/804: Audit log settings
 app.route("/api/settings/audit-log", auditLogSettingsRoutes);

@@ -131,8 +131,8 @@ export function CXPage() {
 
   return (
     <AppShell
-      pageTitle="Customer Experience (CX)"
-      pageDescription="Urmărire cohorte cursanți pe ediții"
+      pageTitle="Grupe"
+      pageDescription="Urmărire grupe / clase de cursanți pe ediții"
       actions={
         <button
           onClick={handleExport}
