@@ -271,6 +271,11 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
   BEFORE the build, so code + schema ship together. Never remove that build step. The
   `src/__tests__/schema-drift.test.ts` gate fails CI if the code's schema has a table/column that
   the committed migrations don't create — catching the drift before it 500s in prod.
+- **Schema index rule (the #2 prod-500 cause, 2026-06-02):** Every new `server/db/schema/X.ts` file
+  MUST have a corresponding `export * from "./X";` added to `server/db/schema/index.ts` in the SAME
+  commit. Without it, Drizzle's `db.query.X` is `undefined` at runtime → any route that touches X
+  returns 500. The `feature-builder` must check this after creating any new schema file. The
+  `integration-architect` and `code-reviewer-vl` must flag it if missing. No exceptions.
 
 ### 3.5.1bis Backlog critic (don't build the first draft of a spec either)
 **Whenever new backlog features are written** (the PLAN step auto-generates a module, or new
