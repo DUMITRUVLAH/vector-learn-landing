@@ -1,172 +1,325 @@
 /**
- * INT-902: Webhook endpoint management routes.
+ * CRM-104: Webhook routes for Facebook Lead Ads and Google Ads
  *
- * POST   /api/settings/webhooks          → register endpoint
- * GET    /api/settings/webhooks          → list endpoints
- * GET    /api/settings/webhooks/:id/deliveries → delivery history
- * DELETE /api/settings/webhooks/:id     → delete endpoint
- * PATCH  /api/settings/webhooks/:id     → toggle active
+ * Facebook Lead Ads flow:
+ *   1. Meta sends GET /webhooks/meta/lead-ads for webhook verification (hub.challenge)
+ *   2. Meta sends POST /webhooks/meta/lead-ads with lead_gen event
+ *   3. We verify HMAC SHA256 signature, fetch full form via Graph API (stub in dev),
+ *      normalize fields, dedup on leadgen_id (idempotent), create lead.
+ *
+ * Google Ads:
+ *   gclid is already saved via the public intake form (CRM-101).
+ *   Offline conversion upload happens at lead→student conversion (CRM-111).
+ *   This file prepares the payload helper for CRM-111.
  */
 
 import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
-import { randomBytes } from "node:crypto";
+import { createHmac } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { webhookEndpoints, webhookDeliveries } from "../db/schema";
-import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { leads, leadInteractions, webhookEvents } from "../db/schema";
+import { normalizePhone, normalizeEmail, normalizeName } from "../lib/normalize";
 
-const ALL_EVENTS = ["lead.created", "lead.updated", "student.enrolled", "payment.received"] as const;
-type WebhookEventType = (typeof ALL_EVENTS)[number];
+export const webhookRoutes = new Hono();
 
-const createEndpointSchema = z.object({
-  url: z.string().url().max(2048),
-  events: z
-    .array(z.enum(ALL_EVENTS))
-    .optional()
-    .default([]),
-  /** If not provided, a secret is auto-generated */
-  secret: z.string().min(16).max(255).optional(),
-});
-
-const updateEndpointSchema = z.object({
-  active: z.boolean().optional(),
-  events: z.array(z.enum(ALL_EVENTS)).optional(),
-});
-
-export const webhookRoutes = new Hono<{ Variables: AuthVariables }>();
-webhookRoutes.use("/*", requireAuth);
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 /**
- * POST /api/settings/webhooks
- * Body: { url, events?, secret? }
- * Returns: { id, url, events, secret, active, createdAt }
- * Note: secret is returned in clear HERE for the user to save; not shown again.
+ * Verify Facebook HMAC SHA256 signature.
+ * Header: X-Hub-Signature-256: sha256=<hex>
+ * Key: META_APP_SECRET env var
  */
-webhookRoutes.post("/", zValidator("json", createEndpointSchema), async (c) => {
-  const body = c.req.valid("json");
-  const user = c.get("user");
-
-  const secret = body.secret ?? randomBytes(32).toString("base64url");
-
-  const [created] = await db
-    .insert(webhookEndpoints)
-    .values({
-      tenantId: user.tenantId,
-      url: body.url,
-      secret,
-      events: body.events && body.events.length > 0 ? body.events : null,
-      active: true,
-    })
-    .returning();
-
-  return c.json(
-    {
-      id: created.id,
-      url: created.url,
-      events: (created.events as WebhookEventType[] | null) ?? [],
-      active: created.active,
-      createdAt: created.createdAt,
-      secret, // shown once for user to verify signature
-    },
-    201
-  );
-});
+function verifyMetaSignature(rawBody: string, header: string | undefined): boolean {
+  if (!header) return false;
+  const appSecret = process.env.META_APP_SECRET;
+  if (!appSecret) {
+    // In dev/test, accept all if no secret configured
+    return process.env.NODE_ENV !== "production";
+  }
+  const expected = "sha256=" + createHmac("sha256", appSecret).update(rawBody).digest("hex");
+  // Use timing-safe comparison to prevent timing attacks
+  if (expected.length !== header.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) {
+    diff |= expected.charCodeAt(i) ^ header.charCodeAt(i);
+  }
+  return diff === 0;
+}
 
 /**
- * GET /api/settings/webhooks
- * Returns array of endpoints for the tenant.
+ * Fetch full lead form data from Meta Graph API.
+ * In dev/test: returns stub data if GRAPH_API_TOKEN is not set.
  */
-webhookRoutes.get("/", async (c) => {
-  const user = c.get("user");
-
-  const rows = await db
-    .select({
-      id: webhookEndpoints.id,
-      url: webhookEndpoints.url,
-      events: webhookEndpoints.events,
-      active: webhookEndpoints.active,
-      createdAt: webhookEndpoints.createdAt,
-      updatedAt: webhookEndpoints.updatedAt,
-    })
-    .from(webhookEndpoints)
-    .where(eq(webhookEndpoints.tenantId, user.tenantId))
-    .orderBy(desc(webhookEndpoints.createdAt));
-
-  return c.json(
-    rows.map((r) => ({
-      ...r,
-      events: (r.events as WebhookEventType[] | null) ?? [],
-    }))
-  );
-});
-
-/**
- * GET /api/settings/webhooks/:id/deliveries
- * Returns recent deliveries for the endpoint.
- */
-webhookRoutes.get("/:id/deliveries", async (c) => {
-  const user = c.get("user");
-  const endpointId = c.req.param("id");
-
-  // Verify ownership
-  const ep = await db.query.webhookEndpoints.findFirst({
-    where: and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.tenantId, user.tenantId)),
-  });
-  if (!ep) return c.json({ error: "not_found" }, 404);
-
-  const deliveries = await db
-    .select()
-    .from(webhookDeliveries)
-    .where(eq(webhookDeliveries.endpointId, endpointId))
-    .orderBy(desc(webhookDeliveries.createdAt))
-    .limit(50);
-
-  return c.json(deliveries);
-});
-
-/**
- * PATCH /api/settings/webhooks/:id
- * Body: { active?, events? }
- */
-webhookRoutes.patch("/:id", zValidator("json", updateEndpointSchema), async (c) => {
-  const user = c.get("user");
-  const endpointId = c.req.param("id");
-  const body = c.req.valid("json");
-
-  const existing = await db.query.webhookEndpoints.findFirst({
-    where: and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.tenantId, user.tenantId)),
-  });
-  if (!existing) return c.json({ error: "not_found" }, 404);
-
-  const updateData: Partial<typeof webhookEndpoints.$inferInsert> = {
-    updatedAt: new Date(),
-  };
-  if (body.active !== undefined) updateData.active = body.active;
-  if (body.events !== undefined) {
-    updateData.events = body.events.length > 0 ? body.events : null;
+async function fetchMetaLeadForm(leadgenId: string, accessToken: string | undefined): Promise<Record<string, string>> {
+  if (!accessToken || process.env.NODE_ENV !== "production") {
+    // Stub response for development
+    return {
+      full_name: "Meta Lead Test",
+      phone_number: "+40712000001",
+      email: "meta-lead@test.com",
+    };
   }
 
-  await db.update(webhookEndpoints).set(updateData).where(eq(webhookEndpoints.id, endpointId));
-
-  return c.json({ ok: true });
-});
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v19.0/${leadgenId}?fields=field_data&access_token=${accessToken}`
+    );
+    const data = (await res.json()) as { field_data?: Array<{ name: string; values: string[] }> };
+    const fields: Record<string, string> = {};
+    for (const item of data.field_data ?? []) {
+      fields[item.name] = item.values[0] ?? "";
+    }
+    return fields;
+  } catch {
+    return {};
+  }
+}
 
 /**
- * DELETE /api/settings/webhooks/:id
- * Permanently removes the endpoint and all its deliveries (cascade).
+ * Map Meta field names to our schema.
+ * Meta field names vary by form creator; we handle common variants.
  */
-webhookRoutes.delete("/:id", async (c) => {
-  const user = c.get("user");
-  const endpointId = c.req.param("id");
+function mapMetaFields(fields: Record<string, string>): {
+  fullName: string | null;
+  phone: string | null;
+  email: string | null;
+  interestCourse: string | null;
+} {
+  const name = fields["full_name"] || fields["name"] || fields["first_name"]
+    ? [fields["first_name"], fields["last_name"]].filter(Boolean).join(" ") || fields["full_name"] || fields["name"]
+    : null;
 
-  const existing = await db.query.webhookEndpoints.findFirst({
-    where: and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.tenantId, user.tenantId)),
-  });
-  if (!existing) return c.json({ error: "not_found" }, 404);
+  return {
+    fullName: name?.trim() || null,
+    phone: fields["phone_number"] || fields["phone"] || null,
+    email: fields["email"] || null,
+    interestCourse: fields["course"] || fields["interest"] || fields["curs"] || null,
+  };
+}
 
-  await db.delete(webhookEndpoints).where(eq(webhookEndpoints.id, endpointId));
+// ---------------------------------------------------------------------------
+// GET /webhooks/meta/lead-ads — Meta webhook verification (hub challenge)
+// ---------------------------------------------------------------------------
+webhookRoutes.get("/meta/lead-ads", async (c) => {
+  const mode = c.req.query("hub.mode");
+  const token = c.req.query("hub.verify_token");
+  const challenge = c.req.query("hub.challenge");
 
-  return c.json({ ok: true, id: endpointId });
+  const verifyToken = process.env.META_VERIFY_TOKEN ?? "vectorlearn_dev_token";
+
+  if (mode === "subscribe" && token === verifyToken) {
+    return c.text(challenge ?? "", 200);
+  }
+  return c.text("Forbidden", 403);
 });
+
+// ---------------------------------------------------------------------------
+// POST /webhooks/meta/lead-ads — Meta webhook event (lead_gen)
+// ---------------------------------------------------------------------------
+webhookRoutes.post("/meta/lead-ads", async (c) => {
+  // 1. Read raw body for HMAC verification
+  const rawBody = await c.req.text();
+  const signature = c.req.header("x-hub-signature-256");
+
+  // 2. Verify HMAC
+  if (!verifyMetaSignature(rawBody, signature)) {
+    return c.json({ error: "invalid_signature" }, 401);
+  }
+
+  // 3. Parse payload
+  let payload: {
+    object?: string;
+    entry?: Array<{
+      id?: string;
+      changes?: Array<{
+        field?: string;
+        value?: {
+          leadgen_id?: string;
+          page_id?: string;
+          form_id?: string;
+          ad_id?: string;
+          ad_group_id?: string;
+        };
+      }>;
+    }>;
+  };
+  try {
+    payload = JSON.parse(rawBody) as typeof payload;
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+
+  if (payload.object !== "page") {
+    return c.json({ status: "ignored", reason: "not_page_object" }, 200);
+  }
+
+  const results: Array<{ leadgenId: string; status: string }> = [];
+
+  for (const entry of payload.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      if (change.field !== "leadgen") continue;
+
+      const value = change.value;
+      if (!value?.leadgen_id) continue;
+
+      const leadgenId = value.leadgen_id;
+      const pageId = value.page_id ?? entry.id ?? null;
+
+      // 4. Find tenant by page_id (or use a default for dev)
+      let tenantId: string | null = null;
+
+      if (pageId) {
+        // In production, look up tenant by their Meta page_id stored in settings
+        // For now: find any active tenant (dev mode) or lookup by pageId in tenant config
+        const anyTenant = await db.query.tenants.findFirst();
+        tenantId = anyTenant?.id ?? null;
+      }
+
+      if (!tenantId) {
+        results.push({ leadgenId, status: "no_tenant_found" });
+        continue;
+      }
+
+      // 5. Idempotency: check if leadgen_id already processed
+      const alreadyProcessed = await db.query.leads.findFirst({
+        where: and(eq(leads.tenantId, tenantId), eq(leads.leadgenId, leadgenId)),
+      });
+
+      if (alreadyProcessed) {
+        // Log the duplicate event
+        await db.insert(webhookEvents).values({
+          tenantId,
+          provider: "facebook_lead_ads",
+          externalId: leadgenId,
+          payload: rawBody.slice(0, 8000),
+          leadId: alreadyProcessed.id,
+          isDuplicate: "true",
+        });
+        results.push({ leadgenId, status: "duplicate" });
+        continue;
+      }
+
+      // 6. Fetch full form data from Graph API
+      const accessToken = process.env.META_PAGE_ACCESS_TOKEN;
+      const formFields = await fetchMetaLeadForm(leadgenId, accessToken);
+      const mapped = mapMetaFields(formFields);
+
+      if (!mapped.fullName || mapped.fullName.length < 2) {
+        results.push({ leadgenId, status: "invalid_name" });
+        continue;
+      }
+
+      const phoneNormalized = normalizePhone(mapped.phone);
+      const emailNormalized = normalizeEmail(mapped.email);
+      const fullNameNormalized = normalizeName(mapped.fullName);
+
+      // 7. Dedup on phone/email as well
+      if (phoneNormalized || emailNormalized) {
+        const contactConditions = [];
+        if (phoneNormalized) contactConditions.push(eq(leads.phoneNormalized, phoneNormalized));
+        if (emailNormalized) contactConditions.push(eq(leads.emailNormalized, emailNormalized));
+        if (contactConditions.length > 0) {
+          const { or } = await import("drizzle-orm");
+          const existing = await db.query.leads.findFirst({
+            where: and(eq(leads.tenantId, tenantId), or(...contactConditions)),
+          });
+          if (existing) {
+            await db.insert(leadInteractions).values({
+              tenantId,
+              leadId: existing.id,
+              type: "system",
+              direction: "inbound",
+              body: `Facebook Lead Ads re-submit (leadgen_id: ${leadgenId})`,
+            });
+            await db.insert(webhookEvents).values({
+              tenantId,
+              provider: "facebook_lead_ads",
+              externalId: leadgenId,
+              payload: rawBody.slice(0, 8000),
+              leadId: existing.id,
+              isDuplicate: "true",
+            });
+            results.push({ leadgenId, status: "duplicate_contact" });
+            continue;
+          }
+        }
+      }
+
+      // 8. Create lead
+      const [created] = await db
+        .insert(leads)
+        .values({
+          tenantId,
+          fullName: mapped.fullName,
+          fullNameNormalized,
+          phone: mapped.phone || null,
+          phoneNormalized,
+          email: mapped.email || null,
+          emailNormalized,
+          interestCourse: mapped.interestCourse || null,
+          source: "facebook_ad",
+          leadgenId,
+          metaFormId: value.form_id || null,
+          metaAdId: value.ad_id || null,
+          utmCampaign: value.ad_group_id || null,
+          // Meta consent is managed by Meta — mark as Meta-managed
+          consentText: "Meta-managed consent (Facebook Lead Ads form)",
+          consentAt: new Date(),
+        })
+        .returning();
+
+      // 9. Log webhook event
+      await db.insert(webhookEvents).values({
+        tenantId,
+        provider: "facebook_lead_ads",
+        externalId: leadgenId,
+        payload: rawBody.slice(0, 8000),
+        leadId: created.id,
+        isDuplicate: "false",
+      });
+
+      // 10. System interaction
+      await db.insert(leadInteractions).values({
+        tenantId,
+        leadId: created.id,
+        type: "system",
+        direction: "inbound",
+        body: `Lead created via Facebook Lead Ads (leadgen_id: ${leadgenId})`,
+      });
+
+      results.push({ leadgenId, status: "created" });
+    }
+  }
+
+  return c.json({ status: "ok", results });
+});
+
+// ---------------------------------------------------------------------------
+// Google Ads helpers (CRM-104 + CRM-111)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build Google Offline Conversion payload for a converted lead.
+ * Called by CRM-111 (convert lead → student) when gclid is present.
+ */
+export function buildGoogleOfflineConversionPayload(params: {
+  gclid: string;
+  conversionName: string;
+  conversionValue?: number;
+  conversionDateTime: Date;
+  currencyCode?: string;
+}): Record<string, unknown> {
+  return {
+    conversions: [
+      {
+        gclid: params.gclid,
+        conversion_name: params.conversionName,
+        conversion_date_time: params.conversionDateTime.toISOString(),
+        conversion_value: params.conversionValue ?? 0,
+        currency_code: params.currencyCode ?? "RON",
+      },
+    ],
+  };
+}
