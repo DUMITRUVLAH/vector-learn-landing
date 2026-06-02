@@ -2827,6 +2827,7 @@
       "depends_on": ["COURSE-201"],
       "title": "Grupe cu capacitate maximă și waitlist",
       "branch": "feat/COURSE-faza-2-edit-archive",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/120",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
@@ -2839,14 +2840,26 @@
       ]
     },
     "COURSE-203": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/COURSE-203-promo-codes.md",
       "milestone": "COURSE",
       "phase": "2",
       "depends_on": ["COURSE-201"],
-      "title": "Coduri promo cu discount (%) sau sumă fixă"
+      "title": "Coduri promo cu discount (%) sau sumă fixă",
+      "branch": "feat/COURSE-faza-2-edit-archive",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/120",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "reports": [
+        "backlog/reports/COURSE-203-manager.md",
+        "backlog/reports/COURSE-203-student.md"
+      ]
     }
   }
 }
