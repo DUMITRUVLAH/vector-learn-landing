@@ -13,6 +13,7 @@ import { tenants } from "./tenants";
 import { leads } from "./leads";
 import { students } from "./students";
 import { users } from "./users";
+import { courses } from "./courses";
 
 export const beneficiaryTypeEnum = pgEnum("beneficiary_type", ["pf", "pj"]);
 export const contractFormatEnum = pgEnum("contract_format", ["fizic", "online"]);
@@ -57,6 +58,12 @@ export const contracts = pgTable(
     currency: contractCurrencyEnum("currency").notNull().default("MDL"),
     persons: integer("persons").notNull().default(1),
 
+    /**
+     * INTEG-202: FK to courses — structural link for revenue-per-course analytics.
+     * Nullable (backward compatible). ON DELETE SET NULL.
+     * contracts.course (varchar) is preserved for display/template; courseId is the FK.
+     */
+    courseId: uuid("course_id").references(() => courses.id, { onDelete: "set null" }),
     /** Optional link to source lead */
     leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
     /** Optional link to source student */

@@ -1,74 +1,61 @@
 ---
 id: INTEG-201
-title: Lead→cohort auto-enroll la conversie — CRM conectat cu CX
+title: "Integrare UX: auto-enroll lead→cohortă la conversie (lead.courseId→cohortParticipants)"
 milestone: INTEG
-phase: "2"
-branch: feat/INTEG-faza-2-ux-cross-module
-status: pending
-attempts: 0
-depends_on: [INTEG-101, INTEG-103]
+phase: 2
+status: in_progress
+depends_on: [CRM-111, CX-703, INTEG-101]
+slug: lead-cohort-autoenroll
 ---
 
 ## Goal
 
-Când un lead se convertește în student, nu există nicio modalitate de a-l înscrie direct într-o cohortă. Managerul trebuie să meargă manual în CX și să-l adauge. Implementăm auto-enroll opțional: la conversie, dacă se specifică un `cohortId`, se creează automat un `cohort_participants` row.
+Când un lead este convertit în student (`POST /api/leads/:id/convert`) și lead-ul are
+`courseId` setat (INTEG-101), sistemul caută automat cea mai apropiată cohortă activă sau
+viitoare pentru acel curs și înscrie studentul ca participant cu `source: "crm"`,
+`paymentStatus: "pending"`.
+
+Dacă nu există nicio cohortă activă/viitoare pentru cursul respectiv, conversia continuă
+normal fără eroare — auto-enroll este oportunistic, nu blocant.
+
+## In scope
+
+- PATCH `POST /api/leads/:id/convert`: după crearea studentului, dacă `lead.courseId` ≠ null,
+  caută cohortă activă/upcoming pentru acel curs (categoria ≠ "past"), alege prima după startDate asc.
+- Dacă găsește cohortă, inserează în `cohort_participants` cu source="crm", paymentStatus="pending",
+  fullName copiat din student, email/phone copiate dacă există.
+- Răspunsul extinde cu `autoEnrolledCohortId: string | null`.
+- Tests: T-INTEG-201-1..5 verzi.
+- Fără migrare nouă (tabele existente).
+
+## Out of scope
+
+- UI pentru selectarea manuală a cohortei la conversie (item separat).
+- Deduplicare participant (dacă studentul era deja în cohortă, întoarce conflictul fără crash).
 
 ## User stories
 
-- Ca manager CRM, când convertesc un lead în student, vreau să pot selecta cohorta în care se înscrie direct din dialogul de conversie, pentru că evit 2 pași manuali.
-- Ca sistem, vreau că dacă lead-ul are `courseId` setat, să îmi sugerez cohortele active pentru acel curs, pentru că reduce erorile de asociere.
+- **US-1**: Ca manager, vreau ca leadul să fie înscris automat la cohortă la conversie pentru a elimina pasul manual.
+- **US-2**: Ca manager, vreau ca dacă nu există cohortă activă, conversia să reușească fără eroare.
 
 ## Acceptance criteria
 
-1. `convertLeadSchema` în `server/routes/leads.ts` (linia ~735) acceptă opțional:
-   ```ts
-   cohortId: z.string().uuid().optional().nullable()
-   ```
-
-2. Handler-ul `POST /api/leads/:id/convert` — după crearea studentului, dacă `body.cohortId` e prezent:
-   - Inserează în `cohort_participants`:
-     ```ts
-     {
-       tenantId,
-       cohortId: body.cohortId,
-       studentId: newStudent.id,
-       fullName: newStudent.fullName,
-       source: 'crm',
-       paymentStatus: null,
-       amountCents: 0,
-     }
-     ```
-   - Dacă inserarea eșuează (cohortă inexistentă, student deja înscris), conversia continuă — eroarea se loghează dar nu blochează studentul.
-
-3. Frontend `LeadCardPage.tsx` — dialogul de conversie include:
-   - Un selector "Înscrie în cohortă (opțional)"
-   - Populat de `GET /api/cohorts?courseId=<lead.courseId>&status=active`
-   - Dacă lead-ul nu are `courseId`, selectorul afișează toate cohortele active
-   - Valoarea selectată se trimite ca `cohortId` în `POST /api/leads/:id/convert`
-
-4. Response-ul `POST /api/leads/:id/convert` include:
-   ```json
-   { "studentId": "...", "cohortParticipantId": "..." | null }
-   ```
-
-5. Nicio migrare nouă necesară (tabelele există deja).
-
-## Files touched
-
-- `server/routes/leads.ts` — `convertLeadSchema` + insert cohort_participants
-- `src/pages/app/LeadCardPage.tsx` — dialog conversie + selector cohortă
-- `src/lib/api/leads.ts` — actualizează `ConvertLeadPayload`
+- [ ] AC1: POST /api/leads/:id/convert cu lead.courseId setat → studentul apare în cohort_participants.
+- [ ] AC2: Auto-enroll alege cohorta cu startDate cel mai apropiat (upcoming/active, nu past).
+- [ ] AC3: Răspunsul conține autoEnrolledCohortId (uuid sau null).
+- [ ] AC4: Dacă nu există cohortă pentru cursul respectiv → autoEnrolledCohortId: null, fără eroare.
+- [ ] AC5: Participant creat cu source="crm", paymentStatus="pending", tenant-safe.
+- [ ] AC6: Dacă lead.courseId null → autoEnrolledCohortId: null, fără tentativă de enroll.
 
 ## Tests
 
-- Unit: conversie cu `cohortId` valid → `cohort_participants` row creat
-- Unit: conversie fără `cohortId` → student creat, fără cohort row, fără eroare
-- Unit: conversie cu `cohortId` invalid → student creat, eroare logată, fără 500
-- Integration: smoke — `POST /api/leads/:id/convert` cu cohortId → 200
+- **T-INTEG-201-1** `[blocant]` Conversia cu courseId setat → autoEnrolledCohortId ≠ null.
+- **T-INTEG-201-2** `[blocant]` Participant creat cu source="crm", paymentStatus="pending".
+- **T-INTEG-201-3** `[blocant]` Conversia fără courseId → autoEnrolledCohortId: null (no crash).
+- **T-INTEG-201-4** Conversia când nu există cohortă pentru curs → autoEnrolledCohortId: null.
+- **T-INTEG-201-5** Logica de selecție a cohortei alege upcoming/active, nu past.
 
-## DoD
+## Definition of Done
 
-- [ ] `convertLeadSchema` acceptă `cohortId` opțional
-- [ ] Auto-enroll funcționează end-to-end
-- [ ] Dialog conversie afișează selector cohortă
-- [ ] Tests verzi
+- [ ] AC1-6 bifate; T-INTEG-201-1..5 verzi; build+typecheck+lint+test verzi
+- [ ] Fără migrare.

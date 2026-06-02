@@ -1,61 +1,55 @@
 ---
 id: INTEG-202
-title: ContractsPage — picker curs real (contracts.courseId FK)
+title: "Integrare: contracts.courseId — contract legat de curs (FK→courses)"
 milestone: INTEG
-phase: "2"
-branch: feat/INTEG-faza-2-ux-cross-module
-status: pending
-attempts: 0
-depends_on: [INTEG-101]
+phase: 2
+status: in_progress
+depends_on: [INTEG-201, CONTRACT-501]
+slug: contracts-course-picker
 ---
 
 ## Goal
 
-Câmpul "Cursul" din contracte este un `<input type="text">` liber. Nu există nicio legătură cu entitatea `courses`. Adăugăm `courseId FK` pe contracts și înlocuim input-ul cu un selector real.
+Adaugă `course_id` (FK→courses, nullable, ON DELETE SET NULL) pe tabela `contracts`.
+Existent: contracts.course (varchar text). Nou: contracts.courseId (UUID FK).
+
+Aceasta permite: (1) legătura contractelor la cursuri structurate, (2) rapoarte de contracte per curs.
+
+## In scope
+
+- Migration: ADD COLUMN course_id uuid + FK constraint.
+- Schema Drizzle: contracts.courseId.
+- Route POST /api/contracts: acceptă courseId.
+- Route PATCH /api/contracts/:id: acceptă courseId.
+- GET /api/contracts: returnează courseId + courseName din JOIN.
+- Tests: T-INTEG-202-1..4 verzi.
+
+## Out of scope
+
+- UI dropdown de selectare curs (UI item separat).
+- Ștergerea câmpului course (varchar) — păstrat pentru backward compat.
 
 ## User stories
 
-- Ca manager, când creez un contract, vreau să selectez cursul dintr-o listă, pentru că nu pot greși numele cursului.
-- Ca sistem, vreau că contractele să fie legate de cursuri reale prin FK, pentru că pot raporta câte contracte per curs.
+- **US-1**: Ca manager, vreau să leagă contractele de cursuri structurate pentru a raporta corect venitul.
+- **US-2**: Ca manager, vreau să văd câte contracte sunt per curs.
 
 ## Acceptance criteria
 
-1. Migrare `0036_integ202_contracts_course.sql` adaugă:
-   - `course_id UUID REFERENCES courses(id) ON DELETE SET NULL` pe tabela `contracts`
-   - Nullable (câmpul `course varchar` rămâne ca snapshot text pentru PDF)
-
-2. Schema drizzle `server/db/schema/contracts.ts` include `courseId`.
-
-3. Route `server/routes/contracts.ts`:
-   - `createContractSchema` și `updateContractSchema` acceptă opțional `courseId`
-   - La salvare, dacă `courseId` e furnizat, copiază și `courses.name` în câmpul `course` (snapshot)
-   - `GET /api/contracts` returnează `courseId` și `courseName`
-
-4. Frontend `src/pages/app/ContractsPage.tsx` (linia ~555):
-   - Câmpul "Cursul" devine `<select>` populat de `GET /api/courses`
-   - Label = `courses.name`, valoare = `courses.id`
-   - Câmpul text `course` se populează automat din selecție
-
-5. Migrare fără erori.
-
-## Files touched
-
-- `server/db/schema/contracts.ts`
-- `server/routes/contracts.ts`
-- `src/pages/app/ContractsPage.tsx`
-- `src/lib/api/contracts.ts`
-- `drizzle/` — migrare `0036_integ202_...`
+- [ ] AC1: Migration adaugă course_id (nullable, FK→courses) pe contracts.
+- [ ] AC2: POST /api/contracts cu courseId → salvat.
+- [ ] AC3: GET /api/contracts returnează courseId + courseName.
+- [ ] AC4: Contractele existente fără courseId nu se sparg.
+- [ ] AC5: tenant-safe; zero `any`; fără raw `.execute().rows`.
 
 ## Tests
 
-- Unit: `contracts.courseId` se salvează corect
-- Unit: `course` snapshot se populează din `courses.name`
-- Integration: `POST /api/contracts` cu `courseId` → 201
+- **T-INTEG-202-1** `[blocant]` Schema contracts.courseId există și e nullable.
+- **T-INTEG-202-2** `[blocant]` POST /api/contracts cu courseId → 201, courseId setat.
+- **T-INTEG-202-3** `[blocant]` GET /api/contracts returnează courseName (sau null).
+- **T-INTEG-202-4** Contracte fără courseId sunt backward compatible (courseId null).
 
-## DoD
+## Definition of Done
 
-- [ ] Migrare generată și committată
-- [ ] `db:reset && db:seed` trece
-- [ ] Selector curs funcțional în UI
-- [ ] Snapshot `course` text se populează automat
-- [ ] Tests verzi
+- [ ] AC1-5; T-INTEG-202-1..4 verzi; build+typecheck+lint+test verzi
+- [ ] Migration + portability verzi (§3.5.1)

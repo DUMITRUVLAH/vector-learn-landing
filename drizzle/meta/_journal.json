@@ -274,6 +274,13 @@
       "when": 1780502000000,
       "tag": "0038_integ103_cohorts_branch_id",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1780503000000,
+      "tag": "0039_integ202_contracts_course_fk",
+      "breakpoints": true
     }
   ]
 }

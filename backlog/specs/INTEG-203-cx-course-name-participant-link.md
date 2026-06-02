@@ -1,69 +1,66 @@
 ---
 id: INTEG-203
-title: CX — course name real în export + link participant→student
+title: "Integrare: CX cohortă — afișare curs + link participant→student"
 milestone: INTEG
-phase: "2"
-branch: feat/INTEG-faza-2-ux-cross-module
+phase: 2
 status: pending
-attempts: 0
-depends_on: [INTEG-103]
+depends_on: [INTEG-201, CX-703]
+slug: cx-course-name-participant-link
 ---
 
 ## Goal
 
-Două goluri de UX în modulul CX:
-1. Export CSV cohortă folosește `selectedCohort.label` ca `courseName` în loc de `courses.name` real
-2. Participanții care au un `studentId` nu au niciun link spre profilul lor din Students
+Închide inelul CX↔Courses↔Students:
+
+1. **CohortHeader** afișează numele cursului (din `cohort.courseId` JOIN courses) cu un link către `/app/courses`.
+2. **ParticipantTable** — participanții cu `source='crm'` (i.e. `studentId` non-null) au un link clickabil pe numele lor → `/app/students/:studentId` (fișa studentului).
+
+Fără aceste două linkuri, managerul trebuie să navigheze manual între CX, Cursuri și Studenți — rupând fluxul.
+
+## In scope
+
+- `GET /api/cohorts` (sau `GET /api/cohorts/:id`) returnează `courseId` + `courseName` (JOIN courses).
+- `CohortHeader` afișează `courseName` cu link (dacă `courseId` e prezent).
+- `ParticipantTable` — celula cu `fullName` a participanților `source='crm'` devine link `<a href="#/app/students/:studentId">`.
+- Zero hardcoded colors; semantic tokens; dark mode; WCAG AA.
+
+## Out of scope
+
+- Editare curs din CX (separat).
+- Linkuri pentru participanți manuali (aceștia nu au `studentId`).
 
 ## User stories
 
-- Ca manager, când export o cohortă în CSV, vreau că coloana "Cursul" să afișeze numele real al cursului, nu eticheta cohortei, pentru că documentul trebuie să fie corect.
-- Ca manager CX, când văd un participant care e și student în sistem, vreau să pot da click pe numele lui și să ajung la fișa lui din Students, pentru că nu renavighezi manual.
+- **US-1**: Ca manager, vreau să văd imediat ce curs este legat de o cohortă, fără să navighez separat în Cursuri.
+- **US-2**: Ca manager, vreau să deschid fișa studentului dintr-un participant CRM cu un singur click.
+- **US-3**: Ca manager, vreau să văd rapid dacă o cohortă NU are curs asociat (link absent = avertisment implicit).
 
 ## Acceptance criteria
 
-### 1. Course name real în export
+- [ ] AC1: `GET /api/cohorts` include `courseName` (string sau null) pentru fiecare cohortă.
+- [ ] AC2: `CohortHeader` afișează `courseName` cu un link sau badge; dacă null → nu afișează nimic (graceful).
+- [ ] AC3: Participanții `source='crm'` cu `studentId` non-null → `fullName` e un `<a>` cu href `#/app/students/:studentId`.
+- [ ] AC4: Participanții `source='manual'` rămân text simplu.
+- [ ] AC5: tenant-safe; zero `any`; fără raw `.execute().rows`; link-uri nu produc erori 404.
 
-- `src/pages/app/CXPage.tsx` — după încărcarea cohortelor, fetch-uiește cursurile distincte:
-  ```ts
-  const courseIds = [...new Set(cohorts.map(c => c.courseId).filter(Boolean))]
-  // GET /api/courses?ids=uuid1,uuid2,...
-  ```
-- Construiește un map `courseId → courseName`
-- La export CSV (linia ~99): `courseName: courseMap[selectedCohort.courseId] ?? selectedCohort.label`
+## Files
 
-### 2. Link participant→student
-
-- `src/components/modules/cx/ParticipantTable.tsx`:
-  - Când `participant.studentId !== null`, wrap name-ul în `<button>` sau `<a>` cu handler de navigație
-  - La click: navighează la `/app/students` cu un parametru de highlight (ex: `?studentId=...`) SAU deschide un mini-popover cu datele de bază ale studentului
-  - Implementare simplă: `onClick={() => window.location.hash = '#/app/students?studentId=' + participant.studentId}`
-  - Iconița de link (extern) afișată lângă nume când `studentId` există
-
-### 3. `GET /api/courses` suportă param `?ids=uuid1,uuid2`
-
-- `server/routes/courses.ts` acceptă query param `ids` (CSV de UUID-uri)
-- Returnează array de cursuri filtrate după acele ID-uri
-- Necesar pentru fetch-ul batch din CXPage
-
-## Files touched
-
-- `src/pages/app/CXPage.tsx` — batch fetch cursuri + courseMap
-- `src/components/modules/cx/ParticipantTable.tsx` — link student
-- `server/routes/courses.ts` — param `?ids=` pentru batch fetch
-- `src/lib/api/courses.ts` — actualizează `listCourses` să accepte `ids`
+### Modified
+- `server/routes/cohorts.ts` — JOIN courses pentru `courseName` în `listCohorts`
+- `src/lib/api/cohorts.ts` — tipul `Cohort` adaugă `courseId?: string | null`, `courseName?: string | null`
+- `src/components/modules/cx/CohortTabs.tsx` — (opțional) afișare curs în selector
+- `src/pages/app/CXPage.tsx` — `CohortHeader` afișează courseName + link
+- `src/components/modules/cx/ParticipantTable.tsx` — link pe fullName pentru source='crm'
 
 ## Tests
 
-- Unit: CXPage CSV export conține `courseName` din `courses.name`
-- Unit: ParticipantTable afișează link când `studentId !== null`
-- Unit: ParticipantTable nu afișează link când `studentId === null`
-- Integration: `GET /api/courses?ids=uuid1,uuid2` returnează array filtrat
+- **T-INTEG-203-1** `[blocant]` `GET /api/cohorts` include `courseName` (string sau null) pentru fiecare cohortă.
+- **T-INTEG-203-2** `[blocant]` `CohortHeader` cu `courseName` setat → render include courseName.
+- **T-INTEG-203-3** `[blocant]` `ParticipantTable` cu participant `source='crm'` + `studentId` → link `href` conține studentId.
+- **T-INTEG-203-4** Participant `source='manual'` → fără link (text simplu).
+- **T-INTEG-203-5** API smoke: `GET /api/cohorts` → 200 cu array (tenant autenticat).
 
-## DoD
+## Definition of Done
 
-- [ ] Export CSV cu course name real
-- [ ] Link participant→student funcțional
-- [ ] `GET /api/courses?ids=` suportat
-- [ ] Tests verzi
-- [ ] Nicio migrare necesară
+- [ ] AC1-5; T-INTEG-203-1..5 verzi; build+typecheck+lint+test verzi
+- [ ] No hardcoded colors; dark mode OK; a11y: link are text descriptiv

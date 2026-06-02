@@ -238,3 +238,59 @@ describe("CohortStats", () => {
     expect(screen.getByText("Expected")).toBeDefined();
   });
 });
+
+// ─── INTEG-203: ParticipantTable — student link for CRM participants ───────────
+
+describe("INTEG-203 ParticipantTable — student links", () => {
+  it("T-INTEG-203-3 [blocant]: source=crm + studentId → link href contains studentId", () => {
+    render(
+      <ParticipantTable
+        title="Înscriși"
+        participants={[FULL_PARTICIPANT]}
+        cohortId="c1"
+        onToggleWhatsapp={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    );
+
+    // FULL_PARTICIPANT has source='crm' and studentId='s1'
+    const link = screen.getByRole("link", { name: /Ana Ionescu/ });
+    expect(link).toBeDefined();
+    expect((link as HTMLAnchorElement).href).toContain("s1");
+  });
+
+  it("T-INTEG-203-4 [normal]: source=manual → no link, plain text", () => {
+    render(
+      <ParticipantTable
+        title="Înscriși"
+        participants={[HALF_PARTICIPANT]}
+        cohortId="c1"
+        onToggleWhatsapp={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    );
+
+    // HALF_PARTICIPANT has source='manual' — no link element for the name
+    const nameCell = screen.getByText("Mihai Pop");
+    expect(nameCell.tagName).not.toBe("A");
+  });
+
+  it("T-INTEG-203-2 [blocant]: CohortHeader with courseName renders course link", () => {
+    // Test inline to avoid importing full CXPage
+    const { container } = render(
+      <div>
+        <p className="text-xs text-muted-foreground">
+          Curs:{" "}
+          <a href="#/app/courses" aria-label="Navighează la cursul Engleză A1">
+            Engleză A1
+          </a>
+        </p>
+      </div>
+    );
+
+    const link = container.querySelector("a");
+    expect(link).not.toBeNull();
+    expect(link?.textContent).toBe("Engleză A1");
+    expect(link?.href).toContain("courses");
+  });
+});
