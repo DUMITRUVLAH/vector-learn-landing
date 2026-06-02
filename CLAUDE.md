@@ -277,6 +277,33 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
   returns 500. The `feature-builder` must check this after creating any new schema file. The
   `integration-architect` and `code-reviewer-vl` must flag it if missing. No exceptions.
 
+### 3.5.1ter The 2026-06-02 prod-outage lessons (READ before merging anything to main)
+On 2026-06-02 the whole app went down for hours after 38 stale PRs were merged to `main` at
+once. The mechanical conflict resolution produced syntactically broken files (`users.ts` with a
+comment line missing its `/*`), dropped ~100 imports (`Medal`, 19 page imports in `App.tsx`,
+`z` in `teachers.ts`), desynced migration tracking, and shipped DB columns no migration created.
+Cascade: build failed → login 500 → page 500s → white screen. Three guardrails now exist and
+are NON-NEGOTIABLE:
+
+1. **Build gate on undefined references (`scripts/check-undefined-refs.mjs`).** `vercel.json`
+   runs it FIRST — it fails the deploy on any TS2304/2552 ("Cannot find name"). This is the
+   guard that matters most: `vite build` (esbuild) does NOT type-check, so a missing import
+   compiles and ships, then becomes a runtime ReferenceError (white screen / 500 on every
+   request). NEVER remove this step. It gates ONLY undefined refs, not the ~240 pre-existing
+   type-quality errors (those don't crash at runtime); do not "fix" it by gating all of tsc.
+2. **Self-healing schema sync (`server/db/sync-schema.ts`).** Runs after migrations on every
+   deploy; adds (never drops) any column the schema expects but the DB lacks. Prevents
+   "column X does not exist". Whole missing TABLES still need a real migration — it logs those.
+3. **Post-deploy smoke (`npm run smoke` → `scripts/e2e-smoke.mjs`).** Real headless-browser
+   login + 23-route sweep that scans for caught error TEXT (red messages), not just JS crashes —
+   because most API failures render as text and a pageerror-only check reports false "all clean".
+   Run it after every prod deploy: `npm run smoke` (or `BASE_URL=… npm run smoke`).
+
+**Never again merge N divergent PRs blind.** One phase = one PR (§0.2). If branches have piled
+up, merge oldest-first ONE at a time, and after each: `npm run check-refs` + `vite build` must
+pass before the next. After the final merge + deploy, `npm run smoke` must be green. A merge
+that hasn't been built+smoke-tested has not shipped — it's just broken code on `main`.
+
 ### 3.5.1bis Backlog critic (don't build the first draft of a spec either)
 **Whenever new backlog features are written** (the PLAN step auto-generates a module, or new
 specs/items are added on owner request), the **`backlog-critic`** agent reviews them BEFORE any are

@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "check-refs": "node scripts/check-undefined-refs.mjs",
+    "smoke": "node scripts/e2e-smoke.mjs",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 100",
     "test": "vitest",
     "test:run": "vitest run",
