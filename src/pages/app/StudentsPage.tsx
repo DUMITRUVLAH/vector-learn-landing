@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare, Upload } from "lucide-react";
+import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare, Upload, Download } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { StudentForm } from "@/components/app/StudentForm";
 import { ImportStudentsModal } from "@/components/app/ImportStudentsModal"; // STU-203
@@ -124,6 +124,22 @@ export function StudentsPage() {
       pageDescription={`${total} ${total === 1 ? "elev" : "elevi"} în baza ta de date · ${activeCount} activi în vizualizarea curentă`}
       actions={
         <div className="flex gap-2">
+          {/* STU-204: Export CSV — sends current filters */}
+          <button
+            type="button"
+            onClick={() => {
+              const qs = new URLSearchParams();
+              if (statusFilter && statusFilter !== "all") qs.set("status", statusFilter);
+              if (debouncedSearch) qs.set("search", debouncedSearch);
+              const query = qs.toString();
+              window.location.href = `/api/students/export${query ? `?${query}` : ""}`;
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+            aria-label="Exportă lista curentă în CSV"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </button>
           {/* STU-203: Import CSV */}
           <button
             type="button"

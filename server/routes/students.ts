@@ -332,6 +332,89 @@ studentRoutes.delete("/:id/notes/:noteId", async (c) => {
   return c.json({ ok: true });
 });
 
+// ─── STU-204: CSV export ──────────────────────────────────────────────────────
+
+const exportQuerySchema = z.object({
+  status: z.enum(["active", "trial", "paused", "archived", "all"]).default("all"),
+  search: z.string().optional(),
+});
+
+/** STU-204: GET /api/students/export — streaming CSV download */
+studentRoutes.get("/export", zValidator("query", exportQuerySchema), async (c) => {
+  const { status, search } = c.req.valid("query");
+  const tenantId = c.get("user").tenantId;
+
+  const conditions = [eq(students.tenantId, tenantId)];
+  if (status !== "all") {
+    conditions.push(eq(students.status, status));
+  }
+  if (search && search.trim()) {
+    const q = `%${search.trim()}%`;
+    const searchCondition = or(
+      ilike(students.fullName, q),
+      ilike(students.email, q),
+      ilike(students.phone, q),
+      ilike(students.parentEmail, q),
+      ilike(students.parentPhone, q)
+    );
+    if (searchCondition) conditions.push(searchCondition);
+  }
+
+  const rows = await db
+    .select({
+      fullName: students.fullName,
+      email: students.email,
+      phone: students.phone,
+      parentPhone: students.parentPhone,
+      parentEmail: students.parentEmail,
+      status: students.status,
+      createdAt: students.createdAt,
+    })
+    .from(students)
+    .where(and(...conditions))
+    .orderBy(desc(students.createdAt))
+    .limit(5000);
+
+  const TRUNCATE_LIMIT = 5000;
+  const truncated = rows.length >= TRUNCATE_LIMIT;
+
+  // Build CSV manually — no new dependencies
+  const header = ["Nume complet", "Email", "Telefon", "Email Parinte", "Telefon Parinte", "Status", "Data inscrierii"];
+  const csvLines: string[] = [header.join(",")];
+  for (const r of rows) {
+    const line = [
+      csvEscape(r.fullName),
+      csvEscape(r.email ?? ""),
+      csvEscape(r.phone ?? ""),
+      csvEscape(r.parentEmail ?? ""),
+      csvEscape(r.parentPhone ?? ""),
+      csvEscape(r.status),
+      csvEscape(r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : ""),
+    ].join(",");
+    csvLines.push(line);
+  }
+
+  const csvBody = csvLines.join("\r\n");
+  const dateStr = new Date().toISOString().slice(0, 10);
+
+  const headers: Record<string, string> = {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": `attachment; filename="elevi-${dateStr}.csv"`,
+  };
+  if (truncated) {
+    headers["X-Truncated"] = "true";
+  }
+
+  return new Response("﻿" + csvBody, { status: 200, headers });
+});
+
+function csvEscape(val: string): string {
+  if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+    return `"${val.replace(/"/g, '""')}"`;
+  }
+  return val;
+}
+
 // ─── STU-203: CSV/Excel import ────────────────────────────────────────────────
 
 const importRowSchema = z.object({

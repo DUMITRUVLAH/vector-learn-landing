@@ -2762,8 +2762,8 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/119"
     },
     "STU-204": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/STU-204-student-export.md",
       "milestone": "STUDENTS",
