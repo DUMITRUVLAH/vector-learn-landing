@@ -16,6 +16,7 @@ import { db } from "../db/client";
 import {
   leads, adCampaignBudgets, pipelineStages,
   lessons, courses, teachers, invoices, students, studentLessons,
+  branches, payments, users,
 } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
@@ -449,10 +450,11 @@ analyticsRoutes.get("/revenue-by-teacher", async (c) => {
   const thirtyISO = thirtyDaysAgo.toISOString();
   const nowISO = now.toISOString();
 
-  // All teachers in tenant
+  // All teachers in tenant (join users to get name)
   const teacherList = await db
-    .select({ id: teachers.id, name: teachers.fullName })
+    .select({ id: teachers.id, name: users.name })
     .from(teachers)
+    .innerJoin(users, eq(teachers.userId, users.id))
     .where(eq(teachers.tenantId, tenantId));
 
   if (teacherList.length === 0) return c.json([]);

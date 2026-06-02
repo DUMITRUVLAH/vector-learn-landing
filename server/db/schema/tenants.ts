@@ -15,6 +15,12 @@ export const tenants = pgTable("tenants", {
   rrUserIds: jsonb("rr_user_ids").$type<string[]>().notNull().default([]),
   /** CRM-135: Pointer to next user in rotation (incrementing counter) */
   rrIndex: integer("rr_index").notNull().default(0),
+  /** CRM-124: SLA threshold for "hot" leads in minutes (default 15) */
+  slaHotMinutes: integer("sla_hot_minutes").notNull().default(15),
+  /** CRM-124: Default SLA threshold for all leads in hours (default 24) */
+  slaDefaultHours: integer("sla_default_hours").notNull().default(24),
+  /** CRM-124: Days until a lead is considered "rotting" (default 7) */
+  rotDays: integer("rot_days").notNull().default(7),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

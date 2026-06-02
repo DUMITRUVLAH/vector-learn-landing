@@ -2,6 +2,7 @@ import { pgTable, uuid, varchar, timestamp, pgEnum, date, index, integer, jsonb,
 import { tenants } from "./tenants";
 import { families } from "./families";
 import { branches } from "./branches";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 
 export const studentStatusEnum = pgEnum("student_status", [
@@ -36,6 +37,8 @@ export const students = pgTable(
     preferredTimeStart: time("preferred_time_start"),
     /** GAP-001: Preferred time window end (e.g. "19:00") */
     preferredTimeEnd: time("preferred_time_end"),
+    /** BRANCH-701: Branch this student belongs to (nullable = unassigned) */
+    branchId: uuid("branch_id").references((): AnyPgColumn => branches.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -44,6 +47,7 @@ export const students = pgTable(
     statusIdx: index("students_status_idx").on(t.tenantId, t.status),
     nameIdx: index("students_name_idx").on(t.tenantId, t.fullName),
     debtIdx: index("students_debt_idx").on(t.tenantId, t.debtCents),
+    branchIdx: index("students_branch_idx").on(t.branchId),
   })
 );
 

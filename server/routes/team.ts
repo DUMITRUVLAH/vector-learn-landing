@@ -15,7 +15,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { db } from "../db/client";
-import { users, userInvitations } from "../db/schema";
+import { users, userInvitations, invitations } from "../db/schema";
 import { hashPassword } from "../auth/password";
 import { createSession, SESSION_COOKIE } from "../auth/session";
 import { setCookie } from "hono/cookie";

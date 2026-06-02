@@ -3,12 +3,72 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, asc, count, desc, eq, gte, ilike, inArray, ne, or } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, leadTags, courses, lessons, studentLessons, lessonPackages } from "../db/schema";
+import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, leadTags, courses, lessons, studentLessons, lessonPackages, cohorts, cohortParticipants, users, leadMentions, inAppNotifications } from "../db/schema";
 import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 import { fireTrigger } from "../lib/automationEngine";
 import { autoAssign } from "../lib/roundRobin";
+import { dispatchWebhook } from "../lib/webhookDispatch";
+import { createNotification, notifyManagersAndOwners } from "../lib/createNotification";
+import { enrollLeadInCadences } from "./cadences";
+import { writeAuditLog } from "../lib/auditLogger";
+import { randomBytes } from "node:crypto";
+
+// ─── CRM-127: lightweight auditLog adapter with a simpler call signature ─────
+async function auditLog(entry: {
+  tenantId: string;
+  actorId?: string | null;
+  entityId?: string | null;
+  action: string;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+}): Promise<void> {
+  return writeAuditLog({
+    tenantId: entry.tenantId,
+    actorId: entry.actorId,
+    actionType: entry.action,
+    targetType: "lead",
+    targetId: entry.entityId,
+    oldValue: entry.before,
+    newValue: entry.after,
+  });
+}
+
+// ─── CRM-127: In-memory undo store for deleted leads (35 s TTL) ──────────────
+interface UndoEntry {
+  leadIds: string[];
+  snapshots: Record<string, unknown>[];
+  expiresAt: number;
+}
+const undoStore = new Map<string, UndoEntry>();
+
+function generateUndoToken(): string {
+  return randomBytes(16).toString("hex");
+}
+
+function cleanExpiredTokens(): void {
+  const now = Date.now();
+  for (const [key, entry] of undoStore.entries()) {
+    if (entry.expiresAt < now) undoStore.delete(key);
+  }
+}
+
+// ─── CRM-134: Parse @mentions from a note body ───────────────────────────────
+function parseMentionedUserIds(
+  text: string,
+  members: Array<{ id: string; name: string }>
+): string[] {
+  const mentioned: string[] = [];
+  for (const member of members) {
+    // Match @FirstName or @Full Name (case-insensitive, word boundary before @)
+    const escapedName = member.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`@${escapedName}`, "i").test(text)) {
+      mentioned.push(member.id);
+    }
+  }
+  return mentioned;
+}
 
 const STAGES = ["new", "contacted", "trial", "paid", "lost"] as const;
 const SOURCES = [

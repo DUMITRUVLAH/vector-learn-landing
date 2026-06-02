@@ -5,7 +5,10 @@ import { and, eq, gte, lt, ne, sql, asc } from "drizzle-orm";
 import { db } from "../db/client";
 import { lessons, courses, teachers, users, students, studentLessons, lessonPackages, auditLog } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { withBranchFilter } from "../middleware/branchScope";
 import { scheduleExhaustionAlert } from "./lessonPackages";
+import { deductUnit, restoreUnit } from "../lib/lessonPackageOps";
+import { notificationService } from "../lib/notificationService";
 
 const createLessonSchema = z.object({
   courseId: z.string().uuid(),
@@ -94,10 +97,11 @@ async function findConflict(
 
 lessonRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
   const { from, to, leadId } = c.req.valid("query");
-  const tenantId = c.get("user").tenantId;
+  const currentUser = c.get("user");
+  const tenantId = currentUser.tenantId;
   const conditions = [eq(lessons.tenantId, tenantId)];
   // BRANCH-703: restrict to user's branch scope
-  withBranchFilter(user, conditions, lessons.branchId);
+  withBranchFilter(currentUser, conditions, lessons.branchId);
   if (from) conditions.push(gte(lessons.scheduledAt, new Date(from)));
   if (to) conditions.push(lt(lessons.scheduledAt, new Date(to)));
   // GAP-003: filter by trial lead

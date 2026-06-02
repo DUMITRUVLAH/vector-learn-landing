@@ -2,6 +2,7 @@ import { pgTable, uuid, varchar, integer, timestamp, pgEnum, index } from "drizz
 import { tenants } from "./tenants";
 import { students } from "./students";
 import { promoCodes } from "./promoCodes"; // COURSE-203
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const paymentStatusEnum = pgEnum("payment_status", [
   "pending",
@@ -32,6 +33,12 @@ export const payments = pgTable(
       onDelete: "set null",
     }),
     originalAmountCents: integer("original_amount_cents"), // before discount
+    /** INTEG-102: optional FK to the course this payment is for */
+    courseId: uuid("course_id").references((): AnyPgColumn => {
+      // Lazy import to avoid circular dependency — courses imports payments indirectly
+      const { courses } = require("./courses");
+      return courses.id;
+    }, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

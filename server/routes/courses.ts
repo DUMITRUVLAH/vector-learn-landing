@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, desc, gte, count as drizzleCount } from "drizzle-orm";
+import { and, eq, desc, gte, ne, count as drizzleCount } from "drizzle-orm";
 import { db } from "../db/client";
 import { courses, leads, lessons, studentLessons, teachers } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";

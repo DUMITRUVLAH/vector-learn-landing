@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, ne, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { teachers, users, lessons } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getBranchScope } from "../middleware/branchScope";
+import { writeAuditLog } from "../lib/auditLogger";
 
 export const teacherRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -36,7 +37,7 @@ teacherRoutes.get("/", async (c) => {
     })
     .from(teachers)
     .innerJoin(users, eq(teachers.userId, users.id))
-    .where(whereClause)
+    .where(where)
     .orderBy(desc(teachers.createdAt));
   return c.json({ items: rows });
 });
@@ -74,6 +75,12 @@ teacherRoutes.get("/available", zValidator("query", availableQuerySchema), async
 
   const busyIds = new Set(busyTeacherIds.map((r) => r.teacherId));
 
+  // Rebuild tenant+branch filter for available-teachers query
+  const scopeForAvailable = getBranchScope(c);
+  const whereAvailable = scopeForAvailable
+    ? and(eq(teachers.tenantId, tenantId), eq(teachers.branchId, scopeForAvailable))
+    : eq(teachers.tenantId, tenantId);
+
   const allTeachers = await db
     .select({
       id: teachers.id,
@@ -85,9 +92,9 @@ teacherRoutes.get("/available", zValidator("query", availableQuerySchema), async
     })
     .from(teachers)
     .innerJoin(users, eq(teachers.userId, users.id))
-    .where(where)
+    .where(whereAvailable)
     .orderBy(desc(teachers.createdAt));
-  return c.json({ items: rows });
+  return c.json({ items: allTeachers });
 });
 
 // ─── HR-404: PATCH /api/teachers/:id — update rate/commission with audit ──────

@@ -11,7 +11,10 @@
  *   if (scope) conditions.push(eq(table.branchId, scope));
  */
 import type { Context } from "hono";
+import { eq } from "drizzle-orm";
+import type { AnyColumn } from "drizzle-orm";
 import type { AuthVariables } from "./requireAuth";
+import type { User } from "../db/schema";
 
 /**
  * Returns the branch_scope UUID for the authenticated user, or null if the user
@@ -22,4 +25,21 @@ export function getBranchScope(
 ): string | null {
   const user = c.get("user");
   return user.branchScope ?? null;
+}
+
+/**
+ * BRANCH-703: Push an eq(column, branchScope) condition if the user has a branch scope.
+ * Use this in route handlers to enforce branch-level data isolation.
+ *
+ * Usage:
+ *   withBranchFilter(user, conditions, table.branchId);
+ */
+export function withBranchFilter(
+  user: User,
+  conditions: ReturnType<typeof eq>[],
+  column: AnyColumn
+): void {
+  if (user.branchScope) {
+    conditions.push(eq(column, user.branchScope));
+  }
 }
