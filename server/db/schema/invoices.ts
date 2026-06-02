@@ -17,6 +17,8 @@ export const invoiceStatusEnum = pgEnum("invoice_status", [
   "issued",
   "paid",
   "cancelled",
+  "refunded",
+  "partially_refunded",
 ]);
 
 export const invoices = pgTable(
@@ -65,6 +67,12 @@ export const invoices = pgTable(
      * Null if not yet paid.
      */
     paymentMethod: varchar("payment_method", { length: 20 }),
+    /**
+     * PAY-007: Total amount refunded so far (in cents).
+     * When refunded_amount_cents == amount_cents, status → 'refunded'.
+     * When 0 < refunded_amount_cents < amount_cents, status → 'partially_refunded'.
+     */
+    refundedAmountCents: integer("refunded_amount_cents").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -1,6 +1,7 @@
 import { api } from "../api";
 
-export type InvoiceStatus = "draft" | "issued" | "paid" | "cancelled";
+/** PAY-007: Added 'refunded' and 'partially_refunded' statuses */
+export type InvoiceStatus = "draft" | "issued" | "paid" | "cancelled" | "refunded" | "partially_refunded";
 export type InvoiceCurrency = "EUR" | "RON" | "USD";
 
 export interface Invoice {
@@ -18,6 +19,10 @@ export interface Invoice {
   dueDate: string | null;
   notes: string | null;
   pdfKey: string | null;
+  /** PAY-007: Total amount refunded so far (cents) */
+  refundedAmountCents: number;
+  /** PAY-007: Stripe Payment Intent ID for Stripe-paid invoices */
+  stripePaymentIntentId: string | null;
   createdAt: string;
   studentName: string;
 }

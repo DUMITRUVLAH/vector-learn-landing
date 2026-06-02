@@ -12,6 +12,7 @@ import {
   FileCode,
   Table2,
   CreditCard,
+  RefreshCcw,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -39,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { SubscriptionTable } from "@/components/invoices/SubscriptionTable";
 import { AddSubscriptionModal } from "@/components/invoices/AddSubscriptionModal";
 import { StripeLinkModal } from "@/components/invoices/StripeLinkModal"; // PAY-004
+import { RefundModal } from "@/components/payments/RefundModal"; // PAY-007
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -49,6 +51,9 @@ const STATUS_META: Record<InvoiceStatus, { label: string; cls: string }> = {
   issued: { label: "Emisă", cls: "bg-primary/15 text-primary" },
   paid: { label: "Plătită", cls: "bg-success/15 text-success" },
   cancelled: { label: "Anulată", cls: "bg-destructive/15 text-destructive" },
+  /** PAY-007: Refund statuses */
+  refunded: { label: "Refundat", cls: "bg-destructive/15 text-destructive" },
+  partially_refunded: { label: "Refund parțial", cls: "bg-warning/15 text-warning" },
 };
 
 function formatCurrency(cents: number, currency: InvoiceCurrency = "RON"): string {
@@ -97,6 +102,8 @@ export function InvoicesPage() {
     invoiceNumber: string;
     amountFormatted: string;
   } | null>(null);
+  // PAY-007: Refund modal state
+  const [refundInvoice, setRefundInvoice] = useState<Invoice | null>(null);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");

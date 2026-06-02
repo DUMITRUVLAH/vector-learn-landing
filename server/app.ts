@@ -151,6 +151,10 @@ app.route("/api", reminderRoutes);
 import { paymentPlanRoutes } from "./routes/paymentPlans"; // PAY-006
 app.route("/api/payment-plans", paymentPlanRoutes);
 
+// PAY-007: Refunds — partial/full invoice refunds + Stripe refund API
+import { refundRoutes } from "./routes/refunds"; // PAY-007
+app.route("/api", refundRoutes);
+
 app.get("/api/health/db", async (c) => {
   try {
     const tablesResult = await db.execute(
