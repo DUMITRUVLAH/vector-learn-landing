@@ -32,7 +32,7 @@ import { contractRoutes } from "./routes/contracts";
 import { feedbackRoutes } from "./routes/feedback";
 import { feedbackPublicRoutes } from "./routes/feedbackPublic";
 import { contactRoutes } from "./routes/contacts";
-import { teamRoutes } from "./routes/team";
+import { teamRoutes, publicTeamRoutes } from "./routes/team";
 import { invoiceRoutes } from "./routes/invoices";
 import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
@@ -133,12 +133,8 @@ app.route("/api/contracts", contractRoutes);
 app.route("/api/invoices", invoiceRoutes);
 // CRM-137: team members endpoint for AssigneePicker
 app.route("/api/team", teamRoutes);
-// SET-802: Notification preferences
-app.route("/api/settings/notifications", notificationSettingsRoutes);
-// SET-803: Branding — logo + colors per tenant
-app.route("/api/settings/branding", brandingSettingsRoutes);
-// SET-804: Aggregated audit log — admin/owner only
-app.route("/api/settings/audit-log", auditLogSettingsRoutes);
+// AUTH-002: public (no-auth) team routes — accept-invitation
+app.route("/api/team", publicTeamRoutes);
 // CX-701: Cohorts (course editions) CRUD
 app.route("/api/cohorts", cohortRoutes);
 // CX-703: Cohort participants (must be mounted at /api/cohorts for /:cohortId/participants)

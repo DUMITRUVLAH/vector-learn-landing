@@ -46,6 +46,10 @@ export function LoginPage() {
           <Link to="/app/signup" className="text-primary font-semibold hover:underline">
             Înregistrează-te
           </Link>
+          {" · "}
+          <Link to="/app/forgot-password" className="text-muted-foreground hover:text-primary hover:underline text-sm">
+            Am uitat parola
+          </Link>
         </>
       }
     >

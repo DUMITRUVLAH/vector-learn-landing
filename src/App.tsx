@@ -61,20 +61,12 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
-// MOB-101: Mobile PWA pages
-import { StudentDashboardPage } from "./pages/app/mobile/StudentDashboardPage";
-import { MobileSchedulePage } from "./pages/app/mobile/MobileSchedulePage";
-// MOB-102: Homework + grading
-import { HomeworkPage } from "./pages/app/mobile/HomeworkPage";
-import { GradingPage } from "./pages/app/GradingPage";
-// MOB-103: Push notification settings
-import { NotificationsSettingsPage } from "./pages/app/mobile/NotificationsSettingsPage";
-// MOB-104: Parent dashboard + chat
-import { ParentDashboardPage } from "./pages/app/mobile/ParentDashboardPage";
-import { ChatPage } from "./pages/app/mobile/ChatPage";
-// MOB-105: Gamification XP + leaderboard
-import { XpPage } from "./pages/app/mobile/XpPage";
-import { LeaderboardPage } from "./pages/app/mobile/LeaderboardPage";
+import { ForgotPasswordPage } from "./pages/app/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/app/ResetPasswordPage";
+import { AcceptInvitationPage } from "./pages/app/AcceptInvitationPage";
+import { ProfilePage } from "./pages/settings/ProfilePage";
+import { SecurityPage } from "./pages/settings/SecurityPage";
+import { Verify2FAPage } from "./pages/auth/Verify2FAPage";
 
 function HomePage() {
   return (
@@ -133,11 +125,17 @@ function Routes() {
   if (path.startsWith("/app/grading")) return <GradingPage />;
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
-  // STU-201: /app/students/:id — student detail page (before /app/students list)
-  if (path.match(/^\/app\/students\/[^/]+$/)) {
-    const id = path.split("/").pop()!;
-    return <StudentDetailPage studentId={id} />;
-  }
+  // AUTH-001: password reset pages (must be before /app catch-all)
+  if (path.startsWith("/app/forgot-password")) return <ForgotPasswordPage />;
+  if (path.startsWith("/app/reset")) return <ResetPasswordPage />;
+  // AUTH-002: accept team invitation (public, no auth required)
+  if (path.startsWith("/app/accept-invitation")) return <AcceptInvitationPage />;
+  // AUTH-003: user profile + GDPR settings
+  if (path.startsWith("/app/settings/profile")) return <ProfilePage />;
+  // AUTH-004: security settings (2FA + session management)
+  if (path.startsWith("/app/settings/security")) return <SecurityPage />;
+  // AUTH-004: 2FA verification step (shown after password login when 2FA is enabled)
+  if (path.startsWith("/app/verify-2fa")) return <Verify2FAPage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;
   if (path.startsWith("/app/courses")) return <CoursesPage />; // COURSE-101
   // COURSE-103: /app/groups/:id — group detail with "Elevi înrolați" tab

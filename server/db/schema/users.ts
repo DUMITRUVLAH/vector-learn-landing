@@ -34,6 +34,13 @@ export const users = pgTable(
      */
     isActive: boolean("is_active").notNull().default(true),    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     /** BRANCH-702: If set, this user is a branch manager scoped to this branch only */
+    // AUTH-003: extended profile fields
+    phone: varchar("phone", { length: 50 }),
+    avatarUrl: varchar("avatar_url", { length: 2048 }),
+    language: varchar("language", { length: 10 }).default("ro"),
+    timezone: varchar("timezone", { length: 64 }).default("Europe/Bucharest"),
+    // AUTH-003: GDPR soft-delete (deleted_at = null means active)
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -58,6 +65,12 @@ export const sessions = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     token: varchar("token", { length: 128 }).notNull().unique(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    // AUTH-004: device + activity tracking for session management UI
+    ipAddress: varchar("ip_address", { length: 64 }),
+    userAgent: varchar("user_agent", { length: 512 }),
+    lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
+    // AUTH-004: when 2FA is required but not yet verified, session is incomplete
+    twoFactorPending: boolean("two_factor_pending").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

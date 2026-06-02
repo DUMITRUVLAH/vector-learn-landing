@@ -10,12 +10,15 @@
  * Also keeps the existing GET /api/team/members endpoint (CRM-137).
  */
 import { Hono } from "hono";
+import { eq, and, gt, isNull } from "drizzle-orm";
+import { randomBytes, createHash } from "node:crypto";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
-import { randomBytes } from "node:crypto";
 import { db } from "../db/client";
-import { users, invitations } from "../db/schema";
+import { users, userInvitations } from "../db/schema";
+import { hashPassword } from "../auth/password";
+import { createSession, SESSION_COOKIE } from "../auth/session";
+import { setCookie } from "hono/cookie";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { userRoleEnum } from "../db/schema/users";
 
@@ -111,90 +114,131 @@ teamRoutes.get("/members", async (c) => {
   return c.json(members);
 });
 
-// ─── POST /api/team/invite ────────────────────────────────────────────────────
+const SECURE_COOKIES = process.env.NODE_ENV === "production";
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 const inviteSchema = z.object({
-  email: z.string().email(),
-  role: z.enum(["admin", "manager", "teacher", "receptionist", "student", "parent"]).default("manager"),
+  email: z.string().email().max(255),
+  role: z.enum(["admin", "manager", "teacher", "receptionist"]).default("teacher"),
 });
 
+// AUTH-002: POST /api/team/invite — admin invites a team member
 teamRoutes.post("/invite", zValidator("json", inviteSchema), async (c) => {
-  const actor = c.get("user");
-
-  // Only admins can invite
-  if (actor.role !== "admin") {
-    return c.json({ error: "forbidden" }, 403);
+  const inviter = c.get("user");
+  if (inviter.role !== "admin" && inviter.role !== "manager") {
+    return c.json({ error: "insufficient_permissions" }, 403);
   }
-
   const { email, role } = c.req.valid("json");
 
-  // Check if user already exists in tenant
+  // Check if user already exists for this tenant
   const existing = await db.query.users.findFirst({
-    where: and(eq(users.tenantId, actor.tenantId), eq(users.email, email)),
+    where: and(eq(users.email, email), eq(users.tenantId, inviter.tenantId)),
   });
-  if (existing) {
-    return c.json({ error: "user_already_exists" }, 409);
-  }
+  if (existing) return c.json({ error: "user_already_exists" }, 409);
 
-  const token = randomBytes(48).toString("base64url");
-  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h TTL
+  // Revoke any previous pending invitation for this email+tenant
+  const rawToken = randomBytes(32).toString("hex");
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
 
-  await db.insert(invitations).values({
-    tenantId: actor.tenantId,
+  // Delete existing pending invitations for same email+tenant
+  await db.delete(userInvitations).where(
+    and(
+      eq(userInvitations.tenantId, inviter.tenantId),
+      eq(userInvitations.email, email),
+      isNull(userInvitations.acceptedAt)
+    )
+  );
+
+  await db.insert(userInvitations).values({
+    tenantId: inviter.tenantId,
     email,
-    role: role as typeof userRoleEnum.enumValues[number],
-    token,
-    createdBy: actor.id,
+    role,
+    tokenHash,
     expiresAt,
+    invitedByUserId: inviter.id,
   });
 
-  // In production, this would send an email. For now we return the URL for the client to display.
-  const inviteUrl = `/app/signup?invite=${token}`;
-
-  // Stub log (no email sent)
-  console.warn(`[INVITE STUB] To: ${email}, Role: ${role}, URL: ${inviteUrl}`);
-
-  return c.json({ inviteUrl, token, expiresAt: expiresAt.toISOString() }, 201);
-});
-
-// ─── PATCH /api/team/:userId ──────────────────────────────────────────────────
-const patchTeamMemberSchema = z.object({
-  role: z.enum(["admin", "manager", "teacher", "receptionist", "student", "parent"]).optional(),
-  isActive: z.boolean().optional(),
-});
-
-teamRoutes.patch("/:userId", zValidator("json", patchTeamMemberSchema), async (c) => {
-  const actor = c.get("user");
-  const targetId = c.req.param("userId");
-  const body = c.req.valid("json");
-
-  // Only admins can patch team members
-  if (actor.role !== "admin") {
-    return c.json({ error: "forbidden" }, 403);
+  const appUrl = process.env.APP_URL ?? "http://localhost:5173";
+  const acceptLink = `${appUrl}/#/app/accept-invitation?token=${rawToken}`;
+  if (process.env.NODE_ENV !== "production") {
+    process.stdout.write(`[AUTH-002] Invite link for ${email}: ${acceptLink}\n`);
   }
 
-  // Find target user
-  const [target] = await db
-    .select()
-    .from(users)
-    .where(and(eq(users.id, targetId), eq(users.tenantId, actor.tenantId)));
+  return c.json({ ok: true, email, role }, 201);
+});
 
-  if (!target) return c.json({ error: "not_found" }, 404);
+// AUTH-002: GET /api/team/invitation?token=... — fetch invitation metadata (email+role)
+// Used by AcceptInvitationPage to pre-fill the email field.
+teamRoutes.get("/invitation", async (c) => {
+  const rawToken = c.req.query("token");
+  if (!rawToken) return c.json({ error: "missing_token" }, 400);
 
-  // Owner (the first admin/creator) cannot be deactivated — protect by role check.
-  // Simple rule: if target is the only admin in the tenant, refuse deactivation.
-  if (body.isActive === false && target.id === actor.id) {
-    return c.json({ error: "cannot_disable_yourself" }, 403);
-  }
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  const invite = await db.query.userInvitations.findFirst({
+    where: and(
+      eq(userInvitations.tokenHash, tokenHash),
+      isNull(userInvitations.acceptedAt),
+      gt(userInvitations.expiresAt, new Date())
+    ),
+  });
 
-  const patch: Record<string, unknown> = { updatedAt: new Date() };
-  if (body.role !== undefined) patch.role = body.role;
-  if (body.isActive !== undefined) patch.isActive = body.isActive;
+  if (!invite) return c.json({ error: "invalid_or_expired_token" }, 400);
+  return c.json({ email: invite.email, role: invite.role });
+});
 
-  const [updated] = await db
-    .update(users)
-    .set(patch)
-    .where(and(eq(users.id, targetId), eq(users.tenantId, actor.tenantId)))
-    .returning({ id: users.id, email: users.email, role: users.role, isActive: users.isActive });
+const acceptInvitationSchema = z.object({
+  token: z.string().min(1).max(128),
+  name: z.string().min(2).max(200),
+  password: z.string().min(8).max(200),
+});
 
-  return c.json({ user: updated });
+// AUTH-002: POST /api/team/accept-invitation — set password and activate user
+// This is a PUBLIC endpoint (no requireAuth) because the invitee is not logged in yet.
+export const publicTeamRoutes = new Hono();
+
+publicTeamRoutes.post("/accept-invitation", zValidator("json", acceptInvitationSchema), async (c) => {
+  const { token, name, password } = c.req.valid("json");
+
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const invite = await db.query.userInvitations.findFirst({
+    where: and(
+      eq(userInvitations.tokenHash, tokenHash),
+      isNull(userInvitations.acceptedAt),
+      gt(userInvitations.expiresAt, new Date())
+    ),
+  });
+
+  if (!invite) return c.json({ error: "invalid_or_expired_token" }, 400);
+
+  const passwordHash = await hashPassword(password);
+
+  // Create the user and mark the invitation as accepted
+  const [newUser] = await db.insert(users).values({
+    tenantId: invite.tenantId,
+    email: invite.email,
+    passwordHash,
+    name,
+    role: invite.role,
+  }).returning();
+
+  await db.update(userInvitations)
+    .set({ acceptedAt: new Date() })
+    .where(eq(userInvitations.id, invite.id));
+
+  // Auto-login
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const { token: sessionToken } = await createSession(newUser.id);
+  setCookie(c, SESSION_COOKIE, sessionToken, {
+    httpOnly: true,
+    sameSite: "Lax",
+    secure: SECURE_COOKIES,
+    path: "/",
+    expires: expiresAt,
+  });
+
+  return c.json({
+    ok: true,
+    user: { id: newUser.id, email: newUser.email, name: newUser.name, role: newUser.role },
+  });
 });

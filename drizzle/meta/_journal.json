@@ -456,6 +456,34 @@
       "when": 1780501000000,
       "tag": "0064_mob105_gamification",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1780394861238,
+      "tag": "0065_auth001_password_reset_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1780395301976,
+      "tag": "0066_auth002_user_invitations",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1780395542946,
+      "tag": "0067_auth003_user_profile_gdpr",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1780396027309,
+      "tag": "0068_auth004_2fa_sessions",
+      "breakpoints": true
     }
   ]
 }

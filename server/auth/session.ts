@@ -10,10 +10,34 @@ export function generateToken(): string {
   return randomBytes(48).toString("base64url");
 }
 
-export async function createSession(userId: string): Promise<{ token: string; expiresAt: Date }> {
+export interface CreateSessionOptions {
+  /** Client IP address — stored for the session-management UI (AUTH-004). */
+  ipAddress?: string;
+  /** User-Agent string — stored for the session-management UI (AUTH-004). */
+  userAgent?: string;
+  /**
+   * AUTH-004: when the user has 2FA enabled and has just passed the password
+   * check, create a "pending" session that can only access the 2FA verify
+   * endpoint.  After TOTP verification, set this to false.
+   */
+  twoFactorPending?: boolean;
+}
+
+export async function createSession(
+  userId: string,
+  options: CreateSessionOptions = {}
+): Promise<{ token: string; expiresAt: Date }> {
   const token = generateToken();
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
-  await db.insert(sessions).values({ userId, token, expiresAt });
+  await db.insert(sessions).values({
+    userId,
+    token,
+    expiresAt,
+    ipAddress: options.ipAddress ?? null,
+    userAgent: options.userAgent ?? null,
+    lastActiveAt: new Date(),
+    twoFactorPending: options.twoFactorPending ?? false,
+  });
   return { token, expiresAt };
 }
 
@@ -26,8 +50,18 @@ export async function getSessionUser(token: string): Promise<{ session: Session;
     await db.delete(sessions).where(eq(sessions.id, session.id));
     return null;
   }
+  // AUTH-004: block pending 2FA sessions from accessing protected endpoints
+  if (session.twoFactorPending) return null;
   const user = await db.query.users.findFirst({ where: eq(users.id, session.userId) });
   if (!user) return null;
+
+  // Update lastActiveAt (fire-and-forget, don't await)
+  void db
+    .update(sessions)
+    .set({ lastActiveAt: new Date() })
+    .where(eq(sessions.id, session.id))
+    .catch(() => {});
+
   return { session, user };
 }
 
