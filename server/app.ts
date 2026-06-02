@@ -44,6 +44,7 @@ import { kinderMedicalRoutes } from "./routes/kinderMedical"; // KINDER-004
 import { kinderParentFeedRoutes } from "./routes/kinderParentFeed"; // KINDER-005
 import { kinderComplianceRoutes } from "./routes/kinderCompliance"; // KINDER-006
 import { kinderIncidentsRoutes } from "./routes/kinderIncidents"; // KINDER-007
+import { onboardingRoutes } from "./routes/onboarding"; // ONBOARD-001
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -184,6 +185,9 @@ app.route("/api/kinder", kinderParentFeedRoutes);
 app.route("/api/kinder", kinderComplianceRoutes);
 // KINDER-007: Incident/accident reports + parent acknowledgment
 app.route("/api/kinder", kinderIncidentsRoutes);
+
+// ONBOARD-001: Onboarding checklist status
+app.route("/api/onboarding", onboardingRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {
