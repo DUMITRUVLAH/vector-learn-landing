@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "MOB-104",
   "last_completed": "MOB-103",
-  "iterations": 145,
-  "last_run_at": "2026-06-02T17:00:00Z",
-  "milestone_status": "MOB faza-1: MOB-101+102+103 done (batch cap 3). PR opened. MOB-104+105 pending.",
+  "iterations": 146,
+  "last_run_at": "2026-06-02T18:00:00Z",
+  "milestone_status": "MOB faza-1: MOB-101+102+103 done. Now building MOB-104 parent view.",
   "active_milestone": "MOB",
   "items": {
     "M1-001": {
@@ -3183,8 +3183,8 @@
       }
     },
     "MOB-104": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MOB-104-parent-mobile-view.md",
       "milestone": "MOB",
