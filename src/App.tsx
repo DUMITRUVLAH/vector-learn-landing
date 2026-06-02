@@ -70,6 +70,9 @@ import { NotificationsSettingsPage } from "./pages/app/mobile/NotificationsSetti
 // MOB-104: Parent dashboard + chat
 import { ParentDashboardPage } from "./pages/app/mobile/ParentDashboardPage";
 import { ChatPage } from "./pages/app/mobile/ChatPage";
+// MOB-105: Gamification XP + leaderboard
+import { XpPage } from "./pages/app/mobile/XpPage";
+import { LeaderboardPage } from "./pages/app/mobile/LeaderboardPage";
 
 function HomePage() {
   return (
@@ -119,10 +122,10 @@ function Routes() {
   if (path.startsWith("/m/settings/notifications")) return <NotificationsSettingsPage />;
   // MOB-104: Parent portal + chat (must be checked before generic /m/ catch-all)
   if (path.startsWith("/m/parent")) return <ParentDashboardPage />;
-  if (path.match(/^\/m\/chat\/[^/]*$/)) {
-    return <ChatPage />;
-  }
   if (path.startsWith("/m/chat")) return <ChatPage />;
+  // MOB-105: Gamification XP + leaderboard
+  if (path.startsWith("/m/xp")) return <XpPage />;
+  if (path.startsWith("/m/leaderboard")) return <LeaderboardPage />;
   if (path.startsWith("/m/")) return <StudentDashboardPage />;
   // MOB-102: Teacher grading
   if (path.startsWith("/app/grading")) return <GradingPage />;

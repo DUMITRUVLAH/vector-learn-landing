@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "MOB-104",
-  "last_completed": "MOB-103",
-  "iterations": 146,
-  "last_run_at": "2026-06-02T18:00:00Z",
-  "milestone_status": "MOB faza-1: MOB-101+102+103 done. Now building MOB-104 parent view.",
+  "current_item": null,
+  "last_completed": "MOB-105",
+  "iterations": 148,
+  "last_run_at": "2026-06-02T19:00:00Z",
+  "milestone_status": "MOB faza-1: ALL DONE (MOB-101..105). PR #124 + new commits on feat/MOB-faza-1-student-pwa. Phase complete — open full PR.",
   "active_milestone": "MOB",
   "items": {
     "M1-001": {
@@ -3183,22 +3183,48 @@
       }
     },
     "MOB-104": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MOB-104-parent-mobile-view.md",
       "milestone": "MOB",
       "phase": "1",
-      "depends_on": ["MOB-103", "PAY-001"]
+      "depends_on": ["MOB-103", "PAY-001"],
+      "branch": "feat/MOB-faza-1-student-pwa",
+      "reports": [
+        "backlog/reports/MOB-104-reviewer.md",
+        "backlog/reports/MOB-104-integration.md",
+        "backlog/reports/MOB-104-manager.md",
+        "backlog/reports/MOB-104-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "BUY"
+      }
     },
     "MOB-105": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MOB-105-gamification-xp-streaks.md",
       "milestone": "MOB",
       "phase": "1",
-      "depends_on": ["MOB-102"]
+      "depends_on": ["MOB-102"],
+      "branch": "feat/MOB-faza-1-student-pwa",
+      "reports": [
+        "backlog/reports/MOB-105-reviewer.md",
+        "backlog/reports/MOB-105-integration.md",
+        "backlog/reports/MOB-105-manager.md",
+        "backlog/reports/MOB-105-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "LOVES"
+      }
     }
   }
 }

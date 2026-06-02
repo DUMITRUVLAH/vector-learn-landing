@@ -12,7 +12,10 @@ import {
   lessons, studentLessons, students, teachers, courses, rooms,
   homework, homeworkSubmissions, pushSubscriptions,
   parentStudentLinks, directMessages, invoices, users,
+  xpEvents, studentStreaks, badges,
 } from "../db/schema";
+import { getStudentXP, awardXP, updateStreak } from "../lib/xp";
+import { sum } from "drizzle-orm";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const mobileRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -674,4 +677,116 @@ mobileRoutes.get("/parent-links/:studentId", async (c) => {
     .orderBy(asc(parentStudentLinks.createdAt));
 
   return c.json({ links: rows });
+});
+
+// ---------------------------------------------------------------------------
+// MOB-105: Gamification endpoints
+// ---------------------------------------------------------------------------
+
+/**
+ * MOB-105: Student XP summary
+ * GET /api/m/xp
+ * Returns totalXP, level, currentStreak, longestStreak, badges[], rank in group.
+ */
+mobileRoutes.get("/xp", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+
+  // Find student linked to this user
+  const [student] = await db
+    .select({ id: students.id })
+    .from(students)
+    .where(and(eq(students.tenantId, tenantId), eq(students.status, "active")))
+    .limit(1);
+
+  if (!student) {
+    return c.json({ totalXP: 0, level: 1, currentStreak: 0, longestStreak: 0, badges: [], rank: null });
+  }
+
+  const { totalXP, level } = await getStudentXP(tenantId, student.id);
+
+  // Streak
+  const [streak] = await db
+    .select({
+      currentStreak: studentStreaks.currentStreak,
+      longestStreak: studentStreaks.longestStreak,
+    })
+    .from(studentStreaks)
+    .where(and(eq(studentStreaks.tenantId, tenantId), eq(studentStreaks.studentId, student.id)))
+    .limit(1);
+
+  // Badges
+  const studentBadges = await db
+    .select({ badgeType: badges.badgeType, earnedAt: badges.earnedAt })
+    .from(badges)
+    .where(and(eq(badges.tenantId, tenantId), eq(badges.studentId, student.id)))
+    .orderBy(asc(badges.earnedAt));
+
+  return c.json({
+    totalXP,
+    level,
+    currentStreak: streak?.currentStreak ?? 0,
+    longestStreak: streak?.longestStreak ?? 0,
+    badges: studentBadges,
+    rank: null, // computed via leaderboard endpoint
+  });
+});
+
+/**
+ * MOB-105: Class leaderboard — top 10 opt-in students in the tenant by XP
+ * GET /api/m/leaderboard
+ */
+mobileRoutes.get("/leaderboard", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+
+  // Find current student
+  const [me] = await db
+    .select({ id: students.id, fullName: students.fullName, leaderboardOptIn: students.leaderboardOptIn })
+    .from(students)
+    .where(and(eq(students.tenantId, tenantId), eq(students.status, "active")))
+    .limit(1);
+
+  // Get all opt-in students with their total XP
+  const optInStudents = await db
+    .select({
+      id: students.id,
+      fullName: students.fullName,
+    })
+    .from(students)
+    .where(
+      and(
+        eq(students.tenantId, tenantId),
+        eq(students.leaderboardOptIn, true),
+        eq(students.status, "active")
+      )
+    );
+
+  // Compute XP for each (N+1 but manageable for small classes)
+  const withXP = await Promise.all(
+    optInStudents.map(async (s) => {
+      const result = await db
+        .select({ total: sum(xpEvents.amount) })
+        .from(xpEvents)
+        .where(and(eq(xpEvents.tenantId, tenantId), eq(xpEvents.studentId, s.id)))
+        .limit(1);
+      return { ...s, totalXP: Number(result[0]?.total ?? 0) };
+    })
+  );
+
+  // Sort descending by XP
+  withXP.sort((a, b) => b.totalXP - a.totalXP);
+
+  const top10 = withXP.slice(0, 10).map((s, idx) => ({ rank: idx + 1, ...s }));
+
+  // If current student is not in top10 but opted in, append their rank
+  let myRank: { rank: number; id: string; fullName: string; totalXP: number } | null = null;
+  if (me) {
+    const myPos = withXP.findIndex((s) => s.id === me.id);
+    if (myPos >= 0 && !top10.some((s) => s.id === me.id)) {
+      myRank = { rank: myPos + 1, ...withXP[myPos] };
+    }
+  }
+
+  return c.json({ leaderboard: top10, myRank });
 });
