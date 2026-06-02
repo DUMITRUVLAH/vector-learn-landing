@@ -37,15 +37,7 @@ import { invoiceRoutes } from "./routes/invoices";
 import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
-import { schoolRoutes } from "./routes/school"; // SCHOOL-001
-import { attendanceRoutes } from "./routes/attendance"; // SCHOOL-003
-import { gradesRoutes } from "./routes/grades"; // SCHOOL-002
-import { tuitionRoutes } from "./routes/tuition"; // SCHOOL-004
-import { admissionsRoutes } from "./routes/admissions"; // SCHOOL-005
-import { timetableRoutes } from "./routes/timetable"; // SCHOOL-006
-import { guardianRoutes } from "./routes/guardians"; // GUARDIAN-001
-import { parentPortalRoutes, schoolNewsAdminRoutes } from "./routes/parentPortal"; // SCHOOL-007
-import { consentRoutes } from "./routes/consent"; // CONSENT-001
+import { badgesRoutes } from "./routes/badges"; // GAP-019
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -169,27 +161,8 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
-// SCHOOL-001: School module (academic years + terms + classes + enrollment)
-// Mounted BEFORE tagRoutes' global requireAuth to ensure correct route resolution
-app.route("/api/school", schoolRoutes);
-// SCHOOL-003: Attendance register — /api/school/attendance/...
-app.route("/api/school/attendance", attendanceRoutes);
-// SCHOOL-002: Gradebook (grades + subjects) — /api/school/subjects, /api/school/grades/...
-app.route("/api/school", gradesRoutes);
-// SCHOOL-004: Tuition billing — /api/school/tuition/...
-app.route("/api/school/tuition", tuitionRoutes);
-// SCHOOL-005: Admissions workflow — /api/school/admissions/...
-app.route("/api/school/admissions", admissionsRoutes);
-// SCHOOL-006: Master timetable — /api/school/timetable/...
-app.route("/api/school/timetable", timetableRoutes);
-// GUARDIAN-001: Authorized guardians — /api/students/:studentId/guardians
-app.route("/api/students", guardianRoutes);
-// SCHOOL-007: Parent portal (role=parent only) — /api/parent/*
-app.route("/api/parent", parentPortalRoutes);
-// SCHOOL-007: School news admin — POST /api/school/news (admin/manager)
-app.route("/api/school/news", schoolNewsAdminRoutes);
-// CONSENT-001: Consent forms + e-signature — /api/school/consent/*
-app.route("/api/school/consent", consentRoutes);
+// GAP-019/020: Badges (gamification) + leaderboard
+app.route("/api/badges", badgesRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

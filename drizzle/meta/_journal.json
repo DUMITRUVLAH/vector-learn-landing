@@ -701,6 +701,13 @@
       "when": 1748909100000,
       "tag": "0099_consent001_forms",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1780338758904,
+      "tag": "0100_gap019_badges",
+      "breakpoints": true
     }
   ]
 }

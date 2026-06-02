@@ -31,12 +31,4 @@ export * from "./subscriptions";
 export * from "./cohorts";
 export * from "./cohortParticipants";
 export * from "./certificates";
-export * from "./school";
-export * from "./schoolAttendance";
-export * from "./schoolGrades";
-export * from "./tuition";
-export * from "./admissions";
-export * from "./timetable";
-export * from "./guardians";
-export * from "./schoolNews";
-export * from "./consent"; // CONSENT-001
+export * from "./badges"; // GAP-019

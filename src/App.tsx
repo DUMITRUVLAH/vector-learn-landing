@@ -60,14 +60,7 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
-import { SchoolClassesPage } from "./pages/app/SchoolClassesPage"; // SCHOOL-001
-import { SchoolAttendancePage } from "./pages/app/SchoolAttendancePage"; // SCHOOL-003
-import { SchoolGradebookPage } from "./pages/app/SchoolGradebookPage"; // SCHOOL-002
-import { SchoolTuitionPage } from "./pages/app/SchoolTuitionPage"; // SCHOOL-004
-import { SchoolAdmissionsPage } from "./pages/app/SchoolAdmissionsPage"; // SCHOOL-005
-import { SchoolTimetablePage } from "./pages/app/SchoolTimetablePage"; // SCHOOL-006
-import { ParentPortalPage } from "./pages/app/ParentPortalPage"; // SCHOOL-007
-import { SchoolConsentPage } from "./pages/app/SchoolConsentPage"; // CONSENT-001
+import { StudentDetailPage } from "./pages/app/StudentDetailPage"; // GAP-019
 import { GamificationPage } from "./pages/app/GamificationPage"; // GAP-020
 
 function HomePage() {
@@ -127,17 +120,11 @@ function Routes() {
   if (path.startsWith("/app/grading")) return <GradingPage />;
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
-  // AUTH-001: password reset pages (must be before /app catch-all)
-  if (path.startsWith("/app/forgot-password")) return <ForgotPasswordPage />;
-  if (path.startsWith("/app/reset")) return <ResetPasswordPage />;
-  // AUTH-002: accept team invitation (public, no auth required)
-  if (path.startsWith("/app/accept-invitation")) return <AcceptInvitationPage />;
-  // AUTH-003: user profile + GDPR settings
-  if (path.startsWith("/app/settings/profile")) return <ProfilePage />;
-  // AUTH-004: security settings (2FA + session management)
-  if (path.startsWith("/app/settings/security")) return <SecurityPage />;
-  // AUTH-004: 2FA verification step (shown after password login when 2FA is enabled)
-  if (path.startsWith("/app/verify-2fa")) return <Verify2FAPage />;
+  // GAP-019: /app/students/:id detail page must come before /app/students list
+  if (path.match(/^\/app\/students\/[^/]+$/)) {
+    const studentId = path.split("/")[3];
+    return <StudentDetailPage studentId={studentId} />;
+  }
   if (path.startsWith("/app/students")) return <StudentsPage />;
   if (path.startsWith("/app/gamification")) return <GamificationPage />; // GAP-020
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
