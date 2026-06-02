@@ -297,7 +297,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 1 | `AUTH-001` | Resetare parolă prin email (forgot password flow) | 1 | in_progress | [specs/AUTH-001-password-reset.md](specs/AUTH-001-password-reset.md) |
-| 2 | `AUTH-002` | Invitații echipă + verificare email la signup | 1 | pending | [specs/AUTH-002-team-invitations.md](specs/AUTH-002-team-invitations.md) |
-| 3 | `AUTH-003` | Profil utilizator + schimbare parolă + GDPR export/ștergere | 1 | pending | [specs/AUTH-003-user-profile-gdpr.md](specs/AUTH-003-user-profile-gdpr.md) |
+| 1 | `AUTH-001` | Resetare parolă prin email (forgot password flow) | 1 | done ✅ | [specs/AUTH-001-password-reset.md](specs/AUTH-001-password-reset.md) · [PR #125](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125) |
+| 2 | `AUTH-002` | Invitații echipă + verificare email la signup | 1 | done ✅ | [specs/AUTH-002-team-invitations.md](specs/AUTH-002-team-invitations.md) · [PR #125](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125) |
+| 3 | `AUTH-003` | Profil utilizator + schimbare parolă + GDPR export/ștergere | 1 | done ✅ | [specs/AUTH-003-user-profile-gdpr.md](specs/AUTH-003-user-profile-gdpr.md) · [PR #125](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125) |
 | 4 | `AUTH-004` | 2FA TOTP + session management (revoke sessions) | 1 | pending | [specs/AUTH-004-2fa-sessions.md](specs/AUTH-004-2fa-sessions.md) |

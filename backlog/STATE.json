@@ -1812,6 +1812,7 @@
       "milestone": "AUTH",
       "phase": "1",
       "depends_on": ["MVP-003"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125",
       "branch": "feat/AUTH-faza-1-security",
       "reports": [
         "backlog/reports/AUTH-001-manager.md",
@@ -1832,6 +1833,7 @@
       "milestone": "AUTH",
       "phase": "1",
       "depends_on": ["AUTH-001"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125",
       "branch": "feat/AUTH-faza-1-security",
       "reports": [
         "backlog/reports/AUTH-002-manager.md",
@@ -1852,6 +1854,7 @@
       "milestone": "AUTH",
       "phase": "1",
       "depends_on": ["AUTH-002"],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125",
       "branch": "feat/AUTH-faza-1-security",
       "reports": [
         "backlog/reports/AUTH-003-manager.md",
