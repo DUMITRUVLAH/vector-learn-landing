@@ -1,11 +1,11 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "BRANCH-704",
-  "iterations": 144,
-  "last_run_at": "2026-06-02T16:00:00Z",
-  "milestone_status": "State sync: BRANCH-701..704 done (merged PR #110). FIN/INT/AI/WAVE2 items added as done. Planning next module.",
-  "active_milestone": "NEXT",
+  "last_completed": "POLISH-003",
+  "iterations": 148,
+  "last_run_at": "2026-06-02T17:30:00Z",
+  "milestone_status": "POLISH faza-1 COMPLETE: POLISH-001/002/003 all done. PR pending on feat/POLISH-faza-1-ux-polish.",
+  "active_milestone": "POLISH",
   "items": {
     "M1-001": {
       "status": "done",
@@ -2170,31 +2170,37 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "POLISH-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-001-nav-quick-search.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/POLISH-faza-1-ux-polish",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "POLISH-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-002-dashboard-widgets.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": ["POLISH-001"]
+      "depends_on": ["POLISH-001"],
+      "branch": "feat/POLISH-faza-1-ux-polish",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "POLISH-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-003-empty-states.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/POLISH-faza-1-ux-polish",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     }
   }
 }

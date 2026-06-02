@@ -29,7 +29,7 @@ if (!hasDbUrl()) {
 
 console.log("[vercel-migrate] Applying database migrations before build…");
 try {
-  execSync("tsx server/db/migrate.ts", { stdio: "inherit" });
+  execSync("node_modules/.bin/tsx server/db/migrate.ts", { stdio: "inherit" });
   console.log("[vercel-migrate] Migrations OK — code and schema will ship together.");
 } catch (err) {
   console.error("[vercel-migrate] Migration FAILED — blocking deploy to protect prod.", err?.message ?? err);
