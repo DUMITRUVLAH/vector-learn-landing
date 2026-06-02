@@ -45,6 +45,14 @@ import { kinderParentFeedRoutes } from "./routes/kinderParentFeed"; // KINDER-00
 import { kinderComplianceRoutes } from "./routes/kinderCompliance"; // KINDER-006
 import { kinderIncidentsRoutes } from "./routes/kinderIncidents"; // KINDER-007
 import { onboardingRoutes } from "./routes/onboarding"; // ONBOARD-001
+import { adminRoutes } from "./routes/admin"; // HEALTH-001
+import { settingsRoutes } from "./routes/settings";
+import { publicFormGetHandler, publicFormSubmitHandler, publicFormPingHandler } from "./routes/publicForms";
+import { enrollRoutes } from "./routes/enroll";
+import { certificatesPublicRoutes } from "./routes/certificatesPublic";
+import { portalRoutes, portalAdminRoutes } from "./routes/portal";
+import { portalNotifsRoutes, portalNotifsAdminRoutes, portalCronRoutes } from "./routes/portalNotifs";
+import { publicTeamRoutes } from "./routes/team";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -68,27 +76,6 @@ app.use(
     credentials: true,
   })
 );
-
-app.route("/api/auth", authRoutes);
-app.route("/api/students", studentRoutes);
-app.route("/api/teachers", teacherRoutes);
-app.route("/api/courses", courseRoutes);
-app.route("/api/lessons", lessonRoutes);
-app.route("/api/payments", paymentRoutes);
-app.route("/api/leads", leadRoutes);
-app.route("/api/pipeline-stages", pipelineRoutes);
-app.route("/api/leads", taskRoutes); // tasks/attachments under /api/leads/:leadId/...
-app.route("/api/templates", templateRoutes);
-app.route("/api/automations", automationRoutes);
-app.route("/api/analytics", analyticsRoutes);
-app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
-app.route("/api/hr/payroll", payrollRoutes);
-app.route("/api/hr/teacher-stats", hrTeacherRoutes);
-app.route("/api/hr/teachers", availabilityRoutes);
-app.route("/api/hr/audit-log", auditLogRoutes);
-app.route("/api/rooms", roomRoutes);
-app.route("/api/lessons", recurringRoutes); // /api/lessons/recurring + /api/lessons/series/:id/future
-app.route("/api/settings", settingsRoutes);
 
 app.get("/api/health", async (c) => {
   try {
@@ -188,6 +175,9 @@ app.route("/api/kinder", kinderIncidentsRoutes);
 
 // ONBOARD-001: Onboarding checklist status
 app.route("/api/onboarding", onboardingRoutes);
+
+// HEALTH-001: Super-admin tenant list + DB health
+app.route("/api/admin", adminRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

@@ -69,6 +69,7 @@ import { KinderImmunizationReportPage } from "./pages/app/KinderImmunizationRepo
 import { KinderParentFeedPage } from "./pages/app/KinderParentFeedPage";
 import { KinderCompliancePage } from "./pages/app/KinderCompliancePage";
 import KinderIncidentsPage from "./pages/app/KinderIncidentsPage";
+import { AdminPage } from "./pages/app/AdminPage"; // HEALTH-001
 
 function HomePage() {
   return (
@@ -125,6 +126,8 @@ function Routes() {
   if (path.startsWith("/m/")) return <StudentDashboardPage />;
   // MOB-102: Teacher grading
   if (path.startsWith("/app/grading")) return <GradingPage />;
+  // HEALTH-001: Admin dashboard — must be before /app/... catch-alls
+  if (path.startsWith("/app/admin")) return <AdminPage />;
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
   // GAP-019: /app/students/:id detail page must come before /app/students list

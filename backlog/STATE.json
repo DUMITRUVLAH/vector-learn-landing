@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "DEMO-001",
-  "iterations": 132,
+  "last_completed": "HEALTH-001",
+  "iterations": 135,
   "last_run_at": "2026-06-02T14:30:00Z",
-  "milestone_status": "DEMO-001 done (PR #126). Wave 2: ONBOARD-001 + HEALTH-001 pending.",
+  "milestone_status": "Wave 2 COMPLETE: DEMO-001 (PR #126) + ONBOARD-001 + HEALTH-001 all done.",
   "active_milestone": "WAVE2",
   "items": {
     "M1-001": {
@@ -2023,24 +2023,38 @@
       }
     },
     "ONBOARD-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ONBOARD-001-first-run-wizard.md",
       "milestone": "WAVE2",
       "phase": "1",
       "depends_on": [
         "DEMO-001"
-      ]
+      ],
+      "branch": "feat/DEMO-001-rich-seed",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/126",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "HEALTH-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/HEALTH-001-admin-dashboard.md",
       "milestone": "WAVE2",
       "phase": "1",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/DEMO-001-rich-seed",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/126",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "manager": "BUY",
+        "student": "N/A"
+      }
     }
   }
 }
