@@ -28,8 +28,11 @@ import {
   type Lead, type LeadInteraction, type LeadContact, type CustomField, type LeadFieldValue, type CourseMatch,
 } from "@/lib/api/leads";
 import { fetchPipelineStages, type PipelineStage } from "@/lib/api/pipeline";
-import { listCourses, type Course } from "@/lib/api/lessons";
 import { AssigneePicker, useAssigneeName } from "@/components/crm/AssigneePicker";
+import { getTenantMembers, type TenantMember } from "@/lib/api/notifications";
+import { MentionTextarea } from "@/components/crm/MentionTextarea";
+import { listTemplates, type MessageTemplate } from "@/lib/api/templates";
+import { sendMessage, listMessages, type Message as CommMessage, type MessageChannel } from "@/lib/api/messages";
 import {
   listTasks, createTask, updateTask, deleteTask,
   listAttachments, createAttachment, deleteAttachment,
@@ -115,6 +118,10 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   // CRM-134: tenant members for @mention autocomplete
   const [tenantMembers, setTenantMembers] = useState<TenantMember[]>([]);
 
+  // COMM-202: Comunicare tab — messages + compose modal
+  const [commMessages, setCommMessages] = useState<CommMessage[]>([]);
+  const [composeModal, setComposeModal] = useState(false);
+
   // Modals
   const [lostReasonModal, setLostReasonModal] = useState(false);
   const [pendingStage, setPendingStage] = useState<string | null>(null);
@@ -188,7 +195,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     setLoading(true);
     setError(null);
     try {
-      const [leadRes, stagesRes, interRes, tasksRes, attRes, contactsRes, tagsRes, fieldValuesRes, membersRes] = await Promise.all([
+      const [leadRes, stagesRes, interRes, tasksRes, attRes, contactsRes, tagsRes, fieldValuesRes, membersRes, messagesRes] = await Promise.all([
         getLead(leadId),
         fetchPipelineStages(),
         listInteractions(leadId),
@@ -198,6 +205,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         listTags(leadId),
         listFieldValues(leadId),
         getTenantMembers().catch(() => ({ members: [] })),
+        listMessages({ lead_id: leadId }).catch(() => ({ items: [] })),
       ]);
       setLead(leadRes);
       setStages(stagesRes.stages);
@@ -209,6 +217,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
       setCustomFields(fieldValuesRes.fields);
       setFieldValues(fieldValuesRes.values);
       setTenantMembers(membersRes.members);
+      setCommMessages(messagesRes.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare");
     } finally {
@@ -442,6 +451,13 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         .catch(() => setCourses([]));
     }
   };
+
+  // Load courses on mount so the inline course-of-interest dropdown is populated
+  useEffect(() => {
+    listCourses()
+      .then((res) => setCourses(res.items))
+      .catch(() => setCourses([]));
+  }, []);
 
   // ─── Revoke consent ───────────────────────────────────────────────────────
   const handleRevokeConsent = async () => {
@@ -957,7 +973,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                   aria-label="Curs de interes (catalog)"
                 >
                   <option value="">— Neselectat —</option>
-                  {courseOptions.map((c) => (
+                  {courses.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
@@ -1629,6 +1645,18 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
           lead={lead}
           onSuccess={handleConvertSuccess}
           onCancel={() => setConvertModal(false)}
+        />
+      )}
+
+      {/* COMM-202: Compose message modal */}
+      {composeModal && lead && (
+        <ComposeMessageModal
+          lead={lead}
+          onSuccess={(msg) => {
+            setCommMessages((prev) => [msg, ...prev]);
+            setComposeModal(false);
+          }}
+          onCancel={() => setComposeModal(false)}
         />
       )}
 

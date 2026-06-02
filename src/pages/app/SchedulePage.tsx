@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo, useCallback, Fragment } from "react";
-import { Loader2, Plus, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw, Users, Lock, BookOpen, CheckCircle2 as CheckIcon } from "lucide-react";
+import { useEffect, useState, useMemo, useCallback, useRef, Fragment } from "react";
+import { Loader2, Plus, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw, Users, Lock, BookOpen, CheckCircle2 as CheckIcon, UserCog } from "lucide-react";
 import { HomeworkTab } from "@/components/app/HomeworkTab";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";

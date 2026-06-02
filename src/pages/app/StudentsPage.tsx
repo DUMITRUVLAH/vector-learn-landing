@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare, BookOpen } from "lucide-react";
+import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare, BookOpen, Check, Download, Globe, Link2, Upload, UserPlus } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { StudentForm } from "@/components/app/StudentForm";
 import { ImportStudentsModal } from "@/components/app/ImportStudentsModal"; // STU-203
@@ -12,6 +12,8 @@ import {
   type Student,
   type ListStudentsParams,
 } from "@/lib/api/students";
+import { listLessonPackages, type LessonPackage } from "@/lib/api/lessonPackages";
+import { generatePortalToken } from "@/lib/api/portal";
 import { listFeedbackForms, sendFeedbackToStudent, type FeedbackForm } from "@/lib/api/feedback";
 import { HomeworkTab } from "@/components/app/HomeworkTab"; // GAP-015
 import { cn } from "@/lib/utils";
@@ -57,6 +59,10 @@ export function StudentsPage() {
   const [feedbackLink, setFeedbackLink] = useState<string | null>(null);
   // GAP-010: portal link
   const [portalCopied, setPortalCopied] = useState<string | null>(null);
+  // STU-203: CSV import modal
+  const [importOpen, setImportOpen] = useState(false);
+  // GAP-006: active lesson packages per student
+  const [packageMap, setPackageMap] = useState<Map<string, LessonPackage[]>>(new Map());
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, FormEvent } from "react";
 import { Loader2, AlertTriangle, ExternalLink } from "lucide-react";
 import { ApiError } from "@/lib/api";
-import { createStudent, updateStudent, type Student, type StudentInput } from "@/lib/api/students";
+import { createStudent, updateStudent, checkStudentDuplicate, type Student, type StudentInput, type DuplicateMatch } from "@/lib/api/students";
 import { cn } from "@/lib/utils";
 
 interface StudentFormProps {

@@ -69,6 +69,25 @@ import { KinderImmunizationReportPage } from "./pages/app/KinderImmunizationRepo
 import { KinderParentFeedPage } from "./pages/app/KinderParentFeedPage";
 import { KinderCompliancePage } from "./pages/app/KinderCompliancePage";
 import KinderIncidentsPage from "./pages/app/KinderIncidentsPage";
+import { MobileSchedulePage } from "./pages/app/mobile/MobileSchedulePage";
+import { HomeworkPage } from "./pages/app/mobile/HomeworkPage";
+import { NotificationsSettingsPage } from "./pages/app/mobile/NotificationsSettingsPage";
+import { ParentDashboardPage } from "./pages/app/mobile/ParentDashboardPage";
+import { ChatPage } from "./pages/app/mobile/ChatPage";
+import { XpPage } from "./pages/app/mobile/XpPage";
+import { LeaderboardPage } from "./pages/app/mobile/LeaderboardPage";
+import { StudentDashboardPage } from "./pages/app/mobile/StudentDashboardPage";
+import { GradingPage } from "./pages/app/GradingPage";
+import { GamificationPage } from "./pages/app/GamificationPage";
+import { ApiKeysPage } from "./pages/app/settings/ApiKeysPage";
+import { WebhooksPage } from "./pages/app/settings/WebhooksPage";
+import { IntegrationsPage } from "./pages/app/settings/IntegrationsPage";
+import { KpiDashboardPage } from "./pages/app/KpiDashboardPage";
+import { RevenueChartsPage } from "./pages/app/RevenueChartsPage";
+import { StudentRetentionPage } from "./pages/app/StudentRetentionPage";
+import { ExportPage } from "./pages/app/ExportPage";
+import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
+import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
 
 function HomePage() {
   return (
@@ -191,7 +210,6 @@ function Routes() {
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
   if (path.startsWith("/app/reports/retention")) return <StudentRetentionPage />;
   if (path.startsWith("/app/reports/export")) return <ExportPage />;
-  if (path.startsWith("/app/features")) return <FeatureTreePage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // PAY-003: /portal/invoice/:id — parent-facing invoice portal (no auth)
   if (path.match(/^\/portal\/invoice\/[^/]+$/)) return <InvoicePortalPage />;
