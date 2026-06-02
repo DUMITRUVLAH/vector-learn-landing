@@ -1,80 +1,67 @@
 ---
 id: BRANCH-704
-title: Rapoarte consolidate vs per-filială — dashboard comparativ + rollup
+title: "Rapoarte per filială + consolidat (US-MF-09, US-MF-16)"
 milestone: BRANCH
-phase: "1"
-branch: feat/BRANCH-faza-1-multifiliale
+phase: "4 — Rapoarte"
+priority: P0
+slug: branch-reports
+depends_on: ["BRANCH-702", "BRANCH-703"]
 status: pending
-attempts: 0
-depends_on: [BRANCH-701, BRANCH-702]
 ---
+
+# BRANCH-704 — Rapoarte per filială + consolidat
 
 ## Goal
 
-Directorul de rețea are nevoie de un dashboard care arată KPI-urile per filială (elevi activi,
-venit lunar, rata de retenție) plus un view "consolidat" la nivel de rețea. Adăugăm pagina
-`BranchReportsPage` cu un toggle "Consolidat / Per filială" și carduri comparabile side-by-side.
+Extinde paginile de rapoarte (REP-301..304) cu un toggle "Consolidat / Per filială". Când "Per filială" e selectat, KPI-urile (MRR, studenți activi) se afișează per filială în carduri separate. "Consolidat" = suma totală (comportamentul actual). Adaugă și un tabel side-by-side comparând MRR per filială.
+
+## In scope
+
+- Toggle "Consolidat / Per filială" pe pagina REP-301 Dashboard KPI
+- Când "Per filială": afișează un card KPI per branch (MRR, studenți, lecții)
+- Tabel comparativ: coloane = filiale, rânduri = KPIs (MRR, Studenți activi, Lecții luna)
+- API `GET /api/analytics/branches` — returnează KPIs per branch pentru tenant
+  - `{ branches: [{ branchId, branchName, mrr, activeStudents, lessonsThisMonth }] }`
+- Filtrare per perioadă (lună, trimestru) — refolosește logica din REP-301
+
+## Out of scope
+
+- Harta geografică (US-MF-10, P2)
+- Royalty calculation (US-MF-11, P1 — viitor)
 
 ## User stories
 
-- Ca director de rețea, vreau să compar filialele pe MRR + elevi activi, pentru că identific best/worst performer.
-- Ca owner, vreau un view consolidat al întregii rețele (total elevi, total venit), pentru că raportez investitorului la nivel de grup.
-- Ca manager de filială, vreau să văd KPI-urile filialei mele în raport cu media rețelei, pentru că știu dacă sunt sub sau peste medie.
-- Ca contabil, vreau să export raportul per filială ca CSV, pentru că trebuie să îl integrez în sistemul de contabilitate al holdingului.
+- US-MF-09: Rapoarte consolidate vs per-filială
+- US-MF-16: KPI compare side-by-side
 
 ## Acceptance criteria
 
-1. API `GET /api/branches/reports/kpi?from=YYYY-MM-DD&to=YYYY-MM-DD` — returnează:
-   ```json
-   {
-     "consolidated": { "activeStudents": N, "monthlyRevenue": N, "retentionRate": N },
-     "byBranch": [
-       { "branchId": "...", "branchName": "...", "activeStudents": N, "monthlyRevenue": N, "retentionRate": N }
-     ]
-   }
-   ```
-   - `activeStudents`: COUNT students WHERE status='active' AND branch_id=X
-   - `monthlyRevenue`: SUM payments.amount WHERE paid_at BETWEEN from AND to AND branch_id=X
-   - `retentionRate`: students activi la finalul intervalului / studenți activi la început (0-100)
-
-2. UI `BranchReportsPage` (`/app/branches/reports`):
-   - Toggle "Consolidat / Per filială"
-   - View consolidat: 3 carduri mari (Elevi activi, Venit total, Rată retenție)
-   - View per filială: grid de carduri, un card per filială, cu badge color-coded (verde/galben/roșu vs medie)
-   - Date picker pentru interval
-   - Buton "Export CSV" pentru view-ul curent
-
-3. Route `/app/branches/reports` în `App.tsx`.
-
-4. Link "Rapoarte filiale" în sidebar (numai dacă tenant are ≥ 2 filiale SAU user e owner).
-
-5. Branch-scoped: dacă user are branchScope setat, afișează numai propria filială.
+- [ ] Toggle "Consolidat / Per filială" vizibil în /app/reports (sau dashboard KPI)
+- [ ] Mod "Per filială": carduri separate per branch cu MRR + studenți activi
+- [ ] Tabel comparativ: cel puțin 2 coloane când există 2+ filiale
+- [ ] GET /api/analytics/branches → 200 cu array branches + KPIs
+- [ ] Mod "Consolidat": comportament REP-301 neschimbat
+- [ ] Dark mode + tokens pe cards noi
 
 ## Files
 
 ### New
-- `server/routes/branchReports.ts` — KPI endpoint
-- `src/pages/app/BranchReportsPage.tsx` — dashboard UI
-- `src/__tests__/branch-reports.test.tsx` — unit tests
+- `server/routes/analytics-branches.ts`
+- `src/components/reports/BranchKpiCards.tsx`
 
 ### Modified
-- `server/app.ts` — mount branchReports routes
-- `src/App.tsx` — add route
-- `src/components/app/AppShell.tsx` — add sidebar link
-- `src/lib/api/branches.ts` — add KPI API helper
+- `server/routes/analytics.ts` — add /branches endpoint (sau routes separate)
+- `server/app.ts` — mount dacă necesar
+- `src/pages/app/ReportsPage.tsx` (sau DashboardPage) — toggle + branch view
 
 ## Tests
 
-- **T-BRANCH-704-1** [blocant] GET /api/branches/reports/kpi returns 200 with consolidated and byBranch.
-- **T-BRANCH-704-2** [blocant] BranchReportsPage renders without crash.
-- **T-BRANCH-704-3** [normal] consolidated.activeStudents equals sum of all branches' activeStudents.
-- **T-BRANCH-704-4** [normal] Export CSV button triggers download with correct headers.
-- **T-BRANCH-704-5** [normal] Toggle between "Consolidat" and "Per filială" renders different UI sections.
+1. [blocant] GET /api/analytics/branches → 200 cu array valid
+2. [blocant] Toggle "Per filială" → afișează BranchKpiCards
+3. [blocant] Toggle "Consolidat" → revine la KPI total
+4. [normal] BranchKpiCards renders fără crash cu 0 branches
+5. [normal] Tabel comparativ cu 2 filiale → 2 coloane
 
 ## DoD
 
-- [ ] No new migrations (data from existing tables filtered by branch_id)
-- [ ] Build + typecheck + lint green
-- [ ] Unit tests green
-- [ ] Reviewer APPROVED
-- [ ] PR on `feat/BRANCH-faza-1-multifiliale`
+Standard — toate criteriile [blocant] verzi, reviewer APPROVED, integration-architect CONNECTED.

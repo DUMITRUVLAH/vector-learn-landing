@@ -16,3 +16,8 @@ export * from "./analytics";
 export * from "./messages";
 export * from "./broadcasts";
 export * from "./notifications";
+export * from "./cadences";
+export * from "./audit";
+export * from "./invoices";
+export * from "./subscriptions";
+export * from "./branches";

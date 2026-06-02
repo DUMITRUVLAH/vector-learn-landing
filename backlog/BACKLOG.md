@@ -193,34 +193,22 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 1 | `FEEDBACK-601` | Formulare feedback: NPS + text + stele + submit public no-auth + dashboard | 1 | done ✅ | [specs/FEEDBACK-601-forms.md](specs/FEEDBACK-601-forms.md) |
+| 1 | `FIN-601` | Facturi PDF cu serie incrementală + UI /app/invoices | 1 | done ✅ | [specs/FIN-601-invoices.md](specs/FIN-601-invoices.md) · [PR #76](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/76) |
+| 2 | `FIN-602` | Datorie elev — link CRM-113 debt_cents + reconciliere plăți | 2 | done ✅ | [specs/FIN-602-debt-reconciliation.md](specs/FIN-602-debt-reconciliation.md) · [PR #77](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/77) |
+| 3 | `FIN-603` | Abonamente recurente — generare automată facturi lunare | 3 | done ✅ | [specs/FIN-603-recurring-billing.md](specs/FIN-603-recurring-billing.md) · [PR #78](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/78) |
+| 4 | `FIN-604` | e-Factura export stub (UBL 2.1 XML) + export SAGA CSV | 4 | done ✅ | [specs/FIN-604-efactura-stub.md](specs/FIN-604-efactura-stub.md) · [PR #79](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/79) |
 
-## Active milestone: CX — Customer Experience (cohorte cursanți)
+## Active milestone: BRANCH — Modulul Multifiliale (branches + scoped access + reports)
 
-> Portat din proiectul `copy-roas` (Vector Academy Dashboard) la nivel de **idei de cod, tabele și
-> features** — reimplementat în arhitectura noastră (Drizzle + tenantId + Hono + design system),
-> NU copy-paste. O fază = un branch = un PR (CLAUDE.md §0.2): `feat/CX-faza-1-cohorts`.
-
-| # | ID | Titlu | Fază | Status | Spec |
-|---|----|-------|------|--------|------|
-| 1 | `CX-701` | Model ediție/cohortă + funcții end-date/progress (din `useCXData`) | 1 | pending | [specs/CX-701-edition-model.md](specs/CX-701-edition-model.md) |
-| 2 | `CX-702` | Pagină cohorte: tab-uri Active/Viitoare/Trecute + progres | 1 | pending | [specs/CX-702-cohort-board.md](specs/CX-702-cohort-board.md) |
-| 3 | `CX-703` | Participanți per cohortă (CRM + manual) cu 3 tabele + stat | 1 | pending | [specs/CX-703-participants-tables.md](specs/CX-703-participants-tables.md) |
-| 4 | `CX-704` | Export CSV participanți cohortă | 1 | pending | [specs/CX-704-export-csv.md](specs/CX-704-export-csv.md) |
-| 5 | `CX-705` | Break-even + profit proiectat per cohortă (din `useProfitability`) | 1 | pending | [specs/CX-705-breakeven-badge.md](specs/CX-705-breakeven-badge.md) |
-
-## Milestone: DIPLOMA — Generare diplome/certificate
-
-> Portat din `copy-roas` (`DiplomaGenerator.tsx` + `VerifyCertificate.tsx`). Editor canvas
-> drag&drop, QR de verificare, export PDF/JPG bulk. Branch: `feat/DIPLOMA-faza-1-certificates`.
+> Fundație multi-branch: branches table, branch_id pe entități, switcher UI, scoped permissions,
+> rapoarte consolidate vs per-filială.
 
 | # | ID | Titlu | Fază | Status | Spec |
 |---|----|-------|------|--------|------|
-| 1 | `DIPLOMA-801` | Schema templates + certificate emise + token verificare | 1 | pending | [specs/DIPLOMA-801-schema-templates.md](specs/DIPLOMA-801-schema-templates.md) |
-| 2 | `DIPLOMA-802` | Editor vizual canvas drag&drop câmpuri + salvare template | 1 | pending | [specs/DIPLOMA-802-canvas-editor.md](specs/DIPLOMA-802-canvas-editor.md) |
-| 3 | `DIPLOMA-803` | Generare PDF/JPG per cursant + QR + persistă certificat | 1 | pending | [specs/DIPLOMA-803-generate-qr.md](specs/DIPLOMA-803-generate-qr.md) |
-| 4 | `DIPLOMA-804` | Generare bulk pe cohortă + download ZIP | 1 | pending | [specs/DIPLOMA-804-bulk-zip.md](specs/DIPLOMA-804-bulk-zip.md) |
-| 5 | `DIPLOMA-805` | Pagină publică verificare `/verify/:token` (no-auth) | 1 | pending | [specs/DIPLOMA-805-public-verify.md](specs/DIPLOMA-805-public-verify.md) |
+| 1 | `BRANCH-701` | Branches schema + branch_id pe entități | 1 | done ✅ | [specs/BRANCH-701-schema.md](specs/BRANCH-701-schema.md) · [PR #80](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/80) |
+| 2 | `BRANCH-702` | Branch switcher UI + filtrare globală | 2 | pending | [specs/BRANCH-702-switcher.md](specs/BRANCH-702-switcher.md) |
+| 3 | `BRANCH-703` | Roluri scoped pe filială — manager vede doar filiala lui | 3 | pending | [specs/BRANCH-703-scoped-roles.md](specs/BRANCH-703-scoped-roles.md) |
+| 4 | `BRANCH-704` | Rapoarte per filială + consolidat | 4 | pending | [specs/BRANCH-704-reports.md](specs/BRANCH-704-reports.md) |
 
 ## Quality gates (required before status → `done`)
 

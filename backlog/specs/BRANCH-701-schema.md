@@ -1,91 +1,85 @@
 ---
 id: BRANCH-701
-title: Schema branches — tabel branches + branch_id pe students/teachers/lessons
+title: "Branches schema + branch_id pe entități (US-MF-01)"
 milestone: BRANCH
-phase: "1"
-branch: feat/BRANCH-faza-1-multifiliale
+phase: "1 — Fundație"
+priority: P0
+slug: branches-schema
+depends_on: ["MVP-002", "MVP-004", "MVP-005"]
 status: pending
-attempts: 0
-depends_on: []
 ---
+
+# BRANCH-701 — Branches schema + branch_id pe entități
 
 ## Goal
 
-Adăugăm suportul multi-filiale la nivel de bază de date: tabel `branches` cu meta-date per
-filială (nume, adresă, manager), câmpul opțional `branch_id` pe tabelele cheie (`students`,
-`teachers`, `lessons`, `courses`), și un seed initial cu "Filiala Implicită" pentru a nu rompe
-datele existente. Aceasta este fundația pe care se vor construi filtrele, permisiunile și
-rapoartele din BRANCH-702..704.
+Definește tabelul `branches` per tenant și adaugă `branch_id` (nullable) pe students, teachers, lessons, courses. Backfill "Default branch" pentru toți rowii existenți. Această migrare este fundația pe care stă tot modulul Multifiliale.
+
+## In scope
+
+- Tabel `branches`:
+  - `id`, `tenant_id`, `name` VARCHAR(200), `address` VARCHAR(500), `manager_user_id` UUID (nullable, FK → users)
+  - `status` ENUM `active | archived`
+  - `created_at`, `updated_at`
+  - Migrare 0016 (urmează 0015_fin604)
+- Câmp `branch_id UUID NULLABLE FK → branches` pe: `students`, `teachers`, `lessons`, `courses`
+  - Migrare 0016 tot (ALTER TABLE pentru fiecare)
+- La creare tenant, se creează automat un "Default branch" cu `name = 'Sediul principal'`
+- API:
+  - `POST /api/branches` — creare filială (admin only)
+  - `GET /api/branches` — lista filiale tenant-scoped
+  - `PATCH /api/branches/:id` — update name/address/manager
+  - `DELETE /api/branches/:id` — archive (nu sterge fizic)
+- Seed actualizat: firstBranch creat în seed, toate students/teachers/lessons din seed au `branch_id = firstBranch.id`
+
+## Out of scope
+
+- Branch switcher UI (BRANCH-702)
+- Scoped permissions (BRANCH-703)
+- Cross-branch reports (BRANCH-704)
 
 ## User stories
 
-- Ca owner de rețea, vreau să definesc 2+ filiale sub același tenant, pentru că am centre în mai multe orașe și vreau să raportez consolidat.
-- Ca manager de filială, vreau că datele mele (elevi, profesori, lecții) sunt grupate pe filiala mea, pentru că nu mă interesează ce se întâmplă la celelalte filiale.
-- Ca sistem, vreau că datele existente să fie asociate cu o "Filialăde Implicită", pentru că altfel toate query-urile cu branch_id NOT NULL ar returna zero rânduri.
-- Ca developer, vreau că branch_id este nullable pe toate tabelele cheie, pentru că centrele cu o singură filială nu ar trebui forțate să configureze branches.
+- US-MF-01: Tabel branches per tenant
 
 ## Acceptance criteria
 
-1. Tabel `branches`:
-   - `id` UUID PK
-   - `tenant_id` UUID FK → tenants (cascade delete)
-   - `name` VARCHAR(200) NOT NULL
-   - `address` TEXT nullable
-   - `manager_user_id` UUID FK → users (set null)
-   - `is_default` BOOLEAN DEFAULT false (un singur default per tenant)
-   - `created_at`, `updated_at` TIMESTAMP
-
-2. Coloane adăugate (nullable, fără DEFAULT forțat, fără backfill în migrare):
-   - `students.branch_id` UUID FK → branches (set null)
-   - `teachers.branch_id` UUID FK → branches (set null)
-   - `lessons.branch_id` UUID FK → branches (set null)
-   - `courses.branch_id` UUID FK → branches (set null)
-
-3. Indexuri pe `branch_id` pentru fiecare tabel modificat.
-
-4. API CRUD pentru branches:
-   - `GET /api/branches` — listare filiale pentru tenant curent
-   - `POST /api/branches` — creare filială nouă
-   - `PUT /api/branches/:id` — editare
-   - `DELETE /api/branches/:id` — ștergere (nu dacă is_default)
-   - `GET /api/branches/current` — returnează filiala activă a utilizatorului curent
-
-5. Seeder: `db:seed` creează o filială implicită ("Filiala Principală") pentru fiecare tenant existent.
-
-6. Migration comisă.
-
-7. Build + typecheck + lint + unit tests verzi.
+- [ ] Tabel `branches` creat, migrare 0016 commitată
+- [ ] Câmp `branch_id` adăugat pe students, teachers, lessons, courses
+- [ ] POST /api/branches → 201 cu branch nou
+- [ ] GET /api/branches → lista tenant-scoped
+- [ ] PATCH /api/branches/:id → actualizare name/address
+- [ ] DELETE /api/branches/:id → status `archived`
+- [ ] Seed crează Default branch + setează branch_id pe toate entitățile
+- [ ] db:reset + db:seed succed
 
 ## Files
 
 ### New
-- `server/db/schema/branches.ts` — tabel branches
-- `server/routes/branches.ts` — CRUD branches API
-- `src/lib/api/branches.ts` — client API helpers
-- `src/__tests__/branches.test.ts` — unit tests
+- `server/db/schema/branches.ts`
+- `drizzle/0016_branch701_branches.sql`
+- `server/routes/branches.ts`
+- `src/lib/api/branches.ts`
 
 ### Modified
+- `server/db/schema/index.ts` — export branches
 - `server/db/schema/students.ts` — add branch_id
 - `server/db/schema/teachers.ts` — add branch_id
 - `server/db/schema/lessons.ts` — add branch_id
 - `server/db/schema/courses.ts` — add branch_id
-- `server/db/schema/index.ts` — export branches
-- `server/app.ts` — mount branches routes
-- `server/db/seed.ts` — add default branch seeding
+- `server/app.ts` — mount branchRoutes
+- `server/db/seed.ts` — create Default branch + set branch_id
 
 ## Tests
 
-- **T-BRANCH-701-1** [blocant] Given the app is running, When GET /api/branches with auth, Then returns 200 with array.
-- **T-BRANCH-701-2** [blocant] When POST /api/branches with valid body, Then returns 201 with created branch.
-- **T-BRANCH-701-3** [blocant] Migration: db:reset + db:seed succeed — no migration collision.
-- **T-BRANCH-701-4** [normal] POST /api/branches with duplicate name for same tenant returns 409 or unique branch via name differentiation.
-- **T-BRANCH-701-5** [normal] DELETE /api/branches/:id on default branch returns 400.
-- **T-BRANCH-701-6** [normal] GET /api/branches returns only branches for the current tenant.
+1. [blocant] Migration gate: 0016 commitată, db:reset+db:seed succed
+2. [blocant] POST /api/branches `{ name: "Cluj", address: "Str. Test 1" }` → 201
+3. [blocant] GET /api/branches → array cu cel puțin 1 branch (Default)
+4. [blocant] PATCH /api/branches/:id `{ name: "Cluj-Napoca" }` → 200
+5. [blocant] DELETE /api/branches/:id → status archived
+6. [normal] Branch student render: students tabel acceptă branch_id fără crash
+7. [normal] Seed verifică branch_id setat pe students
 
 ## DoD
 
-- [ ] Migration committed
-- [ ] Build + typecheck + lint green
-- [ ] Unit tests green
-- [ ] Reviewer APPROVED
-- [ ] PR on `feat/BRANCH-faza-1-multifiliale`
+Standard — toate criteriile [blocant] verzi, reviewer APPROVED, integration-architect CONNECTED.

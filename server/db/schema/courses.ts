@@ -25,8 +25,8 @@ export const courses = pgTable(
     cefrLevel: varchar("cefr_level", { length: 4 }),
     defaultPriceCents: integer("default_price_cents").notNull().default(0),
     durationMinutes: integer("duration_minutes").notNull().default(60),
-    // COURSE-201: soft-delete support
-    status: courseStatusEnum("status").notNull().default("active"),
+    /** BRANCH-701: Branch offering this course (nullable = global catalog) */
+    branchId: uuid("branch_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

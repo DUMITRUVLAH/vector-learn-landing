@@ -41,11 +41,7 @@ export const lessons = pgTable(
     status: lessonStatusEnum("status").notNull().default("scheduled"),
     meetingUrl: varchar("meeting_url", { length: 500 }),
     notes: varchar("notes", { length: 2000 }),
-    /** SCHED-501: Optional room assignment */
-    roomId: uuid("room_id").references(() => rooms.id, { onDelete: "set null" }),
-    /** SCHED-502: Links this lesson to a recurring series */
-    seriesId: uuid("series_id").references(() => lessonSeries.id, { onDelete: "set null" }),
-    /** BRANCH-701: Optional branch assignment for lesson location */
+    /** BRANCH-701: Branch this lesson takes place at (nullable = default) */
     branchId: uuid("branch_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

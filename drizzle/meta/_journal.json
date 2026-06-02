@@ -484,6 +484,55 @@
       "when": 1780396027309,
       "tag": "0068_auth004_2fa_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1780200000000,
+      "tag": "0069_crm126_cadences",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1780200060000,
+      "tag": "0070_crm127_audit_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1780300000000,
+      "tag": "0071_fin601_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1780300060000,
+      "tag": "0072_fin602_debt_reconcile",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1780143485378,
+      "tag": "0073_perpetual_shaman",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1780144108215,
+      "tag": "0074_acoustic_alex_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1780144580052,
+      "tag": "0075_shocking_captain_cross",
+      "breakpoints": true
     }
   ]
 }

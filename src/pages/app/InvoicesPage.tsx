@@ -11,8 +11,6 @@ import {
   PlayCircle,
   FileCode,
   Table2,
-  CreditCard,
-  RefreshCcw,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -20,30 +18,25 @@ import { useRouter } from "@/router/HashRouter";
 import {
   listInvoices,
   createInvoice,
-  downloadInvoicePdf,
+  getInvoicePdf,
   updateInvoiceStatus,
   listSubscriptions,
   updateSubscription,
   runBilling,
   downloadEfacturaXml,
   downloadSagaCsv,
-  bulkGenerateInvoices,
   type Invoice,
   type InvoiceStatus,
   type InvoiceCurrency,
   type Subscription,
   type SubscriptionStatus,
-  type BulkGeneratePreview,
 } from "@/lib/api/invoices";
 import { listStudents, type Student } from "@/lib/api/students";
 import { listPayments, type Payment } from "@/lib/api/payments";
-import { getTenantSettings, updateTenantSettings, type TenantSettings } from "@/lib/api/tenantSettings";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { SubscriptionTable } from "@/components/invoices/SubscriptionTable";
 import { AddSubscriptionModal } from "@/components/invoices/AddSubscriptionModal";
-import { StripeLinkModal } from "@/components/invoices/StripeLinkModal"; // PAY-004
-import { RefundModal } from "@/components/payments/RefundModal"; // PAY-007
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -54,9 +47,6 @@ const STATUS_META: Record<InvoiceStatus, { label: string; cls: string }> = {
   issued: { label: "Emisă", cls: "bg-primary/15 text-primary" },
   paid: { label: "Plătită", cls: "bg-success/15 text-success" },
   cancelled: { label: "Anulată", cls: "bg-destructive/15 text-destructive" },
-  /** PAY-007: Refund statuses */
-  refunded: { label: "Refundat", cls: "bg-destructive/15 text-destructive" },
-  partially_refunded: { label: "Refund parțial", cls: "bg-warning/15 text-warning" },
 };
 
 function formatCurrency(cents: number, currency: InvoiceCurrency = "RON"): string {
@@ -75,7 +65,7 @@ function formatDate(iso: string): string {
   });
 }
 
-type Tab = "invoices" | "subscriptions" | "settings";
+type Tab = "invoices" | "subscriptions";
 
 // ──────────────────────────────────────────────
 // Main page
@@ -99,14 +89,6 @@ export function InvoicesPage() {
   const [filterMonth, setFilterMonth] = useState<string>("");
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [runningBilling, setRunningBilling] = useState(false);
-  // PAY-004: Stripe link modal state
-  const [stripeModal, setStripeModal] = useState<{
-    invoiceId: string;
-    invoiceNumber: string;
-    amountFormatted: string;
-  } | null>(null);
-  // PAY-007: Refund modal state
-  const [refundInvoice, setRefundInvoice] = useState<Invoice | null>(null);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -128,9 +110,7 @@ export function InvoicesPage() {
           month: filterMonth || undefined,
         }),
         listSubscriptions(),
-        // Server caps limit at 100 (see students route Zod schema). Requesting 200
-        // returned a 400 ZodError → page wrongly showed "Niciun elev activ".
-        listStudents({ status: "active", limit: 100 }),
+        listStudents({ status: "active", limit: 200 }),
         listPayments(),
       ]);
       setItems(inv.items);
@@ -148,21 +128,6 @@ export function InvoicesPage() {
     void fetchAll();
   }, [fetchAll]);
 
-  // Load tenant settings when settings tab is active
-  useEffect(() => {
-    if (activeTab !== "settings" || tenantSettings) return;
-    setSettingsLoading(true);
-    getTenantSettings()
-      .then((s) => {
-        setTenantSettings(s);
-        setInvoicePrefixDraft(s.invoicePrefix);
-        setIbanDraft(s.iban ?? "");
-        setBicDraft(s.bic ?? "");
-      })
-      .catch(() => setToast({ kind: "error", message: "Nu pot încărca setările" }))
-      .finally(() => setSettingsLoading(false));
-  }, [activeTab, tenantSettings]);
-
   const handleMarkPaid = async (id: string) => {
     try {
       await updateInvoiceStatus(id, "paid");
@@ -173,9 +138,19 @@ export function InvoicesPage() {
     }
   };
 
-  const handleDownloadPdf = (id: string, _invoiceNumber: string) => {
-    // Triggers direct HTML file download — browser can print to PDF via Ctrl+P
-    downloadInvoicePdf(id);
+  const handleDownloadPdf = async (id: string, invoiceNumber: string) => {
+    try {
+      const result = await getInvoicePdf(id);
+      const win = window.open("", "_blank");
+      if (win) {
+        win.document.write(result.html);
+        win.document.close();
+      } else {
+        setToast({ kind: "error", message: "Permite pop-up-uri pentru a descărca PDF-ul" });
+      }
+    } catch {
+      setToast({ kind: "error", message: `Nu pot genera PDF pentru ${invoiceNumber}` });
+    }
   };
 
   const handleSubStatusChange = async (id: string, status: SubscriptionStatus) => {
@@ -204,29 +179,6 @@ export function InvoicesPage() {
     }
   };
 
-  const handleSaveSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const prefix = invoicePrefixDraft.trim();
-    if (!prefix) return;
-    setSettingsSaving(true);
-    try {
-      const updated = await updateTenantSettings({
-        invoicePrefix: prefix,
-        iban: ibanDraft.trim() || null,
-        bic: bicDraft.trim() || null,
-      });
-      setTenantSettings(updated);
-      setInvoicePrefixDraft(updated.invoicePrefix);
-      setIbanDraft(updated.iban ?? "");
-      setBicDraft(updated.bic ?? "");
-      setToast({ kind: "success", message: "Setări salvate" });
-    } catch {
-      setToast({ kind: "error", message: "Nu pot salva setările" });
-    } finally {
-      setSettingsSaving(false);
-    }
-  };
-
   // Summary totals
   const totalIssued = items
     .filter((i) => i.status === "issued")
@@ -243,24 +195,14 @@ export function InvoicesPage() {
       pageDescription={`${items.length} facturi · ${activeSubs} abonamente active`}
       actions={
         activeTab === "invoices" ? (
-          <div className="inline-flex gap-2">
-            <button
-              type="button"
-              onClick={() => setShowBulkGenerate(true)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground hover:bg-secondary/80"
-            >
-              <FileText className="h-4 w-4" aria-hidden="true" />
-              Bulk generare
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Crează factură
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Crează factură
+          </button>
         ) : (
           <div className="inline-flex gap-2">
             <button
@@ -319,9 +261,6 @@ export function InvoicesPage() {
         </TabButton>
         <TabButton active={activeTab === "subscriptions"} onClick={() => setActiveTab("subscriptions")}>
           Abonamente
-        </TabButton>
-        <TabButton active={activeTab === "settings"} onClick={() => setActiveTab("settings")}>
-          Setări facturare
         </TabButton>
       </div>
 
@@ -500,47 +439,14 @@ export function InvoicesPage() {
                                 </button>
                               )}
                               {(inv.status === "draft" || inv.status === "issued") && (
-                                <>
-                                  {/* PAY-004: Stripe payment link button */}
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setStripeModal({
-                                        invoiceId: inv.id,
-                                        invoiceNumber: inv.invoiceNumber,
-                                        amountFormatted: formatCurrency(
-                                          inv.amountCents,
-                                          inv.currency
-                                        ),
-                                      })
-                                    }
-                                    aria-label={`Trimite link plată card pentru ${inv.invoiceNumber}`}
-                                    className="inline-flex items-center gap-1 rounded-md bg-primary/10 text-primary px-2 py-1 text-[11px] font-semibold hover:bg-primary/20 transition-colors"
-                                  >
-                                    <CreditCard className="h-3 w-3" aria-hidden="true" />
-                                    Card
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleMarkPaid(inv.id)}
-                                    aria-label={`Marchează factură ${inv.invoiceNumber} ca plătită`}
-                                    className="inline-flex items-center gap-1 rounded-md bg-success/10 text-success px-2 py-1 text-[11px] font-semibold hover:bg-success/20"
-                                  >
-                                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                                    Plătit
-                                  </button>
-                                </>
-                              )}
-                              {/* PAY-007: Refund button — show for paid or partially refunded invoices */}
-                              {(inv.status === "paid" || inv.status === "partially_refunded") && (
                                 <button
                                   type="button"
-                                  onClick={() => setRefundInvoice(inv)}
-                                  aria-label={`Procesează rambursare pentru factură ${inv.invoiceNumber}`}
-                                  className="inline-flex items-center gap-1 rounded-md bg-destructive/10 text-destructive px-2 py-1 text-[11px] font-semibold hover:bg-destructive/20 transition-colors"
+                                  onClick={() => handleMarkPaid(inv.id)}
+                                  aria-label={`Marchează factură ${inv.invoiceNumber} ca plătită`}
+                                  className="inline-flex items-center gap-1 rounded-md bg-success/10 text-success px-2 py-1 text-[11px] font-semibold hover:bg-success/20"
                                 >
-                                  <RefreshCcw className="h-3 w-3" aria-hidden="true" />
-                                  Refund
+                                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                                  Plătit
                                 </button>
                               )}
                             </div>
@@ -569,82 +475,6 @@ export function InvoicesPage() {
         </div>
       )}
 
-      {activeTab === "settings" && (
-        <div className="rounded-2xl border border-border bg-card p-6 max-w-lg">
-          <h2 className="text-base font-semibold mb-1">Setări facturare</h2>
-          <p className="text-sm text-muted-foreground mb-5">
-            Configurați seria facturilor emise de centrul dumneavoastră.
-          </p>
-          {settingsLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              Se încarcă…
-            </div>
-          ) : (
-            <form onSubmit={(e) => { void handleSaveSettings(e); }} className="space-y-4">
-              <div>
-                <label htmlFor="invoice-prefix" className="block text-sm font-medium mb-1">
-                  Prefix serie factură
-                </label>
-                <input
-                  id="invoice-prefix"
-                  type="text"
-                  value={invoicePrefixDraft}
-                  onChange={(e) => setInvoicePrefixDraft(e.target.value.toUpperCase())}
-                  maxLength={20}
-                  placeholder="VECT"
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Facturile vor fi numerotate: <span className="font-mono font-semibold">{invoicePrefixDraft || "VECT"}-{new Date().getFullYear()}-0001</span>
-                </p>
-              </div>
-              <div>
-                <label htmlFor="invoice-iban" className="block text-sm font-medium mb-1">
-                  IBAN (pentru QR plată)
-                </label>
-                <input
-                  id="invoice-iban"
-                  type="text"
-                  value={ibanDraft}
-                  onChange={(e) => setIbanDraft(e.target.value.replace(/\s/g, "").toUpperCase())}
-                  maxLength={34}
-                  placeholder="RO49AAAA1B31007593840000"
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Dacă este completat, facturile PDF vor include un QR SEPA scanabil.
-                </p>
-              </div>
-
-              <div>
-                <label htmlFor="invoice-bic" className="block text-sm font-medium mb-1">
-                  BIC/SWIFT (opțional)
-                </label>
-                <input
-                  id="invoice-bic"
-                  type="text"
-                  value={bicDraft}
-                  onChange={(e) => setBicDraft(e.target.value.toUpperCase())}
-                  maxLength={11}
-                  placeholder="BTRLRO22"
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={settingsSaving || !invoicePrefixDraft.trim()}
-                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
-                {settingsSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
-                Salvează
-              </button>
-            </form>
-          )}
-        </div>
-      )}
-
       {/* Create invoice modal */}
       {showCreate && (
         <CreateInvoiceModal
@@ -660,18 +490,6 @@ export function InvoicesPage() {
         />
       )}
 
-      {/* Bulk generate dialog */}
-      {showBulkGenerate && (
-        <BulkGenerateDialog
-          onClose={() => setShowBulkGenerate(false)}
-          onGenerated={() => {
-            setShowBulkGenerate(false);
-            void fetchAll();
-          }}
-          onToast={(kind, message) => setToast({ kind, message })}
-        />
-      )}
-
       {/* Add subscription modal */}
       {showAddSub && (
         <AddSubscriptionModal
@@ -680,30 +498,6 @@ export function InvoicesPage() {
           onSaved={() => {
             setShowAddSub(false);
             setToast({ kind: "success", message: "Abonament creat cu succes" });
-            void fetchAll();
-          }}
-          onError={(m) => setToast({ kind: "error", message: m })}
-        />
-      )}
-
-      {/* PAY-004: Stripe link modal */}
-      {stripeModal && (
-        <StripeLinkModal
-          invoiceId={stripeModal.invoiceId}
-          invoiceNumber={stripeModal.invoiceNumber}
-          amountFormatted={stripeModal.amountFormatted}
-          onClose={() => setStripeModal(null)}
-        />
-      )}
-
-      {/* PAY-007: Refund modal */}
-      {refundInvoice && (
-        <RefundModal
-          invoice={refundInvoice}
-          onClose={() => setRefundInvoice(null)}
-          onRefunded={() => {
-            setRefundInvoice(null);
-            setToast({ kind: "success", message: "Rambursare procesată cu succes" });
             void fetchAll();
           }}
           onError={(m) => setToast({ kind: "error", message: m })}
@@ -1022,173 +816,3 @@ function CreateInvoiceModal({
     </div>
   );
 }
-
-// ──────────────────────────────────────────────
-// PAY-002: Bulk Generate Dialog
-// ──────────────────────────────────────────────
-
-function BulkGenerateDialog({
-  onClose,
-  onGenerated,
-  onToast,
-}: {
-  onClose: () => void;
-  onGenerated: () => void;
-  onToast: (kind: "success" | "error", message: string) => void;
-}) {
-  const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const [month, setMonth] = useState(defaultMonth);
-  const [amountEur, setAmountEur] = useState(0);
-  const [currency, setCurrency] = useState<InvoiceCurrency>("RON");
-  const [preview, setPreview] = useState<BulkGeneratePreview | null>(null);
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [generating, setGenerating] = useState(false);
-
-  const handlePreview = async () => {
-    setLoadingPreview(true);
-    try {
-      const result = await bulkGenerateInvoices({
-        month,
-        amountCents: Math.round(amountEur * 100),
-        currency,
-        dryRun: true,
-      });
-      if (result.dryRun) setPreview(result as BulkGeneratePreview);
-    } catch {
-      onToast("error", "Nu pot calcula preview-ul");
-    } finally {
-      setLoadingPreview(false);
-    }
-  };
-
-  const handleGenerate = async () => {
-    setGenerating(true);
-    try {
-      const result = await bulkGenerateInvoices({
-        month,
-        amountCents: Math.round(amountEur * 100),
-        currency,
-        dryRun: false,
-      });
-      if (!result.dryRun) {
-        onToast("success", `${result.created} facturi generate, ${result.skipped} sărite`);
-        onGenerated();
-      }
-    } catch {
-      onToast("error", "Eroare la generarea facturilor");
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="bulk-dialog-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-    >
-      <div className="bg-card rounded-2xl border border-border shadow-xl max-w-md w-full p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="bulk-dialog-title" className="text-base font-semibold">
-            Generare bulk facturi
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Închide dialog"
-            className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="bulk-month" className="block text-sm font-medium mb-1">
-              Luna / An
-            </label>
-            <input
-              id="bulk-month"
-              type="month"
-              value={month}
-              onChange={(e) => { setMonth(e.target.value); setPreview(null); }}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="bulk-amount" className="block text-sm font-medium mb-1">
-                Sumă per elev
-              </label>
-              <input
-                id="bulk-amount"
-                type="number"
-                min={0}
-                step={0.01}
-                value={amountEur}
-                onChange={(e) => { setAmountEur(Number(e.target.value)); setPreview(null); }}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label htmlFor="bulk-currency" className="block text-sm font-medium mb-1">
-                Monedă
-              </label>
-              <select
-                id="bulk-currency"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value as InvoiceCurrency)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              >
-                <option value="RON">RON</option>
-                <option value="EUR">EUR</option>
-              </select>
-            </div>
-          </div>
-
-          {preview && (
-            <div className="rounded-lg bg-muted/40 border border-border p-4 text-sm space-y-1">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Elevi de facturat:</span>
-                <span className="font-semibold">{preview.count}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Total estimat:</span>
-                <span className="font-semibold">
-                  {new Intl.NumberFormat("ro-RO", { style: "currency", currency: preview.currency, maximumFractionDigits: 0 }).format(preview.totalAmountCents / 100)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Deja facturați luna asta:</span>
-                <span className="font-semibold">{preview.alreadyInvoiced}</span>
-              </div>
-            </div>
-          )}
-
-          <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => void handlePreview()}
-              disabled={loadingPreview}
-              className="flex-1 rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-50"
-            >
-              {loadingPreview ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" aria-hidden="true" /> : "Preview"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleGenerate()}
-              disabled={generating || !preview || preview.count === 0}
-              className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {generating ? "Se generează…" : `Generează ${preview?.count ?? 0} facturi`}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-

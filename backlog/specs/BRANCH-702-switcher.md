@@ -1,74 +1,71 @@
 ---
 id: BRANCH-702
-title: Branch switcher UI + BranchContext — selector filiale în AppShell
+title: "Branch switcher UI + filtrare globală pe filială (US-MF-02)"
 milestone: BRANCH
-phase: "1"
-branch: feat/BRANCH-faza-1-multifiliale
+phase: "2 — UI Switcher"
+priority: P0
+slug: branch-switcher
+depends_on: ["BRANCH-701"]
 status: pending
-attempts: 0
-depends_on: [BRANCH-701]
 ---
+
+# BRANCH-702 — Branch switcher UI + filtrare globală
 
 ## Goal
 
-Adăugăm un dropdown "Toate filialele / București / Cluj" în header-ul AppShell, care stochează
-filiala selectată în localStorage și un React context (`BranchContext`). Toate paginile care
-listează date (elevi, profesori, orar, plăți) vor putea accesa contextul și filtra serverul cu
-`?branchId=`. Managerii cu `branch_scope` restricționat văd automat doar filiala lor (nu pot schimba).
+Adaugă un dropdown "Toate / Sediul principal / Cluj / ..." în AppShell care setează un `branchFilter` context global. Toate paginile (Students, Teachers, Lessons, Invoices) filtrează datele după `branchFilter` activ. Starea se salvează în `localStorage`.
+
+## In scope
+
+- `BranchContext` (React context) cu `activeBranch: string | "all"` și setter
+- `BranchSwitcher` component în AppShell header — dropdown cu filialele tenantului
+- Opțiunea "Toate filialele" (value = "all") = comportamentul actual
+- Propagare: paginile care listează students/teachers/lessons/courses pasează `branch_id` ca query param la API
+- API update: `GET /api/students?branch_id=<id>` + `GET /api/lessons?branch_id=<id>` — filtrare opțională
+- `localStorage` key `vl_active_branch` — persistă selecția între refresh-uri
+- Badge cu numărul filialei selectate în AppShell când nu e "Toate"
+
+## Out of scope
+
+- Creare/editare filiale din UI (BRANCH-701 are API, settings UI vine în SET-8xx)
+- Scoped permissions / access control (BRANCH-703)
 
 ## User stories
 
-- Ca director de rețea, vreau un dropdown "Toate / București / Cluj" în header, pentru că vreau să văd datele unei filiale specifice fără să schimb URL-ul.
-- Ca manager de filială, vreau că selectorul este fixat pe filiala mea și nu pot selecta altele, pentru că nu am acces la datele celorlalți.
-- Ca sistem, vreau că selecția se păstrează între sesiuni prin localStorage, pentru că nu vreau să re-selectez filiala la fiecare refresh.
-- Ca developer, vreau un BranchContext global care expune branchId selectat, pentru că nu vreau prop-drilling prin 20 de componente.
+- US-MF-02: Branch switcher în UI
 
 ## Acceptance criteria
 
-1. `BranchContext` (React context + provider) expune:
-   - `activeBranchId: string | null` — null = toate filialele
-   - `setActiveBranchId(id: string | null): void`
-   - `branches: Branch[]` — lista tuturor filialelor pentru tenant
-   - `loading: boolean`
-
-2. `BranchProvider` în `App.tsx` (wrap la nivel de app, sub auth).
-
-3. Componenta `BranchSwitcher` în `AppShell` header:
-   - Vizibilă numai dacă există ≥ 2 filiale sau user-ul este owner/admin.
-   - Dropdown cu opțiuni: "Toate filialele", urmate de filialele tenant-ului.
-   - Selecția curentă persistată în `localStorage["active_branch_id"]`.
-   - Managers cu `branch_scope` restricționat (BRANCH-703) văd doar propria filială — dropdown dezactivat.
-
-4. Useage pattern: orice pagină importă `useBranch()` și transmite `?branchId=` la fetch-urile API.
-
-5. Pagina `StudentsPage` demonstrează filtrarea: dacă `activeBranchId !== null`, adaugă `?branchId=` la `GET /api/students`.
-
-6. API `GET /api/students` suportă query param `branchId` (filtrare facultativă — nu breaking).
+- [ ] `BranchSwitcher` apare în AppShell header cu lista filialelor
+- [ ] Selectând o filială, pagina Students afișează doar elevii acelei filiale
+- [ ] Selectând "Toate", afișează toți elevii
+- [ ] Selecția se persistă în localStorage și se restaurează la refresh
+- [ ] Badge vizibil când o filială specifică e selectată
+- [ ] GET /api/students?branch_id=<id> → elevi filtrați
+- [ ] GET /api/lessons?branch_id=<id> → lecții filtrate
+- [ ] Dark mode funcționează pe dropdown
 
 ## Files
 
 ### New
-- `src/contexts/BranchContext.tsx` — BranchContext + BranchProvider + useBranch hook
-- `src/components/app/BranchSwitcher.tsx` — dropdown selector component
+- `src/contexts/BranchContext.tsx`
+- `src/components/app/BranchSwitcher.tsx`
 
 ### Modified
-- `src/App.tsx` — wrap routes in BranchProvider
-- `src/components/app/AppShell.tsx` — add BranchSwitcher to header
-- `server/routes/students.ts` — support ?branchId query param
-- `src/pages/app/StudentsPage.tsx` — use useBranch() for filtering
+- `src/components/app/AppShell.tsx` — include BranchSwitcher
+- `src/lib/api/students.ts` — add branch_id filter param
+- `src/lib/api/lessons.ts` (nou dacă nu există) sau `payments.ts`
+- `server/routes/students.ts` — filter by branch_id
+- `server/routes/lessons.ts` — filter by branch_id
 
 ## Tests
 
-- **T-BRANCH-702-1** [blocant] BranchSwitcher renders without crash.
-- **T-BRANCH-702-2** [blocant] BranchContext provides activeBranchId and setActiveBranchId.
-- **T-BRANCH-702-3** [normal] Selecting a branch in BranchSwitcher updates activeBranchId.
-- **T-BRANCH-702-4** [normal] activeBranchId is persisted to localStorage on change.
-- **T-BRANCH-702-5** [normal] GET /api/students?branchId=X returns only students from that branch.
+1. [blocant] BranchSwitcher renders with "Toate filialele" option
+2. [blocant] Selectând o filială → studentsApi este chemat cu branch_id
+3. [blocant] "Toate" → studentsApi este chemat fără branch_id
+4. [blocant] BranchContext persistă în localStorage
+5. [normal] Dark mode: dropdown are classes cu semantic tokens
 
 ## DoD
 
-- [ ] No new migrations
-- [ ] Build + typecheck + lint green
-- [ ] Unit tests green
-- [ ] Reviewer APPROVED
-- [ ] PR on `feat/BRANCH-faza-1-multifiliale`
+Standard — toate criteriile [blocant] verzi, reviewer APPROVED, integration-architect CONNECTED.

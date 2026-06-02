@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { payments, students, invoices, promoCodes } from "../db/schema";
+import { payments, students, invoices } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 const createPaymentSchema = z.object({

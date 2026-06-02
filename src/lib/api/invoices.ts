@@ -1,7 +1,6 @@
 import { api } from "../api";
 
-/** PAY-007: Added 'refunded' and 'partially_refunded' statuses */
-export type InvoiceStatus = "draft" | "issued" | "paid" | "cancelled" | "refunded" | "partially_refunded";
+export type InvoiceStatus = "draft" | "issued" | "paid" | "cancelled";
 export type InvoiceCurrency = "EUR" | "RON" | "USD";
 
 export interface Invoice {
@@ -19,12 +18,13 @@ export interface Invoice {
   dueDate: string | null;
   notes: string | null;
   pdfKey: string | null;
-  /** PAY-007: Total amount refunded so far (cents) */
-  refundedAmountCents: number;
-  /** PAY-007: Stripe Payment Intent ID for Stripe-paid invoices */
-  stripePaymentIntentId: string | null;
   createdAt: string;
   studentName: string;
+}
+
+export interface InvoicePdfResult {
+  invoiceNumber: string;
+  html: string;
 }
 
 export function listInvoices(params?: {
@@ -46,8 +46,6 @@ export function createInvoice(input: {
   series?: string;
   dueDate?: string | null;
   notes?: string | null;
-  /** INTEG-102 */
-  courseId?: string | null;
 }): Promise<Invoice> {
   return api<Invoice>("/api/invoices", {
     method: "POST",
@@ -55,13 +53,8 @@ export function createInvoice(input: {
   });
 }
 
-/**
- * Triggers a direct HTML download of the invoice PDF.
- * The server returns text/html with Content-Disposition: attachment,
- * which browsers download and can print to PDF using the print dialog.
- */
-export function downloadInvoicePdf(id: string): void {
-  window.location.href = `/api/invoices/${id}/pdf`;
+export function getInvoicePdf(id: string): Promise<InvoicePdfResult> {
+  return api<InvoicePdfResult>(`/api/invoices/${id}/pdf`);
 }
 
 export function updateInvoiceStatus(
@@ -140,35 +133,6 @@ export function updateSubscription(
 export function runBilling(): Promise<RunBillingResult> {
   return api<RunBillingResult>("/api/invoices/subscriptions/run-billing", {
     method: "POST",
-  });
-}
-
-// ── PAY-002: Bulk invoice generation ──────────────────────────────────────────
-
-export interface BulkGeneratePreview {
-  dryRun: true;
-  count: number;
-  totalAmountCents: number;
-  currency: string;
-  alreadyInvoiced: number;
-}
-
-export interface BulkGenerateResult {
-  dryRun: false;
-  created: number;
-  skipped: number;
-  invoiceIds: string[];
-}
-
-export function bulkGenerateInvoices(params: {
-  month: string;
-  amountCents: number;
-  currency?: string;
-  dryRun: boolean;
-}): Promise<BulkGeneratePreview | BulkGenerateResult> {
-  return api<BulkGeneratePreview | BulkGenerateResult>("/api/invoices/bulk-generate", {
-    method: "POST",
-    body: JSON.stringify(params),
   });
 }
 

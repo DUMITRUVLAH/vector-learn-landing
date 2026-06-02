@@ -30,8 +30,8 @@ export const students = pgTable(
     familyId: uuid("family_id").references(() => families.id, { onDelete: "set null" }),
     /** FIN-602: Total outstanding debt in cents (floored at 0) */
     debtCents: integer("debt_cents").notNull().default(0),
-    /** MOB-105: Opt-in for class leaderboard display */
-    leaderboardOptIn: boolean("leaderboard_opt_in").notNull().default(false),
+    /** BRANCH-701: Branch this student belongs to (nullable = default/all) */
+    branchId: uuid("branch_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -40,7 +40,6 @@ export const students = pgTable(
     statusIdx: index("students_status_idx").on(t.tenantId, t.status),
     nameIdx: index("students_name_idx").on(t.tenantId, t.fullName),
     debtIdx: index("students_debt_idx").on(t.tenantId, t.debtCents),
-    branchIdx: index("students_branch_idx").on(t.tenantId, t.branchId),
   })
 );
 
