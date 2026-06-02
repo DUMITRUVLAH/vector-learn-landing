@@ -58,8 +58,6 @@ export const leads = pgTable(
     mergedIntoId: uuid("merged_into_id"),  // [CRM-102] audit pointer
     convertedToStudentId: uuid("converted_to_student_id").references(() => students.id, { onDelete: "set null" }),
     convertedAt: timestamp("converted_at", { withTimezone: true }),
-    assignedTo: uuid("assigned_to").references(() => users.id, { onDelete: "set null" }),
-    consentRevokedAt: timestamp("consent_revoked_at", { withTimezone: true }),
     lostReason: varchar("lost_reason", { length: 500 }),
     /** CRM-111: Lead score 0-100 derived from source signals — hot/warm/cold */
     score: integer("score"),

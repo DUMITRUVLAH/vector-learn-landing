@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, integer, boolean, jsonb, timestamp, index } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 
 /**
@@ -33,3 +33,46 @@ export const apiKeys = pgTable(
 
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
+
+/** INT-902: Outbound webhook endpoints configured per tenant */
+export const webhookEndpoints = pgTable(
+  "webhook_endpoints",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    url: varchar("url", { length: 2048 }).notNull(),
+    secret: varchar("secret", { length: 255 }).notNull(),
+    events: jsonb("events"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("webhook_endpoints_tenant_idx").on(t.tenantId),
+  })
+);
+
+/** INT-902: Delivery record for each outbound webhook attempt */
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    endpointId: uuid("endpoint_id").notNull().references(() => webhookEndpoints.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    eventType: varchar("event_type", { length: 100 }).notNull(),
+    payload: jsonb("payload").notNull(),
+    statusCode: integer("status_code"),
+    responseBody: text("response_body"),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    endpointIdx: index("webhook_deliveries_endpoint_idx").on(t.endpointId),
+    tenantIdx: index("webhook_deliveries_tenant_idx").on(t.tenantId),
+    eventTypeIdx: index("webhook_deliveries_event_type_idx").on(t.eventType),
+  })
+);
+
+export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;

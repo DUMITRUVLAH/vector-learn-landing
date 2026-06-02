@@ -1,13 +1,13 @@
 /**
- * CRM-123 — Server-side helper to create in-app notifications.
+ * CRM-123 — Server-side helper to create in-app inAppNotifications.
  * Used by leads routes (lead_created, lead_converted) and task cron jobs.
  */
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client";
-import { notifications, users } from "../db/schema";
-import type { NewNotification } from "../db/schema";
+import { inAppNotifications, users } from "../db/schema";
+import type { NewInAppNotification } from "../db/schema";
 
-export type NotificationPayload = Omit<NewNotification, "id" | "createdAt">;
+export type NotificationPayload = Omit<NewInAppNotification, "id" | "createdAt">;
 
 /**
  * Create a single notification record.
@@ -15,7 +15,7 @@ export type NotificationPayload = Omit<NewNotification, "id" | "createdAt">;
  */
 export async function createNotification(payload: NotificationPayload): Promise<void> {
   try {
-    await db.insert(notifications).values(payload);
+    await db.insert(inAppNotifications).values(payload);
   } catch {
     // Notifications are best-effort — never crash the caller
   }
@@ -44,7 +44,7 @@ export async function notifyManagersAndOwners(
 
     if (targets.length === 0) return;
 
-    await db.insert(notifications).values(
+    await db.insert(inAppNotifications).values(
       targets.map((u) => ({
         ...notification,
         tenantId,

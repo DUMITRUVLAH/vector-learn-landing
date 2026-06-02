@@ -53,33 +53,6 @@ export const groups = pgTable(
 );
 
 /**
- * COURSE-202: Many-to-many enrollment of students into groups.
- */
-export const groupEnrollments = pgTable(
-  "group_enrollments",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id, { onDelete: "cascade" }),
-    groupId: uuid("group_id")
-      .notNull()
-      .references(() => groups.id, { onDelete: "cascade" }),
-    studentId: uuid("student_id")
-      .notNull()
-      .references(() => students.id, { onDelete: "cascade" }),
-    enrolledAt: timestamp("enrolled_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => ({
-    groupIdx: index("ge_group_idx").on(t.groupId),
-    studentIdx: index("ge_student_idx").on(t.studentId),
-    tenantIdx: index("ge_tenant_idx").on(t.tenantId),
-  })
-);
-
-/**
  * COURSE-202: Waitlist for full groups. FIFO by created_at.
  */
 export const groupWaitlist = pgTable(
@@ -110,5 +83,4 @@ export const groupWaitlist = pgTable(
 
 export type Group = typeof groups.$inferSelect;
 export type NewGroup = typeof groups.$inferInsert;
-export type GroupEnrollment = typeof groupEnrollments.$inferSelect;
 export type GroupWaitlist = typeof groupWaitlist.$inferSelect;

@@ -6,9 +6,6 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
- * CRM-134: Users routes
- * GET /api/users/tenant-members — returns all users in the current tenant (for @mention autocomplete)
-import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { users } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -68,7 +65,7 @@ userRoutes.patch(
     return c.json(updated);
   }
 );
-userRoutes.use("/*", requireAuth);
+
 /** Returns id + name for all users in the current tenant (no passwords exposed). */
 userRoutes.get("/tenant-members", async (c) => {
   const { tenantId } = c.get("user");
@@ -78,3 +75,4 @@ userRoutes.get("/tenant-members", async (c) => {
     .where(eq(users.tenantId, tenantId))
     .orderBy(users.name);
   return c.json({ members });
+});
