@@ -4,9 +4,14 @@
  * All routes require authentication; student/parent roles get narrowed data.
  */
 import { Hono } from "hono";
-import { and, eq, gt, asc } from "drizzle-orm";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
+import { and, asc, desc, eq, gt, lt, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { lessons, studentLessons, students, teachers, courses, rooms } from "../db/schema";
+import {
+  lessons, studentLessons, students, teachers, courses, rooms,
+  homework, homeworkSubmissions,
+} from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const mobileRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -139,4 +144,139 @@ mobileRoutes.get("/schedule", async (c) => {
     .limit(50);
 
   return c.json({ lessons: rows });
+});
+
+/**
+ * MOB-102: Homework list for the current student
+ * GET /api/m/homework?filter=overdue
+ * Returns homework sorted by deadline ASC. Optional filter=overdue for past-deadline pending items.
+ */
+mobileRoutes.get("/homework", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const filter = c.req.query("filter"); // "overdue" | undefined
+
+  const [student] = await db
+    .select({ id: students.id })
+    .from(students)
+    .where(and(eq(students.tenantId, tenantId), eq(students.status, "active")))
+    .limit(1);
+
+  if (!student) {
+    return c.json({ homework: [] });
+  }
+
+  const conditions = [
+    eq(homework.tenantId, tenantId),
+    eq(homework.studentId, student.id),
+  ];
+
+  if (filter === "overdue") {
+    const now = new Date();
+    conditions.push(lt(homework.deadline, now));
+    conditions.push(eq(homework.status, "pending"));
+  }
+
+  const rows = await db
+    .select({
+      id: homework.id,
+      body: homework.body,
+      deadline: homework.deadline,
+      status: homework.status,
+      lessonId: homework.lessonId,
+      createdAt: homework.createdAt,
+    })
+    .from(homework)
+    .where(and(...conditions))
+    .orderBy(asc(homework.deadline))
+    .limit(100);
+
+  return c.json({ homework: rows });
+});
+
+/**
+ * MOB-102: Submit homework
+ * POST /api/m/homework/:id/submit
+ * Creates a submission and marks homework as submitted.
+ */
+const submitSchema = z.object({
+  text_body: z.string().max(5000).optional(),
+  image_url: z.string().url().max(500).optional(),
+}).refine(
+  (d) => d.text_body || d.image_url,
+  { message: "Trebuie furnizat text_body sau image_url" }
+);
+
+mobileRoutes.post(
+  "/homework/:id/submit",
+  zValidator("json", submitSchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const { id } = c.req.param();
+    const body = c.req.valid("json");
+
+    // Find the homework item
+    const [hw] = await db
+      .select()
+      .from(homework)
+      .where(and(eq(homework.id, id), eq(homework.tenantId, tenantId)))
+      .limit(1);
+
+    if (!hw) return c.json({ error: "Tema nu a fost găsită" }, 404);
+    if (hw.status === "submitted" || hw.status === "graded") {
+      return c.json({ error: "Tema a fost deja trimisă" }, 409);
+    }
+
+    // Create submission
+    const [submission] = await db
+      .insert(homeworkSubmissions)
+      .values({
+        tenantId,
+        homeworkId: hw.id,
+        studentId: hw.studentId,
+        textBody: body.text_body ?? null,
+        imageUrl: body.image_url ?? null,
+      })
+      .returning();
+
+    // Update homework status
+    await db
+      .update(homework)
+      .set({ status: "submitted", updatedAt: sql`now()` })
+      .where(eq(homework.id, hw.id));
+
+    return c.json({ submission, message: "Tema a fost trimisă cu succes" }, 201);
+  }
+);
+
+/**
+ * MOB-102: Teacher grading — list submitted homework for their lessons
+ * GET /api/grading/homework
+ */
+mobileRoutes.get("/grading", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+
+  // Get all submitted homework for this tenant (teacher sees all)
+  const rows = await db
+    .select({
+      id: homework.id,
+      body: homework.body,
+      deadline: homework.deadline,
+      status: homework.status,
+      studentId: homework.studentId,
+      lessonId: homework.lessonId,
+    })
+    .from(homework)
+    .where(
+      and(
+        eq(homework.tenantId, tenantId),
+        eq(homework.status, "submitted")
+      )
+    )
+    .orderBy(desc(homework.deadline))
+    .limit(50);
+
+  return c.json({ homework: rows });
 });

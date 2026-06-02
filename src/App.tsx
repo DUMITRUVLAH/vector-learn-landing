@@ -62,6 +62,9 @@ import { FormPublicPage } from "./pages/public/FormPublicPage";
 // MOB-101: Mobile PWA pages
 import { StudentDashboardPage } from "./pages/app/mobile/StudentDashboardPage";
 import { MobileSchedulePage } from "./pages/app/mobile/MobileSchedulePage";
+// MOB-102: Homework + grading
+import { HomeworkPage } from "./pages/app/mobile/HomeworkPage";
+import { GradingPage } from "./pages/app/GradingPage";
 
 function HomePage() {
   return (
@@ -105,9 +108,12 @@ function Routes() {
   if (path.startsWith("/calculator/roi")) return <ROICalculatorPage />;
   if (path.startsWith("/calculator/migrare")) return <MigrationEstimatorPage />;
   if (path.startsWith("/calculator/pricing")) return <PricingConfiguratorPage />;
-  // MOB-101: Mobile PWA routes — must come before /app/* to avoid /app fallback
+  // MOB-101/102: Mobile PWA routes — must come before /app/* to avoid /app fallback
   if (path.startsWith("/m/schedule")) return <MobileSchedulePage />;
+  if (path.startsWith("/m/homework")) return <HomeworkPage />;
   if (path.startsWith("/m/")) return <StudentDashboardPage />;
+  // MOB-102: Teacher grading
+  if (path.startsWith("/app/grading")) return <GradingPage />;
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;

@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "MOB-102",
-  "last_completed": "MOB-101",
-  "iterations": 143,
-  "last_run_at": "2026-06-02T15:00:00Z",
-  "milestone_status": "MOB faza-1: MOB-101 done (PWA + student dashboard). MOB-102 in progress.",
+  "current_item": "MOB-103",
+  "last_completed": "MOB-102",
+  "iterations": 144,
+  "last_run_at": "2026-06-02T16:00:00Z",
+  "milestone_status": "MOB faza-1: MOB-101+102 done. MOB-103 push notifications in progress.",
   "active_milestone": "MOB",
   "items": {
     "M1-001": {
@@ -3138,13 +3138,25 @@
       }
     },
     "MOB-102": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MOB-102-mobile-schedule-homework.md",
       "milestone": "MOB",
       "phase": "1",
-      "depends_on": ["MOB-101"]
+      "depends_on": ["MOB-101"],
+      "branch": "feat/MOB-faza-1-student-pwa",
+      "reports": [
+        "backlog/reports/MOB-102-reviewer.md",
+        "backlog/reports/MOB-102-manager.md",
+        "backlog/reports/MOB-102-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "MOB-103": {
       "status": "pending",
