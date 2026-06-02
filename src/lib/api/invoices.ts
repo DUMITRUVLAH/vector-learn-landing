@@ -26,11 +26,6 @@ export interface Invoice {
   studentName: string;
 }
 
-export interface InvoicePdfResult {
-  invoiceNumber: string;
-  html: string;
-}
-
 export function listInvoices(params?: {
   status?: InvoiceStatus;
   month?: string;
@@ -59,8 +54,13 @@ export function createInvoice(input: {
   });
 }
 
-export function getInvoicePdf(id: string): Promise<InvoicePdfResult> {
-  return api<InvoicePdfResult>(`/api/invoices/${id}/pdf`);
+/**
+ * Triggers a direct HTML download of the invoice PDF.
+ * The server returns text/html with Content-Disposition: attachment,
+ * which browsers download and can print to PDF using the print dialog.
+ */
+export function downloadInvoicePdf(id: string): void {
+  window.location.href = `/api/invoices/${id}/pdf`;
 }
 
 export function updateInvoiceStatus(
@@ -139,6 +139,35 @@ export function updateSubscription(
 export function runBilling(): Promise<RunBillingResult> {
   return api<RunBillingResult>("/api/invoices/subscriptions/run-billing", {
     method: "POST",
+  });
+}
+
+// ── PAY-002: Bulk invoice generation ──────────────────────────────────────────
+
+export interface BulkGeneratePreview {
+  dryRun: true;
+  count: number;
+  totalAmountCents: number;
+  currency: string;
+  alreadyInvoiced: number;
+}
+
+export interface BulkGenerateResult {
+  dryRun: false;
+  created: number;
+  skipped: number;
+  invoiceIds: string[];
+}
+
+export function bulkGenerateInvoices(params: {
+  month: string;
+  amountCents: number;
+  currency?: string;
+  dryRun: boolean;
+}): Promise<BulkGeneratePreview | BulkGenerateResult> {
+  return api<BulkGeneratePreview | BulkGenerateResult>("/api/invoices/bulk-generate", {
+    method: "POST",
+    body: JSON.stringify(params),
   });
 }
 

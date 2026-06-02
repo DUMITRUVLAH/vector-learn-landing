@@ -61,8 +61,7 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
-import { GroupsPage } from "./pages/app/GroupsPage";
-import { PromoCodesPage } from "./pages/app/PromoCodesPage";
+import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage"; // PAY-003
 
 function HomePage() {
   return (
@@ -166,6 +165,8 @@ function Routes() {
   if (path.startsWith("/app/promo-codes")) return <PromoCodesPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
+  // PAY-003: /portal/invoice/:id — parent-facing invoice portal (no auth)
+  if (path.match(/^\/portal\/invoice\/[^/]+$/)) return <InvoicePortalPage />;
   // /feedback/:token — public no-auth page for students
   if (path.match(/^\/feedback\/[^/]+$/)) {
     const token = path.split("/")[2];
