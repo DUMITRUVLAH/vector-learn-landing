@@ -91,6 +91,11 @@ export interface UnenrollResult {
   promoted: string | null;
 }
 
+/** Get a single group by ID. */
+export async function getGroup(id: string): Promise<Group> {
+  return api<Group>(`/api/groups/${id}`);
+}
+
 /** List all active groups for this tenant; optionally filter by courseId. */
 export async function listGroups(courseId?: string): Promise<Group[]> {
   const params = courseId ? `?courseId=${encodeURIComponent(courseId)}` : "";

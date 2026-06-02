@@ -79,3 +79,32 @@ export function setUserBranchScope(userId: string, branchId: string | null): Pro
     body: JSON.stringify({ branchId }),
   });
 }
+
+/** Assigns (or removes) a manager user to a branch. */
+export function assignManager(branchId: string, userId: string | null): Promise<Branch> {
+  return api<Branch>(`/api/branches/${branchId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ managerUserId: userId }),
+  });
+}
+
+// ─── BRANCH-704: Per-branch KPI report ────────────────────────────────────────
+
+export interface BranchKPI {
+  branchName: string;
+  activeStudents: number;
+  monthlyRevenue: number;
+  retentionRate: number;
+}
+
+export interface BranchKPIResponseFull {
+  consolidated: BranchKPI;
+  byBranch: BranchKPI[];
+}
+
+// Re-export as BranchKPIResponse for BranchReportsPage
+export type BranchKPIResponse = BranchKPIResponseFull;
+
+export function getBranchKPI(params: { from: string; to: string }): Promise<BranchKPIResponse> {
+  return api<BranchKPIResponse>(`/api/branches/kpi?from=${params.from}&to=${params.to}`);
+}
