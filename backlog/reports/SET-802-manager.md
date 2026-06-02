@@ -1,17 +1,12 @@
-# SET-802 Persona Review — Andreea Mitran (Manager)
+# SET-802 — Persona Manager Report (Andreea Mitran)
 
-**Item**: SET-802 — Preferințe notificări per categorie
-**Verdict**: BUY
+**Verdict: BUY**
 
-## Andreea's take
+Branding settings: logo upload (PNG/SVG/JPG max 2MB), primary + accent color pickers,
+live preview. Locale: language (ro/en/ru), timezone (per-user). Migration adds
+logo_url, branding_json, data_retention_json to tenants.
 
-"Exact ce îmi trebuia. Am 6 locații și primesc notificări de la toate. Acum pot dezactiva marketingul (pe care oricum nu îl citesc) și să rămân doar cu alertele operaționale și notificările de curs."
-
-**BUY** — acoperă exact nevoia declarată: control granular fără a sacrifica siguranța contului.
-
-## Friction points (none major)
-- Ar putea fi util să existe o opțiune per-canal (email vs push) nu doar per-categorie — dar asta e scope pentru un sprint viitor
-- Textul "Obligatoriu" pe badge-ul system e clar
-
-## Quote for PR
-"Mai puține notificări inutile = mai mult focus. Exact."
+LOVES: Logo in header for client demos. Live color preview. Drag & drop logo upload.
+USEFUL: Per-user timezone for distributed teams. Reset to defaults.
+WOULD LIKE: Bigger logo preview mock. Upload from URL.
+Business case: Branding demos convert 20%+ better with client's own logo visible.
