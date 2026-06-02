@@ -2818,8 +2818,8 @@
       }
     },
     "COURSE-202": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/COURSE-202-groups-capacity.md",
       "milestone": "COURSE",

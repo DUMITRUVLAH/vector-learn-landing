@@ -27,6 +27,7 @@ const NAV = [
   { label: "Feedback", href: "/app/feedback", icon: MessageSquare },
   { label: "CX Cohorte", href: "/app/cx", icon: BookOpen }, // CX-702
   { label: "Diplome", href: "/app/diplome", icon: Award }, // DIPLOMA-802
+  { label: "Grupe", href: "/app/groups", icon: Users }, // COURSE-202
   { label: "Clase", href: "/app/school/classes", icon: School }, // SCHOOL-001
   { label: "Prezență", href: "/app/school/attendance", icon: ClipboardList }, // SCHOOL-003
   { label: "Formulare", href: "/app/forms", icon: ClipboardCheck }, // FORMS-002
