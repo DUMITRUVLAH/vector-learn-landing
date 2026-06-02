@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db/client";
 import { tenants, users, students, lessons } from "./db/schema";
 import { authRoutes } from "./routes/auth";
+import { institutionRoutes } from "./routes/institution";
 import { studentRoutes } from "./routes/students";
 import { teacherRoutes } from "./routes/teachers";
 import { courseRoutes } from "./routes/courses";
@@ -184,6 +185,8 @@ app.route("/api/settings/branding", brandingSettingsRoutes);
 app.route("/api/settings/audit-log", auditLogSettingsRoutes);
 // SET-805: Notification preferences per user
 app.route("/api/settings/notifications", notificationSettingsRoutes);
+// INST-001: Institution type (gradinita | scoala | mixt) — drives module visibility
+app.route("/api/settings/institution", institutionRoutes);
 
 app.get("/api/health", async (c) => {
   try {
