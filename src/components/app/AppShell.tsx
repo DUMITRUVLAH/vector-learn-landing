@@ -1,12 +1,11 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { BranchSwitcher } from "@/components/app/BranchSwitcher";
 import { Link, useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
-import { NotificationBell } from "@/components/NotificationBell";
 
 interface AppShellProps {
   children: ReactNode;
@@ -26,6 +25,7 @@ const NAV = [
   { label: "Plăți", href: "/app/payments", icon: CreditCard },
   { label: "Salarizare", href: "/app/hr/payroll", icon: DollarSign },
   { label: "Facturi", href: "/app/invoices", icon: Receipt },
+  { label: "Cont de plată", href: "/app/conturi-plata", icon: Landmark }, // CONT-PLATA
   { label: "Contracte", href: "/app/contracts", icon: FileText },
   { label: "Feedback", href: "/app/feedback", icon: MessageSquare },
   { label: "CX Cohorte", href: "/app/cx", icon: BookOpen }, // CX-702
