@@ -87,7 +87,7 @@ authRoutes.post("/signup", zValidator("json", signupSchema), async (c) => {
 
   return c.json({
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
-    tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan },
+    tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan, institutionType: tenant.institutionType },
   });
 });
 
@@ -135,7 +135,7 @@ authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
 
   return c.json({
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
-    tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan },
+    tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan, institutionType: tenant.institutionType },
   });
 });
 
@@ -155,7 +155,7 @@ authRoutes.get("/me", requireAuth, async (c) => {
 
   return c.json({
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
-    tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan },
+    tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan, institutionType: tenant.institutionType },
   });
 });
 

@@ -1,11 +1,12 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark, Building2 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { BranchSwitcher } from "@/components/app/BranchSwitcher";
 import { Link, useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
+import { isModuleVisible, type ModuleAudience } from "@/lib/institution";
 
 interface AppShellProps {
   children: ReactNode;
@@ -23,6 +24,8 @@ interface NavItem {
 interface NavGroup {
   /** Section heading shown in the sidebar; `null` = no heading (top-level items). */
   section: string | null;
+  /** INST-001: which institution types see this group. Defaults to "shared" (always). */
+  audience?: ModuleAudience;
   items: NavItem[];
 }
 
@@ -52,6 +55,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     section: "Școală",
+    audience: "scoala",
     items: [
       { label: "Elevi", href: "/app/students", icon: Users },
       { label: "Grupe", href: "/app/cx", icon: BookOpen }, // CX-702 (fost „CX Cohorte")
@@ -75,6 +79,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     section: "Grădiniță",
+    audience: "gradinita",
     items: [
       { label: "Check-in", href: "/app/kinder/checkin", icon: Baby }, // KINDER-001
       { label: "Jurnal copil", href: "/app/kinder/diary", icon: FileText }, // KINDER-002
@@ -95,6 +100,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     section: "Setări",
     items: [
+      { label: "Instituție", href: "/app/settings/institution", icon: Building2 }, // INST-001
       // AUTH-003/004: user profile + security settings
       { label: "Profil", href: "/app/settings/profile", icon: Shield },
       { label: "Securitate", href: "/app/settings/security", icon: Shield },
@@ -115,6 +121,11 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
   const { path, navigate } = useRouter();
   /** CRM-120: Today action counter for nav badge */
   const [todayCount, setTodayCount] = useState<number | null>(null);
+
+  /** INST-001: show only the module groups that match the tenant's institution type. */
+  const visibleGroups = NAV_GROUPS.filter((g) =>
+    isModuleVisible(g.audience ?? "shared", data?.tenant.institutionType)
+  );
 
   useEffect(() => {
     // Fetch today counter only when authenticated and not already on today page
@@ -193,7 +204,7 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
       <div className="flex-1 flex">
         <aside className="hidden md:flex w-56 flex-col border-r border-border bg-card/40 p-4">
           <nav className="space-y-4">
-            {NAV_GROUPS.map((group) => (
+            {visibleGroups.map((group) => (
               <div key={group.section ?? "_top"} className="space-y-1">
                 {group.section && (
                   <p className="px-3 pt-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">

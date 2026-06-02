@@ -7,6 +7,14 @@ export const tenants = pgTable("tenants", {
   name: varchar("name", { length: 200 }).notNull(),
   slug: varchar("slug", { length: 64 }).notNull().unique(),
   plan: planEnum("plan").notNull().default("starter"),
+  /**
+   * INST-001: Institution type — drives which modules show in the cabinet.
+   * "gradinita" → kindergarten modules only · "scoala" → school modules only
+   * "mixt" → everything (default, so existing tenants keep seeing all modules).
+   * Stored as varchar (not a pg enum) so the deploy-time self-heal in
+   * sync-schema.ts can ADD COLUMN it without first creating a Postgres enum type.
+   */
+  institutionType: varchar("institution_type", { length: 20 }).notNull().default("mixt"),
   /** COMM-205: Tenant timezone for quiet hours (IANA, e.g. "Europe/Bucharest") */
   timezone: varchar("timezone", { length: 60 }).notNull().default("Europe/Bucharest"),
   /** CRM-135: Round-robin auto-assign — enable/disable */

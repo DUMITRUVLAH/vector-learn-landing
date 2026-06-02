@@ -1,4 +1,4 @@
--- 0109: Backfill schema drift — columns/tables declared in code (server/db/schema) but never
+-- 0110: Backfill schema drift — columns/tables declared in code (server/db/schema) but never
 -- migrated, so a fresh DB (local PGlite, tests, fresh prod deploy) 500s / fails to seed.
 -- Caught by src/__tests__/schema-drift.test.ts. All statements are idempotent (IF NOT EXISTS /
 -- duplicate_object guards) so this is safe on prod where sync-schema.ts may have already added

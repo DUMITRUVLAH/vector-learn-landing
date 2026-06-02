@@ -12,7 +12,7 @@ Prioritizare: **P0 = rupe prod / fraudă acum** → **P3 = igienă**. Marcat `[v
 Un sweep cu browser real ([`scripts/e2e-smoke.mjs`](../../scripts/e2e-smoke.mjs), extins de la 23 la ~45 rute + pagini de detaliu cu ID-uri reale) + gate-ul de migrări au scos la iveală 3 bug-uri **care rupeau deploy-ul fresh și orice DB nou** — toate reparate:
 
 - **F1. Migrări multi-statement fără `--> statement-breakpoint`** (23 fișiere). `db:reset` murea cu `cannot insert multiple commands into a prepared statement` pe PGlite → local dev, testele și gate-ul de migrări erau rupte. Reparat (split dollar-quote-aware). _(vezi database §1c)_
-- **F2. Schema drift cod-vs-migrări:** tabelul `webhook_events` + 6 coloane `leads` + 2 coloane `homework_submissions` existau în cod dar **nicio migrare nu le crea** → `db:seed` pica, fresh-deploy ar fi dat 500. Reparat cu [`0109_schema_drift_backfill.sql`](../../drizzle/0109_schema_drift_backfill.sql) idempotent. _(vezi database §1b)_
+- **F2. Schema drift cod-vs-migrări:** tabelul `webhook_events` + 6 coloane `leads` + 2 coloane `homework_submissions` existau în cod dar **nicio migrare nu le crea** → `db:seed` pica, fresh-deploy ar fi dat 500. Reparat cu [`0110_schema_drift_backfill.sql`](../../drizzle/0110_schema_drift_backfill.sql) idempotent. _(vezi database §1b)_
 - **F3. 2 din cele ~41 rute orfane montate:** `/app/settings/api-keys` și `/app/settings/webhooks` afișau `Unexpected token '<'` (fallback SPA). `apiKeyRoutes` nu era montat; backend-ul webhooks-settings **nu exista deloc** → creat [`webhookSettings.ts`](../../server/routes/webhookSettings.ts). _(vezi architecture §1.1, contrazice security „done well")_
 
 ### Sesiunea 2 (continuare 2026-06-02) — fix-uri + guardrails în framework
@@ -38,7 +38,7 @@ Reziduuri rămase: monta `mobileRoutes` după rescriere; gate de drift bidirecț
    **Rămân 2, `mount-exempt`:** `mobileRoutes` (bug real: importă un export `homework` inexistent — necesită rescriere peste `lesson_homework`+`homework_submissions`); `webhookRoutes` (Meta lead-ads inbound, neapelat de frontend). _(architecture #1)_
 
 1b. **Schema drift cod-vs-migrări — fresh deploy / DB nou dă 500** `[✅ REPARAT 2026-06-02 — F2]`
-   Reparat cu `0109` idempotent. **Rezidual P1:** rulează `src/__tests__/schema-drift.test.ts` în deploy gate (există deja) și tratează un **tabel** lipsă ca eșec de build — `sync-schema.ts` adaugă doar coloane, nu tabele. _(database §1b)_
+   Reparat cu `0110` idempotent. **Rezidual P1:** rulează `src/__tests__/schema-drift.test.ts` în deploy gate (există deja) și tratează un **tabel** lipsă ca eșec de build — `sync-schema.ts` adaugă doar coloane, nu tabele. _(database §1b)_
 
 1c. **Migrări multi-statement fără breakpoint — `db:reset`/CI/teste rupte pe PGlite** `[✅ REPARAT 2026-06-02 — F1]`
    23 fișiere reparate. **Rezidual P2:** scan CI de ~10 linii „migrare cu >1 statement ⇒ are `--> statement-breakpoint`" (drizzle-kit generate e rupt pe repo, migrările-s scrise de mână). _(database §1c)_

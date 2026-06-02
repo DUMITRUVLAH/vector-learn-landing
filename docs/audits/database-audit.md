@@ -29,7 +29,7 @@ Code declared, but **no migration created**:
 
 **Impact:** `npm run db:seed` failed (`column "full_name_normalized" of relation "leads" does not exist`), every fresh-DB test that touches these tables failed, and any route doing `db.query.webhookEvents` 500s on a fresh DB.
 
-**Fix applied:** [`drizzle/0109_schema_drift_backfill.sql`](../../drizzle/0109_schema_drift_backfill.sql) — idempotent (`IF NOT EXISTS` / `duplicate_object` guards), so it is also safe to apply to the live prod DB where `sync-schema.ts` may have already added some of these columns. `schema-drift.test.ts` is now green.
+**Fix applied:** [`drizzle/0110_schema_drift_backfill.sql`](../../drizzle/0110_schema_drift_backfill.sql) — idempotent (`IF NOT EXISTS` / `duplicate_object` guards), so it is also safe to apply to the live prod DB where `sync-schema.ts` may have already added some of these columns. `schema-drift.test.ts` is now green.
 
 **Residual (P1):** the only thing standing between code and a 500 was a test nobody runs on a red suite. Wire `schema-drift.test.ts` into the deploy gate (it already exists), and treat a missing **table** (not just column) as a hard build failure — `sync-schema.ts` only adds columns, never tables.
 

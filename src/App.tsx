@@ -86,6 +86,7 @@ import { GamificationPage } from "./pages/app/GamificationPage";
 import { ApiKeysPage } from "./pages/app/settings/ApiKeysPage";
 import { WebhooksPage } from "./pages/app/settings/WebhooksPage";
 import { IntegrationsPage } from "./pages/app/settings/IntegrationsPage";
+import { InstitutionPage } from "./pages/app/settings/InstitutionPage";
 import { KpiDashboardPage } from "./pages/app/KpiDashboardPage";
 import { RevenueChartsPage } from "./pages/app/RevenueChartsPage";
 import { StudentRetentionPage } from "./pages/app/StudentRetentionPage";
@@ -185,6 +186,7 @@ function Routes() {
   if (path.startsWith("/app/settings/api-keys")) return <ApiKeysPage />; // INT-901
   if (path.startsWith("/app/settings/webhooks")) return <WebhooksPage />; // INT-902
   if (path.startsWith("/app/settings/integrations")) return <IntegrationsPage />; // INT-903
+  if (path.startsWith("/app/settings/institution")) return <InstitutionPage />; // INST-001
   if (path.startsWith("/app/settings/crm/automations")) return <AutomationsPage />;
   if (path.startsWith("/app/settings/crm/templates")) return <TemplatesPage />;
   if (path.startsWith("/app/cadences")) return <CadencesPage />;
