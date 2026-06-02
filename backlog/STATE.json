@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_item": "COURSE-103",
+  "current_item": null,
   "last_completed": "COURSE-102",
   "iterations": 115,
   "last_run_at": "2026-06-02T14:00:00Z",
@@ -2574,7 +2574,7 @@
       }
     },
     "COURSE-103": {
-      "status": "in_progress",
+      "status": "pending",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/COURSE-103-student-enrollment.md",

@@ -6,9 +6,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, ne, desc } from "drizzle-orm";
+import { and, eq, ne, desc, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { groups, courses } from "../db/schema";
+import { groups, courses, groupEnrollments, students, payments } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 const scheduleTemplateSchema = z.object({
@@ -39,8 +39,7 @@ export const groupRoutes = new Hono<{ Variables: AuthVariables }>();
 
 groupRoutes.use("*", requireAuth);
 
-// GET /api/groups — list groups for tenant
-// Note: spotsRemaining is always maxStudents here; enrolledCount added in COURSE-103
+// GET /api/groups — list groups for tenant with enrolled count
 groupRoutes.get("/", async (c) => {
   const tenantId = c.get("user").tenantId;
   const courseId = c.req.query("courseId");
@@ -56,16 +55,37 @@ groupRoutes.get("/", async (c) => {
     .where(and(...conditions))
     .orderBy(desc(groups.createdAt));
 
+  // Count active enrollments per group (COURSE-103)
+  let enrolledByGroup: Record<string, number> = {};
+  if (rows.length > 0) {
+    const counts = await db
+      .select({
+        groupId: groupEnrollments.groupId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(groupEnrollments)
+      .where(
+        and(eq(groupEnrollments.tenantId, tenantId), eq(groupEnrollments.status, "active"))
+      )
+      .groupBy(groupEnrollments.groupId);
+    const countRows = Array.isArray(counts) ? counts : (counts as { rows: typeof counts }).rows ?? [];
+    for (const row of Array.isArray(countRows) ? countRows : []) {
+      if (row && typeof row === "object" && "groupId" in row) {
+        enrolledByGroup[row.groupId as string] = row.count as number;
+      }
+    }
+  }
+
   const items = rows.map((g) => ({
     ...g,
-    enrolledCount: 0,
-    spotsRemaining: g.maxStudents,
+    enrolledCount: enrolledByGroup[g.id] ?? 0,
+    spotsRemaining: Math.max(0, g.maxStudents - (enrolledByGroup[g.id] ?? 0)),
   }));
 
   return c.json({ items });
 });
 
-// GET /api/groups/:id — single group
+// GET /api/groups/:id — single group with enrolled count
 groupRoutes.get("/:id", async (c) => {
   const id = c.req.param("id");
   const tenantId = c.get("user").tenantId;
@@ -74,7 +94,151 @@ groupRoutes.get("/:id", async (c) => {
     .from(groups)
     .where(and(eq(groups.id, id), eq(groups.tenantId, tenantId)));
   if (!item) return c.json({ error: "not_found" }, 404);
-  return c.json({ ...item, enrolledCount: 0, spotsRemaining: item.maxStudents });
+
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(groupEnrollments)
+    .where(
+      and(
+        eq(groupEnrollments.groupId, id),
+        eq(groupEnrollments.tenantId, tenantId),
+        eq(groupEnrollments.status, "active")
+      )
+    );
+  const enrolledCount = countRow?.count ?? 0;
+  return c.json({ ...item, enrolledCount, spotsRemaining: Math.max(0, item.maxStudents - enrolledCount) });
+});
+
+// GET /api/groups/:groupId/enrollments — list enrolled students
+groupRoutes.get("/:groupId/enrollments", async (c) => {
+  const groupId = c.req.param("groupId");
+  const tenantId = c.get("user").tenantId;
+
+  // Verify group belongs to tenant
+  const [group] = await db.select({ id: groups.id }).from(groups)
+    .where(and(eq(groups.id, groupId), eq(groups.tenantId, tenantId)));
+  if (!group) return c.json({ error: "not_found" }, 404);
+
+  const rows = await db
+    .select({
+      enrollment: groupEnrollments,
+      student: students,
+    })
+    .from(groupEnrollments)
+    .innerJoin(students, eq(groupEnrollments.studentId, students.id))
+    .where(
+      and(
+        eq(groupEnrollments.groupId, groupId),
+        eq(groupEnrollments.tenantId, tenantId),
+        eq(groupEnrollments.status, "active")
+      )
+    )
+    .orderBy(students.fullName);
+
+  return c.json({ items: rows });
+});
+
+// POST /api/groups/:groupId/enroll — enroll a student (COURSE-103)
+groupRoutes.post("/:groupId/enroll", async (c) => {
+  const groupId = c.req.param("groupId");
+  const tenantId = c.get("user").tenantId;
+
+  let body: { studentId: string; createPayment?: boolean };
+  try {
+    body = await c.req.json<{ studentId: string; createPayment?: boolean }>();
+  } catch {
+    return c.json({ error: "invalid_body" }, 400);
+  }
+  if (!body.studentId) return c.json({ error: "studentId_required" }, 400);
+
+  // Verify group belongs to tenant
+  const [group] = await db.select().from(groups)
+    .where(and(eq(groups.id, groupId), eq(groups.tenantId, tenantId)));
+  if (!group) return c.json({ error: "group_not_found" }, 404);
+
+  // Verify student belongs to tenant
+  const [student] = await db.select().from(students)
+    .where(and(eq(students.id, body.studentId), eq(students.tenantId, tenantId)));
+  if (!student) return c.json({ error: "student_not_found" }, 404);
+
+  // Check capacity
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(groupEnrollments)
+    .where(
+      and(
+        eq(groupEnrollments.groupId, groupId),
+        eq(groupEnrollments.tenantId, tenantId),
+        eq(groupEnrollments.status, "active")
+      )
+    );
+  const enrolledCount = countRow?.count ?? 0;
+  if (enrolledCount >= group.maxStudents) {
+    return c.json({ error: "group_full" }, 409);
+  }
+
+  // Check for duplicate (existing active enrollment)
+  const [existing] = await db.select({ id: groupEnrollments.id })
+    .from(groupEnrollments)
+    .where(
+      and(
+        eq(groupEnrollments.groupId, groupId),
+        eq(groupEnrollments.studentId, body.studentId)
+      )
+    );
+  if (existing) return c.json({ error: "already_enrolled" }, 409);
+
+  // Insert enrollment
+  const [enrollment] = await db
+    .insert(groupEnrollments)
+    .values({
+      groupId,
+      studentId: body.studentId,
+      tenantId,
+      status: "active",
+    })
+    .returning();
+
+  // Optionally create payment draft
+  let payment = null;
+  if (body.createPayment) {
+    const [courseRow] = await db.select({ defaultPriceCents: courses.defaultPriceCents })
+      .from(courses).where(eq(courses.id, group.courseId));
+    if (courseRow) {
+      const [created] = await db.insert(payments).values({
+        tenantId,
+        studentId: body.studentId,
+        amountCents: courseRow.defaultPriceCents,
+        status: "pending",
+        description: `Înrolare în ${group.name}`,
+      }).returning();
+      payment = created;
+    }
+  }
+
+  return c.json({ enrollment, payment }, 201);
+});
+
+// DELETE /api/groups/:groupId/enroll/:studentId — unenroll student
+groupRoutes.delete("/:groupId/enroll/:studentId", async (c) => {
+  const groupId = c.req.param("groupId");
+  const studentId = c.req.param("studentId");
+  const tenantId = c.get("user").tenantId;
+
+  const [updated] = await db
+    .update(groupEnrollments)
+    .set({ status: "removed", updatedAt: new Date() })
+    .where(
+      and(
+        eq(groupEnrollments.groupId, groupId),
+        eq(groupEnrollments.studentId, studentId),
+        eq(groupEnrollments.tenantId, tenantId),
+        eq(groupEnrollments.status, "active")
+      )
+    )
+    .returning({ id: groupEnrollments.id });
+  if (!updated) return c.json({ error: "not_found" }, 404);
+  return c.json({ ok: true });
 });
 
 // POST /api/groups — create group

@@ -33,3 +33,4 @@ export * from "./certificates";
 export * from "./forms";
 
 export * from "./groups"; // COURSE-102
+export * from "./groupEnrollments"; // COURSE-103

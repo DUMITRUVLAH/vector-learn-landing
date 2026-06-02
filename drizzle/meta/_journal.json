@@ -232,6 +232,13 @@
       "when": 1780500100000,
       "tag": "0032_course102_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780500200000,
+      "tag": "0033_course103_group_enrollments",
+      "breakpoints": true
     }
   ]
 }

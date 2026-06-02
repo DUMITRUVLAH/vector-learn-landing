@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { students } from "../db/schema";
+import { students, groupEnrollments, groups, courses } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 const studentBaseSchema = z.object({
