@@ -225,6 +225,13 @@
       "when": 1780392444313,
       "tag": "0031_broad_cyclops",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1780392818612,
+      "tag": "0032_demonic_doomsday",
+      "breakpoints": true
     }
   ]
 }

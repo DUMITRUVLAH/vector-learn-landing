@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "MOB-103",
-  "last_completed": "MOB-102",
-  "iterations": 144,
-  "last_run_at": "2026-06-02T16:00:00Z",
-  "milestone_status": "MOB faza-1: MOB-101+102 done. MOB-103 push notifications in progress.",
+  "current_item": null,
+  "last_completed": "MOB-103",
+  "iterations": 145,
+  "last_run_at": "2026-06-02T17:00:00Z",
+  "milestone_status": "MOB faza-1: MOB-101+102+103 done (batch cap 3). PR opened. MOB-104+105 pending.",
   "active_milestone": "MOB",
   "items": {
     "M1-001": {
@@ -3159,13 +3159,25 @@
       }
     },
     "MOB-103": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MOB-103-push-notifications.md",
       "milestone": "MOB",
       "phase": "1",
-      "depends_on": ["MOB-102", "COMM-201"]
+      "depends_on": ["MOB-102", "COMM-201"],
+      "branch": "feat/MOB-faza-1-student-pwa",
+      "reports": [
+        "backlog/reports/MOB-103-reviewer.md",
+        "backlog/reports/MOB-103-manager.md",
+        "backlog/reports/MOB-103-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "MOB-104": {
       "status": "pending",

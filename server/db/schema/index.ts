@@ -32,3 +32,4 @@ export * from "./cohortParticipants";
 export * from "./certificates";
 export * from "./forms";
 export * from "./homework"; // MOB-102: homework assignments + submissions
+export * from "./pushSubscriptions"; // MOB-103: Web Push VAPID subscriptions

@@ -10,7 +10,7 @@ import { and, asc, desc, eq, gt, lt, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   lessons, studentLessons, students, teachers, courses, rooms,
-  homework, homeworkSubmissions,
+  homework, homeworkSubmissions, pushSubscriptions,
 } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
@@ -279,4 +279,108 @@ mobileRoutes.get("/grading", async (c) => {
     .limit(50);
 
   return c.json({ homework: rows });
+});
+
+/**
+ * MOB-103: Subscribe to Web Push notifications
+ * POST /api/m/push/subscribe
+ * Body: { endpoint, keys: { p256dh, auth }, categories? }
+ */
+const subscribeSchema = z.object({
+  endpoint: z.string().url(),
+  keys: z.object({
+    p256dh: z.string().min(10),
+    auth: z.string().min(10),
+  }),
+  categories: z.array(z.string()).optional(),
+});
+
+mobileRoutes.post(
+  "/push/subscribe",
+  zValidator("json", subscribeSchema),
+  async (c) => {
+    const user = c.get("user");
+    const body = c.req.valid("json");
+
+    // Upsert: if same endpoint already exists, update keys + categories
+    const existing = await db
+      .select({ id: pushSubscriptions.id })
+      .from(pushSubscriptions)
+      .where(eq(pushSubscriptions.endpoint, body.endpoint))
+      .limit(1);
+
+    if (existing.length > 0) {
+      await db
+        .update(pushSubscriptions)
+        .set({
+          keysP256dh: body.keys.p256dh,
+          keysAuth: body.keys.auth,
+          categories: body.categories ?? ["homework", "schedule_change", "grades", "payment", "system"],
+          updatedAt: sql`now()`,
+        })
+        .where(eq(pushSubscriptions.id, existing[0].id));
+      return c.json({ updated: true }, 200);
+    }
+
+    const [sub] = await db
+      .insert(pushSubscriptions)
+      .values({
+        tenantId: user.tenantId,
+        userId: user.id,
+        endpoint: body.endpoint,
+        keysP256dh: body.keys.p256dh,
+        keysAuth: body.keys.auth,
+        categories: body.categories ?? ["homework", "schedule_change", "grades", "payment", "system"],
+      })
+      .returning({ id: pushSubscriptions.id });
+
+    return c.json({ id: sub.id, created: true }, 201);
+  }
+);
+
+/**
+ * MOB-103: Unsubscribe from push notifications
+ * DELETE /api/m/push/subscribe
+ * Body: { endpoint }
+ */
+mobileRoutes.delete(
+  "/push/subscribe",
+  zValidator("json", z.object({ endpoint: z.string().url() })),
+  async (c) => {
+    const body = c.req.valid("json");
+    await db
+      .delete(pushSubscriptions)
+      .where(eq(pushSubscriptions.endpoint, body.endpoint));
+    return c.json({ deleted: true });
+  }
+);
+
+/**
+ * MOB-103: Update notification category preferences
+ * PUT /api/m/push/categories
+ * Body: { endpoint, categories: string[] }
+ */
+mobileRoutes.put(
+  "/push/categories",
+  zValidator("json", z.object({
+    endpoint: z.string().url(),
+    categories: z.array(z.string()),
+  })),
+  async (c) => {
+    const body = c.req.valid("json");
+    await db
+      .update(pushSubscriptions)
+      .set({ categories: body.categories, updatedAt: sql`now()` })
+      .where(eq(pushSubscriptions.endpoint, body.endpoint));
+    return c.json({ updated: true });
+  }
+);
+
+/**
+ * MOB-103: Get VAPID public key for browser subscription setup
+ * GET /api/m/push/vapid-public-key
+ */
+mobileRoutes.get("/push/vapid-public-key", (c) => {
+  const key = process.env.VAPID_PUBLIC_KEY ?? null;
+  return c.json({ key });
 });
