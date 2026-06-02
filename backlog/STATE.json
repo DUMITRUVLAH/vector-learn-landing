@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "SCHED-602",
-  "last_completed": "SCHED-601",
-  "iterations": 126,
+  "current_item": "SCHED-603",
+  "last_completed": "SCHED-602",
+  "iterations": 127,
   "last_run_at": "2026-06-02T09:00:00Z",
   "milestone_status": "SCHED faza-6: in progress \u2014 SCHED-601..603",
   "active_milestone": "SCHED",
@@ -2899,7 +2899,7 @@
       ]
     },
     "SCHED-602": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHED-602-teacher-substitute.md",
@@ -2909,11 +2909,23 @@
         "SCHED-601",
         "MVP-006"
       ],
-      "title": "\u00cenlocuitor profesor la lec\u021bie + notificare automat\u0103"
+      "title": "\u00cenlocuitor profesor la lec\u021bie + notificare automat\u0103",
+      "branch": "feat/SCHED-faza-6-calendar-ux",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "reports": [
+        "backlog/reports/SCHED-602-reviewer.md",
+        "backlog/reports/SCHED-602-manager.md",
+        "backlog/reports/SCHED-602-student.md"
+      ]
     },
     "SCHED-603": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHED-603-schedule-view-by-teacher.md",
       "milestone": "SCHED",

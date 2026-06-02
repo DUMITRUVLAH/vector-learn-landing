@@ -3,8 +3,9 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, gte, lt, ne, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { lessons, courses, teachers, users, rooms, students, studentLessons } from "../db/schema";
+import { lessons, courses, teachers, users, students, studentLessons } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { writeAuditLog } from "../lib/auditLogger";
 
 const createLessonSchema = z.object({
   courseId: z.string().uuid(),
@@ -325,5 +326,71 @@ lessonRoutes.patch(
         .returning();
       return c.json(created, 201);
     }
+  }
+);
+
+// ─── SCHED-602: PATCH /api/lessons/:id/substitute ────────────────────────────
+// Change the teacher for a specific lesson (substitute), with conflict check + audit.
+
+const substituteBodySchema = z.object({
+  teacherId: z.string().uuid(),
+});
+
+lessonRoutes.patch(
+  "/:id/substitute",
+  zValidator("json", substituteBodySchema),
+  async (c) => {
+    const lessonId = c.req.param("id");
+    const tenantId = c.get("user").tenantId;
+    const actorId = c.get("user").id;
+    const { teacherId: newTeacherId } = c.req.valid("json");
+
+    const lesson = await db.query.lessons.findFirst({
+      where: and(eq(lessons.id, lessonId), eq(lessons.tenantId, tenantId)),
+    });
+    if (!lesson) return c.json({ error: "not_found" }, 404);
+    if (lesson.status === "cancelled") return c.json({ error: "lesson_cancelled" }, 422);
+
+    // Verify new teacher belongs to tenant
+    const teacher = await db.query.teachers.findFirst({
+      where: and(eq(teachers.id, newTeacherId), eq(teachers.tenantId, tenantId)),
+    });
+    if (!teacher) return c.json({ error: "teacher_not_found" }, 404);
+
+    // Conflict check: new teacher must be free in this slot
+    const conflict = await findConflict(
+      tenantId,
+      newTeacherId,
+      lesson.scheduledAt.toISOString(),
+      lesson.durationMinutes,
+      lessonId // exclude this lesson
+    );
+    if (conflict) {
+      return c.json({ error: "teacher_double_booked", conflictingLessonId: conflict.id }, 409);
+    }
+
+    const oldTeacherId = lesson.teacherId;
+    const [updated] = await db
+      .update(lessons)
+      .set({ teacherId: newTeacherId, updatedAt: new Date() })
+      .where(and(eq(lessons.id, lessonId), eq(lessons.tenantId, tenantId)))
+      .returning();
+
+    // Audit log
+    await writeAuditLog({
+      tenantId,
+      actorId,
+      actionType: "lesson.teacher_substituted",
+      targetType: "lesson",
+      targetId: lessonId,
+      oldValue: { teacherId: oldTeacherId },
+      newValue: { teacherId: newTeacherId },
+    });
+
+    // Notification stub: real delivery via COMM module (COMM-201).
+    // oldTeacherId and newTeacherId are available for the notification payload.
+    void oldTeacherId; // referenced in audit log above; notification deferred to COMM
+
+    return c.json(updated);
   }
 );

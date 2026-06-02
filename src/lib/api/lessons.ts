@@ -78,6 +78,19 @@ export function patchLesson(
   });
 }
 
+// SCHED-602: Substitute teacher on a lesson
+export function substituteTeacher(lessonId: string, teacherId: string): Promise<Lesson> {
+  return api<Lesson>(`/api/lessons/${lessonId}/substitute`, {
+    method: "PATCH",
+    body: JSON.stringify({ teacherId }),
+  });
+}
+
+// SCHED-602: Get teachers available in a lesson's slot (no conflict)
+export function listAvailableTeachers(lessonId: string): Promise<{ items: Teacher[] }> {
+  return api<{ items: Teacher[] }>(`/api/teachers/available?lessonId=${encodeURIComponent(lessonId)}`);
+}
+
 export type AttendanceStatus = "present" | "absent" | "late" | "excused" | "pending";
 
 export interface LessonStudent {

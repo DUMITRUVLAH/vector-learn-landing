@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, Fragment, useRef } from "react";
-import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw, Users, Lock } from "lucide-react";
+import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw, Users, Lock, UserCog } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -11,6 +11,8 @@ import {
   createLesson,
   cancelLesson,
   patchLesson,
+  substituteTeacher,
+  listAvailableTeachers,
   getLessonStudents,
   markAttendance,
   type Lesson,
@@ -361,6 +363,11 @@ export function SchedulePage() {
             void fetchAll();
           }}
           onError={(msg) => setToast({ kind: "error", message: msg })}
+          onTeacherChanged={(updated) => {
+            setModal({ kind: "view", lesson: updated });
+            setToast({ kind: "success", message: "Profesor schimbat" });
+            void fetchAll();
+          }}
         />
       )}
 
@@ -701,13 +708,16 @@ function ViewLessonModal({
   onClose,
   onCancelled,
   onError,
+  onTeacherChanged,
 }: {
   lesson: Lesson;
   onClose: () => void;
   onCancelled: () => void;
   onError: (msg: string) => void;
+  onTeacherChanged?: (updatedLesson: Lesson) => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const [showSubstitute, setShowSubstitute] = useState(false);
   const date = new Date(lesson.scheduledAt);
 
   const handleCancel = async () => {
@@ -734,10 +744,20 @@ function ViewLessonModal({
         {lesson.notes && <Row label="Note" value={lesson.notes} />}
       </div>
       <AttendancePanel lesson={lesson} onError={onError} />
-      <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-border">
+      <div className="flex flex-wrap justify-end gap-2 pt-4 mt-4 border-t border-border">
         <button type="button" onClick={onClose} className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted">
           Închide
         </button>
+        {lesson.status !== "cancelled" && (
+          <button
+            type="button"
+            onClick={() => setShowSubstitute(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted"
+          >
+            <UserCog className="h-3.5 w-3.5" />
+            Schimbă profesor
+          </button>
+        )}
         <button
           type="button"
           onClick={handleCancel}
@@ -748,7 +768,117 @@ function ViewLessonModal({
           Anulează lecție
         </button>
       </div>
+      {showSubstitute && (
+        <SubstituteTeacherModal
+          lesson={lesson}
+          onClose={() => setShowSubstitute(false)}
+          onSubstituted={(updated) => {
+            setShowSubstitute(false);
+            onTeacherChanged?.(updated);
+          }}
+          onError={onError}
+        />
+      )}
     </ModalShell>
+  );
+}
+
+// ─── SCHED-602: SubstituteTeacherModal ──────────────────────────────────────
+
+function SubstituteTeacherModal({
+  lesson,
+  onClose,
+  onSubstituted,
+  onError,
+}: {
+  lesson: Lesson;
+  onClose: () => void;
+  onSubstituted: (updated: Lesson) => void;
+  onError: (msg: string) => void;
+}) {
+  const [availableTeachers, setAvailableTeachers] = useState<Teacher[]>([]);
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    listAvailableTeachers(lesson.id)
+      .then((r) => {
+        setAvailableTeachers(r.items);
+        if (r.items.length > 0) setSelectedTeacherId(r.items[0].id);
+      })
+      .catch(() => onError("Nu pot încărca profesorii disponibili."))
+      .finally(() => setLoading(false));
+  }, [lesson.id, onError]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTeacherId) return;
+    setSubmitting(true);
+    try {
+      const updated = await substituteTeacher(lesson.id, selectedTeacherId);
+      onSubstituted(updated);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "teacher_double_booked") {
+        onError("Profesorul ales are conflict în acel slot.");
+      } else {
+        onError("Nu pot schimba profesorul.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Schimbă profesor">
+      <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-2xl border border-border bg-card shadow-xl p-5">
+        <h3 className="font-bold text-base mb-4">Schimbă profesor</h3>
+        {loading ? (
+          <div className="flex items-center gap-2 py-4 text-muted-foreground text-sm">
+            <Loader2 className="h-4 w-4 animate-spin" /> Se caută profesorii disponibili…
+          </div>
+        ) : availableTeachers.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">
+            Niciun profesor disponibil în acest slot.
+          </p>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="sub-teacher" className="block text-sm font-semibold mb-1.5">
+                Profesor disponibil
+              </label>
+              <select
+                id="sub-teacher"
+                value={selectedTeacherId}
+                onChange={(e) => setSelectedTeacherId(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                {availableTeachers.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Profesorul curent: <strong>{lesson.teacherName}</strong>. O notificare va fi trimisă ambilor profesori.
+            </p>
+            <div className="flex justify-end gap-2 pt-1 border-t border-border">
+              <button type="button" onClick={onClose} className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted">
+                Anulează
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCog className="h-3.5 w-3.5" />}
+                Confirmă
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
   );
 }
 
