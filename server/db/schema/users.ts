@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, pgEnum, index, uniqueIndex, boolean } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 
 export const userRoleEnum = pgEnum("user_role", [
@@ -29,14 +29,17 @@ export const users = pgTable(
      * circular import (branches → users → branches) by not importing branches here.
      */
     branchScope: uuid("branch_scope"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+* SET-801: is_active = false blocks login. Soft-delete for departed staff.
+     * Default true; only admins can set false; owners cannot be deactivated.
+     */
+    isActive: boolean("is_active").notNull().default(true),    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     tenantIdx: index("users_tenant_idx").on(t.tenantId),
     emailUniq: uniqueIndex("users_tenant_email_uniq").on(t.tenantId, t.email),
     branchScopeIdx: index("users_branch_scope_idx").on(t.branchScope),
-  })
+isActiveIdx: index("users_is_active_idx").on(t.tenantId, t.isActive),  })
 );
 
 export type User = typeof users.$inferSelect;

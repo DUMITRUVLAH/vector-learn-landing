@@ -182,7 +182,6 @@ export function PayrollPage() {
             </thead>
             <tbody>
               {entries.map((entry) => (
-                // eslint-disable-next-line react/jsx-key -- key is on child tr, React.Fragment doesn't accept key without explicit syntax
                 <React.Fragment key={entry.id}>
                   <tr
                     className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
