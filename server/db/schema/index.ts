@@ -32,6 +32,6 @@ export * from "./cohorts";
 export * from "./cohortParticipants";
 export * from "./certificates";
 export * from "./forms";
-export * from "./aiAuditLog";
-export * from "./churnScores";
-export * from "./aiFeatureFlags";
+
+export * from "./groups"; // COURSE-102
+export * from "./groupEnrollments"; // COURSE-103

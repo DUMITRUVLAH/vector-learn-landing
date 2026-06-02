@@ -3,9 +3,10 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { students } from "../db/schema";
+import { students, groupEnrollments, groups, courses } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { withBranchFilter } from "../middleware/branchScope";
+
 
 const studentBaseSchema = z.object({
   fullName: z.string().min(2).max(200),
@@ -129,4 +130,40 @@ studentRoutes.delete("/:id", async (c) => {
     .returning({ id: students.id });
   if (!archived) return c.json({ error: "not_found" }, 404);
   return c.json({ ok: true, id: archived.id });
+});
+
+/**
+ * COURSE-103: GET /api/students/:id/groups
+ * Returns all active groups the student is enrolled in, with course + schedule info.
+ */
+studentRoutes.get("/:id/groups", async (c) => {
+  const studentId = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
+
+  // Verify student belongs to tenant
+  const [student] = await db.select({ id: students.id }).from(students)
+    .where(and(eq(students.id, studentId), eq(students.tenantId, tenantId)));
+  if (!student) return c.json({ error: "not_found" }, 404);
+
+  const rows = await db
+    .select({
+      enrollment: groupEnrollments,
+      group: groups,
+      courseName: courses.name,
+      courseCefr: courses.cefrLevel,
+    })
+    .from(groupEnrollments)
+    .innerJoin(groups, eq(groupEnrollments.groupId, groups.id))
+    .innerJoin(courses, eq(groups.courseId, courses.id))
+    .where(
+      and(
+        eq(groupEnrollments.studentId, studentId),
+        eq(groupEnrollments.tenantId, tenantId),
+        eq(groupEnrollments.status, "active")
+      )
+    )
+    .orderBy(desc(groupEnrollments.enrolledAt));
+
+  const safeRows = Array.isArray(rows) ? rows : (rows as { rows: typeof rows }).rows ?? [];
+  return c.json({ items: Array.isArray(safeRows) ? safeRows : [] });
 });

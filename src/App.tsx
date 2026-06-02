@@ -36,6 +36,7 @@ import { LoginPage } from "./pages/app/LoginPage";
 import { SignupPage } from "./pages/app/SignupPage";
 import { DashboardPage } from "./pages/app/DashboardPage";
 import { StudentsPage } from "./pages/app/StudentsPage";
+import { StudentDetailPage } from "./pages/app/StudentDetailPage"; // COURSE-103
 import { SchedulePage } from "./pages/app/SchedulePage";
 import { TeachersPage } from "./pages/app/TeachersPage";
 import { PaymentsPage } from "./pages/app/PaymentsPage";
@@ -60,9 +61,9 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
-import { AiAssistantPage } from "./pages/app/AiAssistantPage"; // AI-A01
-import { ChurnPage } from "./pages/app/ChurnPage"; // AI-A02
-import { AiSettingsPage } from "./pages/app/AiSettingsPage"; // AI-A04
+import { CoursesPage } from "./pages/app/CoursesPage"; // COURSE-101
+import { GroupsPage } from "./pages/app/GroupsPage"; // COURSE-102
+import { GroupDetailPage } from "./pages/app/GroupDetailPage"; // COURSE-103
 
 function HomePage() {
   return (
@@ -108,7 +109,19 @@ function Routes() {
   if (path.startsWith("/calculator/pricing")) return <PricingConfiguratorPage />;
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
+  // COURSE-103: /app/students/:id — student detail with "Grupe" tab
+  if (path.match(/^\/app\/students\/[^/]+$/)) {
+    const id = path.split("/").pop()!;
+    return <StudentDetailPage studentId={id} />;
+  }
   if (path.startsWith("/app/students")) return <StudentsPage />;
+  if (path.startsWith("/app/courses")) return <CoursesPage />; // COURSE-101
+  // COURSE-103: /app/groups/:id — group detail with "Elevi înrolați" tab
+  if (path.match(/^\/app\/groups\/[^/]+$/)) {
+    const id = path.split("/").pop()!;
+    return <GroupDetailPage groupId={id} />;
+  }
+  if (path.startsWith("/app/groups")) return <GroupsPage />; // COURSE-102
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;

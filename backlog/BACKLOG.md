@@ -312,3 +312,13 @@ AI-powered features: lesson summary, churn prediction, lead qualification, usage
 | AI-A02 | P0 | Churn prediction — students at risk + suggested actions | pending |
 | AI-A03 | P1 | Lead qualification hot/warm/cold + WhatsApp reply suggestion | pending |
 | AI-A04 | P1 | AI dashboard — cost cap, usage stats, feature flags | pending |
+
+## Milestone: COURSE — Courses & Groups module (Faza 1)
+
+Course management: edit/archive, CEFR levels, Groups as scheduling entities, student enrollment, student profile page.
+
+| ID | Priority | Feature | Status |
+|----|----------|---------|--------|
+| COURSE-101 | P0 | Course management UX — edit, archive, CEFR level, search | pending |
+| COURSE-102 | P0 | Groups (classes) as entities — schema, API, and UI | pending |
+| COURSE-103 | P0 | Student enrollment into groups + auto-payment creation | pending |
