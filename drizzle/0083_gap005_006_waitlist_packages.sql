@@ -23,14 +23,23 @@ CREATE TABLE IF NOT EXISTS "course_waitlist" (
   CONSTRAINT "cwl_unique_entry" UNIQUE ("course_id", "student_id")
 );
 --> statement-breakpoint
-ALTER TABLE "course_waitlist" ADD CONSTRAINT "course_waitlist_tenant_id_tenants_id_fk"
+DO $$ BEGIN
+  ALTER TABLE "course_waitlist" ADD CONSTRAINT "course_waitlist_tenant_id_tenants_id_fk"
   FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
-ALTER TABLE "course_waitlist" ADD CONSTRAINT "course_waitlist_course_id_courses_id_fk"
+DO $$ BEGIN
+  ALTER TABLE "course_waitlist" ADD CONSTRAINT "course_waitlist_course_id_courses_id_fk"
   FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
-ALTER TABLE "course_waitlist" ADD CONSTRAINT "course_waitlist_student_id_students_id_fk"
+DO $$ BEGIN
+  ALTER TABLE "course_waitlist" ADD CONSTRAINT "course_waitlist_student_id_students_id_fk"
   FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "cwl_tenant_idx" ON "course_waitlist" USING btree ("tenant_id");
 --> statement-breakpoint
@@ -62,17 +71,29 @@ CREATE TABLE IF NOT EXISTS "lesson_packages" (
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "lesson_packages" ADD CONSTRAINT "lesson_packages_tenant_id_tenants_id_fk"
+DO $$ BEGIN
+  ALTER TABLE "lesson_packages" ADD CONSTRAINT "lesson_packages_tenant_id_tenants_id_fk"
   FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
-ALTER TABLE "lesson_packages" ADD CONSTRAINT "lesson_packages_student_id_students_id_fk"
+DO $$ BEGIN
+  ALTER TABLE "lesson_packages" ADD CONSTRAINT "lesson_packages_student_id_students_id_fk"
   FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
-ALTER TABLE "lesson_packages" ADD CONSTRAINT "lesson_packages_course_id_courses_id_fk"
+DO $$ BEGIN
+  ALTER TABLE "lesson_packages" ADD CONSTRAINT "lesson_packages_course_id_courses_id_fk"
   FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE restrict ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
-ALTER TABLE "lesson_packages" ADD CONSTRAINT "lesson_packages_invoice_id_invoices_id_fk"
+DO $$ BEGIN
+  ALTER TABLE "lesson_packages" ADD CONSTRAINT "lesson_packages_invoice_id_invoices_id_fk"
   FOREIGN KEY ("invoice_id") REFERENCES "public"."invoices"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "lp_tenant_idx" ON "lesson_packages" USING btree ("tenant_id");
 --> statement-breakpoint

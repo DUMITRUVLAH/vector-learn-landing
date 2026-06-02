@@ -17,7 +17,7 @@ DO $$ BEGIN
     'consent',
     'hidden'
   );
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 --> statement-breakpoint
 
@@ -27,7 +27,7 @@ DO $$ BEGIN
     'published',
     'closed'
   );
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 --> statement-breakpoint
 
@@ -36,7 +36,7 @@ DO $$ BEGIN
     'partial',
     'complete'
   );
-EXCEPTION WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 --> statement-breakpoint
 
@@ -86,39 +86,60 @@ CREATE TABLE IF NOT EXISTS "form_submissions" (
 );
 --> statement-breakpoint
 
-ALTER TABLE "forms"
+DO $$ BEGIN
+  ALTER TABLE "forms"
   ADD CONSTRAINT "forms_tenant_id_tenants_id_fk"
   FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
 
-ALTER TABLE "forms"
+DO $$ BEGIN
+  ALTER TABLE "forms"
   ADD CONSTRAINT "forms_created_by_users_id_fk"
   FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
 
-ALTER TABLE "form_fields"
+DO $$ BEGIN
+  ALTER TABLE "form_fields"
   ADD CONSTRAINT "form_fields_tenant_id_tenants_id_fk"
   FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
 
-ALTER TABLE "form_fields"
+DO $$ BEGIN
+  ALTER TABLE "form_fields"
   ADD CONSTRAINT "form_fields_form_id_forms_id_fk"
   FOREIGN KEY ("form_id") REFERENCES "public"."forms"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
 
-ALTER TABLE "form_submissions"
+DO $$ BEGIN
+  ALTER TABLE "form_submissions"
   ADD CONSTRAINT "form_submissions_tenant_id_tenants_id_fk"
   FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
 
-ALTER TABLE "form_submissions"
+DO $$ BEGIN
+  ALTER TABLE "form_submissions"
   ADD CONSTRAINT "form_submissions_form_id_forms_id_fk"
   FOREIGN KEY ("form_id") REFERENCES "public"."forms"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
 
-ALTER TABLE "form_submissions"
+DO $$ BEGIN
+  ALTER TABLE "form_submissions"
   ADD CONSTRAINT "form_submissions_lead_id_leads_id_fk"
   FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
 
 CREATE INDEX IF NOT EXISTS "forms_tenant_idx" ON "forms" USING btree ("tenant_id");

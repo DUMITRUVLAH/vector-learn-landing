@@ -1,5 +1,8 @@
-CREATE TYPE "public"."custom_field_type" AS ENUM('text', 'select', 'number');--> statement-breakpoint
-CREATE TABLE "custom_fields" (
+DO $$ BEGIN
+  CREATE TYPE "public"."custom_field_type" AS ENUM('text', 'select', 'number');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "custom_fields" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"key" varchar(64) NOT NULL,
@@ -11,7 +14,7 @@ CREATE TABLE "custom_fields" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "lead_contacts" (
+CREATE TABLE IF NOT EXISTS "lead_contacts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"lead_id" uuid NOT NULL,
@@ -24,7 +27,7 @@ CREATE TABLE "lead_contacts" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "lead_field_values" (
+CREATE TABLE IF NOT EXISTS "lead_field_values" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"lead_id" uuid NOT NULL,
@@ -34,7 +37,7 @@ CREATE TABLE "lead_field_values" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "lead_tags" (
+CREATE TABLE IF NOT EXISTS "lead_tags" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"lead_id" uuid NOT NULL,
@@ -42,25 +45,49 @@ CREATE TABLE "lead_tags" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "leads" ADD COLUMN "value_cents" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE "leads" ADD COLUMN "debt_cents" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE "leads" ADD COLUMN "company" varchar(300);--> statement-breakpoint
-ALTER TABLE "leads" ADD COLUMN "deal_name" varchar(300);--> statement-breakpoint
-ALTER TABLE "custom_fields" ADD CONSTRAINT "custom_fields_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_contacts" ADD CONSTRAINT "lead_contacts_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_contacts" ADD CONSTRAINT "lead_contacts_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_field_values" ADD CONSTRAINT "lead_field_values_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_field_values" ADD CONSTRAINT "lead_field_values_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_field_values" ADD CONSTRAINT "lead_field_values_field_id_custom_fields_id_fk" FOREIGN KEY ("field_id") REFERENCES "public"."custom_fields"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_tags" ADD CONSTRAINT "lead_tags_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_tags" ADD CONSTRAINT "lead_tags_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "cf_tenant_idx" ON "custom_fields" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "cf_key_idx" ON "custom_fields" USING btree ("tenant_id","key");--> statement-breakpoint
-CREATE INDEX "lc_tenant_idx" ON "lead_contacts" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "lc_lead_idx" ON "lead_contacts" USING btree ("lead_id");--> statement-breakpoint
-CREATE INDEX "lfv_tenant_idx" ON "lead_field_values" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "lfv_lead_idx" ON "lead_field_values" USING btree ("lead_id");--> statement-breakpoint
-CREATE INDEX "lfv_unique_idx" ON "lead_field_values" USING btree ("lead_id","field_id");--> statement-breakpoint
-CREATE INDEX "ltags_tenant_idx" ON "lead_tags" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "ltags_lead_idx" ON "lead_tags" USING btree ("lead_id");--> statement-breakpoint
-CREATE INDEX "ltags_unique_idx" ON "lead_tags" USING btree ("lead_id","tag");
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "value_cents" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "debt_cents" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "company" varchar(300);--> statement-breakpoint
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "deal_name" varchar(300);--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "custom_fields" ADD CONSTRAINT "custom_fields_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "lead_contacts" ADD CONSTRAINT "lead_contacts_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "lead_contacts" ADD CONSTRAINT "lead_contacts_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "lead_field_values" ADD CONSTRAINT "lead_field_values_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "lead_field_values" ADD CONSTRAINT "lead_field_values_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "lead_field_values" ADD CONSTRAINT "lead_field_values_field_id_custom_fields_id_fk" FOREIGN KEY ("field_id") REFERENCES "public"."custom_fields"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "lead_tags" ADD CONSTRAINT "lead_tags_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "lead_tags" ADD CONSTRAINT "lead_tags_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cf_tenant_idx" ON "custom_fields" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cf_key_idx" ON "custom_fields" USING btree ("tenant_id","key");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lc_tenant_idx" ON "lead_contacts" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lc_lead_idx" ON "lead_contacts" USING btree ("lead_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lfv_tenant_idx" ON "lead_field_values" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lfv_lead_idx" ON "lead_field_values" USING btree ("lead_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lfv_unique_idx" ON "lead_field_values" USING btree ("lead_id","field_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ltags_tenant_idx" ON "lead_tags" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ltags_lead_idx" ON "lead_tags" USING btree ("lead_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ltags_unique_idx" ON "lead_tags" USING btree ("lead_id","tag");

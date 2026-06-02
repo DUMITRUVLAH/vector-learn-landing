@@ -2,7 +2,7 @@
 -- authorized_pickups: persons authorized to pick up a child (with optional PIN)
 -- checkin_log: daily check-in/out records with e-signature
 
-CREATE TABLE "authorized_pickups" (
+CREATE TABLE IF NOT EXISTS "authorized_pickups" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"student_id" uuid NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE "authorized_pickups" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "checkin_log" (
+CREATE TABLE IF NOT EXISTS "checkin_log" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"student_id" uuid NOT NULL,
@@ -29,13 +29,28 @@ CREATE TABLE "checkin_log" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "authorized_pickups" ADD CONSTRAINT "authorized_pickups_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "authorized_pickups" ADD CONSTRAINT "authorized_pickups_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "checkin_log" ADD CONSTRAINT "checkin_log_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "checkin_log" ADD CONSTRAINT "checkin_log_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "checkin_log" ADD CONSTRAINT "checkin_log_staff_user_id_users_id_fk" FOREIGN KEY ("staff_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "authorized_pickups_tenant_idx" ON "authorized_pickups" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "authorized_pickups_student_idx" ON "authorized_pickups" USING btree ("student_id");--> statement-breakpoint
-CREATE INDEX "checkin_log_tenant_idx" ON "checkin_log" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "checkin_log_student_date_idx" ON "checkin_log" USING btree ("student_id","log_date");--> statement-breakpoint
-CREATE INDEX "checkin_log_tenant_date_idx" ON "checkin_log" USING btree ("tenant_id","log_date");
+DO $$ BEGIN
+  ALTER TABLE "authorized_pickups" ADD CONSTRAINT "authorized_pickups_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "authorized_pickups" ADD CONSTRAINT "authorized_pickups_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "checkin_log" ADD CONSTRAINT "checkin_log_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "checkin_log" ADD CONSTRAINT "checkin_log_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "checkin_log" ADD CONSTRAINT "checkin_log_staff_user_id_users_id_fk" FOREIGN KEY ("staff_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "authorized_pickups_tenant_idx" ON "authorized_pickups" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "authorized_pickups_student_idx" ON "authorized_pickups" USING btree ("student_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "checkin_log_tenant_idx" ON "checkin_log" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "checkin_log_student_date_idx" ON "checkin_log" USING btree ("student_id","log_date");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "checkin_log_tenant_date_idx" ON "checkin_log" USING btree ("tenant_id","log_date");

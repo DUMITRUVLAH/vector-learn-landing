@@ -22,20 +22,16 @@ ALTER TABLE "invoices"
   ADD COLUMN IF NOT EXISTS "refunded_amount_cents" integer NOT NULL DEFAULT 0;
 
 -- 3. Create refund_status enum
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'refund_status') THEN
-    CREATE TYPE "refund_status" AS ENUM ('pending', 'completed', 'failed');
-  END IF;
-END$$;
+DO $$ BEGIN
+  CREATE TYPE "refund_status" AS ENUM ('pending', 'completed', 'failed');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 4. Create refund_method enum
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'refund_method') THEN
-    CREATE TYPE "refund_method" AS ENUM ('stripe', 'manual');
-  END IF;
-END$$;
+DO $$ BEGIN
+  CREATE TYPE "refund_method" AS ENUM ('stripe', 'manual');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 5. Create refunds table
 CREATE TABLE IF NOT EXISTS "refunds" (

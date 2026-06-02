@@ -2,12 +2,10 @@
 -- Migration 0036
 
 -- 1. Create accounting_transaction_type enum
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'accounting_transaction_type') THEN
-    CREATE TYPE "accounting_transaction_type" AS ENUM ('payment', 'refund', 'payout');
-  END IF;
-END$$;
+DO $$ BEGIN
+  CREATE TYPE "accounting_transaction_type" AS ENUM ('payment', 'refund', 'payout');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 2. Create accounting_mappings table
 CREATE TABLE IF NOT EXISTS "accounting_mappings" (

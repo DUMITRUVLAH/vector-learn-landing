@@ -11,27 +11,23 @@ CREATE TABLE IF NOT EXISTS "makeup_credits" (
 );
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "makeup_credits" ADD CONSTRAINT "makeup_credits_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
+  ALTER TABLE "makeup_credits" ADD CONSTRAINT "makeup_credits_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "makeup_credits" ADD CONSTRAINT "makeup_credits_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "students"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
+  ALTER TABLE "makeup_credits" ADD CONSTRAINT "makeup_credits_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "students"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "makeup_credits" ADD CONSTRAINT "makeup_credits_lesson_id_lessons_id_fk" FOREIGN KEY ("lesson_id") REFERENCES "lessons"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
+  ALTER TABLE "makeup_credits" ADD CONSTRAINT "makeup_credits_lesson_id_lessons_id_fk" FOREIGN KEY ("lesson_id") REFERENCES "lessons"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "makeup_credits" ADD CONSTRAINT "makeup_credits_makeup_lesson_id_lessons_id_fk" FOREIGN KEY ("makeup_lesson_id") REFERENCES "lessons"("id") ON DELETE set null ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
+  ALTER TABLE "makeup_credits" ADD CONSTRAINT "makeup_credits_makeup_lesson_id_lessons_id_fk" FOREIGN KEY ("makeup_lesson_id") REFERENCES "lessons"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "makeup_tenant_idx" ON "makeup_credits" ("tenant_id");--> statement-breakpoint

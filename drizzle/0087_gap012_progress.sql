@@ -27,45 +27,38 @@ CREATE TABLE IF NOT EXISTS "progress_entries" (
 
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "progress_skills" ADD CONSTRAINT "progress_skills_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
+  ALTER TABLE "progress_skills" ADD CONSTRAINT "progress_skills_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
- ALTER TABLE "progress_skills" ADD CONSTRAINT "progress_skills_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
+  ALTER TABLE "progress_skills" ADD CONSTRAINT "progress_skills_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
- ALTER TABLE "progress_entries" ADD CONSTRAINT "progress_entries_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
+  ALTER TABLE "progress_entries" ADD CONSTRAINT "progress_entries_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
- ALTER TABLE "progress_entries" ADD CONSTRAINT "progress_entries_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
+  ALTER TABLE "progress_entries" ADD CONSTRAINT "progress_entries_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
- ALTER TABLE "progress_entries" ADD CONSTRAINT "progress_entries_skill_id_progress_skills_id_fk" FOREIGN KEY ("skill_id") REFERENCES "public"."progress_skills"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
+  ALTER TABLE "progress_entries" ADD CONSTRAINT "progress_entries_skill_id_progress_skills_id_fk" FOREIGN KEY ("skill_id") REFERENCES "public"."progress_skills"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
- ALTER TABLE "progress_entries" ADD CONSTRAINT "progress_entries_lesson_id_lessons_id_fk" FOREIGN KEY ("lesson_id") REFERENCES "public"."lessons"("id") ON DELETE set null ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
+  ALTER TABLE "progress_entries" ADD CONSTRAINT "progress_entries_lesson_id_lessons_id_fk" FOREIGN KEY ("lesson_id") REFERENCES "public"."lessons"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
- ALTER TABLE "progress_entries" ADD CONSTRAINT "progress_entries_evaluated_by_teachers_id_fk" FOREIGN KEY ("evaluated_by") REFERENCES "public"."teachers"("id") ON DELETE set null ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
+  ALTER TABLE "progress_entries" ADD CONSTRAINT "progress_entries_evaluated_by_teachers_id_fk" FOREIGN KEY ("evaluated_by") REFERENCES "public"."teachers"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 --> statement-breakpoint

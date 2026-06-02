@@ -8,8 +8,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "cohorts_tenant_slug_uniq" ON "cohorts" ("tena
 -- Create enrollment_request_status enum
 DO $$ BEGIN
   CREATE TYPE "enrollment_request_status" AS ENUM ('pending', 'paid', 'waitlisted', 'cancelled');
-EXCEPTION
-  WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 -- Create enrollment_requests table

@@ -1,5 +1,8 @@
-CREATE TYPE "public"."group_status" AS ENUM('active', 'archived');--> statement-breakpoint
-CREATE TABLE "groups" (
+DO $$ BEGIN
+  CREATE TYPE "public"."group_status" AS ENUM('active', 'archived');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "groups" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"course_id" uuid NOT NULL,
@@ -11,7 +14,7 @@ CREATE TABLE "groups" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "group_enrollments" (
+CREATE TABLE IF NOT EXISTS "group_enrollments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"group_id" uuid NOT NULL,
@@ -19,7 +22,7 @@ CREATE TABLE "group_enrollments" (
 	"enrolled_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "group_waitlist" (
+CREATE TABLE IF NOT EXISTS "group_waitlist" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"group_id" uuid NOT NULL,
@@ -27,22 +30,49 @@ CREATE TABLE "group_waitlist" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "groups" ADD CONSTRAINT "groups_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "groups" ADD CONSTRAINT "groups_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "groups" ADD CONSTRAINT "groups_teacher_id_teachers_id_fk" FOREIGN KEY ("teacher_id") REFERENCES "public"."teachers"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "group_enrollments" ADD CONSTRAINT "group_enrollments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "group_enrollments" ADD CONSTRAINT "group_enrollments_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "group_enrollments" ADD CONSTRAINT "group_enrollments_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "group_waitlist" ADD CONSTRAINT "group_waitlist_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "group_waitlist" ADD CONSTRAINT "group_waitlist_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "group_waitlist" ADD CONSTRAINT "group_waitlist_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "groups_tenant_idx" ON "groups" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "groups_course_idx" ON "groups" USING btree ("course_id");--> statement-breakpoint
-CREATE INDEX "groups_tenant_course_idx" ON "groups" USING btree ("tenant_id","course_id");--> statement-breakpoint
-CREATE INDEX "ge_group_idx" ON "group_enrollments" USING btree ("group_id");--> statement-breakpoint
-CREATE INDEX "ge_student_idx" ON "group_enrollments" USING btree ("student_id");--> statement-breakpoint
-CREATE INDEX "ge_tenant_idx" ON "group_enrollments" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "gw_group_idx" ON "group_waitlist" USING btree ("group_id");--> statement-breakpoint
-CREATE INDEX "gw_student_idx" ON "group_waitlist" USING btree ("student_id");--> statement-breakpoint
-CREATE INDEX "gw_tenant_idx" ON "group_waitlist" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "gw_fifo_idx" ON "group_waitlist" USING btree ("group_id","created_at");
+DO $$ BEGIN
+  ALTER TABLE "groups" ADD CONSTRAINT "groups_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "groups" ADD CONSTRAINT "groups_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "groups" ADD CONSTRAINT "groups_teacher_id_teachers_id_fk" FOREIGN KEY ("teacher_id") REFERENCES "public"."teachers"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "group_enrollments" ADD CONSTRAINT "group_enrollments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "group_enrollments" ADD CONSTRAINT "group_enrollments_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "group_enrollments" ADD CONSTRAINT "group_enrollments_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "group_waitlist" ADD CONSTRAINT "group_waitlist_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "group_waitlist" ADD CONSTRAINT "group_waitlist_group_id_groups_id_fk" FOREIGN KEY ("group_id") REFERENCES "public"."groups"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  ALTER TABLE "group_waitlist" ADD CONSTRAINT "group_waitlist_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "groups_tenant_idx" ON "groups" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "groups_course_idx" ON "groups" USING btree ("course_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "groups_tenant_course_idx" ON "groups" USING btree ("tenant_id","course_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ge_group_idx" ON "group_enrollments" USING btree ("group_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ge_student_idx" ON "group_enrollments" USING btree ("student_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "ge_tenant_idx" ON "group_enrollments" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "gw_group_idx" ON "group_waitlist" USING btree ("group_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "gw_student_idx" ON "group_waitlist" USING btree ("student_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "gw_tenant_idx" ON "group_waitlist" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "gw_fifo_idx" ON "group_waitlist" USING btree ("group_id","created_at");
