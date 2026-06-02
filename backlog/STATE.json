@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "POLISH-003",
-  "last_completed": "POLISH-002",
-  "iterations": 147,
-  "last_run_at": "2026-06-02T17:00:00Z",
-  "milestone_status": "POLISH faza-1: POLISH-001/002 done. POLISH-003 empty states in_progress.",
+  "current_item": null,
+  "last_completed": "POLISH-003",
+  "iterations": 148,
+  "last_run_at": "2026-06-02T17:30:00Z",
+  "milestone_status": "POLISH faza-1 COMPLETE: POLISH-001/002/003 all done. PR pending on feat/POLISH-faza-1-ux-polish.",
   "active_milestone": "POLISH",
   "items": {
     "M1-001": {
@@ -2192,13 +2192,15 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "POLISH-003": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-003-empty-states.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/POLISH-faza-1-ux-polish",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     }
   }
 }
