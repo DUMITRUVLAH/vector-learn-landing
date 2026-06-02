@@ -60,7 +60,15 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
-import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
+import { KinderCheckinPage } from "./pages/app/KinderCheckinPage";
+import { KinderPickupsPage } from "./pages/app/KinderPickupsPage";
+import { KinderDiaryPage } from "./pages/app/KinderDiaryPage";
+import { KinderRatioPage } from "./pages/app/KinderRatioPage";
+import { KinderMedicalPage } from "./pages/app/KinderMedicalPage";
+import { KinderImmunizationReportPage } from "./pages/app/KinderImmunizationReportPage";
+import { KinderParentFeedPage } from "./pages/app/KinderParentFeedPage";
+import { KinderCompliancePage } from "./pages/app/KinderCompliancePage";
+import KinderIncidentsPage from "./pages/app/KinderIncidentsPage";
 
 function HomePage() {
   return (
@@ -162,14 +170,22 @@ function Routes() {
   if (path.startsWith("/app/invoices")) return <InvoicesPage />;
   if (path.startsWith("/app/cx")) return <CXPage />;
   if (path.startsWith("/app/diplome")) return <DiplomaPage />;
-  if (path.startsWith("/app/school/attendance")) return <SchoolAttendancePage />; // SCHOOL-003
-  if (path.startsWith("/app/school/gradebook")) return <SchoolGradebookPage />; // SCHOOL-002
-  if (path.startsWith("/app/school/tuition")) return <SchoolTuitionPage />; // SCHOOL-004
-  if (path.startsWith("/app/school/admissions")) return <SchoolAdmissionsPage />; // SCHOOL-005
-  if (path.startsWith("/app/school/timetable")) return <SchoolTimetablePage />; // SCHOOL-006
-  if (path.startsWith("/app/school/consent")) return <SchoolConsentPage />; // CONSENT-001
-  if (path.startsWith("/app/parent/portal") || path === "/app/parent") return <ParentPortalPage />; // SCHOOL-007
-  if (path.startsWith("/app/school/classes") || path === "/app/school") return <SchoolClassesPage />; // SCHOOL-001
+  // KINDER-001: /app/kinder/students/:id/pickups must be before /app/kinder/checkin
+  if (path.match(/^\/app\/kinder\/students\/[^/]+\/pickups$/)) return <KinderPickupsPage />;
+  if (path.startsWith("/app/kinder/checkin")) return <KinderCheckinPage />;
+  // KINDER-002: daily diary
+  if (path.startsWith("/app/kinder/diary")) return <KinderDiaryPage />;
+  // KINDER-003: staff-to-child ratio
+  if (path.startsWith("/app/kinder/ratio")) return <KinderRatioPage />;
+  // KINDER-004: medical — allergies, immunization records, medication log
+  if (path.match(/^\/app\/kinder\/students\/[^/]+\/medical$/)) return <KinderMedicalPage />;
+  if (path.startsWith("/app/kinder/immunization-report")) return <KinderImmunizationReportPage />;
+  // KINDER-005: parent app feed + messaging
+  if (path.match(/^\/app\/kinder\/students\/[^/]+\/feed$/)) return <KinderParentFeedPage />;
+  // KINDER-006: licensing/compliance reports
+  if (path.startsWith("/app/kinder/compliance")) return <KinderCompliancePage />;
+  // KINDER-007: incident/accident reports + parent acknowledgment
+  if (path.startsWith("/app/kinder/incidents")) return <KinderIncidentsPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app/reports/kpi")) return <KpiDashboardPage />;
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;

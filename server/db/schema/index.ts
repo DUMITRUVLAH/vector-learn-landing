@@ -31,4 +31,9 @@ export * from "./subscriptions";
 export * from "./cohorts";
 export * from "./cohortParticipants";
 export * from "./certificates";
-export * from "./badges"; // GAP-019
+export * from "./kinder";
+export * from "./kinderDiary";
+export * from "./kinderRatio";
+export * from "./kinderMedical";
+export * from "./kinderMessages";
+export * from "./kinderIncidents";

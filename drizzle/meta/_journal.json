@@ -715,6 +715,48 @@
       "when": 1780303394592,
       "tag": "0101_parched_arclight",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1780340892198,
+      "tag": "0102_kinder001_checkin",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1780341531396,
+      "tag": "0103_kinder002_diary",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1780341788431,
+      "tag": "0104_kinder003_ratio",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1780342221389,
+      "tag": "0105_kinder004_medical",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1780342742444,
+      "tag": "0106_kinder005_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1780343635345,
+      "tag": "0107_kinder007_incidents",
+      "breakpoints": true
     }
   ]
 }
