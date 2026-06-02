@@ -2714,7 +2714,8 @@
       "reports": [
         "backlog/reports/STU-201-manager.md",
         "backlog/reports/STU-201-student.md"
-      ]
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/119"
     },
     "STU-202": {
       "status": "done",
@@ -2733,7 +2734,8 @@
         "integration": "CONNECTED",
         "manager": "BUY",
         "student": "OK"
-      }
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/119"
     },
     "STU-203": {
       "status": "done",
@@ -2756,7 +2758,8 @@
       "reports": [
         "backlog/reports/STU-203-manager.md",
         "backlog/reports/STU-203-student.md"
-      ]
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/119"
     },
     "STU-204": {
       "status": "pending",
