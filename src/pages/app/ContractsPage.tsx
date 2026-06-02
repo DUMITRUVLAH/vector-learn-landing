@@ -27,6 +27,7 @@ import {
   type ContractCurrency,
   type CreateContractPayload,
 } from "@/lib/api/contracts";
+import { listCourses, type CourseItem } from "@/lib/api/courses";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -46,6 +47,8 @@ interface FormState {
   repRole: string;
   // Course
   course: string;
+  /** INTEG-202: FK uuid selected from CoursePicker */
+  courseId: string;
   hours: string;
   scheduleText: string;
   language: string;
@@ -65,6 +68,7 @@ const EMPTY_FORM: FormState = {
   repName: "",
   repRole: "",
   course: "",
+  courseId: "",
   hours: "",
   scheduleText: "",
   language: "",
@@ -108,6 +112,9 @@ export function ContractsPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successContract, setSuccessContract] = useState<Contract | null>(null);
 
+  // INTEG-202: course list for the picker
+  const [courseItems, setCourseItems] = useState<CourseItem[]>([]);
+
   // OCR state
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrNote, setOcrNote] = useState<string | null>(null);
@@ -150,6 +157,16 @@ export function ContractsPage() {
     }
   }, []);
 
+  // INTEG-202: load course list for picker (non-critical, graceful fallback)
+  useEffect(() => {
+    if (sessionStatus !== "authenticated") return;
+    listCourses()
+      .then(({ items }) => setCourseItems(items))
+      .catch(() => {
+        // non-critical — user can still type course name manually
+      });
+  }, [sessionStatus]);
+
   useEffect(() => {
     if (sessionStatus === "authenticated") loadRecent();
   }, [sessionStatus, loadRecent]);
@@ -190,6 +207,8 @@ export function ContractsPage() {
         repName: form.repName || null,
         repRole: form.repRole || null,
         course: form.course || null,
+        // INTEG-202: include FK
+        courseId: form.courseId || null,
         hours: form.hours ? parseInt(form.hours, 10) : null,
         scheduleText: form.scheduleText || null,
         language: form.language || null,
@@ -264,6 +283,7 @@ export function ContractsPage() {
             <Step2
               form={form}
               setField={setField}
+              courseItems={courseItems}
               onBack={() => setStep(1)}
               onSubmit={handleSubmit}
               submitting={submitting}
@@ -539,27 +559,63 @@ function Step1({
 interface Step2Props {
   form: FormState;
   setField: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+  /** INTEG-202: courses list for the picker */
+  courseItems: CourseItem[];
   onBack: () => void;
   onSubmit: () => void;
   submitting: boolean;
   submitError: string | null;
 }
 
-function Step2({ form, setField, onBack, onSubmit, submitting, submitError }: Step2Props) {
+function Step2({ form, setField, courseItems, onBack, onSubmit, submitting, submitError }: Step2Props) {
+  /** INTEG-202: when user picks a course, auto-fill course name and set FK */
+  function handleCourseSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    const id = e.target.value;
+    if (!id) {
+      setField("courseId", "");
+      setField("course", "");
+      return;
+    }
+    const found = courseItems.find((c) => c.id === id);
+    if (found) {
+      setField("courseId", found.id);
+      setField("course", found.name);
+    }
+  }
+
   return (
     <div className="rounded-xl border border-border bg-card p-6 space-y-6">
       <h2 className="text-base font-semibold">Pas 2 — Detalii curs</h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <FormField label="Cursul" htmlFor="course">
-          <input
-            id="course"
-            type="text"
-            value={form.course}
-            onChange={(e) => setField("course", e.target.value)}
-            placeholder="Ex: Engleză A1"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
+        {/* INTEG-202: Course picker — replaces plain text input when courses exist */}
+        <FormField label="Cursul" htmlFor="course-picker">
+          {courseItems.length > 0 ? (
+            <select
+              id="course-picker"
+              value={form.courseId}
+              onChange={handleCourseSelect}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Selectează cursul"
+            >
+              <option value="">— Selectează cursul —</option>
+              {courseItems.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id="course-picker"
+              type="text"
+              value={form.course}
+              onChange={(e) => setField("course", e.target.value)}
+              placeholder="Ex: Engleză A1"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Denumire curs"
+            />
+          )}
         </FormField>
         <FormField label="Nr. ore" htmlFor="hours">
           <input

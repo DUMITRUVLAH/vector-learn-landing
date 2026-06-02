@@ -11,7 +11,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { cohorts } from "../db/schema";
+import { cohorts, courses } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import {
   calculateCohortEndDate,
@@ -62,7 +62,9 @@ const patchSchema = cohortSchema.partial();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function enrichCohort(c: typeof cohorts.$inferSelect) {
+type CohortRow = typeof cohorts.$inferSelect & { courseName?: string | null };
+
+function enrichCohort(c: CohortRow) {
   const endDate = c.manualEndDate
     ? c.manualEndDate
     : calculateCohortEndDate(
@@ -91,10 +93,29 @@ cohortRoutes.get("/", async (c) => {
     ? and(eq(cohorts.tenantId, user.tenantId), eq(cohorts.branchId, branchId))
     : eq(cohorts.tenantId, user.tenantId);
 
+  // INTEG-203: LEFT JOIN courses to return courseName
   const rows = await db
-    .select()
+    .select({
+      id: cohorts.id,
+      tenantId: cohorts.tenantId,
+      courseId: cohorts.courseId,
+      courseName: courses.name,
+      label: cohorts.label,
+      startDate: cohorts.startDate,
+      totalHours: cohorts.totalHours,
+      hoursPerSession: cohorts.hoursPerSession,
+      scheduleDays: cohorts.scheduleDays,
+      isOnline: cohorts.isOnline,
+      manualEndDate: cohorts.manualEndDate,
+      mentorCostCents: cohorts.mentorCostCents,
+      roomCostCents: cohorts.roomCostCents,
+      driveFolderUrl: cohorts.driveFolderUrl,
+      createdAt: cohorts.createdAt,
+      updatedAt: cohorts.updatedAt,
+    })
     .from(cohorts)
-    .where(whereClause)
+    .leftJoin(courses, eq(cohorts.courseId, courses.id))
+    .where(eq(cohorts.tenantId, user.tenantId))
     .orderBy(asc(cohorts.startDate));
 
   const list = Array.isArray(rows) ? rows : (rows as unknown as { rows: typeof rows }).rows ?? rows;

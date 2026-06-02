@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, count, desc, eq, ilike, inArray, ne, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, ilike, inArray, ne, or } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, leadTags, courses } from "../db/schema";
+import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, leadTags, cohorts, cohortParticipants } from "../db/schema";
 import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
@@ -842,18 +842,75 @@ leadRoutes.post("/:id/convert", zValidator("json", convertLeadSchema), async (c)
     userId,
   });
 
+  // INTEG-201: Auto-enroll in cohort if lead has courseId set
+  let autoEnrolledCohortId: string | null = null;
+  if (lead.courseId) {
+    try {
+      // Find the next upcoming or active cohort for this course
+      const today = new Date().toISOString().slice(0, 10);
+      const candidateCohorts = await db
+        .select()
+        .from(cohorts)
+        .where(
+          and(
+            eq(cohorts.tenantId, tenantId),
+            eq(cohorts.courseId, lead.courseId),
+            // Only upcoming or active cohorts (startDate >= today OR already started but not past)
+            // We pick all and filter by category in JS to avoid complex SQL
+          )
+        )
+        .orderBy(asc(cohorts.startDate));
+
+      const eligible = (Array.isArray(candidateCohorts) ? candidateCohorts : []).filter((coh) => {
+        // A cohort is eligible if it's not in the past (startDate <= today is fine for "active";
+        // only skip if it ended — we check endDate via manualEndDate or default 56-day window)
+        const manualEnd = coh.manualEndDate;
+        const estimatedEnd = manualEnd
+          ? manualEnd
+          : (() => {
+              const totalSessions = Math.ceil(coh.totalHours / coh.hoursPerSession);
+              const daysNeeded = totalSessions * 3; // rough estimate: 3 days between sessions
+              const d = new Date(coh.startDate);
+              d.setDate(d.getDate() + daysNeeded);
+              return d.toISOString().slice(0, 10);
+            })();
+        // Include if cohort hasn't ended yet
+        return estimatedEnd >= today;
+      });
+
+      const targetCohort = eligible[0] ?? null;
+
+      if (targetCohort) {
+        await db.insert(cohortParticipants).values({
+          tenantId,
+          cohortId: targetCohort.id,
+          studentId: student.id,
+          fullName: student.fullName,
+          email: student.email ?? null,
+          phone: student.phone ?? null,
+          source: "crm",
+          paymentStatus: "pending",
+          amountCents: 0,
+        });
+        autoEnrolledCohortId = targetCohort.id;
+      }
+    } catch {
+      // Auto-enroll failure must NOT block conversion — log silently
+    }
+  }
+
   // CRM-123: Notify about conversion
   void notifyManagersAndOwners(tenantId, {
     type: "lead_converted",
     title: `Lead convertit: ${lead.fullName}`,
-    body: `Acum este student activ`,
+    body: `Acum este student activ${autoEnrolledCohortId ? " (înscris în cohortă)" : ""}`,
     link: `#/app/leads/${id}`,
-    metadata: { leadId: id, studentId: student.id },
+    metadata: { leadId: id, studentId: student.id, cohortId: autoEnrolledCohortId },
     isRead: false,
   }).catch(() => undefined);
 
   const updatedLead = { ...lead, convertedToStudentId: student.id, stage: "paid" as const };
-  return c.json({ lead: updatedLead, student, familyId });
+  return c.json({ lead: updatedLead, student, familyId, autoEnrolledCohortId });
 });
 
 leadRoutes.get("/:id/interactions", async (c) => {

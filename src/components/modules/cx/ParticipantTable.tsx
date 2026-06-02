@@ -2,13 +2,13 @@
  * CX-703 — ParticipantTable
  * Reusable table for one of the 3 participant buckets (enrolled, free, pending).
  * Features: WhatsApp toggle, delete manual, add row form (optional).
+ * INTEG-203: CRM participants (source='crm', studentId non-null) show a link to /app/students/:id.
  * Touch targets ≥ 44px, semantic tokens, dark mode.
  */
 import { useState } from "react";
 import { Trash2, Loader2, MessageCircle } from "lucide-react";
 import type {
   CohortParticipant,
-  PatchParticipantPayload,
 } from "@/lib/api/cohortParticipants";
 import { cn } from "@/lib/utils";
 
@@ -121,7 +121,20 @@ export function ParticipantTable({
                   key={p.id}
                   className="hover:bg-muted/20 transition-colors"
                 >
-                  <td className="py-2 px-3 text-foreground font-medium">{p.fullName}</td>
+                  <td className="py-2 px-3 text-foreground font-medium">
+                    {/* INTEG-203: CRM participants with studentId → navigation link to student card */}
+                    {p.source === "crm" && p.studentId ? (
+                      <a
+                        href={`#/app/students/${p.studentId}`}
+                        className="text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                        aria-label={`Deschide fișa studentului ${p.fullName}`}
+                      >
+                        {p.fullName}
+                      </a>
+                    ) : (
+                      p.fullName
+                    )}
+                  </td>
                   <td className="py-2 px-3 text-muted-foreground hidden sm:table-cell">
                     {p.email ?? "—"}
                   </td>
