@@ -5,6 +5,7 @@ import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { students } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { withBranchFilter } from "../middleware/branchScope";
 
 const studentBaseSchema = z.object({
   fullName: z.string().min(2).max(200),
@@ -43,9 +44,12 @@ studentRoutes.use("*", requireAuth);
 
 studentRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
   const { search, status, limit, offset } = c.req.valid("query");
-  const tenantId = c.get("user").tenantId;
+  const user = c.get("user");
+  const tenantId = user.tenantId;
 
+  // BRANCH-703: restrict to user's branch if branchScope is set
   const conditions = [eq(students.tenantId, tenantId)];
+  withBranchFilter(user, conditions, students.branchId);
   if (status !== "all") {
     conditions.push(eq(students.status, status));
   }
