@@ -9,7 +9,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 const createPaymentSchema = z.object({
   studentId: z.string().uuid(),
   amountCents: z.number().int().min(0),
-  currency: z.enum(["EUR", "RON", "USD"]).default("EUR"),
+  currency: z.enum(["EUR", "RON", "USD"]).default("RON"),
   status: z.enum(["pending", "paid", "overdue", "refunded", "cancelled"]).default("pending"),
   dueDate: z.string().datetime().optional().nullable(),
   description: z.string().max(500).optional().nullable(),
