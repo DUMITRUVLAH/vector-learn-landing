@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, pgEnum, date, index, integer } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, pgEnum, date, index, integer, boolean } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { families } from "./families";
 import { branches } from "./branches";
@@ -30,8 +30,8 @@ export const students = pgTable(
     familyId: uuid("family_id").references(() => families.id, { onDelete: "set null" }),
     /** FIN-602: Total outstanding debt in cents (floored at 0) */
     debtCents: integer("debt_cents").notNull().default(0),
-    /** BRANCH-701: Optional branch assignment (null = unassigned / default branch) */
-    branchId: uuid("branch_id"),
+    /** MOB-105: Opt-in for class leaderboard display */
+    leaderboardOptIn: boolean("leaderboard_opt_in").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

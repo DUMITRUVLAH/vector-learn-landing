@@ -428,6 +428,34 @@
       "when": 1780504000000,
       "tag": "0060_pay008_accounting_mappings",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1780392444313,
+      "tag": "0061_broad_cyclops",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1780392818612,
+      "tag": "0062_demonic_doomsday",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1780500000000,
+      "tag": "0063_mob104_parent_links_chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1780501000000,
+      "tag": "0064_mob105_gamification",
+      "breakpoints": true
     }
   ]
 }

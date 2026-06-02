@@ -32,8 +32,8 @@ export * from "./cohorts";
 export * from "./cohortParticipants";
 export * from "./certificates";
 export * from "./forms";
-export * from "./stripeSettings";
-export * from "./invoiceReminders";
-export * from "./paymentPlans";
-export * from "./refunds"; // PAY-007
-export * from "./accountingMappings"; // PAY-008
+export * from "./homework"; // MOB-102: homework assignments + submissions
+export * from "./pushSubscriptions"; // MOB-103: Web Push VAPID subscriptions
+export * from "./parentLinks"; // MOB-104: parent ↔ student account link
+export * from "./directMessages"; // MOB-104: parent ↔ teacher 1:1 chat
+export * from "./gamification"; // MOB-105: XP events, streaks, badges

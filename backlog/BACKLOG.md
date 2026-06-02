@@ -315,4 +315,17 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | `PAY-005` | Reminder automat restanțe — WhatsApp/email la 3/7/14 zile | pending | [specs/PAY-005-debt-reminders.md](specs/PAY-005-debt-reminders.md) |
 | `PAY-006` | Plan de plată în rate — N facturi cu scadențe automate | pending | [specs/PAY-006-installment-plans.md](specs/PAY-006-installment-plans.md) |
 | `PAY-007` | Refund — rambursare parțială sau completă cu audit | pending | [specs/PAY-007-refunds.md](specs/PAY-007-refunds.md) |
-| `PAY-008` | Export contabilitate SAGA/1C — CSV lunar | pending | [specs/PAY-008-accounting-export.md](specs/PAY-008-accounting-export.md) |
+| `PAY-008` | Export contabilitate SAGA/1C — CSV lunar | done ✅ | [specs/PAY-008-accounting-export.md](specs/PAY-008-accounting-export.md) · [PR #123](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/123) |
+
+## Active milestone: MOB — Mobile PWA (student & parent experience)
+
+> Mobile-first experience: PWA install, student dashboard, homework submit, push notifications,
+> parent view, gamification (XP/streaks/badges). One branch per phase: `feat/MOB-faza-1-student-pwa`.
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `MOB-101` | PWA setup + student dashboard (next lesson, quick actions) | 1 | pending | [specs/MOB-101-pwa-student-dashboard.md](specs/MOB-101-pwa-student-dashboard.md) |
+| 2 | `MOB-102` | Mobile schedule (day view) + homework list + submit | 1 | pending | [specs/MOB-102-mobile-schedule-homework.md](specs/MOB-102-mobile-schedule-homework.md) |
+| 3 | `MOB-103` | Web Push notifications (VAPID) per category + quiet hours | 1 | pending | [specs/MOB-103-push-notifications.md](specs/MOB-103-push-notifications.md) |
+| 4 | `MOB-104` | Parent mobile view — balance, invoice download, 1:1 chat | 1 | pending | [specs/MOB-104-parent-mobile-view.md](specs/MOB-104-parent-mobile-view.md) |
+| 5 | `MOB-105` | Gamification — XP, streaks, badges, opt-in leaderboard | 1 | pending | [specs/MOB-105-gamification-xp-streaks.md](specs/MOB-105-gamification-xp-streaks.md) |

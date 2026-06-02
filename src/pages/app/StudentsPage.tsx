@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare, Upload, Download } from "lucide-react";
+import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare, UserPlus, Link2 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { StudentForm } from "@/components/app/StudentForm";
 import { ImportStudentsModal } from "@/components/app/ImportStudentsModal"; // STU-203
@@ -366,8 +366,12 @@ export function StudentsPage() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="p-5">
+            <div className="p-5 space-y-6">
               <StudentForm initial={editing} onSuccess={handleSaved} onCancel={closeDrawer} />
+              {/* MOB-104: Parent account link management */}
+              {editing && (
+                <ParentLinksPanel studentId={editing.id} studentName={editing.fullName} />
+              )}
             </div>
           </div>
         </div>
@@ -507,5 +511,111 @@ export function StudentsPage() {
         />
       )}
     </AppShell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MOB-104: Parent-student link management panel (shown in student edit drawer)
+// ---------------------------------------------------------------------------
+
+interface LinkRow {
+  id: string;
+  parentUserId: string;
+  createdAt: string;
+}
+
+interface ParentLinksPanelProps {
+  studentId: string;
+  studentName: string;
+}
+
+function ParentLinksPanel({ studentId, studentName }: ParentLinksPanelProps) {
+  const [links, setLinks] = useState<LinkRow[]>([]);
+  const [newParentUserId, setNewParentUserId] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/m/parent-links/${studentId}`, { credentials: "include" })
+      .then((r) => r.json() as Promise<{ links: LinkRow[] }>)
+      .then((d) => setLinks(d.links ?? []))
+      .catch(() => setLoadError("Nu s-au putut încărca legăturile"));
+  }, [studentId]);
+
+  const handleAdd = async () => {
+    const trimmed = newParentUserId.trim();
+    if (!trimmed || adding) return;
+    setAdding(true);
+    try {
+      const r = await fetch("/api/m/parent-links", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parentUserId: trimmed, studentId }),
+      });
+      const d = (await r.json()) as { link?: LinkRow; id?: string; alreadyLinked?: boolean };
+      if (r.ok) {
+        const linkId = d.link?.id ?? d.id ?? "";
+        const exists = links.some((l) => l.id === linkId);
+        if (!exists && linkId) {
+          setLinks((prev) => [...prev, { id: linkId, parentUserId: trimmed, createdAt: new Date().toISOString() }]);
+        }
+        setNewParentUserId("");
+      }
+    } catch {
+      // silent — user can retry
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-border pt-5 space-y-3">
+      <div className="flex items-center gap-2">
+        <Link2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        <h3 className="text-sm font-semibold">Linkuiește un Cont Părinte</h3>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Asociați ID-ul utilizatorului cu rol <em>parent</em> pentru a-i permite accesul la portalul
+        {" "}<strong>{studentName}</strong>.
+      </p>
+
+      {loadError && (
+        <p className="text-xs text-destructive">{loadError}</p>
+      )}
+
+      {links.length > 0 && (
+        <ul className="space-y-1" role="list" aria-label="Conturi asociate">
+          {links.map((l) => (
+            <li key={l.id} className="flex items-center gap-2 text-xs rounded-md border border-border bg-muted/30 px-3 py-2">
+              <UserPlus className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+              <span className="font-mono truncate flex-1">{l.parentUserId}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="flex gap-2">
+        <label htmlFor="parent-user-id-input" className="sr-only">ID utilizator părinte</label>
+        <input
+          id="parent-user-id-input"
+          type="text"
+          value={newParentUserId}
+          onChange={(e) => setNewParentUserId(e.target.value)}
+          placeholder="UUID utilizator (rol: parent)"
+          className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        <button
+          type="button"
+          onClick={() => void handleAdd()}
+          disabled={!newParentUserId.trim() || adding}
+          aria-label="Asociază cont"
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserPlus className="h-3 w-3" />}
+          Asociază
+        </button>
+      </div>
+    </div>
   );
 }

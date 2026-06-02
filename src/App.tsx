@@ -61,9 +61,20 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
-import { StripeSettingsPage } from "./pages/app/StripeSettingsPage"; // PAY-004
-import { PaymentPlansPage } from "./pages/app/PaymentPlansPage"; // PAY-006
-import { AccountingPage } from "./pages/app/AccountingPage"; // PAY-008
+// MOB-101: Mobile PWA pages
+import { StudentDashboardPage } from "./pages/app/mobile/StudentDashboardPage";
+import { MobileSchedulePage } from "./pages/app/mobile/MobileSchedulePage";
+// MOB-102: Homework + grading
+import { HomeworkPage } from "./pages/app/mobile/HomeworkPage";
+import { GradingPage } from "./pages/app/GradingPage";
+// MOB-103: Push notification settings
+import { NotificationsSettingsPage } from "./pages/app/mobile/NotificationsSettingsPage";
+// MOB-104: Parent dashboard + chat
+import { ParentDashboardPage } from "./pages/app/mobile/ParentDashboardPage";
+import { ChatPage } from "./pages/app/mobile/ChatPage";
+// MOB-105: Gamification XP + leaderboard
+import { XpPage } from "./pages/app/mobile/XpPage";
+import { LeaderboardPage } from "./pages/app/mobile/LeaderboardPage";
 
 function HomePage() {
   return (
@@ -107,6 +118,19 @@ function Routes() {
   if (path.startsWith("/calculator/roi")) return <ROICalculatorPage />;
   if (path.startsWith("/calculator/migrare")) return <MigrationEstimatorPage />;
   if (path.startsWith("/calculator/pricing")) return <PricingConfiguratorPage />;
+  // MOB-101/102/103/104: Mobile PWA routes — must come before /app/* to avoid /app fallback
+  if (path.startsWith("/m/schedule")) return <MobileSchedulePage />;
+  if (path.startsWith("/m/homework")) return <HomeworkPage />;
+  if (path.startsWith("/m/settings/notifications")) return <NotificationsSettingsPage />;
+  // MOB-104: Parent portal + chat (must be checked before generic /m/ catch-all)
+  if (path.startsWith("/m/parent")) return <ParentDashboardPage />;
+  if (path.startsWith("/m/chat")) return <ChatPage />;
+  // MOB-105: Gamification XP + leaderboard
+  if (path.startsWith("/m/xp")) return <XpPage />;
+  if (path.startsWith("/m/leaderboard")) return <LeaderboardPage />;
+  if (path.startsWith("/m/")) return <StudentDashboardPage />;
+  // MOB-102: Teacher grading
+  if (path.startsWith("/app/grading")) return <GradingPage />;
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
   // STU-201: /app/students/:id — student detail page (before /app/students list)
