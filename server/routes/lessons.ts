@@ -26,8 +26,8 @@ const updateLessonSchema = createLessonSchema.partial();
 const listQuerySchema = z.object({
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
-  // SCHED-603: Optional filter by teacher
-  teacherId: z.string().uuid().optional(),
+  /** BRANCH-702: optional filter by branch UUID */
+  branch_id: z.string().uuid().optional(),
 });
 
 export const lessonRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -90,15 +90,15 @@ async function findConflict(
 }
 
 lessonRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
-  const { from, to, teacherId } = c.req.valid("query");
+  const { from, to, branch_id } = c.req.valid("query");
   const tenantId = c.get("user").tenantId;
   const conditions = [eq(lessons.tenantId, tenantId)];
   // BRANCH-703: restrict to user's branch scope
   withBranchFilter(user, conditions, lessons.branchId);
   if (from) conditions.push(gte(lessons.scheduledAt, new Date(from)));
   if (to) conditions.push(lt(lessons.scheduledAt, new Date(to)));
-  // SCHED-603: Filter by teacher
-  if (teacherId) conditions.push(eq(lessons.teacherId, teacherId));
+  // BRANCH-702: filter by branch_id if provided
+  if (branch_id) conditions.push(eq(lessons.branchId, branch_id));
 
   const rows = await db
     .select({

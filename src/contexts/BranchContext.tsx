@@ -1,80 +1,62 @@
 /**
  * BRANCH-702 — BranchContext
+ * Provides the active branch filter across the whole app.
+ * "all" = show data from all branches (default behaviour).
+ * A specific UUID = filter to that branch only.
  *
- * Provides the active branch selection across all pages.
- * The active branch is persisted to localStorage.
- * Managers with a restricted scope cannot change the active branch.
+ * State is persisted in localStorage under the key `vl_active_branch`.
  */
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { getBranches, type Branch } from "@/lib/api/branches";
-import { useSession } from "@/hooks/useSession";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
-const STORAGE_KEY = "active_branch_id";
+const STORAGE_KEY = "vl_active_branch";
+
+export type BranchFilterValue = "all" | string;
 
 interface BranchContextValue {
-  /** null = "all branches" (owner/admin view). UUID = specific branch selected. */
-  activeBranchId: string | null;
-  setActiveBranchId: (id: string | null) => void;
-  branches: Branch[];
-  loading: boolean;
+  /** Currently active branch filter — "all" or a branch UUID */
+  activeBranch: BranchFilterValue;
+  /** Set the active branch (persists to localStorage) */
+  setActiveBranch: (branchId: BranchFilterValue) => void;
 }
 
-const BranchContext = createContext<BranchContextValue>({
-  activeBranchId: null,
-  setActiveBranchId: () => {},
-  branches: [],
-  loading: false,
-});
+const BranchContext = createContext<BranchContextValue | null>(null);
+
+function readStorage(): BranchFilterValue {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw && raw.trim()) return raw.trim();
+  } catch {
+    // SSR or storage unavailable — ignore
+  }
+  return "all";
+}
 
 export function BranchProvider({ children }: { children: ReactNode }) {
-  const { data: session } = useSession();
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [activeBranchId, setActiveBranchIdState] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(STORAGE_KEY) ?? null;
-    } catch {
-      return null;
-    }
-  });
-  const [loading, setLoading] = useState(false);
+  const [activeBranch, setActiveBranchState] = useState<BranchFilterValue>(readStorage);
 
   useEffect(() => {
-    if (!session) return;
-
-    setLoading(true);
-    getBranches()
-      .then((data) => {
-        setBranches(data.branches);
-      })
-      .catch(() => {
-        // Non-critical — branches just won't show in switcher
-        setBranches([]);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [session]);
-
-  function setActiveBranchId(id: string | null) {
-    setActiveBranchIdState(id);
     try {
-      if (id === null) {
-        localStorage.removeItem(STORAGE_KEY);
-      } else {
-        localStorage.setItem(STORAGE_KEY, id);
-      }
+      localStorage.setItem(STORAGE_KEY, activeBranch);
     } catch {
-      // localStorage unavailable — state-only
+      // Storage unavailable — ignore
     }
-  }
+  }, [activeBranch]);
+
+  const setActiveBranch = useCallback((branchId: BranchFilterValue) => {
+    setActiveBranchState(branchId);
+  }, []);
 
   return (
-    <BranchContext.Provider value={{ activeBranchId, setActiveBranchId, branches, loading }}>
+    <BranchContext.Provider value={{ activeBranch, setActiveBranch }}>
       {children}
     </BranchContext.Provider>
   );
 }
 
 export function useBranch(): BranchContextValue {
-  return useContext(BranchContext);
+  const ctx = useContext(BranchContext);
+  if (!ctx) {
+    throw new Error("useBranch must be used inside <BranchProvider>");
+  }
+  return ctx;
 }

@@ -1117,8 +1117,8 @@
       }
     },
     "BRANCH-702": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BRANCH-702-switcher.md",
       "milestone": "BRANCH",

@@ -176,7 +176,7 @@ function Routes() {
 export default function App() {
   return (
     <HashRouter>
-      {/* BRANCH-702: BranchProvider gives all pages access to the active branch selection */}
+      {/* BRANCH-702: BranchProvider wraps all app routes so useBranch() works from any page */}
       <BranchProvider>
         <Routes />
         {import.meta.env.DEV && <BackendStatusBadge />}

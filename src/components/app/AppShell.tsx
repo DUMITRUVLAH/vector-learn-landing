@@ -86,6 +86,8 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
           <div className="flex items-center gap-3">
             {data && (
               <>
+                {/* BRANCH-702: Branch switcher */}
+                <BranchSwitcher />
                 <div className="text-right hidden sm:block">
                   <p className="text-xs font-semibold">{data.user.name}</p>
                   <p className="text-[10px] text-muted-foreground capitalize">{data.user.role}</p>

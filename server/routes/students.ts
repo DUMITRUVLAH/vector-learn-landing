@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 import {
@@ -38,6 +38,8 @@ const listQuerySchema = z.object({
   status: z.enum(["active", "trial", "paused", "archived", "all"]).default("all"),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
+  /** BRANCH-702: optional filter by branch UUID */
+  branch_id: z.string().uuid().optional(),
 });
 
 function normalizeOptional<T extends Record<string, unknown>>(input: T): T {
@@ -55,9 +57,8 @@ export const studentRoutes = new Hono<{ Variables: AuthVariables }>();
 studentRoutes.use("*", requireAuth);
 
 studentRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
-  const { search, status, limit, offset } = c.req.valid("query");
-  const user = c.get("user");
-  const tenantId = user.tenantId;
+  const { search, status, limit, offset, branch_id } = c.req.valid("query");
+  const tenantId = c.get("user").tenantId;
 
   // BRANCH-703: restrict to user's branch if branchScope is set
   const conditions = [eq(students.tenantId, tenantId)];
@@ -67,6 +68,10 @@ studentRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
   }
   if (status !== "all") {
     conditions.push(eq(students.status, status));
+  }
+  // BRANCH-702: filter by branch_id if provided
+  if (branch_id) {
+    conditions.push(eq(students.branchId, branch_id));
   }
   if (search && search.trim()) {
     const q = `%${search.trim()}%`;
