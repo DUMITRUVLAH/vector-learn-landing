@@ -95,59 +95,22 @@ export function setBudget(input: {
   });
 }
 
-// ─── REP-301: KPI Dashboard ───────────────────────────────────────────────────
+// ─── BRANCH-704: Per-branch KPI analytics ────────────────────────────────────
 
-export type KpiPeriod = "7d" | "30d" | "90d" | "12m";
-
-export interface KpiData {
-  period: KpiPeriod;
-  mrrCents: number;
+export interface BranchKpi {
+  branchId: string;
+  branchName: string;
+  /** Sum of paid payments in current month (cents) */
+  mrr: number;
   activeStudents: number;
-  newStudents: number;
-  churnRatePct: number;
-  arpuCents: number;
-  prevMrrCents: number;
-  prevActiveStudents: number;
+  lessonsThisMonth: number;
 }
 
-export function getKpi(period: KpiPeriod = "30d"): Promise<KpiData> {
-  return api<KpiData>(`/api/analytics/kpi?period=${period}`);
+export interface BranchKpiResponse {
+  branches: BranchKpi[];
 }
 
-// ─── REP-302: Revenue charts ──────────────────────────────────────────────────
-
-export interface RevenueMonth {
-  month: string;
-  totalCents: number;
-  newStudents: number;
-}
-
-export interface RevenueCourse {
-  courseName: string;
-  studentCount: number;
-  totalCents: number;
-}
-
-export function getRevenueOverTime(months = 12): Promise<{ months: RevenueMonth[] }> {
-  return api<{ months: RevenueMonth[] }>(`/api/analytics/revenue-over-time?months=${months}`);
-}
-
-export function getRevenueByCourse(): Promise<{ items: RevenueCourse[] }> {
-  return api<{ items: RevenueCourse[] }>("/api/analytics/revenue-by-course");
-}
-
-// ─── REP-303: Student LTV ─────────────────────────────────────────────────────
-
-export interface StudentLtv {
-  studentId: string;
-  fullName: string;
-  status: string;
-  ltvCents: number;
-  paymentCount: number;
-  lessonsAttended: number;
-  lastLessonAt: string | null;
-}
-
-export function getStudentLtv(limit = 50): Promise<{ items: StudentLtv[] }> {
-  return api<{ items: StudentLtv[] }>(`/api/analytics/student-ltv?limit=${limit}`);
+export function getBranchKpis(period?: "month" | "quarter"): Promise<BranchKpiResponse> {
+  const qs = period ? `?period=${period}` : "";
+  return api<BranchKpiResponse>(`/api/analytics/branches${qs}`);
 }

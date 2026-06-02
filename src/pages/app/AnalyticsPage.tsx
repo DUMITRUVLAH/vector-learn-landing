@@ -5,16 +5,17 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Loader2, AlertTriangle, DollarSign,
-  BarChart3, PieChart, ArrowRight, RefreshCw,
+  BarChart3, PieChart, ArrowRight, RefreshCw, Building2, Layers,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ForecastWidget } from "@/components/crm/ForecastWidget";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import {
-  getFunnel, getLostReasons, getRoas, setBudget,
-  type FunnelData, type LostReasonsData, type RoasData,
+  getFunnel, getLostReasons, getRoas, setBudget, getBranchKpis,
+  type FunnelData, type LostReasonsData, type RoasData, type BranchKpi,
 } from "@/lib/api/analytics";
+import { BranchKpiCards } from "@/components/reports/BranchKpiCards";
 import { cn } from "@/lib/utils";
 
 // ─── Color palette for lost reasons (semantic tokens only) ────────────────────
@@ -309,6 +310,11 @@ export function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  // BRANCH-704: toggle between consolidated and per-branch view
+  const [branchView, setBranchView] = useState<"consolidated" | "per-branch">("consolidated");
+  const [branchPeriod, setBranchPeriod] = useState<"month" | "quarter">("month");
+  const [branchKpis, setBranchKpis] = useState<BranchKpi[]>([]);
+  const [branchLoading, setBranchLoading] = useState(false);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -335,6 +341,25 @@ export function AnalyticsPage() {
     }
   }, []);
 
+  // BRANCH-704: fetch branch KPIs when switching to per-branch view
+  const fetchBranchKpis = useCallback(async (period: "month" | "quarter") => {
+    setBranchLoading(true);
+    try {
+      const res = await getBranchKpis(period);
+      setBranchKpis(res.branches);
+    } catch {
+      setBranchKpis([]);
+    } finally {
+      setBranchLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (branchView === "per-branch") {
+      void fetchBranchKpis(branchPeriod);
+    }
+  }, [branchView, branchPeriod, fetchBranchKpis]);
+
   useEffect(() => { void fetchAll(); }, [fetchAll]);
 
   const handleSetBudget = async (campaign: string, spendCents: number) => {
@@ -359,7 +384,11 @@ export function AnalyticsPage() {
   return (
     <AppShell
       pageTitle="Analytics CRM"
-      pageDescription="Funnel conversie · Motive pierdere · ROAS campanii"
+      pageDescription={
+        branchView === "per-branch"
+          ? "KPI per filială · Comparație side-by-side"
+          : "Funnel conversie · Motive pierdere · ROAS campanii"
+      }
       actions={
         <button
           type="button"
@@ -379,18 +408,107 @@ export function AnalyticsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {funnelData && <FunnelWidget data={funnelData} />}
-        {lostData && <LostReasonsWidget data={lostData} />}
+      {/* BRANCH-704: Consolidated / Per-filială toggle */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+        <div
+          role="group"
+          aria-label="Mod vizualizare rapoarte"
+          className="flex items-center rounded-lg border border-border bg-muted/20 p-1 gap-1"
+        >
+          <button
+            type="button"
+            role="radio"
+            aria-checked={branchView === "consolidated"}
+            onClick={() => setBranchView("consolidated")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+              branchView === "consolidated"
+                ? "bg-card shadow text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+            Consolidat
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={branchView === "per-branch"}
+            onClick={() => setBranchView("per-branch")}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+              branchView === "per-branch"
+                ? "bg-card shadow text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Building2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Per filială
+          </button>
+        </div>
+
+        {/* Period selector for per-branch view */}
+        {branchView === "per-branch" && (
+          <div
+            role="group"
+            aria-label="Perioadă"
+            className="flex items-center rounded-lg border border-border bg-muted/20 p-1 gap-1"
+          >
+            <button
+              type="button"
+              role="radio"
+              aria-checked={branchPeriod === "month"}
+              onClick={() => setBranchPeriod("month")}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                branchPeriod === "month"
+                  ? "bg-card shadow text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Luna
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={branchPeriod === "quarter"}
+              onClick={() => setBranchPeriod("quarter")}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                branchPeriod === "quarter"
+                  ? "bg-card shadow text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Trimestru
+            </button>
+          </div>
+        )}
       </div>
 
-      {roasData && (
-        <div className="mt-6">
-          <RoasWidget
-            data={roasData}
-            onSetBudget={(campaign, spendCents) => handleSetBudget(campaign, spendCents)}
-          />
-        </div>
+      {/* Per-branch KPI cards */}
+      {branchView === "per-branch" ? (
+        <BranchKpiCards
+          branches={branchKpis}
+          loading={branchLoading}
+          period={branchPeriod}
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {funnelData && <FunnelWidget data={funnelData} />}
+            {lostData && <LostReasonsWidget data={lostData} />}
+          </div>
+
+          {roasData && (
+            <div className="mt-6">
+              <RoasWidget
+                data={roasData}
+                onSetBudget={(campaign, spendCents) => handleSetBudget(campaign, spendCents)}
+              />
+            </div>
+          )}
+        </>
       )}
 
       {/* CRM-125: Weighted forecast */}
