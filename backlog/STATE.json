@@ -4,7 +4,7 @@
   "last_completed": "PAY-003",
   "iterations": 132,
   "last_run_at": "2026-06-02T09:00:00Z",
-  "milestone_status": "PAY faza-2: invoice PDF + bulk gen + QR payment",
+  "milestone_status": "PAY faza-2: all done — PAY-001..003, PR #122",
   "active_milestone": "PAY",
   "items": {
     "M1-001": {
@@ -2967,6 +2967,7 @@
       "phase": "2",
       "depends_on": ["MVP-007", "FIN-601"],
       "branch": "feat/PAY-faza-2-invoices",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/122",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
@@ -2983,6 +2984,7 @@
       "phase": "2",
       "depends_on": ["PAY-001"],
       "branch": "feat/PAY-faza-2-invoices",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/122",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
@@ -2999,6 +3001,7 @@
       "phase": "2",
       "depends_on": ["PAY-001", "PORTAL-902"],
       "branch": "feat/PAY-faza-2-invoices",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/122",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
