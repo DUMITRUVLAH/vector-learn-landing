@@ -2,9 +2,10 @@ import { Hono } from "hono";
 import { setCookie, deleteCookie } from "hono/cookie";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, and, gt, isNull } from "drizzle-orm";
+import { randomBytes, createHash } from "node:crypto";
 import { db } from "../db/client";
-import { tenants, users } from "../db/schema";
+import { tenants, users, sessions, passwordResetTokens } from "../db/schema";
 import { hashPassword, verifyPassword } from "../auth/password";
 import { createSession, revokeSession, SESSION_COOKIE } from "../auth/session";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -131,6 +132,124 @@ authRoutes.get("/me", requireAuth, async (c) => {
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
     tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan },
   });
+});
+
+// AUTH-001: In-memory rate limiter for forgot-password (email → [timestamps])
+const resetRateLimitMap = new Map<string, number[]>();
+const RESET_LIMIT = 3;
+const RESET_WINDOW_MS = 15 * 60 * 1000;
+
+function isRateLimited(email: string): boolean {
+  const now = Date.now();
+  const attempts = (resetRateLimitMap.get(email) ?? []).filter(
+    (t) => now - t < RESET_WINDOW_MS
+  );
+  resetRateLimitMap.set(email, attempts);
+  if (attempts.length >= RESET_LIMIT) return true;
+  attempts.push(now);
+  resetRateLimitMap.set(email, attempts);
+  return false;
+}
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email().max(255),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1).max(128),
+  newPassword: z.string().min(8).max(200),
+});
+
+// POST /api/auth/forgot-password — generates a one-time reset token and
+// sends an email (stubbed via console.log in non-production). Always returns
+// 200 even if the email doesn't exist (anti-enumeration).
+authRoutes.post("/forgot-password", zValidator("json", forgotPasswordSchema), async (c) => {
+  const { email } = c.req.valid("json");
+
+  if (isRateLimited(email)) {
+    return c.json({ error: "too_many_requests" }, 429, {
+      "Retry-After": String(Math.ceil(RESET_WINDOW_MS / 1000)),
+    });
+  }
+
+  // Always respond 200 — never reveal whether the email exists.
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+  if (!user) return c.json({ ok: true });
+
+  // Delete any previous unused tokens for this user.
+  await db.delete(passwordResetTokens).where(
+    and(eq(passwordResetTokens.userId, user.id), isNull(passwordResetTokens.usedAt))
+  );
+
+  // Generate token: raw = 64 hex chars; stored as SHA-256 hash.
+  const rawToken = randomBytes(32).toString("hex"); // 64 hex chars
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+  await db.insert(passwordResetTokens).values({ userId: user.id, tokenHash, expiresAt });
+
+  const appUrl = process.env.APP_URL ?? "http://localhost:5173";
+  const resetLink = `${appUrl}/#/app/reset?token=${rawToken}`;
+
+  // In production, plug in a real email provider (Resend/Postmark).
+  // For now the link is written to stdout (non-sensitive in dev; reset tokens expire in 1h).
+  if (process.env.NODE_ENV !== "production") {
+    process.stdout.write(`[AUTH-001] Reset link for ${email}: ${resetLink}\n`);
+  }
+
+  return c.json({ ok: true });
+});
+
+// POST /api/auth/reset-password — validates the token and sets a new password.
+authRoutes.post("/reset-password", zValidator("json", resetPasswordSchema), async (c) => {
+  const { token, newPassword } = c.req.valid("json");
+
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+
+  const record = await db.query.passwordResetTokens.findFirst({
+    where: and(
+      eq(passwordResetTokens.tokenHash, tokenHash),
+      isNull(passwordResetTokens.usedAt),
+      gt(passwordResetTokens.expiresAt, new Date())
+    ),
+  });
+
+  if (!record) {
+    return c.json({ error: "invalid_or_expired_token" }, 400);
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  // Update password and mark token as used in one go.
+  await db.update(users).set({ passwordHash }).where(eq(users.id, record.userId));
+  await db
+    .update(passwordResetTokens)
+    .set({ usedAt: new Date() })
+    .where(eq(passwordResetTokens.id, record.id));
+
+  // Invalidate all existing sessions for this user.
+  await db.delete(sessions).where(eq(sessions.userId, record.userId));
+
+  // Create a fresh session so the user is logged in immediately after reset.
+  const { token: newSessionToken, expiresAt } = await createSession(record.userId);
+  setSessionCookie(c, newSessionToken, expiresAt);
+
+  return c.json({ ok: true });
+});
+
+// POST /api/auth/profile — update current user's profile fields (AUTH-003 placeholder).
+// Minimal implementation here; AUTH-003 will expand this.
+authRoutes.patch("/profile", requireAuth, zValidator("json", z.object({
+  name: z.string().min(1).max(200).optional(),
+}).passthrough()), async (c) => {
+  const user = c.get("user");
+  const body = c.req.valid("json");
+  const { name } = body;
+  if (name !== undefined) {
+    await db.update(users).set({ name }).where(eq(users.id, user.id));
+  }
+  const updated = await db.query.users.findFirst({ where: eq(users.id, user.id) });
+  return c.json({ user: updated });
 });
 
 // Repairs seeded demo accounts that still carry the legacy "$placeholder$"

@@ -59,6 +59,8 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
+import { ForgotPasswordPage } from "./pages/app/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/app/ResetPasswordPage";
 
 function HomePage() {
   return (
@@ -104,6 +106,9 @@ function Routes() {
   if (path.startsWith("/calculator/pricing")) return <PricingConfiguratorPage />;
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
+  // AUTH-001: password reset pages (must be before /app catch-all)
+  if (path.startsWith("/app/forgot-password")) return <ForgotPasswordPage />;
+  if (path.startsWith("/app/reset")) return <ResetPasswordPage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;

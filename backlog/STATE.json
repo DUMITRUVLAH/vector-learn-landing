@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": "DIPLOMA-803",
-  "last_completed": "DIPLOMA-802",
-  "iterations": 91,
-  "last_run_at": "2026-06-01T12:30:00Z",
-  "milestone_status": "DIPLOMA Phase 1 in progress: DIPLOMA-801/802 done (PR #97). DIPLOMA-803..805 pending.",
-  "active_milestone": "DIPLOMA",
+  "current_item": "AUTH-002",
+  "last_completed": "AUTH-001",
+  "iterations": 93,
+  "last_run_at": "2026-06-02T20:30:00Z",
+  "milestone_status": "AUTH faza-1: AUTH-001 done, AUTH-002 in progress",
+  "active_milestone": "AUTH",
   "items": {
     "M1-001": {
       "status": "done",
@@ -1803,6 +1803,53 @@
       "severity": "normal",
       "title": "Consent/permission forms (photo, trips, medical) with e-signature",
       "depends_on": []
+    },
+    "AUTH-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AUTH-001-password-reset.md",
+      "milestone": "AUTH",
+      "phase": "1",
+      "depends_on": ["MVP-003"],
+      "branch": "feat/AUTH-faza-1-security",
+      "reports": [
+        "backlog/reports/AUTH-001-manager.md",
+        "backlog/reports/AUTH-001-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "AUTH-002": {
+      "status": "in_progress",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AUTH-002-team-invitations.md",
+      "milestone": "AUTH",
+      "phase": "1",
+      "depends_on": ["AUTH-001"]
+    },
+    "AUTH-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/AUTH-003-user-profile-gdpr.md",
+      "milestone": "AUTH",
+      "phase": "1",
+      "depends_on": ["AUTH-002"]
+    },
+    "AUTH-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/AUTH-004-2fa-sessions.md",
+      "milestone": "AUTH",
+      "phase": "1",
+      "depends_on": ["AUTH-003"]
     }
   }
 }

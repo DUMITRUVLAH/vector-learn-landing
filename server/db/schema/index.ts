@@ -31,3 +31,4 @@ export * from "./cohorts";
 export * from "./cohortParticipants";
 export * from "./certificates";
 export * from "./forms";
+export * from "./passwordResetTokens";

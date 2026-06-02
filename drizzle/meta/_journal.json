@@ -218,6 +218,13 @@
       "when": 1780402000000,
       "tag": "0030_forms005_analytics",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1780394861238,
+      "tag": "0031_auth001_password_reset_tokens",
+      "breakpoints": true
     }
   ]
 }
