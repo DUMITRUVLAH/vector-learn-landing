@@ -1,7 +1,8 @@
 /**
  * GAP-006: Lesson packages — prepay bundles of N lessons per student per course.
- * Created early (at GAP-004 conversion step) so convert-trial can attach a package.
- * Full package management (GAP-006) will build on this table.
+ * Separate from monetary subscriptions (FIN-603).
+ * GAP-007: unitsRemaining is decremented atomically on attendance = 'present'.
+ * GAP-008: autoRenew triggers a new invoice + package when exhausted.
  */
 import {
   pgTable,
@@ -42,7 +43,7 @@ export const lessonPackages = pgTable(
     invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
     /** Total lessons included in this package */
     unitsTotal: integer("units_total").notNull(),
-    /** Remaining lessons (decremented on each present mark) */
+    /** Remaining lessons (decremented on each present mark — GAP-007) */
     unitsRemaining: integer("units_remaining").notNull(),
     /** GAP-008: Auto-renew when exhausted */
     autoRenew: boolean("auto_renew").notNull().default(false),
@@ -58,7 +59,9 @@ export const lessonPackages = pgTable(
     tenantIdx: index("lp_tenant_idx").on(t.tenantId),
     studentIdx: index("lp_student_idx").on(t.studentId),
     courseIdx: index("lp_course_idx").on(t.courseId),
+    /** Index for FIFO lookup: oldest active package first */
     statusIdx: index("lp_status_idx").on(t.tenantId, t.status),
+    activeStudentCourse: index("lp_active_student_course_idx").on(t.studentId, t.courseId, t.status),
   })
 );
 

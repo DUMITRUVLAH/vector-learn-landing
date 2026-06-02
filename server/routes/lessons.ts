@@ -1,12 +1,11 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, gte, lt, ne, sql } from "drizzle-orm";
+import { and, eq, gte, lt, ne, sql, asc } from "drizzle-orm";
 import { db } from "../db/client";
-import { lessons, courses, teachers, users, students, studentLessons } from "../db/schema";
+import { lessons, courses, teachers, users, students, studentLessons, lessonPackages, auditLog } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
-// GAP-009: recovery hook
-import { createRecoveryRequestIfAbsent } from "./recovery";
+import { scheduleExhaustionAlert } from "./lessonPackages";
 
 const createLessonSchema = z.object({
   courseId: z.string().uuid(),
@@ -347,7 +346,9 @@ lessonRoutes.patch(
       ),
     });
 
-    let resultSl: typeof studentLessons.$inferSelect;
+    const previousStatus = existing?.attendanceStatus ?? null;
+
+    let result;
     if (existing) {
       const [updated] = await db
         .update(studentLessons)
@@ -358,7 +359,7 @@ lessonRoutes.patch(
         })
         .where(eq(studentLessons.id, existing.id))
         .returning();
-      resultSl = updated;
+      result = updated;
     } else {
       // Auto-enroll: create the student_lessons record if it doesn't exist
       const [created] = await db
@@ -372,86 +373,138 @@ lessonRoutes.patch(
           markedAt: now,
         })
         .returning();
-      resultSl = created;
+      result = created;
     }
 
-    // GAP-009: fire-and-forget recovery request creation when absent
-    // Also skip if this is a trial lesson (trials never generate recovery)
-    if (attendanceStatus === "absent" && !lesson.isTrial) {
-      void createRecoveryRequestIfAbsent({
-        tenantId,
-        studentLessonId: resultSl.id,
-        lessonId,
-        studentId,
-      }).catch(() => undefined);
+    // ── GAP-007: Unit deduction hook ─────────────────────────────────────────
+    // Skip deduction for trial lessons (GAP-003).
+    // Only touch packages when transitioning TO or FROM 'present'.
+    const isTrialLesson = (lesson as unknown as Record<string, unknown>).isTrial === true;
+
+    if (!isTrialLesson) {
+      const wasPresent = previousStatus === "present";
+      const nowPresent = attendanceStatus === "present";
+
+      if (nowPresent && !wasPresent) {
+        // Mark present → deduct 1 unit from oldest active package (FIFO on validFrom)
+        await deductUnit(tenantId, studentId, lesson.courseId, lessonId, user.id);
+      } else if (!nowPresent && wasPresent) {
+        // Un-mark present → restore 1 unit (reverse deduction)
+        await restoreUnit(tenantId, studentId, lesson.courseId, lessonId, user.id);
+      }
     }
 
-    return existing ? c.json(resultSl) : c.json(resultSl, 201);
+    return existing ? c.json(result) : c.json(result, 201);
   }
 );
 
-// ─── SCHED-602: PATCH /api/lessons/:id/substitute ────────────────────────────
-// Change the teacher for a specific lesson (substitute), with conflict check + audit.
+/**
+ * GAP-007: Atomically deduct 1 unit from the oldest active lesson package for
+ * (studentId, courseId). No-op if no active package exists.
+ */
+async function deductUnit(
+  tenantId: string,
+  studentId: string,
+  courseId: string,
+  lessonId: string,
+  actorId: string
+) {
+  // Find oldest active package (FIFO on validFrom)
+  const activePackages = await db
+    .select()
+    .from(lessonPackages)
+    .where(
+      and(
+        eq(lessonPackages.tenantId, tenantId),
+        eq(lessonPackages.studentId, studentId),
+        eq(lessonPackages.courseId, courseId),
+        eq(lessonPackages.status, "active"),
+      )
+    )
+    .orderBy(asc(lessonPackages.validFrom))
+    .limit(1);
 
-const substituteBodySchema = z.object({
-  teacherId: z.string().uuid(),
-});
+  const pkg = activePackages[0];
+  if (!pkg) return; // No active package — no-op
 
-lessonRoutes.patch(
-  "/:id/substitute",
-  zValidator("json", substituteBodySchema),
-  async (c) => {
-    const lessonId = c.req.param("id");
-    const tenantId = c.get("user").tenantId;
-    const actorId = c.get("user").id;
-    const { teacherId: newTeacherId } = c.req.valid("json");
+  const newRemaining = pkg.unitsRemaining - 1;
+  const newStatus = newRemaining <= 0 ? "exhausted" as const : "active" as const;
 
-    const lesson = await db.query.lessons.findFirst({
-      where: and(eq(lessons.id, lessonId), eq(lessons.tenantId, tenantId)),
-    });
-    if (!lesson) return c.json({ error: "not_found" }, 404);
-    if (lesson.status === "cancelled") return c.json({ error: "lesson_cancelled" }, 422);
+  await db
+    .update(lessonPackages)
+    .set({
+      unitsRemaining: newRemaining,
+      status: newStatus,
+      updatedAt: new Date(),
+    })
+    .where(eq(lessonPackages.id, pkg.id));
 
-    // Verify new teacher belongs to tenant
-    const teacher = await db.query.teachers.findFirst({
-      where: and(eq(teachers.id, newTeacherId), eq(teachers.tenantId, tenantId)),
-    });
-    if (!teacher) return c.json({ error: "teacher_not_found" }, 404);
+  // Log to audit_log
+  await db.insert(auditLog).values({
+    tenantId,
+    actorId,
+    actionType: "unit_deducted",
+    targetType: "lesson_package",
+    targetId: pkg.id,
+    oldValue: { unitsRemaining: pkg.unitsRemaining, status: pkg.status },
+    newValue: { unitsRemaining: newRemaining, status: newStatus, studentId, lessonId },
+  });
 
-    // Conflict check: new teacher must be free in this slot
-    const conflict = await findConflict(
-      tenantId,
-      newTeacherId,
-      lesson.scheduledAt.toISOString(),
-      lesson.durationMinutes,
-      lessonId // exclude this lesson
-    );
-    if (conflict) {
-      return c.json({ error: "teacher_double_booked", conflictingLessonId: conflict.id }, 409);
-    }
-
-    const oldTeacherId = lesson.teacherId;
-    const [updated] = await db
-      .update(lessons)
-      .set({ teacherId: newTeacherId, updatedAt: new Date() })
-      .where(and(eq(lessons.id, lessonId), eq(lessons.tenantId, tenantId)))
-      .returning();
-
-    // Audit log
-    await writeAuditLog({
-      tenantId,
-      actorId,
-      actionType: "lesson.teacher_substituted",
-      targetType: "lesson",
-      targetId: lessonId,
-      oldValue: { teacherId: oldTeacherId },
-      newValue: { teacherId: newTeacherId },
-    });
-
-    // Notification stub: real delivery via COMM module (COMM-201).
-    // oldTeacherId and newTeacherId are available for the notification payload.
-    void oldTeacherId; // referenced in audit log above; notification deferred to COMM
-
-    return c.json(updated);
+  // Low-balance alert (≤ 2 remaining) or exhausted
+  if (newRemaining <= 2) {
+    await scheduleExhaustionAlert(tenantId, pkg.id, studentId, newRemaining);
   }
-);
+}
+
+/**
+ * GAP-007: Reverse deduction — add 1 unit back to the most recent active or exhausted package.
+ * Called when a 'present' mark is changed back to absent/excused/late.
+ */
+async function restoreUnit(
+  tenantId: string,
+  studentId: string,
+  courseId: string,
+  lessonId: string,
+  actorId: string
+) {
+  // Find the most recently updated package (the one that was just decremented)
+  const packages = await db
+    .select()
+    .from(lessonPackages)
+    .where(
+      and(
+        eq(lessonPackages.tenantId, tenantId),
+        eq(lessonPackages.studentId, studentId),
+        eq(lessonPackages.courseId, courseId),
+        // Can restore from active or exhausted (the deduction may have just exhausted it)
+        sql`${lessonPackages.status} IN ('active', 'exhausted')`,
+      )
+    )
+    .orderBy(asc(lessonPackages.validFrom))
+    .limit(1);
+
+  const pkg = packages[0];
+  if (!pkg) return;
+
+  const newRemaining = pkg.unitsRemaining + 1;
+  const newStatus = newRemaining > 0 ? "active" as const : "exhausted" as const;
+
+  await db
+    .update(lessonPackages)
+    .set({
+      unitsRemaining: newRemaining,
+      status: newStatus,
+      updatedAt: new Date(),
+    })
+    .where(eq(lessonPackages.id, pkg.id));
+
+  await db.insert(auditLog).values({
+    tenantId,
+    actorId,
+    actionType: "unit_restored",
+    targetType: "lesson_package",
+    targetId: pkg.id,
+    oldValue: { unitsRemaining: pkg.unitsRemaining, status: pkg.status },
+    newValue: { unitsRemaining: newRemaining, status: newStatus, studentId, lessonId },
+  });
+}
