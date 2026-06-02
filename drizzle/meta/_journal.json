@@ -246,6 +246,13 @@
       "when": 1780503000000,
       "tag": "0035_pay007_refunds",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1780504000000,
+      "tag": "0036_pay008_accounting_mappings",
+      "breakpoints": true
     }
   ]
 }

@@ -155,6 +155,10 @@ app.route("/api/payment-plans", paymentPlanRoutes);
 import { refundRoutes } from "./routes/refunds"; // PAY-007
 app.route("/api", refundRoutes);
 
+// PAY-008: Accounting export (SAGA/1C CSV) + account code mappings
+import { accountingRoutes } from "./routes/accounting"; // PAY-008
+app.route("/api", accountingRoutes);
+
 app.get("/api/health/db", async (c) => {
   try {
     const tablesResult = await db.execute(
