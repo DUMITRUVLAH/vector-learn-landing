@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
 import { and, eq, desc } from "drizzle-orm";
 import { db } from "../db/client";
 import { teachers, users, lessons } from "../db/schema";
