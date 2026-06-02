@@ -43,6 +43,7 @@ import {
   publicFormSubmitHandler,
   publicFormPingHandler,
 } from "./routes/publicForms"; // FORMS-001/005
+import { mobileRoutes } from "./routes/mobile"; // MOB-101: mobile PWA API
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -136,6 +137,8 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
+// MOB-101..103: Mobile PWA API — student dashboard, schedule, homework, push notifications
+app.route("/api/m", mobileRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {
