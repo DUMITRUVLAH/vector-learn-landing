@@ -60,9 +60,15 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 import { CXPage } from "./pages/app/CXPage";
 import { DiplomaPage } from "./pages/app/DiplomaPage";
-import { EnrollPage } from "./pages/enroll/EnrollPage";
-import { ProgressSkillsPage } from "./pages/app/ProgressSkillsPage"; // GAP-012
-import { ProgressPublicPage } from "./pages/app/ProgressPublicPage"; // GAP-012
+import { SchoolClassesPage } from "./pages/app/SchoolClassesPage"; // SCHOOL-001
+import { SchoolAttendancePage } from "./pages/app/SchoolAttendancePage"; // SCHOOL-003
+import { SchoolGradebookPage } from "./pages/app/SchoolGradebookPage"; // SCHOOL-002
+import { SchoolTuitionPage } from "./pages/app/SchoolTuitionPage"; // SCHOOL-004
+import { SchoolAdmissionsPage } from "./pages/app/SchoolAdmissionsPage"; // SCHOOL-005
+import { SchoolTimetablePage } from "./pages/app/SchoolTimetablePage"; // SCHOOL-006
+import { ParentPortalPage } from "./pages/app/ParentPortalPage"; // SCHOOL-007
+import { SchoolConsentPage } from "./pages/app/SchoolConsentPage"; // CONSENT-001
+import { GamificationPage } from "./pages/app/GamificationPage"; // GAP-020
 
 function HomePage() {
   return (
@@ -133,11 +139,7 @@ function Routes() {
   // AUTH-004: 2FA verification step (shown after password login when 2FA is enabled)
   if (path.startsWith("/app/verify-2fa")) return <Verify2FAPage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;
-  // GAP-018: /app/lessons/:id/check-in must be before /app/schedule
-  if (path.match(/^\/app\/lessons\/[^/]+\/check-in$/)) {
-    const lessonId = path.split("/")[3];
-    return <CheckInPage lessonId={lessonId} />;
-  }
+  if (path.startsWith("/app/gamification")) return <GamificationPage />; // GAP-020
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;
@@ -174,7 +176,14 @@ function Routes() {
   if (path.startsWith("/app/invoices")) return <InvoicesPage />;
   if (path.startsWith("/app/cx")) return <CXPage />;
   if (path.startsWith("/app/diplome")) return <DiplomaPage />;
-  if (path.startsWith("/app/progress")) return <ProgressSkillsPage />; // GAP-012
+  if (path.startsWith("/app/school/attendance")) return <SchoolAttendancePage />; // SCHOOL-003
+  if (path.startsWith("/app/school/gradebook")) return <SchoolGradebookPage />; // SCHOOL-002
+  if (path.startsWith("/app/school/tuition")) return <SchoolTuitionPage />; // SCHOOL-004
+  if (path.startsWith("/app/school/admissions")) return <SchoolAdmissionsPage />; // SCHOOL-005
+  if (path.startsWith("/app/school/timetable")) return <SchoolTimetablePage />; // SCHOOL-006
+  if (path.startsWith("/app/school/consent")) return <SchoolConsentPage />; // CONSENT-001
+  if (path.startsWith("/app/parent/portal") || path === "/app/parent") return <ParentPortalPage />; // SCHOOL-007
+  if (path.startsWith("/app/school/classes") || path === "/app/school") return <SchoolClassesPage />; // SCHOOL-001
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app/reports/kpi")) return <KpiDashboardPage />;
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;

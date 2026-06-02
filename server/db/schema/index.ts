@@ -31,7 +31,12 @@ export * from "./subscriptions";
 export * from "./cohorts";
 export * from "./cohortParticipants";
 export * from "./certificates";
-export * from "./enrollmentRequests"; // GAP-011
-export * from "./progress"; // GAP-012
-export * from "./makeupCredits"; // GAP-013
-export * from "./homework"; // GAP-015
+export * from "./school";
+export * from "./schoolAttendance";
+export * from "./schoolGrades";
+export * from "./tuition";
+export * from "./admissions";
+export * from "./timetable";
+export * from "./guardians";
+export * from "./schoolNews";
+export * from "./consent"; // CONSENT-001

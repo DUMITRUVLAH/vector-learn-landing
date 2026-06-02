@@ -260,6 +260,11 @@ next_action: <what should happen next>
 ## Hard rules
 
 - **NEVER ask the user a question.** If unsure, choose the safest path and log it.
+- **NEVER ask "continui / shall I continue / vrei să merg mai departe" between batches.** When the
+  owner has set a direction ("build the SCHOOL module", "continue with X"), that direction holds
+  across MANY batches until they explicitly change it or say stop. After a batch completes, the
+  next batch on the same direction is already authorized — re-fire it, don't ask. Asking "continui?"
+  when the answer is obviously yes wastes the owner's time and is treated as a §0.1 violation.
 - **NEVER discard human work.** If a file has uncommitted changes from the user, abort and report.
 - **NEVER force-push or delete branches.**
 - **ALWAYS use conventional commits.**

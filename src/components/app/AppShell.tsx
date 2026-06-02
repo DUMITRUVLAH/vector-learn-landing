@@ -1,5 +1,5 @@
-import { ReactNode } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, ListChecks, Shield, FileText } from "lucide-react";
+import { ReactNode, useEffect, useState } from "react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, BookMarked, Banknote, ClipboardCheck, CalendarDays, FileCheck } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { BranchSwitcher } from "@/components/app/BranchSwitcher";
@@ -25,7 +25,20 @@ const NAV = [
   { label: "Orar", href: "/app/schedule", icon: Calendar },
   { label: "Profesori", href: "/app/teachers", icon: GraduationCap },
   { label: "Plăți", href: "/app/payments", icon: CreditCard },
-  { label: "Facturi", href: "/app/invoices", icon: FileText },
+  { label: "Salarizare", href: "/app/hr/payroll", icon: DollarSign },
+  { label: "Facturi", href: "/app/invoices", icon: Receipt },
+  { label: "Contracte", href: "/app/contracts", icon: FileText },
+  { label: "Feedback", href: "/app/feedback", icon: MessageSquare },
+  { label: "CX Cohorte", href: "/app/cx", icon: BookOpen }, // CX-702
+  { label: "Diplome", href: "/app/diplome", icon: Award }, // DIPLOMA-802
+  { label: "Clase", href: "/app/school/classes", icon: School }, // SCHOOL-001
+  { label: "Prezență", href: "/app/school/attendance", icon: ClipboardList }, // SCHOOL-003
+  { label: "Note", href: "/app/school/gradebook", icon: BookMarked }, // SCHOOL-002
+  { label: "Taxe", href: "/app/school/tuition", icon: Banknote }, // SCHOOL-004
+  { label: "Admitere", href: "/app/school/admissions", icon: ClipboardCheck }, // SCHOOL-005
+  { label: "Orar", href: "/app/school/timetable", icon: CalendarDays }, // SCHOOL-006
+  { label: "Consimțământ", href: "/app/school/consent", icon: FileCheck }, // CONSENT-001
+  { label: "Portal Părinți", href: "/app/parent/portal", icon: Users }, // SCHOOL-007
   { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
   { label: "Analytics CRM", href: "/app/analytics/crm", icon: BarChart3 },
   { label: "Analytics", href: "/app/analytics", icon: TrendingUp }, // GAP-016

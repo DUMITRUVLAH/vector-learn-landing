@@ -18,6 +18,16 @@ You are now in **Vector Learn autopilot mode**.
    - Any blocked items + one-line reason each
    - Number of pending items remaining
 
+4. **Then AUTO-CONTINUE the same direction — do NOT ask the owner "continui?".**
+   A bounded batch stops at 3 items for *context-size* reasons only — it is NOT a checkpoint to
+   ask permission. If the owner set a direction (e.g. "build the SCHOOL module", "continue with X")
+   and none of the real stop conditions fired, the next batch is **already authorized**: immediately
+   re-invoke the orchestrator for the next 3 items on the same direction. Keep going batch after batch
+   until: (a) all targeted items are done/blocked, (b) a hard env failure, (c) the owner explicitly
+   says stop, or (d) 3 consecutive items block. Emit only the one-line `[ITEM]` status between
+   batches — never a question, never "vrei să continui", never "spune-mi dacă...". Asking when the
+   answer is obviously yes is a §0.1 violation and wastes the owner's time.
+
 ## Rules for this slash command
 
 - This command is **non-interactive**. Do not ask the user any clarification questions — the orchestrator handles all decisions.

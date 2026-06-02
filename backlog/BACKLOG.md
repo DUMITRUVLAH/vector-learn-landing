@@ -278,14 +278,59 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
 | CONSENT-001 | 🟡 | Consent/permission forms + e-signature |
 
-## Milestone: FORMS — Typeform-style form builder → CRM lead collection
-Requirements: `backlog/reports/REQ-FORMS-typeform-lead-collection-2026-06-01.md`. Reuses the
-FEEDBACK-601 typed-question foundation + the /api/leads/intake dedup path. Submissions become CRM leads.
+## Milestone: GAP — Gap-analysis față de HOLLIHOP (competitor)
 
-| ID | Value | Feature | Spec |
-|----|-------|---------|------|
-| FORMS-001 | 🔴 | Form engine: schema + typed fields + field→lead mapping + public submit (dedup) | full spec |
-| FORMS-002 | 🔴 | Visual builder: reorderable fields + per-field config + lead-mapping + publish/share | req doc |
-| FORMS-003 | 🔴 | Public conversational renderer (/f/:slug) one-question-at-a-time + UTM/hidden + thank-you | req doc |
-| FORMS-004 | 🟡 | Conditional logic / jump branching | req doc |
-| FORMS-005 | 🟡 | Embed snippet + per-form analytics (views/starts/completions/lead conversion) | req doc |
+> Funcționalități identificate ca lipsă față de HOLLIHOP (demo.t8s.ru).
+> Documentație completă: `backlog/GAP-HOLLIHOP-backlog.md`.
+> Ordine build: Faza 1 (trial flow) → Faza 2 (abonamente unități) → Faza 3 (portal+notificări) → Faza 4 (analytics) → Faza 5 (operațional) → Faza 6 (gamificare).
+> Branch per fază: `feat/GAP-faza-<N>-<slug>`.
+
+### Faza 1 — Trial Flow (Lead → Lecție Trial → Student)
+
+| # | ID | Titlu | Prioritate | Status | Spec |
+|---|----|-------|-----------|--------|------|
+| 1 | `GAP-001` | Slot preferat orar pe lead/student | 🔴 HIGH | pending | [specs/GAP-001-slot-preferat-orar.md](specs/GAP-001-slot-preferat-orar.md) |
+| 2 | `GAP-002` | Potrivire automată grupă | 🔴 HIGH | pending | [specs/GAP-002-potrivire-automata-grupa.md](specs/GAP-002-potrivire-automata-grupa.md) |
+| 3 | `GAP-003` | Lecție Trial (tip distinct de lecție) | 🔴 HIGH | pending | [specs/GAP-003-lectie-trial.md](specs/GAP-003-lectie-trial.md) |
+| 4 | `GAP-004` | Conversie automată trial → student activ + înrolare grupă | 🔴 HIGH | pending | [specs/GAP-004-conversie-automata-trial.md](specs/GAP-004-conversie-automata-trial.md) |
+| 5 | `GAP-009` | Lecție Recuperare (make-up) | 🔴 HIGH | pending | [specs/GAP-009-lectie-recuperare.md](specs/GAP-009-lectie-recuperare.md) |
+
+### Faza 2 — Abonamente cu Sold de Unități
+
+| # | ID | Titlu | Prioritate | Status | Spec |
+|---|----|-------|-----------|--------|------|
+| 6 | `GAP-006` | Sold de unități per student per grupă (pachete lecții) | 🔴 HIGH | pending | [specs/GAP-006-sold-unitati.md](specs/GAP-006-sold-unitati.md) |
+| 7 | `GAP-007` | Deducere automată sold unități la prezență marcată | 🔴 HIGH | pending | [specs/GAP-007-deducere-automata-unitati.md](specs/GAP-007-deducere-automata-unitati.md) |
+| 8 | `GAP-005` | Rezervă grupă (lista de așteptare) | 🟡 MEDIUM | pending | [specs/GAP-005-rezerva-grupa.md](specs/GAP-005-rezerva-grupa.md) |
+| 9 | `GAP-008` | Auto-billing la epuizare unități | 🟡 MEDIUM | pending | [specs/GAP-008-auto-billing-unitati.md](specs/GAP-008-auto-billing-unitati.md) |
+
+### Faza 3 — Portal Student & Notificări Cascadă
+
+| # | ID | Titlu | Prioritate | Status | Spec |
+|---|----|-------|-----------|--------|------|
+| 10 | `GAP-010` | Portal Student self-service | 🔴 HIGH | pending | [specs/GAP-010-portal-student.md](specs/GAP-010-portal-student.md) |
+| 11 | `GAP-017` | Notificări în cascadă (WhatsApp→Telegram→SMS→Push) | 🟡 MEDIUM | pending | [specs/GAP-017-notificari-cascada.md](specs/GAP-017-notificari-cascada.md) |
+
+### Faza 4 — Analytics & Rapoarte Extinse
+
+| # | ID | Titlu | Prioritate | Status | Spec |
+|---|----|-------|-----------|--------|------|
+| 12 | `GAP-011` | Funnel vizual bazat pe schimbări de status lead | 🟡 MEDIUM | pending | [specs/GAP-011-funnel-statusuri-lead.md](specs/GAP-011-funnel-statusuri-lead.md) |
+| 13 | `GAP-012` | Raport sursă reclamă cu conversie completă | 🟡 MEDIUM | pending | [specs/GAP-012-raport-sursa-reclama.md](specs/GAP-012-raport-sursa-reclama.md) |
+| 14 | `GAP-014` | Salarizare bazată pe prezența efectivă | 🟡 MEDIUM | pending | [specs/GAP-014-salarizare-prezenta.md](specs/GAP-014-salarizare-prezenta.md) |
+| 15 | `GAP-013` | Raport ocupare săli | 🟢 LOW | pending | [specs/GAP-013-raport-ocupare-sali.md](specs/GAP-013-raport-ocupare-sali.md) |
+
+### Faza 5 — Funcționalități Operaționale
+
+| # | ID | Titlu | Prioritate | Status | Spec |
+|---|----|-------|-----------|--------|------|
+| 16 | `GAP-015` | Excursii și tabere ca tip de eveniment | 🟢 LOW | pending | [specs/GAP-015-excursii-tabere.md](specs/GAP-015-excursii-tabere.md) |
+| 17 | `GAP-016` | Lecții deschise cu înregistrare externă | 🟢 LOW | pending | [specs/GAP-016-lectii-deschise-publice.md](specs/GAP-016-lectii-deschise-publice.md) |
+| 18 | `GAP-018` | Bibliotecă fizică (inventar materiale) | 🟢 LOW | pending | [specs/GAP-018-biblioteca-fizica.md](specs/GAP-018-biblioteca-fizica.md) |
+
+### Faza 6 — Gamificare & Motivare
+
+| # | ID | Titlu | Prioritate | Status | Spec |
+|---|----|-------|-----------|--------|------|
+| 19 | `GAP-019` | Rating profesori (configurat per tenant) | 🟢 LOW | pending | [specs/GAP-019-rating-profesori.md](specs/GAP-019-rating-profesori.md) |
+| 20 | `GAP-020` | Clasament elevi și sistem de puncte de progres | 🟢 LOW | pending | [specs/GAP-020-clasament-puncte-progres.md](specs/GAP-020-clasament-puncte-progres.md) |
