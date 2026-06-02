@@ -292,11 +292,19 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
 | CONSENT-001 | 🟡 | Consent/permission forms + e-signature |
 
-## Active milestone: BRANCH faza-1 — Multifiliale
+## Milestone: BRANCH faza-1 — Multifiliale (DONE, PR #110)
 
 | ID | Severity | Title | Status |
 |----|----------|-------|--------|
-| BRANCH-701 | 🔴 high | Schema branches + branch_id pe students/teachers/lessons | pending |
-| BRANCH-702 | 🔴 high | Branch switcher UI + BranchContext | pending |
-| BRANCH-703 | 🔴 high | Branch-scoped permissions (branch_scope pe users) | pending |
-| BRANCH-704 | 🟡 normal | Rapoarte consolidate vs per-filială | pending |
+| BRANCH-701 | done | Schema branches + branch_id pe students/teachers/lessons | done |
+| BRANCH-702 | done | Branch switcher UI + BranchContext | done |
+| BRANCH-703 | done | Branch-scoped permissions (branch_scope pe users) | done |
+| BRANCH-704 | done | Rapoarte consolidate vs per-filială | done |
+
+## Active milestone: POLISH faza-1 — UX Polish
+
+| ID | Priority | Title | Status | Spec |
+|----|----------|-------|--------|------|
+| POLISH-001 | high | Global quick search + command palette (Cmd+K) | pending | [spec](specs/POLISH-001-nav-quick-search.md) |
+| POLISH-002 | high | Dashboard widget customization | pending | [spec](specs/POLISH-002-dashboard-widgets.md) |
+| POLISH-003 | normal | Empty states cu CTA pentru paginile cheie | pending | [spec](specs/POLISH-003-empty-states.md) |
