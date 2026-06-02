@@ -44,6 +44,7 @@ import {
   publicFormPingHandler,
 } from "./routes/publicForms"; // FORMS-001/005
 import { stripeRoutes, stripeWebhookRoutes } from "./routes/stripe"; // PAY-004
+import { reminderRoutes } from "./routes/reminders"; // PAY-005
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -142,6 +143,9 @@ app.route("/api/certificate-templates", certificateTemplatesRoutes);
 app.route("/api", stripeRoutes);
 // PAY-004: Stripe webhooks (public, signature-verified)
 app.route("/api", stripeWebhookRoutes);
+
+// PAY-005: Debt reminders — admin trigger + invoice reminder history + overdue summary
+app.route("/api", reminderRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {
