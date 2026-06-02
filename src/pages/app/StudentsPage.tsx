@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare, Globe, Copy, Check } from "lucide-react";
+import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare, BookOpen } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { StudentForm } from "@/components/app/StudentForm";
 import { ImportStudentsModal } from "@/components/app/ImportStudentsModal"; // STU-203
@@ -13,7 +13,7 @@ import {
   type ListStudentsParams,
 } from "@/lib/api/students";
 import { listFeedbackForms, sendFeedbackToStudent, type FeedbackForm } from "@/lib/api/feedback";
-import { generatePortalToken } from "@/lib/api/portal";
+import { HomeworkTab } from "@/components/app/HomeworkTab"; // GAP-015
 import { cn } from "@/lib/utils";
 
 const STATUS_BADGE: Record<Student["status"], { label: string; cls: string }> = {
@@ -47,8 +47,8 @@ export function StudentsPage() {
   const [editing, setEditing] = useState<Student | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [confirmArchive, setConfirmArchive] = useState<Student | null>(null);
-  // STU-203: import CSV modal
-  const [importOpen, setImportOpen] = useState(false);
+  // GAP-015: homework modal for student
+  const [homeworkStudent, setHomeworkStudent] = useState<Student | null>(null);
   // FEEDBACK-601: send feedback modal
   const [feedbackTarget, setFeedbackTarget] = useState<Student | null>(null);
   const [feedbackForms, setFeedbackForms] = useState<FeedbackForm[]>([]);
@@ -347,6 +347,15 @@ export function StudentsPage() {
                             >
                               <FilePlus className="h-3.5 w-3.5" />
                             </button>
+                            {/* GAP-015: view homework for student */}
+                            <button
+                              type="button"
+                              onClick={() => setHomeworkStudent(s)}
+                              aria-label={`Teme pentru ${s.fullName}`}
+                              className="touch-target rounded-md hover:bg-primary/10 hover:text-primary flex items-center justify-center"
+                            >
+                              <BookOpen className="h-3.5 w-3.5" />
+                            </button>
                             {/* FEEDBACK-601: send feedback */}
                             <button
                               type="button"
@@ -462,6 +471,32 @@ export function StudentsPage() {
               >
                 Arhivează
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GAP-015: Homework modal for student */}
+      {homeworkStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={`Teme ${homeworkStudent.fullName}`}>
+          <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={() => setHomeworkStudent(null)} />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-card shadow-2xl overflow-hidden">
+            <div className="border-b border-border px-5 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookOpen size={16} className="text-primary" />
+                <h2 className="text-base font-bold">Teme — {homeworkStudent.fullName}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHomeworkStudent(null)}
+                aria-label="Închide"
+                className="rounded-md hover:bg-muted p-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-5 max-h-[70vh] overflow-y-auto">
+              <HomeworkTab mode="student" studentId={homeworkStudent.id} />
             </div>
           </div>
         </div>

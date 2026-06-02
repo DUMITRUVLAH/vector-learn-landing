@@ -1,42 +1,77 @@
 ---
 id: GAP-016
-title: Analytics avansat — retenție cohortă, LTV per student, top cursuri per venit
+title: "Analytics avansat — retenție, venituri per profesor, prognoza churn"
 milestone: GAP
-phase: "5"
-branch: feat/GAP-faza-5-operational
-depends_on: [GAP-011, GAP-012]
+phase: 5
+priority: P2
+slug: advanced-analytics
+depends_on: [REP-301, REP-302, REP-303]
+status: pending
 ---
 
-## Goal
-Extinde dashboard-ul de analytics cu 3 metrici noi relevante pentru directori:
-1. Retenție per cohortă: % studenți care revin la același curs în semestrul următor
-2. LTV (Lifetime Value) per student: totalul plăților istorice per student, top 10
-3. Top cursuri per venit: ranking cursuri după venituri generate luna curentă
+# GAP-016 — Analytics avansat
 
-## User stories
-- Ca director, vreau să văd retenția per cohortă, ca să știu ce cursuri păstrează studenții.
-- Ca director, vreau să văd top 10 clienți după LTV, ca să îi prioritizez pentru oferte speciale.
-- Ca director, vreau să văd top cursuri după venit, ca să știu pe ce să investesc marketing.
+## Goal
+
+Paginile de analytics existente (REP-301..304) afișează KPI-uri agregate. Acest item adaugă
+trei panouri noi pe `/app/analytics`: **retenție per curs**, **venituri per profesor** și
+**scor de risc churn** per student (bazat pe absențe + trend plăți). Fără backend nou de ML —
+totul e calculat cu SQL agregat.
+
+## In scope
+
+- **API endpoint nou:** `GET /api/analytics/retention-by-course` → per curs: nr. studenți
+  activi azi vs. acum 30 zile, retenție % = (activi azi / activi acum 30) * 100.
+  "Activ" = cel puțin o lecție în ultimele 30 zile. Tenant-scoped.
+
+- **API endpoint nou:** `GET /api/analytics/revenue-by-teacher` → per teacher: suma
+  `invoices.amountCents` where `status = paid` și `lessons.teacherId = teacher.id` în ultimele
+  30 zile. Join: `invoices` → student → `student_lessons` → `lessons`. Tenant-scoped.
+
+- **API endpoint nou:** `GET /api/analytics/churn-risk` → top 20 studenți cu risc churn:
+  - absențe nemotivate ≥ 3 în ultimele 30 zile SAU
+  - nicio lecție în ultimele 14 zile SAU
+  - datorie > 0 + ultima plată > 30 zile
+  - Returnează: `{ studentId, name, riskScore (0-100), reasons[] }`. Score simplu: suma
+    flag-urilor × pondere (absențe=40, inactivitate=35, datorie=25). Tenant-scoped.
+
+- **UI — `/app/analytics` (AnalyticsPage.tsx sau pagina existentă de analytics):**
+  - Panou "Retenție per curs": tabel sortabil curs/retenție%, trending up/down badge
+  - Panou "Venituri per profesor": bar chart sau tabel (valoare RON + nr. lecții)
+  - Panou "Risc churn": top 10 studenți cu scor de risc + motive + link la student page
+
+- **DB:** fără raw `.execute().rows`; query builder; JOIN-uri compatibile PostgreSQL + PGlite
+  (nu `ILIKE` specific, folosiți `lower()` dacă trebuie filtrare text)
+
+- **TypeScript strict:** zero `any`
+
+## Out of scope
+
+- ML real / modele predictive
+- Date istorice multi-an (fereastră: ultimele 30 zile fixă)
+- Export CSV al analytics (REP-304 există)
+- Notificări automate la churn-risk (COMM separat)
 
 ## Acceptance criteria
-- [ ] API `GET /api/analytics/cohort-retention` — returnează {cohortId, cohortName, retentionRate, currentStudents, previousStudents}.
-- [ ] API `GET /api/analytics/student-ltv` — returnează top 10 studenți după totalul plăților, {studentId, name, totalPaidCents}.
-- [ ] API `GET /api/analytics/top-courses` — returnează cursuri după venituri luna curentă, {courseId, courseName, revenueCents}.
-- [ ] AnalyticsPage.tsx: 3 noi carduri cu grafice simple (bar chart sau listă ordonată).
-- [ ] Design system, dark mode, zero hex.
 
-## Files to create/modify
-- `server/routes/analytics.ts` (extindere)
-- `src/pages/app/AnalyticsPage.tsx` (extindere)
-- `src/__tests__/gap016-analytics.test.ts`
+- [ ] `GET /api/analytics/retention-by-course` → 200 cu array per curs (poate fi gol)
+- [ ] `GET /api/analytics/revenue-by-teacher` → 200 cu array per teacher
+- [ ] `GET /api/analytics/churn-risk` → 200 cu top studenți riscanti (poate fi gol)
+- [ ] Panourile UI randează fără crash pe `/app/analytics`
+- [ ] DB: zero `.execute().rows` raw; toate queries prin query builder
+- [ ] TypeScript strict; zero `any`; 0 axe critical/serious
+- [ ] Build + typecheck + lint verde
 
 ## Tests
-- **T-GAP-016-1** [blocant] Given GET /api/analytics/cohort-retention, Then 200 cu array de cohort retention objects
-- **T-GAP-016-2** [blocant] Given GET /api/analytics/student-ltv, Then 200 cu max 10 studenți ordonați descrescător
-- **T-GAP-016-3** [blocant] Given GET /api/analytics/top-courses, Then 200 cu cursuri ordonate după venit
-- **T-GAP-016-4** [blocant] Given AnalyticsPage render, Then fără crash cu noile 3 carduri
-- **T-GAP-016-5** [normal] Given tenant fără date, When GET analytics endpoints, Then 200 cu arrays goale
 
-## Definition of Done
-- Build verde. Teste blocante trec. (Nu e migrare dacă nu e nevoie schema nouă.)
-- Reviewer APPROVED. Integration-architect CONNECTED. Personas: manager BUY, student OK.
+- **T-GAP-016-1** `[blocant]` Given studenți cu lecții în ultimele 30 zile, When `GET /api/analytics/retention-by-course`, Then 200 cu array incluzând `retentionPct` numeric
+- **T-GAP-016-2** `[blocant]` Given invoices plătite legate de teachers, When `GET /api/analytics/revenue-by-teacher`, Then 200 cu `revenueRon` per teacher
+- **T-GAP-016-3** `[blocant]` Given student cu 3+ absențe nemotivate, When `GET /api/analytics/churn-risk`, Then student apare în listă cu `riskScore > 0` și `reasons` conținând absente
+- **T-GAP-016-4** `[blocant]` API smoke: login + `GET /api/analytics/retention-by-course` → 200 JSON
+- **T-GAP-016-5** `[normal]` Panoul "Risc churn" randează fără crash în UI (smoke render)
+- **T-GAP-016-6** `[normal]` Dacă DB gol, toate 3 endpoints returnează 200 cu array gol (nu 500)
+
+## DoD
+
+Standard CLAUDE.md §0.2. Faza 5 branch: `feat/GAP-faza-5-operational`. Un PR per fază.
+No migration needed (analytics is read-only queries on existing tables).

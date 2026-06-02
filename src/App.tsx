@@ -38,6 +38,7 @@ import { DashboardPage } from "./pages/app/DashboardPage";
 import { StudentsPage } from "./pages/app/StudentsPage";
 import { StudentDetailPage } from "./pages/app/StudentDetailPage"; // STU-201
 import { SchedulePage } from "./pages/app/SchedulePage";
+import { CheckInPage } from "./pages/app/CheckInPage"; // GAP-018
 import { TeachersPage } from "./pages/app/TeachersPage";
 import { PaymentsPage } from "./pages/app/PaymentsPage";
 import { LeadsPage } from "./pages/app/LeadsPage";
@@ -45,6 +46,12 @@ import { LeadCardPage } from "./pages/app/LeadCardPage";
 import { TemplatesPage } from "./pages/app/TemplatesPage";
 import { AutomationsPage } from "./pages/app/AutomationsPage";
 import { AnalyticsPage } from "./pages/app/AnalyticsPage";
+import { AdvancedAnalyticsPage } from "./pages/app/AdvancedAnalyticsPage"; // GAP-016
+import { PayrollPage } from "./pages/app/PayrollPage";
+import { TeacherStatsPage } from "./pages/app/TeacherStatsPage";
+import { AvailabilityPage } from "./pages/app/AvailabilityPage";
+import { AuditLogPage } from "./pages/app/AuditLogPage";
+import { TodayDashboardPage } from "./pages/app/TodayDashboardPage";
 import { CadencesPage } from "./pages/app/CadencesPage";
 import { LeadAuditLogPage } from "./pages/app/LeadAuditLogPage";
 import { ContractsPage } from "./pages/app/ContractsPage";
@@ -126,13 +133,11 @@ function Routes() {
   // AUTH-004: 2FA verification step (shown after password login when 2FA is enabled)
   if (path.startsWith("/app/verify-2fa")) return <Verify2FAPage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;
-  if (path.startsWith("/app/courses")) return <CoursesPage />; // COURSE-101
-  // COURSE-103: /app/groups/:id — group detail with "Elevi înrolați" tab
-  if (path.match(/^\/app\/groups\/[^/]+$/)) {
-    const id = path.split("/").pop()!;
-    return <GroupDetailPage groupId={id} />;
+  // GAP-018: /app/lessons/:id/check-in must be before /app/schedule
+  if (path.match(/^\/app\/lessons\/[^/]+\/check-in$/)) {
+    const lessonId = path.split("/")[3];
+    return <CheckInPage lessonId={lessonId} />;
   }
-  if (path.startsWith("/app/groups")) return <GroupsPage />; // COURSE-102
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;
@@ -144,6 +149,7 @@ function Routes() {
     return <LeadCardPage leadId={id} />;
   }
   if (path.startsWith("/app/analytics/crm")) return <AnalyticsPage />;
+  if (path.startsWith("/app/analytics")) return <AdvancedAnalyticsPage />; // GAP-016
   if (path.startsWith("/app/hr/payroll")) return <PayrollPage />;
   // /app/hr/teachers/:id/stats
   if (path.match(/^\/app\/hr\/teachers\/[^/]+\/stats$/)) {

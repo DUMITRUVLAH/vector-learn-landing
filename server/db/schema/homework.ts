@@ -1,29 +1,26 @@
 /**
- * MOB-102: Homework and submissions schema
- * Teachers create homework assignments per lesson;
- * students submit text or image responses.
+ * GAP-015: Homework / assignments per lesson + student submissions
+ *
+ * lesson_homework — a teacher creates homework tasks for a lesson
+ * homework_submissions — a student marks homework as submitted
  */
 import {
   pgTable,
   uuid,
   varchar,
   text,
+  date,
   timestamp,
-  pgEnum,
   index,
+  unique,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { lessons } from "./lessons";
 import { students } from "./students";
+import { users } from "./users";
 
-export const homeworkStatusEnum = pgEnum("homework_status", [
-  "pending",
-  "submitted",
-  "graded",
-]);
-
-export const homework = pgTable(
-  "homework",
+export const lessonHomework = pgTable(
+  "lesson_homework",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     tenantId: uuid("tenant_id")
@@ -32,27 +29,20 @@ export const homework = pgTable(
     lessonId: uuid("lesson_id")
       .notNull()
       .references(() => lessons.id, { onDelete: "cascade" }),
-    studentId: uuid("student_id")
-      .notNull()
-      .references(() => students.id, { onDelete: "cascade" }),
-    /** Assignment description / instructions */
-    body: text("body").notNull(),
-    /** Deadline for submission */
-    deadline: timestamp("deadline", { withTimezone: true }).notNull(),
-    status: homeworkStatusEnum("status").notNull().default("pending"),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description"),
+    dueDate: date("due_date"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    tenantIdx: index("hw_tenant_idx").on(t.tenantId),
-    studentIdx: index("hw_student_idx").on(t.studentId),
-    lessonIdx: index("hw_lesson_idx").on(t.lessonId),
-    deadlineIdx: index("hw_deadline_idx").on(t.studentId, t.deadline),
+    tenantIdx: index("lesson_homework_tenant_idx").on(t.tenantId),
+    lessonIdx: index("lesson_homework_lesson_idx").on(t.lessonId),
   })
 );
 
-export type Homework = typeof homework.$inferSelect;
-export type NewHomework = typeof homework.$inferInsert;
+export type LessonHomework = typeof lessonHomework.$inferSelect;
+export type NewLessonHomework = typeof lessonHomework.$inferInsert;
 
 export const homeworkSubmissions = pgTable(
   "homework_submissions",
@@ -63,18 +53,19 @@ export const homeworkSubmissions = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     homeworkId: uuid("homework_id")
       .notNull()
-      .references(() => homework.id, { onDelete: "cascade" }),
+      .references(() => lessonHomework.id, { onDelete: "cascade" }),
     studentId: uuid("student_id")
       .notNull()
       .references(() => students.id, { onDelete: "cascade" }),
-    textBody: text("text_body"),
-    imageUrl: varchar("image_url", { length: 500 }),
     submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    tenantIdx: index("hws_tenant_idx").on(t.tenantId),
-    homeworkIdx: index("hws_homework_idx").on(t.homeworkId),
-    studentIdx: index("hws_student_idx").on(t.studentId),
+    tenantIdx: index("homework_submissions_tenant_idx").on(t.tenantId),
+    homeworkIdx: index("homework_submissions_homework_idx").on(t.homeworkId),
+    studentIdx: index("homework_submissions_student_idx").on(t.studentId),
+    uniqueSubmission: unique("homework_submissions_unique").on(t.homeworkId, t.studentId),
   })
 );
 

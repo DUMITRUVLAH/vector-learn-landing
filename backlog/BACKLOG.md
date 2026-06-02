@@ -278,14 +278,14 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
 | CONSENT-001 | 🟡 | Consent/permission forms + e-signature |
 
-## Active milestone: AUTH — Securitate & autentificare avansată
+## Milestone: FORMS — Typeform-style form builder → CRM lead collection
+Requirements: `backlog/reports/REQ-FORMS-typeform-lead-collection-2026-06-01.md`. Reuses the
+FEEDBACK-601 typed-question foundation + the /api/leads/intake dedup path. Submissions become CRM leads.
 
-> Forgot password, team invitations, user profile + GDPR rights, 2FA TOTP.
-> Branch: `feat/AUTH-faza-1-security`.
-
-| # | ID | Titlu | Fază | Status | Spec |
-|---|----|-------|------|--------|------|
-| 1 | `AUTH-001` | Resetare parolă prin email (forgot password flow) | 1 | done ✅ | [specs/AUTH-001-password-reset.md](specs/AUTH-001-password-reset.md) · [PR #125](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125) |
-| 2 | `AUTH-002` | Invitații echipă + verificare email la signup | 1 | done ✅ | [specs/AUTH-002-team-invitations.md](specs/AUTH-002-team-invitations.md) · [PR #125](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125) |
-| 3 | `AUTH-003` | Profil utilizator + schimbare parolă + GDPR export/ștergere | 1 | done ✅ | [specs/AUTH-003-user-profile-gdpr.md](specs/AUTH-003-user-profile-gdpr.md) · [PR #125](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125) |
-| 4 | `AUTH-004` | 2FA TOTP + session management (revoke sessions) | 1 | pending | [specs/AUTH-004-2fa-sessions.md](specs/AUTH-004-2fa-sessions.md) |
+| ID | Value | Feature | Spec |
+|----|-------|---------|------|
+| FORMS-001 | 🔴 | Form engine: schema + typed fields + field→lead mapping + public submit (dedup) | full spec |
+| FORMS-002 | 🔴 | Visual builder: reorderable fields + per-field config + lead-mapping + publish/share | req doc |
+| FORMS-003 | 🔴 | Public conversational renderer (/f/:slug) one-question-at-a-time + UTM/hidden + thank-you | req doc |
+| FORMS-004 | 🟡 | Conditional logic / jump branching | req doc |
+| FORMS-005 | 🟡 | Embed snippet + per-form analytics (views/starts/completions/lead conversion) | req doc |

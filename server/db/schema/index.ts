@@ -31,6 +31,7 @@ export * from "./subscriptions";
 export * from "./cohorts";
 export * from "./cohortParticipants";
 export * from "./certificates";
-export * from "./enrollmentRequests";
-export * from "./progress";
-export * from "./makeupCredits";
+export * from "./enrollmentRequests"; // GAP-011
+export * from "./progress"; // GAP-012
+export * from "./makeupCredits"; // GAP-013
+export * from "./homework"; // GAP-015

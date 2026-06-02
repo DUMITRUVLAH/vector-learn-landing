@@ -157,3 +157,19 @@ export function markAttendance(
     body: JSON.stringify({ attendanceStatus }),
   });
 }
+
+// GAP-018: Batch attendance update for mobile check-in
+export interface BatchAttendanceUpdate {
+  studentId: string;
+  status: Exclude<AttendanceStatus, "pending">;
+}
+
+export function batchMarkAttendance(
+  lessonId: string,
+  updates: BatchAttendanceUpdate[]
+): Promise<{ updated: number }> {
+  return api<{ updated: number }>(`/api/lessons/${lessonId}/attendance`, {
+    method: "PATCH",
+    body: JSON.stringify({ updates }),
+  });
+}

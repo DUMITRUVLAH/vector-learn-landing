@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "GAP-013",
-  "iterations": 106,
-  "last_run_at": "2026-06-01T18:50:00Z",
-  "milestone_status": "GAP faza-3 done (PR #100). GAP faza-4 started: GAP-011 done (PR #101). Next: GAP-012 pe feat/GAP-faza-4-analytics.",
+  "last_completed": "GAP-018",
+  "iterations": 110,
+  "last_run_at": "2026-06-01T20:30:00Z",
+  "milestone_status": "GAP Faza 5 complete: GAP-015/016/018 done on feat/GAP-faza-5-operational. PR pending. GAP-019/020 (gamification) next.",
   "active_milestone": "GAP",
   "items": {
     "M1-001": {
@@ -1946,7 +1946,7 @@
       "pr": null
     },
     "GAP-014": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/GAP-014-stripe-online-payments.md",
@@ -1956,24 +1956,36 @@
       "pr": null
     },
     "GAP-015": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/GAP-015-homework-assignments.md",
       "milestone": "GAP",
       "phase": "5",
-      "branch": null,
-      "pr": null
+      "branch": "feat/GAP-faza-5-operational",
+      "pr": null,
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "GAP-016": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/GAP-016-advanced-analytics.md",
       "milestone": "GAP",
       "phase": "5",
-      "branch": null,
-      "pr": null
+      "branch": "feat/GAP-faza-5-operational",
+      "pr": null,
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "GAP-017": {
       "status": "done",
@@ -1996,14 +2008,20 @@
       ]
     },
     "GAP-018": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/GAP-018-mobile-check-in.md",
       "milestone": "GAP",
       "phase": "5",
-      "branch": null,
-      "pr": null
+      "branch": "feat/GAP-faza-5-operational",
+      "pr": null,
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "GAP-019": {
       "status": "pending",
@@ -2024,6 +2042,70 @@
       "phase": "6",
       "branch": null,
       "pr": null
+    },
+    "FORMS-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FORMS-001-form-engine-lead-mapping.md",
+      "milestone": "FORMS",
+      "phase": "1",
+      "severity": "high",
+      "title": "Motor formulare: schema + c\u00e2mpuri tipizate + mapare c\u00e2mp\u2192lead + submit public cu dedup",
+      "depends_on": []
+    },
+    "FORMS-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/REQ-FORMS-typeform-lead-collection-2026-06-01.md",
+      "milestone": "FORMS",
+      "phase": "1",
+      "severity": "high",
+      "title": "Builder vizual: list\u0103 c\u00e2mpuri reordonabil\u0103 + config per c\u00e2mp + mapare lead + publish/share",
+      "depends_on": [
+        "FORMS-001"
+      ]
+    },
+    "FORMS-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/REQ-FORMS-typeform-lead-collection-2026-06-01.md",
+      "milestone": "FORMS",
+      "phase": "1",
+      "severity": "high",
+      "title": "Renderer public conversa\u021bional one-question-at-a-time (/f/:slug) + UTM/hidden capture + thank-you",
+      "depends_on": [
+        "FORMS-001"
+      ]
+    },
+    "FORMS-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/REQ-FORMS-typeform-lead-collection-2026-06-01.md",
+      "milestone": "FORMS",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Logic\u0103 condi\u021bional\u0103 / jump branching (if answer \u2192 jump to field/end)",
+      "depends_on": [
+        "FORMS-002",
+        "FORMS-003"
+      ]
+    },
+    "FORMS-005": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/reports/REQ-FORMS-typeform-lead-collection-2026-06-01.md",
+      "milestone": "FORMS",
+      "phase": "1",
+      "severity": "normal",
+      "title": "Embed snippet (inline/popup) + analytics per formular (views/starts/completions/conversie lead)",
+      "depends_on": [
+        "FORMS-003"
+      ]
     }
   }
 }

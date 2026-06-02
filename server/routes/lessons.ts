@@ -398,113 +398,64 @@ lessonRoutes.patch(
   }
 );
 
-/**
- * GAP-007: Atomically deduct 1 unit from the oldest active lesson package for
- * (studentId, courseId). No-op if no active package exists.
- */
-async function deductUnit(
-  tenantId: string,
-  studentId: string,
-  courseId: string,
-  lessonId: string,
-  actorId: string
-) {
-  // Find oldest active package (FIFO on validFrom)
-  const activePackages = await db
-    .select()
-    .from(lessonPackages)
-    .where(
-      and(
-        eq(lessonPackages.tenantId, tenantId),
-        eq(lessonPackages.studentId, studentId),
-        eq(lessonPackages.courseId, courseId),
-        eq(lessonPackages.status, "active"),
-      )
-    )
-    .orderBy(asc(lessonPackages.validFrom))
-    .limit(1);
+// ─── GAP-018: Batch attendance update (mobile check-in) ──────────────────────
+// PATCH /api/lessons/:id/attendance
+// Body: { updates: [{ studentId, status }] }
+// Upserts attendance for multiple students at once — for the mobile check-in page.
 
-  const pkg = activePackages[0];
-  if (!pkg) return; // No active package — no-op
-
-  const newRemaining = pkg.unitsRemaining - 1;
-  const newStatus = newRemaining <= 0 ? "exhausted" as const : "active" as const;
-
-  await db
-    .update(lessonPackages)
-    .set({
-      unitsRemaining: newRemaining,
-      status: newStatus,
-      updatedAt: new Date(),
+const batchAttendanceSchema = z.object({
+  updates: z.array(
+    z.object({
+      studentId: z.string().uuid(),
+      status: z.enum(["present", "absent", "late", "excused"]),
     })
-    .where(eq(lessonPackages.id, pkg.id));
+  ).min(1).max(200),
+});
 
-  // Log to audit_log
-  await db.insert(auditLog).values({
-    tenantId,
-    actorId,
-    actionType: "unit_deducted",
-    targetType: "lesson_package",
-    targetId: pkg.id,
-    oldValue: { unitsRemaining: pkg.unitsRemaining, status: pkg.status },
-    newValue: { unitsRemaining: newRemaining, status: newStatus, studentId, lessonId },
-  });
+lessonRoutes.patch(
+  "/:id/attendance",
+  zValidator("json", batchAttendanceSchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const { id: lessonId } = c.req.param();
+    const { updates } = c.req.valid("json");
+    const now = new Date();
 
-  // Low-balance alert (≤ 2 remaining) or exhausted
-  if (newRemaining <= 2) {
-    await scheduleExhaustionAlert(tenantId, pkg.id, studentId, newRemaining);
+    const lesson = await db.query.lessons.findFirst({
+      where: and(eq(lessons.id, lessonId), eq(lessons.tenantId, tenantId)),
+    });
+    if (!lesson) return c.json({ error: "lesson_not_found" }, 404);
+
+    let updatedCount = 0;
+
+    for (const { studentId, status } of updates) {
+      const existing = await db.query.studentLessons.findFirst({
+        where: and(
+          eq(studentLessons.lessonId, lessonId),
+          eq(studentLessons.studentId, studentId),
+          eq(studentLessons.tenantId, tenantId)
+        ),
+      });
+
+      if (existing) {
+        await db
+          .update(studentLessons)
+          .set({ attendanceStatus: status, markedBy: user.id, markedAt: now })
+          .where(eq(studentLessons.id, existing.id));
+      } else {
+        await db.insert(studentLessons).values({
+          tenantId,
+          lessonId,
+          studentId,
+          attendanceStatus: status,
+          markedBy: user.id,
+          markedAt: now,
+        });
+      }
+      updatedCount++;
+    }
+
+    return c.json({ updated: updatedCount });
   }
-}
-
-/**
- * GAP-007: Reverse deduction — add 1 unit back to the most recent active or exhausted package.
- * Called when a 'present' mark is changed back to absent/excused/late.
- */
-async function restoreUnit(
-  tenantId: string,
-  studentId: string,
-  courseId: string,
-  lessonId: string,
-  actorId: string
-) {
-  // Find the most recently updated package (the one that was just decremented)
-  const packages = await db
-    .select()
-    .from(lessonPackages)
-    .where(
-      and(
-        eq(lessonPackages.tenantId, tenantId),
-        eq(lessonPackages.studentId, studentId),
-        eq(lessonPackages.courseId, courseId),
-        // Can restore from active or exhausted (the deduction may have just exhausted it)
-        sql`${lessonPackages.status} IN ('active', 'exhausted')`,
-      )
-    )
-    .orderBy(asc(lessonPackages.validFrom))
-    .limit(1);
-
-  const pkg = packages[0];
-  if (!pkg) return;
-
-  const newRemaining = pkg.unitsRemaining + 1;
-  const newStatus = newRemaining > 0 ? "active" as const : "exhausted" as const;
-
-  await db
-    .update(lessonPackages)
-    .set({
-      unitsRemaining: newRemaining,
-      status: newStatus,
-      updatedAt: new Date(),
-    })
-    .where(eq(lessonPackages.id, pkg.id));
-
-  await db.insert(auditLog).values({
-    tenantId,
-    actorId,
-    actionType: "unit_restored",
-    targetType: "lesson_package",
-    targetId: pkg.id,
-    oldValue: { unitsRemaining: pkg.unitsRemaining, status: pkg.status },
-    newValue: { unitsRemaining: newRemaining, status: newStatus, studentId, lessonId },
-  });
-}
+);

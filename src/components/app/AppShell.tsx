@@ -27,7 +27,8 @@ const NAV = [
   { label: "Plăți", href: "/app/payments", icon: CreditCard },
   { label: "Facturi", href: "/app/invoices", icon: FileText },
   { label: "Automatizări", href: "/app/settings/crm/automations", icon: Zap },
-  { label: "Analytics", href: "/app/analytics/crm", icon: BarChart3 },
+  { label: "Analytics CRM", href: "/app/analytics/crm", icon: BarChart3 },
+  { label: "Analytics", href: "/app/analytics", icon: TrendingUp }, // GAP-016
   { label: "Cadences", href: "/app/cadences", icon: ListChecks },
   { label: "Audit Log", href: "/app/audit-log", icon: Shield },
   // AUTH-003/004: user profile + security settings
