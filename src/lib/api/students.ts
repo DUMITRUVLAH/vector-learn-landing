@@ -78,6 +78,10 @@ export function updateStudent(id: string, input: Partial<StudentInput>): Promise
   });
 }
 
+export function getStudent(id: string): Promise<Student> {
+  return api<Student>(`/api/students/${id}`);
+}
+
 export function archiveStudent(id: string): Promise<{ ok: true; id: string }> {
   return api<{ ok: true; id: string }>(`/api/students/${id}`, {
     method: "DELETE",

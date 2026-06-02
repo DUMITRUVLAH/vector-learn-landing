@@ -603,6 +603,34 @@
       "when": 1780400100000,
       "tag": "0085_gap017_portal_notif_prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1780401000000,
+      "tag": "0086_gap011_enrollment",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1780492800000,
+      "tag": "0087_gap012_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1780579200000,
+      "tag": "0088_gap013_makeup_credits",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1780665600000,
+      "tag": "0089_gap014_stripe_invoices",
+      "breakpoints": true
     }
   ]
 }

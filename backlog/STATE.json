@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "GAP-011",
-  "last_completed": "GAP-017",
-  "iterations": 104,
-  "last_run_at": "2026-06-01T18:00:00Z",
-  "milestone_status": "GAP faza-3 started: GAP-010 portal student in_progress. Branch: feat/GAP-faza-3-portal-notificari.",
+  "current_item": null,
+  "last_completed": "GAP-013",
+  "iterations": 106,
+  "last_run_at": "2026-06-01T18:50:00Z",
+  "milestone_status": "GAP faza-3 done (PR #100). GAP faza-4 started: GAP-011 done (PR #101). Next: GAP-012 pe feat/GAP-faza-4-analytics.",
   "active_milestone": "GAP",
   "items": {
     "M1-001": {
@@ -1811,8 +1811,7 @@
       "branch": "feat/GAP-faza-1-trial-flow",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
       "milestone": "GAP",
-      "phase": "1",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "phase": "1"
     },
     "GAP-002": {
       "status": "done",
@@ -1821,8 +1820,7 @@
       "branch": "feat/GAP-faza-1-trial-flow",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
       "milestone": "GAP",
-      "phase": "1",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "phase": "1"
     },
     "GAP-003": {
       "status": "done",
@@ -1831,8 +1829,7 @@
       "branch": "feat/GAP-faza-1-trial-flow",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
       "milestone": "GAP",
-      "phase": "1",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "phase": "1"
     },
     "GAP-004": {
       "status": "done",
@@ -1841,8 +1838,7 @@
       "branch": "feat/GAP-faza-1-trial-flow",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
       "milestone": "GAP",
-      "phase": "1",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "phase": "1"
     },
     "GAP-005": {
       "status": "done",
@@ -1851,8 +1847,7 @@
       "branch": "feat/GAP-faza-2-abonamente-waitlist",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/99",
       "milestone": "GAP",
-      "phase": "2",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "phase": "2"
     },
     "GAP-006": {
       "status": "done",
@@ -1861,8 +1856,7 @@
       "branch": "feat/GAP-faza-2-abonamente-waitlist",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/99",
       "milestone": "GAP",
-      "phase": "2",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "phase": "2"
     },
     "GAP-007": {
       "status": "done",
@@ -1871,8 +1865,7 @@
       "branch": "feat/GAP-faza-2-abonamente-waitlist",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/99",
       "milestone": "GAP",
-      "phase": "2",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "phase": "2"
     },
     "GAP-008": {
       "status": "done",
@@ -1881,8 +1874,7 @@
       "branch": "feat/GAP-faza-2-abonamente-waitlist",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/99",
       "milestone": "GAP",
-      "phase": "2",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "phase": "2"
     },
     "GAP-009": {
       "status": "done",
@@ -1891,8 +1883,7 @@
       "branch": "feat/GAP-faza-1-trial-flow",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
       "milestone": "GAP",
-      "phase": "1",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "LOVES" }
+      "phase": "1"
     },
     "GAP-010": {
       "status": "done",
@@ -1902,50 +1893,57 @@
       "milestone": "GAP",
       "phase": "3",
       "branch": "feat/GAP-faza-3-portal-notificari",
-      "pr": null,
-      "reports": [
-        "backlog/reports/GAP-010-manager.md",
-        "backlog/reports/GAP-010-student.md"
-      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/100",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
         "manager": "BUY",
         "student": "LOVES"
-      }
+      },
+      "reports": [
+        "backlog/reports/GAP-010-manager.md",
+        "backlog/reports/GAP-010-student.md"
+      ]
     },
     "GAP-011": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/GAP-011-enrollment-public.md",
       "milestone": "GAP",
       "phase": "4",
-      "branch": null,
-      "pr": null,
-      "reports": []
+      "branch": "feat/GAP-faza-4-analytics",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/101",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      },
+      "reports": [
+        "backlog/reports/GAP-011-manager.md",
+        "backlog/reports/GAP-011-student.md"
+      ]
     },
     "GAP-012": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 2,
       "blockers": [],
       "spec": "backlog/specs/GAP-012-gradebook-progress.md",
       "milestone": "GAP",
       "phase": "4",
-      "branch": null,
-      "pr": null,
-      "reports": []
+      "branch": "feat/GAP-faza-4-analytics",
+      "pr": null
     },
     "GAP-013": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/GAP-013-makeup-lessons.md",
       "milestone": "GAP",
       "phase": "4",
       "branch": null,
-      "pr": null,
-      "reports": []
+      "pr": null
     },
     "GAP-014": {
       "status": "pending",
@@ -1955,8 +1953,7 @@
       "milestone": "GAP",
       "phase": "4",
       "branch": null,
-      "pr": null,
-      "reports": []
+      "pr": null
     },
     "GAP-015": {
       "status": "pending",
@@ -1966,8 +1963,7 @@
       "milestone": "GAP",
       "phase": "5",
       "branch": null,
-      "pr": null,
-      "reports": []
+      "pr": null
     },
     "GAP-016": {
       "status": "pending",
@@ -1977,8 +1973,7 @@
       "milestone": "GAP",
       "phase": "5",
       "branch": null,
-      "pr": null,
-      "reports": []
+      "pr": null
     },
     "GAP-017": {
       "status": "done",
@@ -1988,17 +1983,17 @@
       "milestone": "GAP",
       "phase": "3",
       "branch": "feat/GAP-faza-3-portal-notificari",
-      "pr": null,
-      "reports": [
-        "backlog/reports/GAP-017-manager.md",
-        "backlog/reports/GAP-017-student.md"
-      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/100",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
         "manager": "BUY",
         "student": "LOVES"
-      }
+      },
+      "reports": [
+        "backlog/reports/GAP-017-manager.md",
+        "backlog/reports/GAP-017-student.md"
+      ]
     },
     "GAP-018": {
       "status": "pending",
@@ -2008,8 +2003,7 @@
       "milestone": "GAP",
       "phase": "5",
       "branch": null,
-      "pr": null,
-      "reports": []
+      "pr": null
     },
     "GAP-019": {
       "status": "pending",
@@ -2019,8 +2013,7 @@
       "milestone": "GAP",
       "phase": "6",
       "branch": null,
-      "pr": null,
-      "reports": []
+      "pr": null
     },
     "GAP-020": {
       "status": "pending",
@@ -2030,8 +2023,7 @@
       "milestone": "GAP",
       "phase": "6",
       "branch": null,
-      "pr": null,
-      "reports": []
+      "pr": null
     }
   }
 }
