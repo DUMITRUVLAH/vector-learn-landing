@@ -60,6 +60,7 @@ import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
 import { GroupsPage } from "./pages/app/GroupsPage";
+import { PromoCodesPage } from "./pages/app/PromoCodesPage";
 
 function HomePage() {
   return (
@@ -145,6 +146,7 @@ function Routes() {
   }
   if (path.startsWith("/app/forms")) return <FormsPage />;
   if (path.startsWith("/app/groups")) return <GroupsPage />;
+  if (path.startsWith("/app/promo-codes")) return <PromoCodesPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // /feedback/:token — public no-auth page for students

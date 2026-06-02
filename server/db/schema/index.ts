@@ -32,3 +32,4 @@ export * from "./cohortParticipants";
 export * from "./certificates";
 export * from "./forms";
 export * from "./groups";
+export * from "./promoCodes";

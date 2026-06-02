@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { payments, students, invoices } from "../db/schema";
+import { payments, students, invoices, promoCodes } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 const createPaymentSchema = z.object({
@@ -13,6 +13,8 @@ const createPaymentSchema = z.object({
   status: z.enum(["pending", "paid", "overdue", "refunded", "cancelled"]).default("pending"),
   dueDate: z.string().datetime().optional().nullable(),
   description: z.string().max(500).optional().nullable(),
+  // COURSE-203: optional promo code
+  promoCode: z.string().max(20).optional().nullable(),
 });
 
 const updatePaymentSchema = createPaymentSchema.partial();
@@ -79,17 +81,58 @@ paymentRoutes.get("/stats", async (c) => {
 paymentRoutes.post("/", zValidator("json", createPaymentSchema), async (c) => {
   const body = c.req.valid("json");
   const tenantId = c.get("user").tenantId;
+
+  // COURSE-203: apply promo code if provided
+  let finalAmountCents = body.amountCents;
+  let promoCodeId: string | null = null;
+  let originalAmountCents: number | null = null;
+
+  if (body.promoCode) {
+    const code = body.promoCode.toUpperCase();
+    const pc = await db.query.promoCodes.findFirst({
+      where: and(eq(promoCodes.tenantId, tenantId), eq(promoCodes.code, code)),
+    });
+
+    if (pc) {
+      const now = new Date();
+      const expired = pc.expiresAt && pc.expiresAt < now;
+      const exhausted = pc.maxUses != null && pc.usedCount >= pc.maxUses;
+      const disabled = pc.status === "disabled";
+
+      if (!expired && !exhausted && !disabled) {
+        originalAmountCents = body.amountCents;
+        promoCodeId = pc.id;
+
+        if (pc.discountType === "percent") {
+          const discount = Math.round(body.amountCents * (pc.discountValue / 100));
+          finalAmountCents = Math.max(0, body.amountCents - discount);
+        } else {
+          // fixed discount in cents
+          finalAmountCents = Math.max(0, body.amountCents - pc.discountValue);
+        }
+
+        // Increment used_count
+        await db
+          .update(promoCodes)
+          .set({ usedCount: pc.usedCount + 1, updatedAt: new Date() })
+          .where(eq(promoCodes.id, pc.id));
+      }
+    }
+  }
+
   const [created] = await db
     .insert(payments)
     .values({
       tenantId,
       studentId: body.studentId,
-      amountCents: body.amountCents,
+      amountCents: finalAmountCents,
       currency: body.currency,
       status: body.status,
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
       paidAt: body.status === "paid" ? new Date() : null,
       description: body.description ?? null,
+      promoCodeId,
+      originalAmountCents,
     })
     .returning();
   return c.json(created, 201);

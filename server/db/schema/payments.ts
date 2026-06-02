@@ -1,6 +1,7 @@
 import { pgTable, uuid, varchar, integer, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { students } from "./students";
+import { promoCodes } from "./promoCodes"; // COURSE-203
 
 export const paymentStatusEnum = pgEnum("payment_status", [
   "pending",
@@ -26,6 +27,11 @@ export const payments = pgTable(
     dueDate: timestamp("due_date", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     description: varchar("description", { length: 500 }),
+    // COURSE-203: optional promo code applied to this payment
+    promoCodeId: uuid("promo_code_id").references(() => promoCodes.id, {
+      onDelete: "set null",
+    }),
+    originalAmountCents: integer("original_amount_cents"), // before discount
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -2818,18 +2818,29 @@
       }
     },
     "COURSE-202": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/COURSE-202-groups-capacity.md",
       "milestone": "COURSE",
       "phase": "2",
       "depends_on": ["COURSE-201"],
-      "title": "Grupe cu capacitate maximă și waitlist"
+      "title": "Grupe cu capacitate maximă și waitlist",
+      "branch": "feat/COURSE-faza-2-edit-archive",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "reports": [
+        "backlog/reports/COURSE-202-manager.md",
+        "backlog/reports/COURSE-202-student.md"
+      ]
     },
     "COURSE-203": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/COURSE-203-promo-codes.md",
       "milestone": "COURSE",
