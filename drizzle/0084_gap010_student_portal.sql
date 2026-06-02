@@ -1,0 +1,17 @@
+-- GAP-010: Student portal tokens
+-- Magic-link access tokens for student/parent self-service portal
+
+CREATE TABLE IF NOT EXISTS "student_portal_tokens" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE CASCADE,
+  "student_id" uuid NOT NULL REFERENCES "students"("id") ON DELETE CASCADE,
+  "token" uuid DEFAULT gen_random_uuid() NOT NULL UNIQUE,
+  "expires_at" timestamp with time zone NOT NULL,
+  "last_used_at" timestamp with time zone,
+  "is_active" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS "spt_tenant_idx" ON "student_portal_tokens" ("tenant_id");
+CREATE INDEX IF NOT EXISTS "spt_token_idx" ON "student_portal_tokens" ("token");
+CREATE INDEX IF NOT EXISTS "spt_student_idx" ON "student_portal_tokens" ("student_id", "is_active");

@@ -46,13 +46,14 @@ import { TemplatesPage } from "./pages/app/TemplatesPage";
 import { AutomationsPage } from "./pages/app/AutomationsPage";
 import { AnalyticsPage } from "./pages/app/AnalyticsPage";
 import { CadencesPage } from "./pages/app/CadencesPage";
-import { AuditLogPage } from "./pages/app/AuditLogPage";
-import { FeatureTreePage } from "./pages/app/FeatureTreePage";
-import { KpiDashboardPage } from "./pages/app/KpiDashboardPage";
-import { RevenueChartsPage } from "./pages/app/RevenueChartsPage";
-import { StudentRetentionPage } from "./pages/app/StudentRetentionPage";
-import { ExportPage } from "./pages/app/ExportPage";
-import { CRMSettingsPage } from "./pages/app/CRMSettingsPage";
+import { LeadAuditLogPage } from "./pages/app/LeadAuditLogPage";
+import { ContractsPage } from "./pages/app/ContractsPage";
+import { FeedbackPage } from "./pages/app/FeedbackPage";
+import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
+import { InvoicesPage } from "./pages/app/InvoicesPage";
+import { CXPage } from "./pages/app/CXPage";
+import { DiplomaPage } from "./pages/app/DiplomaPage";
+import { StudentPortalPage } from "./pages/portal/StudentPortalPage";
 
 function HomePage() {
   return (
@@ -173,10 +174,10 @@ function Routes() {
     const token = path.split("/")[2];
     return <FeedbackPublicPage token={token} />;
   }
-  // FORMS-003: /f/:slug — public conversational form renderer (no auth)
-  if (path.match(/^\/f\/[^/]+$/)) {
-    const slug = path.split("/")[2];
-    return <FormPublicPage slug={slug} />;
+  // GAP-010: /portal/:token — public self-service student portal
+  if (path.match(/^\/portal\/[^/]+$/)) {
+    const token = path.split("/")[2];
+    return <StudentPortalPage token={token} />;
   }
   return <HomePage />;
 }

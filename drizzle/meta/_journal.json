@@ -589,6 +589,20 @@
       "when": 1780322262150,
       "tag": "0083_gap005_006_waitlist_packages",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1780400000000,
+      "tag": "0084_gap010_student_portal",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1780400100000,
+      "tag": "0085_gap017_portal_notif_prefs",
+      "breakpoints": true
     }
   ]
 }
