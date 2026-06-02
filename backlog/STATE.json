@@ -1,11 +1,11 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "BRANCH-703",
-  "iterations": 105,
-  "last_run_at": "2026-06-02T07:00:00Z",
-  "milestone_status": "BRANCH faza-1 COMPLETE: BRANCH-701/702/703 done, PR #115 open.",
-  "active_milestone": "BRANCH",
+  "last_completed": "AI-A04",
+  "iterations": 112,
+  "last_run_at": "2026-06-02T11:00:00Z",
+  "milestone_status": "AI faza-1: ALL DONE (A01/A02/A03/A04) on PR#116. Batch complete.",
+  "active_milestone": "AI",
   "items": {
     "M1-001": {
       "status": "done",
@@ -2345,6 +2345,159 @@
       "depends_on": ["BRANCH-701", "BRANCH-702"],
       "branch": "feat/BRANCH-faza-1-branches",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/115",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "SET-801": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SET-801-team-management.md",
+      "milestone": "SET",
+      "phase": "1",
+      "depends_on": ["MVP-003"],
+      "branch": "feat/SET-faza-1-settings",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/111",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "SET-802": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SET-802-branding-locale.md",
+      "milestone": "SET",
+      "phase": "1",
+      "depends_on": ["SET-801"],
+      "branch": "feat/SET-faza-1-settings",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/111",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "SET-803": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SET-803-audit-log-gdpr.md",
+      "milestone": "SET",
+      "phase": "1",
+      "depends_on": ["SET-801"],
+      "branch": "feat/SET-faza-1-settings",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/111",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "SET-804": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SET-804-onboarding-wizard.md",
+      "milestone": "SET",
+      "phase": "1",
+      "depends_on": ["SET-801", "SET-802"],
+      "branch": "feat/SET-faza-1-settings",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/111",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "SET-805": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SET-805-notifications-preferences.md",
+      "milestone": "SET",
+      "phase": "1",
+      "depends_on": ["SET-801"],
+      "branch": "feat/SET-faza-1-settings",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/111",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "AI-A01": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AI-A01-lesson-summary.md",
+      "milestone": "AI",
+      "phase": "1",
+      "depends_on": ["MVP-005", "COMM-201"],
+      "branch": "feat/AI-faza-1-assistant",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/116",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
+    },
+    "AI-A02": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AI-A02-churn-prediction.md",
+      "milestone": "AI",
+      "phase": "1",
+      "depends_on": ["AI-A01", "MVP-004", "SCHED-503"],
+      "branch": "feat/AI-faza-1-assistant",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/116",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "AI-A03": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AI-A03-lead-qualification.md",
+      "milestone": "AI",
+      "phase": "1",
+      "depends_on": ["AI-A01", "CRM-105"],
+      "branch": "feat/AI-faza-1-assistant",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/116",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "AI-A04": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AI-A04-ai-dashboard.md",
+      "milestone": "AI",
+      "phase": "1",
+      "depends_on": ["AI-A01", "AI-A02", "AI-A03"],
+      "branch": "feat/AI-faza-1-assistant",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/116",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",

@@ -75,7 +75,7 @@ savedViewsRoutes.delete("/:id", async (c) => {
 
   // Only the owner, or a manager/admin can delete
   const isOwner = existing.userId === user.id;
-  const isManagerOrAdmin = user.role === "owner" || user.role === "manager";
+  const isManagerOrAdmin = (user.role as string) === "owner" || user.role === "manager";
   if (!isOwner && !isManagerOrAdmin) {
     return c.json({ error: "forbidden" }, 403);
   }

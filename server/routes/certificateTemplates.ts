@@ -161,7 +161,8 @@ certificateTemplatesRoutes.post(
         courseId: body.courseId ?? null,
         cohortId: body.cohortId ?? null,
         backgroundUrl: body.backgroundUrl ?? null,
-        fieldsConfig: (body.fieldsConfig as Record<string, unknown>) ?? null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        fieldsConfig: (body.fieldsConfig as any) ?? null,
         isGlobal,
       })
       .returning();
@@ -201,7 +202,8 @@ certificateTemplatesRoutes.patch(
       .set({
         ...body,
         ...(isGlobal !== undefined ? { isGlobal } : {}),
-        fieldsConfig: body.fieldsConfig as Record<string, unknown> | null | undefined,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        fieldsConfig: body.fieldsConfig as any,
         updatedAt: new Date(),
       })
       .where(

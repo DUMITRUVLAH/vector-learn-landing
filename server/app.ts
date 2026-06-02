@@ -38,7 +38,10 @@ import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
 import { formRoutes } from "./routes/forms"; // FORMS-001
-import { branchRoutes } from "./routes/branches"; // BRANCH-701
+import { aiRoutes } from "./routes/ai"; // AI-A01: lesson summary + AI infrastructure
+import { aiChurnRoutes } from "./routes/aiChurn"; // AI-A02: churn prediction
+import { aiLeadsRoutes } from "./routes/aiLeads"; // AI-A03: lead qualification + reply suggestion
+import { aiSettingsRoutes } from "./routes/aiSettings"; // AI-A04: budget cap + feature flags
 import {
   publicFormGetHandler,
   publicFormSubmitHandler,
@@ -146,8 +149,14 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
-// BRANCH-701: Multi-branch (filiale) management
-app.route("/api/branches", branchRoutes);
+// AI-A01: AI assistant — lesson summary, churn, lead qualification
+app.route("/api/ai", aiRoutes);
+// AI-A02: churn prediction — /api/ai/churn-score + /api/ai/churn-scores
+app.route("/api/ai/churn", aiChurnRoutes);
+// AI-A03: lead qualification + reply suggestion
+app.route("/api/ai", aiLeadsRoutes);
+// AI-A04: AI usage dashboard, budget cap, feature flags
+app.route("/api/settings/ai", aiSettingsRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {
@@ -155,7 +164,8 @@ app.get("/api/health/db", async (c) => {
       sql`SELECT count(*)::int as table_count FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE '\\_\\_%' ESCAPE '\\'`
     );
     // postgres-js returns the rows array directly; PGlite wraps them in `.rows`.
-    const tableRows = (Array.isArray(tablesResult) ? tablesResult : tablesResult.rows) as
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tableRows = (Array.isArray(tablesResult) ? tablesResult : (tablesResult as any).rows) as
       | Array<{ table_count: number }>
       | undefined;
     const tableRow = tableRows?.[0];

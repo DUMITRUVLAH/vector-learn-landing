@@ -290,22 +290,25 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
 | CONSENT-001 | 🟡 | Consent/permission forms + e-signature |
 
-## Milestone: INTEG — Integrare inter-module (audit 2026-06-01)
-Audit complet: `backlog/reports/AUDIT-INTEG-2026-06-01.md`. Module deconectate: leads fără curs/filială, analytics cu 4 endpoints lipsă, plăți fără courseId, cohorte fără branchId, UX fragmentat cross-module.
+## Milestone: SET — Settings/Users (NIGHT-PLAN §7)
 
-### INTEG faza-1 — FK-uri lipsă + endpoints analytics rupte
+Platform administration: team management, branding, audit log, GDPR compliance, onboarding.
 
-| ID | Severity | Title | Status |
-|----|----------|-------|--------|
-| INTEG-101 | 🔴 high | leads.courseId + leads.branchId FK + course picker în LeadCard | pending |
-| INTEG-102 | 🔴 high | payments.courseId + invoices.courseId FK | pending |
-| INTEG-103 | 🔴 high | cohorts.branchId FK + branch filter pe cohorts route | pending |
-| INTEG-104 | 🔴 high | Implementează 4 endpoints analytics lipsă (KPI, revenue, LTV) | pending |
+| ID | Priority | Feature | Status |
+|----|----------|---------|--------|
+| SET-801 | P0 | Team management — invite/disable/role matrix | pending |
+| SET-802 | P0 | Tenant branding + locale/timezone settings | pending |
+| SET-803 | P0 | Audit log + GDPR (DPA download, data retention) | pending |
+| SET-804 | P0 | Onboarding wizard (logo→course→teacher→students) | pending |
+| SET-805 | P1 | Notification preferences + /status public page | pending |
 
-### INTEG faza-2 — UX cross-module
+## Milestone: AI — AI Assistant module (NIGHT-PLAN §9)
 
-| ID | Severity | Title | Status |
-|----|----------|-------|--------|
-| INTEG-201 | 🔴 high | Lead→cohort auto-enroll la conversie | pending |
-| INTEG-202 | 🟡 normal | ContractsPage — picker curs real (contracts.courseId FK) | pending |
-| INTEG-203 | 🟡 normal | CX — course name real în export + link participant→student | pending |
+AI-powered features: lesson summary, churn prediction, lead qualification, usage dashboard.
+
+| ID | Priority | Feature | Status |
+|----|----------|---------|--------|
+| AI-A01 | P0 | AI lesson summary + GDPR pseudonymization layer | pending |
+| AI-A02 | P0 | Churn prediction — students at risk + suggested actions | pending |
+| AI-A03 | P1 | Lead qualification hot/warm/cold + WhatsApp reply suggestion | pending |
+| AI-A04 | P1 | AI dashboard — cost cap, usage stats, feature flags | pending |
