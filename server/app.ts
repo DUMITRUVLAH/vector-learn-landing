@@ -63,12 +63,6 @@ import { notificationSettingsRoutes } from "./routes/notificationSettings"; // S
  */
 export const app = new Hono();
 
-// Temporary error handler — exposes error message to diagnose prod 500s
-app.onError((err, c) => {
-  console.error("[UNHANDLED]", err);
-  return c.json({ error: "internal_error", message: err.message, stack: err.stack?.split("\n").slice(0, 5) }, 500);
-});
-
 app.use("*", logger());
 
 const allowedOrigins = [
