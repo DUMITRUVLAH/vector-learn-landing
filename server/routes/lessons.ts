@@ -5,10 +5,7 @@ import { and, eq, gte, lt, ne, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { lessons, courses, teachers, users, students, studentLessons } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
-import { NotificationService } from "../services/notifications";
-
-/** COMM-205: singleton notification service for lesson reschedule triggers */
-const notificationService = new NotificationService(db);
+import { getBranchScope } from "../middleware/branchScope";
 
 const createLessonSchema = z.object({
   courseId: z.string().uuid(),
@@ -97,8 +94,14 @@ lessonRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
   withBranchFilter(user, conditions, lessons.branchId);
   if (from) conditions.push(gte(lessons.scheduledAt, new Date(from)));
   if (to) conditions.push(lt(lessons.scheduledAt, new Date(to)));
-  // BRANCH-702: filter by branch_id if provided
-  if (branch_id) conditions.push(eq(lessons.branchId, branch_id));
+  // BRANCH-703: server-side branch scope enforcement
+  const scope = getBranchScope(c);
+  if (scope) {
+    conditions.push(eq(lessons.branchId, scope));
+  } else if (branch_id) {
+    // BRANCH-702: optional client-side filter (full-access users only)
+    conditions.push(eq(lessons.branchId, branch_id));
+  }
 
   const rows = await db
     .select({

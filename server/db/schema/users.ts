@@ -41,6 +41,9 @@ export const users = pgTable(
     timezone: varchar("timezone", { length: 64 }).default("Europe/Bucharest"),
     // AUTH-003: GDPR soft-delete (deleted_at = null means active)
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+     * BRANCH-703: Scoped branch access.
+     * NULL = access to ALL branches (owner/admin).
+     * UUID = access limited to this branch only (branch manager).
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

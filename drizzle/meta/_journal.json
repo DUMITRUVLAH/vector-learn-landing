@@ -533,6 +533,13 @@
       "when": 1780144580052,
       "tag": "0075_shocking_captain_cross",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1780145179788,
+      "tag": "0076_branch703_user_scope",
+      "breakpoints": true
     }
   ]
 }

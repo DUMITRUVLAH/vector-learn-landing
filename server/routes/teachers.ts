@@ -1,12 +1,9 @@
 import { Hono } from "hono";
-import { zValidator } from "@hono/zod-validator";
-import { z } from "zod";
-import { and, eq, desc, ne, sql } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { db } from "../db/client";
 import { teachers, users, lessons } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
-import { writeAuditLog } from "../lib/auditLogger";
-import { withBranchFilter } from "../middleware/branchScope";
+import { getBranchScope } from "../middleware/branchScope";
 
 export const teacherRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -18,12 +15,11 @@ const updateTeacherSchema = z.object({
 });
 
 teacherRoutes.get("/", async (c) => {
-  const user = c.get("user");
-  const tenantId = user.tenantId;
-
-  // BRANCH-702: branch_manager sees only their branch's teachers
-  const whereClause = user.branchScope
-    ? and(eq(teachers.tenantId, tenantId), eq(teachers.branchId, user.branchScope))
+  const tenantId = c.get("user").tenantId;
+  // BRANCH-703: server-side branch scope enforcement
+  const scope = getBranchScope(c);
+  const where = scope
+    ? and(eq(teachers.tenantId, tenantId), eq(teachers.branchId, scope))
     : eq(teachers.tenantId, tenantId);
 
   const rows = await db
@@ -87,11 +83,9 @@ teacherRoutes.get("/available", zValidator("query", availableQuerySchema), async
     })
     .from(teachers)
     .innerJoin(users, eq(teachers.userId, users.id))
-    .where(eq(teachers.tenantId, tenantId))
-    .orderBy(users.name);
-
-  const available = allTeachers.filter((t) => !busyIds.has(t.id));
-  return c.json({ items: available });
+    .where(where)
+    .orderBy(desc(teachers.createdAt));
+  return c.json({ items: rows });
 });
 
 // ─── HR-404: PATCH /api/teachers/:id — update rate/commission with audit ──────
