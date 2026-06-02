@@ -8,11 +8,15 @@ export interface SessionUser {
   role: "admin" | "manager" | "teacher" | "receptionist" | "student" | "parent";
 }
 
+/** INST-001: which modules a workspace shows. Older sessions may omit it → treat as "mixt". */
+export type InstitutionType = "gradinita" | "scoala" | "mixt";
+
 export interface SessionTenant {
   id: string;
   name: string;
   slug: string;
   plan: "starter" | "growth" | "pro" | "enterprise";
+  institutionType?: InstitutionType;
 }
 
 export interface SessionData {
