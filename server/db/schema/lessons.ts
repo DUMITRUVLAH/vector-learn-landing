@@ -1,4 +1,5 @@
 import { pgTable, uuid, varchar, integer, timestamp, pgEnum, index, boolean } from "drizzle-orm/pg-core";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { courses } from "./courses";
 import { teachers } from "./teachers";
@@ -7,6 +8,7 @@ import { users } from "./users";
 import { rooms } from "./rooms";
 import { lessonSeries } from "./lessonSeries";
 import { leads } from "./leads";
+import { branches } from "./branches";
 
 export const lessonStatusEnum = pgEnum("lesson_status", [
   "scheduled",
@@ -58,6 +60,7 @@ export const lessons = pgTable(
     trialLeadId: uuid("trial_lead_id").references(() => leads.id, { onDelete: "set null" }),
     /** GAP-003: Teacher-recorded result of the trial */
     trialResult: trialResultEnum("trial_result"),
+    branchId: uuid("branch_id").references((): AnyPgColumn => branches.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

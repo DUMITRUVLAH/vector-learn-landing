@@ -1,6 +1,7 @@
 import { pgTable, uuid, varchar, integer, boolean, timestamp, index, pgEnum } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { branches } from "./branches";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
 export type CefrLevel = (typeof CEFR_LEVELS)[number];
@@ -29,12 +30,15 @@ export const courses = pgTable(
     maxStudents: integer("max_students"),
     /** GAP-009: If true, make-up lessons do not consume a unit from lesson_packages */
     recoveryIncluded: boolean("recovery_included").notNull().default(true),
+    status: varchar("status", { length: 16 }).notNull().default("active"),
+    branchId: uuid("branch_id").references((): AnyPgColumn => branches.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     tenantIdx: index("courses_tenant_idx").on(t.tenantId),
-    statusIdx: index("courses_status_idx").on(t.status),
+    statusIdx: index("courses_status_idx").on(t.tenantId, t.status),
+    branchIdx: index("courses_branch_idx").on(t.branchId),
   })
 );
 
