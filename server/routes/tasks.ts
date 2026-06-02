@@ -121,7 +121,10 @@ taskRoutes.delete("/:leadId/tasks/:taskId", async (c) => {
 
 const createAttachmentSchema = z.object({
   fileName: z.string().min(1).max(300),
-  fileUrl: z.string().min(1).max(1000), // base64 data URL or blob URL
+  // base64 data URL of the file content. A real file's data URL is far larger than
+  // the old 1000-char cap (which rejected EVERY non-trivial upload with a 400), so
+  // the limit must accommodate the client-side size gate (10 MB ≈ ~13.4M base64 chars).
+  fileUrl: z.string().min(1).max(15_000_000),
   mime: z.string().max(100),
   sizeBytes: z.number().int().min(0).default(0),
 });

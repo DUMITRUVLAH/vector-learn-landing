@@ -523,9 +523,18 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   };
 
   // ─── Files ────────────────────────────────────────────────────────────────
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !lead) return;
+  // Files are stored inline as base64 data URLs (no object storage yet), so cap
+  // the size client-side to keep DB rows sane and give the user a clear message
+  // instead of a silent server rejection.
+  const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+  const [dragActive, setDragActive] = useState(false);
+
+  const uploadFile = (file: File) => {
+    if (!lead) return;
+    if (file.size > MAX_FILE_BYTES) {
+      setToast({ kind: "error", message: `Fișier prea mare (${formatBytes(file.size)}). Maxim 10 MB.` });
+      return;
+    }
     setUploadingFile(true);
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -545,6 +554,19 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     };
     reader.onerror = () => { setUploadingFile(false); setToast({ kind: "error", message: "Nu pot citi fișierul" }); };
     reader.readAsDataURL(file);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) uploadFile(file);
+  };
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    if (uploadingFile) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file) uploadFile(file);
   };
 
   const handleDeleteAttachment = async (attachmentId: string) => {
@@ -666,7 +688,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               params.set("leadId", lead.id);
               navigate(`/app/contracts?${params.toString()}`);
             }}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
             aria-label="Generează contract din lead"
           >
             <FilePlus className="h-4 w-4" />
@@ -777,32 +799,30 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
           <section className="rounded-xl border border-border bg-card p-4 space-y-3">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Stadiu</p>
-              {editing ? (
-                <select
-                  value={editDraft.stage ?? lead.stage}
-                  onChange={(e) => void handleStageChange(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                  aria-label="Schimbă stadiu"
-                >
-                  {stages.map((s) => (
-                    <option key={s.key} value={s.key}>{s.label}</option>
-                  ))}
-                </select>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <div className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", currentStage?.color ?? "bg-muted")}>
+              {/* Stage is always changeable in one click — moving a lead through the
+                  pipeline is the most frequent CRM action and shouldn't require Edit
+                  mode. Keeping it on its own control also avoids firing a live
+                  moveLeadStage while the user is editing other fields. */}
+              {stages.length > 0 ? (
+                <div className="relative">
+                  <div className={cn("inline-flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold", currentStage?.color ?? "bg-muted")}>
                     {currentStageLabel}
+                    <ChevronDown className="ml-auto h-3.5 w-3.5 opacity-70" aria-hidden="true" />
                   </div>
-                  {stages.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {}} // stage change is via dropdown in edit mode
-                      className="ml-auto"
-                      aria-hidden="true"
-                    >
-                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                    </button>
-                  )}
+                  <select
+                    value={lead.stage}
+                    onChange={(e) => void handleStageChange(e.target.value)}
+                    className="absolute inset-0 w-full cursor-pointer opacity-0"
+                    aria-label="Schimbă stadiu"
+                  >
+                    {stages.map((s) => (
+                      <option key={s.key} value={s.key}>{s.label}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", currentStage?.color ?? "bg-muted")}>
+                  {currentStageLabel}
                 </div>
               )}
             </div>
@@ -863,7 +883,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                   aria-label="Nume complet"
                 />
               ) : (
-                <p className="font-semibold text-sm">{lead.fullName}</p>
+                <p className="text-base font-bold leading-tight">{lead.fullName}</p>
               )}
             </div>
 
@@ -1005,11 +1025,16 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               <p className="text-xs text-muted-foreground">{SOURCE_LABEL[lead.source] ?? lead.source}</p>
             </div>
 
-            {/* UTM */}
+            {/* UTM — analyst-level noise, collapsed by default */}
             {(lead.utmSource || lead.utmMedium || lead.utmCampaign) && (
-              <div className="rounded-md bg-muted/40 px-2 py-1.5 text-[10px] text-muted-foreground leading-relaxed">
-                UTM: {lead.utmSource ?? "—"} / {lead.utmMedium ?? "—"} / {lead.utmCampaign ?? "—"}
-              </div>
+              <details className="group">
+                <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground select-none">
+                  Detalii UTM
+                </summary>
+                <div className="mt-1 rounded-md bg-muted/40 px-2 py-1.5 text-[10px] text-muted-foreground leading-relaxed">
+                  UTM: {lead.utmSource ?? "—"} / {lead.utmMedium ?? "—"} / {lead.utmCampaign ?? "—"}
+                </div>
+              </details>
             )}
 
             {/* Created at */}
@@ -1197,12 +1222,13 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                 <UserPlus className="h-4 w-4" />
                 Convertește în Student
               </button>
+              {/* Destructive action de-emphasised (ghost) so it isn't mis-tapped for Convert */}
               <button
                 type="button"
                 onClick={() => { setPendingStage("lost"); setLostReasonModal(true); }}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-destructive/40 px-4 py-2 text-sm font-semibold text-destructive hover:bg-destructive/10"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-1.5 text-xs font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
                 Marchează pierdut
               </button>
             </div>
@@ -1310,13 +1336,15 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
             </div>
           )}
 
-          {/* CRM-126: Cadence panel */}
-          <section className="rounded-xl border border-border bg-card p-4 space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Follow-up Cadences
-            </p>
-            <CadencePanel leadId={leadId} />
-          </section>
+          {/* CRM-126: Cadence panel — follow-up sequences are irrelevant once the lead is a student */}
+          {!lead.convertedToStudentId && lead.stage !== "lost" && (
+            <section className="rounded-xl border border-border bg-card p-4 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Follow-up Cadences
+              </p>
+              <CadencePanel leadId={leadId} />
+            </section>
+          )}
         </aside>
 
         {/* ─── RIGHT COLUMN ────────────────────────────────────────────── */}
@@ -1483,7 +1511,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
 
           {activeTab === "files" && (
             <div role="tabpanel" aria-label="Fișiere" className="space-y-4">
-              {/* Upload button */}
+              {/* Upload zone — click or drag-and-drop */}
               <div>
                 <input
                   ref={fileInputRef}
@@ -1495,11 +1523,26 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); if (!uploadingFile) setDragActive(true); }}
+                  onDragLeave={() => setDragActive(false)}
+                  onDrop={handleFileDrop}
                   disabled={uploadingFile}
-                  className="inline-flex items-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/20 px-4 py-3 text-sm font-semibold hover:bg-muted/40 disabled:opacity-50 w-full justify-center"
+                  className={cn(
+                    "flex w-full flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-4 py-6 text-sm font-semibold transition-colors disabled:opacity-50",
+                    dragActive
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-muted/20 hover:bg-muted/40"
+                  )}
                 >
-                  {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                  {uploadingFile ? "Se încarcă…" : "Încarcă fișier"}
+                  <div className="flex items-center gap-2">
+                    {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    {uploadingFile ? "Se încarcă…" : "Încarcă fișier"}
+                  </div>
+                  {!uploadingFile && (
+                    <span className="text-xs font-normal text-muted-foreground">
+                      Trage un fișier aici sau apasă · maxim 10 MB
+                    </span>
+                  )}
                 </button>
               </div>
 

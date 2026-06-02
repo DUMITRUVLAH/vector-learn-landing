@@ -1,7 +1,7 @@
 /**
  * CRM-107: Lead tasks and attachments
  */
-import { pgTable, uuid, varchar, timestamp, pgEnum, index, integer } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, text, timestamp, pgEnum, index, integer } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { leads } from "./leads";
 import { users } from "./users";
@@ -48,7 +48,7 @@ export const leadAttachments = pgTable(
       .notNull()
       .references(() => leads.id, { onDelete: "cascade" }),
     fileName: varchar("file_name", { length: 300 }).notNull(),
-    fileUrl: varchar("file_url", { length: 1000 }).notNull(),   // base64 data URL or S3 URL
+    fileUrl: text("file_url").notNull(),   // base64 data URL (no object storage yet) or S3 URL — unbounded; size is gated client-side
     mime: varchar("mime", { length: 100 }).notNull(),
     sizeBytes: integer("size_bytes").notNull().default(0),
     uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
