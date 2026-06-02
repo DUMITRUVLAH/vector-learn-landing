@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "POLISH-002",
-  "last_completed": "POLISH-001",
-  "iterations": 146,
-  "last_run_at": "2026-06-02T16:30:00Z",
-  "milestone_status": "POLISH faza-1: POLISH-001 done (Cmd+K palette). POLISH-002 dashboard widgets in_progress.",
+  "current_item": "POLISH-003",
+  "last_completed": "POLISH-002",
+  "iterations": 147,
+  "last_run_at": "2026-06-02T17:00:00Z",
+  "milestone_status": "POLISH faza-1: POLISH-001/002 done. POLISH-003 empty states in_progress.",
   "active_milestone": "POLISH",
   "items": {
     "M1-001": {
@@ -2181,17 +2181,19 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "POLISH-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-002-dashboard-widgets.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": ["POLISH-001"]
+      "depends_on": ["POLISH-001"],
+      "branch": "feat/POLISH-faza-1-ux-polish",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "POLISH-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-003-empty-states.md",
       "milestone": "POLISH",

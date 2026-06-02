@@ -13,6 +13,7 @@ import {
   Table2,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { EmptyState } from "@/components/EmptyState"; // POLISH-003
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -333,21 +334,12 @@ export function InvoicesPage() {
             ) : error ? (
               <div className="py-16 text-center text-sm text-destructive">{error}</div>
             ) : items.length === 0 ? (
-              <div className="py-16 text-center">
-                <FileText
-                  className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3"
-                  aria-hidden="true"
-                />
-                <p className="text-sm text-muted-foreground mb-4">Nicio factură găsită.</p>
-                <button
-                  type="button"
-                  onClick={() => setShowCreate(true)}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-                >
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  Crează prima factură
-                </button>
-              </div>
+              <EmptyState
+                icon={<FileText className="h-12 w-12" />}
+                title="Nicio factură creată"
+                description="Creează prima factură pentru a gestiona plățile elevilor."
+                action={{ label: "Crează factură", onClick: () => setShowCreate(true) }}
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

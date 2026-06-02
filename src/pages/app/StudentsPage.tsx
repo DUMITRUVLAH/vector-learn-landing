@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { Plus, Search, Loader2, MoreVertical, Pencil, Archive, X, FilePlus, MessageSquare, BookOpen } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { EmptyState } from "@/components/EmptyState"; // POLISH-003
 import { StudentForm } from "@/components/app/StudentForm";
 import { ImportStudentsModal } from "@/components/app/ImportStudentsModal"; // STU-203
 import { useSession } from "@/hooks/useSession";
@@ -226,19 +227,12 @@ export function StudentsPage() {
           ) : error ? (
             <div className="py-16 text-center text-sm text-destructive">{error}</div>
           ) : items.length === 0 ? (
-            <div className="py-16 text-center">
-              <p className="text-sm text-muted-foreground mb-4">
-                Niciun elev găsit pentru filtrele curente.
-              </p>
-              <button
-                type="button"
-                onClick={openAdd}
-                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-              >
-                <Plus className="h-4 w-4" />
-                Adaugă primul elev
-              </button>
-            </div>
+            <EmptyState
+              icon={<BookOpen className="h-12 w-12" />}
+              title="Niciun elev înregistrat"
+              description="Adaugă primul elev pentru a începe gestionarea programului academic."
+              action={{ label: "Adaugă elev", onClick: openAdd }}
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

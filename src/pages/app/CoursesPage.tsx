@@ -6,6 +6,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { Plus, Search, Loader2, Pencil, Archive, BookOpen, RotateCcw } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { CourseForm } from "@/components/app/CourseForm";
+import { EmptyState } from "@/components/EmptyState";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -182,12 +183,12 @@ export function CoursesPage() {
             {error}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <BookOpen className="h-12 w-12 text-muted-foreground mb-3" aria-hidden="true" />
-            <p className="text-muted-foreground text-sm">
-              {search ? "Niciun curs nu corespunde căutării." : "Nu există cursuri încă. Adaugă primul curs."}
-            </p>
-          </div>
+          <EmptyState
+            icon={<BookOpen className="h-12 w-12" />}
+            title={search ? "Niciun curs găsit" : "Niciun curs configurat"}
+            description={search ? "Modifică termenul de căutare sau filtrele." : "Adaugă primul curs pentru a începe programul academic."}
+            action={!search ? { label: "Creează curs", onClick: () => { setEditing(null); setDrawerOpen(true); } } : undefined}
+          />
         ) : (
           <div className="rounded-lg border border-border overflow-hidden">
             <table className="w-full text-sm" aria-label="Lista cursuri">
