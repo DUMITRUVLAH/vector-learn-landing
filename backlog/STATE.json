@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "SET-801",
-  "last_completed": "AUTH-004",
-  "iterations": 136,
-  "last_run_at": "2026-06-02T15:00:00Z",
-  "milestone_status": "AUTH faza-1 COMPLETE (PR #125 merged). BRANCH faza-1 COMPLETE. Starting SET faza-1 (Settings & Admin).",
+  "current_item": null,
+  "last_completed": "SET-801",
+  "iterations": 137,
+  "last_run_at": "2026-06-02T15:30:00Z",
+  "milestone_status": "SET faza-1 in progress: SET-801 done (migration repair + team/branding/audit/notifications). SET-802, SET-803 pending.",
   "active_milestone": "SET",
   "items": {
     "M1-001": {
@@ -1941,13 +1941,20 @@
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "SET-801": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SET-801-team-management.md",
       "milestone": "SET",
       "phase": "1",
-      "depends_on": ["AUTH-001"]
+      "depends_on": ["AUTH-001"],
+      "branch": "feat/SET-faza-1-settings",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SET-802": {
       "status": "pending",
