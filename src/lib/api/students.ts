@@ -88,9 +88,6 @@ export function archiveStudent(id: string): Promise<{ ok: true; id: string }> {
   });
 }
 
-export function getStudent(id: string): Promise<Student> {
-  return api<Student>(`/api/students/${id}`);
-}
 
 // STU-201: Student payment history
 export interface StudentPayment {

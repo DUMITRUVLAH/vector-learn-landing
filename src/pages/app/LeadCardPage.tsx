@@ -1328,38 +1328,11 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
-              </span>
-            );
-
-            return (
-              <div role="tablist" className="flex gap-1 border-b border-border mb-4 overflow-x-auto">
-                {([
-                  ["activity", "Activitate"],
-                  ["tasks", taskTabLabel],
-                  ["files", `Fișiere${attachments.length > 0 ? ` (${attachments.length})` : ""}`],
-                  ["contacts", `Contacte${contacts.length > 0 ? ` (${contacts.length})` : ""}`],
-                  ["fields", `Câmpuri${fieldValues.length > 0 ? ` (${fieldValues.length})` : ""}`],
-                  ["gdpr", "GDPR"],
-                ] as [Tab, React.ReactNode][]).map(([t, label]) => (
-                  <button
-                    key={t}
-                    role="tab"
-                    type="button"
-                    aria-selected={activeTab === t}
-                    onClick={() => setActiveTab(t)}
-                    className={cn(
-                      "whitespace-nowrap px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors shrink-0",
-                      activeTab === t
-                        ? "border-primary text-primary"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            );
-          })()}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
 
           {/* Tab content */}

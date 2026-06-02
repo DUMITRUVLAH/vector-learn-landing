@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": "BRANCH-701",
-  "last_completed": "KINDER-007",
-  "iterations": 131,
-  "last_run_at": "2026-06-01T23:00:00Z",
-  "milestone_status": "KINDER faza-1 COMPLETE (KINDER-001..007 all done, PR #108). BRANCH faza-1 starting: BRANCH-701..704 generated from user-stories/multifilale.md.",
-  "active_milestone": "BRANCH",
+  "current_item": null,
+  "last_completed": "SET-803",
+  "iterations": 140,
+  "last_run_at": "2026-06-02T15:30:00Z",
+  "milestone_status": "SET faza-1 in progress: SET-801 done (migration repair + team/branding/audit/notifications). SET-802, SET-803 pending.",
+  "active_milestone": "SET",
   "items": {
     "M1-001": {
       "status": "done",
@@ -1891,6 +1891,102 @@
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
       "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "AUTH-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AUTH-001-password-reset.md",
+      "milestone": "AUTH",
+      "phase": "1",
+      "depends_on": [],
+      "branch": "feat/AUTH-faza-1-security",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "AUTH-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AUTH-002-team-invitations.md",
+      "milestone": "AUTH",
+      "phase": "1",
+      "depends_on": ["AUTH-001"],
+      "branch": "feat/AUTH-faza-1-security",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "AUTH-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AUTH-003-user-profile-gdpr.md",
+      "milestone": "AUTH",
+      "phase": "1",
+      "depends_on": ["AUTH-001"],
+      "branch": "feat/AUTH-faza-1-security",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "AUTH-004": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AUTH-004-2fa-sessions.md",
+      "milestone": "AUTH",
+      "phase": "1",
+      "depends_on": ["AUTH-003"],
+      "branch": "feat/AUTH-faza-1-security",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+    },
+    "SET-801": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SET-801-team-management.md",
+      "milestone": "SET",
+      "phase": "1",
+      "depends_on": ["AUTH-001"],
+      "branch": "feat/SET-faza-1-settings",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "SET-802": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SET-802-branding-locale.md",
+      "milestone": "SET",
+      "phase": "1",
+      "depends_on": ["SET-801"],
+      "branch": "feat/SET-faza-1-settings",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "SET-803": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SET-803-audit-log-gdpr.md",
+      "milestone": "SET",
+      "phase": "1",
+      "depends_on": ["SET-801"],
+      "branch": "feat/SET-faza-1-settings",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     }
   }
 }
