@@ -17,35 +17,7 @@ import { templateRoutes } from "./routes/templates";
 import { automationRoutes } from "./routes/automations";
 import { analyticsRoutes } from "./routes/analytics";
 import { tagRoutes } from "./routes/tags";
-import { payrollRoutes } from "./routes/payroll";
-import { hrTeacherRoutes } from "./routes/hrTeachers";
-import { availabilityRoutes } from "./routes/availability";
-import { auditLogRoutes } from "./routes/auditLog";
-import { roomRoutes } from "./routes/rooms";
-import { recurringRoutes } from "./routes/recurring";
-import { savedViewsRoutes } from "./routes/saved-views";
-import { leadsTodayRoutes } from "./routes/leads-today";
-import { notificationRoutes } from "./routes/notifications";
-import { cadenceRoutes } from "./routes/cadences";
-import { auditRoutes } from "./routes/audit";
-import { contractRoutes } from "./routes/contracts";
-import { feedbackRoutes } from "./routes/feedback";
-import { feedbackPublicRoutes } from "./routes/feedbackPublic";
-import { contactRoutes } from "./routes/contacts";
-import { teamRoutes, publicTeamRoutes } from "./routes/team";
-import { invoiceRoutes } from "./routes/invoices";
-import { cohortRoutes } from "./routes/cohorts";
-import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
-import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
-import { formRoutes } from "./routes/forms"; // FORMS-001
-import { tenantSettingsRoutes } from "./routes/tenantSettings"; // PAY-001
-import { portalInvoiceRoutes } from "./routes/portalInvoice"; // PAY-003
-import {
-  publicFormGetHandler,
-  publicFormSubmitHandler,
-  publicFormPingHandler,
-} from "./routes/publicForms"; // FORMS-001/005
-import { mobileRoutes } from "./routes/mobile"; // MOB-101: mobile PWA API
+import { messageRoutes } from "./routes/messages";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -70,9 +42,21 @@ app.use(
   })
 );
 
-// UX-701: Health checks MUST be public and registered BEFORE any route that mounts
-// auth middleware at "/api" (tagRoutes), otherwise /api/health is intercepted and returns
-// 401 — which made the BackendStatusBadge show "API: down" on every page despite a healthy API.
+app.route("/api/auth", authRoutes);
+app.route("/api/students", studentRoutes);
+app.route("/api/teachers", teacherRoutes);
+app.route("/api/courses", courseRoutes);
+app.route("/api/lessons", lessonRoutes);
+app.route("/api/payments", paymentRoutes);
+app.route("/api/leads", leadRoutes);
+app.route("/api/pipeline-stages", pipelineRoutes);
+app.route("/api/leads", taskRoutes); // tasks/attachments under /api/leads/:leadId/...
+app.route("/api/templates", templateRoutes);
+app.route("/api/automations", automationRoutes);
+app.route("/api/analytics", analyticsRoutes);
+app.route("/api", tagRoutes); // tags, custom-fields, field-values under /api/leads/:id/... and /api/settings/...
+app.route("/api/messages", messageRoutes);
+
 app.get("/api/health", async (c) => {
   try {
     await db.execute(sql`SELECT 1 as ping`);
