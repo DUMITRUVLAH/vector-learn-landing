@@ -4,7 +4,7 @@
   "last_completed": "SCHED-603",
   "iterations": 128,
   "last_run_at": "2026-06-02T09:00:00Z",
-  "milestone_status": "SCHED faza-6: in progress \u2014 SCHED-601..603",
+  "milestone_status": "SCHED faza-6: all done \u2014 SCHED-601..603, PR #121",
   "active_milestone": "SCHED",
   "items": {
     "M1-001": {
@@ -2896,7 +2896,8 @@
         "backlog/reports/SCHED-601-reviewer.md",
         "backlog/reports/SCHED-601-manager.md",
         "backlog/reports/SCHED-601-student.md"
-      ]
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/121"
     },
     "SCHED-602": {
       "status": "done",
@@ -2921,7 +2922,8 @@
         "backlog/reports/SCHED-602-reviewer.md",
         "backlog/reports/SCHED-602-manager.md",
         "backlog/reports/SCHED-602-student.md"
-      ]
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/121"
     },
     "SCHED-603": {
       "status": "done",
@@ -2945,7 +2947,8 @@
         "backlog/reports/SCHED-603-reviewer.md",
         "backlog/reports/SCHED-603-manager.md",
         "backlog/reports/SCHED-603-student.md"
-      ]
+      ],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/121"
     }
   }
 }
