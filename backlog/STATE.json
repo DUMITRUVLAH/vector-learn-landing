@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "STU-203",
+  "last_completed": "STU-205",
   "iterations": 123,
   "last_run_at": "2026-06-02T08:00:00Z",
-  "milestone_status": "STUDENTS faza-2: STU-201..205 pending",
+  "milestone_status": "STUDENTS faza-2: all done — STU-201..205",
   "active_milestone": "STUDENTS",
   "items": {
     "M1-001": {
@@ -2781,7 +2781,7 @@
       }
     },
     "STU-205": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/STU-205-duplicate-detection-create.md",
@@ -2790,7 +2790,15 @@
       "depends_on": [
         "STU-204"
       ],
-      "title": "Detectare duplicate la crearea elevului"
+      "title": "Detectare duplicate la crearea elevului",
+      "branch": "feat/STUDENTS-faza-2-profile",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/119",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     }
   }
 }
