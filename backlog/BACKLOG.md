@@ -305,3 +305,14 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | `PAY-001` | Facturi PDF cu serie incrementală + download | in_progress | [specs/PAY-001-invoice-pdf.md](specs/PAY-001-invoice-pdf.md) |
 | `PAY-002` | Generare bulk facturi lunare pentru toți elevii activi | pending | [specs/PAY-002-bulk-invoice-gen.md](specs/PAY-002-bulk-invoice-gen.md) |
 | `PAY-003` | QR de plată EPC069-12 în factură PDF + portal părinți | pending | [specs/PAY-003-payment-qr.md](specs/PAY-003-payment-qr.md) |
+
+
+## Milestone: PAY faza-3 — Stripe, Reminders, Installments, Refunds, Accounting
+
+| ID | Title | Status | Spec |
+|----|-------|--------|------|
+| `PAY-004` | Plată cu cardul prin Stripe — Payment Link + webhook | pending | [specs/PAY-004-stripe-card-payments.md](specs/PAY-004-stripe-card-payments.md) |
+| `PAY-005` | Reminder automat restanțe — WhatsApp/email la 3/7/14 zile | pending | [specs/PAY-005-debt-reminders.md](specs/PAY-005-debt-reminders.md) |
+| `PAY-006` | Plan de plată în rate — N facturi cu scadențe automate | pending | [specs/PAY-006-installment-plans.md](specs/PAY-006-installment-plans.md) |
+| `PAY-007` | Refund — rambursare parțială sau completă cu audit | pending | [specs/PAY-007-refunds.md](specs/PAY-007-refunds.md) |
+| `PAY-008` | Export contabilitate SAGA/1C — CSV lunar | pending | [specs/PAY-008-accounting-export.md](specs/PAY-008-accounting-export.md) |

@@ -18,6 +18,8 @@ export const invoiceStatusEnum = pgEnum("invoice_status", [
   "issued",
   "paid",
   "cancelled",
+  "refunded",
+  "partially_refunded",
 ]);
 
 export const invoices = pgTable(
@@ -51,8 +53,27 @@ export const invoices = pgTable(
      * 'submitted' = sent to ANAF (future)
      */
     efacturaStatus: varchar("efactura_status", { length: 30 }),
-    /** INTEG-102: FK to courses — pentru revenue per curs */
-    courseId: uuid("course_id").references(() => courses.id, { onDelete: "set null" }),
+    /**
+     * PAY-004: Stripe Payment Intent ID — set when a payment link is created.
+     * Used to reconcile the webhook `payment_intent.succeeded` event.
+     */
+    stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 100 }),
+    /**
+     * PAY-004: Stripe Checkout/Payment Link URL — stored so we can display or
+     * re-send the same link without creating a new one.
+     */
+    stripePaymentLinkUrl: varchar("stripe_payment_link_url", { length: 2048 }),
+    /**
+     * PAY-004: How the invoice was paid — 'card' (Stripe), 'cash', 'transfer', etc.
+     * Null if not yet paid.
+     */
+    paymentMethod: varchar("payment_method", { length: 20 }),
+    /**
+     * PAY-007: Total amount refunded so far (in cents).
+     * When refunded_amount_cents == amount_cents, status → 'refunded'.
+     * When 0 < refunded_amount_cents < amount_cents, status → 'partially_refunded'.
+     */
+    refundedAmountCents: integer("refunded_amount_cents").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

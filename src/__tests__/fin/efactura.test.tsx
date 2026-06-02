@@ -134,6 +134,8 @@ const issuedInvoice = {
   dueDate: null,
   notes: null,
   pdfKey: null,
+  refundedAmountCents: 0,
+  stripePaymentIntentId: null,
   createdAt: "2026-05-15T10:00:00Z",
   studentName: "Maria Ionescu",
 };

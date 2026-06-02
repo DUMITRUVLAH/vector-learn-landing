@@ -37,5 +37,4 @@ Each module → 3–5 items. Source of behavior: the matching `backlog/user-stor
 ## Progress log (orchestrator appends one line per item)
 - (start) all CRM done (101–116). Beginning Comunicare module.
 - planner: generated FIN items FIN-601..FIN-604 from user-stories/payments.md + NIGHT-PLAN Finanțe description
-- planner: generated SCHED items SCHED-601..SCHED-603 from user-stories/schedule.md (faza-6: drag-drop reschedule, teacher substitute, view-by-teacher filter)
-- SCHED-601 done: drag-and-drop reschedule (PR on feat/SCHED-faza-6-calendar-ux)
+- planner: all NIGHT-PLAN modules done (168 items). Generated PAY faza-3 items PAY-004..PAY-008 from user-stories/payments.md (US-PAY-05..18 backlog items)

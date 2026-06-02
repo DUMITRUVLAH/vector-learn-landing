@@ -45,9 +45,8 @@ import {
   publicFormSubmitHandler,
   publicFormPingHandler,
 } from "./routes/publicForms"; // FORMS-001/005
-import { apiKeyRoutes } from "./routes/apiKeys"; // INT-901
-import { webhookRoutes } from "./routes/webhooks"; // INT-902
-import { integrationTriggersRoutes } from "./routes/integrationTriggers"; // INT-903
+import { stripeRoutes, stripeWebhookRoutes } from "./routes/stripe"; // PAY-004
+import { reminderRoutes } from "./routes/reminders"; // PAY-005
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -149,6 +148,26 @@ app.route("/api/cohorts", cohortParticipantsRoutes);
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
 app.route("/api/settings/tenant", tenantSettingsRoutes); // PAY-001
 app.route("/api/portal", portalInvoiceRoutes); // PAY-003 — public portal (no auth)
+
+// PAY-004: Stripe settings + invoice payment links (auth-protected)
+app.route("/api", stripeRoutes);
+// PAY-004: Stripe webhooks (public, signature-verified)
+app.route("/api", stripeWebhookRoutes);
+
+// PAY-005: Debt reminders — admin trigger + invoice reminder history + overdue summary
+app.route("/api", reminderRoutes);
+
+// PAY-006: Payment plans (N installments with auto-invoices)
+import { paymentPlanRoutes } from "./routes/paymentPlans"; // PAY-006
+app.route("/api/payment-plans", paymentPlanRoutes);
+
+// PAY-007: Refunds — partial/full invoice refunds + Stripe refund API
+import { refundRoutes } from "./routes/refunds"; // PAY-007
+app.route("/api", refundRoutes);
+
+// PAY-008: Accounting export (SAGA/1C CSV) + account code mappings
+import { accountingRoutes } from "./routes/accounting"; // PAY-008
+app.route("/api", accountingRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

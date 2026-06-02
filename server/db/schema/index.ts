@@ -32,5 +32,8 @@ export * from "./cohorts";
 export * from "./cohortParticipants";
 export * from "./certificates";
 export * from "./forms";
-export * from "./groups";
-export * from "./promoCodes";
+export * from "./stripeSettings";
+export * from "./invoiceReminders";
+export * from "./paymentPlans";
+export * from "./refunds"; // PAY-007
+export * from "./accountingMappings"; // PAY-008

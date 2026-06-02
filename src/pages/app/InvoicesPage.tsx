@@ -11,6 +11,8 @@ import {
   PlayCircle,
   FileCode,
   Table2,
+  CreditCard,
+  RefreshCcw,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -40,6 +42,8 @@ import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { SubscriptionTable } from "@/components/invoices/SubscriptionTable";
 import { AddSubscriptionModal } from "@/components/invoices/AddSubscriptionModal";
+import { StripeLinkModal } from "@/components/invoices/StripeLinkModal"; // PAY-004
+import { RefundModal } from "@/components/payments/RefundModal"; // PAY-007
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -50,6 +54,9 @@ const STATUS_META: Record<InvoiceStatus, { label: string; cls: string }> = {
   issued: { label: "Emisă", cls: "bg-primary/15 text-primary" },
   paid: { label: "Plătită", cls: "bg-success/15 text-success" },
   cancelled: { label: "Anulată", cls: "bg-destructive/15 text-destructive" },
+  /** PAY-007: Refund statuses */
+  refunded: { label: "Refundat", cls: "bg-destructive/15 text-destructive" },
+  partially_refunded: { label: "Refund parțial", cls: "bg-warning/15 text-warning" },
 };
 
 function formatCurrency(cents: number, currency: InvoiceCurrency = "RON"): string {
@@ -92,13 +99,14 @@ export function InvoicesPage() {
   const [filterMonth, setFilterMonth] = useState<string>("");
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [runningBilling, setRunningBilling] = useState(false);
-  const [showBulkGenerate, setShowBulkGenerate] = useState(false);
-  const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
-  const [settingsLoading, setSettingsLoading] = useState(false);
-  const [settingsSaving, setSettingsSaving] = useState(false);
-  const [invoicePrefixDraft, setInvoicePrefixDraft] = useState("");
-  const [ibanDraft, setIbanDraft] = useState("");
-  const [bicDraft, setBicDraft] = useState("");
+  // PAY-004: Stripe link modal state
+  const [stripeModal, setStripeModal] = useState<{
+    invoiceId: string;
+    invoiceNumber: string;
+    amountFormatted: string;
+  } | null>(null);
+  // PAY-007: Refund modal state
+  const [refundInvoice, setRefundInvoice] = useState<Invoice | null>(null);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -492,14 +500,47 @@ export function InvoicesPage() {
                                 </button>
                               )}
                               {(inv.status === "draft" || inv.status === "issued") && (
+                                <>
+                                  {/* PAY-004: Stripe payment link button */}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setStripeModal({
+                                        invoiceId: inv.id,
+                                        invoiceNumber: inv.invoiceNumber,
+                                        amountFormatted: formatCurrency(
+                                          inv.amountCents,
+                                          inv.currency
+                                        ),
+                                      })
+                                    }
+                                    aria-label={`Trimite link plată card pentru ${inv.invoiceNumber}`}
+                                    className="inline-flex items-center gap-1 rounded-md bg-primary/10 text-primary px-2 py-1 text-[11px] font-semibold hover:bg-primary/20 transition-colors"
+                                  >
+                                    <CreditCard className="h-3 w-3" aria-hidden="true" />
+                                    Card
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkPaid(inv.id)}
+                                    aria-label={`Marchează factură ${inv.invoiceNumber} ca plătită`}
+                                    className="inline-flex items-center gap-1 rounded-md bg-success/10 text-success px-2 py-1 text-[11px] font-semibold hover:bg-success/20"
+                                  >
+                                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                                    Plătit
+                                  </button>
+                                </>
+                              )}
+                              {/* PAY-007: Refund button — show for paid or partially refunded invoices */}
+                              {(inv.status === "paid" || inv.status === "partially_refunded") && (
                                 <button
                                   type="button"
-                                  onClick={() => handleMarkPaid(inv.id)}
-                                  aria-label={`Marchează factură ${inv.invoiceNumber} ca plătită`}
-                                  className="inline-flex items-center gap-1 rounded-md bg-success/10 text-success px-2 py-1 text-[11px] font-semibold hover:bg-success/20"
+                                  onClick={() => setRefundInvoice(inv)}
+                                  aria-label={`Procesează rambursare pentru factură ${inv.invoiceNumber}`}
+                                  className="inline-flex items-center gap-1 rounded-md bg-destructive/10 text-destructive px-2 py-1 text-[11px] font-semibold hover:bg-destructive/20 transition-colors"
                                 >
-                                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                                  Plătit
+                                  <RefreshCcw className="h-3 w-3" aria-hidden="true" />
+                                  Refund
                                 </button>
                               )}
                             </div>
@@ -639,6 +680,30 @@ export function InvoicesPage() {
           onSaved={() => {
             setShowAddSub(false);
             setToast({ kind: "success", message: "Abonament creat cu succes" });
+            void fetchAll();
+          }}
+          onError={(m) => setToast({ kind: "error", message: m })}
+        />
+      )}
+
+      {/* PAY-004: Stripe link modal */}
+      {stripeModal && (
+        <StripeLinkModal
+          invoiceId={stripeModal.invoiceId}
+          invoiceNumber={stripeModal.invoiceNumber}
+          amountFormatted={stripeModal.amountFormatted}
+          onClose={() => setStripeModal(null)}
+        />
+      )}
+
+      {/* PAY-007: Refund modal */}
+      {refundInvoice && (
+        <RefundModal
+          invoice={refundInvoice}
+          onClose={() => setRefundInvoice(null)}
+          onRefunded={() => {
+            setRefundInvoice(null);
+            setToast({ kind: "success", message: "Rambursare procesată cu succes" });
             void fetchAll();
           }}
           onError={(m) => setToast({ kind: "error", message: m })}
