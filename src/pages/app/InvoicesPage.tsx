@@ -487,6 +487,18 @@ export function InvoicesPage() {
                                   </button>
                                 </>
                               )}
+                              {/* PAY-007: Refund button — show for paid or partially refunded invoices */}
+                              {(inv.status === "paid" || inv.status === "partially_refunded") && (
+                                <button
+                                  type="button"
+                                  onClick={() => setRefundInvoice(inv)}
+                                  aria-label={`Procesează rambursare pentru factură ${inv.invoiceNumber}`}
+                                  className="inline-flex items-center gap-1 rounded-md bg-destructive/10 text-destructive px-2 py-1 text-[11px] font-semibold hover:bg-destructive/20 transition-colors"
+                                >
+                                  <RefreshCcw className="h-3 w-3" aria-hidden="true" />
+                                  Refund
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -549,6 +561,20 @@ export function InvoicesPage() {
           invoiceNumber={stripeModal.invoiceNumber}
           amountFormatted={stripeModal.amountFormatted}
           onClose={() => setStripeModal(null)}
+        />
+      )}
+
+      {/* PAY-007: Refund modal */}
+      {refundInvoice && (
+        <RefundModal
+          invoice={refundInvoice}
+          onClose={() => setRefundInvoice(null)}
+          onRefunded={() => {
+            setRefundInvoice(null);
+            setToast({ kind: "success", message: "Rambursare procesată cu succes" });
+            void fetchAll();
+          }}
+          onError={(m) => setToast({ kind: "error", message: m })}
         />
       )}
 

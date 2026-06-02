@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAY-006",
-  "iterations": 138,
+  "last_completed": "PAY-007",
+  "iterations": 139,
   "last_run_at": "2026-06-02T12:00:00Z",
   "milestone_status": "PAY faza-3: PAY-004..006 done (PR #123), PAY-007 in_progress",
   "active_milestone": "PAY",
@@ -1570,7 +1570,7 @@
       "milestone": "BUGFIX",
       "phase": "1",
       "severity": "normal",
-      "title": "Payments default currency EUR but invoices default RON \u2014 inconsistent for RO client",
+      "title": "Payments default currency EUR but invoices default RON — inconsistent for RO client",
       "depends_on": [],
       "branch": "feat/BUGFIX-faza-1-prod-fixes",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/107",
@@ -1627,7 +1627,7 @@
       "milestone": "GAP",
       "phase": "1",
       "severity": "high",
-      "title": "Online card payments (Stripe) \u2014 collect card, auto-reconcile invoices",
+      "title": "Online card payments (Stripe) — collect card, auto-reconcile invoices",
       "depends_on": [],
       "branch": "feat/GAP-faza-1-trial-flow",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
@@ -1667,7 +1667,7 @@
       "milestone": "GAP",
       "phase": "1",
       "severity": "high",
-      "title": "Lesson packages / prepaid credits \u2014 sell N hours, auto-deduct per lesson, low-balance alerts",
+      "title": "Lesson packages / prepaid credits — sell N hours, auto-deduct per lesson, low-balance alerts",
       "depends_on": [],
       "branch": "feat/GAP-faza-2-abonamente-waitlist",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/99",
@@ -1686,7 +1686,7 @@
       "milestone": "GAP",
       "phase": "1",
       "severity": "normal",
-      "title": "Makeup lessons + cancellation credits \u2014 cancelled lesson \u2192 credit \u2192 rebook free",
+      "title": "Makeup lessons + cancellation credits — cancelled lesson → credit → rebook free",
       "depends_on": [],
       "branch": "feat/GAP-faza-1-trial-flow",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/98",
@@ -1705,7 +1705,7 @@
       "milestone": "GAP",
       "phase": "1",
       "severity": "normal",
-      "title": "Gradebook / student progress reports \u2014 skills, milestones, parent-facing progress",
+      "title": "Gradebook / student progress reports — skills, milestones, parent-facing progress",
       "depends_on": [],
       "branch": "feat/GAP-faza-4-analytics",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/101",
@@ -1724,7 +1724,7 @@
       "milestone": "GAP",
       "phase": "1",
       "severity": "normal",
-      "title": "Public online enrollment \u2014 self-enroll into course/cohort + pay in one flow",
+      "title": "Public online enrollment — self-enroll into course/cohort + pay in one flow",
       "depends_on": [
         "PAY-901"
       ],
@@ -1821,7 +1821,7 @@
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "high",
-      "title": "Tuition billing \u2014 annual/term plans, installments, sibling discount, financial aid",
+      "title": "Tuition billing — annual/term plans, installments, sibling discount, financial aid",
       "depends_on": [],
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
@@ -1840,7 +1840,7 @@
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "normal",
-      "title": "Admissions workflow \u2014 application\u2192documents\u2192acceptance\u2192enrollment",
+      "title": "Admissions workflow — application→documents→acceptance→enrollment",
       "depends_on": [],
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
@@ -1859,7 +1859,7 @@
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "normal",
-      "title": "Master timetable (class\u00d7subject\u00d7teacher\u00d7room grid)",
+      "title": "Master timetable (class×subject×teacher×room grid)",
       "depends_on": [],
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
@@ -1916,7 +1916,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -1954,7 +1954,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical \u2014 allergies, immunization records, medication log",
+      "title": "Medical — allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -2030,7 +2030,7 @@
       "milestone": "SCHOOL",
       "phase": "1",
       "severity": "high",
-      "title": "Authorized-guardian model \u2014 multiple guardians per child, custody/permission flags",
+      "title": "Authorized-guardian model — multiple guardians per child, custody/permission flags",
       "depends_on": [],
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
@@ -2832,7 +2832,7 @@
       "depends_on": [
         "COURSE-101"
       ],
-      "title": "Editare \u0219i arhivare cursuri",
+      "title": "Editare și arhivare cursuri",
       "branch": "feat/COURSE-faza-2-edit-archive",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -2851,7 +2851,7 @@
       "depends_on": [
         "COURSE-201"
       ],
-      "title": "Grupe cu capacitate maxim\u0103 \u0219i waitlist",
+      "title": "Grupe cu capacitate maximă și waitlist",
       "branch": "feat/COURSE-faza-2-edit-archive",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/120",
       "verdicts": {
@@ -2871,7 +2871,7 @@
       "depends_on": [
         "COURSE-201"
       ],
-      "title": "Coduri promo cu discount (%) sau sum\u0103 fix\u0103",
+      "title": "Coduri promo cu discount (%) sau sumă fixă",
       "branch": "feat/COURSE-faza-2-edit-archive",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/120",
       "verdicts": {
@@ -2892,7 +2892,7 @@
         "SCHED-501",
         "SCHED-502"
       ],
-      "title": "Drag-and-drop reprogramare lec\u021bie \u00een calendar",
+      "title": "Drag-and-drop reprogramare lecție în calendar",
       "branch": "feat/SCHED-faza-6-calendar-ux",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -2918,7 +2918,7 @@
         "SCHED-601",
         "MVP-006"
       ],
-      "title": "\u00cenlocuitor profesor la lec\u021bie + notificare automat\u0103",
+      "title": "Înlocuitor profesor la lecție + notificare automată",
       "branch": "feat/SCHED-faza-6-calendar-ux",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -2943,7 +2943,7 @@
       "depends_on": [
         "SCHED-602"
       ],
-      "title": "Filtrare orar per profesor + statistici \u00eenc\u0103rcare s\u0103pt\u0103m\u00e2nal\u0103",
+      "title": "Filtrare orar per profesor + statistici încărcare săptămânală",
       "branch": "feat/SCHED-faza-6-calendar-ux",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -3078,15 +3078,23 @@
       }
     },
     "PAY-007": {
-      "status": "pending",
-      "attempts": 1,
+      "status": "done",
+      "attempts": 2,
       "blockers": [],
       "spec": "backlog/specs/PAY-007-refunds.md",
       "milestone": "PAY",
       "phase": "3",
       "depends_on": [
         "PAY-004"
-      ]
+      ],
+      "branch": "feat/PAY-faza-3-stripe-reminders-refunds",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/123",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "PAY-008": {
       "status": "pending",
