@@ -71,3 +71,7 @@ export function archiveStudent(id: string): Promise<{ ok: true; id: string }> {
     method: "DELETE",
   });
 }
+
+export function getStudent(id: string): Promise<Student> {
+  return api<Student>(`/api/students/${id}`);
+}

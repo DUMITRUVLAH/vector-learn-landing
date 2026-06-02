@@ -2574,8 +2574,8 @@
       }
     },
     "COURSE-103": {
-      "status": "pending",
-      "attempts": 1,
+      "status": "in_progress",
+      "attempts": 2,
       "blockers": [],
       "spec": "backlog/specs/COURSE-103-student-enrollment.md",
       "milestone": "COURSE",

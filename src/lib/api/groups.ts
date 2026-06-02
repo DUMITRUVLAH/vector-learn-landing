@@ -1,5 +1,5 @@
 /**
- * COURSE-102: Groups API client
+ * COURSE-102/103: Groups API client — groups CRUD + enrollment
  */
 
 const BASE = "/api/groups";
@@ -94,4 +94,81 @@ export async function archiveGroup(id: string): Promise<{ ok: boolean }> {
   });
   if (!res.ok) throw new Error(`archiveGroup: ${res.status}`);
   return res.json() as Promise<{ ok: boolean }>;
+}
+
+// ─── COURSE-103: Enrollment ────────────────────────────────────────────────
+
+export interface GroupEnrollment {
+  id: string;
+  tenantId: string;
+  groupId: string;
+  studentId: string;
+  enrolledAt: string;
+  status: "active" | "removed";
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentInGroup {
+  enrollment: GroupEnrollment;
+  student: {
+    id: string;
+    fullName: string;
+    email?: string | null;
+    phone?: string | null;
+    parentEmail?: string | null;
+    status: string;
+  };
+}
+
+export interface StudentGroupEntry {
+  enrollment: GroupEnrollment;
+  group: Group;
+  courseName: string;
+  courseCefr?: string | null;
+}
+
+export async function listGroupEnrollments(groupId: string): Promise<{ items: StudentInGroup[] }> {
+  const res = await fetch(`${BASE}/${groupId}/enrollments`, { credentials: "include" });
+  if (!res.ok) throw new Error(`listGroupEnrollments: ${res.status}`);
+  return res.json() as Promise<{ items: StudentInGroup[] }>;
+}
+
+export async function enrollStudent(
+  groupId: string,
+  body: { studentId: string; createPayment?: boolean }
+): Promise<{ enrollment: GroupEnrollment; payment?: unknown }> {
+  const res = await fetch(`${BASE}/${groupId}/enroll`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw Object.assign(new Error(`enrollStudent: ${res.status}`), {
+      status: res.status,
+      code: data.error ?? "unknown",
+    });
+  }
+  return res.json() as Promise<{ enrollment: GroupEnrollment; payment?: unknown }>;
+}
+
+export async function unenrollStudent(
+  groupId: string,
+  studentId: string
+): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE}/${groupId}/enroll/${studentId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`unenrollStudent: ${res.status}`);
+  return res.json() as Promise<{ ok: boolean }>;
+}
+
+export async function listStudentGroups(studentId: string): Promise<{ items: StudentGroupEntry[] }> {
+  const res = await fetch(`/api/students/${studentId}/groups`, { credentials: "include" });
+  if (!res.ok) throw new Error(`listStudentGroups: ${res.status}`);
+  return res.json() as Promise<{ items: StudentGroupEntry[] }>;
 }
