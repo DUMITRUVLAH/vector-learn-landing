@@ -97,6 +97,8 @@ export function InvoicesPage() {
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [invoicePrefixDraft, setInvoicePrefixDraft] = useState("");
+  const [ibanDraft, setIbanDraft] = useState("");
+  const [bicDraft, setBicDraft] = useState("");
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -146,6 +148,8 @@ export function InvoicesPage() {
       .then((s) => {
         setTenantSettings(s);
         setInvoicePrefixDraft(s.invoicePrefix);
+        setIbanDraft(s.iban ?? "");
+        setBicDraft(s.bic ?? "");
       })
       .catch(() => setToast({ kind: "error", message: "Nu pot încărca setările" }))
       .finally(() => setSettingsLoading(false));
@@ -198,9 +202,15 @@ export function InvoicesPage() {
     if (!prefix) return;
     setSettingsSaving(true);
     try {
-      const updated = await updateTenantSettings({ invoicePrefix: prefix });
+      const updated = await updateTenantSettings({
+        invoicePrefix: prefix,
+        iban: ibanDraft.trim() || null,
+        bic: bicDraft.trim() || null,
+      });
       setTenantSettings(updated);
       setInvoicePrefixDraft(updated.invoicePrefix);
+      setIbanDraft(updated.iban ?? "");
+      setBicDraft(updated.bic ?? "");
       setToast({ kind: "success", message: "Setări salvate" });
     } catch {
       setToast({ kind: "error", message: "Nu pot salva setările" });
@@ -548,6 +558,39 @@ export function InvoicesPage() {
                   Facturile vor fi numerotate: <span className="font-mono font-semibold">{invoicePrefixDraft || "VECT"}-{new Date().getFullYear()}-0001</span>
                 </p>
               </div>
+              <div>
+                <label htmlFor="invoice-iban" className="block text-sm font-medium mb-1">
+                  IBAN (pentru QR plată)
+                </label>
+                <input
+                  id="invoice-iban"
+                  type="text"
+                  value={ibanDraft}
+                  onChange={(e) => setIbanDraft(e.target.value.replace(/\s/g, "").toUpperCase())}
+                  maxLength={34}
+                  placeholder="RO49AAAA1B31007593840000"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Dacă este completat, facturile PDF vor include un QR SEPA scanabil.
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="invoice-bic" className="block text-sm font-medium mb-1">
+                  BIC/SWIFT (opțional)
+                </label>
+                <input
+                  id="invoice-bic"
+                  type="text"
+                  value={bicDraft}
+                  onChange={(e) => setBicDraft(e.target.value.toUpperCase())}
+                  maxLength={11}
+                  placeholder="BTRLRO22"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+
               <button
                 type="submit"
                 disabled={settingsSaving || !invoicePrefixDraft.trim()}

@@ -39,6 +39,7 @@ import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
 import { formRoutes } from "./routes/forms"; // FORMS-001
 import { tenantSettingsRoutes } from "./routes/tenantSettings"; // PAY-001
+import { portalInvoiceRoutes } from "./routes/portalInvoice"; // PAY-003
 import {
   publicFormGetHandler,
   publicFormSubmitHandler,
@@ -138,6 +139,7 @@ app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
 app.route("/api/settings/tenant", tenantSettingsRoutes); // PAY-001
+app.route("/api/portal", portalInvoiceRoutes); // PAY-003 — public portal (no auth)
 
 app.get("/api/health/db", async (c) => {
   try {

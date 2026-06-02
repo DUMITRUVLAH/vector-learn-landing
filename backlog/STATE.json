@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "current_item": "PAY-002",
-  "last_completed": "PAY-001",
+  "current_item": "PAY-003",
+  "last_completed": "PAY-002",
   "iterations": 129,
   "last_run_at": "2026-06-02T09:00:00Z",
   "milestone_status": "PAY faza-2: invoice PDF + bulk gen + QR payment",
@@ -2975,17 +2975,24 @@
       }
     },
     "PAY-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAY-002-bulk-invoice-gen.md",
       "milestone": "PAY",
       "phase": "2",
-      "depends_on": ["PAY-001"]
+      "depends_on": ["PAY-001"],
+      "branch": "feat/PAY-faza-2-invoices",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "PAY-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAY-003-payment-qr.md",
       "milestone": "PAY",

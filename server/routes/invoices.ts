@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, desc, sql, lte } from "drizzle-orm";
+import QRCode from "qrcode";
 import { db } from "../db/client";
 import { invoices, students, subscriptions, tenants } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -137,6 +138,8 @@ invoiceRoutes.get("/:id/pdf", async (c) => {
       studentName: students.fullName,
       tenantName: tenants.name,
       invoicePrefix: tenants.invoicePrefix,
+      iban: tenants.iban,
+      bic: tenants.bic,
     })
     .from(invoices)
     .innerJoin(students, eq(invoices.studentId, students.id))
@@ -161,6 +164,34 @@ invoiceRoutes.get("/:id/pdf", async (c) => {
     paid: "Plătită",
     cancelled: "Anulată",
   };
+
+  // PAY-003: Generate EPC QR if IBAN is configured
+  let qrDataUrl: string | null = null;
+  if (row.iban) {
+    try {
+      const amountEur = row.currency === "EUR" ? row.amountCents / 100 : 0; // only EUR amounts in EPC
+      const epcPayload = [
+        "BCD",
+        "002",
+        "1",
+        "SCT",
+        row.bic ?? "",
+        row.tenantName.slice(0, 70),
+        row.iban.replace(/\s/g, "").toUpperCase(),
+        amountEur > 0 ? `EUR${amountEur.toFixed(2)}` : "",
+        "",
+        "",
+        row.invoiceNumber,
+      ].join("\n");
+      qrDataUrl = await QRCode.toDataURL(epcPayload, {
+        errorCorrectionLevel: "M",
+        width: 150,
+        margin: 1,
+      });
+    } catch {
+      qrDataUrl = null; // graceful degradation if QR generation fails
+    }
+  }
 
   const html = `<!DOCTYPE html>
 <html lang="ro">
@@ -240,10 +271,23 @@ invoiceRoutes.get("/:id/pdf", async (c) => {
     </tbody>
   </table>
 
+  ${qrDataUrl ? `
+  <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:flex-end;">
+    <div class="footer" style="margin-top:0;padding-top:0;border-top:none;">
+      <span>${row.tenantName} &bull; Vector Learn Platform</span>
+      <span>Generat automat &bull; ${new Date().toLocaleDateString("ro-RO")}</span>
+    </div>
+    <div style="text-align:center;">
+      <img src="${qrDataUrl}" alt="QR plată SEPA" width="110" height="110" style="display:block;"/>
+      <div style="font-size:9px;color:#888;margin-top:4px;">Scanați pentru plată instant<br/>(BT Pay, Revolut, George)</div>
+    </div>
+  </div>
+  ` : `
   <div class="footer">
     <span>${row.tenantName} &bull; Vector Learn Platform</span>
     <span>Generat automat &bull; ${new Date().toLocaleDateString("ro-RO")}</span>
   </div>
+  `}
 </body>
 </html>`;
 
