@@ -218,6 +218,41 @@
       "when": 1780402000000,
       "tag": "0030_forms005_analytics",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1780500000000,
+      "tag": "0031_integ101_leads_course_branch",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1780501000000,
+      "tag": "0032_integ102_payments_invoices_course",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780502000000,
+      "tag": "0033_integ103_cohorts_branch_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1780600000000,
+      "tag": "0034_stu202_student_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1780381117036,
+      "tag": "0035_quick_unus",
+      "breakpoints": true
     }
   ]
 }
