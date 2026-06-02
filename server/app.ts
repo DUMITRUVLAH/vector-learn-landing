@@ -63,6 +63,11 @@ import { notificationSettingsRoutes } from "./routes/notificationSettings"; // S
  */
 export const app = new Hono();
 
+app.onError((err, c) => {
+  console.error("[ERR]", err.message);
+  return c.json({ error: err.message }, 500);
+});
+
 app.use("*", logger());
 
 const allowedOrigins = [
