@@ -136,6 +136,35 @@ export function runBilling(): Promise<RunBillingResult> {
   });
 }
 
+// ── PAY-002: Bulk invoice generation ──────────────────────────────────────────
+
+export interface BulkGeneratePreview {
+  dryRun: true;
+  count: number;
+  totalAmountCents: number;
+  currency: string;
+  alreadyInvoiced: number;
+}
+
+export interface BulkGenerateResult {
+  dryRun: false;
+  created: number;
+  skipped: number;
+  invoiceIds: string[];
+}
+
+export function bulkGenerateInvoices(params: {
+  month: string;
+  amountCents: number;
+  currency?: string;
+  dryRun: boolean;
+}): Promise<BulkGeneratePreview | BulkGenerateResult> {
+  return api<BulkGeneratePreview | BulkGenerateResult>("/api/invoices/bulk-generate", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
 // ── FIN-604: e-Factura + SAGA CSV ─────────────────────────────────────────────
 
 /**

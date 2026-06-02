@@ -327,6 +327,112 @@ invoiceRoutes.get("/debt-summary", async (c) => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
+// PAY-002: Bulk invoice generation
+// ──────────────────────────────────────────────────────────────────────────────
+
+const bulkGenerateSchema = z.object({
+  /** Month in YYYY-MM format (e.g. "2026-06") */
+  month: z.string().regex(/^\d{4}-\d{2}$/, "Format must be YYYY-MM"),
+  /** Amount in cents to charge each student. Defaults to 0 (informational). */
+  amountCents: z.number().int().min(0).default(0),
+  currency: z.enum(["EUR", "RON", "USD"]).default("RON"),
+  dryRun: z.boolean().default(false),
+});
+
+/**
+ * POST /api/invoices/bulk-generate
+ * With dryRun=true: returns preview {count, totalAmount, alreadyInvoiced} without creating anything.
+ * With dryRun=false: creates one invoice per active student not yet invoiced this month.
+ * Idempotent: students with an invoice in the given month are skipped.
+ * Tenant-safe: only processes students belonging to the caller's tenant.
+ */
+invoiceRoutes.post("/bulk-generate", zValidator("json", bulkGenerateSchema), async (c) => {
+  const body = c.req.valid("json");
+  const tenantId = c.get("user").tenantId;
+
+  const [yr, mo] = body.month.split("-").map(Number);
+  const monthStart = new Date(yr, (mo as number) - 1, 1);
+  const monthEnd = new Date(yr, mo as number, 1);
+
+  // Fetch all active students for this tenant
+  const activeStudents = await db
+    .select({ id: students.id, fullName: students.fullName, debtCents: students.debtCents })
+    .from(students)
+    .where(and(eq(students.tenantId, tenantId), eq(students.status, "active")));
+
+  // Fetch invoice IDs that already exist for this month (to detect skips)
+  const existingInvoices = await db
+    .select({ studentId: invoices.studentId })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.tenantId, tenantId),
+        sql`${invoices.issueDate} >= ${monthStart.toISOString()} AND ${invoices.issueDate} < ${monthEnd.toISOString()}`
+      )
+    );
+  const alreadyInvoicedSet = new Set(existingInvoices.map((r) => r.studentId));
+
+  const toInvoice = activeStudents.filter((s) => !alreadyInvoicedSet.has(s.id));
+  const totalAmount = body.amountCents > 0 ? toInvoice.length * body.amountCents : 0;
+
+  if (body.dryRun) {
+    return c.json({
+      dryRun: true,
+      count: toInvoice.length,
+      totalAmountCents: totalAmount,
+      currency: body.currency,
+      alreadyInvoiced: alreadyInvoicedSet.size,
+    });
+  }
+
+  // Actual generation — fetch tenant prefix first
+  const [t] = await db
+    .select({ invoicePrefix: tenants.invoicePrefix })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId));
+  const prefix = t?.invoicePrefix ?? "VECT";
+  const year = yr;
+
+  const created: string[] = [];
+
+  for (const student of toInvoice) {
+    // Compute next sequential number (max in this series for this tenant)
+    const [maxRow] = await db
+      .select({ maxNum: sql<number>`coalesce(max(${invoices.number}), 0)` })
+      .from(invoices)
+      .where(and(eq(invoices.tenantId, tenantId), eq(invoices.series, prefix)));
+
+    const nextNum = (maxRow?.maxNum ?? 0) + 1;
+    const invoiceNumber = `${prefix}-${year}-${String(nextNum).padStart(4, "0")}`;
+
+    const [inv] = await db
+      .insert(invoices)
+      .values({
+        tenantId,
+        studentId: student.id,
+        series: prefix,
+        number: nextNum,
+        invoiceNumber,
+        amountCents: body.amountCents,
+        currency: body.currency,
+        status: "draft",
+        issueDate: monthStart,
+        notes: `Factura lunii ${body.month}`,
+      })
+      .returning({ id: invoices.id });
+
+    if (inv) created.push(inv.id);
+  }
+
+  return c.json({
+    dryRun: false,
+    created: created.length,
+    skipped: alreadyInvoicedSet.size,
+    invoiceIds: created,
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
 // FIN-603: Subscription routes (abonamente recurente)
 // ──────────────────────────────────────────────────────────────────────────────
 

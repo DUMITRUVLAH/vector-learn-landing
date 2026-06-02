@@ -25,11 +25,13 @@ import {
   runBilling,
   downloadEfacturaXml,
   downloadSagaCsv,
+  bulkGenerateInvoices,
   type Invoice,
   type InvoiceStatus,
   type InvoiceCurrency,
   type Subscription,
   type SubscriptionStatus,
+  type BulkGeneratePreview,
 } from "@/lib/api/invoices";
 import { listStudents, type Student } from "@/lib/api/students";
 import { listPayments, type Payment } from "@/lib/api/payments";
@@ -90,6 +92,7 @@ export function InvoicesPage() {
   const [filterMonth, setFilterMonth] = useState<string>("");
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [runningBilling, setRunningBilling] = useState(false);
+  const [showBulkGenerate, setShowBulkGenerate] = useState(false);
   const [tenantSettings, setTenantSettings] = useState<TenantSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -222,14 +225,24 @@ export function InvoicesPage() {
       pageDescription={`${items.length} facturi · ${activeSubs} abonamente active`}
       actions={
         activeTab === "invoices" ? (
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Crează factură
-          </button>
+          <div className="inline-flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowBulkGenerate(true)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground hover:bg-secondary/80"
+            >
+              <FileText className="h-4 w-4" aria-hidden="true" />
+              Bulk generare
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Crează factură
+            </button>
+          </div>
         ) : (
           <div className="inline-flex gap-2">
             <button
@@ -563,6 +576,18 @@ export function InvoicesPage() {
         />
       )}
 
+      {/* Bulk generate dialog */}
+      {showBulkGenerate && (
+        <BulkGenerateDialog
+          onClose={() => setShowBulkGenerate(false)}
+          onGenerated={() => {
+            setShowBulkGenerate(false);
+            void fetchAll();
+          }}
+          onToast={(kind, message) => setToast({ kind, message })}
+        />
+      )}
+
       {/* Add subscription modal */}
       {showAddSub && (
         <AddSubscriptionModal
@@ -889,3 +914,173 @@ function CreateInvoiceModal({
     </div>
   );
 }
+
+// ──────────────────────────────────────────────
+// PAY-002: Bulk Generate Dialog
+// ──────────────────────────────────────────────
+
+function BulkGenerateDialog({
+  onClose,
+  onGenerated,
+  onToast,
+}: {
+  onClose: () => void;
+  onGenerated: () => void;
+  onToast: (kind: "success" | "error", message: string) => void;
+}) {
+  const now = new Date();
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const [month, setMonth] = useState(defaultMonth);
+  const [amountEur, setAmountEur] = useState(0);
+  const [currency, setCurrency] = useState<InvoiceCurrency>("RON");
+  const [preview, setPreview] = useState<BulkGeneratePreview | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
+  const handlePreview = async () => {
+    setLoadingPreview(true);
+    try {
+      const result = await bulkGenerateInvoices({
+        month,
+        amountCents: Math.round(amountEur * 100),
+        currency,
+        dryRun: true,
+      });
+      if (result.dryRun) setPreview(result as BulkGeneratePreview);
+    } catch {
+      onToast("error", "Nu pot calcula preview-ul");
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const result = await bulkGenerateInvoices({
+        month,
+        amountCents: Math.round(amountEur * 100),
+        currency,
+        dryRun: false,
+      });
+      if (!result.dryRun) {
+        onToast("success", `${result.created} facturi generate, ${result.skipped} sărite`);
+        onGenerated();
+      }
+    } catch {
+      onToast("error", "Eroare la generarea facturilor");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="bulk-dialog-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    >
+      <div className="bg-card rounded-2xl border border-border shadow-xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 id="bulk-dialog-title" className="text-base font-semibold">
+            Generare bulk facturi
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Închide dialog"
+            className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="bulk-month" className="block text-sm font-medium mb-1">
+              Luna / An
+            </label>
+            <input
+              id="bulk-month"
+              type="month"
+              value={month}
+              onChange={(e) => { setMonth(e.target.value); setPreview(null); }}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="bulk-amount" className="block text-sm font-medium mb-1">
+                Sumă per elev
+              </label>
+              <input
+                id="bulk-amount"
+                type="number"
+                min={0}
+                step={0.01}
+                value={amountEur}
+                onChange={(e) => { setAmountEur(Number(e.target.value)); setPreview(null); }}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label htmlFor="bulk-currency" className="block text-sm font-medium mb-1">
+                Monedă
+              </label>
+              <select
+                id="bulk-currency"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as InvoiceCurrency)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              >
+                <option value="RON">RON</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+          </div>
+
+          {preview && (
+            <div className="rounded-lg bg-muted/40 border border-border p-4 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Elevi de facturat:</span>
+                <span className="font-semibold">{preview.count}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total estimat:</span>
+                <span className="font-semibold">
+                  {new Intl.NumberFormat("ro-RO", { style: "currency", currency: preview.currency, maximumFractionDigits: 0 }).format(preview.totalAmountCents / 100)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Deja facturați luna asta:</span>
+                <span className="font-semibold">{preview.alreadyInvoiced}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => void handlePreview()}
+              disabled={loadingPreview}
+              className="flex-1 rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-50"
+            >
+              {loadingPreview ? <Loader2 className="h-3.5 w-3.5 animate-spin mx-auto" aria-hidden="true" /> : "Preview"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleGenerate()}
+              disabled={generating || !preview || preview.count === 0}
+              className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {generating ? "Se generează…" : `Generează ${preview?.count ?? 0} facturi`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
