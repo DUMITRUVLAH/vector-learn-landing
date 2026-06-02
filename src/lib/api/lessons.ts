@@ -39,10 +39,12 @@ export interface Course {
   updatedAt: string;
 }
 
-export function listLessons(from?: string, to?: string): Promise<{ items: Lesson[] }> {
+export function listLessons(from?: string, to?: string, teacherId?: string | null): Promise<{ items: Lesson[] }> {
   const qs = new URLSearchParams();
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
+  // SCHED-603: optional teacher filter
+  if (teacherId) qs.set("teacherId", teacherId);
   const query = qs.toString();
   return api<{ items: Lesson[] }>(`/api/lessons${query ? `?${query}` : ""}`);
 }
@@ -93,6 +95,30 @@ export function updateCourse(
 // COURSE-201: soft-delete (archive) a course
 export function archiveCourse(id: string): Promise<{ ok: true }> {
   return api<{ ok: true }>(`/api/courses/${id}`, { method: "DELETE" });
+}
+
+// SCHED-601: Reschedule lesson (drag-and-drop) via PATCH
+export function patchLesson(
+  id: string,
+  input: { scheduledAt?: string; teacherId?: string; durationMinutes?: number }
+): Promise<Lesson> {
+  return api<Lesson>(`/api/lessons/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+// SCHED-602: Substitute teacher on a lesson
+export function substituteTeacher(lessonId: string, teacherId: string): Promise<Lesson> {
+  return api<Lesson>(`/api/lessons/${lessonId}/substitute`, {
+    method: "PATCH",
+    body: JSON.stringify({ teacherId }),
+  });
+}
+
+// SCHED-602: Get teachers available in a lesson's slot (no conflict)
+export function listAvailableTeachers(lessonId: string): Promise<{ items: Teacher[] }> {
+  return api<{ items: Teacher[] }>(`/api/teachers/available?lessonId=${encodeURIComponent(lessonId)}`);
 }
 
 export type AttendanceStatus = "present" | "absent" | "late" | "excused" | "pending";

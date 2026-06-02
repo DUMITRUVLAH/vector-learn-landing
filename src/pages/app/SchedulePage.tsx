@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo, useCallback, Fragment } from "react";
-import { Loader2, Plus, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw, Users, Lock } from "lucide-react";
+import { useEffect, useState, useMemo, useCallback, Fragment, useRef } from "react";
+import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw, Users, Lock, UserCog } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -10,6 +10,9 @@ import {
   listCourses,
   createLesson,
   cancelLesson,
+  patchLesson,
+  substituteTeacher,
+  listAvailableTeachers,
   getLessonStudents,
   markAttendance,
   type Lesson,
@@ -76,6 +79,15 @@ export function SchedulePage() {
     | null
   >(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  // SCHED-601: drag-and-drop state
+  const draggingLessonId = useRef<string | null>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null); // "dayIdx:hour" key
+  const [rescheduling, setRescheduling] = useState<string | null>(null); // lessonId being saved
+  // SCHED-603: teacher filter (persisted in localStorage)
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
+    try { return localStorage.getItem("schedule:teacherId") ?? ""; }
+    catch { return ""; }
+  });
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -94,7 +106,8 @@ export function SchedulePage() {
     setError(null);
     try {
       const [lr, tr, cr, rr] = await Promise.all([
-        listLessons(weekStart.toISOString(), weekEnd.toISOString()),
+        // SCHED-603: pass selectedTeacherId filter
+        listLessons(weekStart.toISOString(), weekEnd.toISOString(), selectedTeacherId || null),
         listTeachers(),
         listCourses(),
         listRooms(),
@@ -108,11 +121,69 @@ export function SchedulePage() {
     } finally {
       setLoading(false);
     }
-  }, [weekStart, weekEnd]);
+  }, [weekStart, weekEnd, selectedTeacherId]);
 
   useEffect(() => {
     void fetchAll();
   }, [fetchAll]);
+
+  // SCHED-603: persist teacher selection and handle change
+  const handleTeacherFilterChange = useCallback((teacherId: string) => {
+    setSelectedTeacherId(teacherId);
+    try { localStorage.setItem("schedule:teacherId", teacherId); }
+    catch { /* ignore */ }
+  }, []);
+
+  // SCHED-603: weekly stats for selected teacher
+  const teacherWeeklyStats = useMemo(() => {
+    const active = lessons.filter((l) => l.status !== "cancelled");
+    const count = active.length;
+    const hours = active.reduce((sum, l) => sum + l.durationMinutes / 60, 0);
+    return { count, hours: Math.round(hours * 10) / 10 };
+  }, [lessons]);
+
+  // SCHED-601: handle drag-and-drop reschedule
+  const handleDrop = useCallback(async (dayIdx: number, hour: number) => {
+    const lessonId = draggingLessonId.current;
+    if (!lessonId) return;
+    draggingLessonId.current = null;
+    setDragOver(null);
+
+    const lesson = lessons.find((l) => l.id === lessonId);
+    if (!lesson || lesson.status === "completed" || lesson.status === "cancelled") return;
+
+    const targetDate = addDays(weekStart, dayIdx);
+    targetDate.setHours(hour, 0, 0, 0);
+    const newScheduledAt = targetDate.toISOString();
+
+    // No-op if same slot
+    const origDate = new Date(lesson.scheduledAt);
+    if (
+      origDate.getDay() === targetDate.getDay() &&
+      origDate.getHours() === targetDate.getHours() &&
+      origDate.toDateString() === targetDate.toDateString()
+    ) return;
+
+    setRescheduling(lessonId);
+    try {
+      const updated = await patchLesson(lessonId, { scheduledAt: newScheduledAt });
+      setLessons((prev) => prev.map((l) => (l.id === lessonId ? { ...l, ...updated } : l)));
+      setToast({ kind: "success", message: "Lecție reprogramată" });
+    } catch (err) {
+      if (err instanceof ApiError && (err.code === "teacher_double_booked" || err.code === "room_double_booked")) {
+        setToast({
+          kind: "error",
+          message: err.code === "teacher_double_booked"
+            ? "Conflict: profesorul e deja rezervat în acel slot."
+            : "Conflict: sala e deja ocupată în acel slot.",
+        });
+      } else {
+        setToast({ kind: "error", message: "Nu pot reprograma lecția." });
+      }
+    } finally {
+      setRescheduling(null);
+    }
+  }, [lessons, weekStart]);
 
   const lessonsByCell = useMemo(() => {
     const map = new Map<string, Lesson[]>();
@@ -166,17 +237,45 @@ export function SchedulePage() {
         </div>
       }
     >
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm font-semibold">{labelForWeek}</p>
-        <button
-          type="button"
-          onClick={() => setModal({ kind: "recurring" })}
-          className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted"
-          aria-label="Adaugă lecție recurentă"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Repetă
-        </button>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <p className="text-sm font-semibold">{labelForWeek}</p>
+          {/* SCHED-603: Weekly stats for selected teacher */}
+          {selectedTeacherId && !loading && (
+            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+              {teacherWeeklyStats.count} lecții · {teacherWeeklyStats.hours}h
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* SCHED-603: Teacher filter dropdown */}
+          {teachers.length > 0 && (
+            <div>
+              <label htmlFor="teacher-filter" className="sr-only">Filtrează după profesor</label>
+              <select
+                id="teacher-filter"
+                value={selectedTeacherId}
+                onChange={(e) => handleTeacherFilterChange(e.target.value)}
+                className="rounded-md border border-input bg-background px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
+                aria-label="Filtrează orar după profesor"
+              >
+                <option value="">Toți profesorii</option>
+                {teachers.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setModal({ kind: "recurring" })}
+            className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted"
+            aria-label="Adaugă lecție recurentă"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Repetă
+          </button>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -220,32 +319,61 @@ export function SchedulePage() {
                     {String(hour).padStart(2, "0")}:00
                   </div>
                   {DAYS.map((_, dayIdx) => {
-                    const cellLessons = lessonsByCell.get(`${dayIdx}:${hour}`) ?? [];
+                    const cellKey = `${dayIdx}:${hour}`;
+                    const cellLessons = lessonsByCell.get(cellKey) ?? [];
+                    const isDropTarget = dragOver === cellKey;
                     return (
                       <div
                         key={`${dayIdx}-${hour}`}
-                        className="border-b border-r border-border min-h-[68px] p-1 hover:bg-muted/20 cursor-pointer relative"
+                        className={cn(
+                          "border-b border-r border-border min-h-[68px] p-1 cursor-pointer relative transition-colors",
+                          isDropTarget ? "bg-primary/10 ring-1 ring-inset ring-primary/40" : "hover:bg-muted/20"
+                        )}
                         onClick={() => {
                           if (cellLessons.length === 0) setModal({ kind: "create", day: dayIdx, hour });
                         }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setDragOver(cellKey);
+                        }}
+                        onDragLeave={() => setDragOver(null)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          void handleDrop(dayIdx, hour);
+                        }}
                       >
-                        {cellLessons.map((l) => (
-                          <button
-                            key={l.id}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setModal({ kind: "view", lesson: l });
-                            }}
-                            className={cn(
-                              "block w-full text-left rounded-md p-1.5 text-[10px] mb-0.5 hover:shadow-md transition-all",
-                              courseColor(l.courseId)
-                            )}
-                          >
-                            <p className="font-bold truncate">{l.courseName}</p>
-                            <p className="opacity-80 truncate">{l.teacherName}</p>
-                          </button>
-                        ))}
+                        {cellLessons.map((l) => {
+                          const isMoving = rescheduling === l.id;
+                          const canDrag = l.status !== "completed" && l.status !== "cancelled";
+                          return (
+                            <button
+                              key={l.id}
+                              type="button"
+                              draggable={canDrag}
+                              onDragStart={() => {
+                                if (canDrag) draggingLessonId.current = l.id;
+                              }}
+                              onDragEnd={() => {
+                                draggingLessonId.current = null;
+                                setDragOver(null);
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setModal({ kind: "view", lesson: l });
+                              }}
+                              aria-label={`${l.courseName} – ${l.teacherName}. Trage pentru a reprograma.`}
+                              className={cn(
+                                "block w-full text-left rounded-md p-1.5 text-[10px] mb-0.5 hover:shadow-md transition-all",
+                                courseColor(l.courseId),
+                                canDrag && "cursor-grab active:cursor-grabbing",
+                                isMoving && "opacity-50"
+                              )}
+                            >
+                              <p className="font-bold truncate">{l.courseName}</p>
+                              <p className="opacity-80 truncate">{l.teacherName}</p>
+                            </button>
+                          );
+                        })}
                       </div>
                     );
                   })}
@@ -284,6 +412,11 @@ export function SchedulePage() {
             void fetchAll();
           }}
           onError={(msg) => setToast({ kind: "error", message: msg })}
+          onTeacherChanged={(updated) => {
+            setModal({ kind: "view", lesson: updated });
+            setToast({ kind: "success", message: "Profesor schimbat" });
+            void fetchAll();
+          }}
         />
       )}
 
@@ -624,13 +757,16 @@ function ViewLessonModal({
   onClose,
   onCancelled,
   onError,
+  onTeacherChanged,
 }: {
   lesson: Lesson;
   onClose: () => void;
   onCancelled: () => void;
   onError: (msg: string) => void;
+  onTeacherChanged?: (updatedLesson: Lesson) => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const [showSubstitute, setShowSubstitute] = useState(false);
   const date = new Date(lesson.scheduledAt);
 
   const handleCancel = async () => {
@@ -657,10 +793,20 @@ function ViewLessonModal({
         {lesson.notes && <Row label="Note" value={lesson.notes} />}
       </div>
       <AttendancePanel lesson={lesson} onError={onError} />
-      <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-border">
+      <div className="flex flex-wrap justify-end gap-2 pt-4 mt-4 border-t border-border">
         <button type="button" onClick={onClose} className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted">
           Închide
         </button>
+        {lesson.status !== "cancelled" && (
+          <button
+            type="button"
+            onClick={() => setShowSubstitute(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted"
+          >
+            <UserCog className="h-3.5 w-3.5" />
+            Schimbă profesor
+          </button>
+        )}
         <button
           type="button"
           onClick={handleCancel}
@@ -671,7 +817,117 @@ function ViewLessonModal({
           Anulează lecție
         </button>
       </div>
+      {showSubstitute && (
+        <SubstituteTeacherModal
+          lesson={lesson}
+          onClose={() => setShowSubstitute(false)}
+          onSubstituted={(updated) => {
+            setShowSubstitute(false);
+            onTeacherChanged?.(updated);
+          }}
+          onError={onError}
+        />
+      )}
     </ModalShell>
+  );
+}
+
+// ─── SCHED-602: SubstituteTeacherModal ──────────────────────────────────────
+
+function SubstituteTeacherModal({
+  lesson,
+  onClose,
+  onSubstituted,
+  onError,
+}: {
+  lesson: Lesson;
+  onClose: () => void;
+  onSubstituted: (updated: Lesson) => void;
+  onError: (msg: string) => void;
+}) {
+  const [availableTeachers, setAvailableTeachers] = useState<Teacher[]>([]);
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    listAvailableTeachers(lesson.id)
+      .then((r) => {
+        setAvailableTeachers(r.items);
+        if (r.items.length > 0) setSelectedTeacherId(r.items[0].id);
+      })
+      .catch(() => onError("Nu pot încărca profesorii disponibili."))
+      .finally(() => setLoading(false));
+  }, [lesson.id, onError]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTeacherId) return;
+    setSubmitting(true);
+    try {
+      const updated = await substituteTeacher(lesson.id, selectedTeacherId);
+      onSubstituted(updated);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "teacher_double_booked") {
+        onError("Profesorul ales are conflict în acel slot.");
+      } else {
+        onError("Nu pot schimba profesorul.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Schimbă profesor">
+      <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-2xl border border-border bg-card shadow-xl p-5">
+        <h3 className="font-bold text-base mb-4">Schimbă profesor</h3>
+        {loading ? (
+          <div className="flex items-center gap-2 py-4 text-muted-foreground text-sm">
+            <Loader2 className="h-4 w-4 animate-spin" /> Se caută profesorii disponibili…
+          </div>
+        ) : availableTeachers.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">
+            Niciun profesor disponibil în acest slot.
+          </p>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="sub-teacher" className="block text-sm font-semibold mb-1.5">
+                Profesor disponibil
+              </label>
+              <select
+                id="sub-teacher"
+                value={selectedTeacherId}
+                onChange={(e) => setSelectedTeacherId(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                {availableTeachers.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Profesorul curent: <strong>{lesson.teacherName}</strong>. O notificare va fi trimisă ambilor profesori.
+            </p>
+            <div className="flex justify-end gap-2 pt-1 border-t border-border">
+              <button type="button" onClick={onClose} className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold hover:bg-muted">
+                Anulează
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCog className="h-3.5 w-3.5" />}
+                Confirmă
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
   );
 }
 

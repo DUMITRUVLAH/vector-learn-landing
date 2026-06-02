@@ -290,35 +290,10 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
 | CONSENT-001 | 🟡 | Consent/permission forms + e-signature |
 
-## Milestone: SET — Settings/Users (NIGHT-PLAN §7)
+## Milestone: SCHED faza-6 — Calendar UX enhancements
 
-Platform administration: team management, branding, audit log, GDPR compliance, onboarding.
-
-| ID | Priority | Feature | Status |
-|----|----------|---------|--------|
-| SET-801 | P0 | Team management — invite/disable/role matrix | pending |
-| SET-802 | P0 | Tenant branding + locale/timezone settings | pending |
-| SET-803 | P0 | Audit log + GDPR (DPA download, data retention) | pending |
-| SET-804 | P0 | Onboarding wizard (logo→course→teacher→students) | pending |
-| SET-805 | P1 | Notification preferences + /status public page | pending |
-
-## Milestone: AI — AI Assistant module (NIGHT-PLAN §9)
-
-AI-powered features: lesson summary, churn prediction, lead qualification, usage dashboard.
-
-| ID | Priority | Feature | Status |
-|----|----------|---------|--------|
-| AI-A01 | P0 | AI lesson summary + GDPR pseudonymization layer | pending |
-| AI-A02 | P0 | Churn prediction — students at risk + suggested actions | pending |
-| AI-A03 | P1 | Lead qualification hot/warm/cold + WhatsApp reply suggestion | pending |
-| AI-A04 | P1 | AI dashboard — cost cap, usage stats, feature flags | pending |
-
-## Milestone: COURSE — Courses & Groups module (Faza 1)
-
-Course management: edit/archive, CEFR levels, Groups as scheduling entities, student enrollment, student profile page.
-
-| ID | Priority | Feature | Status |
-|----|----------|---------|--------|
-| COURSE-101 | P0 | Course management UX — edit, archive, CEFR level, search | pending |
-| COURSE-102 | P0 | Groups (classes) as entities — schema, API, and UI | pending |
-| COURSE-103 | P0 | Student enrollment into groups + auto-payment creation | pending |
+| ID | Title | Status | Spec |
+|----|-------|--------|------|
+| `SCHED-601` | Drag-and-drop reprogramare lecție în calendar | done ✅ | [specs/SCHED-601-drag-drop-reschedule.md](specs/SCHED-601-drag-drop-reschedule.md) |
+| `SCHED-602` | Înlocuitor profesor la lecție + notificare automată | pending | [specs/SCHED-602-teacher-substitute.md](specs/SCHED-602-teacher-substitute.md) |
+| `SCHED-603` | Filtrare orar per profesor + statistici încărcare săptămânală | pending | [specs/SCHED-603-schedule-view-by-teacher.md](specs/SCHED-603-schedule-view-by-teacher.md) |
