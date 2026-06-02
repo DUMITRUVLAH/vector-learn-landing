@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
+import { normalizePhone, normalizeEmail } from "../lib/normalize";
 import {
   students,
   payments,
@@ -329,4 +330,139 @@ studentRoutes.delete("/:id/notes/:noteId", async (c) => {
 
   await db.delete(studentNotes).where(eq(studentNotes.id, noteId));
   return c.json({ ok: true });
+});
+
+// ─── STU-203: CSV/Excel import ────────────────────────────────────────────────
+
+const importRowSchema = z.object({
+  fullName: z.string().min(1).max(200),
+  phone: z.string().max(32).optional().nullable(),
+  email: z.string().max(255).optional().nullable(),
+  parentName: z.string().max(200).optional().nullable(),
+  parentPhone: z.string().max(32).optional().nullable(),
+  parentEmail: z.string().max(255).optional().nullable(),
+  birthDate: z.string().optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+});
+
+const previewSchema = z.object({
+  rows: z.array(importRowSchema).max(200),
+});
+
+const commitSchema = z.object({
+  rows: z.array(importRowSchema).max(200),
+});
+
+/** STU-203: POST /api/students/import/preview — dry-run with dedup */
+studentRoutes.post("/import/preview", zValidator("json", previewSchema), async (c) => {
+  const { rows } = c.req.valid("json");
+  const tenantId = c.get("user").tenantId;
+
+  const preview: Array<{
+    row: number;
+    fullName: string;
+    phone: string | null;
+    status: "new" | "duplicate" | "error";
+    error: string | null;
+  }> = [];
+
+  let newCount = 0;
+  let dupCount = 0;
+  let errCount = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row.fullName?.trim()) {
+      preview.push({ row: i + 1, fullName: "", phone: null, status: "error", error: "Lipsește numele" });
+      errCount++;
+      continue;
+    }
+
+    const phoneNorm = normalizePhone(row.phone ?? null);
+    const emailNorm = normalizeEmail(row.email ?? null);
+
+    // Dedup by normalized phone or email using SQL normalization
+    // We store phone as-is, so we normalize both the input and the DB value for comparison
+    let isDuplicate = false;
+    if (phoneNorm || emailNorm) {
+      // For phone: use SQL regex to strip non-digits and compare last 9 digits
+      const phoneMatch = phoneNorm
+        ? await db.query.students.findFirst({
+            where: and(
+              eq(students.tenantId, tenantId),
+              sql`regexp_replace(${students.phone}, '[^0-9]', '', 'g') LIKE ${`%${phoneNorm.replace(/\D/g, "").slice(-9)}`}`
+            ),
+            columns: { id: true },
+          })
+        : null;
+
+      if (phoneMatch) {
+        isDuplicate = true;
+      } else if (emailNorm) {
+        const emailMatch = await db.query.students.findFirst({
+          where: and(
+            eq(students.tenantId, tenantId),
+            sql`lower(trim(${students.email})) = ${emailNorm}`
+          ),
+          columns: { id: true },
+        });
+        if (emailMatch) isDuplicate = true;
+      }
+    }
+
+    if (isDuplicate) {
+      preview.push({ row: i + 1, fullName: row.fullName, phone: row.phone ?? null, status: "duplicate", error: null });
+      dupCount++;
+    } else {
+      preview.push({ row: i + 1, fullName: row.fullName, phone: row.phone ?? null, status: "new", error: null });
+      newCount++;
+    }
+  }
+
+  return c.json({
+    preview,
+    summary: { total: rows.length, new: newCount, duplicates: dupCount, errors: errCount },
+  });
+});
+
+/** STU-203: POST /api/students/import/commit — bulk insert new students */
+studentRoutes.post("/import/commit", zValidator("json", commitSchema), async (c) => {
+  const { rows } = c.req.valid("json");
+  const tenantId = c.get("user").tenantId;
+
+  let imported = 0;
+  let skipped = 0;
+
+  for (const row of rows) {
+    if (!row.fullName?.trim()) { skipped++; continue; }
+
+    const phoneNorm = normalizePhone(row.phone ?? null);
+    const emailNorm = normalizeEmail(row.email ?? null);
+
+    // Re-check dedup at commit time (phone normalization via SQL)
+    if (phoneNorm) {
+      const existing = await db.query.students.findFirst({
+        where: and(
+          eq(students.tenantId, tenantId),
+          sql`regexp_replace(${students.phone}, '[^0-9]', '', 'g') LIKE ${`%${phoneNorm.replace(/\D/g, "").slice(-9)}`}`
+        ),
+        columns: { id: true },
+      });
+      if (existing) { skipped++; continue; }
+    }
+
+    await db.insert(students).values({
+      tenantId,
+      fullName: row.fullName.trim(),
+      phone: row.phone ?? null,
+      email: row.email ?? null,
+      parentPhone: row.parentPhone ?? null,
+      parentEmail: row.parentEmail ?? null,
+      notes: row.notes ?? null,
+      status: "active",
+    }).onConflictDoNothing();
+    imported++;
+  }
+
+  return c.json({ imported, skipped });
 });

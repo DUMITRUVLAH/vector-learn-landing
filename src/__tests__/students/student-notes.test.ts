@@ -105,7 +105,7 @@ describe("STU-202 — Delete authorization", () => {
       createdAt: "2026-06-01", updatedAt: "2026-06-01"
     };
     const currentUserId = "user-B";
-    const currentRole = "teacher";
+    const currentRole: string = "teacher";
     const canDelete = note.authorId === currentUserId || currentRole === "admin" || currentRole === "manager";
     expect(canDelete).toBe(false);
   });
@@ -129,7 +129,7 @@ describe("STU-202 — Delete authorization", () => {
       createdAt: "2026-06-01", updatedAt: "2026-06-01"
     };
     const currentUserId = "user-B";
-    const currentRole = "manager";
+    const currentRole: string = "manager";
     const canDelete = note.authorId === currentUserId || currentRole === "admin" || currentRole === "manager";
     expect(canDelete).toBe(true);
   });

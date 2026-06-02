@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "STU-202",
-  "iterations": 122,
+  "last_completed": "STU-203",
+  "iterations": 123,
   "last_run_at": "2026-06-02T08:00:00Z",
   "milestone_status": "STUDENTS faza-2: STU-201..205 pending",
   "active_milestone": "STUDENTS",
@@ -2736,8 +2736,8 @@
       }
     },
     "STU-203": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/STU-203-csv-import-students.md",
       "milestone": "STUDENTS",
@@ -2745,7 +2745,18 @@
       "depends_on": [
         "STU-202"
       ],
-      "title": "Import CSV/Excel studenti"
+      "title": "Import CSV/Excel studenti",
+      "branch": "feat/STUDENTS-faza-2-profile",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "reports": [
+        "backlog/reports/STU-203-manager.md",
+        "backlog/reports/STU-203-student.md"
+      ]
     },
     "STU-204": {
       "status": "pending",
