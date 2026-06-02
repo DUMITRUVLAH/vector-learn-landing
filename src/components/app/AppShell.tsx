@@ -1,12 +1,11 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Bell } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { BranchSwitcher } from "@/components/app/BranchSwitcher";
 import { Link, useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
-import { NotificationBell } from "@/components/NotificationBell";
 
 interface AppShellProps {
   children: ReactNode;
@@ -47,6 +46,12 @@ const NAV = [
   // AUTH-003/004: user profile + security settings
   { label: "Profil", href: "/app/settings/profile", icon: Shield },
   { label: "Securitate", href: "/app/settings/security", icon: Shield },
+  // SET-801..805: Settings module
+  { label: "Echipă", href: "/app/settings/team", icon: Users },
+  { label: "Branding", href: "/app/settings/branding", icon: Award },
+  { label: "Audit Log", href: "/app/settings/audit-log", icon: ClipboardList },
+  { label: "GDPR", href: "/app/settings/gdpr", icon: ShieldCheck },
+  { label: "Notificări", href: "/app/settings/notifications", icon: Bell },
 ];
 
 export function AppShell({ children, pageTitle, pageDescription, actions }: AppShellProps) {

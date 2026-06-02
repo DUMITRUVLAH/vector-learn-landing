@@ -9,6 +9,12 @@ export const tenants = pgTable("tenants", {
   plan: planEnum("plan").notNull().default("starter"),
   /** COMM-205: Tenant timezone for quiet hours (IANA, e.g. "Europe/Bucharest") */
   timezone: varchar("timezone", { length: 60 }).notNull().default("Europe/Bucharest"),
+  /** SET-802: Branding — logo URL (base64 or CDN URL) */
+  logoUrl: varchar("logo_url", { length: 2048 }),
+  /** SET-802: Branding JSON { primaryColor, accentColor } */
+  brandingJson: jsonb("branding_json").$type<{ primaryColor?: string; accentColor?: string }>(),
+  /** SET-802: Lead/student retention policies */
+  dataRetentionJson: jsonb("data_retention_json").$type<{ leadsLostDays?: number; inactiveStudentsDays?: number }>(),
   /** CRM-135: Round-robin auto-assign — enable/disable */
   rrEnabled: boolean("rr_enabled").notNull().default(false),
   /** CRM-135: Ordered list of user IDs in the round-robin rotation */

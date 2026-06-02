@@ -45,3 +45,28 @@ export async function markAllRead(): Promise<{ updated: number }> {
 export async function getTenantMembers(): Promise<{ members: TenantMember[] }> {
   return api<{ members: TenantMember[] }>("/api/users/tenant-members");
 }
+
+// ─── AppNotification — richer shape used by NotificationBell ─────────────────
+
+export interface AppNotification {
+  id: string;
+  tenantId: string;
+  userId: string;
+  type: string;
+  title: string;
+  body: string;
+  link?: string | null;
+  isRead: boolean;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface NotificationsResponse {
+  items: AppNotification[];
+  unreadCount: number;
+}
+
+/** Mark a single notification as read. */
+export async function markRead(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/notifications/${id}/read`, { method: "PATCH" });
+}

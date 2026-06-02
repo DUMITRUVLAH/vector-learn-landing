@@ -1,1 +1,1 @@
-ALTER TABLE "pipeline_stages" ADD COLUMN "probability_pct" integer DEFAULT 10 NOT NULL;
+ALTER TABLE "pipeline_stages" ADD COLUMN IF NOT EXISTS "probability_pct" integer DEFAULT 10 NOT NULL;

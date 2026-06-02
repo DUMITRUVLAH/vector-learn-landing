@@ -1,7 +1,3 @@
--- CONSENT-001: Formulare de consimțământ cu e-semnătură
--- Migration prefix: 0036 (follows 0035_school007_news)
--- No CREATE TYPE enum needed (status is varchar for flexibility)
-
 -- Tabelul șabloanelor de formulare
 CREATE TABLE IF NOT EXISTS "consent_templates" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -17,7 +13,6 @@ CREATE TABLE IF NOT EXISTS "consent_templates" (
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "consent_templates_tenant_active_idx" ON "consent_templates" ("tenant_id", "is_active");
 --> statement-breakpoint
-
 -- Tabelul cererilor de consimțământ (per tutore per elev per formular)
 CREATE TABLE IF NOT EXISTS "consent_requests" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

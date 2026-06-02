@@ -1,6 +1,3 @@
--- SCHOOL-006: Master timetable — timetable_slots table
--- Migration prefix: 0033 (max on branch was 0032)
-
 CREATE TABLE IF NOT EXISTS "timetable_slots" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
   "tenant_id" uuid NOT NULL,

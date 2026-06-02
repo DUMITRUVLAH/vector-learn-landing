@@ -1,6 +1,3 @@
--- PAY-004: Stripe settings per tenant + Stripe columns on invoices
--- Migration 0032
-
 -- Stripe settings table (one row per tenant)
 CREATE TABLE IF NOT EXISTS "stripe_settings" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),

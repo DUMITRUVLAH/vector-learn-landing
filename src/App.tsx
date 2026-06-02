@@ -69,6 +69,35 @@ import { KinderImmunizationReportPage } from "./pages/app/KinderImmunizationRepo
 import { KinderParentFeedPage } from "./pages/app/KinderParentFeedPage";
 import { KinderCompliancePage } from "./pages/app/KinderCompliancePage";
 import KinderIncidentsPage from "./pages/app/KinderIncidentsPage";
+// Mobile pages
+import { MobileSchedulePage } from "./pages/app/mobile/MobileSchedulePage";
+import { HomeworkPage } from "./pages/app/mobile/HomeworkPage";
+import { NotificationsSettingsPage } from "./pages/app/mobile/NotificationsSettingsPage";
+import { ParentDashboardPage } from "./pages/app/mobile/ParentDashboardPage";
+import { ChatPage } from "./pages/app/mobile/ChatPage";
+import { XpPage } from "./pages/app/mobile/XpPage";
+import { LeaderboardPage } from "./pages/app/mobile/LeaderboardPage";
+import { StudentDashboardPage } from "./pages/app/mobile/StudentDashboardPage";
+// Settings pages (SET-801..805)
+import { ApiKeysPage } from "./pages/app/settings/ApiKeysPage";
+import { WebhooksPage } from "./pages/app/settings/WebhooksPage";
+import { IntegrationsPage } from "./pages/app/settings/IntegrationsPage";
+import TeamPage from "./pages/app/settings/TeamPage";
+import BrandingPage from "./pages/app/settings/BrandingPage";
+import AuditLogSettingsPage from "./pages/app/settings/AuditLogPage";
+import GdprPage from "./pages/app/settings/GdprPage";
+import NotificationPrefsPage from "./pages/app/settings/NotificationPrefsPage";
+// Reports pages
+import { KpiDashboardPage } from "./pages/app/KpiDashboardPage";
+import { RevenueChartsPage } from "./pages/app/RevenueChartsPage";
+import { StudentRetentionPage } from "./pages/app/StudentRetentionPage";
+import { ExportPage } from "./pages/app/ExportPage";
+// Other missing pages
+import { GamificationPage } from "./pages/app/GamificationPage";
+import { GradingPage } from "./pages/app/GradingPage";
+import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
+import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
+import { FeatureTreePage } from "./pages/app/FeatureTreePage";
 
 function HomePage() {
   return (
@@ -158,6 +187,12 @@ function Routes() {
     return <AvailabilityPage teacherId={id} />;
   }
   if (path.startsWith("/app/hr/audit")) return <AuditLogPage />;
+  // SET-801..805: Settings pages
+  if (path.startsWith("/app/settings/team")) return <TeamPage />;
+  if (path.startsWith("/app/settings/branding")) return <BrandingPage />;
+  if (path.startsWith("/app/settings/audit-log")) return <AuditLogSettingsPage />;
+  if (path.startsWith("/app/settings/gdpr")) return <GdprPage />;
+  if (path.startsWith("/app/settings/notifications")) return <NotificationPrefsPage />;
   if (path.startsWith("/app/settings/api-keys")) return <ApiKeysPage />; // INT-901
   if (path.startsWith("/app/settings/webhooks")) return <WebhooksPage />; // INT-902
   if (path.startsWith("/app/settings/integrations")) return <IntegrationsPage />; // INT-903

@@ -52,7 +52,9 @@ import { portalNotifsRoutes, portalNotifsAdminRoutes, portalCronRoutes } from ".
 import { publicTeamRoutes } from "./routes/team";
 // SET-801..805: Settings routes
 import { brandingSettingsRoutes } from "./routes/brandingSettings"; // SET-802
+import { localeSettingsRoutes } from "./routes/localeSettings"; // SET-802
 import { auditLogSettingsRoutes } from "./routes/auditLogSettings"; // SET-803/804
+import { gdprSettingsRoutes } from "./routes/gdprSettings"; // SET-803
 import { notificationSettingsRoutes } from "./routes/notificationSettings"; // SET-805
 
 /**
@@ -169,8 +171,12 @@ app.route("/api/kinder", kinderComplianceRoutes);
 app.route("/api/kinder", kinderIncidentsRoutes);
 // SET-802: Branding settings (logo, colors, tenant name)
 app.route("/api/settings/branding", brandingSettingsRoutes);
+// SET-802: Locale / timezone settings per user
+app.route("/api/settings/locale", localeSettingsRoutes);
 // SET-803/804: Audit log settings
 app.route("/api/settings/audit-log", auditLogSettingsRoutes);
+// SET-803: GDPR settings (DPA download + data retention)
+app.route("/api/settings/gdpr", gdprSettingsRoutes);
 // SET-805: Notification preferences per user
 app.route("/api/settings/notifications", notificationSettingsRoutes);
 

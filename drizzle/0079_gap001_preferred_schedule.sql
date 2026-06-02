@@ -1,15 +1,60 @@
-CREATE TYPE "public"."notification_type" AS ENUM('task_due', 'lead_converted', 'lead_created', 'system');--> statement-breakpoint
-CREATE TYPE "public"."enrollment_status" AS ENUM('active', 'paused', 'completed', 'cancelled');--> statement-breakpoint
-CREATE TYPE "public"."beneficiary_type" AS ENUM('pf', 'pj');--> statement-breakpoint
-CREATE TYPE "public"."contract_currency" AS ENUM('MDL', 'EUR', 'RON');--> statement-breakpoint
-CREATE TYPE "public"."contract_format" AS ENUM('fizic', 'online');--> statement-breakpoint
-CREATE TYPE "public"."feedback_invitation_status" AS ENUM('pending', 'submitted');--> statement-breakpoint
-CREATE TYPE "public"."feedback_question_type" AS ENUM('rating', 'nps', 'text', 'yesno');--> statement-breakpoint
-CREATE TYPE "public"."invoice_status" AS ENUM('draft', 'issued', 'paid', 'cancelled');--> statement-breakpoint
-CREATE TYPE "public"."subscription_status" AS ENUM('active', 'paused', 'cancelled');--> statement-breakpoint
-CREATE TYPE "public"."participant_payment_status" AS ENUM('full', 'half', 'pending', 'free');--> statement-breakpoint
-CREATE TYPE "public"."participant_source" AS ENUM('crm', 'manual');--> statement-breakpoint
-CREATE TABLE "notifications" (
+DO $$
+BEGIN
+  CREATE TYPE "public"."notification_type" AS ENUM('task_due', 'lead_converted', 'lead_created', 'system');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."enrollment_status" AS ENUM('active', 'paused', 'completed', 'cancelled');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."beneficiary_type" AS ENUM('pf', 'pj');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."contract_currency" AS ENUM('MDL', 'EUR', 'RON');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."contract_format" AS ENUM('fizic', 'online');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."feedback_invitation_status" AS ENUM('pending', 'submitted');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."feedback_question_type" AS ENUM('rating', 'nps', 'text', 'yesno');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."invoice_status" AS ENUM('draft', 'issued', 'paid', 'cancelled');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."subscription_status" AS ENUM('active', 'paused', 'cancelled');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."participant_payment_status" AS ENUM('full', 'half', 'pending', 'free');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpointDO $$
+BEGIN
+  CREATE TYPE "public"."participant_source" AS ENUM('crm', 'manual');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "notifications" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"user_id" uuid NOT NULL,
@@ -22,7 +67,7 @@ CREATE TABLE "notifications" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "saved_views" (
+CREATE TABLE IF NOT EXISTS "saved_views" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"user_id" uuid NOT NULL,
@@ -33,7 +78,7 @@ CREATE TABLE "saved_views" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "cadences" (
+CREATE TABLE IF NOT EXISTS "cadences" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"name" varchar(200) NOT NULL,
@@ -44,7 +89,7 @@ CREATE TABLE "cadences" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "lead_cadence_enrollments" (
+CREATE TABLE IF NOT EXISTS "lead_cadence_enrollments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"lead_id" uuid NOT NULL,
@@ -56,7 +101,7 @@ CREATE TABLE "lead_cadence_enrollments" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "crm_audit_log" (
+CREATE TABLE IF NOT EXISTS "crm_audit_log" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"actor_id" uuid,
@@ -68,7 +113,7 @@ CREATE TABLE "crm_audit_log" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "contracts" (
+CREATE TABLE IF NOT EXISTS "contracts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"number" varchar(64) NOT NULL,
@@ -100,7 +145,7 @@ CREATE TABLE "contracts" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "feedback_answers" (
+CREATE TABLE IF NOT EXISTS "feedback_answers" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"invitation_id" uuid NOT NULL,
 	"question_id" uuid NOT NULL,
@@ -108,7 +153,7 @@ CREATE TABLE "feedback_answers" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "feedback_forms" (
+CREATE TABLE IF NOT EXISTS "feedback_forms" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"title" varchar(200) NOT NULL,
@@ -118,7 +163,7 @@ CREATE TABLE "feedback_forms" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "feedback_invitations" (
+CREATE TABLE IF NOT EXISTS "feedback_invitations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"form_id" uuid NOT NULL,
 	"student_id" uuid NOT NULL,
@@ -128,7 +173,7 @@ CREATE TABLE "feedback_invitations" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "feedback_questions" (
+CREATE TABLE IF NOT EXISTS "feedback_questions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"form_id" uuid NOT NULL,
 	"type" "feedback_question_type" NOT NULL,
@@ -138,7 +183,7 @@ CREATE TABLE "feedback_questions" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "invoices" (
+CREATE TABLE IF NOT EXISTS "invoices" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"student_id" uuid NOT NULL,
@@ -158,7 +203,7 @@ CREATE TABLE "invoices" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "subscriptions" (
+CREATE TABLE IF NOT EXISTS "subscriptions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"student_id" uuid NOT NULL,
@@ -172,7 +217,7 @@ CREATE TABLE "subscriptions" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "cohorts" (
+CREATE TABLE IF NOT EXISTS "cohorts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"course_id" uuid NOT NULL,
@@ -190,7 +235,7 @@ CREATE TABLE "cohorts" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "cohort_participants" (
+CREATE TABLE IF NOT EXISTS "cohort_participants" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"cohort_id" uuid NOT NULL,
@@ -207,7 +252,7 @@ CREATE TABLE "cohort_participants" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "certificate_templates" (
+CREATE TABLE IF NOT EXISTS "certificate_templates" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"course_id" uuid,
@@ -220,7 +265,7 @@ CREATE TABLE "certificate_templates" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "issued_certificates" (
+CREATE TABLE IF NOT EXISTS "issued_certificates" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"certificate_id" varchar(100) NOT NULL,
@@ -239,91 +284,322 @@ CREATE TABLE "issued_certificates" (
 	CONSTRAINT "issued_cert_tenant_certid_uniq" UNIQUE("tenant_id","certificate_id")
 );
 --> statement-breakpoint
-ALTER TABLE "tenants" ADD COLUMN "sla_hot_minutes" integer DEFAULT 15 NOT NULL;--> statement-breakpoint
-ALTER TABLE "tenants" ADD COLUMN "sla_default_hours" integer DEFAULT 24 NOT NULL;--> statement-breakpoint
-ALTER TABLE "tenants" ADD COLUMN "rot_days" integer DEFAULT 7 NOT NULL;--> statement-breakpoint
-ALTER TABLE "students" ADD COLUMN "debt_cents" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE "students" ADD COLUMN "preferred_days" jsonb;--> statement-breakpoint
-ALTER TABLE "students" ADD COLUMN "preferred_time_start" time;--> statement-breakpoint
-ALTER TABLE "students" ADD COLUMN "preferred_time_end" time;--> statement-breakpoint
-ALTER TABLE "leads" ADD COLUMN "preferred_days" jsonb;--> statement-breakpoint
-ALTER TABLE "leads" ADD COLUMN "preferred_time_start" time;--> statement-breakpoint
-ALTER TABLE "leads" ADD COLUMN "preferred_time_end" time;--> statement-breakpoint
-ALTER TABLE "pipeline_stages" ADD COLUMN "probability_pct" integer DEFAULT 10 NOT NULL;--> statement-breakpoint
-ALTER TABLE "notifications" ADD CONSTRAINT "notifications_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "saved_views" ADD CONSTRAINT "saved_views_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "saved_views" ADD CONSTRAINT "saved_views_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "cadences" ADD CONSTRAINT "cadences_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_cadence_enrollments" ADD CONSTRAINT "lead_cadence_enrollments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_cadence_enrollments" ADD CONSTRAINT "lead_cadence_enrollments_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "lead_cadence_enrollments" ADD CONSTRAINT "lead_cadence_enrollments_cadence_id_cadences_id_fk" FOREIGN KEY ("cadence_id") REFERENCES "public"."cadences"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "crm_audit_log" ADD CONSTRAINT "crm_audit_log_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "crm_audit_log" ADD CONSTRAINT "crm_audit_log_actor_id_users_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "contracts" ADD CONSTRAINT "contracts_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "contracts" ADD CONSTRAINT "contracts_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "contracts" ADD CONSTRAINT "contracts_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "contracts" ADD CONSTRAINT "contracts_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "feedback_answers" ADD CONSTRAINT "feedback_answers_invitation_id_feedback_invitations_id_fk" FOREIGN KEY ("invitation_id") REFERENCES "public"."feedback_invitations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "feedback_answers" ADD CONSTRAINT "feedback_answers_question_id_feedback_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."feedback_questions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "feedback_forms" ADD CONSTRAINT "feedback_forms_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "feedback_invitations" ADD CONSTRAINT "feedback_invitations_form_id_feedback_forms_id_fk" FOREIGN KEY ("form_id") REFERENCES "public"."feedback_forms"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "feedback_invitations" ADD CONSTRAINT "feedback_invitations_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "feedback_questions" ADD CONSTRAINT "feedback_questions_form_id_feedback_forms_id_fk" FOREIGN KEY ("form_id") REFERENCES "public"."feedback_forms"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "invoices" ADD CONSTRAINT "invoices_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "invoices" ADD CONSTRAINT "invoices_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "invoices" ADD CONSTRAINT "invoices_payment_id_payments_id_fk" FOREIGN KEY ("payment_id") REFERENCES "public"."payments"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "cohorts" ADD CONSTRAINT "cohorts_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "cohorts" ADD CONSTRAINT "cohorts_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "cohort_participants" ADD CONSTRAINT "cohort_participants_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "cohort_participants" ADD CONSTRAINT "cohort_participants_cohort_id_cohorts_id_fk" FOREIGN KEY ("cohort_id") REFERENCES "public"."cohorts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "cohort_participants" ADD CONSTRAINT "cohort_participants_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "certificate_templates" ADD CONSTRAINT "certificate_templates_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "certificate_templates" ADD CONSTRAINT "certificate_templates_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "certificate_templates" ADD CONSTRAINT "certificate_templates_cohort_id_cohorts_id_fk" FOREIGN KEY ("cohort_id") REFERENCES "public"."cohorts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "issued_certificates" ADD CONSTRAINT "issued_certificates_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "issued_certificates" ADD CONSTRAINT "issued_certificates_cohort_id_cohorts_id_fk" FOREIGN KEY ("cohort_id") REFERENCES "public"."cohorts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "issued_certificates" ADD CONSTRAINT "issued_certificates_template_id_certificate_templates_id_fk" FOREIGN KEY ("template_id") REFERENCES "public"."certificate_templates"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "notif_tenant_idx" ON "notifications" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "notif_user_idx" ON "notifications" USING btree ("user_id","is_read","created_at");--> statement-breakpoint
-CREATE INDEX "sv_tenant_idx" ON "saved_views" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "sv_user_idx" ON "saved_views" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "cad_tenant_idx" ON "cadences" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "cad_enabled_idx" ON "cadences" USING btree ("tenant_id","enabled");--> statement-breakpoint
-CREATE INDEX "lce_tenant_idx" ON "lead_cadence_enrollments" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "lce_lead_idx" ON "lead_cadence_enrollments" USING btree ("lead_id","status");--> statement-breakpoint
-CREATE INDEX "lce_fire_idx" ON "lead_cadence_enrollments" USING btree ("status","next_fire_at");--> statement-breakpoint
-CREATE INDEX "lce_cadence_idx" ON "lead_cadence_enrollments" USING btree ("cadence_id");--> statement-breakpoint
-CREATE INDEX "cal_tenant_time_idx" ON "crm_audit_log" USING btree ("tenant_id","created_at");--> statement-breakpoint
-CREATE INDEX "cal_entity_idx" ON "crm_audit_log" USING btree ("entity_id","created_at");--> statement-breakpoint
-CREATE INDEX "cal_actor_idx" ON "crm_audit_log" USING btree ("tenant_id","actor_id");--> statement-breakpoint
-CREATE INDEX "contracts_tenant_idx" ON "contracts" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "contracts_tenant_date_idx" ON "contracts" USING btree ("tenant_id","contract_date");--> statement-breakpoint
-CREATE INDEX "contracts_number_idx" ON "contracts" USING btree ("tenant_id","number");--> statement-breakpoint
-CREATE INDEX "contracts_lead_idx" ON "contracts" USING btree ("lead_id");--> statement-breakpoint
-CREATE INDEX "contracts_student_idx" ON "contracts" USING btree ("student_id");--> statement-breakpoint
-CREATE INDEX "feedback_answers_invitation_idx" ON "feedback_answers" USING btree ("invitation_id");--> statement-breakpoint
-CREATE INDEX "feedback_answers_question_idx" ON "feedback_answers" USING btree ("question_id");--> statement-breakpoint
-CREATE INDEX "feedback_forms_tenant_idx" ON "feedback_forms" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "feedback_invitations_form_idx" ON "feedback_invitations" USING btree ("form_id");--> statement-breakpoint
-CREATE INDEX "feedback_invitations_student_idx" ON "feedback_invitations" USING btree ("student_id");--> statement-breakpoint
-CREATE INDEX "feedback_invitations_token_idx" ON "feedback_invitations" USING btree ("token");--> statement-breakpoint
-CREATE INDEX "feedback_questions_form_idx" ON "feedback_questions" USING btree ("form_id");--> statement-breakpoint
-CREATE INDEX "invoices_tenant_idx" ON "invoices" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "invoices_student_idx" ON "invoices" USING btree ("student_id");--> statement-breakpoint
-CREATE INDEX "invoices_status_idx" ON "invoices" USING btree ("tenant_id","status");--> statement-breakpoint
-CREATE INDEX "invoices_number_idx" ON "invoices" USING btree ("tenant_id","number");--> statement-breakpoint
-CREATE INDEX "subscriptions_tenant_idx" ON "subscriptions" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "subscriptions_student_idx" ON "subscriptions" USING btree ("student_id");--> statement-breakpoint
-CREATE INDEX "subscriptions_status_idx" ON "subscriptions" USING btree ("tenant_id","status");--> statement-breakpoint
-CREATE INDEX "subscriptions_billing_idx" ON "subscriptions" USING btree ("tenant_id","next_billing_date");--> statement-breakpoint
-CREATE INDEX "cohorts_tenant_course_idx" ON "cohorts" USING btree ("tenant_id","course_id");--> statement-breakpoint
-CREATE INDEX "cohorts_tenant_start_idx" ON "cohorts" USING btree ("tenant_id","start_date");--> statement-breakpoint
-CREATE INDEX "cohort_participants_tenant_cohort_idx" ON "cohort_participants" USING btree ("tenant_id","cohort_id");--> statement-breakpoint
-CREATE INDEX "cohort_participants_cohort_idx" ON "cohort_participants" USING btree ("cohort_id");--> statement-breakpoint
-CREATE INDEX "cert_tmpl_tenant_global_idx" ON "certificate_templates" USING btree ("tenant_id","is_global");--> statement-breakpoint
-CREATE INDEX "cert_tmpl_tenant_course_idx" ON "certificate_templates" USING btree ("tenant_id","course_id");--> statement-breakpoint
-CREATE INDEX "issued_cert_tenant_idx" ON "issued_certificates" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "students_debt_idx" ON "students" USING btree ("tenant_id","debt_cents");
+ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "sla_hot_minutes" integer DEFAULT 15 NOT NULL;
+--> statement-breakpoint
+ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "sla_default_hours" integer DEFAULT 24 NOT NULL;
+--> statement-breakpoint
+ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "rot_days" integer DEFAULT 7 NOT NULL;
+--> statement-breakpoint
+ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "debt_cents" integer DEFAULT 0 NOT NULL;
+--> statement-breakpoint
+ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "preferred_days" jsonb;
+--> statement-breakpoint
+ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "preferred_time_start" time;
+--> statement-breakpoint
+ALTER TABLE "students" ADD COLUMN IF NOT EXISTS "preferred_time_end" time;
+--> statement-breakpoint
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "preferred_days" jsonb;
+--> statement-breakpoint
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "preferred_time_start" time;
+--> statement-breakpoint
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "preferred_time_end" time;
+--> statement-breakpoint
+ALTER TABLE "pipeline_stages" ADD COLUMN IF NOT EXISTS "probability_pct" integer DEFAULT 10 NOT NULL;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "notifications" ADD CONSTRAINT "notifications_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "saved_views" ADD CONSTRAINT "saved_views_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "saved_views" ADD CONSTRAINT "saved_views_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "cadences" ADD CONSTRAINT "cadences_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "lead_cadence_enrollments" ADD CONSTRAINT "lead_cadence_enrollments_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "lead_cadence_enrollments" ADD CONSTRAINT "lead_cadence_enrollments_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "lead_cadence_enrollments" ADD CONSTRAINT "lead_cadence_enrollments_cadence_id_cadences_id_fk" FOREIGN KEY ("cadence_id") REFERENCES "public"."cadences"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "crm_audit_log" ADD CONSTRAINT "crm_audit_log_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "crm_audit_log" ADD CONSTRAINT "crm_audit_log_actor_id_users_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "contracts" ADD CONSTRAINT "contracts_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "contracts" ADD CONSTRAINT "contracts_lead_id_leads_id_fk" FOREIGN KEY ("lead_id") REFERENCES "public"."leads"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "contracts" ADD CONSTRAINT "contracts_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "contracts" ADD CONSTRAINT "contracts_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "feedback_answers" ADD CONSTRAINT "feedback_answers_invitation_id_feedback_invitations_id_fk" FOREIGN KEY ("invitation_id") REFERENCES "public"."feedback_invitations"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "feedback_answers" ADD CONSTRAINT "feedback_answers_question_id_feedback_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."feedback_questions"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "feedback_forms" ADD CONSTRAINT "feedback_forms_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "feedback_invitations" ADD CONSTRAINT "feedback_invitations_form_id_feedback_forms_id_fk" FOREIGN KEY ("form_id") REFERENCES "public"."feedback_forms"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "feedback_invitations" ADD CONSTRAINT "feedback_invitations_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "feedback_questions" ADD CONSTRAINT "feedback_questions_form_id_feedback_forms_id_fk" FOREIGN KEY ("form_id") REFERENCES "public"."feedback_forms"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "invoices" ADD CONSTRAINT "invoices_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "invoices" ADD CONSTRAINT "invoices_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "invoices" ADD CONSTRAINT "invoices_payment_id_payments_id_fk" FOREIGN KEY ("payment_id") REFERENCES "public"."payments"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "cohorts" ADD CONSTRAINT "cohorts_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "cohorts" ADD CONSTRAINT "cohorts_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "cohort_participants" ADD CONSTRAINT "cohort_participants_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "cohort_participants" ADD CONSTRAINT "cohort_participants_cohort_id_cohorts_id_fk" FOREIGN KEY ("cohort_id") REFERENCES "public"."cohorts"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "cohort_participants" ADD CONSTRAINT "cohort_participants_student_id_students_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."students"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "certificate_templates" ADD CONSTRAINT "certificate_templates_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "certificate_templates" ADD CONSTRAINT "certificate_templates_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "certificate_templates" ADD CONSTRAINT "certificate_templates_cohort_id_cohorts_id_fk" FOREIGN KEY ("cohort_id") REFERENCES "public"."cohorts"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "issued_certificates" ADD CONSTRAINT "issued_certificates_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "issued_certificates" ADD CONSTRAINT "issued_certificates_cohort_id_cohorts_id_fk" FOREIGN KEY ("cohort_id") REFERENCES "public"."cohorts"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  ALTER TABLE "issued_certificates" ADD CONSTRAINT "issued_certificates_template_id_certificate_templates_id_fk" FOREIGN KEY ("template_id") REFERENCES "public"."certificate_templates"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "notif_tenant_idx" ON "notifications" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "notif_user_idx" ON "notifications" USING btree ("user_id","is_read","created_at");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "sv_tenant_idx" ON "saved_views" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "sv_user_idx" ON "saved_views" USING btree ("user_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cad_tenant_idx" ON "cadences" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cad_enabled_idx" ON "cadences" USING btree ("tenant_id","enabled");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lce_tenant_idx" ON "lead_cadence_enrollments" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lce_lead_idx" ON "lead_cadence_enrollments" USING btree ("lead_id","status");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lce_fire_idx" ON "lead_cadence_enrollments" USING btree ("status","next_fire_at");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "lce_cadence_idx" ON "lead_cadence_enrollments" USING btree ("cadence_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cal_tenant_time_idx" ON "crm_audit_log" USING btree ("tenant_id","created_at");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cal_entity_idx" ON "crm_audit_log" USING btree ("entity_id","created_at");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cal_actor_idx" ON "crm_audit_log" USING btree ("tenant_id","actor_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "contracts_tenant_idx" ON "contracts" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "contracts_tenant_date_idx" ON "contracts" USING btree ("tenant_id","contract_date");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "contracts_number_idx" ON "contracts" USING btree ("tenant_id","number");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "contracts_lead_idx" ON "contracts" USING btree ("lead_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "contracts_student_idx" ON "contracts" USING btree ("student_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "feedback_answers_invitation_idx" ON "feedback_answers" USING btree ("invitation_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "feedback_answers_question_idx" ON "feedback_answers" USING btree ("question_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "feedback_forms_tenant_idx" ON "feedback_forms" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "feedback_invitations_form_idx" ON "feedback_invitations" USING btree ("form_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "feedback_invitations_student_idx" ON "feedback_invitations" USING btree ("student_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "feedback_invitations_token_idx" ON "feedback_invitations" USING btree ("token");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "feedback_questions_form_idx" ON "feedback_questions" USING btree ("form_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "invoices_tenant_idx" ON "invoices" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "invoices_student_idx" ON "invoices" USING btree ("student_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "invoices_status_idx" ON "invoices" USING btree ("tenant_id","status");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "invoices_number_idx" ON "invoices" USING btree ("tenant_id","number");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "subscriptions_tenant_idx" ON "subscriptions" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "subscriptions_student_idx" ON "subscriptions" USING btree ("student_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "subscriptions_status_idx" ON "subscriptions" USING btree ("tenant_id","status");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "subscriptions_billing_idx" ON "subscriptions" USING btree ("tenant_id","next_billing_date");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cohorts_tenant_course_idx" ON "cohorts" USING btree ("tenant_id","course_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cohorts_tenant_start_idx" ON "cohorts" USING btree ("tenant_id","start_date");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cohort_participants_tenant_cohort_idx" ON "cohort_participants" USING btree ("tenant_id","cohort_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cohort_participants_cohort_idx" ON "cohort_participants" USING btree ("cohort_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cert_tmpl_tenant_global_idx" ON "certificate_templates" USING btree ("tenant_id","is_global");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "cert_tmpl_tenant_course_idx" ON "certificate_templates" USING btree ("tenant_id","course_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "issued_cert_tenant_idx" ON "issued_certificates" USING btree ("tenant_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "students_debt_idx" ON "students" USING btree ("tenant_id","debt_cents");
