@@ -3124,6 +3124,7 @@
       "phase": "1",
       "depends_on": ["MVP-004", "MVP-005"],
       "branch": "feat/MOB-faza-1-student-pwa",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/124",
       "reports": [
         "backlog/reports/MOB-101-reviewer.md",
         "backlog/reports/MOB-101-integration.md",
@@ -3146,6 +3147,7 @@
       "phase": "1",
       "depends_on": ["MOB-101"],
       "branch": "feat/MOB-faza-1-student-pwa",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/124",
       "reports": [
         "backlog/reports/MOB-102-reviewer.md",
         "backlog/reports/MOB-102-manager.md",
@@ -3167,6 +3169,7 @@
       "phase": "1",
       "depends_on": ["MOB-102", "COMM-201"],
       "branch": "feat/MOB-faza-1-student-pwa",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/124",
       "reports": [
         "backlog/reports/MOB-103-reviewer.md",
         "backlog/reports/MOB-103-manager.md",
