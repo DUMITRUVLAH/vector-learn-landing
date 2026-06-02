@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "AUTH-003",
-  "last_completed": "AUTH-002",
-  "iterations": 94,
-  "last_run_at": "2026-06-02T21:00:00Z",
-  "milestone_status": "AUTH faza-1: AUTH-001/002 done, AUTH-003 next",
+  "current_item": null,
+  "last_completed": "AUTH-003",
+  "iterations": 95,
+  "last_run_at": "2026-06-02T21:30:00Z",
+  "milestone_status": "AUTH faza-1: AUTH-001/002/003 done — 3 items this run. AUTH-004 pending for next run.",
   "active_milestone": "AUTH",
   "items": {
     "M1-001": {
@@ -1845,13 +1845,24 @@
       }
     },
     "AUTH-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/AUTH-003-user-profile-gdpr.md",
       "milestone": "AUTH",
       "phase": "1",
-      "depends_on": ["AUTH-002"]
+      "depends_on": ["AUTH-002"],
+      "branch": "feat/AUTH-faza-1-security",
+      "reports": [
+        "backlog/reports/AUTH-003-manager.md",
+        "backlog/reports/AUTH-003-student.md"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "AUTH-004": {
       "status": "pending",

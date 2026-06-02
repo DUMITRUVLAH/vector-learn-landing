@@ -232,6 +232,13 @@
       "when": 1780395301976,
       "tag": "0032_auth002_user_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780395542946,
+      "tag": "0033_auth003_user_profile_gdpr",
+      "breakpoints": true
     }
   ]
 }

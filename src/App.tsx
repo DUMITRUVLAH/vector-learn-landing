@@ -62,6 +62,7 @@ import { FormPublicPage } from "./pages/public/FormPublicPage";
 import { ForgotPasswordPage } from "./pages/app/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/app/ResetPasswordPage";
 import { AcceptInvitationPage } from "./pages/app/AcceptInvitationPage";
+import { ProfilePage } from "./pages/settings/ProfilePage";
 
 function HomePage() {
   return (
@@ -112,6 +113,8 @@ function Routes() {
   if (path.startsWith("/app/reset")) return <ResetPasswordPage />;
   // AUTH-002: accept team invitation (public, no auth required)
   if (path.startsWith("/app/accept-invitation")) return <AcceptInvitationPage />;
+  // AUTH-003: user profile + GDPR settings
+  if (path.startsWith("/app/settings/profile")) return <ProfilePage />;
   if (path.startsWith("/app/students")) return <StudentsPage />;
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;

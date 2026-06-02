@@ -21,6 +21,13 @@ export const users = pgTable(
     passwordHash: varchar("password_hash", { length: 255 }).notNull(),
     name: varchar("name", { length: 200 }).notNull(),
     role: userRoleEnum("role").notNull().default("manager"),
+    // AUTH-003: extended profile fields
+    phone: varchar("phone", { length: 50 }),
+    avatarUrl: varchar("avatar_url", { length: 2048 }),
+    language: varchar("language", { length: 10 }).default("ro"),
+    timezone: varchar("timezone", { length: 64 }).default("Europe/Bucharest"),
+    // AUTH-003: GDPR soft-delete (deleted_at = null means active)
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
