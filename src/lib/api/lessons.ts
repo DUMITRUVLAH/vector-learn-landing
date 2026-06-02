@@ -67,6 +67,17 @@ export function listCourses(): Promise<{ items: Course[] }> {
   return api<{ items: Course[] }>("/api/courses");
 }
 
+// SCHED-601: Reschedule lesson (drag-and-drop) via PATCH
+export function patchLesson(
+  id: string,
+  input: { scheduledAt?: string; teacherId?: string; durationMinutes?: number }
+): Promise<Lesson> {
+  return api<Lesson>(`/api/lessons/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
 export type AttendanceStatus = "present" | "absent" | "late" | "excused" | "pending";
 
 export interface LessonStudent {

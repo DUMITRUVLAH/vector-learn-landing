@@ -289,3 +289,11 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | KINDER-007 | 🟡 | Incident/accident reports + signature |
 | GUARDIAN-001 | 🔴 | Authorized-guardian model (multi-guardian, custody) |
 | CONSENT-001 | 🟡 | Consent/permission forms + e-signature |
+
+## Milestone: SCHED faza-6 — Calendar UX enhancements
+
+| ID | Title | Status | Spec |
+|----|-------|--------|------|
+| `SCHED-601` | Drag-and-drop reprogramare lecție în calendar | done ✅ | [specs/SCHED-601-drag-drop-reschedule.md](specs/SCHED-601-drag-drop-reschedule.md) |
+| `SCHED-602` | Înlocuitor profesor la lecție + notificare automată | pending | [specs/SCHED-602-teacher-substitute.md](specs/SCHED-602-teacher-substitute.md) |
+| `SCHED-603` | Filtrare orar per profesor + statistici încărcare săptămânală | pending | [specs/SCHED-603-schedule-view-by-teacher.md](specs/SCHED-603-schedule-view-by-teacher.md) |

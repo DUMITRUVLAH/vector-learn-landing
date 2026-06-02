@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo, useCallback, Fragment } from "react";
-import { Loader2, Plus, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw, Users, Lock } from "lucide-react";
+import { useEffect, useState, useMemo, useCallback, Fragment, useRef } from "react";
+import { Loader2, X, ChevronLeft, ChevronRight, AlertTriangle, Trash2, RefreshCw, Users, Lock } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -10,6 +10,7 @@ import {
   listCourses,
   createLesson,
   cancelLesson,
+  patchLesson,
   getLessonStudents,
   markAttendance,
   type Lesson,
@@ -76,6 +77,10 @@ export function SchedulePage() {
     | null
   >(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  // SCHED-601: drag-and-drop state
+  const draggingLessonId = useRef<string | null>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null); // "dayIdx:hour" key
+  const [rescheduling, setRescheduling] = useState<string | null>(null); // lessonId being saved
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -113,6 +118,49 @@ export function SchedulePage() {
   useEffect(() => {
     void fetchAll();
   }, [fetchAll]);
+
+  // SCHED-601: handle drag-and-drop reschedule
+  const handleDrop = useCallback(async (dayIdx: number, hour: number) => {
+    const lessonId = draggingLessonId.current;
+    if (!lessonId) return;
+    draggingLessonId.current = null;
+    setDragOver(null);
+
+    const lesson = lessons.find((l) => l.id === lessonId);
+    if (!lesson || lesson.status === "completed" || lesson.status === "cancelled") return;
+
+    const targetDate = addDays(weekStart, dayIdx);
+    targetDate.setHours(hour, 0, 0, 0);
+    const newScheduledAt = targetDate.toISOString();
+
+    // No-op if same slot
+    const origDate = new Date(lesson.scheduledAt);
+    if (
+      origDate.getDay() === targetDate.getDay() &&
+      origDate.getHours() === targetDate.getHours() &&
+      origDate.toDateString() === targetDate.toDateString()
+    ) return;
+
+    setRescheduling(lessonId);
+    try {
+      const updated = await patchLesson(lessonId, { scheduledAt: newScheduledAt });
+      setLessons((prev) => prev.map((l) => (l.id === lessonId ? { ...l, ...updated } : l)));
+      setToast({ kind: "success", message: "Lecție reprogramată" });
+    } catch (err) {
+      if (err instanceof ApiError && (err.code === "teacher_double_booked" || err.code === "room_double_booked")) {
+        setToast({
+          kind: "error",
+          message: err.code === "teacher_double_booked"
+            ? "Conflict: profesorul e deja rezervat în acel slot."
+            : "Conflict: sala e deja ocupată în acel slot.",
+        });
+      } else {
+        setToast({ kind: "error", message: "Nu pot reprograma lecția." });
+      }
+    } finally {
+      setRescheduling(null);
+    }
+  }, [lessons, weekStart]);
 
   const lessonsByCell = useMemo(() => {
     const map = new Map<string, Lesson[]>();
@@ -220,32 +268,61 @@ export function SchedulePage() {
                     {String(hour).padStart(2, "0")}:00
                   </div>
                   {DAYS.map((_, dayIdx) => {
-                    const cellLessons = lessonsByCell.get(`${dayIdx}:${hour}`) ?? [];
+                    const cellKey = `${dayIdx}:${hour}`;
+                    const cellLessons = lessonsByCell.get(cellKey) ?? [];
+                    const isDropTarget = dragOver === cellKey;
                     return (
                       <div
                         key={`${dayIdx}-${hour}`}
-                        className="border-b border-r border-border min-h-[68px] p-1 hover:bg-muted/20 cursor-pointer relative"
+                        className={cn(
+                          "border-b border-r border-border min-h-[68px] p-1 cursor-pointer relative transition-colors",
+                          isDropTarget ? "bg-primary/10 ring-1 ring-inset ring-primary/40" : "hover:bg-muted/20"
+                        )}
                         onClick={() => {
                           if (cellLessons.length === 0) setModal({ kind: "create", day: dayIdx, hour });
                         }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setDragOver(cellKey);
+                        }}
+                        onDragLeave={() => setDragOver(null)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          void handleDrop(dayIdx, hour);
+                        }}
                       >
-                        {cellLessons.map((l) => (
-                          <button
-                            key={l.id}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setModal({ kind: "view", lesson: l });
-                            }}
-                            className={cn(
-                              "block w-full text-left rounded-md p-1.5 text-[10px] mb-0.5 hover:shadow-md transition-all",
-                              courseColor(l.courseId)
-                            )}
-                          >
-                            <p className="font-bold truncate">{l.courseName}</p>
-                            <p className="opacity-80 truncate">{l.teacherName}</p>
-                          </button>
-                        ))}
+                        {cellLessons.map((l) => {
+                          const isMoving = rescheduling === l.id;
+                          const canDrag = l.status !== "completed" && l.status !== "cancelled";
+                          return (
+                            <button
+                              key={l.id}
+                              type="button"
+                              draggable={canDrag}
+                              onDragStart={() => {
+                                if (canDrag) draggingLessonId.current = l.id;
+                              }}
+                              onDragEnd={() => {
+                                draggingLessonId.current = null;
+                                setDragOver(null);
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setModal({ kind: "view", lesson: l });
+                              }}
+                              aria-label={`${l.courseName} – ${l.teacherName}. Trage pentru a reprograma.`}
+                              className={cn(
+                                "block w-full text-left rounded-md p-1.5 text-[10px] mb-0.5 hover:shadow-md transition-all",
+                                courseColor(l.courseId),
+                                canDrag && "cursor-grab active:cursor-grabbing",
+                                isMoving && "opacity-50"
+                              )}
+                            >
+                              <p className="font-bold truncate">{l.courseName}</p>
+                              <p className="opacity-80 truncate">{l.teacherName}</p>
+                            </button>
+                          );
+                        })}
                       </div>
                     );
                   })}
