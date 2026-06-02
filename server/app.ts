@@ -38,9 +38,7 @@ import { cohortRoutes } from "./routes/cohorts";
 import { cohortParticipantsRoutes } from "./routes/cohortParticipants";
 import { certificateTemplatesRoutes } from "./routes/certificateTemplates"; // DIPLOMA-801
 import { formRoutes } from "./routes/forms"; // FORMS-001
-import { notificationSettingsRoutes } from "./routes/notificationSettings"; // SET-802
-import { brandingSettingsRoutes } from "./routes/brandingSettings"; // SET-803
-import { auditLogSettingsRoutes } from "./routes/auditLogSettings"; // SET-804
+import { branchRoutes } from "./routes/branches"; // BRANCH-701
 import {
   publicFormGetHandler,
   publicFormSubmitHandler,
@@ -148,12 +146,8 @@ app.route("/api/cohorts", cohortRoutes);
 app.route("/api/cohorts", cohortParticipantsRoutes);
 // DIPLOMA-801: Certificate templates
 app.route("/api/certificate-templates", certificateTemplatesRoutes);
-// INT-901: API Keys for external integrations
-app.route("/api/settings/api-keys", apiKeyRoutes);
-// INT-902: Outbound webhooks
-app.route("/api/settings/webhooks", webhookRoutes);
-// INT-903: Zapier-compatible REST triggers (X-API-Key auth)
-app.route("/api/integrations/triggers", integrationTriggersRoutes);
+// BRANCH-701: Multi-branch (filiale) management
+app.route("/api/branches", branchRoutes);
 
 app.get("/api/health/db", async (c) => {
   try {

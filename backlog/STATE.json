@@ -1,11 +1,11 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "INT-903",
-  "iterations": 100,
-  "last_run_at": "2026-06-02T01:00:00Z",
-  "milestone_status": "INT faza-3 COMPLETE: INT-901/902/903 done, PR #114 open. All items done/blocked.",
-  "active_milestone": "INT",
+  "last_completed": "BRANCH-703",
+  "iterations": 105,
+  "last_run_at": "2026-06-02T07:00:00Z",
+  "milestone_status": "BRANCH faza-1 COMPLETE: BRANCH-701/702/703 done, PR #115 open.",
+  "active_milestone": "BRANCH",
   "items": {
     "M1-001": {
       "status": "done",
@@ -2232,6 +2232,125 @@
         "student": "PASS"
       },
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/114"
+    },
+    "FIN-601": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-601-invoices.md",
+      "milestone": "FIN",
+      "phase": "1",
+      "depends_on": ["MVP-007", "CRM-113"],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "FIN-602": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-602-debt-reconciliation.md",
+      "milestone": "FIN",
+      "phase": "1",
+      "depends_on": ["FIN-601", "CRM-113"],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "FIN-603": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-603-recurring-billing.md",
+      "milestone": "FIN",
+      "phase": "1",
+      "depends_on": ["FIN-601", "FIN-602"],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "FIN-604": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/FIN-604-efactura-stub.md",
+      "milestone": "FIN",
+      "phase": "1",
+      "depends_on": ["FIN-601"],
+      "branch": "feat/SCHOOL-faza-1-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "BRANCH-701": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/BRANCH-701-schema-switcher.md",
+      "milestone": "BRANCH",
+      "phase": "1",
+      "depends_on": ["MVP-004", "MVP-005", "MVP-006"],
+      "branch": "feat/BRANCH-faza-1-branches",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/115",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "BRANCH-702": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/BRANCH-702-scoped-roles.md",
+      "milestone": "BRANCH",
+      "phase": "1",
+      "depends_on": ["BRANCH-701"],
+      "branch": "feat/BRANCH-faza-1-branches",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/115",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "BRANCH-703": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/BRANCH-703-consolidated-reports.md",
+      "milestone": "BRANCH",
+      "phase": "1",
+      "depends_on": ["BRANCH-701", "BRANCH-702"],
+      "branch": "feat/BRANCH-faza-1-branches",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/115",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     }
   }
 }

@@ -1,153 +1,412 @@
 /**
- * BRANCH-702 — /app/branches
- *
- * Branch management page: list all branches, create new, edit, delete.
- * Shows the BranchSwitcher in action.
+ * BRANCH-701: Branches (Filiale) management page + consolidated/per-branch stats view
+ * Route: /app/branches
  */
 import { useEffect, useState } from "react";
+import { Plus, Building2, Users, GraduationCap, TrendingUp, Trash2, UserCheck } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
-import { useSession } from "@/hooks/useSession";
-import {
-  getBranches,
-  createBranch,
-  updateBranch,
-  deleteBranch,
-  type Branch,
-  type CreateBranchPayload,
-} from "@/lib/api/branches";
-import { Building2, Plus, Loader2, AlertCircle, Pencil, Trash2, CheckCircle2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  listBranches,
+  getBranchStats,
+  getBranchRollup,
+  createBranch,
+  deleteBranch,
+  assignManager,
+  type Branch,
+  type BranchStats,
+  type BranchRollup,
+} from "@/lib/api/branches";
+import { formatCents } from "@/lib/utils";
 
-// ─── Create/Edit Dialog ────────────────────────────────────────────────────────
+type ViewMode = "consolidated" | "per-branch" | "managers";
 
-interface BranchDialogProps {
-  initial?: Branch | null;
-  onClose: () => void;
-  onSaved: (branch: Branch) => void;
+export function BranchesPage() {
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [stats, setStats] = useState<BranchStats[]>([]);
+  const [rollup, setRollup] = useState<BranchRollup | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("consolidated");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Branch | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; email: string; role: string }[]>([]);
+  const [assignTarget, setAssignTarget] = useState<Branch | null>(null);
+
+  const loadData = () => {
+    setLoading(true);
+    Promise.all([listBranches(), getBranchStats(), getBranchRollup()])
+      .then(([branchesData, statsData, rollupData]) => {
+        setBranches(branchesData.items);
+        setStats(statsData.items);
+        setRollup(rollupData);
+        setError(null);
+      })
+      .catch(() => setError("Nu s-au putut încărca filialele."))
+      .finally(() => setLoading(false));
+  };
+
+  const loadTeam = () => {
+    if (typeof fetch === "undefined") return;
+    const p = fetch("/api/team/members", { credentials: "include" });
+    if (!p || typeof p.then !== "function") return;
+    p
+      .then((r) => r.ok ? r.json() as Promise<{ items: { id: string; name: string; email: string; role: string }[] }> : Promise.reject())
+      .then(({ items }) => setTeamMembers(items))
+      .catch(() => { /* silently ignore */ });
+  };
+
+  useEffect(() => {
+    loadData();
+    loadTeam();
+  }, []);
+
+  const handleDeleteBranch = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteBranch(deleteTarget.id);
+      setDeleteTarget(null);
+      setDeleteError(null);
+      loadData();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Eroare la ștergere.");
+    }
+  };
+
+  return (
+    <AppShell
+      pageTitle="Filiale"
+      pageDescription="Gestionează filialele (locațiile) academiei tale."
+      actions={
+        <button
+          type="button"
+          onClick={() => setShowAddModal(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Adaugă filială
+        </button>
+      }
+    >
+      <div className="space-y-6">
+        {/* View toggle */}
+        <div className="flex items-center gap-2">
+          {(["consolidated", "per-branch", "managers"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewMode(mode)}
+              className={cn(
+                "px-3 py-1.5 text-sm rounded-md border transition-colors",
+                viewMode === mode
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background border-border hover:bg-muted"
+              )}
+            >
+              {mode === "consolidated" ? "Consolidat" : mode === "per-branch" ? "Per filială" : "Manageri"}
+            </button>
+          ))}
+        </div>
+
+        {loading && (
+          <p className="text-sm text-muted-foreground animate-pulse">Se încarcă...</p>
+        )}
+
+        {error && (
+          <p className="text-sm text-destructive">{error}</p>
+        )}
+
+        {!loading && !error && viewMode === "consolidated" && rollup && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <KpiCard
+              icon={Building2}
+              label="Filiale active"
+              value={String(rollup.totalBranches)}
+            />
+            <KpiCard
+              icon={Users}
+              label="Total elevi"
+              value={String(rollup.totalStudents)}
+            />
+            <KpiCard
+              icon={GraduationCap}
+              label="Total profesori"
+              value={String(rollup.totalTeachers)}
+            />
+            <KpiCard
+              icon={TrendingUp}
+              label="Venit luna curentă"
+              value={formatCents(rollup.totalRevenue)}
+            />
+          </div>
+        )}
+
+        {!loading && !error && viewMode === "per-branch" && (
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-4 py-3 border-b border-border">
+              <h2 className="text-sm font-semibold">Statistici per filială</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Filială</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Elevi</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Profesori</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Venit lună</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-muted-foreground"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {stats.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                        Nu există filiale. Adaugă prima filială.
+                      </td>
+                    </tr>
+                  )}
+                  {stats.map((s) => {
+                    const branch = branches.find((b) => b.id === s.branchId);
+                    return (
+                      <tr key={s.branchId} className="hover:bg-muted/30">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <span className="font-medium">{s.branchName}</span>
+                            {s.isDefault && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                                implicit
+                              </span>
+                            )}
+                          </div>
+                          {s.address && (
+                            <p className="text-xs text-muted-foreground mt-0.5 ml-6">{s.address}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">{s.studentCount}</td>
+                        <td className="px-4 py-3 text-right">{s.teacherCount}</td>
+                        <td className="px-4 py-3 text-right">{formatCents(s.revenueCurrentMonth)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            aria-label={`Șterge filiala ${s.branchName}`}
+                            onClick={() => { if (branch) setDeleteTarget(branch); }}
+                            className="p-1 rounded hover:bg-destructive/10 text-destructive transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Managers tab */}
+        {!loading && !error && viewMode === "managers" && (
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-4 py-3 border-b border-border">
+              <h2 className="text-sm font-semibold">Manageri per filială</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Filială</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Manager</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Acțiuni</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {branches.map((branch) => {
+                    const manager = teamMembers.find((m) => m.id === branch.managerUserId);
+                    return (
+                      <tr key={branch.id} className="hover:bg-muted/30">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <span className="font-medium">{branch.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {manager ? (
+                            <div className="flex items-center gap-2">
+                              <UserCheck className="h-4 w-4 text-green-600 shrink-0" />
+                              <span>{manager.name}</span>
+                              <span className="text-xs text-muted-foreground">({manager.email})</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">Neasignat</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setAssignTarget(branch)}
+                            className="px-2 py-1 text-xs rounded border border-border hover:bg-muted transition-colors"
+                          >
+                            Asignează manager
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {!loading && !error && branches.length === 0 && (
+          <div className="text-center py-12 text-muted-foreground">
+            <Building2 className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">Nicio filială definită.</p>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border border-border hover:bg-muted transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Adaugă prima filială
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Add Branch Modal */}
+      {showAddModal && (
+        <AddBranchModal
+          onClose={() => setShowAddModal(false)}
+          onCreated={() => {
+            setShowAddModal(false);
+            loadData();
+          }}
+        />
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleteTarget && (
+        <ConfirmDeleteModal
+          branchName={deleteTarget.name}
+          error={deleteError}
+          onCancel={() => { setDeleteTarget(null); setDeleteError(null); }}
+          onConfirm={handleDeleteBranch}
+        />
+      )}
+
+      {/* Assign Manager modal */}
+      {assignTarget && (
+        <AssignManagerModal
+          branch={assignTarget}
+          teamMembers={teamMembers}
+          onClose={() => setAssignTarget(null)}
+          onAssigned={() => { setAssignTarget(null); loadData(); }}
+        />
+      )}
+    </AppShell>
+  );
 }
 
-function BranchDialog({ initial, onClose, onSaved }: BranchDialogProps) {
-  const [form, setForm] = useState<CreateBranchPayload>({
-    name: initial?.name ?? "",
-    address: initial?.address ?? "",
-    isDefault: initial?.isDefault ?? false,
-  });
+interface KpiCardProps {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}
+
+function KpiCard({ icon: Icon, label, value }: KpiCardProps) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-1">
+      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </p>
+      <p className="text-2xl font-bold tracking-tight">{value}</p>
+    </div>
+  );
+}
+
+interface AddBranchModalProps {
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+function AddBranchModal({ onClose, onCreated }: AddBranchModalProps) {
+  const [name, setName] = useState("");
+  const [address, setAddress] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) {
+    if (!name.trim()) {
       setError("Numele filialei este obligatoriu.");
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      if (initial) {
-        const result = await updateBranch(initial.id, form);
-        onSaved(result.branch);
-      } else {
-        const result = await createBranch(form);
-        onSaved(result.branch);
-      }
+      await createBranch({ name: name.trim(), address: address.trim() || null });
+      onCreated();
     } catch {
-      setError("Eroare la salvare. Încercați din nou.");
+      setError("Nu s-a putut crea filiala. Încearcă din nou.");
     } finally {
       setSaving(false);
     }
-  }
-
-  const inputCls =
-    "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50";
-  const labelCls = "block text-sm font-medium text-foreground mb-1";
+  };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={initial ? "Editare filială" : "Filială nouă"}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-    >
-      <div className="w-full max-w-md rounded-xl bg-card border border-border shadow-2xl">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="text-base font-semibold text-foreground">
-            {initial ? "Editare filială" : "Filială nouă"}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 hover:bg-muted"
-            aria-label="Închide dialog"
-          >
-            <X className="h-4 w-4 text-muted-foreground" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          {error && (
-            <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label className={labelCls} htmlFor="branch-name">
-              Denumire filială <span className="text-destructive">*</span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-card rounded-lg border border-border shadow-xl p-6 w-full max-w-sm mx-4 z-10">
+        <h2 className="text-base font-semibold mb-1">Adaugă filială nouă</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Definește o nouă locație / filială sub acest tenant.
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label htmlFor="branch-name" className="text-sm font-medium">
+              Nume filială <span className="text-destructive">*</span>
             </label>
             <input
               id="branch-name"
-              type="text"
-              placeholder="ex. Filiala Cluj"
-              value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-              className={inputCls}
-              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="ex: București Nord"
+              disabled={saving}
+              className="w-full px-3 py-2 text-sm rounded-md border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
             />
           </div>
-
-          <div>
-            <label className={labelCls} htmlFor="branch-address">
-              Adresă (opțional)
-            </label>
+          <div className="space-y-1">
+            <label htmlFor="branch-address" className="text-sm font-medium">Adresă</label>
             <input
               id="branch-address"
-              type="text"
-              placeholder="Str. Principală 1, Cluj-Napoca"
-              value={form.address ?? ""}
-              onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
-              className={inputCls}
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="ex: Str. Victoriei 12, București"
+              disabled={saving}
+              className="w-full px-3 py-2 text-sm rounded-md border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
             />
           </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              id="branch-default"
-              type="checkbox"
-              checked={form.isDefault ?? false}
-              onChange={(e) => setForm((p) => ({ ...p, isDefault: e.target.checked }))}
-              className="h-4 w-4 rounded border-border"
-            />
-            <label htmlFor="branch-default" className="text-sm text-foreground cursor-pointer">
-              Setează ca filială implicită
-            </label>
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-2">
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-muted"
+              disabled={saving}
+              className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-muted transition-colors disabled:opacity-50"
             >
-              Anulare
+              Anulează
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm text-white hover:bg-primary/90 disabled:opacity-50"
+              className="px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {initial ? "Salvează" : "Crează filială"}
+              {saving ? "Se salvează..." : "Adaugă filială"}
             </button>
           </div>
         </form>
@@ -156,200 +415,115 @@ function BranchDialog({ initial, onClose, onSaved }: BranchDialogProps) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+interface AssignManagerModalProps {
+  branch: Branch;
+  teamMembers: { id: string; name: string; email: string; role: string }[];
+  onClose: () => void;
+  onAssigned: () => void;
+}
 
-export default function BranchesPage() {
-  const { data: session } = useSession();
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [loading, setLoading] = useState(true);
+function AssignManagerModal({ branch, teamMembers, onClose, onAssigned }: AssignManagerModalProps) {
+  const [selectedUserId, setSelectedUserId] = useState(branch.managerUserId ?? "");
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showDialog, setShowDialog] = useState(false);
-  const [editBranch, setEditBranch] = useState<Branch | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  async function load() {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
-      const data = await getBranches();
-      setBranches(data.branches);
+      await assignManager(branch.id, selectedUserId || null);
+      onAssigned();
     } catch {
-      setError("Eroare la încărcarea filialelor.");
+      setError("Nu s-a putut asigna managerul. Încearcă din nou.");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
-  }
-
-  useEffect(() => {
-    if (session) load();
-  }, [session]);
-
-  function handleSaved(branch: Branch) {
-    setBranches((prev) => {
-      const idx = prev.findIndex((b) => b.id === branch.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = branch;
-        return next;
-      }
-      return [...prev, branch];
-    });
-    setShowDialog(false);
-    setEditBranch(null);
-  }
-
-  async function handleDelete(branch: Branch) {
-    if (branch.isDefault) {
-      setDeleteError("Nu puteți șterge filiala implicită.");
-      return;
-    }
-    if (!window.confirm(`Ștergeți filiala "${branch.name}"? Această acțiune nu poate fi anulată.`)) {
-      return;
-    }
-    setDeletingId(branch.id);
-    setDeleteError(null);
-    try {
-      await deleteBranch(branch.id);
-      setBranches((prev) => prev.filter((b) => b.id !== branch.id));
-    } catch {
-      setDeleteError("Eroare la ștergere. Încercați din nou.");
-    } finally {
-      setDeletingId(null);
-    }
-  }
+  };
 
   return (
-    <AppShell
-      pageTitle="Filiale"
-      pageDescription="Gestionați locațiile rețelei dumneavoastră"
-      actions={
-        <button
-          type="button"
-          onClick={() => {
-            setEditBranch(null);
-            setShowDialog(true);
-          }}
-          className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm text-white hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          Filială nouă
-        </button>
-      }
-    >
-      {deleteError && (
-        <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive mb-4">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          {deleteError}
-        </div>
-      )}
+    <div className="fixed inset-0 z-50 flex items-center justify-center" data-testid="assign-manager-modal">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-card rounded-lg border border-border shadow-xl p-6 w-full max-w-sm mx-4 z-10">
+        <h2 className="text-base font-semibold mb-1">Asignează manager</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Filiala: <strong>{branch.name}</strong>
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label htmlFor="manager-select" className="text-sm font-medium">Utilizator manager</label>
+            <select
+              id="manager-select"
+              value={selectedUserId}
+              onChange={(e) => setSelectedUserId(e.target.value)}
+              disabled={saving}
+              className="w-full px-3 py-2 text-sm rounded-md border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+            >
+              <option value="">— Neasignat —</option>
+              {teamMembers.map((m) => (
+                <option key={m.id} value={m.id}>{m.name} ({m.role})</option>
+              ))}
+            </select>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-muted transition-colors disabled:opacity-50"
+            >
+              Anulează
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {saving ? "Se salvează..." : "Salvează"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
-      {error && (
-        <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          {error}
-        </div>
-      )}
+interface ConfirmDeleteModalProps {
+  branchName: string;
+  error: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
 
-      {loading && (
-        <div className="flex items-center justify-center py-16 text-muted-foreground">
-          <Loader2 className="h-6 w-6 animate-spin mr-2" />
-          Se încarcă...
-        </div>
-      )}
-
-      {!loading && !error && branches.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Building2 className="h-12 w-12 text-muted-foreground/30 mb-4" />
-          <p className="text-muted-foreground">Nu există filiale configurate.</p>
+function ConfirmDeleteModal({ branchName, error, onCancel, onConfirm }: ConfirmDeleteModalProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative bg-card rounded-lg border border-border shadow-xl p-6 w-full max-w-sm mx-4 z-10">
+        <h2 className="text-base font-semibold mb-1">Șterge filiala</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Sigur vrei să ștergi filiala <strong>{branchName}</strong>?
+          Această acțiune este ireversibilă. Filiala nu poate fi ștearsă dacă are elevi asignați.
+        </p>
+        {error && <p className="text-sm text-destructive mb-3">{error}</p>}
+        <div className="flex justify-end gap-2">
           <button
             type="button"
-            onClick={() => setShowDialog(true)}
-            className="mt-4 flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm text-white hover:bg-primary/90"
+            onClick={onCancel}
+            className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-muted transition-colors"
           >
-            <Plus className="h-4 w-4" />
-            Creează prima filială
+            Anulează
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="px-3 py-1.5 text-sm rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+          >
+            Șterge
           </button>
         </div>
-      )}
-
-      {!loading && !error && branches.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {branches.map((branch) => (
-            <div
-              key={branch.id}
-              className="rounded-xl border border-border bg-card p-5 space-y-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Building2 className="h-5 w-5 text-primary flex-shrink-0" aria-hidden="true" />
-                  <h3 className="font-semibold text-foreground truncate">{branch.name}</h3>
-                </div>
-                {branch.isDefault && (
-                  <span className="flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/30 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-300 flex-shrink-0">
-                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                    Implicită
-                  </span>
-                )}
-              </div>
-
-              {branch.address && (
-                <p className="text-sm text-muted-foreground">{branch.address}</p>
-              )}
-
-              <p className="text-xs text-muted-foreground">
-                Creată: {new Date(branch.createdAt).toLocaleDateString("ro-RO")}
-              </p>
-
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditBranch(branch);
-                    setShowDialog(true);
-                  }}
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
-                  aria-label={`Editare ${branch.name}`}
-                >
-                  <Pencil className="h-3 w-3" aria-hidden="true" />
-                  Editare
-                </button>
-
-                {!branch.isDefault && (
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(branch)}
-                    disabled={deletingId === branch.id}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-lg border border-destructive/30 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10",
-                      deletingId === branch.id && "opacity-50 cursor-not-allowed"
-                    )}
-                    aria-label={`Ștergere ${branch.name}`}
-                  >
-                    {deletingId === branch.id ? (
-                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Trash2 className="h-3 w-3" aria-hidden="true" />
-                    )}
-                    Ștergere
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {showDialog && (
-        <BranchDialog
-          initial={editBranch}
-          onClose={() => {
-            setShowDialog(false);
-            setEditBranch(null);
-          }}
-          onSaved={handleSaved}
-        />
-      )}
-    </AppShell>
+      </div>
+    </div>
   );
 }

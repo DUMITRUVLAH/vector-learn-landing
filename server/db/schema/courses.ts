@@ -14,14 +14,14 @@ export const courses = pgTable(
     level: varchar("level", { length: 32 }),
     defaultPriceCents: integer("default_price_cents").notNull().default(0),
     durationMinutes: integer("duration_minutes").notNull().default(60),
-    /** BRANCH-701: Optional branch assignment */
-    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
+    /** BRANCH-701: Optional branch assignment for branch-specific course offerings */
+    branchId: uuid("branch_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     tenantIdx: index("courses_tenant_idx").on(t.tenantId),
-    branchIdx: index("courses_branch_idx").on(t.branchId),
+    branchIdx: index("courses_branch_idx").on(t.tenantId, t.branchId),
   })
 );
 

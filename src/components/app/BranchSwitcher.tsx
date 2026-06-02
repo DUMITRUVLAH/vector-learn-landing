@@ -1,106 +1,91 @@
 /**
- * BRANCH-702 — BranchSwitcher
- *
- * Dropdown in AppShell header to switch between branches.
- * Visible only when tenant has ≥ 2 branches or the user is owner/admin.
- * Shows "Toate filialele" (null) + one option per branch.
+ * BRANCH-701: Branch Switcher dropdown
+ * Allows switching between "Toate filialele" and a specific branch.
+ * Stores selection in localStorage via useBranch hook.
  */
+import { useEffect, useRef, useState } from "react";
 import { Building2, ChevronDown } from "lucide-react";
+import { useBranch } from "@/hooks/useBranch";
+import { listBranches, type Branch } from "@/lib/api/branches";
 import { cn } from "@/lib/utils";
-import { useBranch } from "@/contexts/BranchContext";
 
 export function BranchSwitcher() {
-  const { activeBranchId, setActiveBranchId, branches, loading } = useBranch();
+  const [activeBranchId, setActiveBranch] = useBranch();
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-  // Don't render if there's only one (or zero) branch
-  if (loading || branches.length < 2) return null;
+  useEffect(() => {
+    setLoading(true);
+    listBranches()
+      .then(({ items }) => setBranches(items))
+      .catch(() => {/* silently ignore — branch switcher is optional UI */})
+      .finally(() => setLoading(false));
+  }, []);
 
-  const activeBranch = branches.find((b) => b.id === activeBranchId) ?? null;
-  const label = activeBranch?.name ?? "Toate filialele";
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Don't render if there's only 0–1 branch (no point switching)
+  if (!loading && branches.length <= 1) return null;
+
+  const activeBranch = branches.find((b) => b.id === activeBranchId);
+  const label = activeBranch ? activeBranch.name : "Toate filialele";
 
   return (
-    <div className="relative group">
+    <div ref={ref} className="relative hidden sm:block">
       <button
         type="button"
-        className={cn(
-          "flex items-center gap-1.5 rounded-lg border border-border bg-background/50 px-2.5 py-1.5 text-sm text-foreground hover:bg-muted",
-          "focus:outline-none focus:ring-2 focus:ring-primary/50"
-        )}
-        aria-label={`Filială activă: ${label}`}
-        aria-haspopup="listbox"
-        aria-expanded="false"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Schimbă filiala activă"
+        aria-expanded={open}
+        className="flex items-center gap-1.5 h-8 px-2 text-xs rounded-md border border-border bg-background hover:bg-muted transition-colors"
       >
-        <Building2 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+        <Building2 className="h-3.5 w-3.5 shrink-0" />
         <span className="max-w-[120px] truncate">{label}</span>
-        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+        <ChevronDown className={cn("h-3 w-3 ml-0.5 opacity-60 shrink-0 transition-transform", open && "rotate-180")} />
       </button>
-
-      {/* Dropdown */}
-      <div
-        role="listbox"
-        aria-label="Selectare filială"
-        className={cn(
-          "absolute right-0 top-full mt-1 z-50 min-w-[200px] rounded-xl border border-border bg-card shadow-xl",
-          "invisible opacity-0 group-focus-within:visible group-focus-within:opacity-100",
-          "transition-all duration-150"
-        )}
-      >
-        <div className="p-1">
-          {/* "All branches" option */}
+      {open && (
+        <div className="absolute right-0 top-9 z-50 min-w-[180px] rounded-md border border-border bg-popover shadow-md py-1">
+          <p className="px-3 py-1 text-[10px] text-muted-foreground uppercase tracking-wide">Filială activă</p>
+          <hr className="border-border mb-1" />
           <button
             type="button"
-            role="option"
-            aria-selected={activeBranchId === null}
-            onClick={() => setActiveBranchId(null)}
+            onMouseDown={() => { setActiveBranch(null); setOpen(false); }}
             className={cn(
-              "w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-left",
-              "hover:bg-muted focus:outline-none focus:bg-muted",
-              activeBranchId === null
-                ? "bg-primary/10 text-primary font-medium"
-                : "text-foreground"
+              "w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left",
+              activeBranchId === null && "bg-muted font-medium"
             )}
           >
-            <Building2 className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+            <Building2 className="h-3.5 w-3.5 opacity-60" />
             Toate filialele
           </button>
-
-          {branches.length > 0 && (
-            <div className="my-1 border-t border-border" role="separator" />
-          )}
-
-          {/* Individual branches */}
           {branches.map((branch) => (
             <button
               key={branch.id}
               type="button"
-              role="option"
-              aria-selected={activeBranchId === branch.id}
-              onClick={() => setActiveBranchId(branch.id)}
+              onMouseDown={() => { setActiveBranch(branch.id); setOpen(false); }}
               className={cn(
-                "w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-left",
-                "hover:bg-muted focus:outline-none focus:bg-muted",
-                activeBranchId === branch.id
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "text-foreground"
+                "w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left",
+                activeBranchId === branch.id && "bg-muted font-medium"
               )}
             >
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full flex-shrink-0",
-                  branch.isDefault ? "bg-green-500" : "bg-blue-500"
-                )}
-                aria-hidden="true"
-              />
-              <span className="truncate">{branch.name}</span>
+              <Building2 className="h-3.5 w-3.5 opacity-60" />
+              <span className="flex-1 truncate">{branch.name}</span>
               {branch.isDefault && (
-                <span className="ml-auto text-xs text-muted-foreground flex-shrink-0">
-                  implicită
-                </span>
+                <span className="text-[10px] text-muted-foreground">implicit</span>
               )}
             </button>
           ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }

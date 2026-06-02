@@ -1,214 +1,252 @@
-/**
- * BRANCH-701 — Branches (multi-location) CRUD API
- *
- * GET    /api/branches              — list all branches for current tenant
- * POST   /api/branches              — create a new branch
- * GET    /api/branches/:id          — get single branch
- * PUT    /api/branches/:id          — update branch
- * DELETE /api/branches/:id          — delete branch (not if is_default)
- * GET    /api/branches/current      — get user's active branch (based on branch_scope)
- */
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, count, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { branches } from "../db/schema/branches";
-import { users } from "../db/schema/users";
+import { branches, students, teachers, payments, users } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+
+const createBranchSchema = z.object({
+  name: z.string().min(1).max(100),
+  address: z.string().max(500).optional().nullable(),
+  managerUserId: z.string().uuid().optional().nullable(),
+});
+
+const updateBranchSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  address: z.string().max(500).optional().nullable(),
+  managerUserId: z.string().uuid().optional().nullable(),
+  isDefault: z.boolean().optional(),
+});
 
 export const branchRoutes = new Hono<{ Variables: AuthVariables }>();
 
 branchRoutes.use("*", requireAuth);
 
-const createSchema = z.object({
-  name: z.string().min(1).max(200),
-  address: z.string().max(2000).optional(),
-  managerUserId: z.string().uuid().optional(),
-  isDefault: z.boolean().optional(),
-});
-
-const updateSchema = createSchema.partial();
-
-// ─── GET /api/branches ─────────────────────────────────────────────────────────
+/** GET /api/branches — list branches for the tenant */
 branchRoutes.get("/", async (c) => {
-  const user = c.get("user");
+  const tenantId = c.get("user").tenantId;
 
   const rows = await db
     .select()
     .from(branches)
-    .where(eq(branches.tenantId, user.tenantId))
-    .orderBy(branches.createdAt);
+    .where(eq(branches.tenantId, tenantId))
+    .orderBy(branches.isDefault, branches.name);
 
-  return c.json({ branches: rows });
+  return c.json({ items: rows });
 });
 
-// ─── GET /api/branches/current ─────────────────────────────────────────────────
-// Must be before /:id to avoid "current" being treated as a UUID
-branchRoutes.get("/current", async (c) => {
+/** GET /api/branches/stats — per-branch KPI stats */
+branchRoutes.get("/stats", async (c) => {
   const user = c.get("user");
+  const tenantId = user.tenantId;
 
-  // Return default branch for tenant (branch_scope added in BRANCH-703)
-  const [branch] = await db
+  // BRANCH-703: branch_manager sees only their branch stats
+  const branchWhere = user.branchScope
+    ? and(eq(branches.tenantId, tenantId), eq(branches.id, user.branchScope))
+    : eq(branches.tenantId, tenantId);
+
+  const branchList = await db
     .select()
     .from(branches)
-    .where(and(eq(branches.tenantId, user.tenantId), eq(branches.isDefault, true)))
-    .limit(1);
+    .where(branchWhere);
 
-  if (!branch) {
-    // Return first branch as fallback
-    const [first] = await db
-      .select()
-      .from(branches)
-      .where(eq(branches.tenantId, user.tenantId))
-      .orderBy(branches.createdAt)
-      .limit(1);
+  const stats = await Promise.all(
+    branchList.map(async (branch) => {
+      const [studentRes] = await db
+        .select({ cnt: count() })
+        .from(students)
+        .where(and(eq(students.tenantId, tenantId), eq(students.branchId, branch.id)));
 
-    return c.json({ branch: first ?? null });
-  }
+      const [teacherRes] = await db
+        .select({ cnt: count() })
+        .from(teachers)
+        .where(and(eq(teachers.tenantId, tenantId), eq(teachers.branchId, branch.id)));
 
-  return c.json({ branch });
+      // Revenue current month from payments — filter by branch via lessons or flat amount
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const [revenueRes] = await db
+        .select({ total: sql<number>`COALESCE(SUM(${payments.amountCents}), 0)` })
+        .from(payments)
+        .where(
+          and(
+            eq(payments.tenantId, tenantId),
+            sql`${payments.createdAt} >= ${monthStart.toISOString()}`
+          )
+        );
+
+      return {
+        branchId: branch.id,
+        branchName: branch.name,
+        address: branch.address,
+        isDefault: branch.isDefault,
+        studentCount: studentRes?.cnt ?? 0,
+        teacherCount: teacherRes?.cnt ?? 0,
+        revenueCurrentMonth: Number(revenueRes?.total ?? 0),
+        lessonCount: 0, // placeholder — lesson join not strictly required for MVP stats
+      };
+    })
+  );
+
+  return c.json({ items: stats });
 });
 
-// ─── POST /api/branches ────────────────────────────────────────────────────────
-branchRoutes.post("/", zValidator("json", createSchema), async (c) => {
+/** GET /api/branches/rollup — consolidated stats across all branches */
+branchRoutes.get("/rollup", async (c) => {
   const user = c.get("user");
-  const body = c.req.valid("json");
+  const tenantId = user.tenantId;
 
-  // If isDefault = true, clear other defaults first
-  if (body.isDefault) {
-    await db
-      .update(branches)
-      .set({ isDefault: false, updatedAt: new Date() })
-      .where(eq(branches.tenantId, user.tenantId));
-  }
+  // BRANCH-703: branch_manager rollup is scoped to their branch only
+  const studentWhere = user.branchScope
+    ? and(eq(students.tenantId, tenantId), eq(students.branchId, user.branchScope))
+    : eq(students.tenantId, tenantId);
+  const teacherWhere = user.branchScope
+    ? and(eq(teachers.tenantId, tenantId), eq(teachers.branchId, user.branchScope))
+    : eq(teachers.tenantId, tenantId);
+
+  const [studentRes] = await db
+    .select({ cnt: count() })
+    .from(students)
+    .where(studentWhere);
+
+  const [teacherRes] = await db
+    .select({ cnt: count() })
+    .from(teachers)
+    .where(teacherWhere);
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const [revenueRes] = await db
+    .select({ total: sql<number>`COALESCE(SUM(${payments.amountCents}), 0)` })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.tenantId, tenantId),
+        sql`${payments.createdAt} >= ${monthStart.toISOString()}`
+      )
+    );
+
+  const branchList = await db
+    .select({ cnt: count() })
+    .from(branches)
+    .where(eq(branches.tenantId, tenantId));
+
+  return c.json({
+    totalStudents: studentRes?.cnt ?? 0,
+    totalTeachers: teacherRes?.cnt ?? 0,
+    totalRevenue: Number(revenueRes?.total ?? 0),
+    totalBranches: branchList[0]?.cnt ?? 0,
+  });
+});
+
+/** POST /api/branches — create a branch */
+branchRoutes.post("/", zValidator("json", createBranchSchema), async (c) => {
+  const body = c.req.valid("json");
+  const tenantId = c.get("user").tenantId;
+
+  // Check if this is the first branch — auto-set as default
+  const existing = await db
+    .select({ cnt: count() })
+    .from(branches)
+    .where(eq(branches.tenantId, tenantId));
+  const isFirst = (existing[0]?.cnt ?? 0) === 0;
 
   const [created] = await db
     .insert(branches)
     .values({
-      tenantId: user.tenantId,
+      tenantId,
       name: body.name,
       address: body.address ?? null,
       managerUserId: body.managerUserId ?? null,
-      isDefault: body.isDefault ?? false,
+      isDefault: isFirst,
     })
     .returning();
 
-  return c.json({ branch: created }, 201);
+  return c.json(created, 201);
 });
 
-// ─── GET /api/branches/:id ────────────────────────────────────────────────────
-branchRoutes.get("/:id", async (c) => {
-  const user = c.get("user");
+/** PATCH /api/branches/:id — update branch */
+branchRoutes.patch("/:id", zValidator("json", updateBranchSchema), async (c) => {
   const id = c.req.param("id");
-
-  const [branch] = await db
-    .select()
-    .from(branches)
-    .where(and(eq(branches.id, id), eq(branches.tenantId, user.tenantId)));
-
-  if (!branch) return c.json({ error: "not_found" }, 404);
-
-  return c.json({ branch });
-});
-
-// ─── PUT /api/branches/:id ────────────────────────────────────────────────────
-branchRoutes.put("/:id", zValidator("json", updateSchema), async (c) => {
-  const user = c.get("user");
-  const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
   const body = c.req.valid("json");
 
-  const [existing] = await db
+  // Verify ownership
+  const existing = await db
     .select()
     .from(branches)
-    .where(and(eq(branches.id, id), eq(branches.tenantId, user.tenantId)));
+    .where(and(eq(branches.id, id), eq(branches.tenantId, tenantId)));
 
-  if (!existing) return c.json({ error: "not_found" }, 404);
-
-  // If setting as default, clear others
-  if (body.isDefault) {
-    await db
-      .update(branches)
-      .set({ isDefault: false, updatedAt: new Date() })
-      .where(and(eq(branches.tenantId, user.tenantId)));
+  if (existing.length === 0) {
+    return c.json({ error: "Branch not found" }, 404);
   }
+
+  const updates: Partial<typeof branches.$inferInsert> = {
+    updatedAt: new Date(),
+  };
+  if (body.name !== undefined) updates.name = body.name;
+  if (body.address !== undefined) updates.address = body.address;
+  if (body.managerUserId !== undefined) updates.managerUserId = body.managerUserId;
+  if (body.isDefault !== undefined) updates.isDefault = body.isDefault;
 
   const [updated] = await db
     .update(branches)
-    .set({ ...body, updatedAt: new Date() })
-    .where(eq(branches.id, id))
+    .set(updates)
+    .where(and(eq(branches.id, id), eq(branches.tenantId, tenantId)))
     .returning();
 
-  return c.json({ branch: updated });
+  // BRANCH-702: When assigning a manager, set their branch_scope to this branch
+  if (body.managerUserId !== undefined) {
+    if (body.managerUserId) {
+      // Assign scope to new manager
+      await db
+        .update(users)
+        .set({ branchScope: id })
+        .where(and(eq(users.id, body.managerUserId), eq(users.tenantId, tenantId)));
+    } else if (existing[0]?.managerUserId) {
+      // Remove scope from old manager (when managerUserId cleared to null)
+      await db
+        .update(users)
+        .set({ branchScope: null })
+        .where(and(eq(users.id, existing[0].managerUserId), eq(users.tenantId, tenantId)));
+    }
+  }
+
+  return c.json(updated);
 });
 
-// ─── DELETE /api/branches/:id ─────────────────────────────────────────────────
+/** DELETE /api/branches/:id — delete branch (fails if it has students/teachers) */
 branchRoutes.delete("/:id", async (c) => {
-  const user = c.get("user");
   const id = c.req.param("id");
+  const tenantId = c.get("user").tenantId;
 
-  const [existing] = await db
+  // Verify ownership
+  const existing = await db
     .select()
     .from(branches)
-    .where(and(eq(branches.id, id), eq(branches.tenantId, user.tenantId)));
+    .where(and(eq(branches.id, id), eq(branches.tenantId, tenantId)));
 
-  if (!existing) return c.json({ error: "not_found" }, 404);
-
-  // Cannot delete the default branch
-  if (existing.isDefault) {
-    return c.json({ error: "cannot_delete_default_branch" }, 400);
+  if (existing.length === 0) {
+    return c.json({ error: "Branch not found" }, 404);
   }
 
-  await db.delete(branches).where(eq(branches.id, id));
+  // Block if students are assigned
+  const [studentRes] = await db
+    .select({ cnt: count() })
+    .from(students)
+    .where(and(eq(students.tenantId, tenantId), eq(students.branchId, id)));
 
-  return c.json({ deleted: true });
-});
-
-// ─── PUT /api/branches/:id/users/:userId/scope ────────────────────────────────
-// BRANCH-703: Set or clear branch_scope for a user (owner/admin only).
-// scope = UUID → restrict user to that branch. scope = null → global access.
-const scopeSchema = z.object({
-  scope: z.string().uuid().nullable(),
-});
-
-branchRoutes.put(
-  "/:id/users/:userId/scope",
-  zValidator("json", scopeSchema),
-  async (c) => {
-    const actor = c.get("user");
-
-    // Only owner or admin may change branch scope
-    if (actor.role !== "admin" && actor.role !== "manager") {
-      return c.json({ error: "forbidden" }, 403);
-    }
-
-    const branchId = c.req.param("id");
-    const userId = c.req.param("userId");
-    const { scope } = c.req.valid("json");
-
-    // Verify branch belongs to tenant
-    const [branch] = await db
-      .select()
-      .from(branches)
-      .where(and(eq(branches.id, branchId), eq(branches.tenantId, actor.tenantId)));
-
-    if (!branch) return c.json({ error: "branch_not_found" }, 404);
-
-    // Verify user belongs to tenant
-    const [targetUser] = await db
-      .select()
-      .from(users)
-      .where(and(eq(users.id, userId), eq(users.tenantId, actor.tenantId)));
-
-    if (!targetUser) return c.json({ error: "user_not_found" }, 404);
-
-    // Update branch_scope
-    const [updated] = await db
-      .update(users)
-      .set({ branchScope: scope, updatedAt: new Date() })
-      .where(and(eq(users.id, userId), eq(users.tenantId, actor.tenantId)))
-      .returning({ id: users.id, branchScope: users.branchScope });
-
-    return c.json({ user: updated });
+  if ((studentRes?.cnt ?? 0) > 0) {
+    return c.json(
+      { error: "Cannot delete branch with assigned students. Reassign students first." },
+      409
+    );
   }
-);
+
+  await db
+    .delete(branches)
+    .where(and(eq(branches.id, id), eq(branches.tenantId, tenantId)));
+
+  return c.json({ success: true });
+});

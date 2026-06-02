@@ -49,7 +49,10 @@ studentRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
 
   // BRANCH-703: restrict to user's branch if branchScope is set
   const conditions = [eq(students.tenantId, tenantId)];
-  withBranchFilter(user, conditions, students.branchId);
+  // BRANCH-702: branch_manager sees only their branch's students
+  if (user.branchScope) {
+    conditions.push(eq(students.branchId, user.branchScope));
+  }
   if (status !== "all") {
     conditions.push(eq(students.status, status));
   }

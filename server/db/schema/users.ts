@@ -33,6 +33,8 @@ export const users = pgTable(
      * Default true; only admins can set false; owners cannot be deactivated.
      */
     isActive: boolean("is_active").notNull().default(true),    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** BRANCH-702: If set, this user is a branch manager scoped to this branch only */
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
@@ -40,6 +42,8 @@ export const users = pgTable(
     emailUniq: uniqueIndex("users_tenant_email_uniq").on(t.tenantId, t.email),
     branchScopeIdx: index("users_branch_scope_idx").on(t.branchScope),
 isActiveIdx: index("users_is_active_idx").on(t.tenantId, t.isActive),  })
+    branchScopeIdx: index("users_branch_scope_idx").on(t.tenantId, t.branchScope),
+  })
 );
 
 export type User = typeof users.$inferSelect;

@@ -1,7 +1,4 @@
-/**
- * BRANCH-701 — Client-side API helpers for /api/branches
- */
-import { api } from "../api";
+const BASE = "/api/branches";
 
 export interface Branch {
   id: string;
@@ -14,105 +11,92 @@ export interface Branch {
   updatedAt: string;
 }
 
-export interface CreateBranchPayload {
-  name: string;
-  address?: string;
-  managerUserId?: string;
-  isDefault?: boolean;
-}
-
-/** GET /api/branches */
-export function getBranches(): Promise<{ branches: Branch[] }> {
-  return api<{ branches: Branch[] }>("/api/branches");
-}
-
-/** GET /api/branches/current */
-export function getCurrentBranch(): Promise<{ branch: Branch | null }> {
-  return api<{ branch: Branch | null }>("/api/branches/current");
-}
-
-/** POST /api/branches */
-export function createBranch(payload: CreateBranchPayload): Promise<{ branch: Branch }> {
-  return api<{ branch: Branch }>("/api/branches", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-/** GET /api/branches/:id */
-export function getBranch(id: string): Promise<{ branch: Branch }> {
-  return api<{ branch: Branch }>(`/api/branches/${id}`);
-}
-
-/** PUT /api/branches/:id */
-export function updateBranch(
-  id: string,
-  payload: Partial<CreateBranchPayload>
-): Promise<{ branch: Branch }> {
-  return api<{ branch: Branch }>(`/api/branches/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-}
-
-/** DELETE /api/branches/:id */
-export function deleteBranch(id: string): Promise<{ deleted: boolean }> {
-  return api<{ deleted: boolean }>(`/api/branches/${id}`, {
-    method: "DELETE",
-  });
-}
-
-// ─── BRANCH-704: KPI Reports ──────────────────────────────────────────────────
-
-export interface BranchKPI {
+export interface BranchStats {
   branchId: string;
   branchName: string;
-  activeStudents: number;
-  monthlyRevenue: number;
-  retentionRate: number;
+  address: string | null;
+  isDefault: boolean;
+  studentCount: number;
+  teacherCount: number;
+  revenueCurrentMonth: number;
+  lessonCount: number;
 }
 
-export interface NetworkKPI {
-  activeStudents: number;
-  monthlyRevenue: number;
-  retentionRate: number;
+export interface BranchRollup {
+  totalStudents: number;
+  totalTeachers: number;
+  totalRevenue: number;
+  totalBranches: number;
 }
 
-export interface BranchKPIResponse {
-  consolidated: NetworkKPI;
-  byBranch: BranchKPI[];
+export async function listBranches(): Promise<{ items: Branch[] }> {
+  const res = await fetch(BASE, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch branches");
+  const data = await res.json() as unknown;
+  // Guard against unexpected response shape (e.g. mock data in tests)
+  if (!data || typeof data !== "object" || !("items" in data) || !Array.isArray((data as { items: unknown }).items)) {
+    return { items: [] };
+  }
+  return data as { items: Branch[] };
 }
 
-/**
- * GET /api/branches/reports/kpi?from=YYYY-MM-DD&to=YYYY-MM-DD
- * Returns consolidated + per-branch KPIs for the authenticated tenant.
- */
-export function getBranchKPI(params?: {
-  from?: string;
-  to?: string;
-}): Promise<BranchKPIResponse> {
-  const qs = new URLSearchParams();
-  if (params?.from) qs.set("from", params.from);
-  if (params?.to) qs.set("to", params.to);
-  const query = qs.toString() ? `?${qs.toString()}` : "";
-  return api<BranchKPIResponse>(`/api/branches/reports/kpi${query}`);
+export async function getBranchStats(): Promise<{ items: BranchStats[] }> {
+  const res = await fetch(`${BASE}/stats`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch branch stats");
+  return res.json() as Promise<{ items: BranchStats[] }>;
 }
 
-/**
- * BRANCH-703: PUT /api/branches/:branchId/users/:userId/scope
- * Set or clear branch_scope for a user.
- * scope = UUID → restrict user to that branch. scope = null → global access.
- */
-export function setUserBranchScope(
-  branchId: string,
-  userId: string,
-  scope: string | null
-): Promise<{ user: { id: string; branchScope: string | null } }> {
-  return api<{ user: { id: string; branchScope: string | null } }>(
-    `/api/branches/${branchId}/users/${userId}/scope`,
-    {
-      method: "PUT",
-      body: JSON.stringify({ scope }),
-    }
-  );
+export async function getBranchRollup(): Promise<BranchRollup> {
+  const res = await fetch(`${BASE}/rollup`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch branch rollup");
+  return res.json() as Promise<BranchRollup>;
+}
+
+export async function createBranch(data: {
+  name: string;
+  address?: string | null;
+  managerUserId?: string | null;
+}): Promise<Branch> {
+  const res = await fetch(BASE, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create branch");
+  return res.json() as Promise<Branch>;
+}
+
+export async function updateBranch(
+  id: string,
+  data: {
+    name?: string;
+    address?: string | null;
+    managerUserId?: string | null;
+    isDefault?: boolean;
+  }
+): Promise<Branch> {
+  const res = await fetch(`${BASE}/${id}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update branch");
+  return res.json() as Promise<Branch>;
+}
+
+export async function assignManager(branchId: string, managerUserId: string | null): Promise<Branch> {
+  return updateBranch(branchId, { managerUserId });
+}
+
+export async function deleteBranch(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/${id}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? "Failed to delete branch");
+  }
 }

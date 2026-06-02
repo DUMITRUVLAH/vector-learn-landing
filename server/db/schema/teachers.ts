@@ -16,14 +16,14 @@ export const teachers = pgTable(
     hourlyRateCents: integer("hourly_rate_cents").notNull().default(0),
     commissionPct: integer("commission_pct").notNull().default(45),
     /** BRANCH-701: Optional branch assignment */
-    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
+    branchId: uuid("branch_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     tenantIdx: index("teachers_tenant_idx").on(t.tenantId),
     userIdx: index("teachers_user_idx").on(t.userId),
-    branchIdx: index("teachers_branch_idx").on(t.branchId),
+    branchIdx: index("teachers_branch_idx").on(t.tenantId, t.branchId),
   })
 );
 

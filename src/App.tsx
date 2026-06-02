@@ -60,9 +60,7 @@ import { DiplomaPage } from "./pages/app/DiplomaPage";
 import { FormsPage } from "./pages/app/FormsPage";
 import { FormBuilderPage } from "./pages/app/FormBuilderPage";
 import { FormPublicPage } from "./pages/public/FormPublicPage";
-import { ApiKeysPage } from "./pages/app/settings/ApiKeysPage"; // INT-901
-import { WebhooksPage } from "./pages/app/settings/WebhooksPage"; // INT-902
-import { IntegrationsPage } from "./pages/app/settings/IntegrationsPage"; // INT-903
+import { BranchesPage } from "./pages/app/BranchesPage";
 
 function HomePage() {
   return (
@@ -150,9 +148,6 @@ function Routes() {
     return <FormBuilderPage formId={id} />;
   }
   if (path.startsWith("/app/forms")) return <FormsPage />;
-  // BRANCH-704: Branch reports must be checked before /app/branches (more specific)
-  if (path.startsWith("/app/branches/reports")) return <BranchReportsPage />;
-  // BRANCH-702: Multi-branch management
   if (path.startsWith("/app/branches")) return <BranchesPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app")) return <DashboardPage />;

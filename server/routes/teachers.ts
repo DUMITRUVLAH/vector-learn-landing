@@ -20,21 +20,25 @@ const updateTeacherSchema = z.object({
 teacherRoutes.get("/", async (c) => {
   const user = c.get("user");
   const tenantId = user.tenantId;
-  // BRANCH-703: apply branch scope filter for branch-restricted managers
-  const conditions = [eq(teachers.tenantId, tenantId)];
-  withBranchFilter(user, conditions, teachers.branchId);
+
+  // BRANCH-702: branch_manager sees only their branch's teachers
+  const whereClause = user.branchScope
+    ? and(eq(teachers.tenantId, tenantId), eq(teachers.branchId, user.branchScope))
+    : eq(teachers.tenantId, tenantId);
+
   const rows = await db
     .select({
       id: teachers.id,
       userId: teachers.userId,
       hourlyRateCents: teachers.hourlyRateCents,
       commissionPct: teachers.commissionPct,
+      branchId: teachers.branchId,
       name: users.name,
       email: users.email,
     })
     .from(teachers)
     .innerJoin(users, eq(teachers.userId, users.id))
-    .where(and(...conditions))
+    .where(whereClause)
     .orderBy(desc(teachers.createdAt));
   return c.json({ items: rows });
 });
