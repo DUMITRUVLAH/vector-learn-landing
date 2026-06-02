@@ -54,6 +54,7 @@ import { publicTeamRoutes } from "./routes/team";
 import { brandingSettingsRoutes } from "./routes/brandingSettings"; // SET-802
 import { auditLogSettingsRoutes } from "./routes/auditLogSettings"; // SET-803/804
 import { notificationSettingsRoutes } from "./routes/notificationSettings"; // SET-805
+import { badgesRoutes } from "./routes/badges"; // GAP-019/020 gamification
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -166,6 +167,8 @@ app.route("/api/kinder", kinderParentFeedRoutes);
 app.route("/api/kinder", kinderComplianceRoutes);
 // KINDER-007: Incident/accident reports + parent acknowledgment
 app.route("/api/kinder", kinderIncidentsRoutes);
+// GAP-019/020: Gamification badges + leaderboard
+app.route("/api/badges", badgesRoutes);
 // SET-802: Branding settings (logo, colors, tenant name)
 app.route("/api/settings/branding", brandingSettingsRoutes);
 // SET-803/804: Audit log settings

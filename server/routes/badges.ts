@@ -136,7 +136,7 @@ badgesRoutes.use("*", requireAuth);
 
 /** GET /api/badges/students/:studentId — lista insigne ale elevului */
 badgesRoutes.get("/students/:studentId", async (c) => {
-  const { tenantId } = c.get("session");
+  const { tenantId } = c.get("user");
   const { studentId } = c.req.param();
 
   const rows = await db
@@ -160,7 +160,7 @@ badgesRoutes.get("/students/:studentId", async (c) => {
 
 /** POST /api/badges/check/:studentId — rulează awarding logic */
 badgesRoutes.post("/check/:studentId", async (c) => {
-  const { tenantId } = c.get("session");
+  const { tenantId } = c.get("user");
   const { studentId } = c.req.param();
 
   // Verify student belongs to this tenant
@@ -177,7 +177,7 @@ badgesRoutes.post("/check/:studentId", async (c) => {
 
 /** GET /api/badges/leaderboard?limit=10 — GAP-020: top elevi după badge count */
 badgesRoutes.get("/leaderboard", zValidator("query", z.object({ limit: z.coerce.number().int().min(1).max(50).optional().default(10) })), async (c) => {
-  const { tenantId } = c.get("session");
+  const { tenantId } = c.get("user");
   const { limit } = c.req.valid("query");
 
   const thirtyDaysAgo = new Date();
@@ -238,7 +238,7 @@ badgesRoutes.get("/leaderboard", zValidator("query", z.object({ limit: z.coerce.
 
 /** GET /api/badges/stats — statistici globale (pentru GAP-020 card) */
 badgesRoutes.get("/stats", async (c) => {
-  const { tenantId } = c.get("session");
+  const { tenantId } = c.get("user");
 
   // Total badges awarded
   const [totalRow] = await db
