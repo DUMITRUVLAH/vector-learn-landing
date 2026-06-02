@@ -83,6 +83,11 @@ export function SchedulePage() {
   const draggingLessonId = useRef<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null); // "dayIdx:hour" key
   const [rescheduling, setRescheduling] = useState<string | null>(null); // lessonId being saved
+  // SCHED-603: teacher filter (persisted in localStorage)
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
+    try { return localStorage.getItem("schedule:teacherId") ?? ""; }
+    catch { return ""; }
+  });
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -101,7 +106,8 @@ export function SchedulePage() {
     setError(null);
     try {
       const [lr, tr, cr, rr] = await Promise.all([
-        listLessons(weekStart.toISOString(), weekEnd.toISOString()),
+        // SCHED-603: pass selectedTeacherId filter
+        listLessons(weekStart.toISOString(), weekEnd.toISOString(), selectedTeacherId || null),
         listTeachers(),
         listCourses(),
         listRooms(),
@@ -115,11 +121,26 @@ export function SchedulePage() {
     } finally {
       setLoading(false);
     }
-  }, [weekStart, weekEnd]);
+  }, [weekStart, weekEnd, selectedTeacherId]);
 
   useEffect(() => {
     void fetchAll();
   }, [fetchAll]);
+
+  // SCHED-603: persist teacher selection and handle change
+  const handleTeacherFilterChange = useCallback((teacherId: string) => {
+    setSelectedTeacherId(teacherId);
+    try { localStorage.setItem("schedule:teacherId", teacherId); }
+    catch { /* ignore */ }
+  }, []);
+
+  // SCHED-603: weekly stats for selected teacher
+  const teacherWeeklyStats = useMemo(() => {
+    const active = lessons.filter((l) => l.status !== "cancelled");
+    const count = active.length;
+    const hours = active.reduce((sum, l) => sum + l.durationMinutes / 60, 0);
+    return { count, hours: Math.round(hours * 10) / 10 };
+  }, [lessons]);
 
   // SCHED-601: handle drag-and-drop reschedule
   const handleDrop = useCallback(async (dayIdx: number, hour: number) => {
@@ -216,17 +237,45 @@ export function SchedulePage() {
         </div>
       }
     >
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm font-semibold">{labelForWeek}</p>
-        <button
-          type="button"
-          onClick={() => setModal({ kind: "recurring" })}
-          className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted"
-          aria-label="Adaugă lecție recurentă"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Repetă
-        </button>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <p className="text-sm font-semibold">{labelForWeek}</p>
+          {/* SCHED-603: Weekly stats for selected teacher */}
+          {selectedTeacherId && !loading && (
+            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+              {teacherWeeklyStats.count} lecții · {teacherWeeklyStats.hours}h
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* SCHED-603: Teacher filter dropdown */}
+          {teachers.length > 0 && (
+            <div>
+              <label htmlFor="teacher-filter" className="sr-only">Filtrează după profesor</label>
+              <select
+                id="teacher-filter"
+                value={selectedTeacherId}
+                onChange={(e) => handleTeacherFilterChange(e.target.value)}
+                className="rounded-md border border-input bg-background px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/40"
+                aria-label="Filtrează orar după profesor"
+              >
+                <option value="">Toți profesorii</option>
+                {teachers.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setModal({ kind: "recurring" })}
+            className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-semibold hover:bg-muted"
+            aria-label="Adaugă lecție recurentă"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Repetă
+          </button>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-border bg-card overflow-hidden">

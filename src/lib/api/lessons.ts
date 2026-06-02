@@ -34,10 +34,12 @@ export interface Course {
   durationMinutes: number;
 }
 
-export function listLessons(from?: string, to?: string): Promise<{ items: Lesson[] }> {
+export function listLessons(from?: string, to?: string, teacherId?: string | null): Promise<{ items: Lesson[] }> {
   const qs = new URLSearchParams();
   if (from) qs.set("from", from);
   if (to) qs.set("to", to);
+  // SCHED-603: optional teacher filter
+  if (teacherId) qs.set("teacherId", teacherId);
   const query = qs.toString();
   return api<{ items: Lesson[] }>(`/api/lessons${query ? `?${query}` : ""}`);
 }

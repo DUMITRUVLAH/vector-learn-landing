@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "SCHED-603",
-  "last_completed": "SCHED-602",
-  "iterations": 127,
+  "current_item": null,
+  "last_completed": "SCHED-603",
+  "iterations": 128,
   "last_run_at": "2026-06-02T09:00:00Z",
   "milestone_status": "SCHED faza-6: in progress \u2014 SCHED-601..603",
   "active_milestone": "SCHED",
@@ -2924,7 +2924,7 @@
       ]
     },
     "SCHED-603": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SCHED-603-schedule-view-by-teacher.md",
@@ -2933,7 +2933,19 @@
       "depends_on": [
         "SCHED-602"
       ],
-      "title": "Filtrare orar per profesor + statistici \u00eenc\u0103rcare s\u0103pt\u0103m\u00e2nal\u0103"
+      "title": "Filtrare orar per profesor + statistici \u00eenc\u0103rcare s\u0103pt\u0103m\u00e2nal\u0103",
+      "branch": "feat/SCHED-faza-6-calendar-ux",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "reports": [
+        "backlog/reports/SCHED-603-reviewer.md",
+        "backlog/reports/SCHED-603-manager.md",
+        "backlog/reports/SCHED-603-student.md"
+      ]
     }
   }
 }
