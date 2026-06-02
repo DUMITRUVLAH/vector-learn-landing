@@ -36,6 +36,5 @@ Each module → 3–5 items. Source of behavior: the matching `backlog/user-stor
 
 ## Progress log (orchestrator appends one line per item)
 - (start) all CRM done (101–116). Beginning Comunicare module.
-- planner: generated FIN items FIN-601..FIN-604 from user-stories/payments.md + NIGHT-PLAN Finanțe description
-- planner: all NIGHT-PLAN modules done (168 items). Generated PAY faza-3 items PAY-004..PAY-008 from user-stories/payments.md (US-PAY-05..18 backlog items)
-- planner: generated MOB items MOB-101..MOB-105 from user-stories/mobile.md (US-MOB-01..09)
+- COMM-201 done → PR #44 (infra providers + messages table + MessagingService + consent check)
+- COMM-202 done → PR #45 (tab Comunicare în lead card + ComposeMessageModal + template fill)

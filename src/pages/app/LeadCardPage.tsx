@@ -1,12 +1,12 @@
 /**
- * CRM-106/107/109/111/113/114/115 — Cartonaș detaliu lead /app/leads/:id
+ * CRM-106/107/109/111/113/114/115/COMM-202 — Cartonaș detaliu lead /app/leads/:id
  * CRM-107: Task-uri + Fișiere
  * CRM-109: Email/WhatsApp/Sună + logare apel
  * CRM-111: Score badge, ConvertModal cu familie
  * CRM-113: Valoare deal + datorie (inline edit)
  * CRM-114: Companie + deal_name + contacte multiple (tab Contacte)
  * CRM-115: Tag-uri libere + câmpuri custom (tab Custom Fields)
- * CRM-133: Duplicate detection banner + MergeLeadModal
+ * COMM-202: Tab „Comunicare" cu log mesaje + buton „Mesaj nou" cu selectare template
  */
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -37,17 +37,10 @@ import {
 } from "@/lib/api/tasks";
 import { cn } from "@/lib/utils";
 import { SendMessageModal, LogCallModal, type SendChannel } from "@/components/crm/CommModal";
-import { ConvertModal } from "@/components/crm/ConvertModal";
-import { scoreLead, type ScoreFactor } from "@/lib/api/leads";
-import { CadencePanel } from "@/components/crm/CadencePanel";
-import { UndoToast } from "@/components/crm/UndoToast";
-import { crmDeleteLead } from "@/lib/api/audit";
-// CRM-144: copy-to-clipboard button for phone / email
-import { CopyButton } from "@/components/crm/CopyButton";
-// CRM-145: score explainer with factors breakdown
-import { ScoreExplain } from "@/components/crm/ScoreExplain";
-// CRM-133: merge duplicate leads
-import { MergeLeadModal } from "@/components/crm/MergeLeadModal";
+import { ConvertModal, getScoreBadge, SCORE_BADGE_STYLES, SCORE_BADGE_LABELS } from "@/components/crm/ConvertModal";
+import { scoreLead } from "@/lib/api/leads";
+import { listMessages, sendMessage, type Message as CommMessage, type MessageChannel } from "@/lib/api/messages";
+import { listTemplates, type MessageTemplate } from "@/lib/api/templates";
 
 const SOURCE_LABEL: Record<string, string> = {
   webform: "Site web", manual: "Manual", facebook_ad: "Facebook",
@@ -65,7 +58,7 @@ const INTERACTION_LABEL: Record<string, string> = {
   sms: "SMS", meeting: "Întâlnire", stage_change: "Schimbare stadiu", system: "Sistem",
 };
 
-type Tab = "activity" | "tasks" | "files" | "contacts" | "fields" | "gdpr";
+type Tab = "activity" | "tasks" | "files" | "contacts" | "fields" | "comunicare" | "gdpr";
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -131,35 +124,9 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   // CRM-111: Enhanced convert modal
   const [convertModal, setConvertModal] = useState(false);
 
-  // CRM-145: score factors for explainer; auto-score if missing
-  const [scoreFactors, setScoreFactors] = useState<ScoreFactor[]>([]);
-  const [scoreLoading, setScoreLoading] = useState(false);
-
-  const runScore = async (id: string) => {
-    setScoreLoading(true);
-    try {
-      const res = await scoreLead(id);
-      // Defensive: a malformed/empty response must never crash the card.
-      // The auto-score effect fires on mount for many existing flows.
-      if (res && typeof res.score === "number") {
-        setLead((prev) => prev ? { ...prev, score: res.score } : prev);
-        setScoreFactors(res.factors ?? []);
-      }
-    } catch { /* ignore — user can retry manually */ }
-    finally { setScoreLoading(false); }
-  };
-
-  // CRM-133: Duplicate detection banner
-  const [duplicates, setDuplicates] = useState<Lead[]>([]);
-  const [mergeModal, setMergeModal] = useState<{ open: boolean; duplicate: Lead | null }>({
-    open: false, duplicate: null,
-  });
-
-  // INTEG-101: course options for selector
-  const [courseOptions, setCourseOptions] = useState<Course[]>([]);
-  useEffect(() => {
-    listCourses().then((r) => setCourseOptions(r.items)).catch(() => undefined);
-  }, []);
+  // COMM-202: Message log + compose modal
+  const [commMessages, setCommMessages] = useState<CommMessage[]>([]);
+  const [composeModal, setComposeModal] = useState(false);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -175,7 +142,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     setLoading(true);
     setError(null);
     try {
-      const [leadRes, stagesRes, interRes, tasksRes, attRes, contactsRes, tagsRes, fieldValuesRes] = await Promise.all([
+      const [leadRes, stagesRes, interRes, tasksRes, attRes, contactsRes, tagsRes, fieldValuesRes, msgsRes] = await Promise.all([
         getLead(leadId),
         fetchPipelineStages(),
         listInteractions(leadId),
@@ -184,6 +151,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         listContacts(leadId),
         listTags(leadId),
         listFieldValues(leadId),
+        listMessages({ lead_id: leadId }),
       ]);
       setLead(leadRes);
       setStages(stagesRes.stages);
@@ -194,6 +162,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
       setTags(tagsRes.tags);
       setCustomFields(fieldValuesRes.fields);
       setFieldValues(fieldValuesRes.values);
+      setCommMessages(msgsRes.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare");
     } finally {
@@ -1048,25 +1017,27 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         {/* ─── RIGHT COLUMN ────────────────────────────────────────────── */}
         <main>
           {/* Tab bar */}
-          {/* CRM-147: compute overdue task count for tab badge */}
-          {(() => {
-            const now = new Date();
-            const overdueCount = tasks.filter(
-              (t) => t.status === "open" && t.dueAt != null && new Date(t.dueAt) < now
-            ).length;
-            const openCount = tasks.filter((t) => t.status === "open").length;
-
-            const taskTabLabel = (
-              <span className="inline-flex items-center gap-1">
-                {tasks.length > 0 ? `Task-uri (${openCount})` : "Task-uri"}
-                {overdueCount > 0 && (
-                  <span
-                    className="inline-flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold min-w-[16px] h-4 px-1"
-                    aria-label={`${overdueCount} task${overdueCount > 1 ? "-uri" : ""} restant${overdueCount > 1 ? "e" : ""}`}
-                    data-testid="overdue-badge"
-                  >
-                    {overdueCount}
-                  </span>
+          <div role="tablist" className="flex gap-1 border-b border-border mb-4 overflow-x-auto">
+            {([
+              ["activity", "Activitate"],
+              ["tasks", tasks.length > 0 ? `Task-uri (${tasks.filter((t) => t.status === "open").length})` : "Task-uri"],
+              ["files", `Fișiere${attachments.length > 0 ? ` (${attachments.length})` : ""}`],
+              ["contacts", `Contacte${contacts.length > 0 ? ` (${contacts.length})` : ""}`],
+              ["fields", `Câmpuri${fieldValues.length > 0 ? ` (${fieldValues.length})` : ""}`],
+              ["comunicare", `Comunicare${commMessages.length > 0 ? ` (${commMessages.length})` : ""}`],
+              ["gdpr", "GDPR"],
+            ] as [Tab, string][]).map(([t, label]) => (
+              <button
+                key={t}
+                role="tab"
+                type="button"
+                aria-selected={activeTab === t}
+                onClick={() => setActiveTab(t)}
+                className={cn(
+                  "whitespace-nowrap px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors shrink-0",
+                  activeTab === t
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
               </span>
             );
@@ -1302,6 +1273,17 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
             />
           )}
 
+          {/* COMM-202: Comunicare tab */}
+          {activeTab === "comunicare" && lead && (
+            <ComunicareTab
+              lead={lead}
+              messages={commMessages}
+              consentRevoked={consentRevoked}
+              onNewMessage={() => setComposeModal(true)}
+              onMessageSent={(msg) => setCommMessages((prev) => [msg, ...prev])}
+            />
+          )}
+
           {activeTab === "gdpr" && (
             <div role="tabpanel" aria-label="GDPR" className="space-y-4">
               <section className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -1384,13 +1366,16 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         />
       )}
 
-      {/* CRM-133: Merge lead modal */}
-      {mergeModal.open && mergeModal.duplicate && lead && (
-        <MergeLeadModal
-          currentLead={lead}
-          duplicateLead={mergeModal.duplicate}
-          onSuccess={handleMergeSuccess}
-          onCancel={() => setMergeModal({ open: false, duplicate: null })}
+      {/* COMM-202: Compose message modal */}
+      {composeModal && lead && (
+        <ComposeMessageModal
+          lead={lead}
+          onSuccess={(msg) => {
+            setCommMessages((prev) => [msg, ...prev]);
+            setComposeModal(false);
+            setToast({ kind: "success", message: "Mesaj trimis cu succes!" });
+          }}
+          onCancel={() => setComposeModal(false)}
         />
       )}
 
@@ -1729,6 +1714,342 @@ function ContactsTab({ leadId, contacts, setContacts }: ContactsTabProps) {
           Adaugă contact
         </button>
       )}
+    </div>
+  );
+}
+
+// ─── COMM-202: ComunicareTab ──────────────────────────────────────────────────
+
+const STATUS_BADGE: Record<CommMessage["status"], string> = {
+  queued: "bg-muted text-muted-foreground",
+  sent: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  delivered: "bg-success/10 text-success",
+  failed: "bg-destructive/10 text-destructive",
+};
+
+const STATUS_LABEL: Record<CommMessage["status"], string> = {
+  queued: "În așteptare",
+  sent: "Trimis",
+  delivered: "Livrat",
+  failed: "Eșuat",
+};
+
+const CHANNEL_LABEL: Record<CommMessage["channel"], string> = {
+  email: "Email",
+  sms: "SMS",
+  whatsapp: "WhatsApp",
+};
+
+interface ComunicareTabProps {
+  lead: Lead;
+  messages: CommMessage[];
+  consentRevoked: boolean;
+  onNewMessage: () => void;
+  onMessageSent: (msg: CommMessage) => void;
+}
+
+function ComunicareTab({ messages, consentRevoked, onNewMessage }: ComunicareTabProps) {
+  return (
+    <div role="tabpanel" aria-label="Comunicare" className="space-y-4">
+      {/* Header row with action */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-muted-foreground">
+          {messages.length === 0 ? "Niciun mesaj trimis." : `${messages.length} mesaj${messages.length !== 1 ? "e" : ""}`}
+        </p>
+        <button
+          type="button"
+          onClick={onNewMessage}
+          disabled={consentRevoked}
+          title={consentRevoked ? "Consimțământ retras — trimitere blocată" : "Trimite mesaj nou"}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Mail className="h-4 w-4" aria-hidden="true" />
+          Mesaj nou
+        </button>
+      </div>
+
+      {/* Consent revoked warning */}
+      {consentRevoked && (
+        <div role="alert" className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          Consimțământ retras — trimitere nouă blocată (GDPR).
+        </div>
+      )}
+
+      {/* Message list */}
+      {messages.length === 0 ? (
+        <div className="py-8 text-center">
+          <p className="text-sm text-muted-foreground">Niciun mesaj trimis încă.</p>
+          <p className="text-xs text-muted-foreground mt-1">Apasă „Mesaj nou" pentru a trimite primul mesaj.</p>
+        </div>
+      ) : (
+        <ul className="space-y-2" aria-label="Lista mesaje">
+          {messages.map((msg) => (
+            <li
+              key={msg.id}
+              className="rounded-lg border border-border bg-card p-3 space-y-1.5"
+            >
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-foreground">
+                    {CHANNEL_LABEL[msg.channel]}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">→ {msg.toAddress}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold", STATUS_BADGE[msg.status])}>
+                    {STATUS_LABEL[msg.status]}
+                  </span>
+                  <time className="text-[10px] text-muted-foreground whitespace-nowrap" dateTime={msg.createdAt}>
+                    {new Date(msg.createdAt).toLocaleString("ro-RO")}
+                  </time>
+                </div>
+              </div>
+              {msg.subject && (
+                <p className="text-xs font-semibold text-foreground/80">{msg.subject}</p>
+              )}
+              <p className="text-sm text-foreground/70 line-clamp-3 whitespace-pre-wrap">{msg.body}</p>
+              {msg.errorMessage && (
+                <p className="text-xs text-destructive">{msg.errorMessage}</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── COMM-202: ComposeMessageModal ────────────────────────────────────────────
+
+interface ComposeMessageModalProps {
+  lead: Lead;
+  onSuccess: (msg: CommMessage) => void;
+  onCancel: () => void;
+}
+
+function ComposeMessageModal({ lead, onSuccess, onCancel }: ComposeMessageModalProps) {
+  const [channel, setChannel] = useState<MessageChannel>("email");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [templates, setTemplates] = useState<MessageTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [to, setTo] = useState(channel === "email" ? lead.email ?? "" : lead.phone ?? "");
+  const [body, setBody] = useState("");
+  const [subject, setSubject] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Build lead context for variable fill
+  const leadContext: Record<string, string> = {
+    first_name: lead.fullName.split(" ")[0] ?? lead.fullName,
+    full_name: lead.fullName,
+    phone: lead.phone ?? "",
+    email: lead.email ?? "",
+    course: lead.interestCourse ?? "",
+    center_name: "Vector Learn",
+  };
+
+  useEffect(() => {
+    void listTemplates()
+      .then((res) => setTemplates(res.items))
+      .catch(() => setTemplates([]))
+      .finally(() => setLoadingTemplates(false));
+  }, []);
+
+  // Update "to" when channel changes
+  useEffect(() => {
+    setTo(channel === "email" ? lead.email ?? "" : lead.phone ?? "");
+    setSelectedTemplateId("");
+    setBody("");
+    setSubject("");
+  }, [channel, lead.email, lead.phone]);
+
+  const filteredTemplates = templates.filter((t) => t.channel === channel);
+
+  const handleTemplateSelect = (id: string) => {
+    setSelectedTemplateId(id);
+    if (!id) { setBody(""); setSubject(""); return; }
+    const tmpl = templates.find((t) => t.id === id);
+    if (!tmpl) return;
+    // Fill variables from lead context
+    const filled = tmpl.body.replace(/\{\{(\w+)\}\}/g, (_, key: string) => leadContext[key] ?? `{{${key}}}`);
+    setBody(filled);
+    if (tmpl.subject) {
+      const filledSubject = tmpl.subject.replace(/\{\{(\w+)\}\}/g, (_, key: string) => leadContext[key] ?? `{{${key}}}`);
+      setSubject(filledSubject);
+    } else {
+      setSubject("");
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!to.trim() || !body.trim()) return;
+    setSending(true);
+    setError(null);
+    try {
+      const res = await sendMessage({
+        channel,
+        to_address: to.trim(),
+        body: body.trim(),
+        subject: subject.trim() || null,
+        template_id: selectedTemplateId || null,
+        lead_id: lead.id,
+      });
+      onSuccess(res.message);
+    } catch (err) {
+      if (err instanceof Error && err.message === "consent_revoked") {
+        setError("Consimțământul a fost retras. Trimiterea este blocată (GDPR).");
+      } else {
+        setError("Eroare la trimitere. Încearcă din nou.");
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Compune mesaj nou">
+      <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative w-full max-w-lg rounded-2xl border border-border bg-card shadow-xl">
+        {/* Header */}
+        <div className="border-b border-border px-5 py-3.5 flex items-center justify-between sticky top-0 bg-card rounded-t-2xl">
+          <h2 className="text-base font-bold">Mesaj nou</h2>
+          <button type="button" onClick={onCancel} aria-label="Închide" className="rounded-md hover:bg-muted p-1">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={(e) => void handleSubmit(e)} className="p-5 space-y-4">
+          {/* Channel selector */}
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Canal</p>
+            <div className="flex gap-2" role="group" aria-label="Selectează canal">
+              {(["email", "sms", "whatsapp"] as MessageChannel[]).map((ch) => (
+                <button
+                  key={ch}
+                  type="button"
+                  onClick={() => setChannel(ch)}
+                  aria-pressed={channel === ch}
+                  className={cn(
+                    "flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors min-h-[44px]",
+                    channel === ch
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border hover:bg-muted text-muted-foreground"
+                  )}
+                >
+                  {ch === "email" ? "Email" : ch === "sms" ? "SMS" : "WhatsApp"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Template selector */}
+          <div>
+            <label htmlFor="template-select" className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+              Template (opțional)
+            </label>
+            {loadingTemplates ? (
+              <p className="text-xs text-muted-foreground">Se încarcă template-uri…</p>
+            ) : (
+              <select
+                id="template-select"
+                value={selectedTemplateId}
+                onChange={(e) => handleTemplateSelect(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                aria-label="Selectează template"
+              >
+                <option value="">— fără template —</option>
+                {filteredTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+                {filteredTemplates.length === 0 && (
+                  <option disabled>Niciun template pentru {channel}</option>
+                )}
+              </select>
+            )}
+          </div>
+
+          {/* To */}
+          <div>
+            <label htmlFor="compose-to" className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+              Destinatar
+            </label>
+            <input
+              id="compose-to"
+              type={channel === "email" ? "email" : "tel"}
+              required
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              aria-label="Adresă destinatar"
+              placeholder={channel === "email" ? "email@exemplu.ro" : "+40 771 234 567"}
+            />
+          </div>
+
+          {/* Subject (email only) */}
+          {channel === "email" && (
+            <div>
+              <label htmlFor="compose-subject" className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+                Subiect
+              </label>
+              <input
+                id="compose-subject"
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                aria-label="Subiect email"
+                placeholder="Subiect email…"
+              />
+            </div>
+          )}
+
+          {/* Body */}
+          <div>
+            <label htmlFor="compose-body" className="block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+              Mesaj
+            </label>
+            <textarea
+              id="compose-body"
+              required
+              rows={5}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y"
+              aria-label="Textul mesajului"
+              placeholder="Scrie mesajul…"
+            />
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div role="alert" className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {error}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-md border border-border px-4 py-2 text-sm font-semibold hover:bg-muted min-h-[44px]"
+            >
+              Anulează
+            </button>
+            <button
+              type="submit"
+              disabled={sending || !to.trim() || !body.trim()}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 min-h-[44px]"
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" aria-hidden="true" />}
+              Trimite
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
