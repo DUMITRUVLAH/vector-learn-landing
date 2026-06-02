@@ -35,3 +35,12 @@ try {
   console.error("[vercel-migrate] Migration FAILED — blocking deploy to protect prod.", err?.message ?? err);
   process.exit(1);
 }
+
+// Self-healing schema sync: add any columns/tables the schema expects but migrations
+// failed to create (the recurring "column X does not exist" 500s). Non-destructive
+// (ADD COLUMN IF NOT EXISTS only) and never fails the build.
+try {
+  execSync("node_modules/.bin/tsx server/db/sync-schema.ts", { stdio: "inherit" });
+} catch (err) {
+  console.error("[vercel-migrate] schema-sync error (non-fatal):", err?.message ?? err);
+}

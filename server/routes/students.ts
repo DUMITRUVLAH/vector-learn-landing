@@ -39,7 +39,7 @@ const updateStudentSchema = studentBaseSchema.partial();
 const listQuerySchema = z.object({
   search: z.string().optional(),
   status: z.enum(["active", "trial", "paused", "archived", "all"]).default("all"),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  limit: z.coerce.number().int().min(1).max(500).default(50),
   offset: z.coerce.number().int().min(0).default(0),
   /** BRANCH-702: optional filter by branch UUID */
   branch_id: z.string().uuid().optional(),
