@@ -1,21 +1,25 @@
 /**
  * PAY-004: Stripe integration helpers.
  *
- * Key management: in this version, keys are stored as-is in the DB (masked in UI).
- * Production hardening: replace encode/decode with AES-256-GCM using ENCRYPTION_KEY env.
+ * Key management: secret/webhook keys are encrypted at rest with AES-256-GCM (server/lib/crypto.ts).
  */
 import Stripe from "stripe";
+import { encrypt, decrypt, isEncrypted } from "./crypto";
 
-/** Simple reversible encoding — swap with AES-256 in production */
+/** Encrypt a Stripe key for storage (AES-256-GCM). Was plain base64 — security C-2 / IMPROVEMENTS #3. */
 export function encryptKey(raw: string): string {
-  return Buffer.from(raw).toString("base64");
+  return encrypt(raw);
 }
 
-export function decryptKey(encoded: string): string {
+export function decryptKey(stored: string): string {
+  // Backward-compat: keys written before this fix are base64 (not iv:tag:ct hex). Decode those so
+  // existing tenants keep working; re-saving Stripe settings re-encrypts them with AES. Rotate keys
+  // after deploy — the old base64 values were effectively plaintext.
+  if (isEncrypted(stored)) return decrypt(stored);
   try {
-    return Buffer.from(encoded, "base64").toString("utf8");
+    return Buffer.from(stored, "base64").toString("utf8");
   } catch {
-    return encoded; // fallback: stored as plaintext
+    return stored;
   }
 }
 

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS "student_notes" (
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "sn_tenant_student_idx" ON "student_notes" ("tenant_id", "student_id");
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "sn_created_at_idx" ON "student_notes" ("tenant_id", "student_id", "created_at");

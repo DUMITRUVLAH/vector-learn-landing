@@ -29,19 +29,32 @@ const CHROME_PATHS = [
 ].filter(Boolean);
 
 // Substrings that indicate a caught error rendered into the page (not thrown).
+// "Unexpected token" catches the JSON.parse('<!doctype …') symptom of an API call hitting
+// the SPA HTML fallback (route not mounted) — exactly how the api-keys/webhooks pages broke.
 const ERR_PATTERNS = [
   "does not exist", "must be less than", "must be greater", "Internal Server",
   "http_500", "is not defined", "Eroare la", "null value", "violates",
-  "Cannot read", "invalid input", "NaN", "Failed to fetch",
+  "Cannot read", "invalid input", "NaN", "Failed to fetch", "Unexpected token",
 ];
 
+// Static routes — every authenticated /app/* page in the router (src/App.tsx Routes()).
+// NOTE: these must match the router's path checks exactly; a near-miss (e.g. /app/diploma
+// vs /app/diplome, or /app/automations vs /app/settings/crm/automations) silently falls
+// through to the dashboard and passes WITHOUT testing the intended page.
 const ROUTES = [
-  "/#/app/dashboard", "/#/app/students", "/#/app/schedule", "/#/app/teachers",
-  "/#/app/payments", "/#/app/leads", "/#/app/courses", "/#/app/invoices",
-  "/#/app/reports/kpi", "/#/app/reports/revenue", "/#/app/reports/retention",
-  "/#/app/gamification", "/#/app/contracts", "/#/app/analytics", "/#/app/automations",
-  "/#/app/templates", "/#/app/cadences", "/#/app/feedback", "/#/app/cx", "/#/app/diploma",
+  "/#/app/dashboard", "/#/app/students", "/#/app/gamification", "/#/app/schedule",
+  "/#/app/teachers", "/#/app/payments", "/#/app/leads", "/#/app/leads/today",
+  "/#/app/courses", "/#/app/invoices", "/#/app/contracts", "/#/app/feedback", "/#/app/cx",
+  "/#/app/diplome", "/#/app/cadences", "/#/app/audit-log",
+  "/#/app/analytics", "/#/app/analytics/crm",
+  "/#/app/hr/payroll", "/#/app/hr/audit",
+  "/#/app/reports/kpi", "/#/app/reports/revenue", "/#/app/reports/retention", "/#/app/reports/export",
+  "/#/app/grading",
+  "/#/app/conturi-plata", "/#/app/conturi-plata/setari", "/#/app/conturi-plata/nou",
+  "/#/app/kinder/checkin", "/#/app/kinder/diary", "/#/app/kinder/ratio",
+  "/#/app/kinder/immunization-report", "/#/app/kinder/compliance", "/#/app/kinder/incidents",
   "/#/app/settings/integrations", "/#/app/settings/api-keys", "/#/app/settings/webhooks",
+  "/#/app/settings/crm/automations", "/#/app/settings/crm/templates",
 ];
 
 async function main() {
@@ -71,8 +84,31 @@ async function main() {
   }
   console.log(`✅ login OK → dashboard (${BASE})`);
 
+  // Resolve real IDs (cookies are set) so detail pages get exercised with live data,
+  // not just the static list pages. A detail route that 500s on a real id is a common break.
+  const ids = await page.evaluate(async () => {
+    const j = async (u) => { try { const r = await fetch(u); return r.ok ? await r.json() : null; } catch { return null; } };
+    const pick = (o) => Array.isArray(o) ? o[0]
+      : (o?.items?.[0] || o?.data?.[0] || o?.students?.[0] || o?.leads?.[0] || o?.teachers?.[0]);
+    const [students, leads, teachers] = await Promise.all([
+      j("/api/students"), j("/api/leads"), j("/api/teachers"),
+    ]);
+    return { student: pick(students)?.id, lead: pick(leads)?.id, teacher: pick(teachers)?.id };
+  });
+  const detailRoutes = [];
+  if (ids.student) detailRoutes.push(
+    `/#/app/students/${ids.student}`,
+    `/#/app/kinder/students/${ids.student}/medical`,
+    `/#/app/kinder/students/${ids.student}/feed`,
+  );
+  if (ids.lead) detailRoutes.push(`/#/app/leads/${ids.lead}`);
+  if (ids.teacher) detailRoutes.push(
+    `/#/app/hr/teachers/${ids.teacher}/stats`,
+    `/#/app/hr/teachers/${ids.teacher}/availability`,
+  );
+
   let fails = 0;
-  for (const r of ROUTES) {
+  for (const r of [...ROUTES, ...detailRoutes]) {
     await page.goto(BASE + r, { waitUntil: "networkidle", timeout: 20000 }).catch(() => {});
     await page.waitForTimeout(800);
     const text = await page.$eval("body", (el) => el.innerText).catch(() => "");

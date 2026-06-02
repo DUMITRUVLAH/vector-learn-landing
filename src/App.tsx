@@ -92,6 +92,7 @@ import { StudentRetentionPage } from "./pages/app/StudentRetentionPage";
 import { ExportPage } from "./pages/app/ExportPage";
 import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
 import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 function HomePage() {
   return (
@@ -240,12 +241,24 @@ function Routes() {
   return <HomePage />;
 }
 
+// Wraps the route tree in an ErrorBoundary keyed by the current path, so a render crash on one
+// page shows a recoverable error card instead of white-screening the whole SPA, and navigating
+// to another route clears it (IMPROVEMENTS #8).
+function BoundedRoutes() {
+  const { path } = useRouter();
+  return (
+    <ErrorBoundary resetKey={path}>
+      <Routes />
+    </ErrorBoundary>
+  );
+}
+
 export default function App() {
   return (
     <HashRouter>
       {/* BRANCH-702: BranchProvider wraps all app routes so useBranch() works from any page */}
       <BranchProvider>
-        <Routes />
+        <BoundedRoutes />
         {import.meta.env.DEV && <BackendStatusBadge />}
       </BranchProvider>
     </HashRouter>

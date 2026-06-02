@@ -3,5 +3,7 @@
 -- Idempotent: ALTER TABLE ... ADD COLUMN IF NOT EXISTS (suportat pe Postgres 9.6+).
 
 ALTER TABLE "forms" ADD COLUMN IF NOT EXISTS "views" INTEGER NOT NULL DEFAULT 0;
+--> statement-breakpoint
 ALTER TABLE "forms" ADD COLUMN IF NOT EXISTS "starts" INTEGER NOT NULL DEFAULT 0;
+--> statement-breakpoint
 ALTER TABLE "forms" ADD COLUMN IF NOT EXISTS "completions" INTEGER NOT NULL DEFAULT 0;

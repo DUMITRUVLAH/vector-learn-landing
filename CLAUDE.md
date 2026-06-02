@@ -276,6 +276,28 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
   commit. Without it, Drizzle's `db.query.X` is `undefined` at runtime → any route that touches X
   returns 500. The `feature-builder` must check this after creating any new schema file. The
   `integration-architect` and `code-reviewer-vl` must flag it if missing. No exceptions.
+- **Route-mount rule (the #1 silent-break, 2026-06-02):** Every Hono router exported from
+  `server/routes/*.ts` (`export const xxxRoutes = new Hono()`) MUST be mounted in `server/app.ts`
+  (`app.route("/api/...", xxxRoutes)`) in the SAME commit, OR carry a `// mount-exempt: <reason>`
+  annotation. An unmounted route the frontend calls falls through to the SPA HTML fallback →
+  the page crashes on `JSON.parse('<!doctype …')` ("Unexpected token '<'"). `scripts/check-route-mounts.mjs`
+  enforces this in the build + CI (`.github/workflows/prod-safety.yml`). (44 routers were once orphaned.)
+- **Migration statement-breakpoint rule:** a hand-written migration with >1 SQL statement MUST put
+  `--> statement-breakpoint` between them (a `;` inside a `DO $$ … $$;` block is not a boundary), or
+  PGlite/CI/`db:reset` die with "cannot insert multiple commands into a prepared statement" (42601).
+  `scripts/check-migration-breakpoints.mjs` enforces this in the build + CI. See
+  [docs/solutions/database-issues/migration-statement-breakpoints.md].
+- **Bidirectional schema match:** when a migration `ADD COLUMN`s, declare that column in the schema
+  file (`server/db/schema/*.ts`) in the SAME commit. A column in the DB but not in the schema makes
+  `table.column` `undefined` at runtime → `db.select` 500s with "Cannot convert undefined or null to
+  object". (`schema-drift.test.ts` only catches the opposite direction.)
+- **Webhook/callback handlers that mutate financial state** must REJECT anything they cannot
+  cryptographically verify — "no secret configured" means "don't trust" (400), never "skip the check".
+  Secrets at rest use AES-256-GCM (`server/lib/crypto.ts`), never base64.
+
+> **`.github/workflows/prod-safety.yml`** runs all four static/PGlite guards (undefined-refs,
+> route-mounts, migration-breakpoints, schema-drift) on every PR + push to main. It is fast, needs
+> no secrets, and is the durable "these bug classes can't silently return" net. Keep it green.
 
 ### 3.5.1ter The 2026-06-02 prod-outage lessons (READ before merging anything to main)
 On 2026-06-02 the whole app went down for hours after 38 stale PRs were merged to `main` at

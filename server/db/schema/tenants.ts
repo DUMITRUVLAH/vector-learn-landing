@@ -21,6 +21,21 @@ export const tenants = pgTable("tenants", {
   slaDefaultHours: integer("sla_default_hours").notNull().default(24),
   /** CRM-124: Days until a lead is considered "rotting" (default 7) */
   rotDays: integer("rot_days").notNull().default(7),
+  // The following columns are created by migrations (0047/0055/0108) but were never declared in
+  // this schema file — so `tenants.invoicePrefix` etc. resolved to `undefined` and 500'd every
+  // route that selected them (tenantSettings, aiSettings, branding). Declared here to match the DB.
+  /** SET-803: branding logo URL (migration 0055) */
+  logoUrl: varchar("logo_url", { length: 500 }),
+  /** SET-803: branding config blob (migration 0055) */
+  brandingJson: jsonb("branding_json").$type<Record<string, unknown>>(),
+  /** AI-A04: monthly AI budget cap in USD cents (migration 0047) */
+  aiMonthlyBudgetUsdCents: integer("ai_monthly_budget_usd_cents"),
+  /** PAY/CONT-PLATA: invoice number prefix (migration 0108) */
+  invoicePrefix: varchar("invoice_prefix", { length: 20 }).notNull().default("VECT"),
+  /** CONT-PLATA: tenant bank IBAN (migration 0108) */
+  iban: varchar("iban", { length: 34 }),
+  /** CONT-PLATA: tenant bank BIC/SWIFT (migration 0108) */
+  bic: varchar("bic", { length: 11 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

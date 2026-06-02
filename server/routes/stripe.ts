@@ -293,19 +293,19 @@ stripeWebhookRoutes.post("/webhooks/stripe", async (c) => {
     .limit(1);
   const settings = settingsRows[0];
 
-  // Verify signature if webhook secret is configured
-  if (settings?.webhookSecretEncrypted) {
-    try {
-      const stripe = buildStripeClient(decryptKey(settings.secretKeyEncrypted ?? ""));
-      constructWebhookEvent(
-        stripe,
-        rawBody,
-        sig,
-        decryptKey(settings.webhookSecretEncrypted)
-      );
-    } catch {
-      return c.json({ error: "invalid_signature" }, 400);
-    }
+  // Signature verification is MANDATORY (security C-1 / IMPROVEMENTS #2). An event we cannot
+  // cryptographically verify is rejected and NEVER mutates an invoice. Previously, if a tenant
+  // had no webhook secret configured, this block was skipped and the code fell through to mark
+  // the invoice paid — so an unauthenticated attacker who guessed an invoice UUID could POST a
+  // fake `payment_intent.succeeded` and get a free enrollment. No secret ⇒ no trust ⇒ 400.
+  if (!settings?.webhookSecretEncrypted || !settings?.secretKeyEncrypted) {
+    return c.json({ error: "webhook_not_configured" }, 400);
+  }
+  try {
+    const stripe = buildStripeClient(decryptKey(settings.secretKeyEncrypted));
+    constructWebhookEvent(stripe, rawBody, sig, decryptKey(settings.webhookSecretEncrypted));
+  } catch {
+    return c.json({ error: "invalid_signature" }, 400);
   }
 
   // Process events

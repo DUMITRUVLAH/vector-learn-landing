@@ -54,11 +54,53 @@ import { publicTeamRoutes } from "./routes/team";
 import { brandingSettingsRoutes } from "./routes/brandingSettings"; // SET-802
 import { auditLogSettingsRoutes } from "./routes/auditLogSettings"; // SET-803/804
 import { notificationSettingsRoutes } from "./routes/notificationSettings"; // SET-805
+import { apiKeyRoutes } from "./routes/apiKeys"; // INT-901
+import { webhookSettingsRoutes } from "./routes/webhookSettings"; // INT-902
 import { badgesRoutes } from "./routes/badges"; // GAP-019/020 gamification
 import { companyRegistryRoutes } from "./routes/companyRegistry"; // CONT-PLATA: contafirm.md registry proxy
 import { sellerProfileRoutes } from "./routes/sellerProfile"; // CONT-PLATA: issuer details
 import { companyClientRoutes } from "./routes/companyClients"; // CONT-PLATA: saved counterparties
 import { paymentAccountRoutes } from "./routes/paymentAccounts"; // CONT-PLATA: payment accounts
+// Previously-orphaned routers (IMPROVEMENTS #1) — the frontend api modules already call these;
+// they were built end-to-end but never mounted, so they fell through to the SPA HTML fallback.
+import { accountingRoutes } from "./routes/accounting";
+import { admissionsRoutes } from "./routes/admissions";
+import { aiRoutes } from "./routes/ai";
+import { aiChurnRoutes } from "./routes/aiChurn";
+import { aiLeadsRoutes } from "./routes/aiLeads";
+import { aiSettingsRoutes } from "./routes/aiSettings";
+import { attendanceRoutes } from "./routes/attendance";
+import { branchReportsRoutes } from "./routes/branchReports";
+import { branchRoutes } from "./routes/branches";
+import { broadcastRoutes } from "./routes/broadcasts";
+import { certificatesIssueRoutes } from "./routes/certificatesIssue";
+import { consentRoutes } from "./routes/consent";
+import { formRoutes } from "./routes/forms";
+import { gradesRoutes } from "./routes/grades";
+import { groupRoutes } from "./routes/groups";
+import { guardianRoutes } from "./routes/guardians";
+import { lessonHomeworkRoutes, homeworkRoutes, studentHomeworkRoutes } from "./routes/homework";
+import { integrationTriggersRoutes } from "./routes/integrationTriggers";
+import { lessonPackageRoutes } from "./routes/lessonPackages";
+import { messageRoutes } from "./routes/messages";
+import { parentPortalRoutes, schoolNewsAdminRoutes } from "./routes/parentPortal";
+import { paymentPlanRoutes } from "./routes/paymentPlans";
+import { portalInvoiceRoutes } from "./routes/portalInvoice";
+import { progressRoutes } from "./routes/progress";
+import { promoCodeRoutes } from "./routes/promoCodes";
+import { recoveryRoutes } from "./routes/recovery";
+import { refundRoutes } from "./routes/refunds";
+import { reminderRoutes } from "./routes/reminders";
+import { schoolRoutes } from "./routes/school";
+import { settingsRoutes } from "./routes/settings";
+import { stripeRoutes, stripeWebhookRoutes } from "./routes/stripe";
+import { tenantSettingsRoutes } from "./routes/tenantSettings";
+import { timetableRoutes } from "./routes/timetable";
+import { tuitionRoutes } from "./routes/tuition";
+import { userRoutes } from "./routes/users";
+import { waitlistRoutes } from "./routes/waitlist";
+import { twoFactorRoutes } from "./routes/auth/twoFactor"; // AUTH-004: 2FA setup/verify/disable
+import { sessionMgmtRoutes } from "./routes/auth/sessions"; // active session management
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -98,6 +140,8 @@ app.post("/api/public/forms/:slug/submit", publicFormSubmitHandler);
 app.post("/api/public/forms/:slug/ping", publicFormPingHandler);
 
 app.route("/api/auth", authRoutes);
+app.route("/api/auth/2fa", twoFactorRoutes); // AUTH-004: /setup, /verify, /enable, /disable
+app.route("/api/auth/sessions", sessionMgmtRoutes); // list + revoke active sessions
 app.route("/api/students", studentRoutes);
 app.route("/api/teachers", teacherRoutes);
 app.route("/api/courses", courseRoutes);
@@ -184,6 +228,63 @@ app.route("/api/settings/branding", brandingSettingsRoutes);
 app.route("/api/settings/audit-log", auditLogSettingsRoutes);
 // SET-805: Notification preferences per user
 app.route("/api/settings/notifications", notificationSettingsRoutes);
+// INT-901/902: API keys + outbound webhook endpoints (settings pages)
+app.route("/api/settings/api-keys", apiKeyRoutes);
+app.route("/api/settings/webhooks", webhookSettingsRoutes);
+
+// ── Previously-orphaned routers (IMPROVEMENTS #1). Mount prefixes derived from each route file's
+// internal paths + the frontend api module that calls it. MORE-SPECIFIC prefixes are registered
+// BEFORE the general ones they share a base with (Hono matches in registration order).
+// AI: churn + settings are more specific than the bare /api/ai family.
+app.route("/api/ai/churn", aiChurnRoutes);
+app.route("/api/settings/ai", aiSettingsRoutes);
+app.route("/api/ai", aiRoutes);
+app.route("/api/ai", aiLeadsRoutes); // /qualify-leads, /reply-suggestion
+// School / K-12 vertical: timetable, tuition, admissions are sub-namespaces of /api/school.
+app.route("/api/school/timetable", timetableRoutes);
+app.route("/api/school/tuition", tuitionRoutes);
+app.route("/api/school/admissions", admissionsRoutes);
+app.route("/api/school", schoolRoutes); // /years, /terms, /classes
+app.route("/api/school", gradesRoutes); // /subjects, /grades/...
+app.route("/api/school", schoolNewsAdminRoutes); // /news (admin)
+// Branches (reports is more specific than /api/branches).
+app.route("/api/branches/reports", branchReportsRoutes);
+app.route("/api/branches", branchRoutes);
+// Standalone /api/<prefix> CRUD routers.
+app.route("/api/attendance", attendanceRoutes);
+app.route("/api/broadcasts", broadcastRoutes);
+app.route("/api/certificates", certificatesIssueRoutes); // /issue, /issue-bulk
+app.route("/api/consent", consentRoutes);
+app.route("/api/forms", formRoutes);
+app.route("/api/groups", groupRoutes);
+app.route("/api/integrations/triggers", integrationTriggersRoutes);
+app.route("/api/lesson-packages", lessonPackageRoutes);
+app.route("/api/messages", messageRoutes);
+// NOTE: mobileRoutes (/api/m) is intentionally NOT mounted — mobile.ts imports a non-existent
+// `homework` schema export (queries a `homework` table with studentId/deadline/status that was
+// never created; lesson_homework has none of those). Mounting it crashes server boot. Needs a
+// real rewrite (join lesson_homework + homework_submissions). Tracked in IMPROVEMENTS. (mount-exempt)
+app.route("/api/parent", parentPortalRoutes); // /children/...
+app.route("/api/payment-plans", paymentPlanRoutes);
+app.route("/api/portal", portalInvoiceRoutes); // /invoice/:id (composes with other /api/portal mounts)
+app.route("/api/progress", progressRoutes);
+app.route("/api/promo-codes", promoCodeRoutes);
+app.route("/api/recovery", recoveryRoutes);
+app.route("/api/settings", settingsRoutes); // /rr-assign (round-robin assignment)
+app.route("/api/tenantSettings", tenantSettingsRoutes);
+app.route("/api/users", userRoutes);
+// Routers whose internal paths already carry the feature segment → mount at "/api".
+app.route("/api", accountingRoutes); // /accounting/export, /accounting/summary, /accounting/mappings
+app.route("/api/students", guardianRoutes); // /:studentId/guardians
+app.route("/api/students", studentHomeworkRoutes); // /:studentId/homework
+app.route("/api/lessons", lessonHomeworkRoutes); // /:lessonId/homework
+app.route("/api/homework", homeworkRoutes); // /:id/submit
+app.route("/api", refundRoutes); // /invoices/:id/refund, /refunds
+app.route("/api", reminderRoutes); // /admin/run-reminders, /invoices/:id/reminders, /payments/overdue-summary
+app.route("/api", waitlistRoutes); // /courses/:id/waitlist
+// Stripe: signature verification on the webhook is now mandatory (security C-1 fix), safe to mount.
+app.route("/api", stripeRoutes); // /settings/stripe, /invoices/:id/stripe-link
+app.route("/api", stripeWebhookRoutes); // /webhooks/stripe
 
 app.get("/api/health", async (c) => {
   try {

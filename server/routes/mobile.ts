@@ -18,6 +18,9 @@ import { getStudentXP, awardXP, updateStreak } from "../lib/xp";
 import { sum } from "drizzle-orm";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
+// mount-exempt: imports a non-existent `homework` schema export (the /homework endpoint queries a
+// `homework` table with studentId/deadline/status that was never created — lesson_homework has none
+// of those). Mounting crashes server boot. Needs a rewrite over lesson_homework + homework_submissions.
 export const mobileRoutes = new Hono<{ Variables: AuthVariables }>();
 
 mobileRoutes.use("*", requireAuth);

@@ -12,6 +12,10 @@ Read one spec from `backlog/specs/<ID>.md`, implement it completely, and report 
 
 ## Hard rules
 
+0. **Heed `KNOWN_PITFALLS` if passed.** The orchestrator may hand you a `KNOWN_PITFALLS` block —
+   distilled notes from `docs/solutions/` about failures past work hit in this same area (migration
+   prefix collisions, raw `.execute().rows`, missing schema `index.ts` export, tenant leaks, etc.).
+   Treat them as constraints to satisfy up front, not optional reading. Don't re-learn a documented bug.
 1. **Read the spec first.** Implement only what's in *Acceptance criteria*. Do not invent extra features.
 2. **Use the design system.** Colors via tokens (`bg-primary`, `text-muted-foreground`), spacing via Tailwind scale, radius/shadow from `var(--radius)` / `shadow-*`. NEVER hardcode hex values in JSX.
 3. **No new deps without justification.** Prefer inline SVG over chart libs, native HTML5 DnD over libraries. If you must add a dep, document why in the PR description.

@@ -9,30 +9,30 @@ BEGIN
     ALTER TYPE "invoice_status" ADD VALUE 'refunded';
   END IF;
 END$$;
-
+--> statement-breakpoint
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'partially_refunded' AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'invoice_status')) THEN
     ALTER TYPE "invoice_status" ADD VALUE 'partially_refunded';
   END IF;
 END$$;
-
+--> statement-breakpoint
 -- 2. Add refunded_amount_cents column to invoices
 ALTER TABLE "invoices"
   ADD COLUMN IF NOT EXISTS "refunded_amount_cents" integer NOT NULL DEFAULT 0;
-
+--> statement-breakpoint
 -- 3. Create refund_status enum
 DO $$ BEGIN
   CREATE TYPE "refund_status" AS ENUM ('pending', 'completed', 'failed');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-
+--> statement-breakpoint
 -- 4. Create refund_method enum
 DO $$ BEGIN
   CREATE TYPE "refund_method" AS ENUM ('stripe', 'manual');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-
+--> statement-breakpoint
 -- 5. Create refunds table
 CREATE TABLE IF NOT EXISTS "refunds" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -49,8 +49,10 @@ CREATE TABLE IF NOT EXISTS "refunds" (
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
-
+--> statement-breakpoint
 -- 6. Create indexes
 CREATE INDEX IF NOT EXISTS "refunds_tenant_idx" ON "refunds"("tenant_id");
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "refunds_invoice_idx" ON "refunds"("invoice_id");
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "refunds_status_idx" ON "refunds"("tenant_id", "status");

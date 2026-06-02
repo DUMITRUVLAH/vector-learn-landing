@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS "portal_notification_prefs" (
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "pnp_tenant_idx" ON "portal_notification_prefs" ("tenant_id");
+--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "pnp_student_uniq" ON "portal_notification_prefs" ("student_id");

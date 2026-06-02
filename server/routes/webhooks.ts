@@ -20,6 +20,8 @@ import { db } from "../db/client";
 import { leads, leadInteractions, webhookEvents } from "../db/schema";
 import { normalizePhone, normalizeEmail, normalizeName } from "../lib/normalize";
 
+// mount-exempt: inbound Meta lead-ads webhook (not called by the frontend; URL configured in Meta).
+// Deferred pending the auth/dispatch hardening for inbound integrations — tracked in IMPROVEMENTS.
 export const webhookRoutes = new Hono();
 
 // ---------------------------------------------------------------------------

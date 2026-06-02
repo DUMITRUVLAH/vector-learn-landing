@@ -1,0 +1,43 @@
+name: Prod-safety gates
+
+# The guards that stop the recurring prod-breakers (see docs/audits/IMPROVEMENTS.md). Fast, no
+# secrets, no DB credentials — each is a static scan or a self-contained PGlite check. Runs on
+# every PR and push so the bug classes we already fixed can never silently come back.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: prod-safety-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      # 1. Undefined references (TS2304/2552) — a missing import ships a runtime ReferenceError.
+      - name: Undefined-reference gate
+        run: node scripts/check-undefined-refs.mjs
+
+      # 2. Every Hono router export must be mounted in server/app.ts (or mount-exempt).
+      #    An orphan route falls through to the SPA HTML fallback → "Unexpected token '<'".
+      - name: Route-mount gate
+        run: node scripts/check-route-mounts.mjs
+
+      # 3. Multi-statement migrations must use "--> statement-breakpoint" or they crash a fresh DB.
+      - name: Migration-breakpoint gate
+        run: node scripts/check-migration-breakpoints.mjs
+
+      # 4. Schema drift — every table/column the code declares must be created by a migration,
+      #    else a fresh deploy 500s. sync-schema.ts only adds columns, never whole tables.
+      - name: Schema-drift gate
+        run: npx vitest run src/__tests__/schema-drift.test.ts

@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS "groups" (
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "updated_at" timestamptz NOT NULL DEFAULT now()
 );
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "groups_tenant_idx" ON "groups" ("tenant_id");
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "groups_course_idx" ON "groups" ("course_id");
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "groups_status_idx" ON "groups" ("tenant_id", "status");

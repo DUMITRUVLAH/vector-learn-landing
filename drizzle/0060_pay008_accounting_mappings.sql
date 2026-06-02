@@ -6,7 +6,7 @@ DO $$ BEGIN
   CREATE TYPE "accounting_transaction_type" AS ENUM ('payment', 'refund', 'payout');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-
+--> statement-breakpoint
 -- 2. Create accounting_mappings table
 CREATE TABLE IF NOT EXISTS "accounting_mappings" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS "accounting_mappings" (
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
-
+--> statement-breakpoint
 -- 3. Create indexes
 CREATE INDEX IF NOT EXISTS "accounting_mappings_tenant_idx" ON "accounting_mappings"("tenant_id");
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "accounting_mappings_type_idx" ON "accounting_mappings"("tenant_id", "transaction_type");

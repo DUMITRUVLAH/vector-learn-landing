@@ -5,9 +5,9 @@
 
 -- courses: add max_students + recovery_included
 ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "max_students" integer;
+--> statement-breakpoint
 ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "recovery_included" boolean DEFAULT true NOT NULL;
 --> statement-breakpoint
-
 -- GAP-005: course_waitlist
 CREATE TABLE IF NOT EXISTS "course_waitlist" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -47,7 +47,6 @@ CREATE INDEX IF NOT EXISTS "cwl_course_idx" ON "course_waitlist" USING btree ("c
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "cwl_position_idx" ON "course_waitlist" USING btree ("course_id", "position");
 --> statement-breakpoint
-
 -- GAP-006: lesson_package_status enum + lesson_packages
 DO $$ BEGIN
   CREATE TYPE "public"."lesson_package_status" AS ENUM ('active', 'exhausted', 'expired', 'cancelled');

@@ -14,7 +14,9 @@ CREATE TABLE IF NOT EXISTS form_logic (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS form_logic_form_idx ON form_logic(form_id);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS form_logic_tenant_idx ON form_logic(tenant_id);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS form_logic_from_field_idx ON form_logic(from_field_id);

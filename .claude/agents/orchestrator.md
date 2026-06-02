@@ -31,8 +31,12 @@ The owner reviews PRs on their own schedule, in parallel. Do not wait for PR app
 ## Pipeline (per item)
 
 ```
-PICK → BUILD → TEST-WRITER → REVIEW⇄IMPROVE(≤3) → TEST⇄FIX(≤2) → PERSONA_MANAGER → PERSONA_STUDENT → COMMIT → PR → MARK_DONE → LOOP
+PICK → RECALL → BUILD → TEST-WRITER → REVIEW⇄IMPROVE(≤3) → TEST⇄FIX(≤2) → PERSONA_MANAGER → PERSONA_STUDENT → COMMIT → PR → MARK_DONE → COMPOUND → LOOP
 ```
+
+`RECALL` = search `docs/solutions/` for past learnings touching this area, pass them to the builder.
+`COMPOUND` = after a non-trivial fix, write the lesson back to `docs/solutions/` for the next run.
+Together they form the compound-engineering loop: knowledge accumulates instead of being re-learned.
 
 `REVIEW⇄IMPROVE` = reviewer(s) give findings, improver applies them, re-review until clean.
 `TEST⇄FIX` = on a red gate, fix in place and re-test (repair, don't skip — CLAUDE.md §0.2).
@@ -90,8 +94,24 @@ Triggered only when no `pending` item exists and no `blocked` item is retryable.
 
 **Bounded-batch interaction:** spec generation doesn't count toward the 3-item cap. If a module yields 4 specs but cap allows 3 builds, build 3 and leave the 4th `pending` for the next run.
 
+### Step 1c — RECALL LEARNINGS (compound knowledge, before building)
+Before BUILD, search `docs/solutions/` for any past learning that touches the area this item
+builds (auth, migrations, db, deploy, the module name, etc.). This is the compound-engineering
+"don't step on the same rake twice" gate — knowledge from prior fixes carries forward.
+
+- Invoke the `ce-learnings-researcher` agent with a `<work-context>` block (Activity = the spec's
+  Goal; Concepts = the modules/tables/areas it touches; Domains = code-implementation). It greps
+  `docs/solutions/` frontmatter and returns the relevant notes distilled.
+- If `docs/solutions/` is empty or no match → skip silently, continue to BUILD.
+- If matches found → pass them to `feature-builder` in Step 2 as "KNOWN_PITFALLS: <distilled notes>"
+  so the builder avoids the documented failure up front (e.g. migration prefix collision, raw
+  `.execute().rows`, missing schema `index.ts` export).
+
+This step is cheap and read-only; never let it block the loop.
+
 ### Step 2 — BUILD
-Invoke `feature-builder` agent via Agent tool. Pass the spec file path. Wait for `BUILDER_RESULT`.
+Invoke `feature-builder` agent via Agent tool. Pass the spec file path AND any `KNOWN_PITFALLS`
+from Step 1c. Wait for `BUILDER_RESULT`.
 
 - `success` → continue to TEST-WRITER
 - `partial` → mark item `blocked`, write report, GOTO Step 1 (next item)
@@ -227,6 +247,21 @@ for this run. Merging is outward-facing and hard to reverse — it stays the own
 Update `backlog/STATE.json`: set item status to `done`, set `last_completed = <ID>`, clear `current_item`.
 
 Update `backlog/BACKLOG.md` table: change status column to `done` for that row.
+
+### Step 9b — COMPOUND (document non-trivial fixes — knowledge that compounds)
+The compound-engineering principle: each solved problem should make the next one easier. So when
+this item's TEST⇄FIX or REVIEW⇄IMPROVE loop required a **real diagnosis** — a migration collision,
+a driver-portability bug, a missing schema export, an auth/tenant leak, a race, anything that took
+more than a one-line typo fix — write ONE note to `docs/solutions/<category>/<slug>.md` using the
+frontmatter schema in `docs/solutions/README.md` (title, problem_type, module, tags, symptoms,
+severity, date) and the body sections **Symptom → Root cause → Fix → How to avoid next time**.
+
+Rules:
+- **Only non-trivial fixes.** A clean build with no real debugging produces NO note (noise control).
+- **One problem per file.** Reuse an existing note (update it) before creating a near-duplicate —
+  grep `docs/solutions/` for the same tags first.
+- Keep it tight (≤ 40 lines). The next agent reads it in seconds via `ce-learnings-researcher`.
+- This is the write side of the Step 1c loop: today's fix becomes tomorrow's KNOWN_PITFALLS.
 
 ### Step 10 — LOOP
 Increment iteration counter. If you have already completed **3 items this run**, STOP here and emit ORCHESTRATOR_RUN_SUMMARY with `stop_reason: batch_complete` and `pending: <count>` (bounded-batch rule in Operating principle — keeps context under the 200k window, no credits). Otherwise GOTO Step 1. Between items emit ONE short status line:
