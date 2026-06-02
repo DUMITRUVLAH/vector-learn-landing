@@ -18,6 +18,8 @@ export interface Cohort {
   mentorCostCents: number;
   roomCostCents: number;
   driveFolderUrl: string | null;
+  /** INTEG-103: branch_id (soft-ref, nullable UUID) */
+  branchId?: string | null;
   createdAt: string;
   updatedAt: string;
   // Enriched by server
@@ -38,12 +40,20 @@ export interface CreateCohortPayload {
   mentorCostCents?: number;
   roomCostCents?: number;
   driveFolderUrl?: string | null;
+  /** INTEG-103: branch_id */
+  branchId?: string | null;
 }
 
 export type PatchCohortPayload = Partial<CreateCohortPayload>;
 
-export async function listCohorts(): Promise<{ cohorts: Cohort[] }> {
-  return api<{ cohorts: Cohort[] }>("/api/cohorts");
+/**
+ * INTEG-103: optional branchId filter — passes ?branchId=<uuid> to server
+ */
+export async function listCohorts(
+  opts?: { branchId?: string }
+): Promise<{ cohorts: Cohort[] }> {
+  const qs = opts?.branchId ? `?branchId=${encodeURIComponent(opts.branchId)}` : "";
+  return api<{ cohorts: Cohort[] }>(`/api/cohorts${qs}`);
 }
 
 export async function createCohort(

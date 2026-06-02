@@ -55,6 +55,12 @@ export const cohorts = pgTable(
     roomCostCents: integer("room_cost_cents").notNull().default(0),
     /** Optional Google Drive folder URL */
     driveFolderUrl: varchar("drive_folder_url", { length: 1000 }),
+    /**
+     * INTEG-103: branch_id (soft-ref, nullable UUID).
+     * FK constraint to branches.id deferred until BRANCH-faza-1 PR is merged to main.
+     * Enables filtering cohorts per branch and per-branch cohort reports.
+     */
+    branchId: uuid("branch_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

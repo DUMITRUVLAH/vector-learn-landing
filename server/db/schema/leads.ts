@@ -2,6 +2,7 @@ import { pgTable, uuid, varchar, timestamp, pgEnum, index, jsonb, integer } from
 import { tenants } from "./tenants";
 import { students } from "./students";
 import { users } from "./users";
+import { courses } from "./courses";
 
 export const leadStageEnum = pgEnum("lead_stage", [
   "new",
@@ -62,6 +63,10 @@ export const leads = pgTable(
     company: varchar("company", { length: 300 }),
     /** CRM-114: Optional deal name — if set, used as title instead of full_name */
     dealName: varchar("deal_name", { length: 300 }),
+    /** INTEG-101: FK to courses — curs de interes structural (selectat din lista de cursuri reale) */
+    courseId: uuid("course_id").references(() => courses.id, { onDelete: "set null" }),
+    /** INTEG-101: FK to branches — filiale (UUID, FK constraint added when branches table is on main) */
+    branchId: uuid("branch_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

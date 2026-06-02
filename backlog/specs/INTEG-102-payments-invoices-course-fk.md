@@ -1,70 +1,52 @@
 ---
 id: INTEG-102
-title: payments.courseId + invoices.courseId FK — plăți legate de curs
+title: "Integrare: payments + invoices cu FK spre courses — revenue per curs"
 milestone: INTEG
-phase: "1"
-branch: feat/INTEG-faza-1-conectivitate-module
+phase: 1
 status: pending
-attempts: 0
 depends_on: [INTEG-101]
+slug: payments-invoices-course-fk
 ---
 
 ## Goal
 
-Plățile și facturile trebuie asociate unui curs pentru a putea calcula revenue per curs. Acum `payments` și `invoices` au doar `studentId` — nu se știe pentru ce curs s-a plătit. Fără acest FK, endpoint-ul `/api/analytics/revenue-by-course` este imposibil de implementat corect.
+Adaugă `course_id` (FK→courses, nullable, ON DELETE SET NULL) pe tabelele `payments` și `invoices`.
+Permite rapoarte de venit per curs (revenue-per-course) fără a rupe plățile existente.
+
+## In scope
+
+- Migration: ADD COLUMN course_id uuid + FK constraint pe ambele tabele.
+- Schema Drizzle: payments.courseId + invoices.courseId cu referință la courses.id.
+- Routes: createSchema + patchSchema acceptă courseId; GET returnează courseName din JOIN.
+- Tests: T-INTEG-102-1..4 verzi.
+
+## Out of scope
+
+- UI pentru selectarea cursului pe plată/factură (UI item separat).
+- Revenue-per-course dashboard (INTEG-104).
 
 ## User stories
 
-- Ca director financiar, vreau să văd câți bani a generat fiecare curs, pentru că știu care cursuri sunt profitabile.
-- Ca manager, când creez o factură, vreau să asociez cursul pentru care se plătește, pentru că factura trebuie să fie clară.
-- Ca sistem analytics, vreau să pot agrupa plățile pe `courseId`, pentru că generez rapoartele de revenue.
+- **US-1**: Ca manager, vreau ca fiecare plată să fie legată de un curs pentru a vedea venitul per curs.
+- **US-2**: Ca manager, vreau ca facturile să indice cursul pentru export contabil corect.
 
 ## Acceptance criteria
 
-1. Migrare `0034_integ102_payments_invoices_course.sql` adaugă:
-   - `course_id UUID REFERENCES courses(id) ON DELETE SET NULL` pe tabela `payments`
-   - `course_id UUID REFERENCES courses(id) ON DELETE SET NULL` pe tabela `invoices`
-   - Ambele nullable
-
-2. Schema drizzle `server/db/schema/payments.ts` și `server/db/schema/invoices.ts` includ `courseId` cu relație FK.
-
-3. Route `server/routes/payments.ts`:
-   - `createPaymentSchema` acceptă opțional `courseId`
-   - `POST /api/payments` salvează `courseId`
-   - `GET /api/payments` returnează `courseId` și `courseName` (join)
-
-4. Route `server/routes/invoices.ts`:
-   - `createInvoiceSchema` acceptă opțional `courseId`
-   - `POST /api/invoices` salvează `courseId`
-   - `GET /api/invoices` returnează `courseId` și `courseName` (join)
-
-5. Frontend `InvoicesPage.tsx` și `PaymentsPage.tsx`:
-   - La creare invoice/payment, afișează un selector de curs (opțional)
-   - Dacă studentul are un `courseId` pe lead/cohort, pre-populează selectorul
-
-6. Migrare rulează fără erori.
-
-## Files touched
-
-- `server/db/schema/payments.ts`
-- `server/db/schema/invoices.ts`
-- `server/routes/payments.ts`
-- `server/routes/invoices.ts`
-- `src/pages/app/InvoicesPage.tsx`
-- `src/pages/app/PaymentsPage.tsx`
-- `src/lib/api/invoices.ts` și `payments.ts` — actualizează tipuri
-- `drizzle/` — migrare nouă `0034_integ102_...`
+- [ ] AC1: Migration 0032 adaugă course_id (nullable) pe payments și invoices.
+- [ ] AC2: POST /api/payments cu courseId → rând cu course_id setat.
+- [ ] AC3: POST /api/invoices cu courseId → rând cu course_id setat.
+- [ ] AC4: GET /api/payments returnează courseName din join (sau null dacă lipsește).
+- [ ] AC5: Plățile existente fără courseId nu se sparg (backward compatible).
+- [ ] AC6: tenant-safe; zero `any`; fără raw `.execute().rows`.
 
 ## Tests
 
-- Unit: `payments.courseId` se salvează și returnează
-- Unit: `invoices.courseId` se salvează și returnează
-- Integration: `POST /api/payments` cu `courseId` valid → persistat
+- **T-INTEG-102-1** `[blocant]` POST /api/payments cu courseId valid → 201, course_id setat.
+- **T-INTEG-102-2** `[blocant]` POST /api/invoices cu courseId valid → 201, course_id setat.
+- **T-INTEG-102-3** `[blocant]` GET /api/payments → returnează courseName (sau null).
+- **T-INTEG-102-4** POST fără courseId → 201, course_id null (backward compatible).
 
-## DoD
+## Definition of Done
 
-- [ ] Migrare generată și committată
-- [ ] `db:reset && db:seed` trece
-- [ ] TypeScript strict
-- [ ] Selectori curs în InvoicesPage + PaymentsPage
-- [ ] Tests verzi
+- [ ] AC1-6 bifate; T-INTEG-102-1..4 verzi; build+typecheck+lint+test verzi
+- [ ] Migration + API smoke + portability verzi (§3.5.1)

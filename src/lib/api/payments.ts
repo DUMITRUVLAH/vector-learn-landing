@@ -9,6 +9,10 @@ export interface Payment {
   dueDate: string | null;
   paidAt: string | null;
   description: string | null;
+  /** INTEG-102: course FK */
+  courseId?: string | null;
+  /** INTEG-102: course name resolved server-side */
+  courseName?: string | null;
   createdAt: string;
   studentName: string;
 }
@@ -34,6 +38,8 @@ export function createPayment(input: {
   status?: "pending" | "paid" | "overdue" | "refunded" | "cancelled";
   dueDate?: string | null;
   description?: string | null;
+  /** INTEG-102 */
+  courseId?: string | null;
 }): Promise<Payment> {
   return api<Payment>("/api/payments", {
     method: "POST",

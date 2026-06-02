@@ -1,60 +1,55 @@
 ---
 id: INTEG-103
-title: cohorts.branchId FK + branch filter — cohorte per filială
+title: "Integrare: cohorts.branchId — cohortă legată de filială"
 milestone: INTEG
-phase: "1"
-branch: feat/INTEG-faza-1-conectivitate-module
-status: pending
-attempts: 0
-depends_on: [BRANCH-701]
+phase: 1
+status: in_progress
+depends_on: [INTEG-101, INTEG-102]
+slug: cohorts-branch-fk
 ---
 
 ## Goal
 
-Cohortele (CX module) nu au filială. Un manager de filială vede toate cohortele din toate filialele. Adăugăm `branchId` pe cohorte și aplicăm branch filter pe route.
+Adaugă `branch_id` (UUID, soft-ref, nullable) pe tabela `cohorts` pentru a lega o ediție de curs
+de o filială specifică. Permite filtrarea cohortelor per filială și rapoarte de cohortă per filială.
+
+Notă: FK hard constraint (REFERENCES branches(id)) se adaugă post-merge al PR BRANCH-faza-1 (#110).
+Acum: câmp UUID soft (fără FK), la fel ca leads.branchId (INTEG-101 pattern).
+
+## In scope
+
+- Migration: ADD COLUMN branch_id uuid (nullable, fără FK constraint acum).
+- Schema Drizzle: cohorts.branchId (uuid, nullable).
+- Route PATCH /api/cohorts/:id acceptă branchId.
+- Route GET /api/cohorts acceptă query param `branchId` (filter).
+- Tests: T-INTEG-103-1..4 verzi.
+
+## Out of scope
+
+- FK hard constraint → post-merge BRANCH-faza-1.
+- Branch selector în UI cohortă (UI item separat).
 
 ## User stories
 
-- Ca manager de filială, vreau să văd doar cohortele filialei mele în CX, pentru că nu am acces la alte filiale.
-- Ca director de rețea, vreau să pot filtra cohortele pe filială în CX, pentru că văd situația per locație.
-- Ca sistem, vreau că la crearea unei cohorte, `branchId`-ul să fie setat automat din contextul filialei active, pentru că nu e nevoie să selectez manual.
+- **US-1**: Ca manager, vreau să asociez o ediție de curs cu o filială pentru rapoarte per filială.
+- **US-2**: Ca manager, vreau să filtrez cohortele după filială.
 
 ## Acceptance criteria
 
-1. Migrare `0035_integ103_cohorts_branch.sql` adaugă:
-   - `branch_id UUID REFERENCES branches(id) ON DELETE SET NULL` pe tabela `cohorts`
-   - Nullable (backward compatible)
-
-2. Schema drizzle `server/db/schema/cohorts.ts` include `branchId`.
-
-3. Route `server/routes/cohorts.ts`:
-   - `cohortSchema` acceptă opțional `branchId`
-   - `GET /api/cohorts` aplică `withBranchFilter` (același pattern ca `students`)
-   - `POST /api/cohorts` salvează `branchId` din body sau din contextul user-ului
-
-4. Frontend `CXPage.tsx`:
-   - La crearea unei cohorte, `branchId` se trimite automat (din `BranchContext`)
-   - Cohortele afișate sunt filtrate per filialei active
-
-5. Migrare fără erori.
-
-## Files touched
-
-- `server/db/schema/cohorts.ts`
-- `server/routes/cohorts.ts`
-- `src/pages/app/CXPage.tsx`
-- `src/lib/api/cohorts.ts` — adaugă `branchId` în tipul `Cohort`
-- `drizzle/` — migrare `0035_integ103_...`
+- [ ] AC1: Migration adaugă branch_id uuid nullable pe cohorts.
+- [ ] AC2: PATCH /api/cohorts/:id cu branchId → salvat corect.
+- [ ] AC3: GET /api/cohorts?branchId=X → returnează doar cohortele acelei filiale.
+- [ ] AC4: GET /api/cohorts fără filter → returnează toate cohortele (backward compatible).
+- [ ] AC5: tenant-safe; zero `any`; fără raw `.execute().rows`.
 
 ## Tests
 
-- Unit: `cohorts.branchId` se salvează
-- Unit: `GET /api/cohorts` cu branch filter returnează doar cohortele filialei
-- Integration: creare cohortă cu `branchId` → persistat
+- **T-INTEG-103-1** `[blocant]` Schema cohorts.branchId există și e nullable.
+- **T-INTEG-103-2** `[blocant]` PATCH cu branchId valid → branchId setat pe cohortă.
+- **T-INTEG-103-3** `[blocant]` GET ?branchId= → filtrare corectă (returnează numai cohorte cu acel branchId).
+- **T-INTEG-103-4** GET fără filter → toate cohortele (backward compatible).
 
-## DoD
+## Definition of Done
 
-- [ ] Migrare generată și committată
-- [ ] `db:reset && db:seed` trece
-- [ ] withBranchFilter aplicat pe cohorts route
-- [ ] Tests verzi
+- [ ] AC1-5 bifate; T-INTEG-103-1..4 verzi; build+typecheck+lint+test verzi
+- [ ] Migration + portability verzi (§3.5.1)

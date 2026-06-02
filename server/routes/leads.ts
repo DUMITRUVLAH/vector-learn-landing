@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, asc, count, desc, eq, ilike, inArray, ne, or } from "drizzle-orm";
 import { db } from "../db/client";
-import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, leadTags } from "../db/schema";
+import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, leadTags, courses } from "../db/schema";
 import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
@@ -86,6 +86,10 @@ const createLeadSchema = z.object({
   dealName: z.string().max(300).optional().nullable(),
   /** CRM-141: initial stage for direct-to-column creation */
   stage: z.enum(STAGES).optional().default("new"),
+  /** INTEG-101: FK to courses */
+  courseId: z.string().uuid().optional().nullable(),
+  /** INTEG-101: FK to branches (soft reference — FK constraint deferred) */
+  branchId: z.string().uuid().optional().nullable(),
 });
 
 const updateLeadSchema = z.object({
@@ -99,6 +103,9 @@ const updateLeadSchema = z.object({
   debtCents: z.number().int().min(0).optional(),
   company: z.string().max(300).optional().nullable(),
   dealName: z.string().max(300).optional().nullable(),
+  /** INTEG-101 */
+  courseId: z.string().uuid().optional().nullable(),
+  branchId: z.string().uuid().optional().nullable(),
 });
 
 const stageChangeSchema = z.object({
@@ -125,6 +132,8 @@ const listQuerySchema = z.object({
   /** Shared filters */
   source: z.enum([...SOURCES, "all"]).default("all"),
   assignedTo: z.string().optional(),
+  /** INTEG-101: branch filter */
+  branchId: z.string().uuid().optional(),
 });
 
 const publicIntakeSchema = z.object({
@@ -265,12 +274,14 @@ leadRoutes.post("/dedup-check", zValidator("json", dedupCheckSchema), async (c) 
 });
 
 leadRoutes.get("/", zValidator("query", listQuerySchema), async (c) => {
-  const { search, stage, view, page, pageSize, sort, dir, source: filterSource, assignedTo } = c.req.valid("query");
+  const { search, stage, view, page, pageSize, sort, dir, source: filterSource, assignedTo, branchId } = c.req.valid("query");
   const tenantId = c.get("user").tenantId;
 
   const conditions = [eq(leads.tenantId, tenantId)];
   if (stage !== "all") conditions.push(eq(leads.stage, stage));
   if (filterSource && filterSource !== "all") conditions.push(eq(leads.source, filterSource as typeof SOURCES[number]));
+  /** INTEG-101: branch filter — only show leads from this branch */
+  if (branchId) conditions.push(eq(leads.branchId, branchId));
   if (assignedTo && assignedTo !== "all") {
     if (assignedTo === "unassigned") {
       // filter unassigned leads — use isNull check via raw expression workaround
@@ -586,6 +597,9 @@ leadRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
       dealName: (body.dealName as string | null) ?? null,
       /** CRM-141: honor initial stage (defaults to "new" via schema) */
       stage: (body.stage as typeof STAGES[number]) ?? "new",
+      /** INTEG-101: course FK + branch */
+      courseId: (body.courseId as string | null) ?? null,
+      branchId: (body.branchId as string | null) ?? null,
     })
     .returning();
 
@@ -629,7 +643,18 @@ leadRoutes.get("/:id", async (c) => {
     where: and(eq(leads.id, id), eq(leads.tenantId, tenantId)),
   });
   if (!lead) return c.json({ error: "not_found" }, 404);
-  return c.json(lead);
+
+  // INTEG-101: augment with courseName
+  let courseName: string | null = null;
+  if (lead.courseId) {
+    const course = await db.query.courses.findFirst({
+      where: eq(courses.id, lead.courseId),
+      columns: { name: true },
+    });
+    courseName = course?.name ?? null;
+  }
+
+  return c.json({ ...lead, courseName });
 });
 
 leadRoutes.patch("/:id", zValidator("json", updateLeadSchema), async (c) => {

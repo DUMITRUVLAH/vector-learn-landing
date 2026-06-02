@@ -54,6 +54,8 @@ const cohortSchema = z.object({
   mentorCostCents: z.number().int().min(0).default(0),
   roomCostCents: z.number().int().min(0).default(0),
   driveFolderUrl: z.string().url().optional().nullable(),
+  /** INTEG-103: branch_id (soft-ref, nullable UUID). FK deferred until BRANCH-faza-1 merges. */
+  branchId: z.string().uuid().optional().nullable(),
 });
 
 const patchSchema = cohortSchema.partial();
@@ -82,11 +84,17 @@ function enrichCohort(c: typeof cohorts.$inferSelect) {
 
 cohortRoutes.get("/", async (c) => {
   const user = c.get("user");
+  const branchId = c.req.query("branchId");
+
+  // INTEG-103: optional branchId filter
+  const whereClause = branchId
+    ? and(eq(cohorts.tenantId, user.tenantId), eq(cohorts.branchId, branchId))
+    : eq(cohorts.tenantId, user.tenantId);
 
   const rows = await db
     .select()
     .from(cohorts)
-    .where(eq(cohorts.tenantId, user.tenantId))
+    .where(whereClause)
     .orderBy(asc(cohorts.startDate));
 
   const list = Array.isArray(rows) ? rows : (rows as unknown as { rows: typeof rows }).rows ?? rows;
@@ -115,6 +123,7 @@ cohortRoutes.post("/", zValidator("json", cohortSchema), async (c) => {
       mentorCostCents: body.mentorCostCents,
       roomCostCents: body.roomCostCents,
       driveFolderUrl: body.driveFolderUrl ?? null,
+      branchId: body.branchId ?? null, // INTEG-103
     })
     .returning();
 

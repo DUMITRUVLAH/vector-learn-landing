@@ -1,126 +1,58 @@
 ---
 id: INTEG-104
-title: Implementează 4 endpoint-uri analytics lipsă — KPI, revenue, LTV
+title: "Integrare: 4 endpoint-uri analytics lipsă (/kpi, /revenue-over-time, /revenue-by-course, /student-ltv)"
 milestone: INTEG
-phase: "1"
-branch: feat/INTEG-faza-1-conectivitate-module
-status: pending
-attempts: 0
-depends_on: [INTEG-102]
+phase: 1
+status: in_progress
+depends_on: [INTEG-102, INTEG-103]
+slug: analytics-endpoints
 ---
 
 ## Goal
 
-Patru pagini de analytics (KpiDashboardPage, RevenueChartsPage, StudentRetentionPage) apelează endpoint-uri care NU există pe server. Fiecare pagină afișează permanent stare de eroare. Implementăm toate 4 endpoint-urile cu date reale din DB.
+Adaugă 4 endpoint-uri analytics lipsă care conectează modulele financiare (payments, courses, students).
+Aceste endpoint-uri sunt cerute de dashboard-ul de rapoarte (REP-301..304) dar nu existau
+în analytics.ts, forțând UI-ul să calculeze pe client sau să afișeze date incomplete.
 
-## Context — ce există acum
+## In scope
 
-`server/routes/analytics.ts` are doar endpoint-uri CRM (`/crm/funnel`, `/crm/roas`, etc.).  
-Clientul frontend la `src/lib/api/analytics.ts` apelează:
-- `GET /api/analytics/kpi?period=month|quarter|year` → `KpiDashboardPage.tsx`
-- `GET /api/analytics/revenue-over-time?months=N` → `RevenueChartsPage.tsx`
-- `GET /api/analytics/revenue-by-course` → `RevenueChartsPage.tsx`
-- `GET /api/analytics/student-ltv?limit=N` → `StudentRetentionPage.tsx`
+- GET /api/analytics/kpi — KPI-uri sumare: revenue luna curentă, students activi, rata conversie.
+- GET /api/analytics/revenue-over-time — serii temporale revnue zilnic/lunar (query param: granularity=day|month, months=1..12).
+- GET /api/analytics/revenue-by-course — revenue total per curs (din payments.course_id JOIN courses).
+- GET /api/analytics/student-ltv — LTV mediu per student (total plăți paid / nr studenți activi).
+- Niciun endpoint nu necesită migrare (folosesc tabele existente: payments, courses, students).
+- Tests: T-INTEG-104-1..5 verzi.
+
+## Out of scope
+
+- UI charts (acoperit de REP-30x).
+- Revenue per branch (INTEG-faza-2).
 
 ## User stories
 
-- Ca director, vreau să văd KPI-urile cheie (elevi activi, MRR, rata de retenție, leads noi) pe dashboard, pentru că am o imagine rapidă a academiei.
-- Ca director financiar, vreau un grafic de revenue în timp (lunile trecute), pentru că identific tendințele.
-- Ca manager de cursuri, vreau să știu ce revenue a generat fiecare curs, pentru că știu care sunt cursurile cele mai valoroase.
-- Ca director, vreau să văd LTV-ul mediu pe student (total plăți / student), pentru că înțeleg valoarea pe termen lung.
+- **US-1**: Ca manager, vreau KPI-uri la o privire pe dashboard pentru a lua decizii rapide.
+- **US-2**: Ca manager, vreau să văd evoluția venitului lunar ca să detectez trenduri.
+- **US-3**: Ca manager, vreau să știu care curs aduce cel mai mult venit.
+- **US-4**: Ca director, vreau LTV-ul mediu per student pentru a evalua profitabilitatea.
 
 ## Acceptance criteria
 
-### 1. `GET /api/analytics/kpi?period=month|quarter|year`
-
-Returnează:
-```json
-{
-  "activeStudents": 120,
-  "activeStudentsChange": 5.2,
-  "mrr": 48000,
-  "mrrChange": -2.1,
-  "newLeads": 34,
-  "newLeadsChange": 12.0,
-  "retentionRate": 87.5,
-  "retentionRateChange": 1.5
-}
-```
-- `activeStudents` = count(`students` WHERE `status = 'active'` AND în perioada selectată)
-- `mrr` = sum(`payments.amountCents`) pentru luna curentă / 100
-- `newLeads` = count(`leads` create în perioadă)
-- `retentionRate` = (elevi activi la final / elevi activi la start) * 100
-- `*Change` = comparație cu perioada anterioară (%)
-
-### 2. `GET /api/analytics/revenue-over-time?months=N`
-
-Returnează array de N luni:
-```json
-[
-  { "month": "2026-01", "revenue": 42000, "payments": 38 },
-  { "month": "2026-02", "revenue": 45000, "payments": 41 }
-]
-```
-- Grupare pe `DATE_TRUNC('month', payments.paid_at)`
-- Sum `amountCents` / 100
-
-### 3. `GET /api/analytics/revenue-by-course`
-
-Returnează:
-```json
-[
-  { "courseId": "uuid", "courseName": "Engleză B2", "revenue": 15000, "students": 12 },
-  ...
-]
-```
-- Join `payments → courses` via `payments.courseId` (adăugat de INTEG-102)
-- Fallback dacă `courseId` null: grup separat "Necategorizat"
-- Sortat descrescător după revenue
-
-### 4. `GET /api/analytics/student-ltv?limit=N`
-
-Returnează:
-```json
-{
-  "averageLtv": 2400,
-  "medianLtv": 1800,
-  "topStudents": [
-    { "studentId": "uuid", "studentName": "Ion P.", "totalPaid": 7200, "months": 14 }
-  ]
-}
-```
-- `totalPaid` = sum(`payments.amountCents`) per student / 100
-- `months` = luni de la prima plată la ultima
-- `topStudents` = primii `limit` studenți după `totalPaid`
-
-### 5. Branch filter
-
-Toate 4 endpoint-urile aplică branch filter dacă user-ul are `branchScope`.
-
-### 6. Paginile nu mai afișează eroare
-
-`KpiDashboardPage`, `RevenueChartsPage`, `StudentRetentionPage` — toate se încarcă cu date reale fără erori de 404.
-
-## Files touched
-
-- `server/routes/analytics.ts` — adaugă cele 4 handler-e noi
-- `src/pages/app/KpiDashboardPage.tsx` — verifică că tipurile se potrivesc
-- `src/pages/app/RevenueChartsPage.tsx` — verifică că tipurile se potrivesc
-- `src/pages/app/StudentRetentionPage.tsx` — verifică că tipurile se potrivesc
-- `src/lib/api/analytics.ts` — verifică/aliniază tipurile cu response-ul real
+- [ ] AC1: GET /api/analytics/kpi → { revenueMtdCents, activeStudents, conversionRate, overdueCount }.
+- [ ] AC2: GET /api/analytics/revenue-over-time?months=3 → { series: [{period, amountCents}] }.
+- [ ] AC3: GET /api/analytics/revenue-by-course → { courses: [{courseId, courseName, totalCents}] }.
+- [ ] AC4: GET /api/analytics/student-ltv → { avgLtvCents, totalRevenueCents, activeStudents }.
+- [ ] AC5: Toate endpoint-urile returnează 200 cu JSON valid; tenant-safe; zero any; fără .execute().rows.
+- [ ] AC6: Endpoint-urile sunt înregistrate în app.ts (sau în analyticsRoutes deja montat).
 
 ## Tests
 
-- Unit: `/api/analytics/kpi` returnează structura corectă
-- Unit: `/api/analytics/revenue-over-time` returnează N luni
-- Unit: `/api/analytics/revenue-by-course` returnează cursuri cu revenue
-- Unit: `/api/analytics/student-ltv` returnează LTV stats
-- Integration: toate 4 endpoint-uri returnează 200 cu tenant valid
+- **T-INTEG-104-1** `[blocant]` GET /api/analytics/kpi → shape corect (revenueMtdCents, activeStudents, conversionRate, overdueCount).
+- **T-INTEG-104-2** `[blocant]` GET /api/analytics/revenue-over-time → { series: Array<{period, amountCents}> }.
+- **T-INTEG-104-3** `[blocant]` GET /api/analytics/revenue-by-course → { courses: Array<{courseId, courseName, totalCents}> }.
+- **T-INTEG-104-4** `[blocant]` GET /api/analytics/student-ltv → { avgLtvCents, totalRevenueCents, activeStudents }.
+- **T-INTEG-104-5** Calculele sunt corecte: revenue-by-course grupează payments pe courseId și sumează amountCents.
 
-## DoD
+## Definition of Done
 
-- [ ] Toate 4 endpoint-uri implementate
-- [ ] Paginile se încarcă fără erori 404
-- [ ] Branch filter aplicat
-- [ ] TypeScript strict — zero `any`
-- [ ] Tests verzi
+- [ ] AC1-6 bifate; T-INTEG-104-1..5 verzi; build+typecheck+lint+test verzi
+- [ ] Fără migrare necesară (tabele existente).
