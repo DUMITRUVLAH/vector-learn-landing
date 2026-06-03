@@ -159,6 +159,9 @@ describe("CRM-115 — Tags on lead card", () => {
 
     renderLeadCard();
 
+    // Redesign: Câmpuri now lives under the "Mai mult" overflow menu
+    fireEvent.click(await screen.findByRole("button", { name: "Mai mult" }));
+
     await waitFor(() => {
       expect(screen.getByRole("tab", { name: /câmpuri/i })).toBeDefined();
     });

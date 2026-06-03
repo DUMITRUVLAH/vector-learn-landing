@@ -181,6 +181,8 @@ describe("CRM-106 — Lead card page", () => {
 
   it("T-CRM-106-1: interactions are in reverse chronological order (newest first)", async () => {
     renderLeadCard();
+    // Redesign: the unified timeline lives under the "Istoric" tab (Overview is default)
+    fireEvent.click(await screen.findByRole("tab", { name: "Istoric" }));
     const timeline = await waitFor(() => screen.getByLabelText("Timeline interacțiuni"));
     const items = Array.from(timeline.querySelectorAll("li"));
     // Newest (i3 - stage_change: occurred 2026-01-02) should appear before oldest (i1 - system: 2026-01-01)
@@ -198,6 +200,8 @@ describe("CRM-106 — Lead card page", () => {
    */
   it("T-CRM-106-4: adding a note appears immediately in timeline", async () => {
     renderLeadCard();
+    // Redesign: note composer lives under the "Istoric" tab (Overview is default)
+    fireEvent.click(await screen.findByRole("tab", { name: "Istoric" }));
     // CRM-134: note field is now MentionTextarea with updated aria-label
     await waitFor(() =>
       expect(screen.getByRole("textbox", { name: /notă/i })).toBeInTheDocument()
@@ -220,6 +224,7 @@ describe("CRM-106 — Lead card page", () => {
 
   it("T-CRM-106-4: note submit button disabled when input empty", async () => {
     renderLeadCard();
+    fireEvent.click(await screen.findByRole("tab", { name: "Istoric" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Adaugă" })).toBeDisabled());
   });
 
@@ -272,11 +277,11 @@ describe("CRM-106 — Lead card page", () => {
   });
 
   /**
-   * T-CRM-106-3: activity tab is default and sorted reverse chronological
+   * T-CRM-106-3: Overview is the default tab (redesign)
    */
-  it("T-CRM-106-3: activity tab is default active", async () => {
+  it("T-CRM-106-3: overview tab is default active", async () => {
     renderLeadCard();
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Activitate" })).toHaveAttribute("aria-selected", "true"));
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true"));
   });
 
   /**
@@ -303,6 +308,8 @@ describe("CRM-106 — Lead card page", () => {
    */
   it("renders GDPR tab with consent info", async () => {
     renderLeadCard();
+    // Redesign: GDPR now lives under the "Mai mult" overflow menu
+    fireEvent.click(await screen.findByRole("button", { name: "Mai mult" }));
     await waitFor(() => expect(screen.getByRole("tab", { name: "GDPR" })).toBeInTheDocument());
     fireEvent.click(screen.getByRole("tab", { name: "GDPR" }));
     expect(screen.getByText(/Consimțământ GDPR/i)).toBeInTheDocument();
