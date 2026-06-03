@@ -18,9 +18,15 @@ export const users = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     email: varchar("email", { length: 255 }).notNull(),
-    passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+    // Nullable: users who sign in only via Google (auth_provider = "google")
+    // have no local password. Password login guards against a null hash.
+    passwordHash: varchar("password_hash", { length: 255 }),
     name: varchar("name", { length: 200 }).notNull(),
     role: userRoleEnum("role").notNull().default("manager"),
+    // OAuth: Google's stable subject id ("sub"). Null for password-only accounts.
+    googleId: varchar("google_id", { length: 64 }),
+    // How the account authenticates: "password" (default) or "google".
+    authProvider: varchar("auth_provider", { length: 20 }).notNull().default("password"),
     branchScope: uuid("branch_scope"),
     isActive: boolean("is_active").notNull().default(true),
     phone: varchar("phone", { length: 50 }),
@@ -34,6 +40,7 @@ export const users = pgTable(
   (t) => ({
     tenantIdx: index("users_tenant_idx").on(t.tenantId),
     emailUniq: uniqueIndex("users_tenant_email_uniq").on(t.tenantId, t.email),
+    googleIdUniq: uniqueIndex("users_google_id_uniq").on(t.googleId),
     branchScopeIdx: index("users_branch_scope_idx").on(t.tenantId, t.branchScope),
     isActiveIdx: index("users_is_active_idx").on(t.tenantId, t.isActive),
   })
