@@ -3,15 +3,16 @@
  * lead → student + optional family (payer ↔ students)
  * Pre-fills from lead fields; supports payer (parent) data
  */
-import { useState } from "react";
-import { Loader2, UserPlus, X, Users } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Loader2, UserPlus, X, Users, GraduationCap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { convertLead, type Lead } from "@/lib/api/leads";
+import { listCohorts, type Cohort } from "@/lib/api/cohorts";
 import { ApiError } from "@/lib/api";
 
 interface ConvertModalProps {
   lead: Lead;
-  onSuccess: (result: { studentId: string; familyId: string | null }) => void;
+  onSuccess: (result: { studentId: string; familyId: string | null; enrolledCohortId: string | null }) => void;
   onCancel: () => void;
 }
 
@@ -28,8 +29,38 @@ export function ConvertModal({ lead, onSuccess, onCancel }: ConvertModalProps) {
   const [payerPhone, setPayerPhone] = useState("");
   const [payerEmail, setPayerEmail] = useState("");
 
+  // CX: pick which cohort/edition to enroll the new student in.
+  const [cohorts, setCohorts] = useState<Cohort[]>([]);
+  const [cohortId, setCohortId] = useState("");
+  const [cohortsLoading, setCohortsLoading] = useState(true);
+
   const [converting, setConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Load enrollable cohorts (active + upcoming). If the lead has a courseId, the
+  // cohorts of that course are surfaced first and one is pre-selected.
+  useEffect(() => {
+    let cancelled = false;
+    listCohorts()
+      .then((res) => {
+        if (cancelled) return;
+        const enrollable = res.cohorts.filter((c) => c.category !== "past");
+        // Course of this lead first (if known), then by start date.
+        enrollable.sort((a, b) => {
+          const aMatch = lead.courseId && a.courseId === lead.courseId ? 0 : 1;
+          const bMatch = lead.courseId && b.courseId === lead.courseId ? 0 : 1;
+          if (aMatch !== bMatch) return aMatch - bMatch;
+          return a.startDate.localeCompare(b.startDate);
+        });
+        setCohorts(enrollable);
+        // Pre-select the first cohort of the lead's course, if any.
+        const preferred = lead.courseId ? enrollable.find((c) => c.courseId === lead.courseId) : null;
+        if (preferred) setCohortId(preferred.id);
+      })
+      .catch(() => { /* cohort picker just stays empty — never blocks convert */ })
+      .finally(() => { if (!cancelled) setCohortsLoading(false); });
+    return () => { cancelled = true; };
+  }, [lead.courseId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,8 +77,9 @@ export function ConvertModal({ lead, onSuccess, onCancel }: ConvertModalProps) {
         payerName: hasParent && payerName.trim() ? payerName.trim() : null,
         payerPhone: hasParent && payerPhone.trim() ? payerPhone.trim() : null,
         payerEmail: hasParent && payerEmail.trim() ? payerEmail.trim() : null,
+        cohortId: cohortId || null,
       });
-      onSuccess({ studentId: result.student.id, familyId: result.familyId });
+      onSuccess({ studentId: result.student.id, familyId: result.familyId, enrolledCohortId: result.autoEnrolledCohortId });
     } catch (err) {
       if (err instanceof ApiError && err.code === "already_converted") {
         setError("Lead-ul a fost deja convertit.");
@@ -167,6 +199,36 @@ export function ConvertModal({ lead, onSuccess, onCancel }: ConvertModalProps) {
                   </div>
                 </div>
               </div>
+            </fieldset>
+
+            {/* CX: enroll in a cohort / edition */}
+            <fieldset className="space-y-2">
+              <legend className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                <GraduationCap className="h-3.5 w-3.5" aria-hidden="true" />
+                Înscrie în grupă
+              </legend>
+              <select
+                value={cohortId}
+                onChange={(e) => setCohortId(e.target.value)}
+                disabled={cohortsLoading}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                aria-label="Grupă / ediție în care se înscrie elevul"
+              >
+                <option value="">
+                  {cohortsLoading ? "Se încarcă grupele…" : "— Fără înscriere acum —"}
+                </option>
+                {cohorts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}{c.courseName ? ` · ${c.courseName}` : ""} ({c.category === "active" ? "activă" : "viitoare"})
+                  </option>
+                ))}
+              </select>
+              {!cohortsLoading && cohorts.length === 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  Nu există grupe active/viitoare.{" "}
+                  <a href="#/app/cx" className="text-primary underline">Creează o grupă</a> în pagina Grupe.
+                </p>
+              )}
             </fieldset>
 
             {/* Family toggle */}

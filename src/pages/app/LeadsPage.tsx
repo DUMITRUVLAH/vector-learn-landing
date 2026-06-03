@@ -256,8 +256,16 @@ export function LeadsPage() {
     }
   }, []);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  /**
+   * Load (or reload) the whole pipeline.
+   * @param opts.silent — when true, do NOT toggle the global `loading` flag.
+   *   Used after a stage move so the board re-syncs in the background without
+   *   flashing the full-page "Se încarcă pipeline-ul…" spinner (which made the
+   *   whole screen blink / jump on every drag — the refresh the owner reported).
+   */
+  const fetchAll = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const [pipelineRes, stagesRes, forecastRes] = await Promise.all([
@@ -272,11 +280,62 @@ export function LeadsPage() {
       setStages(stagesRes.stages);
       if (forecastRes) setTotalWeightedCents(forecastRes.totalWeightedCents);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Eroare");
+      // On a silent refresh, keep the current (optimistic) board rather than
+      // wiping it with an error screen — the move already succeeded on the server.
+      if (!silent) setError(err instanceof Error ? err.message : "Eroare");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
+
+  /**
+   * Optimistically move a lead between stage columns in local state, instantly,
+   * before the server round-trip. Recomputes per-stage counts and value sums so
+   * the column headers stay correct without a full reload. Returns a snapshot
+   * `revert()` so callers can roll back if the server rejects the move.
+   */
+  const moveLeadLocal = useCallback((leadId: string, toStageKey: string) => {
+    const prev = { grouped, counts, valueSums };
+    setGrouped((g) => {
+      let moved: Lead | undefined;
+      const next: Record<string, Lead[]> = {};
+      for (const [key, arr] of Object.entries(g)) {
+        const idx = arr.findIndex((l) => l.id === leadId);
+        if (idx >= 0) {
+          moved = { ...arr[idx], stage: toStageKey as LeadStage };
+          next[key] = [...arr.slice(0, idx), ...arr.slice(idx + 1)];
+        } else {
+          next[key] = arr;
+        }
+      }
+      if (moved) next[toStageKey] = [moved, ...(next[toStageKey] ?? [])];
+      return next;
+    });
+    setCounts((c) => {
+      const lead = Object.values(grouped).flat().find((l) => l.id === leadId);
+      if (!lead || lead.stage === toStageKey) return c;
+      return {
+        ...c,
+        [lead.stage]: Math.max(0, (c[lead.stage] ?? 0) - 1),
+        [toStageKey]: (c[toStageKey] ?? 0) + 1,
+      };
+    });
+    setValueSums((v) => {
+      const lead = Object.values(grouped).flat().find((l) => l.id === leadId);
+      const cents = lead?.valueCents ?? 0;
+      if (!lead || lead.stage === toStageKey || cents === 0) return v;
+      return {
+        ...v,
+        [lead.stage]: Math.max(0, (v[lead.stage] ?? 0) - cents),
+        [toStageKey]: (v[toStageKey] ?? 0) + cents,
+      };
+    });
+    return () => {
+      setGrouped(prev.grouped);
+      setCounts(prev.counts);
+      setValueSums(prev.valueSums);
+    };
+  }, [grouped, counts, valueSums]);
 
   useEffect(() => {
     void fetchAll();
@@ -352,18 +411,23 @@ export function LeadsPage() {
 
     const prevStage = lead.stage;
 
+    // Optimistic: move the card instantly, no full-page reload.
+    const revert = moveLeadLocal(lead.id, toStageKey);
+
     try {
       await moveLeadStage(lead.id, toStageKey as LeadStage);
-      void fetchAll();
+      void fetchAll({ silent: true });
       // CRM-143: show undo toast
       setStageMoveUndo({
         message: `Mutat la "${targetStage?.label ?? toStageKey}"`,
         onUndo: async () => {
+          moveLeadLocal(lead.id, prevStage);
           await moveLeadStage(lead.id, prevStage as LeadStage);
-          void fetchAll();
+          void fetchAll({ silent: true });
         },
       });
     } catch {
+      revert();
       setToast({ kind: "error", message: "Nu pot muta lead-ul" });
     }
   };
@@ -375,20 +439,23 @@ export function LeadsPage() {
     const movedLead = allLeads.find((l) => l.id === leadId);
     const prevStage = movedLead?.stage;
     setLostReasonFor(null);
+    const revert = moveLeadLocal(leadId, targetStage);
     try {
       await moveLeadStage(leadId, targetStage as LeadStage, lostReason);
-      void fetchAll();
+      void fetchAll({ silent: true });
       // CRM-143: undo lost-stage move
       if (prevStage) {
         setStageMoveUndo({
           message: "Lead marcat ca pierdut",
           onUndo: async () => {
+            moveLeadLocal(leadId, prevStage);
             await moveLeadStage(leadId, prevStage as LeadStage);
-            void fetchAll();
+            void fetchAll({ silent: true });
           },
         });
       }
     } catch {
+      revert();
       setToast({ kind: "error", message: "Nu pot muta lead-ul" });
     }
   };
@@ -815,12 +882,13 @@ export function LeadsPage() {
                         onClick={() => navigate(`/app/leads/${lead.id}`)}
                         stages={stages}
                         onStageMove={async (stageKey) => {
+                          const revert = moveLeadLocal(lead.id, stageKey);
                           try {
                             await moveLeadStage(lead.id, stageKey as LeadStage);
                             const target = stages.find((s) => s.key === stageKey);
                             setToast({ kind: "success", message: `Lead mutat la "${target?.label ?? stageKey}"` });
-                            void fetchAll();
-                          } catch { setToast({ kind: "error", message: "Nu pot muta lead-ul" }); }
+                            void fetchAll({ silent: true });
+                          } catch { revert(); setToast({ kind: "error", message: "Nu pot muta lead-ul" }); }
                         }}
                         onStageLost={(stageKey) => setLostReasonFor({ leadId: lead.id, targetStage: stageKey })}
                       />

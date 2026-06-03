@@ -18,6 +18,7 @@ import {
   type AutomationTrigger, type TestResult, type AutomationRun,
 } from "@/lib/api/automations";
 import { listTemplates, type MessageTemplate } from "@/lib/api/templates";
+import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { cn } from "@/lib/utils";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -73,8 +74,14 @@ interface AutomationEditorProps {
 }
 
 function AutomationEditor({ initial, templates, onSave, onCancel, saving }: AutomationEditorProps) {
+  // CX/CRM fix: the "assign" action needs a real user UUID. Load team members so
+  // the manager picks from a dropdown instead of typing a UUID (which fails .uuid()
+  // validation server-side → "Nu pot salva automatizarea").
+  const { members: teamMembers } = useTeamMembers();
   const [name, setName] = useState(initial?.name ?? "");
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
+  /** Inline validation message shown when an action is missing required params */
+  const [localError, setLocalError] = useState<string | null>(null);
   const [trigger, setTrigger] = useState<AutomationTrigger>(
     initial?.trigger ?? { event: "lead.created" }
   );
@@ -113,9 +120,32 @@ function AutomationEditor({ initial, templates, onSave, onCancel, saving }: Auto
     setActions((prev) => prev.map((a, i) => (i === idx ? { ...a, params } : a)));
   };
 
+  // Validate each action has its required params filled, so we catch it BEFORE
+  // the server 400s with an opaque error. Returns a human message or null.
+  const validateActions = (): string | null => {
+    for (const a of actions) {
+      if (a.type === "assign" && !String(a.params.userId ?? "").trim()) {
+        return "Alege responsabilul pentru acțiunea „Asignează lead”.";
+      }
+      if (a.type === "send_template" && !String(a.params.templateId ?? "").trim()) {
+        return "Alege un șablon pentru acțiunea „Trimite șablon”.";
+      }
+      if (a.type === "create_task" && !String(a.params.title ?? "").trim()) {
+        return "Completează titlul pentru acțiunea „Creează task”.";
+      }
+      if (a.type === "move_stage" && !String(a.params.stage ?? "").trim()) {
+        return "Alege stadiul pentru acțiunea „Mută în stadiu”.";
+      }
+    }
+    return null;
+  };
+  const actionError = validateActions();
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || actions.length === 0) return;
+    if (actionError) { setLocalError(actionError); return; }
+    setLocalError(null);
     onSave({ name: name.trim(), enabled, trigger, conditions, actions });
   };
 
@@ -438,18 +468,36 @@ function AutomationEditor({ initial, templates, onSave, onCancel, saving }: Auto
             )}
 
             {action.type === "assign" && (
-              <input
-                type="text"
-                value={String(action.params.userId ?? "")}
-                onChange={(e) => updateActionParams(idx, { userId: e.target.value })}
-                placeholder="UUID vânzător…"
-                className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs font-mono"
-                aria-label="UUID vânzător"
-              />
+              <div>
+                <select
+                  value={String(action.params.userId ?? "")}
+                  onChange={(e) => updateActionParams(idx, { userId: e.target.value })}
+                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Responsabil (cui se asignează lead-ul)"
+                >
+                  <option value="">— Alege responsabilul —</option>
+                  {teamMembers.map((m) => (
+                    <option key={m.id} value={m.id}>{m.fullName}</option>
+                  ))}
+                </select>
+                {teamMembers.length === 0 && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Niciun membru în echipă.{" "}
+                    <a href="#/app/team" className="text-primary underline">Adaugă unul.</a>
+                  </p>
+                )}
+              </div>
             )}
           </div>
         ))}
       </section>
+
+      {/* Inline validation message — tells the user WHAT to fix (not a generic error) */}
+      {(localError || actionError) && (
+        <p role="alert" className="text-right text-sm text-destructive">
+          {localError ?? actionError}
+        </p>
+      )}
 
       {/* Footer buttons */}
       <div className="flex justify-end gap-2 pt-2">
@@ -462,7 +510,7 @@ function AutomationEditor({ initial, templates, onSave, onCancel, saving }: Auto
         </button>
         <button
           type="submit"
-          disabled={saving || !name.trim() || actions.length === 0}
+          disabled={saving || !name.trim() || actions.length === 0 || actionError !== null}
           className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
