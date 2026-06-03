@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { setCookie, deleteCookie } from "hono/cookie";
+import { setCookie, deleteCookie, getCookie } from "hono/cookie";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { eq, and, gt, isNull } from "drizzle-orm";
@@ -11,6 +11,15 @@ import { createSession, revokeSession, SESSION_COOKIE } from "../auth/session";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { twoFactorRoutes } from "./auth/twoFactor";
 import { sessionMgmtRoutes } from "./auth/sessions";
+import {
+  getGoogleConfig,
+  generateState,
+  generateCodeVerifier,
+  codeChallengeFromVerifier,
+  buildAuthUrl,
+  exchangeCode,
+  fetchUserInfo,
+} from "../auth/google";
 
 const signupSchema = z.object({
   tenantName: z.string().min(2).max(200),
@@ -97,6 +106,11 @@ authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
     where: eq(users.email, body.email),
   });
   if (!user) {
+    return c.json({ error: "invalid_credentials" }, 401);
+  }
+  // Google-only accounts have no local password hash — they must use Google
+  // sign-in. Return the generic error to avoid leaking which accounts exist.
+  if (!user.passwordHash) {
     return c.json({ error: "invalid_credentials" }, 401);
   }
   const ok = await verifyPassword(body.password, user.passwordHash);
@@ -403,6 +417,141 @@ authRoutes.post("/__dev__/setup-demo-password", async (c) => {
     .where(eq(users.passwordHash, "$placeholder$"))
     .returning({ id: users.id });
   return c.json({ updated: updated.length, password: "demo123456" });
+});
+
+// AUTH-005: Google Sign-In (OAuth 2.0 / OIDC) ───────────────────────────────
+const G_STATE_COOKIE = "vl_g_state";
+const G_VERIFIER_COOKIE = "vl_g_verifier";
+const G_COOKIE_PATH = "/api/auth/google";
+const OAUTH_COOKIE_TTL_S = 600; // 10 min — the round-trip to Google is short
+
+function appUrl(): string {
+  return process.env.APP_URL ?? "http://localhost:5173";
+}
+
+// GET /api/auth/google — start the flow: mint state + PKCE, then redirect.
+authRoutes.get("/google", async (c) => {
+  const config = getGoogleConfig();
+  if (!config) {
+    return c.redirect(`${appUrl()}/#/app/login?error=google_not_configured`);
+  }
+
+  const state = generateState();
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = codeChallengeFromVerifier(codeVerifier);
+
+  const cookieOpts = {
+    httpOnly: true,
+    sameSite: "Lax" as const,
+    secure: SECURE_COOKIES,
+    path: G_COOKIE_PATH,
+    maxAge: OAUTH_COOKIE_TTL_S,
+  };
+  setCookie(c, G_STATE_COOKIE, state, cookieOpts);
+  setCookie(c, G_VERIFIER_COOKIE, codeVerifier, cookieOpts);
+
+  return c.redirect(buildAuthUrl(config, state, codeChallenge));
+});
+
+// GET /api/auth/google/callback — Google redirects back here with ?code&state.
+authRoutes.get("/google/callback", async (c) => {
+  const config = getGoogleConfig();
+  if (!config) {
+    return c.redirect(`${appUrl()}/#/app/login?error=google_not_configured`);
+  }
+
+  const fail = (reason: string) =>
+    c.redirect(`${appUrl()}/#/app/login?error=${reason}`);
+
+  // The user may have denied consent, or Google may send an error param.
+  if (c.req.query("error")) return fail("google_denied");
+
+  const code = c.req.query("code");
+  const state = c.req.query("state");
+  const storedState = getCookie(c, G_STATE_COOKIE);
+  const codeVerifier = getCookie(c, G_VERIFIER_COOKIE);
+
+  // Clear the one-time cookies regardless of outcome.
+  deleteCookie(c, G_STATE_COOKIE, { path: G_COOKIE_PATH });
+  deleteCookie(c, G_VERIFIER_COOKIE, { path: G_COOKIE_PATH });
+
+  if (!code || !state || !storedState || !codeVerifier || state !== storedState) {
+    return fail("google_state_mismatch");
+  }
+
+  let profile;
+  try {
+    const tokens = await exchangeCode(config, code, codeVerifier);
+    profile = await fetchUserInfo(tokens.access_token);
+  } catch {
+    return fail("google_failed");
+  }
+
+  if (!profile.email || !profile.emailVerified) {
+    return fail("google_email_unverified");
+  }
+
+  const ipAddress =
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+    c.req.header("cf-connecting-ip") ??
+    undefined;
+  const userAgent = c.req.header("user-agent") ?? undefined;
+
+  // 1) Already linked by Google id → straight login.
+  let user = await db.query.users.findFirst({
+    where: eq(users.googleId, profile.sub),
+  });
+
+  // 2) Existing account with the same email → link Google to it.
+  if (!user) {
+    const byEmail = await db.query.users.findFirst({
+      where: eq(users.email, profile.email),
+    });
+    if (byEmail) {
+      await db
+        .update(users)
+        .set({ googleId: profile.sub, updatedAt: new Date() })
+        .where(eq(users.id, byEmail.id));
+      user = { ...byEmail, googleId: profile.sub };
+    }
+  }
+
+  // 3) Brand-new user → create a fresh tenant + admin account (owner's choice).
+  if (!user) {
+    const baseName = profile.name || profile.email.split("@")[0];
+    let slug = slugify(baseName) || `org-${Math.random().toString(36).slice(2, 8)}`;
+    let attempt = 0;
+    while (await db.query.tenants.findFirst({ where: eq(tenants.slug, slug) })) {
+      attempt += 1;
+      slug = `${slugify(baseName)}-${attempt}`;
+      if (attempt > 50) return fail("google_failed");
+    }
+    const [tenant] = await db
+      .insert(tenants)
+      .values({ name: baseName, slug, plan: "starter" })
+      .returning();
+    const [created] = await db
+      .insert(users)
+      .values({
+        tenantId: tenant.id,
+        email: profile.email,
+        passwordHash: null,
+        name: profile.name,
+        role: "admin",
+        googleId: profile.sub,
+        authProvider: "google",
+        avatarUrl: profile.picture ?? null,
+      })
+      .returning();
+    user = created;
+  }
+
+  // Google verifies the email itself, so we skip the app's 2FA gate here and
+  // issue a full session directly.
+  const { token, expiresAt } = await createSession(user.id, { ipAddress, userAgent });
+  setSessionCookie(c, token, expiresAt);
+
+  return c.redirect(`${appUrl()}/#/app/dashboard`);
 });
 
 // AUTH-004: mount 2FA and session-management sub-routes
