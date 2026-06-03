@@ -11,7 +11,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   Loader2, ArrowLeft, Pencil, Check, X, ChevronDown,
-  Phone, Mail, Globe, Calendar, MessageCircle, UserPlus,
+  Phone, Mail, Calendar, MessageCircle, UserPlus,
   AlertTriangle, CheckCircle2, Trash2, MoreVertical, ShieldOff,
   Clock, Paperclip, Upload, Download, FilePlus,
 } from "lucide-react";
@@ -70,7 +70,11 @@ const INTERACTION_LABEL: Record<string, string> = {
   sms: "SMS", meeting: "Întâlnire", stage_change: "Schimbare stadiu", system: "Sistem",
 };
 
-type Tab = "activity" | "tasks" | "files" | "contacts" | "fields" | "comunicare" | "gdpr";
+type Tab = "overview" | "activity" | "tasks" | "files" | "contacts" | "fields" | "gdpr";
+/** Tabs folded under the "Mai mult" overflow menu (low-frequency). */
+const MORE_TABS: Tab[] = ["contacts", "fields", "gdpr"];
+/** Sub-filters for the unified history feed. */
+type HistoryFilter = "all" | "note" | "call" | "message";
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -96,7 +100,11 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   const [fieldValues, setFieldValues] = useState<LeadFieldValue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>("activity");
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  // Redesign: unified-history sub-filter, "Mai mult" overflow menu, top action menu
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
 
   // Task form
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -795,14 +803,30 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
         {/* ─── LEFT COLUMN ─────────────────────────────────────────────── */}
         <aside className="lg:sticky lg:top-4 lg:self-start space-y-4">
-          {/* Stage selector */}
+          {/* ─── Identity + primary actions (redesign) ─── */}
           <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+            {/* Name */}
+            <div>
+              {editing ? (
+                <input
+                  type="text"
+                  required
+                  minLength={2}
+                  value={editDraft.fullName ?? lead.fullName}
+                  onChange={(e) => setEditDraft((d) => ({ ...d, fullName: e.target.value }))}
+                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-base font-bold"
+                  aria-label="Nume complet"
+                />
+              ) : (
+                <h2 className="text-lg font-bold leading-tight">{lead.fullName}</h2>
+              )}
+              <p className="mt-0.5 text-xs text-muted-foreground">{SOURCE_LABEL[lead.source] ?? lead.source}</p>
+            </div>
+
+            {/* Stage — always changeable in one click (no Edit mode), avoids firing
+                a live moveLeadStage while editing other fields. */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Stadiu</p>
-              {/* Stage is always changeable in one click — moving a lead through the
-                  pipeline is the most frequent CRM action and shouldn't require Edit
-                  mode. Keeping it on its own control also avoids firing a live
-                  moveLeadStage while the user is editing other fields. */}
               {stages.length > 0 ? (
                 <div className="relative">
                   <div className={cn("inline-flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold", currentStage?.color ?? "bg-muted")}>
@@ -865,28 +889,128 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                 <AssigneeDisplay assignedTo={lead.assignedTo} />
               )}
             </div>
+
+            {/* Primary action bar — one obvious place for the frequent actions */}
+            {!editing && (
+              <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
+                <button
+                  type="button"
+                  onClick={handleOpenCall}
+                  disabled={!lead.phone || consentRevoked}
+                  className="inline-flex flex-1 min-w-[72px] items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 py-2 text-xs font-semibold hover:bg-muted disabled:opacity-40"
+                  aria-label="Sună lead"
+                  title="Sună + Loghează apel"
+                >
+                  <Phone className="h-3.5 w-3.5" aria-hidden="true" />
+                  Sună
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenSend("whatsapp")}
+                  disabled={!lead.phone || consentRevoked}
+                  className="inline-flex flex-1 min-w-[72px] items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 py-2 text-xs font-semibold hover:bg-muted disabled:opacity-40"
+                  aria-label="Trimite WhatsApp"
+                  title="Trimite WhatsApp"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                  WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenSend("email")}
+                  disabled={!lead.email || consentRevoked}
+                  className="inline-flex flex-1 min-w-[72px] items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 py-2 text-xs font-semibold hover:bg-muted disabled:opacity-40"
+                  aria-label="Trimite email"
+                  title="Trimite email"
+                >
+                  <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+                  Email
+                </button>
+                {!lead.convertedToStudentId && lead.stage !== "lost" && (
+                  <button
+                    type="button"
+                    onClick={handleConvert}
+                    className="inline-flex flex-1 min-w-[120px] items-center justify-center gap-1.5 rounded-lg border border-success/60 px-2.5 py-2 text-xs font-semibold text-success hover:bg-success/10"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                    Convertește
+                  </button>
+                )}
+                {/* More actions popover */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setActionsMenuOpen((v) => !v)}
+                    className="inline-flex items-center justify-center rounded-lg border border-border px-2.5 py-2 text-xs font-semibold hover:bg-muted"
+                    aria-label="Mai multe acțiuni"
+                    aria-haspopup="true"
+                    aria-expanded={actionsMenuOpen}
+                  >
+                    <MoreVertical className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                  {actionsMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setActionsMenuOpen(false)} />
+                      <div className="absolute left-0 top-full mt-1 z-40 w-52 rounded-xl border border-border bg-card shadow-lg py-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActionsMenuOpen(false);
+                            const params = new URLSearchParams();
+                            if (lead.fullName) params.set("name", lead.fullName);
+                            if (lead.interestCourse) params.set("course", lead.interestCourse);
+                            if (lead.valueCents) params.set("valueCents", String(lead.valueCents));
+                            params.set("leadId", lead.id);
+                            navigate(`/app/contracts?${params.toString()}`);
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                        >
+                          <FilePlus className="h-4 w-4" aria-hidden="true" />
+                          Generează contract
+                        </button>
+                        {!lead.convertedToStudentId && lead.stage !== "lost" && (
+                          <button
+                            type="button"
+                            onClick={() => { setActionsMenuOpen(false); handleFindCourse(); }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                          >
+                            <Calendar className="h-4 w-4" aria-hidden="true" />
+                            Găsește grupă
+                          </button>
+                        )}
+                        {!lead.convertedToStudentId && lead.stage !== "lost" && trialLessons.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => { setActionsMenuOpen(false); handleOpenConvertTrialModal(); }}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted text-success"
+                          >
+                            <UserPlus className="h-4 w-4" aria-hidden="true" />
+                            Convertește din Trial
+                          </button>
+                        )}
+                        {!lead.convertedToStudentId && lead.stage !== "lost" && (
+                          <>
+                            <div className="my-1 border-t border-border" />
+                            <button
+                              type="button"
+                              onClick={() => { setActionsMenuOpen(false); setPendingStage("lost"); setLostReasonModal(true); }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted text-muted-foreground hover:text-destructive"
+                            >
+                              <X className="h-4 w-4" aria-hidden="true" />
+                              Marchează pierdut
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </section>
 
-          {/* Contact info */}
-          <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-            {/* Full name */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Nume complet</p>
-              {editing ? (
-                <input
-                  type="text"
-                  required
-                  minLength={2}
-                  value={editDraft.fullName ?? lead.fullName}
-                  onChange={(e) => setEditDraft((d) => ({ ...d, fullName: e.target.value }))}
-                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                  aria-label="Nume complet"
-                />
-              ) : (
-                <p className="text-base font-bold leading-tight">{lead.fullName}</p>
-              )}
-            </div>
-
+          {/* ─── Contact (collapsible) ─── */}
+          <CardGroup title="Contact">
             {/* Phone */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Telefon</p>
@@ -908,32 +1032,8 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                     <Phone className="h-3.5 w-3.5" aria-hidden="true" />
                     {lead.phone}
                   </a>
-                  <div className="flex gap-1 items-center">
-                    {/* CRM-144: copy phone to clipboard */}
-                    <CopyButton value={lead.phone} ariaLabel="Copiază telefonul" />
-                    <button
-                      type="button"
-                      onClick={handleOpenCall}
-                      disabled={consentRevoked}
-                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted disabled:opacity-40"
-                      aria-label="Sună lead"
-                      title="Sună + Loghează apel"
-                    >
-                      <Phone className="h-3 w-3" aria-hidden="true" />
-                      Sună
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSend("whatsapp")}
-                      disabled={consentRevoked}
-                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted disabled:opacity-40"
-                      aria-label="Trimite WhatsApp"
-                      title="Trimite WhatsApp"
-                    >
-                      <MessageCircle className="h-3 w-3" aria-hidden="true" />
-                      WA
-                    </button>
-                  </div>
+                  {/* CRM-144: copy phone to clipboard (call/WA moved to the action bar) */}
+                  <CopyButton value={lead.phone} ariaLabel="Copiază telefonul" />
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">—</p>
@@ -961,27 +1061,17 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                     <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     <span className="truncate">{lead.email}</span>
                   </a>
-                  <div className="flex gap-1 items-center shrink-0">
-                    {/* CRM-144: copy email to clipboard */}
-                    <CopyButton value={lead.email} ariaLabel="Copiază email-ul" />
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSend("email")}
-                      disabled={consentRevoked}
-                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold hover:bg-muted disabled:opacity-40"
-                      aria-label="Trimite email"
-                      title="Trimite email"
-                    >
-                      <Mail className="h-3 w-3" aria-hidden="true" />
-                      Email
-                    </button>
-                  </div>
+                  {/* CRM-144: copy email to clipboard (send moved to the action bar) */}
+                  <CopyButton value={lead.email} ariaLabel="Copiază email-ul" />
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">—</p>
               )}
             </div>
+          </CardGroup>
 
+          {/* ─── Interes (collapsible) ─── */}
+          <CardGroup title="Interes">
             {/* INTEG-101: Curs de interes — selector din lista de cursuri reale */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Curs (din catalog)</p>
@@ -1019,22 +1109,18 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               )}
             </div>
 
-            {/* Source */}
-            <div className="flex items-center gap-1.5">
-              <Globe className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-              <p className="text-xs text-muted-foreground">{SOURCE_LABEL[lead.source] ?? lead.source}</p>
-            </div>
+          </CardGroup>
 
-            {/* UTM — analyst-level noise, collapsed by default */}
+          {/* ─── Detalii (collapsible, closed by default) ─── */}
+          <CardGroup title="Detalii" defaultOpen={false}>
+            {/* UTM */}
             {(lead.utmSource || lead.utmMedium || lead.utmCampaign) && (
-              <details className="group">
-                <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground select-none">
-                  Detalii UTM
-                </summary>
-                <div className="mt-1 rounded-md bg-muted/40 px-2 py-1.5 text-[10px] text-muted-foreground leading-relaxed">
-                  UTM: {lead.utmSource ?? "—"} / {lead.utmMedium ?? "—"} / {lead.utmCampaign ?? "—"}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">UTM</p>
+                <div className="rounded-md bg-muted/40 px-2 py-1.5 text-[10px] text-muted-foreground leading-relaxed">
+                  {lead.utmSource ?? "—"} / {lead.utmMedium ?? "—"} / {lead.utmCampaign ?? "—"}
                 </div>
-              </details>
+              </div>
             )}
 
             {/* Created at */}
@@ -1063,6 +1149,10 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               )}
             </div>
 
+          </CardGroup>
+
+          {/* ─── Disponibilitate (collapsible) ─── */}
+          <CardGroup title="Disponibilitate">
             {/* GAP-001: Slot preferat orar */}
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Disponibilitate preferată</p>
@@ -1144,22 +1234,10 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               )}
             </div>
 
-            {/* Notes */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Note</p>
-              {editing ? (
-                <textarea
-                  rows={3}
-                  value={editDraft.notes ?? lead.notes ?? ""}
-                  onChange={(e) => setEditDraft((d) => ({ ...d, notes: e.target.value || null }))}
-                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm resize-none"
-                  aria-label="Note interne"
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground">{lead.notes ?? "—"}</p>
-              )}
-            </div>
+          </CardGroup>
 
+          {/* ─── Valoare deal & note (collapsible) ─── */}
+          <CardGroup title="Valoare deal & note">
             {/* CRM-113: Value + debt */}
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1180,59 +1258,32 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               </div>
             </div>
 
-            {/* CRM-115: Tags */}
+            {/* Notes */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Tag-uri</p>
-              <TagsInline
-                leadId={leadId}
-                tags={tags}
-                setTags={setTags}
-              />
-            </div>
-          </section>
-
-          {/* Action buttons */}
-          {!lead.convertedToStudentId && lead.stage !== "lost" && (
-            <div className="space-y-2">
-              {/* GAP-002: Find matching course */}
-              <button
-                type="button"
-                onClick={handleFindCourse}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-primary/40 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10"
-              >
-                <Calendar className="h-4 w-4" />
-                Găsește grupă
-              </button>
-              {/* GAP-004: Convert-from-trial button — visible only when lead has at least one trial lesson */}
-              {trialLessons.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleOpenConvertTrialModal}
-                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-success px-4 py-2.5 text-sm font-semibold text-success-foreground hover:bg-success/90"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Convertește din Trial
-                </button>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Note</p>
+              {editing ? (
+                <textarea
+                  rows={3}
+                  value={editDraft.notes ?? lead.notes ?? ""}
+                  onChange={(e) => setEditDraft((d) => ({ ...d, notes: e.target.value || null }))}
+                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm resize-none"
+                  aria-label="Note interne"
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">{lead.notes ?? "—"}</p>
               )}
-              <button
-                type="button"
-                onClick={handleConvert}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-success/60 px-4 py-2.5 text-sm font-semibold text-success hover:bg-success/10 disabled:opacity-50"
-              >
-                <UserPlus className="h-4 w-4" />
-                Convertește în Student
-              </button>
-              {/* Destructive action de-emphasised (ghost) so it isn't mis-tapped for Convert */}
-              <button
-                type="button"
-                onClick={() => { setPendingStage("lost"); setLostReasonModal(true); }}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-1.5 text-xs font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-              >
-                <X className="h-3.5 w-3.5" />
-                Marchează pierdut
-              </button>
             </div>
-          )}
+
+          </CardGroup>
+
+          {/* ─── Tag-uri (collapsible) ─── */}
+          <CardGroup title="Tag-uri">
+            <TagsInline
+              leadId={leadId}
+              tags={tags}
+              setTags={setTags}
+            />
+          </CardGroup>
 
           {/* GAP-002: Match panel */}
           {matchPanel && (
@@ -1349,16 +1400,13 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
 
         {/* ─── RIGHT COLUMN ────────────────────────────────────────────── */}
         <main>
-          {/* Tab bar */}
-          <div role="tablist" className="flex gap-1 border-b border-border mb-4 overflow-x-auto">
+          {/* Tab bar — 5 visible tabs + "Mai mult" overflow for low-frequency tabs */}
+          <div role="tablist" className="flex items-center gap-1 border-b border-border mb-4 overflow-x-auto">
             {([
-              ["activity", "Activitate"],
+              ["overview", "Overview"],
+              ["activity", "Istoric"],
               ["tasks", tasks.length > 0 ? `Task-uri (${tasks.filter((t) => t.status === "open").length})` : "Task-uri"],
               ["files", `Fișiere${attachments.length > 0 ? ` (${attachments.length})` : ""}`],
-              ["contacts", `Contacte${contacts.length > 0 ? ` (${contacts.length})` : ""}`],
-              ["fields", `Câmpuri${fieldValues.length > 0 ? ` (${fieldValues.length})` : ""}`],
-              ["comunicare", `Comunicare${commMessages.length > 0 ? ` (${commMessages.length})` : ""}`],
-              ["gdpr", "GDPR"],
             ] as [Tab, string][]).map(([t, label]) => (
               <button
                 key={t}
@@ -1376,14 +1424,159 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                 {label}
               </button>
             ))}
+            {/* Mai mult overflow */}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setMoreMenuOpen((v) => !v)}
+                aria-haspopup="true"
+                aria-expanded={moreMenuOpen}
+                className={cn(
+                  "inline-flex items-center gap-1 whitespace-nowrap px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors",
+                  MORE_TABS.includes(activeTab)
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Mai mult
+                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              {moreMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setMoreMenuOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1 z-40 w-44 rounded-xl border border-border bg-card shadow-lg py-1">
+                    {([
+                      ["contacts", `Contacte${contacts.length > 0 ? ` (${contacts.length})` : ""}`],
+                      ["fields", `Câmpuri${fieldValues.length > 0 ? ` (${fieldValues.length})` : ""}`],
+                      ["gdpr", "GDPR"],
+                    ] as [Tab, string][]).map(([t, label]) => (
+                      <button
+                        key={t}
+                        role="tab"
+                        type="button"
+                        aria-selected={activeTab === t}
+                        onClick={() => { setActiveTab(t); setMoreMenuOpen(false); }}
+                        className={cn(
+                          "flex w-full items-center px-3 py-2 text-sm hover:bg-muted",
+                          activeTab === t ? "text-primary font-semibold" : "text-foreground"
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
 
           {/* Tab content */}
+          {/* ─── Overview dashboard (default tab) ─── */}
+          {activeTab === "overview" && (
+            <div role="tabpanel" aria-label="Overview" className="space-y-4">
+              {/* Summary stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <OverviewStat
+                  label="Valoare deal"
+                  value={(lead.valueCents ?? 0) > 0 ? new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format((lead.valueCents ?? 0) / 100) : "—"}
+                />
+                <OverviewStat label="Scor lead" value={lead.score != null ? String(lead.score) : "—"} />
+                <OverviewStat
+                  label="Task-uri active"
+                  value={String(tasks.filter((t) => t.status === "open").length)}
+                />
+                <OverviewStat
+                  label="Datorie"
+                  value={(lead.debtCents ?? 0) > 0 ? new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format((lead.debtCents ?? 0) / 100) : "—"}
+                  accent={(lead.debtCents ?? 0) > 0 ? "text-destructive" : undefined}
+                />
+              </div>
+
+              {/* Next tasks */}
+              <section className="rounded-xl border border-border bg-card">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <h3 className="text-sm font-bold">Următoarele task-uri</h3>
+                  <button type="button" onClick={() => setActiveTab("tasks")} className="text-xs font-semibold text-primary hover:underline">Vezi toate</button>
+                </div>
+                <div className="p-4">
+                  {(() => {
+                    const open = tasks
+                      .filter((t) => t.status === "open")
+                      .sort((a, b) => (a.dueAt ? new Date(a.dueAt).getTime() : Infinity) - (b.dueAt ? new Date(b.dueAt).getTime() : Infinity))
+                      .slice(0, 3);
+                    return open.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Niciun task activ.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {open.map((t) => {
+                          const overdue = t.dueAt && new Date(t.dueAt) < new Date();
+                          return (
+                            <li key={t.id} className="flex items-start gap-2 text-sm">
+                              <Clock className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", overdue ? "text-destructive" : "text-muted-foreground")} aria-hidden="true" />
+                              <div className="min-w-0">
+                                <p className="font-medium">{t.title}</p>
+                                {t.dueAt && <p className={cn("text-xs", overdue ? "text-destructive font-semibold" : "text-muted-foreground")}>{overdue ? "Întârziat · " : ""}{new Date(t.dueAt).toLocaleString("ro-RO")}</p>}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    );
+                  })()}
+                </div>
+              </section>
+
+              {/* Recent activity */}
+              <section className="rounded-xl border border-border bg-card">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <h3 className="text-sm font-bold">Activitate recentă</h3>
+                  <button type="button" onClick={() => setActiveTab("activity")} className="text-xs font-semibold text-primary hover:underline">Vezi tot istoricul</button>
+                </div>
+                <div className="p-4">
+                  {(() => {
+                    const recent = buildHistoryFeed(interactions, commMessages, "all").slice(0, 4);
+                    return recent.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Niciun istoric încă.</p>
+                    ) : (
+                      <ul className="space-y-3">
+                        {recent.map((e) => <React.Fragment key={e.id}>{e.node}</React.Fragment>)}
+                      </ul>
+                    );
+                  })()}
+                </div>
+              </section>
+
+              {/* Recent files */}
+              <section className="rounded-xl border border-border bg-card">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <h3 className="text-sm font-bold">Fișiere recente</h3>
+                  <button type="button" onClick={() => setActiveTab("files")} className="text-xs font-semibold text-primary hover:underline">Vezi toate</button>
+                </div>
+                <div className="p-4">
+                  {attachments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Niciun fișier atașat.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {attachments.slice(0, 3).map((att) => (
+                        <li key={att.id} className="flex items-center gap-2 text-sm">
+                          <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                          <span className="truncate">{att.fileName}</span>
+                          <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{formatBytes(att.sizeBytes)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* ─── Istoric — unified note / call / message feed ─── */}
           {activeTab === "activity" && (
-            <div role="tabpanel" aria-label="Activitate">
+            <div role="tabpanel" aria-label="Istoric" className="space-y-4">
               {/* Note compose */}
-              <form onSubmit={(e) => void addNote(e)} className="mb-4">
+              <form onSubmit={(e) => void addNote(e)}>
                 <MentionTextarea
                   id="note-input"
                   value={noteBody}
@@ -1405,16 +1598,52 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
                 </div>
               </form>
 
-              {/* Timeline */}
-              {interactions.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">Niciun istoric încă.</p>
-              ) : (
-                <ul className="space-y-3" aria-label="Timeline interacțiuni">
-                  {interactions.map((item) => (
-                    <TimelineItem key={item.id} item={item} />
+              {/* Filter chips + new message */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-1" role="group" aria-label="Filtrează istoricul">
+                  {([
+                    ["all", "Toate"],
+                    ["note", "Note"],
+                    ["call", "Apeluri"],
+                    ["message", "Mesaje"],
+                  ] as [HistoryFilter, string][]).map(([f, label]) => (
+                    <button
+                      key={f}
+                      type="button"
+                      aria-pressed={historyFilter === f}
+                      onClick={() => setHistoryFilter(f)}
+                      className={cn(
+                        "rounded-full px-3 py-1 text-xs font-semibold transition-colors",
+                        historyFilter === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {label}
+                    </button>
                   ))}
-                </ul>
-              )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setComposeModal(true)}
+                  disabled={consentRevoked}
+                  title={consentRevoked ? "Consimțământ retras — trimitere blocată" : "Trimite mesaj nou"}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold hover:bg-muted disabled:opacity-40"
+                >
+                  <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+                  Mesaj nou
+                </button>
+              </div>
+
+              {/* Unified feed */}
+              {(() => {
+                const feed = buildHistoryFeed(interactions, commMessages, historyFilter);
+                return feed.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-8 text-center">Niciun istoric încă.</p>
+                ) : (
+                  <ul className="space-y-3" aria-label="Timeline interacțiuni">
+                    {feed.map((e) => <React.Fragment key={e.id}>{e.node}</React.Fragment>)}
+                  </ul>
+                );
+              })()}
             </div>
           )}
 
@@ -1598,16 +1827,7 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
             />
           )}
 
-          {/* COMM-202: Comunicare tab */}
-          {activeTab === "comunicare" && lead && (
-            <ComunicareTab
-              lead={lead}
-              messages={commMessages}
-              consentRevoked={consentRevoked}
-              onNewMessage={() => setComposeModal(true)}
-              onMessageSent={(msg) => setCommMessages((prev) => [msg, ...prev])}
-            />
-          )}
+          {/* COMM-202: Comunicare merged into the unified "Istoric" feed (redesign) */}
 
           {activeTab === "gdpr" && (
             <div role="tabpanel" aria-label="GDPR" className="space-y-4">
@@ -1964,6 +2184,92 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// ─── Collapsible left-column group (redesign) ──────────────────────────────────
+
+function CardGroup({
+  title,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details open={defaultOpen} className="group rounded-xl border border-border bg-card overflow-hidden">
+      <summary className="flex cursor-pointer select-none items-center justify-between px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-muted-foreground hover:bg-muted/30 list-none [&::-webkit-details-marker]:hidden">
+        {title}
+        <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <div className="space-y-3 px-4 pb-4 pt-0">{children}</div>
+    </details>
+  );
+}
+
+// ─── Overview stat tile (redesign) ─────────────────────────────────────────────
+
+function OverviewStat({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={cn("mt-1 text-lg font-bold leading-none", accent)}>{value}</p>
+    </div>
+  );
+}
+
+// ─── Unified history feed (redesign): notes/calls/messages in one timeline ─────
+
+type FeedEntry = { id: string; date: number; node: React.ReactNode };
+
+function MessageFeedItem({ msg }: { msg: CommMessage }) {
+  return (
+    <li className="flex gap-3">
+      <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted">
+        <Mail className="h-3 w-3 text-primary" aria-hidden="true" />
+      </div>
+      <div className="flex-1 space-y-1.5 rounded-lg border border-border bg-card p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-foreground">{CHANNEL_LABEL[msg.channel]}</span>
+            <span className="text-[10px] text-muted-foreground">→ {msg.toAddress}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold", STATUS_BADGE[msg.status])}>{STATUS_LABEL[msg.status]}</span>
+            <time className="whitespace-nowrap text-[10px] text-muted-foreground" dateTime={msg.createdAt}>{new Date(msg.createdAt).toLocaleString("ro-RO")}</time>
+          </div>
+        </div>
+        {msg.subject && <p className="text-xs font-semibold text-foreground/80">{msg.subject}</p>}
+        <p className="line-clamp-3 whitespace-pre-wrap text-sm text-foreground/70">{msg.body}</p>
+        {msg.errorMessage && <p className="text-xs text-destructive">{msg.errorMessage}</p>}
+      </div>
+    </li>
+  );
+}
+
+function buildHistoryFeed(
+  interactions: LeadInteraction[],
+  messages: CommMessage[],
+  filter: HistoryFilter,
+): FeedEntry[] {
+  const entries: FeedEntry[] = [];
+  for (const it of interactions) {
+    const isNote = it.type === "note";
+    const isCall = it.type === "call";
+    const isMsg = it.type === "email" || it.type === "whatsapp" || it.type === "sms";
+    if (filter === "note" && !isNote) continue;
+    if (filter === "call" && !isCall) continue;
+    if (filter === "message" && !isMsg) continue;
+    entries.push({ id: `i-${it.id}`, date: new Date(it.occurredAt).getTime(), node: <TimelineItem item={it} /> });
+  }
+  if (filter === "all" || filter === "message") {
+    for (const m of messages) {
+      entries.push({ id: `m-${m.id}`, date: new Date(m.sentAt ?? m.createdAt).getTime(), node: <MessageFeedItem msg={m} /> });
+    }
+  }
+  entries.sort((a, b) => b.date - a.date);
+  return entries;
+}
+
 // ─── CRM-115: TagsInline ──────────────────────────────────────────────────────
 
 interface TagsInlineProps {
@@ -2165,85 +2471,9 @@ const CHANNEL_LABEL: Record<CommMessage["channel"], string> = {
   whatsapp: "WhatsApp",
 };
 
-interface ComunicareTabProps {
-  lead: Lead;
-  messages: CommMessage[];
-  consentRevoked: boolean;
-  onNewMessage: () => void;
-  onMessageSent: (msg: CommMessage) => void;
-}
-
-function ComunicareTab({ messages, consentRevoked, onNewMessage }: ComunicareTabProps) {
-  return (
-    <div role="tabpanel" aria-label="Comunicare" className="space-y-4">
-      {/* Header row with action */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-muted-foreground">
-          {messages.length === 0 ? "Niciun mesaj trimis." : `${messages.length} mesaj${messages.length !== 1 ? "e" : ""}`}
-        </p>
-        <button
-          type="button"
-          onClick={onNewMessage}
-          disabled={consentRevoked}
-          title={consentRevoked ? "Consimțământ retras — trimitere blocată" : "Trimite mesaj nou"}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <Mail className="h-4 w-4" aria-hidden="true" />
-          Mesaj nou
-        </button>
-      </div>
-
-      {/* Consent revoked warning */}
-      {consentRevoked && (
-        <div role="alert" className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
-          Consimțământ retras — trimitere nouă blocată (GDPR).
-        </div>
-      )}
-
-      {/* Message list */}
-      {messages.length === 0 ? (
-        <div className="py-8 text-center">
-          <p className="text-sm text-muted-foreground">Niciun mesaj trimis încă.</p>
-          <p className="text-xs text-muted-foreground mt-1">Apasă „Mesaj nou" pentru a trimite primul mesaj.</p>
-        </div>
-      ) : (
-        <ul className="space-y-2" aria-label="Lista mesaje">
-          {messages.map((msg) => (
-            <li
-              key={msg.id}
-              className="rounded-lg border border-border bg-card p-3 space-y-1.5"
-            >
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-foreground">
-                    {CHANNEL_LABEL[msg.channel]}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">→ {msg.toAddress}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold", STATUS_BADGE[msg.status])}>
-                    {STATUS_LABEL[msg.status]}
-                  </span>
-                  <time className="text-[10px] text-muted-foreground whitespace-nowrap" dateTime={msg.createdAt}>
-                    {new Date(msg.createdAt).toLocaleString("ro-RO")}
-                  </time>
-                </div>
-              </div>
-              {msg.subject && (
-                <p className="text-xs font-semibold text-foreground/80">{msg.subject}</p>
-              )}
-              <p className="text-sm text-foreground/70 line-clamp-3 whitespace-pre-wrap">{msg.body}</p>
-              {msg.errorMessage && (
-                <p className="text-xs text-destructive">{msg.errorMessage}</p>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
+// COMM-202: the standalone "Comunicare" tab was merged into the unified "Istoric"
+// feed (see MessageFeedItem / buildHistoryFeed). Messages still render via the
+// shared STATUS_BADGE / STATUS_LABEL / CHANNEL_LABEL maps above.
 
 // ─── COMM-202: ComposeMessageModal ────────────────────────────────────────────
 

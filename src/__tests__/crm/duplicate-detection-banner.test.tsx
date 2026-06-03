@@ -176,10 +176,8 @@ describe("LeadCardPage — CRM-133 duplicate detection banner", () => {
 
     render(<LeadCardPage leadId="lead-1" />);
 
-    // Wait for page to load
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText("Adaugă o notă internă…")).toBeInTheDocument();
-    });
+    // Wait for page to load (Overview is the default tab)
+    await screen.findByRole("tab", { name: "Overview" });
 
     expect(screen.queryByText(/Posibil duplicat/i)).toBeNull();
   });
@@ -189,9 +187,7 @@ describe("LeadCardPage — CRM-133 duplicate detection banner", () => {
 
     render(<LeadCardPage leadId="lead-1" />);
 
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText("Adaugă o notă internă…")).toBeInTheDocument();
-    });
+    await screen.findByRole("tab", { name: "Overview" });
 
     expect(screen.queryByText(/Posibil duplicat/i)).toBeNull();
   });
