@@ -3,7 +3,7 @@
  * Lists courses with search, filter (Active/Archived), edit, and archive actions.
  */
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Plus, Search, Loader2, Pencil, Archive, BookOpen, RotateCcw } from "lucide-react";
+import { Plus, Search, Loader2, Pencil, Archive, BookOpen, RotateCcw, Copy, Check } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { CourseForm } from "@/components/app/CourseForm";
 import { useSession } from "@/hooks/useSession";
@@ -35,6 +35,43 @@ const CEFR_BADGE: Record<string, string> = {
 
 function formatPrice(cents: number): string {
   return `${(cents / 100).toLocaleString("ro-RO", { minimumFractionDigits: 0 })} RON`;
+}
+
+/**
+ * INTEG-201: "Cod Lovable" — the course id is the code an external form (Lovable)
+ * sends as `courseId` to POST /api/leads/ingest so the incoming lead is attached
+ * to the right course. Shows a short, copyable chip.
+ */
+function CourseIngestCode({ courseId }: { courseId: string }) {
+  const [copied, setCopied] = useState(false);
+  const shortCode = courseId.slice(0, 8);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(courseId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — chip still shows the code for manual copy */
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleCopy()}
+      title={`Cod pentru Lovable: ${courseId} (click pentru a copia)`}
+      aria-label={copied ? "Cod copiat" : `Copiază codul Lovable pentru acest curs (${shortCode})`}
+      className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 font-mono text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors touch-target"
+    >
+      {copied ? (
+        <Check className="h-3 w-3 text-success" aria-hidden="true" />
+      ) : (
+        <Copy className="h-3 w-3" aria-hidden="true" />
+      )}
+      <span className="tabular-nums">{shortCode}…</span>
+    </button>
+  );
 }
 
 export function CoursesPage() {
@@ -196,6 +233,7 @@ export function CoursesPage() {
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Denumire</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground hidden md:table-cell">Nivel</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground hidden sm:table-cell">CEFR</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground hidden xl:table-cell">Cod Lovable</th>
                   <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden lg:table-cell">Preț</th>
                   <th className="px-4 py-3 text-right font-medium text-muted-foreground hidden lg:table-cell">Durată</th>
                   <th className="px-4 py-3 text-center font-medium text-muted-foreground">Status</th>
@@ -227,6 +265,9 @@ export function CoursesPage() {
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3 hidden xl:table-cell">
+                      <CourseIngestCode courseId={course.id} />
                     </td>
                     <td className="px-4 py-3 text-right text-muted-foreground hidden lg:table-cell">
                       {formatPrice(course.defaultPriceCents)}

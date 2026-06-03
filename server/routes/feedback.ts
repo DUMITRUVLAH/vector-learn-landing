@@ -10,7 +10,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   feedbackForms,
@@ -18,6 +18,8 @@ import {
   feedbackInvitations,
   feedbackAnswers,
   students,
+  cohortParticipants,
+  cohorts,
 } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
@@ -228,6 +230,73 @@ feedbackRoutes.post("/:id/send", zValidator("json", sendSchema), async (c) => {
 
   const publicUrl = `/feedback/${invitation.token}`;
   return c.json({ invitation, publicUrl }, 201);
+});
+
+/**
+ * CX: POST /api/feedback/:id/send-cohort — send this form to an ENTIRE cohort.
+ * Creates one invitation per CRM-sourced participant (those linked to a student),
+ * skipping participants who already have an invitation for this form (idempotent).
+ * No migration: reuses feedback_invitations via the participant's studentId.
+ */
+const sendCohortSchema = z.object({ cohortId: z.string().uuid() });
+
+feedbackRoutes.post("/:id/send-cohort", zValidator("json", sendCohortSchema), async (c) => {
+  const user = c.get("user");
+  const formId = c.req.param("id");
+  const { cohortId } = c.req.valid("json");
+
+  // Verify form belongs to tenant
+  const formRows = await db
+    .select()
+    .from(feedbackForms)
+    .where(and(eq(feedbackForms.id, formId), eq(feedbackForms.tenantId, user.tenantId)));
+  const formList = Array.isArray(formRows) ? formRows : (formRows as unknown as { rows: typeof formRows }).rows ?? formRows;
+  if (!formList[0]) return c.json({ error: "not_found" }, 404);
+
+  // Verify cohort belongs to tenant
+  const cohortRows = await db
+    .select({ id: cohorts.id })
+    .from(cohorts)
+    .where(and(eq(cohorts.id, cohortId), eq(cohorts.tenantId, user.tenantId)));
+  const cohortList = Array.isArray(cohortRows) ? cohortRows : (cohortRows as unknown as { rows: typeof cohortRows }).rows ?? cohortRows;
+  if (!cohortList[0]) return c.json({ error: "cohort_not_found" }, 404);
+
+  // Participants of this cohort that are linked to a student (CRM-sourced).
+  const partRows = await db
+    .select({ studentId: cohortParticipants.studentId })
+    .from(cohortParticipants)
+    .where(and(eq(cohortParticipants.cohortId, cohortId), eq(cohortParticipants.tenantId, user.tenantId)));
+  const partList = Array.isArray(partRows) ? partRows : (partRows as unknown as { rows: typeof partRows }).rows ?? partRows;
+
+  const studentIds = [...new Set(partList.map((p) => p.studentId).filter((s): s is string => !!s))];
+  if (studentIds.length === 0) {
+    return c.json({ created: 0, skipped: 0, total: 0, reason: "no_linked_students" });
+  }
+
+  // Skip students that already have an invitation for this form (idempotent re-send).
+  const existingRows = await db
+    .select({ studentId: feedbackInvitations.studentId })
+    .from(feedbackInvitations)
+    .where(and(eq(feedbackInvitations.formId, formId), inArray(feedbackInvitations.studentId, studentIds)));
+  const existingList = Array.isArray(existingRows) ? existingRows : (existingRows as unknown as { rows: typeof existingRows }).rows ?? existingRows;
+  const alreadyInvited = new Set(existingList.map((r) => r.studentId));
+
+  const toInvite = studentIds.filter((id) => !alreadyInvited.has(id));
+  if (toInvite.length === 0) {
+    return c.json({ created: 0, skipped: studentIds.length, total: studentIds.length });
+  }
+
+  const inserted = await db
+    .insert(feedbackInvitations)
+    .values(toInvite.map((studentId) => ({ formId, studentId })))
+    .returning({ id: feedbackInvitations.id });
+  const insertedList = Array.isArray(inserted) ? inserted : (inserted as unknown as { rows: typeof inserted }).rows ?? inserted;
+
+  return c.json({
+    created: insertedList.length,
+    skipped: alreadyInvited.size,
+    total: studentIds.length,
+  }, 201);
 });
 
 /** GET /api/feedback/:id/responses — all responses for a form */

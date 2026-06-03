@@ -10,7 +10,7 @@
  */
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
-  Loader2, ArrowLeft, Pencil, Check, X, ChevronDown,
+  Loader2, ArrowLeft, Check, X, ChevronDown,
   Phone, Mail, Calendar, MessageCircle, UserPlus,
   AlertTriangle, CheckCircle2, Trash2, MoreVertical, ShieldOff,
   Clock, Paperclip, Upload, Download, FilePlus,
@@ -115,10 +115,11 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
 
-  // Edit state
-  const [editing, setEditing] = useState(false);
-  const [editDraft, setEditDraft] = useState<Partial<Lead>>({});
-  const [saving, setSaving] = useState(false);
+  // Edit state — the card is always-editable inline (no edit mode); each field
+  // autosaves on blur via saveField below.
+  /** Inline autosave: which field key is currently being persisted (for the ✓/spinner) */
+  const [fieldSaving, setFieldSaving] = useState<string | null>(null);
+  const [fieldSaved, setFieldSaved] = useState<string | null>(null);
 
   // Note compose
   const [noteBody, setNoteBody] = useState("");
@@ -263,43 +264,27 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
       });
   }, [lead?.id, lead?.phone, lead?.email]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Edit helpers ─────────────────────────────────────────────────────────
-  const startEdit = () => {
+  // ─── Inline autosave ──────────────────────────────────────────────────────
+  /**
+   * Persist a single field immediately (on blur / change), so the whole card is
+   * always editable without an "Editează" mode. Only PATCHes when the value
+   * actually changed. Shows a transient ✓ next to the field.
+   */
+  const saveField = useCallback(async <K extends keyof Lead>(key: K, value: Lead[K]) => {
     if (!lead) return;
-    setEditDraft({
-      fullName: lead.fullName,
-      phone: lead.phone,
-      email: lead.email,
-      interestCourse: lead.interestCourse,
-      notes: lead.notes,
-      valueCents: lead.valueCents,
-      debtCents: lead.debtCents,
-      company: lead.company,
-      dealName: lead.dealName,
-      preferredDays: (lead as unknown as Record<string, unknown>).preferredDays as number[] | null ?? null,
-      preferredTimeStart: (lead as unknown as Record<string, unknown>).preferredTimeStart as string | null ?? null,
-      preferredTimeEnd: (lead as unknown as Record<string, unknown>).preferredTimeEnd as string | null ?? null,
-    });
-    setEditing(true);
-  };
-
-  const cancelEdit = () => { setEditing(false); setEditDraft({}); };
-
-  const saveEdit = async () => {
-    if (!lead) return;
-    setSaving(true);
+    if (lead[key] === value) return; // no-op — nothing changed
+    setFieldSaving(String(key));
     try {
-      const updated = await updateLead(lead.id, editDraft);
+      const updated = await updateLead(lead.id, { [key]: value } as Partial<Lead>);
       setLead(updated);
-      setEditing(false);
-      setEditDraft({});
-      setToast({ kind: "success", message: "Modificări salvate" });
+      setFieldSaved(String(key));
+      setTimeout(() => setFieldSaved((k) => (k === String(key) ? null : k)), 1500);
     } catch {
-      setToast({ kind: "error", message: "Nu pot salva" });
+      setToast({ kind: "error", message: "Nu pot salva modificarea" });
     } finally {
-      setSaving(false);
+      setFieldSaving((k) => (k === String(key) ? null : k));
     }
-  };
+  }, [lead]);
 
   // ─── Stage change ─────────────────────────────────────────────────────────
   const handleStageChange = async (newStage: string) => {
@@ -417,11 +402,11 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
     setConvertModal(true);
   };
 
-  const handleConvertSuccess = async (result: { studentId: string; familyId: string | null }) => {
+  const handleConvertSuccess = async (result: { studentId: string; familyId: string | null; enrolledCohortId: string | null }) => {
     setConvertModal(false);
     setToast({
       kind: "success",
-      message: `Convertit în student!${result.familyId ? " Familie creată." : ""}`,
+      message: `Convertit în student!${result.familyId ? " Familie creată." : ""}${result.enrolledCohortId ? " Înscris în grupă." : ""}`,
     });
     void fetchAll();
   };
@@ -664,26 +649,18 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
             <ArrowLeft className="h-4 w-4" />
             <span className="hidden sm:inline">Pipeline</span>
           </button>
-          {!editing ? (
-            <button
-              type="button"
-              onClick={startEdit}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted"
-              aria-label="Editează lead"
-            >
-              <Pencil className="h-4 w-4" />
-              <span className="hidden sm:inline">Editează</span>
-            </button>
+          {/* No "Editează" mode — the whole card is always editable inline
+              (fields autosave on blur). A small status pill confirms saves. */}
+          {fieldSaving ? (
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold text-muted-foreground" aria-live="polite">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="hidden sm:inline">Se salvează…</span>
+            </span>
           ) : (
-            <div className="flex gap-2">
-              <button type="button" onClick={cancelEdit} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted" aria-label="Anulează editare">
-                <X className="h-4 w-4" />
-              </button>
-              <button type="button" onClick={() => void saveEdit()} disabled={saving} className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50" aria-label="Salvează modificări">
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                <span className="hidden sm:inline">Salvează</span>
-              </button>
-            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm font-semibold text-success" aria-hidden="true">
+              <Check className="h-4 w-4" />
+              <span className="hidden sm:inline">Salvat automat</span>
+            </span>
           )}
           {/* CONTRACT-501: Generate contract button */}
           <button
@@ -805,22 +782,19 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
         <aside className="lg:sticky lg:top-4 lg:self-start space-y-4">
           {/* ─── Identity + primary actions (redesign) ─── */}
           <section className="rounded-xl border border-border bg-card p-4 space-y-3">
-            {/* Name */}
+            {/* Name — always-editable inline (autosave on blur) */}
             <div>
-              {editing ? (
-                <input
-                  type="text"
-                  required
-                  minLength={2}
-                  value={editDraft.fullName ?? lead.fullName}
-                  onChange={(e) => setEditDraft((d) => ({ ...d, fullName: e.target.value }))}
-                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-base font-bold"
-                  aria-label="Nume complet"
-                />
-              ) : (
-                <h2 className="text-lg font-bold leading-tight">{lead.fullName}</h2>
-              )}
-              <p className="mt-0.5 text-xs text-muted-foreground">{SOURCE_LABEL[lead.source] ?? lead.source}</p>
+              <input
+                type="text"
+                required
+                minLength={2}
+                defaultValue={lead.fullName}
+                key={lead.fullName}
+                onBlur={(e) => { const v = e.target.value.trim(); if (v.length >= 2) void saveField("fullName", v); }}
+                className="w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 text-lg font-bold leading-tight hover:border-input focus:border-input focus:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+                aria-label="Nume complet"
+              />
+              <p className="mt-0.5 px-1 text-xs text-muted-foreground">{SOURCE_LABEL[lead.source] ?? lead.source}</p>
             </div>
 
             {/* Stage — always changeable in one click (no Edit mode), avoids firing
@@ -874,24 +848,20 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               )}
             </div>
 
-            {/* Assigned to — CRM-137: AssigneePicker replaces UUID text input */}
+            {/* Assigned to — CRM-137: always-editable AssigneePicker (commits on change) */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Responsabil</p>
-              {editing ? (
-                <AssigneePicker
-                  id="lead-assignee"
-                  value={editDraft.assignedTo ?? lead.assignedTo}
-                  onChange={(userId) => setEditDraft((d) => ({ ...d, assignedTo: userId }))}
-                  ariaLabel="Responsabil"
-                  className="w-full"
-                />
-              ) : (
-                <AssigneeDisplay assignedTo={lead.assignedTo} />
-              )}
+              <FieldLabel saving={fieldSaving === "assignedTo"} saved={fieldSaved === "assignedTo"}>Responsabil</FieldLabel>
+              <AssigneePicker
+                id="lead-assignee"
+                value={lead.assignedTo}
+                onChange={(userId) => void saveField("assignedTo", userId as Lead["assignedTo"])}
+                ariaLabel="Responsabil"
+                className="w-full"
+              />
             </div>
 
             {/* Primary action bar — one obvious place for the frequent actions */}
-            {!editing && (
+            {(
               <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
                 <button
                   type="button"
@@ -1009,105 +979,96 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
             )}
           </section>
 
+          {/* ─── Budget (deal value + debt) — moved to the TOP, always-editable ─── */}
+          <section className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Budget</p>
+            <div className="grid grid-cols-2 gap-3">
+              <InlineMoney
+                label="Valoare deal"
+                cents={lead.valueCents ?? 0}
+                onCommit={(c) => void saveField("valueCents", c)}
+                saving={fieldSaving === "valueCents"}
+                saved={fieldSaved === "valueCents"}
+              />
+              <InlineMoney
+                label="Datorie"
+                cents={lead.debtCents ?? 0}
+                onCommit={(c) => void saveField("debtCents", c)}
+                accent={(lead.debtCents ?? 0) > 0 ? "text-destructive" : undefined}
+                saving={fieldSaving === "debtCents"}
+                saved={fieldSaved === "debtCents"}
+              />
+            </div>
+          </section>
+
           {/* ─── Contact (collapsible) ─── */}
           <CardGroup title="Contact">
-            {/* Phone */}
+            {/* Phone — always-editable inline; copy button stays for quick reuse */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Telefon</p>
-              {editing ? (
-                <input
-                  type="tel"
-                  value={editDraft.phone ?? lead.phone ?? ""}
-                  onChange={(e) => setEditDraft((d) => ({ ...d, phone: e.target.value || null }))}
-                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                  aria-label="Telefon"
-                />
-              ) : lead.phone ? (
-                <div className="flex items-center justify-between gap-2">
-                  <a
-                    href={`tel:${lead.phone}`}
-                    className={cn("flex items-center gap-1.5 text-sm font-medium text-primary hover:underline", consentRevoked && "pointer-events-none opacity-50")}
-                    aria-disabled={consentRevoked}
-                  >
-                    <Phone className="h-3.5 w-3.5" aria-hidden="true" />
-                    {lead.phone}
-                  </a>
-                  {/* CRM-144: copy phone to clipboard (call/WA moved to the action bar) */}
-                  <CopyButton value={lead.phone} ariaLabel="Copiază telefonul" />
+              <div className="flex items-center gap-1.5">
+                <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+                <div className="flex-1 min-w-0">
+                  <InlineText
+                    label="Telefon"
+                    type="tel"
+                    value={lead.phone ?? ""}
+                    placeholder="—"
+                    onCommit={(v) => void saveField("phone", v || null)}
+                    saving={fieldSaving === "phone"}
+                    saved={fieldSaved === "phone"}
+                  />
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">—</p>
-              )}
+                {lead.phone && <CopyButton value={lead.phone} ariaLabel="Copiază telefonul" />}
+              </div>
             </div>
 
-            {/* Email */}
+            {/* Email — always-editable inline; copy button stays for quick reuse */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Email</p>
-              {editing ? (
-                <input
-                  type="email"
-                  value={editDraft.email ?? lead.email ?? ""}
-                  onChange={(e) => setEditDraft((d) => ({ ...d, email: e.target.value || null }))}
-                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                  aria-label="Email"
-                />
-              ) : lead.email ? (
-                <div className="flex items-center justify-between gap-2">
-                  <a
-                    href={`mailto:${lead.email}`}
-                    className={cn("flex items-center gap-1.5 text-sm font-medium text-primary hover:underline min-w-0 truncate", consentRevoked && "pointer-events-none opacity-50")}
-                    aria-disabled={consentRevoked}
-                  >
-                    <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    <span className="truncate">{lead.email}</span>
-                  </a>
-                  {/* CRM-144: copy email to clipboard (send moved to the action bar) */}
-                  <CopyButton value={lead.email} ariaLabel="Copiază email-ul" />
+              <div className="flex items-center gap-1.5">
+                <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+                <div className="flex-1 min-w-0">
+                  <InlineText
+                    label="Email"
+                    type="email"
+                    value={lead.email ?? ""}
+                    placeholder="—"
+                    onCommit={(v) => void saveField("email", v || null)}
+                    saving={fieldSaving === "email"}
+                    saved={fieldSaved === "email"}
+                  />
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">—</p>
-              )}
+                {lead.email && <CopyButton value={lead.email} ariaLabel="Copiază email-ul" />}
+              </div>
             </div>
           </CardGroup>
 
           {/* ─── Interes (collapsible) ─── */}
           <CardGroup title="Interes">
-            {/* INTEG-101: Curs de interes — selector din lista de cursuri reale */}
+            {/* INTEG-101: Curs din catalog — always-editable select (commits on change) */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Curs (din catalog)</p>
-              {editing ? (
-                <select
-                  value={editDraft.courseId ?? ""}
-                  onChange={(e) => setEditDraft((d) => ({ ...d, courseId: e.target.value || null }))}
-                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label="Curs de interes (catalog)"
-                >
-                  <option value="">— Neselectat —</option>
-                  {courses.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <p className="text-sm">{lead.courseName ?? (lead.courseId ? lead.courseId.slice(0, 8) + "…" : "—")}</p>
-              )}
+              <FieldLabel saving={fieldSaving === "courseId"} saved={fieldSaved === "courseId"}>Curs (din catalog)</FieldLabel>
+              <select
+                value={lead.courseId ?? ""}
+                onChange={(e) => void saveField("courseId", (e.target.value || null) as Lead["courseId"])}
+                className={inlineInputCls}
+                aria-label="Curs de interes (catalog)"
+              >
+                <option value="">— Neselectat —</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
             </div>
 
-            {/* Interest course — text fallback / notes */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Alte mențiuni curs</p>
-              {editing ? (
-                <input
-                  type="text"
-                  value={editDraft.interestCourse ?? lead.interestCourse ?? ""}
-                  onChange={(e) => setEditDraft((d) => ({ ...d, interestCourse: e.target.value || null }))}
-                  placeholder="ex: Engleză B2 (notițe libere)"
-                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                  aria-label="Alte mențiuni curs"
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground">{lead.interestCourse ?? "—"}</p>
-              )}
-            </div>
+            {/* Interest course — text fallback / free mention */}
+            <InlineText
+              label="Alte mențiuni curs"
+              value={lead.interestCourse ?? ""}
+              placeholder="ex: Engleză B2 (notițe libere)"
+              onCommit={(v) => void saveField("interestCourse", v || null)}
+              saving={fieldSaving === "interestCourse"}
+              saved={fieldSaved === "interestCourse"}
+            />
 
           </CardGroup>
 
@@ -1131,149 +1092,108 @@ export function LeadCardPage({ leadId }: LeadCardPageProps) {
               </p>
             </div>
 
-            {/* CRM-114: Company + Deal name */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Companie</p>
-              {editing ? (
-                <input type="text" value={editDraft.company ?? lead.company ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, company: e.target.value || null }))} placeholder="ex: S.R.L. Acme" className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Companie" />
-              ) : (
-                <p className="text-sm">{lead.company ?? "—"}</p>
-              )}
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Titlu deal</p>
-              {editing ? (
-                <input type="text" value={editDraft.dealName ?? lead.dealName ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, dealName: e.target.value || null }))} placeholder="opțional, override full_name" className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Titlu deal" />
-              ) : (
-                <p className="text-sm text-muted-foreground">{lead.dealName ?? "—"}</p>
-              )}
-            </div>
+            {/* CRM-114: Company + Deal name — always-editable inline */}
+            <InlineText
+              label="Companie"
+              value={lead.company ?? ""}
+              placeholder="ex: S.R.L. Acme"
+              onCommit={(v) => void saveField("company", v || null)}
+              saving={fieldSaving === "company"}
+              saved={fieldSaved === "company"}
+            />
+            <InlineText
+              label="Titlu deal"
+              value={lead.dealName ?? ""}
+              placeholder="opțional, override full_name"
+              onCommit={(v) => void saveField("dealName", v || null)}
+              saving={fieldSaving === "dealName"}
+              saved={fieldSaved === "dealName"}
+            />
 
           </CardGroup>
 
-          {/* ─── Disponibilitate (collapsible) ─── */}
+          {/* ─── Disponibilitate (collapsible) — always-editable (commits on click/blur) ─── */}
           <CardGroup title="Disponibilitate">
             {/* GAP-001: Slot preferat orar */}
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Disponibilitate preferată</p>
-              {editing ? (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-1" role="group" aria-label="Zile preferate">
-                    {[
-                      { label: "L", full: "Luni", val: 1 },
-                      { label: "M", full: "Marți", val: 2 },
-                      { label: "Mi", full: "Miercuri", val: 3 },
-                      { label: "J", full: "Joi", val: 4 },
-                      { label: "V", full: "Vineri", val: 5 },
-                      { label: "S", full: "Sâmbătă", val: 6 },
-                      { label: "D", full: "Duminică", val: 7 },
-                    ].map(({ label, full, val }) => {
-                      const days = (editDraft.preferredDays as number[] | null | undefined) ?? [];
-                      const active = days.includes(val);
-                      return (
-                        <button
-                          key={val}
-                          type="button"
-                          aria-label={full}
-                          aria-pressed={active}
-                          onClick={() => {
-                            const cur = (editDraft.preferredDays as number[] | null | undefined) ?? [];
-                            const next = active ? cur.filter((d) => d !== val) : [...cur, val].sort((a, b) => a - b);
-                            setEditDraft((d) => ({ ...d, preferredDays: next.length > 0 ? next : null }));
-                          }}
-                          className={cn(
-                            "h-7 w-7 rounded-full text-xs font-medium border transition-colors",
-                            active
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-background text-muted-foreground border-input hover:border-primary"
-                          )}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    <label className="text-xs text-muted-foreground w-12 shrink-0">De la:</label>
-                    <input
-                      type="time"
-                      value={(editDraft.preferredTimeStart as string | null | undefined) ?? ""}
-                      onChange={(e) => setEditDraft((d) => ({ ...d, preferredTimeStart: e.target.value || null }))}
-                      className="rounded-md border border-input bg-background px-2 py-1 text-sm"
-                      aria-label="Ora de start preferată"
-                    />
-                    <label className="text-xs text-muted-foreground w-12 shrink-0">Până la:</label>
-                    <input
-                      type="time"
-                      value={(editDraft.preferredTimeEnd as string | null | undefined) ?? ""}
-                      onChange={(e) => setEditDraft((d) => ({ ...d, preferredTimeEnd: e.target.value || null }))}
-                      className="rounded-md border border-input bg-background px-2 py-1 text-sm"
-                      aria-label="Ora de sfârșit preferată"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  {(() => {
-                    const days = (lead as unknown as Record<string, unknown>).preferredDays as number[] | null;
-                    const start = (lead as unknown as Record<string, unknown>).preferredTimeStart as string | null;
-                    const end = (lead as unknown as Record<string, unknown>).preferredTimeEnd as string | null;
-                    const dayNames = ["", "Luni", "Marți", "Miercuri", "Joi", "Vineri", "Sâmbătă", "Duminică"];
-                    const hasDays = days && days.length > 0;
-                    const hasTime = start || end;
-                    if (!hasDays && !hasTime) return "—";
+              <FieldLabel
+                saving={fieldSaving === "preferredDays" || fieldSaving === "preferredTimeStart" || fieldSaving === "preferredTimeEnd"}
+                saved={fieldSaved === "preferredDays" || fieldSaved === "preferredTimeStart" || fieldSaved === "preferredTimeEnd"}
+              >
+                Disponibilitate preferată
+              </FieldLabel>
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-1" role="group" aria-label="Zile preferate">
+                  {[
+                    { label: "L", full: "Luni", val: 1 },
+                    { label: "M", full: "Marți", val: 2 },
+                    { label: "Mi", full: "Miercuri", val: 3 },
+                    { label: "J", full: "Joi", val: 4 },
+                    { label: "V", full: "Vineri", val: 5 },
+                    { label: "S", full: "Sâmbătă", val: 6 },
+                    { label: "D", full: "Duminică", val: 7 },
+                  ].map(({ label, full, val }) => {
+                    const days = ((lead as unknown as Record<string, unknown>).preferredDays as number[] | null | undefined) ?? [];
+                    const active = days.includes(val);
                     return (
-                      <>
-                        {hasDays && <span>{days!.map((d) => dayNames[d]).join(", ")}</span>}
-                        {hasDays && hasTime && <span className="mx-1">·</span>}
-                        {hasTime && <span>{start ?? "—"}–{end ?? "—"}</span>}
-                      </>
+                      <button
+                        key={val}
+                        type="button"
+                        aria-label={full}
+                        aria-pressed={active}
+                        onClick={() => {
+                          const next = active ? days.filter((d) => d !== val) : [...days, val].sort((a, b) => a - b);
+                          void saveField("preferredDays" as keyof Lead, (next.length > 0 ? next : null) as Lead[keyof Lead]);
+                        }}
+                        className={cn(
+                          "h-7 w-7 rounded-full text-xs font-medium border transition-colors",
+                          active
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-muted-foreground border-input hover:border-primary"
+                        )}
+                      >
+                        {label}
+                      </button>
                     );
-                  })()}
+                  })}
                 </div>
-              )}
+                <div className="flex gap-2 items-center">
+                  <label className="text-xs text-muted-foreground w-12 shrink-0">De la:</label>
+                  <input
+                    type="time"
+                    defaultValue={((lead as unknown as Record<string, unknown>).preferredTimeStart as string | null | undefined) ?? ""}
+                    key={`start-${(lead as unknown as Record<string, unknown>).preferredTimeStart ?? ""}`}
+                    onBlur={(e) => void saveField("preferredTimeStart" as keyof Lead, (e.target.value || null) as Lead[keyof Lead])}
+                    className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+                    aria-label="Ora de start preferată"
+                  />
+                  <label className="text-xs text-muted-foreground w-12 shrink-0">Până la:</label>
+                  <input
+                    type="time"
+                    defaultValue={((lead as unknown as Record<string, unknown>).preferredTimeEnd as string | null | undefined) ?? ""}
+                    key={`end-${(lead as unknown as Record<string, unknown>).preferredTimeEnd ?? ""}`}
+                    onBlur={(e) => void saveField("preferredTimeEnd" as keyof Lead, (e.target.value || null) as Lead[keyof Lead])}
+                    className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+                    aria-label="Ora de sfârșit preferată"
+                  />
+                </div>
+              </div>
             </div>
 
           </CardGroup>
 
-          {/* ─── Valoare deal & note (collapsible) ─── */}
-          <CardGroup title="Valoare deal & note">
-            {/* CRM-113: Value + debt */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Valoare deal (€)</p>
-                {editing ? (
-                  <input type="number" min="0" step="0.01" value={editDraft.valueCents !== undefined ? ((editDraft.valueCents ?? 0) / 100).toFixed(2) : ((lead.valueCents ?? 0) / 100).toFixed(2)} onChange={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); setEditDraft((d) => ({ ...d, valueCents: isNaN(v) ? 0 : Math.round(v * 100) })); }} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Valoare deal în euro" />
-                ) : (
-                  <p className="text-sm font-bold">{(lead.valueCents ?? 0) > 0 ? new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format((lead.valueCents ?? 0) / 100) : "—"}</p>
-                )}
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Datorie (€)</p>
-                {editing ? (
-                  <input type="number" min="0" step="0.01" value={editDraft.debtCents !== undefined ? ((editDraft.debtCents ?? 0) / 100).toFixed(2) : ((lead.debtCents ?? 0) / 100).toFixed(2)} onChange={(e) => { const v = parseFloat(e.target.value.replace(",", ".")); setEditDraft((d) => ({ ...d, debtCents: isNaN(v) ? 0 : Math.round(v * 100) })); }} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" aria-label="Datorie în euro" />
-                ) : (
-                  <p className={cn("text-sm font-semibold", (lead.debtCents ?? 0) > 0 ? "text-destructive" : "text-muted-foreground")}>{(lead.debtCents ?? 0) > 0 ? new Intl.NumberFormat("ro-RO", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format((lead.debtCents ?? 0) / 100) : "—"}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Note</p>
-              {editing ? (
-                <textarea
-                  rows={3}
-                  value={editDraft.notes ?? lead.notes ?? ""}
-                  onChange={(e) => setEditDraft((d) => ({ ...d, notes: e.target.value || null }))}
-                  className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm resize-none"
-                  aria-label="Note interne"
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground">{lead.notes ?? "—"}</p>
-              )}
-            </div>
-
+          {/* ─── Note interne (collapsible) — value/debt moved to Budget on top ─── */}
+          <CardGroup title="Note interne">
+            <InlineText
+              label="Note interne (private)"
+              value={lead.notes ?? ""}
+              placeholder="Scrie o notă internă despre acest lead…"
+              onCommit={(v) => void saveField("notes", v || null)}
+              saving={fieldSaving === "notes"}
+              saved={fieldSaved === "notes"}
+              multiline
+              rows={4}
+            />
           </CardGroup>
 
           {/* ─── Tag-uri (collapsible) ─── */}
@@ -2172,6 +2092,108 @@ function DetailRow({ label, value, className }: { label: string; value: string; 
     <div className="rounded-md bg-muted/40 p-2.5">
       <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{label}</p>
       <p className={cn("text-sm font-medium", className)}>{value}</p>
+    </div>
+  );
+}
+
+// ─── Inline-edit field label with save status ─────────────────────────────────
+// Always-editable card: no "Edit" mode. Each field autosaves on blur and shows a
+// transient ✓. These small components keep that consistent + accessible.
+
+function FieldLabel({ children, saving, saved }: { children: React.ReactNode; saving?: boolean; saved?: boolean }) {
+  return (
+    <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+      {children}
+      {saving && <Loader2 className="h-2.5 w-2.5 animate-spin text-muted-foreground" aria-label="Se salvează" />}
+      {saved && <Check className="h-2.5 w-2.5 text-success" aria-label="Salvat" />}
+    </p>
+  );
+}
+
+const inlineInputCls =
+  "w-full rounded-md border border-transparent bg-muted/30 px-2 py-1.5 text-sm hover:border-input focus:border-input focus:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors";
+
+/** Inline text/tel/email field that commits on blur (or Enter) when changed. */
+function InlineText({
+  label, value, onCommit, type = "text", placeholder, saving, saved, multiline = false, rows = 3,
+}: {
+  label: string;
+  value: string;
+  onCommit: (v: string) => void;
+  type?: "text" | "tel" | "email";
+  placeholder?: string;
+  saving?: boolean;
+  saved?: boolean;
+  multiline?: boolean;
+  rows?: number;
+}) {
+  const [draft, setDraft] = useState(value);
+  // Keep local draft in sync if the lead reloads with a new server value.
+  useEffect(() => { setDraft(value); }, [value]);
+  const commit = () => { if (draft !== value) onCommit(draft); };
+  return (
+    <div>
+      <FieldLabel saving={saving} saved={saved}>{label}</FieldLabel>
+      {multiline ? (
+        <textarea
+          rows={rows}
+          value={draft}
+          placeholder={placeholder}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          className={cn(inlineInputCls, "resize-none")}
+          aria-label={label}
+        />
+      ) : (
+        <input
+          type={type}
+          value={draft}
+          placeholder={placeholder}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter" && type !== "text") { e.currentTarget.blur(); } }}
+          className={inlineInputCls}
+          aria-label={label}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Inline euro-money field (stores cents) committing on blur when changed. */
+function InlineMoney({
+  label, cents, onCommit, accent, saving, saved,
+}: {
+  label: string;
+  cents: number;
+  onCommit: (cents: number) => void;
+  accent?: string;
+  saving?: boolean;
+  saved?: boolean;
+}) {
+  const [draft, setDraft] = useState((cents / 100).toFixed(2));
+  useEffect(() => { setDraft((cents / 100).toFixed(2)); }, [cents]);
+  const commit = () => {
+    const v = parseFloat(draft.replace(",", "."));
+    const next = isNaN(v) ? 0 : Math.round(v * 100);
+    if (next !== cents) onCommit(next);
+  };
+  return (
+    <div>
+      <FieldLabel saving={saving} saved={saved}>{label}</FieldLabel>
+      <div className="relative">
+        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">€</span>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          className={cn(inlineInputCls, "pl-6 font-bold tabular-nums", accent)}
+          aria-label={`${label} în euro`}
+        />
+      </div>
     </div>
   );
 }

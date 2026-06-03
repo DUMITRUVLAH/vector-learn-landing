@@ -6,6 +6,7 @@ import { db } from "../db/client";
 import { leads, leadInteractions, students, tenants, pipelineStages, leadTasks, messageTemplates, families, leadTags, courses, lessons, studentLessons, lessonPackages, cohorts, cohortParticipants, users, leadMentions, inAppNotifications } from "../db/schema";
 import { renderTemplate } from "../db/schema/templates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireApiKey } from "../middleware/requireApiKey";
 import { normalizePhone, normalizeEmail } from "../lib/normalize";
 import { fireTrigger } from "../lib/automationEngine";
 import { autoAssign } from "../lib/roundRobin";
@@ -123,6 +124,8 @@ const updateLeadSchema = z.object({
   preferredDays: z.array(z.number().int().min(1).max(7)).optional().nullable(),
   preferredTimeStart: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
   preferredTimeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  /** INTEG-101: FK to courses catalog — editable inline on the lead card */
+  courseId: z.string().uuid().optional().nullable(),
 });
 
 const stageChangeSchema = z.object({
@@ -165,6 +168,37 @@ const publicIntakeSchema = z.object({
   fbclid: z.string().max(200).optional().nullable(),
   gclid: z.string().max(200).optional().nullable(),
   consentText: z.string().max(500),
+});
+
+/**
+ * INTEG-201 — Schema for the API-key-authenticated lead ingest endpoint
+ * (`POST /api/leads/ingest`). Used by external lead sources such as a Lovable
+ * landing page. The tenant is resolved from the API key (X-API-Key header), so
+ * no `tenantSlug` is needed — and one tenant's key can never write to another.
+ *
+ * Course mapping (request from owner): the caller may send EITHER
+ *   - `courseId`   — the course UUID (the "code" shown on the course page), OR
+ *   - `courseCode` — a human label matched case-insensitively against course
+ *                    name; resolved to courseId server-side when it matches.
+ * Whatever is sent in `interestCourse` is also stored as free text for display.
+ */
+const ingestLeadSchema = z.object({
+  fullName: z.string().min(2).max(200),
+  phone: z.string().max(32).optional().nullable(),
+  email: z.string().email().max(255).optional().nullable().or(z.literal("")),
+  interestCourse: z.string().max(200).optional().nullable(),
+  /** Course mapping — UUID preferred, free-text code as fallback */
+  courseId: z.string().uuid().optional().nullable(),
+  courseCode: z.string().max(200).optional().nullable(),
+  /** Marketing attribution (defaults to "lovable" so these are filterable) */
+  utmSource: z.string().max(100).optional().nullable(),
+  utmMedium: z.string().max(100).optional().nullable(),
+  utmCampaign: z.string().max(100).optional().nullable(),
+  fbclid: z.string().max(200).optional().nullable(),
+  gclid: z.string().max(200).optional().nullable(),
+  notes: z.string().max(2000).optional().nullable(),
+  /** GDPR consent text captured on the external form */
+  consentText: z.string().max(500).optional().nullable(),
 });
 
 function nullify<T extends Record<string, unknown>>(obj: T): T {
@@ -252,15 +286,114 @@ leadRoutes.post("/intake", zValidator("json", publicIntakeSchema), async (c) => 
   return c.json({ leadId: created.id, isDuplicate: false });
 });
 
+// ─── INTEG-201: API-key authenticated lead ingest (Lovable → CRM) ────────────
+// Auth: X-API-Key header (requireApiKey resolves the tenant). Reuses the same
+// dedup + round-robin auto-assign + system-interaction logic as /intake, so an
+// ingested lead behaves exactly like a webform lead and lands on the Kanban.
+leadRoutes.post("/ingest", requireApiKey, zValidator("json", ingestLeadSchema), async (c) => {
+  const body = c.req.valid("json");
+  const user = c.get("user"); // populated by requireApiKey from the key's tenant
+  const tenantId = user.tenantId;
+
+  const phoneNormalized = normalizePhone(body.phone ?? undefined);
+  const emailNormalized = normalizeEmail(body.email ?? undefined);
+
+  // Resolve course mapping: courseId (UUID) wins; else match courseCode by name.
+  let courseId: string | null = body.courseId ?? null;
+  if (!courseId && body.courseCode) {
+    const match = await db.query.courses.findFirst({
+      where: and(
+        eq(courses.tenantId, tenantId),
+        ilike(courses.name, body.courseCode),
+      ),
+    });
+    if (match) courseId = match.id;
+  }
+  // Guard against cross-tenant courseId injection: drop it if it isn't ours.
+  if (courseId) {
+    const owned = await db.query.courses.findFirst({
+      where: and(eq(courses.id, courseId), eq(courses.tenantId, tenantId)),
+    });
+    if (!owned) courseId = null;
+  }
+
+  // Dedup: same tenant + same phone OR email → return existing (no duplicate lead)
+  if (phoneNormalized || emailNormalized) {
+    const existing = await db.query.leads.findFirst({
+      where: and(
+        eq(leads.tenantId, tenantId),
+        or(
+          phoneNormalized ? eq(leads.phoneNormalized, phoneNormalized) : undefined,
+          emailNormalized ? eq(leads.emailNormalized, emailNormalized) : undefined,
+        ),
+      ),
+    });
+    if (existing) {
+      await db.insert(leadInteractions).values({
+        tenantId,
+        leadId: existing.id,
+        type: "system",
+        direction: "internal",
+        body: `Re-submit via API ingest (already in pipeline at stage: ${existing.stage})`,
+      });
+      return c.json({ leadId: existing.id, isDuplicate: true });
+    }
+  }
+
+  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("x-real-ip") ?? null;
+  const ingestAssignedTo = await autoAssign(db, tenantId, null);
+
+  const [created] = await db
+    .insert(leads)
+    .values({
+      tenantId,
+      fullName: body.fullName,
+      phone: body.phone || null,
+      phoneNormalized,
+      email: body.email || null,
+      emailNormalized,
+      interestCourse: body.interestCourse || null,
+      courseId,
+      // No dedicated "lovable" enum value (avoids a migration); tag via utmSource.
+      source: "webform",
+      utmSource: body.utmSource || "lovable",
+      utmMedium: body.utmMedium || null,
+      utmCampaign: body.utmCampaign || null,
+      fbclid: body.fbclid || null,
+      gclid: body.gclid || null,
+      consentText: body.consentText || "Lead via API ingest",
+      consentAt: new Date(),
+      ipAtConsent: ip,
+      assignedTo: ingestAssignedTo,
+    })
+    .returning();
+
+  await db.insert(leadInteractions).values({
+    tenantId,
+    leadId: created.id,
+    type: "system",
+    direction: "internal",
+    body: `Lead created via API ingest (${body.utmSource || "lovable"})`,
+  });
+
+  // Fire automation triggers (cadences, webhooks) as for any new lead.
+  // Fire-and-forget — never fail the ingest because an automation hook threw.
+  void fireTrigger(tenantId, "lead.created", created).catch(() => undefined);
+
+  return c.json({ leadId: created.id, isDuplicate: false }, 201);
+});
+
 // Public dedup check (used by manual add form on blur)
 leadRoutes.post("/check-duplicate", async (c) => {
   // This endpoint requires auth since it reveals internal data
   return c.json({ error: "use_authenticated_version" }, 400);
 });
 
-// Authenticated routes from here
+// Authenticated routes from here.
+// /intake (public) and /ingest (API-key, auth handled per-route) opt out of the
+// global session-auth middleware so they reach their own handlers.
 leadRoutes.use("/*", async (c, next) => {
-  if (c.req.path.endsWith("/intake")) return next();
+  if (c.req.path.endsWith("/intake") || c.req.path.endsWith("/ingest")) return next();
   return requireAuth(c, next);
 });
 
@@ -696,6 +829,14 @@ leadRoutes.patch("/:id", zValidator("json", updateLeadSchema), async (c) => {
   });
   if (!before) return c.json({ error: "not_found" }, 404);
 
+  // INTEG-101: guard courseId against cross-tenant injection — drop if not ours.
+  if (body.courseId) {
+    const owned = await db.query.courses.findFirst({
+      where: and(eq(courses.id, body.courseId as string), eq(courses.tenantId, tenantId)),
+    });
+    if (!owned) return c.json({ error: "course_not_found" }, 400);
+  }
+
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   for (const [k, v] of Object.entries(body)) patch[k] = v;
   if ("phone" in body) patch.phoneNormalized = normalizePhone(body.phone as string | null);
@@ -795,6 +936,8 @@ const convertLeadSchema = z.object({
   studentEmail: z.string().email().max(255).optional().nullable().or(z.literal("")),
   birthDate: z.string().max(20).optional().nullable(), // ISO date string
   studentStatus: z.enum(["active", "trial"]).default("active"),
+  /** CX: explicit cohort to enroll the new student in (overrides auto-pick) */
+  cohortId: z.string().uuid().optional().nullable(),
 });
 
 leadRoutes.post("/:id/convert", zValidator("json", convertLeadSchema), async (c) => {
@@ -869,9 +1012,36 @@ leadRoutes.post("/:id/convert", zValidator("json", convertLeadSchema), async (c)
     userId,
   });
 
-  // INTEG-201: Auto-enroll in cohort if lead has courseId set
+  // CX: enroll the new student in a cohort.
+  //  - If the caller picked one explicitly (body.cohortId), use it (verify it's ours).
+  //  - Otherwise fall back to auto-pick: the next active/upcoming cohort for lead.courseId.
   let autoEnrolledCohortId: string | null = null;
-  if (lead.courseId) {
+
+  if (body.cohortId) {
+    try {
+      const chosen = await db.query.cohorts.findFirst({
+        where: and(eq(cohorts.id, body.cohortId), eq(cohorts.tenantId, tenantId)),
+      });
+      if (chosen) {
+        await db.insert(cohortParticipants).values({
+          tenantId,
+          cohortId: chosen.id,
+          studentId: student.id,
+          fullName: student.fullName,
+          email: student.email ?? null,
+          phone: student.phone ?? null,
+          source: "crm",
+          paymentStatus: "pending",
+          amountCents: 0,
+        });
+        autoEnrolledCohortId = chosen.id;
+      }
+    } catch {
+      // Explicit enroll failure must NOT block conversion — log silently
+    }
+  }
+
+  if (!autoEnrolledCohortId && lead.courseId) {
     try {
       // Find the next upcoming or active cohort for this course
       const today = new Date().toISOString().slice(0, 10);

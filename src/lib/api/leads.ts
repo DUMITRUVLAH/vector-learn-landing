@@ -52,6 +52,10 @@ export interface Lead {
   preferredDays?: number[] | null;
   preferredTimeStart?: string | null;
   preferredTimeEnd?: string | null;
+  /** INTEG-101: FK to courses catalog (mapping target for Lovable ingest) */
+  courseId?: string | null;
+  /** INTEG-101: resolved course name (augmented server-side for display) */
+  courseName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -267,7 +271,7 @@ export function addInteraction(
 
 export function updateLead(
   id: string,
-  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo" | "valueCents" | "debtCents" | "company" | "dealName" | "preferredDays" | "preferredTimeStart" | "preferredTimeEnd">>
+  patch: Partial<Pick<Lead, "fullName" | "phone" | "email" | "interestCourse" | "notes" | "assignedTo" | "valueCents" | "debtCents" | "company" | "dealName" | "preferredDays" | "preferredTimeStart" | "preferredTimeEnd" | "courseId">>
 ): Promise<Lead> {
   return api<Lead>(`/api/leads/${id}`, {
     method: "PATCH",
@@ -287,12 +291,14 @@ export function convertLead(
     studentEmail?: string | null;
     birthDate?: string | null;
     studentStatus?: "active" | "trial";
+    /** CX: explicit cohort to enroll the new student in (overrides auto-pick) */
+    cohortId?: string | null;
   }
 ): Promise<{
   lead: Lead;
   student: { id: string; fullName: string; familyId?: string | null };
   familyId: string | null;
-  /** INTEG-201: auto-enrolled cohort id, or null if no cohort found/applicable */
+  /** INTEG-201: enrolled cohort id (explicit or auto), or null if none */
   autoEnrolledCohortId: string | null;
 }> {
   return api<{

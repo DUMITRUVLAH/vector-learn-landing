@@ -156,10 +156,11 @@ describe("CRM-106 — Lead card page", () => {
     renderLeadCard();
     // Wait for loading to finish (spinner disappears, lead data renders)
     await waitFor(() => expect(screen.queryByText(/se încarcă/i)).not.toBeInTheDocument());
-    expect(screen.getAllByText("Maria Popescu").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("+40771234567")).toBeInTheDocument();
-    expect(screen.getByText("maria@test.ro")).toBeInTheDocument();
-    expect(screen.getByText("Engleză B2")).toBeInTheDocument();
+    // Redesign: the card is always-editable, so contact info lives in inputs.
+    expect(screen.getAllByDisplayValue("Maria Popescu").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByDisplayValue("+40771234567")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("maria@test.ro")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Engleză B2")).toBeInTheDocument();
   });
 
   it("T-CRM-106-1: renders source", async () => {
@@ -229,27 +230,28 @@ describe("CRM-106 — Lead card page", () => {
   });
 
   /**
-   * T-CRM-106-2: inline edit saves via PATCH
+   * T-CRM-106-2: inline always-editable card — fields autosave on blur (no edit mode)
    */
-  it("T-CRM-106-2: edit button switches to edit mode", async () => {
+  it("T-CRM-106-2: card fields are always editable (no edit-mode toggle)", async () => {
     renderLeadCard();
-    await waitFor(() => expect(screen.getByLabelText("Editează lead")).toBeInTheDocument());
-    fireEvent.click(screen.getByLabelText("Editează lead"));
+    await waitFor(() => expect(screen.queryByText(/se încarcă/i)).not.toBeInTheDocument());
+    // No "Editează" button — fields are editable inputs straight away.
+    expect(screen.queryByLabelText("Editează lead")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Telefon")).toBeInTheDocument();
     expect(screen.getByLabelText("Email")).toBeInTheDocument();
-    expect(screen.getByLabelText("Salvează modificări")).toBeInTheDocument();
   });
 
-  it("T-CRM-106-2: saving edit calls updateLead with modified fields", async () => {
+  it("T-CRM-106-2: editing a field and blurring calls updateLead with that field", async () => {
     renderLeadCard();
-    await waitFor(() => expect(screen.getByLabelText("Editează lead")).toBeInTheDocument());
-    fireEvent.click(screen.getByLabelText("Editează lead"));
+    await waitFor(() => expect(screen.getByLabelText("Telefon")).toBeInTheDocument());
 
     const phoneInput = screen.getByLabelText("Telefon");
     fireEvent.change(phoneInput, { target: { value: "+40779999999" } });
+    fireEvent.blur(phoneInput);
 
-    fireEvent.click(screen.getByLabelText("Salvează modificări"));
-    await waitFor(() => expect(leadsApi.updateLead).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(leadsApi.updateLead).toHaveBeenCalledWith("lead-001", { phone: "+40779999999" })
+    );
   });
 
   /**
@@ -265,15 +267,17 @@ describe("CRM-106 — Lead card page", () => {
     expect(screen.getByRole("alert").textContent).toMatch(/consimțământ retras/i);
   });
 
-  it("T-CRM-106-5: consent revoked disables phone link", async () => {
+  it("T-CRM-106-5: consent revoked disables outbound contact actions", async () => {
     vi.mocked(leadsApi.getLead).mockResolvedValue({
       ...MOCK_LEAD,
       consentRevokedAt: "2026-01-05T00:00:00Z",
     });
     renderLeadCard();
-    await waitFor(() => expect(screen.getByText("+40771234567")).toBeInTheDocument());
-    const phoneLink = screen.getByText("+40771234567").closest("a");
-    expect(phoneLink).toHaveAttribute("aria-disabled", "true");
+    // Redesign: phone is an editable input; consent now disables the action-bar
+    // buttons (Sună / WhatsApp / Email) rather than a tel: link.
+    await waitFor(() => expect(screen.getByLabelText("Sună lead")).toBeInTheDocument());
+    expect(screen.getByLabelText("Sună lead")).toBeDisabled();
+    expect(screen.getByLabelText("Trimite WhatsApp")).toBeDisabled();
   });
 
   /**

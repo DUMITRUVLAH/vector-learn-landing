@@ -87,6 +87,23 @@ export async function sendFeedbackToStudent(
   );
 }
 
+/**
+ * CX: send a feedback form to an entire cohort. Creates one invitation per
+ * CRM-linked participant; skips those already invited for this form.
+ */
+export async function sendFeedbackToCohort(
+  formId: string,
+  cohortId: string
+): Promise<{ created: number; skipped: number; total: number; reason?: string }> {
+  return api<{ created: number; skipped: number; total: number; reason?: string }>(
+    `/api/feedback/${formId}/send-cohort`,
+    {
+      method: "POST",
+      body: JSON.stringify({ cohortId }),
+    }
+  );
+}
+
 export async function getFeedbackResponses(
   formId: string
 ): Promise<{ responses: Array<FeedbackInvitation & { answers: Array<{ questionId: string; value: string | null }> }> }> {
