@@ -7,7 +7,9 @@ import {
   Pencil,
   Ban,
   Send,
+  Download,
 } from "lucide-react";
+import { downloadPaymentAccountPdf } from "@/lib/paymentAccountPdf";
 import { AppShell } from "@/components/app/AppShell";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -37,6 +39,7 @@ export function PaymentAccountViewPage({ accountId }: PaymentAccountViewPageProp
   const [account, setAccount] = useState<PaymentAccountDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -75,6 +78,19 @@ export function PaymentAccountViewPage({ accountId }: PaymentAccountViewPageProp
       setError("Emiterea a eșuat.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleDownload() {
+    if (!account) return;
+    setDownloading(true);
+    setError(null);
+    try {
+      await downloadPaymentAccountPdf(account);
+    } catch {
+      setError("PDF-ul nu a putut fi generat.");
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -161,12 +177,20 @@ export function PaymentAccountViewPage({ accountId }: PaymentAccountViewPageProp
               <Ban className="size-4" /> Anulează
             </button>
           )}
+          <button
+            onClick={handleDownload}
+            disabled={downloading}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+          >
+            {downloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            Descarcă PDF
+          </button>
           {!isDraft && (
             <button
               onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
             >
-              <Printer className="size-4" /> Printează / PDF
+              <Printer className="size-4" /> Printează
             </button>
           )}
         </div>
