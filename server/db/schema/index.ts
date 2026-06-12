@@ -86,3 +86,4 @@ export * from "./sellerProfiles";
 export * from "./companyClients";
 export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
+export * from "./par"; // PAR-001: Payment Action Request module

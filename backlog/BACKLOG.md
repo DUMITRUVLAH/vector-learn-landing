@@ -9,7 +9,44 @@
 
 ---
 
-## Active milestone: M1 — Module deep-dive pages
+## Active milestone: PAR — Payment Action Request workflow (NEW APP, added 2026-06-12)
+
+A digital, online, multi-role workflow that replaces the paper **Payment Action Request (PAR) Form**
+used by donor-funded NGOs (sample: ATIC / Digital Safeguard, Republic of Moldova). Staff **request** a
+payment → **approvers** sign off per a **Delegation of Authority (DOA)** matrix → **finance** executes
+it → the system regenerates the exact paper form as a **PDF**. Reuses this repo's stack (Hono + Drizzle
++ PGlite/Supabase, multi-tenant, auth, jsPDF, Vector 365). Behavior contract: [par/PAR-CORE.md](par/PAR-CORE.md).
+Driver: [par/BUILD-SEQUENCE.md](par/BUILD-SEQUENCE.md). Tests: [par/TEST-SCENARIOS.md](par/TEST-SCENARIOS.md).
+
+| Phase | ID | Title | Status | Spec |
+|-------|----|-------|--------|------|
+| A | `PAR-001` | Schema `par.ts` + enums + migration 0113 + seed demo NGO | pending | [PAR-001](specs/PAR-001-schema.md) |
+| A | `PAR-002` | Roles + `requirePARRole` + DOA matrix + seed DOA | pending | [PAR-002](specs/PAR-002-roles-doa.md) |
+| A | `PAR-003` | Org config: budget codes/departments/projects/vendors/settings | pending | [PAR-003](specs/PAR-003-org-config.md) |
+| B | `PAR-101` | Create API — header (sections 1–9) + draft + numbering | pending | [PAR-101](specs/PAR-101-create-api.md) |
+| B | `PAR-102` | Line items (section 10) + auto-sum + 10% note | pending | [PAR-102](specs/PAR-102-line-items.md) |
+| B | `PAR-103` | End-use (11) + payee (12) + IBAN/IDNP validation | pending | [PAR-103](specs/PAR-103-enduse-payee.md) |
+| B | `PAR-104` | Attachments (section 13) | pending | [PAR-104](specs/PAR-104-attachments.md) |
+| B | `PAR-105` | Create wizard UI `/app/par/new` | pending | [PAR-105](specs/PAR-105-create-wizard.md) |
+| B | `PAR-106` | Dashboard + list `/app/par` | pending | [PAR-106](specs/PAR-106-dashboard-list.md) |
+| C | `PAR-107` | DOA routing engine (submit → approval chain) | pending | [PAR-107](specs/PAR-107-routing-engine.md) |
+| C | `PAR-108` | Approver inbox + approve/reject/request-changes | pending | [PAR-108](specs/PAR-108-approver-inbox.md) |
+| C | `PAR-109` | Sequential multi-level approval + integrity | pending | [PAR-109](specs/PAR-109-sequential-approval.md) |
+| C | `PAR-110` | Timeline & audit per PAR | pending | [PAR-110](specs/PAR-110-timeline-audit.md) |
+| C | `PAR-111` | Notifications (in-app + email) | pending | [PAR-111](specs/PAR-111-notifications.md) |
+| D | `PAR-112` | Finance queue + section 16 | pending | [PAR-112](specs/PAR-112-finance-queue.md) |
+| D | `PAR-113` | Payment execution + 10% overage re-approval | pending | [PAR-113](specs/PAR-113-payment-execution.md) |
+| E | `PAR-114` | PDF generator (faithful to the form) | pending | [PAR-114](specs/PAR-114-pdf-generator.md) |
+| E | `PAR-115` | Download PDF + attach to record | pending | [PAR-115](specs/PAR-115-pdf-download.md) |
+| F | `PAR-116` | Admin DOA matrix UI + members/roles | pending | [PAR-116](specs/PAR-116-admin-doa.md) |
+| F | `PAR-117` | Reports + CSV export | pending | [PAR-117](specs/PAR-117-reports.md) |
+| F | `PAR-118` | Full detail page (16 sections, role-aware actions) | pending | [PAR-118](specs/PAR-118-detail-page.md) |
+
+**PAR milestone: 0/21 done. Build in phase order A→F; one phase = one branch = one PR (§0.2).**
+
+---
+
+## Previous milestone: M1 — Module deep-dive pages
 
 Each module gets a dedicated landing sub-page at `/modules/<slug>` with an interactive demo, deep-dive copy, screenshots, FAQ, and a CTA. Output is a fully built page + tests + UX persona reviews + lighthouse score ≥ 90.
 

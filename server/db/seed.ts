@@ -1,6 +1,14 @@
 import "dotenv/config";
 import { db, closeDb } from "./client";
 import { tenants, users, students, teachers, courses, lessons, branches, leads } from "./schema";
+import {
+  parMembers,
+  parSettings,
+  parDepartments,
+  parProjects,
+  parBudgetCodes,
+  parDoaMatrix,
+} from "./schema/par";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -149,6 +157,96 @@ async function seed() {
     ])
     .returning();
   console.log(`✅ ${leadRows.length} leads created`);
+
+  // ── PAR-001: Seed NGO demo tenant for Payment Action Request module ──────────
+  const PAR_SLUG = "demo-atic-ngo";
+  const existingPar = await db.query.tenants.findFirst({ where: eq(tenants.slug, PAR_SLUG) });
+  if (!existingPar) {
+    const [parTenant] = await db
+      .insert(tenants)
+      .values({ name: "ATIC — Digital Safeguard", slug: PAR_SLUG, plan: "growth" })
+      .returning();
+
+    // 4 users covering all PAR roles
+    const [parAdmin, parApprover, parFinance, parRequestor] = await db
+      .insert(users)
+      .values([
+        { tenantId: parTenant.id, email: "admin@atic.demo.io", passwordHash: demoPasswordHash, name: "Irina Oriol", role: "admin" },
+        { tenantId: parTenant.id, email: "approver@atic.demo.io", passwordHash: demoPasswordHash, name: "Ana Chirita", role: "teacher" },
+        { tenantId: parTenant.id, email: "finance@atic.demo.io", passwordHash: demoPasswordHash, name: "Mihai Botnaru", role: "teacher" },
+        { tenantId: parTenant.id, email: "requestor@atic.demo.io", passwordHash: demoPasswordHash, name: "Sirbu Cristina", role: "teacher" },
+      ])
+      .returning();
+
+    // PAR role assignments
+    await db.insert(parMembers).values([
+      { tenantId: parTenant.id, userId: parAdmin.id, role: "par_admin" },
+      { tenantId: parTenant.id, userId: parApprover.id, role: "approver", approvalLimitCents: 10000000 },
+      { tenantId: parTenant.id, userId: parFinance.id, role: "finance" },
+      { tenantId: parTenant.id, userId: parRequestor.id, role: "requestor" },
+    ]);
+
+    // PAR settings
+    const [parSettingsRow] = await db
+      .insert(parSettings)
+      .values({
+        tenantId: parTenant.id,
+        microPurchaseThresholdCents: 500000, // 5,000 MDL
+        defaultCurrency: "MDL",
+        orgLegalName: "Asociația pentru Tehnologie și Internet din Moldova",
+        requestNoPrefix: "PAR",
+      })
+      .returning();
+
+    // Departments
+    const [deptAtic] = await db
+      .insert(parDepartments)
+      .values([
+        { tenantId: parTenant.id, name: "ATIC" },
+        { tenantId: parTenant.id, name: "Finance" },
+        { tenantId: parTenant.id, name: "Procurement" },
+      ])
+      .returning();
+
+    // Projects
+    await db.insert(parProjects).values([
+      { tenantId: parTenant.id, name: "Digital Safeguard", donor: "USAID" },
+      { tenantId: parTenant.id, name: "CyberSkills Moldova", donor: "EU Delegation" },
+    ]);
+
+    // Budget codes
+    await db.insert(parBudgetCodes).values([
+      { tenantId: parTenant.id, code: "M13", name: "Procurement — Monthly budget" },
+      { tenantId: parTenant.id, code: "DS-2026-OPS", name: "Digital Safeguard Operations 2026" },
+      { tenantId: parTenant.id, code: "DS-2026-PROG", name: "Digital Safeguard Program 2026" },
+    ]);
+
+    // Default DOA matrix (CORE §3):
+    //   Band ≤ micro-purchase (5000 MDL) → 1 step: DOA Holder / Supervisor
+    //   > micro-purchase, ≤ 100,000 MDL → 2 steps: DOA Holder + Executive Director
+    //   > 100,000 MDL → 3 steps: DOA Holder + Finance Director + Executive Director
+    await db.insert(parDoaMatrix).values([
+      // Band 1: up to micro-purchase threshold
+      { tenantId: parTenant.id, minAmountCents: 0, maxAmountCents: 500000, step: 1, approverRoleLabel: "DOA Holder / Supervisor", approverParRole: "approver" },
+      // Band 2: above micro-purchase up to 100k
+      { tenantId: parTenant.id, minAmountCents: 500001, maxAmountCents: 10000000, step: 1, approverRoleLabel: "DOA Holder / Supervisor", approverParRole: "approver" },
+      { tenantId: parTenant.id, minAmountCents: 500001, maxAmountCents: 10000000, step: 2, approverRoleLabel: "Executive Director", approverUserId: parAdmin.id },
+      // Band 3: above 100k
+      { tenantId: parTenant.id, minAmountCents: 10000001, maxAmountCents: null, step: 1, approverRoleLabel: "DOA Holder / Supervisor", approverParRole: "approver" },
+      { tenantId: parTenant.id, minAmountCents: 10000001, maxAmountCents: null, step: 2, approverRoleLabel: "Finance / Program Director", approverUserId: parFinance.id },
+      { tenantId: parTenant.id, minAmountCents: 10000001, maxAmountCents: null, step: 3, approverRoleLabel: "Executive Director", approverUserId: parAdmin.id },
+    ]);
+
+    console.log(`✅ PAR demo tenant created: ATIC — Digital Safeguard`);
+    console.log(`   PAR admin: ${parAdmin.email}`);
+    console.log(`   PAR approver: ${parApprover.email}`);
+    console.log(`   PAR finance: ${parFinance.email}`);
+    console.log(`   PAR requestor: ${parRequestor.email}`);
+    console.log(`   Micro-purchase threshold: ${parSettingsRow.microPurchaseThresholdCents / 100} MDL`);
+    console.log(`   DOA matrix: ${deptAtic ? 6 : 0} rules seeded`);
+  } else {
+    console.log(`⚠️  PAR demo tenant already exists (${existingPar.id}). Skipping.`);
+  }
 
   console.log(`\n📌 Demo credentials:`);
   console.log(`   email: ${admin.email}`);
