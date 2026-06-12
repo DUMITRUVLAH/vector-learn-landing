@@ -281,6 +281,12 @@ export const parRequests = pgTable(
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    /**
+     * PAR-107: SHA-256 hex hash of (header + line items + payee) at submit time.
+     * Used to verify body immutability on display and on PDF (PAR-109 §AC).
+     * Null until first submit. Regenerated on re-submit after changes_requested.
+     */
+    bodyHash: varchar("body_hash", { length: 64 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -335,6 +341,12 @@ export const parApprovals = pgTable(
     /** e.g. "DOA Holder / Supervisor", "Executive Director" */
     approverRoleLabel: varchar("approver_role_label", { length: 200 }),
     decision: parDecisionEnum("decision").notNull().default("pending"),
+    /**
+     * PAR-107/PAR-109: true = step cannot be decided yet (prior step not approved).
+     * Step 1 starts as false (active); all subsequent steps start as true (locked).
+     * Unlocked by the routing engine when the previous step reaches "approved".
+     */
+    locked: boolean("locked").notNull().default(false),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
     comment: text("comment"),
     /** Typed or drawn signature name — prints in signature box on PDF */

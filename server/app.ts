@@ -111,6 +111,16 @@ import { parDepartmentsRoutes } from "./routes/parDepartments"; // PAR-003: depa
 import { parProjectsRoutes } from "./routes/parProjects"; // PAR-003: projects/programs
 import { parVendorsRoutes } from "./routes/parVendors"; // PAR-003: vendor/payee registry
 import { parSettingsRoutes } from "./routes/parSettings"; // PAR-003: org settings
+// PAR Phase B routes
+import { parRoutes } from "./routes/par"; // PAR-101/102/103: request CRUD + line items + payee
+import { parAttachmentsRoutes } from "./routes/parAttachments"; // PAR-104: attachments upload/list/delete
+// PAR Phase C routes
+import { parApprovalsRoutes } from "./routes/parApprovals"; // PAR-108/113: approve/reject/request-changes + inbox + reapprove
+import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline / audit log
+// PAR Phase D routes
+import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: finance queue + section 16 + pay
+// PAR Phase F routes
+import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -299,7 +309,7 @@ app.route("/api", stripeWebhookRoutes); // /webhooks/stripe
 app.route("/api/settings/institution", institutionRoutes);
 
 // PAR (Payment Action Request) module — Phase A
-// /api/par/me must be registered BEFORE /api/par/members (more specific path first)
+// Specific-path prefixes MUST be registered BEFORE the generic /api/par/:id handlers.
 app.route("/api/par/me", parMeRoutes);
 app.route("/api/par/members", parMembersRoutes);
 app.route("/api/par/doa", parDoaRoutes);
@@ -308,6 +318,21 @@ app.route("/api/par/departments", parDepartmentsRoutes);
 app.route("/api/par/projects", parProjectsRoutes);
 app.route("/api/par/vendors", parVendorsRoutes);
 app.route("/api/par/settings", parSettingsRoutes);
+// PAR Phase F — reports (must come before generic /api/par handlers)
+app.route("/api/par/reports", parReportsRoutes);
+// PAR Phase D (specific paths) — register BEFORE generic /api/par to prevent
+// /api/par/finance being captured by /:id as "finance"
+app.route("/api/par", parPaymentsRoutes);
+// PAR Phase B — request CRUD + line items + payee (PAR-101/102/103)
+// Mount AFTER all more-specific paths to avoid path conflicts
+app.route("/api/par", parRoutes);
+// PAR-104: attachments — mounted under /api/par (handles /:id/attachments paths)
+app.route("/api/par", parAttachmentsRoutes);
+// PAR Phase C — approval actions + inbox (PAR-108)
+// /inbox is a more-specific path; register BEFORE generic /:id handlers
+app.route("/api/par", parApprovalsRoutes);
+// PAR-110: timeline endpoint — mounted AFTER approval routes
+app.route("/api/par", parTimelineRoutes);
 
 app.get("/api/health", async (c) => {
   try {

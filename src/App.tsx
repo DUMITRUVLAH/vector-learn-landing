@@ -94,6 +94,36 @@ import { ExportPage } from "./pages/app/ExportPage";
 import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
 import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+// PAR-105: Create wizard
+import { ParCreateWizard } from "./pages/par/ParCreateWizard";
+// PAR-106: Dashboard + list
+import { ParDashboard } from "./pages/par/ParDashboard";
+// PAR-108: Approver inbox
+import ParInbox from "./pages/par/ParInbox";
+// PAR-112: Finance queue
+import ParFinanceQueue from "./pages/par/ParFinanceQueue";
+// PAR-115: PAR detail page with PDF download
+import ParDetailPage from "./pages/par/ParDetail";
+// PAR-116: Admin panel
+import ParAdmin from "./pages/par/ParAdmin";
+// PAR-117: Reports
+import { ParReports } from "./pages/par/ParReports";
+import { useState, useEffect } from "react";
+import { getParMe } from "./lib/api/par";
+
+/** PAR-116: Role-aware wrapper — fetches current user's PAR roles then renders ParAdmin */
+function ParAdminPage() {
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getParMe()
+      .then((r) => setIsAdmin(r.roles.includes("par_admin")))
+      .catch(() => setIsAdmin(false));
+  }, []);
+
+  if (isAdmin === null) return null; // Loading
+  return <ParAdmin isAdmin={isAdmin} />;
+}
 
 function HomePage() {
   return (
@@ -222,6 +252,20 @@ function Routes() {
   if (path.startsWith("/app/kinder/compliance")) return <KinderCompliancePage />;
   // KINDER-007: incident/accident reports + parent acknowledgment
   if (path.startsWith("/app/kinder/incidents")) return <KinderIncidentsPage />;
+  // PAR-105: /app/par/new — create wizard (must come before /app/par list)
+  if (path.startsWith("/app/par/new")) return <ParCreateWizard />;
+  // PAR-108: /app/par/inbox — approver inbox (before /app/par generic)
+  if (path.startsWith("/app/par/inbox")) return <ParInbox />;
+  // PAR-112: /app/par/finance — finance queue (before /app/par generic)
+  if (path.startsWith("/app/par/finance")) return <ParFinanceQueue />;
+  // PAR-116: /app/par/admin — admin panel (par_admin only; before :id catch-all)
+  if (path.startsWith("/app/par/admin")) return <ParAdminPage />;
+  // PAR-117: /app/par/reports — reports dashboard
+  if (path.startsWith("/app/par/reports")) return <ParReports />;
+  // PAR-115: /app/par/:id — detail page (before /app/par generic, after named routes)
+  if (path.match(/^\/app\/par\/[^/]+$/)) return <ParDetailPage />;
+  // PAR-106: /app/par — dashboard + list
+  if (path.startsWith("/app/par")) return <ParDashboard />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app/reports/kpi")) return <KpiDashboardPage />;
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;

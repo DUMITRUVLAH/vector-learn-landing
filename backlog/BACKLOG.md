@@ -27,22 +27,22 @@ Driver: [par/BUILD-SEQUENCE.md](par/BUILD-SEQUENCE.md). Tests: [par/TEST-SCENARI
 | B | `PAR-102` | Line items (section 10) + auto-sum + 10% note | pending | [PAR-102](specs/PAR-102-line-items.md) |
 | B | `PAR-103` | End-use (11) + payee (12) + IBAN/IDNP validation | pending | [PAR-103](specs/PAR-103-enduse-payee.md) |
 | B | `PAR-104` | Attachments (section 13) | pending | [PAR-104](specs/PAR-104-attachments.md) |
-| B | `PAR-105` | Create wizard UI `/app/par/new` | pending | [PAR-105](specs/PAR-105-create-wizard.md) |
-| B | `PAR-106` | Dashboard + list `/app/par` | pending | [PAR-106](specs/PAR-106-dashboard-list.md) |
-| C | `PAR-107` | DOA routing engine (submit → approval chain) | pending | [PAR-107](specs/PAR-107-routing-engine.md) |
-| C | `PAR-108` | Approver inbox + approve/reject/request-changes | pending | [PAR-108](specs/PAR-108-approver-inbox.md) |
-| C | `PAR-109` | Sequential multi-level approval + integrity | pending | [PAR-109](specs/PAR-109-sequential-approval.md) |
+| B | `PAR-105` | Create wizard UI `/app/par/new` | done | [PAR-105](specs/PAR-105-create-wizard.md) |
+| B | `PAR-106` | Dashboard + list `/app/par` | done | [PAR-106](specs/PAR-106-dashboard-list.md) |
+| C | `PAR-107` | DOA routing engine (submit → approval chain) | done | [PAR-107](specs/PAR-107-routing-engine.md) |
+| C | `PAR-108` | Approver inbox + approve/reject/request-changes | done | [PAR-108](specs/PAR-108-approver-inbox.md) |
+| C | `PAR-109` | Sequential multi-level approval + integrity | done | [PAR-109](specs/PAR-109-sequential-approval.md) |
 | C | `PAR-110` | Timeline & audit per PAR | pending | [PAR-110](specs/PAR-110-timeline-audit.md) |
 | C | `PAR-111` | Notifications (in-app + email) | pending | [PAR-111](specs/PAR-111-notifications.md) |
-| D | `PAR-112` | Finance queue + section 16 | pending | [PAR-112](specs/PAR-112-finance-queue.md) |
-| D | `PAR-113` | Payment execution + 10% overage re-approval | pending | [PAR-113](specs/PAR-113-payment-execution.md) |
-| E | `PAR-114` | PDF generator (faithful to the form) | pending | [PAR-114](specs/PAR-114-pdf-generator.md) |
-| E | `PAR-115` | Download PDF + attach to record | pending | [PAR-115](specs/PAR-115-pdf-download.md) |
-| F | `PAR-116` | Admin DOA matrix UI + members/roles | pending | [PAR-116](specs/PAR-116-admin-doa.md) |
-| F | `PAR-117` | Reports + CSV export | pending | [PAR-117](specs/PAR-117-reports.md) |
-| F | `PAR-118` | Full detail page (16 sections, role-aware actions) | pending | [PAR-118](specs/PAR-118-detail-page.md) |
+| D | `PAR-112` | Finance queue + section 16 | done | [PAR-112](specs/PAR-112-finance-queue.md) |
+| D | `PAR-113` | Payment execution + 10% overage re-approval | done | [PAR-113](specs/PAR-113-payment-execution.md) |
+| E | `PAR-114` | PDF generator (faithful to the form) | done ✅ | [PAR-114](specs/PAR-114-pdf-generator.md) · [PR #142](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/142) |
+| E | `PAR-115` | Download PDF + attach to record | done ✅ | [PAR-115](specs/PAR-115-pdf-download.md) · [PR #142](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/142) |
+| F | `PAR-116` | Admin DOA matrix UI + members/roles | done ✅ | [PAR-116](specs/PAR-116-admin-doa.md) · [PR #143](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/143) |
+| F | `PAR-117` | Reports + CSV export | done ✅ | [PAR-117](specs/PAR-117-reports.md) · [PR #143](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/143) |
+| F | `PAR-118` | Full detail page (16 sections, role-aware actions) | done ✅ | [PAR-118](specs/PAR-118-detail-page.md) · [PR #143](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/143) |
 
-**PAR milestone: 0/21 done. Build in phase order A→F; one phase = one branch = one PR (§0.2).**
+**PAR milestone: 21/21 done (Phases A–F complete). Module COMPLETE.**
 
 ---
 

@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-003",
-  "iterations": 147,
+  "last_completed": "PAR-118",
+  "iterations": 164,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "PAR",
@@ -63,8 +63,8 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/138"
     },
     "PAR-101": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-101-create-api.md",
       "milestone": "PAR",
@@ -72,44 +72,76 @@
       "depends_on": [
         "PAR-002",
         "PAR-003"
-      ]
+      ],
+      "branch": "feat/PAR-faza-B-create",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/139"
     },
     "PAR-102": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-102-line-items.md",
       "milestone": "PAR",
       "phase": "B",
       "depends_on": [
         "PAR-101"
-      ]
+      ],
+      "branch": "feat/PAR-faza-B-create",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/139"
     },
     "PAR-103": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-103-enduse-payee.md",
       "milestone": "PAR",
       "phase": "B",
       "depends_on": [
         "PAR-101"
-      ]
+      ],
+      "branch": "feat/PAR-faza-B-create",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/139"
     },
     "PAR-104": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-104-attachments.md",
       "milestone": "PAR",
       "phase": "B",
       "depends_on": [
         "PAR-101"
-      ]
+      ],
+      "branch": "feat/PAR-faza-B-create",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/139"
     },
     "PAR-105": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-105-create-wizard.md",
       "milestone": "PAR",
@@ -118,11 +150,19 @@
         "PAR-102",
         "PAR-103",
         "PAR-104"
-      ]
+      ],
+      "branch": "feat/PAR-faza-B-create",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/139"
     },
     "PAR-106": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-106-dashboard-list.md",
       "milestone": "PAR",
@@ -130,11 +170,19 @@
       "depends_on": [
         "PAR-101",
         "PAR-105"
-      ]
+      ],
+      "branch": "feat/PAR-faza-B-create",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/139"
     },
     "PAR-107": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-107-routing-engine.md",
       "milestone": "PAR",
@@ -142,33 +190,54 @@
       "depends_on": [
         "PAR-002",
         "PAR-101"
-      ]
+      ],
+      "branch": "feat/PAR-faza-C-approval",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-108": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-108-approver-inbox.md",
       "milestone": "PAR",
       "phase": "C",
       "depends_on": [
         "PAR-107"
-      ]
+      ],
+      "branch": "feat/PAR-faza-C-approval",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-109": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-109-sequential-approval.md",
       "milestone": "PAR",
       "phase": "C",
       "depends_on": [
         "PAR-108"
-      ]
+      ],
+      "branch": "feat/PAR-faza-C-approval",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-110": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-110-timeline-audit.md",
       "milestone": "PAR",
@@ -176,99 +245,164 @@
       "depends_on": [
         "PAR-101",
         "PAR-109"
-      ]
+      ],
+      "branch": "feat/PAR-faza-C-approval",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-111": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-111-notifications.md",
       "milestone": "PAR",
       "phase": "C",
+      "branch": "feat/PAR-faza-C-approval",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "depends_on": [
         "PAR-108"
       ]
     },
     "PAR-112": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-112-finance-queue.md",
       "milestone": "PAR",
       "phase": "D",
       "depends_on": [
         "PAR-109"
-      ]
+      ],
+      "branch": "feat/PAR-faza-D-finance",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-113": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-113-payment-execution.md",
       "milestone": "PAR",
       "phase": "D",
       "depends_on": [
         "PAR-112"
-      ]
+      ],
+      "branch": "feat/PAR-faza-D-finance",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "adversarial": "APPROVED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-114": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-114-pdf-generator.md",
       "milestone": "PAR",
       "phase": "E",
       "depends_on": [
         "PAR-109"
-      ]
+      ],
+      "branch": "feat/PAR-faza-E-pdf",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-115": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-115-pdf-download.md",
       "milestone": "PAR",
       "phase": "E",
       "depends_on": [
         "PAR-114"
-      ]
+      ],
+      "branch": "feat/PAR-faza-E-pdf",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-116": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-116-admin-doa.md",
       "milestone": "PAR",
       "phase": "F",
+      "branch": "feat/PAR-faza-F-admin",
       "depends_on": [
         "PAR-107",
         "PAR-003"
-      ]
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-117": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-117-reports.md",
       "milestone": "PAR",
       "phase": "F",
+      "branch": "feat/PAR-faza-F-admin",
       "depends_on": [
         "PAR-113"
-      ]
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-118": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-118-detail-page.md",
       "milestone": "PAR",
       "phase": "F",
+      "branch": "feat/PAR-faza-F-admin",
       "depends_on": [
         "PAR-109",
         "PAR-110",
         "PAR-114",
         "PAR-115"
-      ]
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/143"
     },
     "M1-001": {
       "status": "done",
