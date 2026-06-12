@@ -21,7 +21,8 @@
         "integration": "CONNECTED",
         "manager": "MAYBE",
         "student": "PASS"
-      }
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/138"
     },
     "PAR-002": {
       "status": "done",
@@ -39,7 +40,8 @@
         "integration": "CONNECTED",
         "manager": "MAYBE",
         "student": "PASS"
-      }
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/138"
     },
     "PAR-003": {
       "status": "done",
@@ -57,7 +59,8 @@
         "integration": "CONNECTED",
         "manager": "MAYBE",
         "student": "PASS"
-      }
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/138"
     },
     "PAR-101": {
       "status": "pending",
@@ -2072,7 +2075,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2112,7 +2115,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical — allergies, immunization records, medication log",
+      "title": "Medical \u2014 allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
