@@ -26,6 +26,7 @@ import {
 } from "../../db/schema/par";
 import { resolveApprovalChain } from "./doa";
 import { computeParBodyHash, type ParBodyForHash } from "./integrity";
+import { notifySubmitted } from "../../services/par/notify";
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -231,9 +232,12 @@ export async function submitPAR(params: {
     detail: `PAR ${par.requestNo} submitted; ${sanitizedChain.length} approval step(s) generated. Body hash: ${bodyHash.slice(0, 8)}…`,
   });
 
-  // PAR-111 notification stub: in a full implementation, emit an event here.
-  // The first approver (step 1) should be notified.
-  // For now we log to audit; PAR-111 wires up the notification service.
+  // PAR-111: notify first approver (best-effort — never throws)
+  const firstStep = sanitizedChain.find((s) => s.step === 1);
+  await notifySubmitted(
+    { tenantId, parId, requestNo: par.requestNo },
+    firstStep?.approverUserId ?? null
+  );
 
   return {
     ok: true,

@@ -29,6 +29,12 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { buildBodyForHash } from "../lib/par/submit";
 import { verifyParBodyHash } from "../lib/par/integrity";
+import {
+  notifyStepAdvanced,
+  notifyFullyApprovedToFinance,
+  notifyRejected,
+  notifyChangesRequested,
+} from "../services/par/notify";
 
 export const parApprovalsRoutes = new Hono<{ Variables: AuthVariables }>();
 parApprovalsRoutes.use("*", requireAuth);
@@ -286,6 +292,13 @@ parApprovalsRoutes.post(
         detail: `Step ${nextStep.step} (${nextStep.approverRoleLabel}) unlocked for approval`,
       });
 
+      // PAR-111: notify the next approver (best-effort)
+      await notifyStepAdvanced(
+        { tenantId, parId, requestNo: par.requestNo },
+        nextStep.approverUserId ?? null,
+        nextStep.approverRoleLabel ?? `Step ${nextStep.step}`
+      );
+
       const [refreshed] = await db
         .select()
         .from(parRequests)
@@ -318,6 +331,11 @@ parApprovalsRoutes.post(
       event: newStatus === "in_finance" ? "fully_approved_to_finance" : "fully_approved",
       detail: `All approval steps complete. PAR → ${newStatus}`,
     });
+
+    // PAR-111: notify finance users when fully approved to finance (best-effort)
+    if (newStatus === "in_finance") {
+      await notifyFullyApprovedToFinance({ tenantId, parId, requestNo: par.requestNo });
+    }
 
     return c.json({ ...finalPar, chain_status: "complete" });
   }
@@ -410,6 +428,13 @@ parApprovalsRoutes.post(
       detail: `Step ${activeStep.step} rejected. Comment: ${body.comment.slice(0, 200)}`,
     });
 
+    // PAR-111: notify requestor (best-effort)
+    await notifyRejected(
+      { tenantId, parId, requestNo: par.requestNo },
+      par.requestedByUserId,
+      body.comment
+    );
+
     return c.json({ ...rejectedPar, chain_status: "rejected" });
   }
 );
@@ -484,6 +509,13 @@ parApprovalsRoutes.post(
       event: "changes_requested",
       detail: `Step ${activeStep.step} requested changes. Comment: ${body.comment.slice(0, 200)}`,
     });
+
+    // PAR-111: notify requestor (best-effort)
+    await notifyChangesRequested(
+      { tenantId, parId, requestNo: par.requestNo },
+      par.requestedByUserId,
+      body.comment
+    );
 
     return c.json({ ...changedPar, chain_status: "changes_requested" });
   }
