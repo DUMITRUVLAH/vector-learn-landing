@@ -693,6 +693,55 @@ parRoutes.patch(
   }
 );
 
+// ─── POST /api/par/:id/submit — PAR-105 stub (full routing in PAR-107) ───────
+// Transitions draft → pending_approval. The DOA routing engine (PAR-107) will
+// generate the par_approvals chain; for now we just flip the status so the wizard
+// can redirect to /app/par/:id without blocking Phase B.
+
+parRoutes.post("/:id/submit", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+
+  if (par.requestedByUserId !== user.id) {
+    return c.json({ error: "forbidden: only the author can submit this PAR" }, 403);
+  }
+  if (!EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number])) {
+    return c.json({ error: `PAR is not in a submittable status: ${par.status}` }, 400);
+  }
+
+  // PAR-105 submit-time validation: execute_payment requires end_use
+  if (par.purpose === "execute_payment" && !par.endUse?.trim()) {
+    return c.json(
+      { error: "end_use_required: purpose=execute_payment requires end_use to be set" },
+      400
+    );
+  }
+
+  const [updated] = await db
+    .update(parRequests)
+    .set({
+      status: "pending_approval",
+      submittedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
+    .returning();
+
+  await writeAudit({
+    tenantId,
+    parId,
+    actorUserId: user.id,
+    event: "submitted",
+    detail: `PAR ${par.requestNo} submitted for approval`,
+  });
+
+  return c.json(updated);
+});
+
 // ─── DELETE /api/par/:id/line-items/:lineId ──────────────────────────────────
 
 parRoutes.delete("/:id/line-items/:lineId", async (c) => {

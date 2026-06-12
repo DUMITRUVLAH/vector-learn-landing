@@ -94,6 +94,10 @@ import { ExportPage } from "./pages/app/ExportPage";
 import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
 import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+// PAR-105: Create wizard
+import { ParCreateWizard } from "./pages/par/ParCreateWizard";
+// PAR-106: Dashboard + list
+import { ParDashboard } from "./pages/par/ParDashboard";
 
 function HomePage() {
   return (
@@ -222,6 +226,10 @@ function Routes() {
   if (path.startsWith("/app/kinder/compliance")) return <KinderCompliancePage />;
   // KINDER-007: incident/accident reports + parent acknowledgment
   if (path.startsWith("/app/kinder/incidents")) return <KinderIncidentsPage />;
+  // PAR-105: /app/par/new — create wizard (must come before /app/par list)
+  if (path.startsWith("/app/par/new")) return <ParCreateWizard />;
+  // PAR-106: /app/par — dashboard + list
+  if (path.startsWith("/app/par")) return <ParDashboard />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app/reports/kpi")) return <KpiDashboardPage />;
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
