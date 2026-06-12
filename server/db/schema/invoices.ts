@@ -50,6 +50,19 @@ export const invoices = pgTable(
      * 'submitted' = sent to ANAF (future)
      */
     efacturaStatus: varchar("efactura_status", { length: 30 }),
+    /**
+     * EFMD: SIA e-Factura Moldova (SFS) — integrare semiautomatizată.
+     * Seria + numărul sub care factura e înregistrată la SFS.
+     */
+    efacturaMdSeria: varchar("efactura_md_seria", { length: 20 }),
+    efacturaMdNumber: varchar("efactura_md_number", { length: 30 }),
+    /** Statutul SFS al facturii: 0=Draft, 1=Semnat Furnizor, 2=Refuzat, 3=Acceptat, 5=Anulat, 6=Arhivat, 7=Trimis, 8=Semnat Cumpărător, 10=Transportat */
+    efacturaMdStatus: integer("efactura_md_status"),
+    /** RequestId-ul transmiterii (reconciliere cu GetLogs/SearchInvoices). */
+    efacturaMdRequestId: varchar("efactura_md_request_id", { length: 64 }),
+    efacturaMdSubmittedAt: timestamp("efactura_md_submitted_at", { withTimezone: true }),
+    /** Ultimul mesaj de eroare/diagnostic primit de la SFS. */
+    efacturaMdMessage: text("efactura_md_message"),
     // GAP-014: Stripe Checkout fields
     stripeSessionId: varchar("stripe_session_id", { length: 255 }),
     stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),

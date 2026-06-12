@@ -11,6 +11,8 @@ import {
   PlayCircle,
   FileCode,
   Table2,
+  Send,
+  RefreshCw,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -25,6 +27,9 @@ import {
   runBilling,
   downloadEfacturaXml,
   downloadSagaCsv,
+  submitEfacturaMd,
+  syncEfacturaMd,
+  EFACTURA_MD_STATUS_LABELS,
   type Invoice,
   type InvoiceStatus,
   type InvoiceCurrency,
@@ -65,6 +70,14 @@ function formatDate(iso: string): string {
   });
 }
 
+/** Culori badge pentru statusul SFS (e-Factura Moldova). */
+function efacturaMdBadgeCls(status: number): string {
+  if (status === 3) return "bg-success/15 text-success";
+  if (status === 2 || status === 5) return "bg-destructive/15 text-destructive";
+  if (status === 0) return "bg-muted text-muted-foreground";
+  return "bg-primary/15 text-primary"; // 1, 6, 7, 8, 10 — în curs
+}
+
 type Tab = "invoices" | "subscriptions";
 
 // ──────────────────────────────────────────────
@@ -89,6 +102,8 @@ export function InvoicesPage() {
   const [filterMonth, setFilterMonth] = useState<string>("");
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [runningBilling, setRunningBilling] = useState(false);
+  const [submittingEfmd, setSubmittingEfmd] = useState<string | null>(null);
+  const [syncingEfmd, setSyncingEfmd] = useState(false);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -160,6 +175,42 @@ export function InvoicesPage() {
       void fetchAll();
     } catch {
       setToast({ kind: "error", message: "Nu pot actualiza abonamentul" });
+    }
+  };
+
+  const handleSubmitEfacturaMd = async (id: string, invoiceNumber: string) => {
+    setSubmittingEfmd(id);
+    try {
+      const result = await submitEfacturaMd(id);
+      setToast({
+        kind: "success",
+        message: `${invoiceNumber} → SFS ${result.seria} ${result.number}${result.mock ? " (TEST)" : ""}`,
+      });
+      void fetchAll();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "already_submitted") {
+        setToast({ kind: "error", message: "Factura e deja transmisă la e-Factura MD" });
+      } else {
+        setToast({ kind: "error", message: `Nu pot transmite ${invoiceNumber} la e-Factura MD` });
+      }
+    } finally {
+      setSubmittingEfmd(null);
+    }
+  };
+
+  const handleSyncEfacturaMd = async () => {
+    setSyncingEfmd(true);
+    try {
+      const result = await syncEfacturaMd();
+      setToast({
+        kind: "success",
+        message: `Sync e-Factura MD: ${result.synced}/${result.checked} actualizate${result.mock ? " (TEST)" : ""}`,
+      });
+      void fetchAll();
+    } catch {
+      setToast({ kind: "error", message: "Eroare la sincronizarea e-Factura MD" });
+    } finally {
+      setSyncingEfmd(false);
     }
   };
 
@@ -311,16 +362,31 @@ export function InvoicesPage() {
                 Resetează
               </button>
             )}
-            {/* Export SAGA CSV button — aligned right in filter bar */}
-            <button
-              type="button"
-              onClick={() => downloadSagaCsv(filterMonth || undefined)}
-              aria-label="Export SAGA CSV"
-              className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-            >
-              <Table2 className="h-3.5 w-3.5" aria-hidden="true" />
-              Export SAGA CSV
-            </button>
+            {/* Export SAGA CSV + sync e-Factura MD — aligned right in filter bar */}
+            <div className="ml-auto inline-flex gap-2">
+              <button
+                type="button"
+                onClick={handleSyncEfacturaMd}
+                disabled={syncingEfmd}
+                aria-label="Sincronizează statusurile e-Factura Moldova"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50"
+              >
+                <RefreshCw
+                  className={cn("h-3.5 w-3.5", syncingEfmd && "animate-spin")}
+                  aria-hidden="true"
+                />
+                Sync e-Factura MD
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadSagaCsv(filterMonth || undefined)}
+                aria-label="Export SAGA CSV"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+              >
+                <Table2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Export SAGA CSV
+              </button>
+            </div>
           </div>
 
           {/* Invoice Table */}
@@ -407,14 +473,27 @@ export function InvoicesPage() {
                             {formatDate(inv.issueDate)}
                           </td>
                           <td className="px-4 py-3">
-                            <span
-                              className={cn(
-                                "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold",
-                                meta.cls
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold",
+                                  meta.cls
+                                )}
+                              >
+                                {meta.label}
+                              </span>
+                              {inv.efacturaMdStatus !== null && inv.efacturaMdStatus !== undefined && (
+                                <span
+                                  title={`e-Factura MD: ${inv.efacturaMdSeria ?? ""} ${inv.efacturaMdNumber ?? ""}`}
+                                  className={cn(
+                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold",
+                                    efacturaMdBadgeCls(inv.efacturaMdStatus)
+                                  )}
+                                >
+                                  MD: {EFACTURA_MD_STATUS_LABELS[inv.efacturaMdStatus] ?? inv.efacturaMdStatus}
+                                </span>
                               )}
-                            >
-                              {meta.label}
-                            </span>
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="inline-flex gap-1.5 items-center">
@@ -438,6 +517,23 @@ export function InvoicesPage() {
                                   e-Fact
                                 </button>
                               )}
+                              {(inv.status === "issued" || inv.status === "paid") &&
+                                inv.efacturaMdStatus === null && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSubmitEfacturaMd(inv.id, inv.invoiceNumber)}
+                                    disabled={submittingEfmd === inv.id}
+                                    aria-label={`Transmite factura ${inv.invoiceNumber} la e-Factura Moldova`}
+                                    className="inline-flex items-center gap-1 rounded-md bg-primary/10 text-primary px-2 py-1 text-[11px] font-semibold hover:bg-primary/20 disabled:opacity-50"
+                                  >
+                                    {submittingEfmd === inv.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                                    ) : (
+                                      <Send className="h-3 w-3" aria-hidden="true" />
+                                    )}
+                                    e-Fact MD
+                                  </button>
+                                )}
                               {(inv.status === "draft" || inv.status === "issued") && (
                                 <button
                                   type="button"

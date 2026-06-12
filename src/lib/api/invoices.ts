@@ -18,6 +18,10 @@ export interface Invoice {
   dueDate: string | null;
   notes: string | null;
   pdfKey: string | null;
+  /** EFMD: seria/numărul/statusul facturii în SIA e-Factura Moldova (SFS). */
+  efacturaMdSeria: string | null;
+  efacturaMdNumber: string | null;
+  efacturaMdStatus: number | null;
   createdAt: string;
   studentName: string;
 }
@@ -153,4 +157,70 @@ export function downloadEfacturaXml(id: string): void {
 export function downloadSagaCsv(month?: string): void {
   const qs = month ? `?month=${encodeURIComponent(month)}` : "";
   window.location.href = `/api/invoices/export/saga-csv${qs}`;
+}
+
+// ── EFMD: SIA e-Factura Moldova (SFS) ────────────────────────────────────────
+
+/** Etichete pentru statusurile SFS (InvoiceStatus). */
+export const EFACTURA_MD_STATUS_LABELS: Record<number, string> = {
+  0: "Draft SFS",
+  1: "Semnat Furnizor",
+  2: "Refuzat",
+  3: "Acceptat",
+  5: "Anulat",
+  6: "Arhivat",
+  7: "Trimis",
+  8: "Semnat Cumpărător",
+  10: "Transportat",
+};
+
+export interface SubmitEfacturaMdResult {
+  ok: boolean;
+  seria: string;
+  number: string;
+  requestId: string;
+  mock: boolean;
+  invoiceStatus: number;
+  invoiceStatusLabel: string;
+  message: string;
+}
+
+export interface SyncEfacturaMdResult {
+  checked: number;
+  synced: number;
+  mock: boolean;
+  items: Array<{
+    id: string;
+    seria: string;
+    number: string;
+    invoiceStatus: number;
+    invoiceStatusLabel: string;
+  }>;
+}
+
+/** Transmite factura la SIA e-Factura Moldova (flux semiautomatizat, nesemnat). */
+export function submitEfacturaMd(
+  id: string,
+  input?: { buyerIdno?: string; vatRate?: number }
+): Promise<SubmitEfacturaMdResult> {
+  return api<SubmitEfacturaMdResult>(`/api/invoices/${id}/efactura-md`, {
+    method: "POST",
+    body: JSON.stringify(input ?? {}),
+  });
+}
+
+/** Re-sincronizează statusurile SFS pentru toate facturile transmise. */
+export function syncEfacturaMd(): Promise<SyncEfacturaMdResult> {
+  return api<SyncEfacturaMdResult>("/api/invoices/efactura-md/sync", { method: "POST" });
+}
+
+/** Anulează factura la SFS. */
+export function cancelEfacturaMd(
+  id: string,
+  comment?: string
+): Promise<{ ok: boolean; mock: boolean; invoiceStatusLabel: string }> {
+  return api<{ ok: boolean; mock: boolean; invoiceStatusLabel: string }>(
+    `/api/invoices/${id}/efactura-md/cancel`,
+    { method: "POST", body: JSON.stringify({ comment: comment ?? "Anulare din Vector Learn" }) }
+  );
 }
