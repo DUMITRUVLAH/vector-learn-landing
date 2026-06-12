@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "PAR-101",
   "last_completed": "PAR-003",
-  "iterations": 147,
+  "iterations": 148,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "PAR",
@@ -63,8 +63,8 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/138"
     },
     "PAR-101": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-101-create-api.md",
       "milestone": "PAR",
@@ -72,7 +72,8 @@
       "depends_on": [
         "PAR-002",
         "PAR-003"
-      ]
+      ],
+      "branch": "feat/PAR-faza-B-create"
     },
     "PAR-102": {
       "status": "pending",

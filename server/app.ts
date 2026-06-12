@@ -111,6 +111,8 @@ import { parDepartmentsRoutes } from "./routes/parDepartments"; // PAR-003: depa
 import { parProjectsRoutes } from "./routes/parProjects"; // PAR-003: projects/programs
 import { parVendorsRoutes } from "./routes/parVendors"; // PAR-003: vendor/payee registry
 import { parSettingsRoutes } from "./routes/parSettings"; // PAR-003: org settings
+// PAR Phase B routes
+import { parRoutes } from "./routes/par"; // PAR-101/102/103: request CRUD + line items + payee
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -299,7 +301,7 @@ app.route("/api", stripeWebhookRoutes); // /webhooks/stripe
 app.route("/api/settings/institution", institutionRoutes);
 
 // PAR (Payment Action Request) module — Phase A
-// /api/par/me must be registered BEFORE /api/par/members (more specific path first)
+// /api/par/me must be registered BEFORE /api/par (more specific path first)
 app.route("/api/par/me", parMeRoutes);
 app.route("/api/par/members", parMembersRoutes);
 app.route("/api/par/doa", parDoaRoutes);
@@ -308,6 +310,9 @@ app.route("/api/par/departments", parDepartmentsRoutes);
 app.route("/api/par/projects", parProjectsRoutes);
 app.route("/api/par/vendors", parVendorsRoutes);
 app.route("/api/par/settings", parSettingsRoutes);
+// PAR Phase B — request CRUD + line items + payee (PAR-101/102/103)
+// Mount AFTER /api/par/me and other more-specific paths to avoid path conflicts
+app.route("/api/par", parRoutes);
 
 app.get("/api/health", async (c) => {
   try {
