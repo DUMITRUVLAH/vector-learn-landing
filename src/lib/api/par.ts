@@ -117,9 +117,12 @@ export interface ParPayment {
   id: string;
   parBl: string | null;
   receivedAt: string | null;
+  receivedByUserId: string | null;
+  assignedToUserId: string | null;
   actualAmountCents: number | null;
   paymentDate: string | null;
   paymentRef: string | null;
+  proofUrl?: string | null;
 }
 
 // Config entities
