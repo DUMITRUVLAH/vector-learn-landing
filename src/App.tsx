@@ -102,6 +102,8 @@ import { ParDashboard } from "./pages/par/ParDashboard";
 import ParInbox from "./pages/par/ParInbox";
 // PAR-112: Finance queue
 import ParFinanceQueue from "./pages/par/ParFinanceQueue";
+// PAR-115: PAR detail page with PDF download
+import ParDetailPage from "./pages/par/ParDetail";
 
 function HomePage() {
   return (
@@ -236,6 +238,8 @@ function Routes() {
   if (path.startsWith("/app/par/inbox")) return <ParInbox />;
   // PAR-112: /app/par/finance — finance queue (before /app/par generic)
   if (path.startsWith("/app/par/finance")) return <ParFinanceQueue />;
+  // PAR-115: /app/par/:id — detail page (before /app/par generic, after named routes)
+  if (path.match(/^\/app\/par\/[^/]+$/)) return <ParDetailPage />;
   // PAR-106: /app/par — dashboard + list
   if (path.startsWith("/app/par")) return <ParDashboard />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
