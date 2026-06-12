@@ -34,8 +34,8 @@ Driver: [par/BUILD-SEQUENCE.md](par/BUILD-SEQUENCE.md). Tests: [par/TEST-SCENARI
 | C | `PAR-109` | Sequential multi-level approval + integrity | done | [PAR-109](specs/PAR-109-sequential-approval.md) |
 | C | `PAR-110` | Timeline & audit per PAR | pending | [PAR-110](specs/PAR-110-timeline-audit.md) |
 | C | `PAR-111` | Notifications (in-app + email) | pending | [PAR-111](specs/PAR-111-notifications.md) |
-| D | `PAR-112` | Finance queue + section 16 | pending | [PAR-112](specs/PAR-112-finance-queue.md) |
-| D | `PAR-113` | Payment execution + 10% overage re-approval | pending | [PAR-113](specs/PAR-113-payment-execution.md) |
+| D | `PAR-112` | Finance queue + section 16 | done | [PAR-112](specs/PAR-112-finance-queue.md) |
+| D | `PAR-113` | Payment execution + 10% overage re-approval | done | [PAR-113](specs/PAR-113-payment-execution.md) |
 | E | `PAR-114` | PDF generator (faithful to the form) | pending | [PAR-114](specs/PAR-114-pdf-generator.md) |
 | E | `PAR-115` | Download PDF + attach to record | pending | [PAR-115](specs/PAR-115-pdf-download.md) |
 | F | `PAR-116` | Admin DOA matrix UI + members/roles | pending | [PAR-116](specs/PAR-116-admin-doa.md) |
