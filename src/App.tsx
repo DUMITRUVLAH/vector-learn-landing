@@ -100,6 +100,8 @@ import { ParCreateWizard } from "./pages/par/ParCreateWizard";
 import { ParDashboard } from "./pages/par/ParDashboard";
 // PAR-108: Approver inbox
 import ParInbox from "./pages/par/ParInbox";
+// PAR-112: Finance queue
+import ParFinanceQueue from "./pages/par/ParFinanceQueue";
 
 function HomePage() {
   return (
@@ -232,6 +234,8 @@ function Routes() {
   if (path.startsWith("/app/par/new")) return <ParCreateWizard />;
   // PAR-108: /app/par/inbox — approver inbox (before /app/par generic)
   if (path.startsWith("/app/par/inbox")) return <ParInbox />;
+  // PAR-112: /app/par/finance — finance queue (before /app/par generic)
+  if (path.startsWith("/app/par/finance")) return <ParFinanceQueue />;
   // PAR-106: /app/par — dashboard + list
   if (path.startsWith("/app/par")) return <ParDashboard />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;

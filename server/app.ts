@@ -115,8 +115,10 @@ import { parSettingsRoutes } from "./routes/parSettings"; // PAR-003: org settin
 import { parRoutes } from "./routes/par"; // PAR-101/102/103: request CRUD + line items + payee
 import { parAttachmentsRoutes } from "./routes/parAttachments"; // PAR-104: attachments upload/list/delete
 // PAR Phase C routes
-import { parApprovalsRoutes } from "./routes/parApprovals"; // PAR-108: approve/reject/request-changes + inbox
+import { parApprovalsRoutes } from "./routes/parApprovals"; // PAR-108/113: approve/reject/request-changes + inbox + reapprove
 import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline / audit log
+// PAR Phase D routes
+import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: finance queue + section 16 + pay
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -305,7 +307,7 @@ app.route("/api", stripeWebhookRoutes); // /webhooks/stripe
 app.route("/api/settings/institution", institutionRoutes);
 
 // PAR (Payment Action Request) module — Phase A
-// /api/par/me must be registered BEFORE /api/par (more specific path first)
+// Specific-path prefixes MUST be registered BEFORE the generic /api/par/:id handlers.
 app.route("/api/par/me", parMeRoutes);
 app.route("/api/par/members", parMembersRoutes);
 app.route("/api/par/doa", parDoaRoutes);
@@ -314,8 +316,11 @@ app.route("/api/par/departments", parDepartmentsRoutes);
 app.route("/api/par/projects", parProjectsRoutes);
 app.route("/api/par/vendors", parVendorsRoutes);
 app.route("/api/par/settings", parSettingsRoutes);
+// PAR Phase D (specific paths) — register BEFORE generic /api/par to prevent
+// /api/par/finance being captured by /:id as "finance"
+app.route("/api/par", parPaymentsRoutes);
 // PAR Phase B — request CRUD + line items + payee (PAR-101/102/103)
-// Mount AFTER /api/par/me and other more-specific paths to avoid path conflicts
+// Mount AFTER all more-specific paths to avoid path conflicts
 app.route("/api/par", parRoutes);
 // PAR-104: attachments — mounted under /api/par (handles /:id/attachments paths)
 app.route("/api/par", parAttachmentsRoutes);

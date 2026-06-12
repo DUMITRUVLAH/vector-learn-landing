@@ -1,14 +1,16 @@
 /**
  * PAR-108: Approver inbox + approve/reject/request-changes actions.
  * PAR-109: Sequential lock enforcement + body-immutability guard + hash re-verify.
+ * PAR-113: Overage re-approval (POST /api/par/:id/reapprove — placed here per spec, same guard + audit trail)
  *
  * Routes:
  *   GET  /api/par/inbox                          → PAR-108: PARs awaiting the current user's decision
  *   POST /api/par/:id/approve                    → PAR-108: approve the active step
  *   POST /api/par/:id/reject                     → PAR-108: reject (terminal)
  *   POST /api/par/:id/request-changes            → PAR-108: send back for requestor edit
+ *   POST /api/par/:id/reapprove                  → PAR-113: re-approve 10%-overage; PAR → in_finance
  *
- * CORE: backlog/par/PAR-CORE.md §1, §4, §9
+ * CORE: backlog/par/PAR-CORE.md §1, §3 (10% rule), §4, §9
  * Mounted in server/app.ts: app.route("/api/par", parApprovalsRoutes)
  *   (must be registered BEFORE the generic /api/par router — or alongside it —
  *    because Hono matches longest-prefix; "inbox" is more specific than ":id")
@@ -35,6 +37,7 @@ import {
   notifyRejected,
   notifyChangesRequested,
 } from "../services/par/notify";
+import { parPayments } from "../db/schema/par";
 
 export const parApprovalsRoutes = new Hono<{ Variables: AuthVariables }>();
 parApprovalsRoutes.use("*", requireAuth);
@@ -520,3 +523,62 @@ parApprovalsRoutes.post(
     return c.json({ ...changedPar, chain_status: "changes_requested" });
   }
 );
+
+// ─── POST /api/par/:id/reapprove ──────────────────────────────────────────────
+// PAR-113: Overage re-approval. The final approver signs off on the 10%-overage,
+// setting overage_reapproved=true → PAR returns to in_finance so finance can pay.
+//
+// Guard: same roles as regular approve (approver | par_admin).
+// CORE §4 state machine: reapproval_required → in_finance → paid.
+
+parApprovalsRoutes.post("/:id/reapprove", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+
+  const roles = await getUserPARRoles(user.id, tenantId);
+  const canApprove = roles.includes("approver") || roles.includes("par_admin");
+  if (!canApprove) return c.json({ error: "forbidden: approver role required" }, 403);
+
+  const [par] = await db
+    .select()
+    .from(parRequests)
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+  if (!par) return c.json({ error: "not_found" }, 404);
+
+  if (par.status !== "reapproval_required") {
+    return c.json(
+      { error: `conflict: PAR status is '${par.status}', expected reapproval_required` },
+      409
+    );
+  }
+
+  const now = new Date();
+
+  // Set overage_reapproved = true on par_payments
+  await db
+    .update(parPayments)
+    .set({ overageReapproved: true, updatedAt: now })
+    .where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId)));
+
+  // PAR → in_finance (finance can now call /pay again and it will succeed)
+  await db
+    .update(parRequests)
+    .set({ status: "in_finance", updatedAt: now })
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+
+  await writeAudit({
+    tenantId,
+    parId,
+    actorUserId: user.id,
+    event: "overage_reapproved",
+    detail: `Overage re-approved by user ${user.id}. PAR returned to in_finance.`,
+  });
+
+  const [updated] = await db
+    .select()
+    .from(parRequests)
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+
+  return c.json({ status: "in_finance", overage_reapproved: true, par: updated });
+});

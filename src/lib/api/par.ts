@@ -310,6 +310,73 @@ export async function deleteAttachment(parId: string, attId: string): Promise<{ 
   return api(`/api/par/${parId}/attachments/${attId}`, { method: "DELETE" });
 }
 
+// ─── PAR-112/113: Finance queue + section 16 + payment execution ─────────────
+
+export interface ParPaymentRecord {
+  id: string;
+  tenantId: string;
+  parId: string;
+  parBl: string | null;
+  receivedAt: string | null;
+  receivedByUserId: string | null;
+  assignedToUserId: string | null;
+  actualAmountCents: number | null;
+  paymentDate: string | null;
+  paymentRef: string | null;
+  proofUrl: string | null;
+  overageReapproved: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ParFinanceQueueItem extends ParRequest {
+  above_micro_threshold: boolean;
+  payment: ParPaymentRecord | null;
+}
+
+export async function getFinanceQueue(): Promise<{ items: ParFinanceQueueItem[]; total: number }> {
+  return api("/api/par/finance");
+}
+
+export interface Section16Payload {
+  par_bl?: string | null;
+  received_by_user_id?: string | null;
+  assigned_to_user_id?: string | null;
+}
+
+export async function submitSection16(
+  parId: string,
+  payload: Section16Payload
+): Promise<{ par: ParRequest; payment: ParPaymentRecord }> {
+  return api(`/api/par/${parId}/finance`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface PayPayload {
+  actual_amount_cents: number;
+  payment_date: string; // ISO date or datetime
+  payment_ref: string;
+  proof_url?: string | null;
+}
+
+export async function executePayment(
+  parId: string,
+  payload: PayPayload
+): Promise<{ status: "paid" | "reapproval_required"; par: ParRequest; message?: string }> {
+  return api(`/api/par/${parId}/pay`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function reapproveOverage(
+  parId: string
+): Promise<{ status: string; overage_reapproved: boolean; par: ParRequest }> {
+  return api(`/api/par/${parId}/reapprove`, { method: "POST", body: JSON.stringify({}) });
+}
+
 // ─── PAR-110: Timeline / audit log ───────────────────────────────────────────
 
 export interface ParTimelineEvent {
