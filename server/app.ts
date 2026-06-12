@@ -116,6 +116,7 @@ import { parRoutes } from "./routes/par"; // PAR-101/102/103: request CRUD + lin
 import { parAttachmentsRoutes } from "./routes/parAttachments"; // PAR-104: attachments upload/list/delete
 // PAR Phase C routes
 import { parApprovalsRoutes } from "./routes/parApprovals"; // PAR-108: approve/reject/request-changes + inbox
+import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline / audit log
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -321,6 +322,8 @@ app.route("/api/par", parAttachmentsRoutes);
 // PAR Phase C — approval actions + inbox (PAR-108)
 // /inbox is a more-specific path; register BEFORE generic /:id handlers
 app.route("/api/par", parApprovalsRoutes);
+// PAR-110: timeline endpoint — mounted AFTER approval routes
+app.route("/api/par", parTimelineRoutes);
 
 app.get("/api/health", async (c) => {
   try {

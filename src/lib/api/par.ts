@@ -310,6 +310,22 @@ export async function deleteAttachment(parId: string, attId: string): Promise<{ 
   return api(`/api/par/${parId}/attachments/${attId}`, { method: "DELETE" });
 }
 
+// ─── PAR-110: Timeline / audit log ───────────────────────────────────────────
+
+export interface ParTimelineEvent {
+  id: string;
+  event: string;
+  detail: string | null;
+  diff: string | null;
+  actor_user_id: string | null;
+  actor_name: string;
+  created_at: string;
+}
+
+export async function getParTimeline(parId: string): Promise<{ timeline: ParTimelineEvent[]; total: number }> {
+  return api(`/api/par/${parId}/timeline`);
+}
+
 // ─── Config lookups ───────────────────────────────────────────────────────────
 
 export async function listDepartments(): Promise<{ items: ParDepartment[] }> {
