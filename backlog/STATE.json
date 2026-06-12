@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-115",
-  "iterations": 162,
+  "last_completed": "PAR-118",
+  "iterations": 164,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "PAR",
@@ -346,41 +346,63 @@
       }
     },
     "PAR-116": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-116-admin-doa.md",
       "milestone": "PAR",
       "phase": "F",
+      "branch": "feat/PAR-faza-F-admin",
       "depends_on": [
         "PAR-107",
         "PAR-003"
-      ]
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-117": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-117-reports.md",
       "milestone": "PAR",
       "phase": "F",
+      "branch": "feat/PAR-faza-F-admin",
       "depends_on": [
         "PAR-113"
-      ]
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-118": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-118-detail-page.md",
       "milestone": "PAR",
       "phase": "F",
+      "branch": "feat/PAR-faza-F-admin",
       "depends_on": [
         "PAR-109",
         "PAR-110",
         "PAR-114",
         "PAR-115"
-      ]
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/143"
     },
     "M1-001": {
       "status": "done",

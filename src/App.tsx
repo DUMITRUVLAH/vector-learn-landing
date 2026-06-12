@@ -104,6 +104,26 @@ import ParInbox from "./pages/par/ParInbox";
 import ParFinanceQueue from "./pages/par/ParFinanceQueue";
 // PAR-115: PAR detail page with PDF download
 import ParDetailPage from "./pages/par/ParDetail";
+// PAR-116: Admin panel
+import ParAdmin from "./pages/par/ParAdmin";
+// PAR-117: Reports
+import { ParReports } from "./pages/par/ParReports";
+import { useState, useEffect } from "react";
+import { getParMe } from "./lib/api/par";
+
+/** PAR-116: Role-aware wrapper — fetches current user's PAR roles then renders ParAdmin */
+function ParAdminPage() {
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getParMe()
+      .then((r) => setIsAdmin(r.roles.includes("par_admin")))
+      .catch(() => setIsAdmin(false));
+  }, []);
+
+  if (isAdmin === null) return null; // Loading
+  return <ParAdmin isAdmin={isAdmin} />;
+}
 
 function HomePage() {
   return (
@@ -238,6 +258,10 @@ function Routes() {
   if (path.startsWith("/app/par/inbox")) return <ParInbox />;
   // PAR-112: /app/par/finance — finance queue (before /app/par generic)
   if (path.startsWith("/app/par/finance")) return <ParFinanceQueue />;
+  // PAR-116: /app/par/admin — admin panel (par_admin only; before :id catch-all)
+  if (path.startsWith("/app/par/admin")) return <ParAdminPage />;
+  // PAR-117: /app/par/reports — reports dashboard
+  if (path.startsWith("/app/par/reports")) return <ParReports />;
   // PAR-115: /app/par/:id — detail page (before /app/par generic, after named routes)
   if (path.match(/^\/app\/par\/[^/]+$/)) return <ParDetailPage />;
   // PAR-106: /app/par — dashboard + list

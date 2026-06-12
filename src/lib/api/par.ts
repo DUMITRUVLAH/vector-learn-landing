@@ -399,19 +399,225 @@ export async function getParTimeline(parId: string): Promise<{ timeline: ParTime
 // ─── Config lookups ───────────────────────────────────────────────────────────
 
 export async function listDepartments(): Promise<{ items: ParDepartment[] }> {
-  return api("/api/par/departments");
+  return api<{ items?: ParDepartment[]; departments?: ParDepartment[] }>("/api/par/departments")
+    .then((r) => ({ items: (r as { items?: ParDepartment[]; departments?: ParDepartment[] }).items ?? (r as { items?: ParDepartment[]; departments?: ParDepartment[] }).departments ?? [] }));
 }
 
 export async function listProjects(): Promise<{ items: ParProject[] }> {
-  return api("/api/par/projects");
+  return api<{ items?: ParProject[]; projects?: ParProject[] }>("/api/par/projects")
+    .then((r) => ({ items: (r as { items?: ParProject[]; projects?: ParProject[] }).items ?? (r as { items?: ParProject[]; projects?: ParProject[] }).projects ?? [] }));
 }
 
 export async function listBudgetCodes(): Promise<{ items: ParBudgetCode[] }> {
-  return api("/api/par/budget-codes");
+  return api<{ items?: ParBudgetCode[]; budgetCodes?: ParBudgetCode[] }>("/api/par/budget-codes")
+    .then((r) => ({ items: (r as { items?: ParBudgetCode[]; budgetCodes?: ParBudgetCode[] }).items ?? (r as { items?: ParBudgetCode[]; budgetCodes?: ParBudgetCode[] }).budgetCodes ?? [] }));
 }
 
 export async function listVendors(): Promise<{ items: ParVendor[] }> {
-  return api("/api/par/vendors");
+  return api<{ items?: ParVendor[]; vendors?: ParVendor[] }>("/api/par/vendors")
+    .then((r) => ({ items: (r as { items?: ParVendor[]; vendors?: ParVendor[] }).items ?? (r as { items?: ParVendor[]; vendors?: ParVendor[] }).vendors ?? [] }));
+}
+
+// ─── PAR me — current user's PAR roles ───────────────────────────────────────
+
+export async function getParMe(): Promise<{ roles: string[]; userId: string; tenantId: string }> {
+  return api("/api/par/me");
+}
+
+// ─── PAR-116: Admin — DOA, Settings, Members, Reference data ─────────────────
+
+export interface ParDoaRow {
+  id: string;
+  tenantId: string;
+  chargeTo: "operations" | "program" | "other" | null;
+  departmentId: string | null;
+  minAmountCents: number;
+  maxAmountCents: number | null;
+  step: number;
+  approverRoleLabel: string;
+  approverUserId: string | null;
+  approverParRole: "requestor" | "approver" | "finance" | "par_admin" | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ParSettings {
+  id?: string;
+  tenantId?: string;
+  microPurchaseThresholdCents: number;
+  defaultCurrency: string;
+  orgLegalName: string | null;
+  orgLogoUrl: string | null;
+  pdfHelpUrl: string | null;
+  requestNoPrefix: string;
+}
+
+export interface ParMember {
+  id: string;
+  userId: string;
+  role: "requestor" | "approver" | "finance" | "par_admin";
+  approvalLimitCents: number | null;
+  createdAt: string;
+  userName?: string;
+  userEmail?: string;
+}
+
+export async function listParDoaMatrix(): Promise<{ rows: ParDoaRow[] }> {
+  return api("/api/par/doa");
+}
+
+export async function createParDoaRow(payload: Omit<ParDoaRow, "id" | "tenantId" | "createdAt" | "updatedAt">): Promise<ParDoaRow> {
+  return api("/api/par/doa", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function updateParDoaRow(id: string, payload: Partial<Omit<ParDoaRow, "id" | "tenantId" | "createdAt" | "updatedAt">>): Promise<ParDoaRow> {
+  return api(`/api/par/doa/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export async function deleteParDoaRow(id: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/doa/${id}`, { method: "DELETE" });
+}
+
+export async function getParSettings(): Promise<ParSettings> {
+  return api("/api/par/settings");
+}
+
+export async function updateParSettings(payload: Partial<Omit<ParSettings, "id" | "tenantId">>): Promise<ParSettings> {
+  return api("/api/par/settings", { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export async function listParMembers(): Promise<{ members: ParMember[] }> {
+  return api("/api/par/members");
+}
+
+export async function assignParMember(payload: {
+  userId: string;
+  role: "requestor" | "approver" | "finance" | "par_admin";
+  approvalLimitCents?: number | null;
+}): Promise<ParMember> {
+  return api("/api/par/members", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function revokeParMember(id: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/members/${id}`, { method: "DELETE" });
+}
+
+// Reference data CRUD — departments, projects, budget codes, vendors
+
+export async function createDepartment(payload: { name: string }): Promise<ParDepartment> {
+  return api("/api/par/departments", { method: "POST", body: JSON.stringify(payload) });
+}
+export async function updateDepartment(id: string, payload: Partial<{ name: string; active: boolean }>): Promise<ParDepartment> {
+  return api(`/api/par/departments/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export async function deleteDepartment(id: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/departments/${id}`, { method: "DELETE" });
+}
+
+export async function createProject(payload: { name: string; donor?: string | null }): Promise<ParProject> {
+  return api("/api/par/projects", { method: "POST", body: JSON.stringify(payload) });
+}
+export async function updateProject(id: string, payload: Partial<{ name: string; donor?: string | null; active: boolean }>): Promise<ParProject> {
+  return api(`/api/par/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export async function deleteProject(id: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/projects/${id}`, { method: "DELETE" });
+}
+
+export async function createBudgetCode(payload: { code: string; name: string }): Promise<ParBudgetCode> {
+  return api("/api/par/budget-codes", { method: "POST", body: JSON.stringify(payload) });
+}
+export async function updateBudgetCode(id: string, payload: Partial<{ code: string; name: string; active: boolean }>): Promise<ParBudgetCode> {
+  return api(`/api/par/budget-codes/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export async function deleteBudgetCode(id: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/budget-codes/${id}`, { method: "DELETE" });
+}
+
+export async function createVendor(payload: { name: string; idnp?: string | null; iban?: string | null; bank?: string | null }): Promise<ParVendor> {
+  return api("/api/par/vendors", { method: "POST", body: JSON.stringify(payload) });
+}
+export async function updateVendor(id: string, payload: Partial<{ name: string; idnp?: string | null; iban?: string | null; bank?: string | null; active: boolean }>): Promise<ParVendor> {
+  return api(`/api/par/vendors/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export async function deleteVendor(id: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/vendors/${id}`, { method: "DELETE" });
+}
+
+// ─── PAR-117: Reports ─────────────────────────────────────────────────────────
+
+export interface ParReportFilters {
+  period_from?: string;  // ISO date
+  period_to?: string;    // ISO date
+}
+
+export interface ParSpendByItem {
+  label: string;       // budget code / department / project name
+  id: string | null;
+  totalCents: number;
+  count: number;
+}
+
+export interface ParAgingItem {
+  status: string;
+  count: number;
+  avgAgingDays: number;
+  totalCents: number;
+}
+
+export interface ParCycleTimeItem {
+  avgSubmitToApprovedDays: number | null;
+  avgSubmitToPaidDays: number | null;
+  count: number;
+}
+
+export async function getParReportByBudget(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
+  const params = new URLSearchParams();
+  if (filters?.period_from) params.set("from", filters.period_from);
+  if (filters?.period_to) params.set("to", filters.period_to);
+  const qs = params.toString();
+  return api(`/api/par/reports/by-budget${qs ? `?${qs}` : ""}`);
+}
+
+export async function getParReportByDepartment(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
+  const params = new URLSearchParams();
+  if (filters?.period_from) params.set("from", filters.period_from);
+  if (filters?.period_to) params.set("to", filters.period_to);
+  const qs = params.toString();
+  return api(`/api/par/reports/by-department${qs ? `?${qs}` : ""}`);
+}
+
+export async function getParReportByProject(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
+  const params = new URLSearchParams();
+  if (filters?.period_from) params.set("from", filters.period_from);
+  if (filters?.period_to) params.set("to", filters.period_to);
+  const qs = params.toString();
+  return api(`/api/par/reports/by-project${qs ? `?${qs}` : ""}`);
+}
+
+export async function getParReportByChargeTo(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
+  const params = new URLSearchParams();
+  if (filters?.period_from) params.set("from", filters.period_from);
+  if (filters?.period_to) params.set("to", filters.period_to);
+  const qs = params.toString();
+  return api(`/api/par/reports/by-charge-to${qs ? `?${qs}` : ""}`);
+}
+
+export async function getParReportAging(): Promise<{ items: ParAgingItem[] }> {
+  return api("/api/par/reports/aging");
+}
+
+export async function getParReportCycleTime(): Promise<ParCycleTimeItem> {
+  return api("/api/par/reports/cycle-time");
+}
+
+export function getParReportExportUrl(filters?: ParReportFilters): string {
+  const params = new URLSearchParams();
+  if (filters?.period_from) params.set("from", filters.period_from);
+  if (filters?.period_to) params.set("to", filters.period_to);
+  const qs = params.toString();
+  return `/api/par/reports/export.csv${qs ? `?${qs}` : ""}`;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -119,6 +119,8 @@ import { parApprovalsRoutes } from "./routes/parApprovals"; // PAR-108/113: appr
 import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline / audit log
 // PAR Phase D routes
 import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: finance queue + section 16 + pay
+// PAR Phase F routes
+import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -316,6 +318,8 @@ app.route("/api/par/departments", parDepartmentsRoutes);
 app.route("/api/par/projects", parProjectsRoutes);
 app.route("/api/par/vendors", parVendorsRoutes);
 app.route("/api/par/settings", parSettingsRoutes);
+// PAR Phase F — reports (must come before generic /api/par handlers)
+app.route("/api/par/reports", parReportsRoutes);
 // PAR Phase D (specific paths) — register BEFORE generic /api/par to prevent
 // /api/par/finance being captured by /:id as "finance"
 app.route("/api/par", parPaymentsRoutes);
