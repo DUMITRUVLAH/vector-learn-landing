@@ -102,6 +102,15 @@ import { userRoutes } from "./routes/users";
 import { waitlistRoutes } from "./routes/waitlist";
 import { twoFactorRoutes } from "./routes/auth/twoFactor"; // AUTH-004: 2FA setup/verify/disable
 import { sessionMgmtRoutes } from "./routes/auth/sessions"; // active session management
+// PAR (Payment Action Request) module — Phase A routes
+import { parMeRoutes } from "./routes/parMe"; // PAR-002: GET /api/par/me
+import { parMembersRoutes } from "./routes/parMembers"; // PAR-002: members CRUD
+import { parDoaRoutes } from "./routes/parDoa"; // PAR-002: DOA matrix CRUD
+import { parBudgetCodesRoutes } from "./routes/parBudgetCodes"; // PAR-003: budget codes
+import { parDepartmentsRoutes } from "./routes/parDepartments"; // PAR-003: departments
+import { parProjectsRoutes } from "./routes/parProjects"; // PAR-003: projects/programs
+import { parVendorsRoutes } from "./routes/parVendors"; // PAR-003: vendor/payee registry
+import { parSettingsRoutes } from "./routes/parSettings"; // PAR-003: org settings
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -288,6 +297,17 @@ app.route("/api", stripeRoutes); // /settings/stripe, /invoices/:id/stripe-link
 app.route("/api", stripeWebhookRoutes); // /webhooks/stripe
 // INST-001: Institution type (gradinita | scoala | mixt) — drives module visibility
 app.route("/api/settings/institution", institutionRoutes);
+
+// PAR (Payment Action Request) module — Phase A
+// /api/par/me must be registered BEFORE /api/par/members (more specific path first)
+app.route("/api/par/me", parMeRoutes);
+app.route("/api/par/members", parMembersRoutes);
+app.route("/api/par/doa", parDoaRoutes);
+app.route("/api/par/budget-codes", parBudgetCodesRoutes);
+app.route("/api/par/departments", parDepartmentsRoutes);
+app.route("/api/par/projects", parProjectsRoutes);
+app.route("/api/par/vendors", parVendorsRoutes);
+app.route("/api/par/settings", parSettingsRoutes);
 
 app.get("/api/health", async (c) => {
   try {

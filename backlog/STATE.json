@@ -1,12 +1,275 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "BRANCH-704",
-  "iterations": 144,
-  "last_run_at": "2026-06-02T16:00:00Z",
-  "milestone_status": "State sync: BRANCH-701..704 done (merged PR #110). FIN/INT/AI/WAVE2 items added as done. Planning next module.",
-  "active_milestone": "NEXT",
+  "last_completed": "PAR-003",
+  "iterations": 147,
+  "last_run_at": "2026-06-12T00:00:00Z",
+  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "active_milestone": "PAR",
   "items": {
+    "PAR-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-001-schema.md",
+      "milestone": "PAR",
+      "phase": "A",
+      "depends_on": [],
+      "branch": "feat/PAR-faza-A-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/138"
+    },
+    "PAR-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-002-roles-doa.md",
+      "milestone": "PAR",
+      "phase": "A",
+      "depends_on": [
+        "PAR-001"
+      ],
+      "branch": "feat/PAR-faza-A-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/138"
+    },
+    "PAR-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-003-org-config.md",
+      "milestone": "PAR",
+      "phase": "A",
+      "depends_on": [
+        "PAR-001"
+      ],
+      "branch": "feat/PAR-faza-A-fundatie",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/138"
+    },
+    "PAR-101": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-101-create-api.md",
+      "milestone": "PAR",
+      "phase": "B",
+      "depends_on": [
+        "PAR-002",
+        "PAR-003"
+      ]
+    },
+    "PAR-102": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-102-line-items.md",
+      "milestone": "PAR",
+      "phase": "B",
+      "depends_on": [
+        "PAR-101"
+      ]
+    },
+    "PAR-103": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-103-enduse-payee.md",
+      "milestone": "PAR",
+      "phase": "B",
+      "depends_on": [
+        "PAR-101"
+      ]
+    },
+    "PAR-104": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-104-attachments.md",
+      "milestone": "PAR",
+      "phase": "B",
+      "depends_on": [
+        "PAR-101"
+      ]
+    },
+    "PAR-105": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-105-create-wizard.md",
+      "milestone": "PAR",
+      "phase": "B",
+      "depends_on": [
+        "PAR-102",
+        "PAR-103",
+        "PAR-104"
+      ]
+    },
+    "PAR-106": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-106-dashboard-list.md",
+      "milestone": "PAR",
+      "phase": "B",
+      "depends_on": [
+        "PAR-101",
+        "PAR-105"
+      ]
+    },
+    "PAR-107": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-107-routing-engine.md",
+      "milestone": "PAR",
+      "phase": "C",
+      "depends_on": [
+        "PAR-002",
+        "PAR-101"
+      ]
+    },
+    "PAR-108": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-108-approver-inbox.md",
+      "milestone": "PAR",
+      "phase": "C",
+      "depends_on": [
+        "PAR-107"
+      ]
+    },
+    "PAR-109": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-109-sequential-approval.md",
+      "milestone": "PAR",
+      "phase": "C",
+      "depends_on": [
+        "PAR-108"
+      ]
+    },
+    "PAR-110": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-110-timeline-audit.md",
+      "milestone": "PAR",
+      "phase": "C",
+      "depends_on": [
+        "PAR-101",
+        "PAR-109"
+      ]
+    },
+    "PAR-111": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-111-notifications.md",
+      "milestone": "PAR",
+      "phase": "C",
+      "depends_on": [
+        "PAR-108"
+      ]
+    },
+    "PAR-112": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-112-finance-queue.md",
+      "milestone": "PAR",
+      "phase": "D",
+      "depends_on": [
+        "PAR-109"
+      ]
+    },
+    "PAR-113": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-113-payment-execution.md",
+      "milestone": "PAR",
+      "phase": "D",
+      "depends_on": [
+        "PAR-112"
+      ]
+    },
+    "PAR-114": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-114-pdf-generator.md",
+      "milestone": "PAR",
+      "phase": "E",
+      "depends_on": [
+        "PAR-109"
+      ]
+    },
+    "PAR-115": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-115-pdf-download.md",
+      "milestone": "PAR",
+      "phase": "E",
+      "depends_on": [
+        "PAR-114"
+      ]
+    },
+    "PAR-116": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-116-admin-doa.md",
+      "milestone": "PAR",
+      "phase": "F",
+      "depends_on": [
+        "PAR-107",
+        "PAR-003"
+      ]
+    },
+    "PAR-117": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-117-reports.md",
+      "milestone": "PAR",
+      "phase": "F",
+      "depends_on": [
+        "PAR-113"
+      ]
+    },
+    "PAR-118": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAR-118-detail-page.md",
+      "milestone": "PAR",
+      "phase": "F",
+      "depends_on": [
+        "PAR-109",
+        "PAR-110",
+        "PAR-114",
+        "PAR-115"
+      ]
+    },
     "M1-001": {
       "status": "done",
       "attempts": 1,
@@ -1522,15 +1785,7 @@
       },
       "depends_on": [
         "DIPLOMA-803"
-      ],
-      "branch": "feat/DIPLOMA-faza-1-schema-editor",
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/105",
-      "verdicts": {
-        "reviewer": "APPROVED",
-        "integration": "CONNECTED",
-        "manager": "BUY",
-        "student": "OK"
-      }
+      ]
     },
     "DIPLOMA-805": {
       "status": "done",
@@ -1561,7 +1816,12 @@
       "branch": "feat/BUGFIX-faza-1-prod-fixes",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/107",
       "notes": "Resolved by vercel-migrate auto-run on next deploy; routes already mounted in app.ts",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "BUGFIX-002": {
       "status": "done",
@@ -1572,7 +1832,12 @@
       "phase": "1",
       "branch": "feat/BUGFIX-faza-1-prod-fixes",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/107",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "BUGFIX-003": {
       "status": "done",
@@ -1583,7 +1848,12 @@
       "phase": "1",
       "branch": "feat/BUGFIX-faza-1-prod-fixes",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/107",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "BUGFIX-004": {
       "status": "done",
@@ -1594,7 +1864,12 @@
       "phase": "1",
       "branch": "feat/BUGFIX-faza-1-prod-fixes",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/107",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "PAY-901": {
       "status": "done",
@@ -1668,7 +1943,12 @@
       "phase": "1",
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-002": {
       "status": "done",
@@ -1679,7 +1959,12 @@
       "phase": "1",
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-003": {
       "status": "done",
@@ -1690,7 +1975,12 @@
       "phase": "1",
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-004": {
       "status": "done",
@@ -1701,7 +1991,12 @@
       "phase": "1",
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-005": {
       "status": "done",
@@ -1712,7 +2007,12 @@
       "phase": "1",
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-006": {
       "status": "done",
@@ -1723,7 +2023,12 @@
       "phase": "1",
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SCHOOL-007": {
       "status": "done",
@@ -1734,7 +2039,12 @@
       "phase": "1",
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "KINDER-001": {
       "status": "done",
@@ -1748,7 +2058,12 @@
       "severity": "high",
       "title": "Digital check-in/sign-out + authorized-pickup + e-signature",
       "depends_on": [],
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "KINDER-002": {
       "status": "done",
@@ -1761,8 +2076,15 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
       "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
-      "depends_on": ["KINDER-001"],
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "depends_on": [
+        "KINDER-001"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "KINDER-003": {
       "status": "done",
@@ -1775,8 +2097,15 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
       "title": "Staff-to-child ratio monitoring + licensing-limit alerts",
-      "depends_on": ["KINDER-001"],
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "depends_on": [
+        "KINDER-001"
+      ],
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "KINDER-004": {
       "status": "done",
@@ -1790,7 +2119,12 @@
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "KINDER-005": {
       "status": "done",
@@ -1804,7 +2138,12 @@
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "LOVES" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "KINDER-006": {
       "status": "done",
@@ -1818,7 +2157,12 @@
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "BRANCH-701": {
       "status": "done",
@@ -1830,7 +2174,12 @@
       "depends_on": [],
       "branch": "feat/BRANCH-faza-1-multifiliale",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/110",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "BRANCH-702": {
       "status": "done",
@@ -1839,10 +2188,17 @@
       "spec": "backlog/specs/BRANCH-702-switcher.md",
       "milestone": "BRANCH",
       "phase": "1",
-      "depends_on": ["BRANCH-701"],
+      "depends_on": [
+        "BRANCH-701"
+      ],
       "branch": "feat/BRANCH-faza-1-multifiliale",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/110",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "BRANCH-703": {
       "status": "done",
@@ -1851,10 +2207,17 @@
       "spec": "backlog/specs/BRANCH-703-permissions.md",
       "milestone": "BRANCH",
       "phase": "1",
-      "depends_on": ["BRANCH-701"],
+      "depends_on": [
+        "BRANCH-701"
+      ],
       "branch": "feat/BRANCH-faza-1-multifiliale",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/110",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "BRANCH-704": {
       "status": "done",
@@ -1863,10 +2226,18 @@
       "spec": "backlog/specs/BRANCH-704-reports.md",
       "milestone": "BRANCH",
       "phase": "1",
-      "depends_on": ["BRANCH-701", "BRANCH-702"],
+      "depends_on": [
+        "BRANCH-701",
+        "BRANCH-702"
+      ],
       "branch": "feat/BRANCH-faza-1-multifiliale",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/110",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "KINDER-007": {
       "status": "done",
@@ -1877,10 +2248,18 @@
       "phase": "1",
       "severity": "normal",
       "title": "Incident/accident reports + parent acknowledgment signature",
-      "depends_on": ["KINDER-001", "KINDER-004"],
+      "depends_on": [
+        "KINDER-001",
+        "KINDER-004"
+      ],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "N/A" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "N/A"
+      }
     },
     "GUARDIAN-001": {
       "status": "done",
@@ -1891,7 +2270,12 @@
       "phase": "1",
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CONSENT-001": {
       "status": "done",
@@ -1902,7 +2286,12 @@
       "phase": "1",
       "branch": "feat/SCHOOL-faza-1-fundatie",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/103",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "AUTH-001": {
       "status": "done",
@@ -1914,7 +2303,12 @@
       "depends_on": [],
       "branch": "feat/AUTH-faza-1-security",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "AUTH-002": {
       "status": "done",
@@ -1923,10 +2317,17 @@
       "spec": "backlog/specs/AUTH-002-team-invitations.md",
       "milestone": "AUTH",
       "phase": "1",
-      "depends_on": ["AUTH-001"],
+      "depends_on": [
+        "AUTH-001"
+      ],
       "branch": "feat/AUTH-faza-1-security",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "AUTH-003": {
       "status": "done",
@@ -1935,10 +2336,17 @@
       "spec": "backlog/specs/AUTH-003-user-profile-gdpr.md",
       "milestone": "AUTH",
       "phase": "1",
-      "depends_on": ["AUTH-001"],
+      "depends_on": [
+        "AUTH-001"
+      ],
       "branch": "feat/AUTH-faza-1-security",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "AUTH-004": {
       "status": "done",
@@ -1947,10 +2355,17 @@
       "spec": "backlog/specs/AUTH-004-2fa-sessions.md",
       "milestone": "AUTH",
       "phase": "1",
-      "depends_on": ["AUTH-003"],
+      "depends_on": [
+        "AUTH-003"
+      ],
       "branch": "feat/AUTH-faza-1-security",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/125",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SET-801": {
       "status": "done",
@@ -1959,7 +2374,9 @@
       "spec": "backlog/specs/SET-801-team-management.md",
       "milestone": "SET",
       "phase": "1",
-      "depends_on": ["AUTH-001"],
+      "depends_on": [
+        "AUTH-001"
+      ],
       "branch": "feat/SET-faza-1-settings",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -1975,7 +2392,9 @@
       "spec": "backlog/specs/SET-802-branding-locale.md",
       "milestone": "SET",
       "phase": "1",
-      "depends_on": ["SET-801"],
+      "depends_on": [
+        "SET-801"
+      ],
       "branch": "feat/SET-faza-1-settings",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -1991,7 +2410,9 @@
       "spec": "backlog/specs/SET-803-audit-log-gdpr.md",
       "milestone": "SET",
       "phase": "1",
-      "depends_on": ["SET-801"],
+      "depends_on": [
+        "SET-801"
+      ],
       "branch": "feat/SET-faza-1-settings",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/127",
       "verdicts": {
@@ -2011,7 +2432,12 @@
       "depends_on": [],
       "branch": "feat/FIN-601-invoices",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/76",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "FIN-602": {
       "status": "done",
@@ -2020,10 +2446,17 @@
       "spec": "backlog/specs/FIN-602-debt-reconciliation.md",
       "milestone": "FIN",
       "phase": "1",
-      "depends_on": ["FIN-601"],
+      "depends_on": [
+        "FIN-601"
+      ],
       "branch": "feat/FIN-602-debt-reconciliation",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/77",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "FIN-603": {
       "status": "done",
@@ -2032,10 +2465,17 @@
       "spec": "backlog/specs/FIN-603-recurring-billing.md",
       "milestone": "FIN",
       "phase": "1",
-      "depends_on": ["FIN-601"],
+      "depends_on": [
+        "FIN-601"
+      ],
       "branch": "feat/FIN-603-recurring-billing",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/78",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "FIN-604": {
       "status": "done",
@@ -2044,10 +2484,17 @@
       "spec": "backlog/specs/FIN-604-efactura-stub.md",
       "milestone": "FIN",
       "phase": "1",
-      "depends_on": ["FIN-601"],
+      "depends_on": [
+        "FIN-601"
+      ],
       "branch": "feat/FIN-604-efactura-stub",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/79",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "INT-901": {
       "status": "done",
@@ -2059,7 +2506,12 @@
       "depends_on": [],
       "branch": "feat/INT-faza-3-api-keys",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/114",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "INT-902": {
       "status": "done",
@@ -2068,10 +2520,17 @@
       "spec": "backlog/specs/INT-902-webhooks.md",
       "milestone": "INT",
       "phase": "1",
-      "depends_on": ["INT-901"],
+      "depends_on": [
+        "INT-901"
+      ],
       "branch": "feat/INT-faza-3-api-keys",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/114",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "INT-903": {
       "status": "done",
@@ -2080,10 +2539,17 @@
       "spec": "backlog/specs/INT-903-zapier-trigger.md",
       "milestone": "INT",
       "phase": "1",
-      "depends_on": ["INT-901"],
+      "depends_on": [
+        "INT-901"
+      ],
       "branch": "feat/INT-faza-3-api-keys",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/114",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "AI-A01": {
       "status": "done",
@@ -2095,7 +2561,12 @@
       "depends_on": [],
       "branch": "feat/AI-faza-1-assistant",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/116",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "AI-A02": {
       "status": "done",
@@ -2104,10 +2575,17 @@
       "spec": "backlog/specs/AI-A02-churn-prediction.md",
       "milestone": "AI",
       "phase": "1",
-      "depends_on": ["AI-A01"],
+      "depends_on": [
+        "AI-A01"
+      ],
       "branch": "feat/AI-faza-1-assistant",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/116",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "AI-A03": {
       "status": "done",
@@ -2116,10 +2594,17 @@
       "spec": "backlog/specs/AI-A03-lead-qualification.md",
       "milestone": "AI",
       "phase": "1",
-      "depends_on": ["AI-A01"],
+      "depends_on": [
+        "AI-A01"
+      ],
       "branch": "feat/AI-faza-1-assistant",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/116",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "AI-A04": {
       "status": "done",
@@ -2128,10 +2613,17 @@
       "spec": "backlog/specs/AI-A04-ai-dashboard.md",
       "milestone": "AI",
       "phase": "1",
-      "depends_on": ["AI-A01"],
+      "depends_on": [
+        "AI-A01"
+      ],
       "branch": "feat/AI-faza-1-assistant",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/116",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "DEMO-001": {
       "status": "done",
@@ -2143,7 +2635,12 @@
       "depends_on": [],
       "branch": "feat/DEMO-001-rich-seed",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/126",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "ONBOARD-001": {
       "status": "done",
@@ -2152,10 +2649,17 @@
       "spec": "backlog/specs/ONBOARD-001-first-run-wizard.md",
       "milestone": "WAVE2",
       "phase": "1",
-      "depends_on": ["DEMO-001"],
+      "depends_on": [
+        "DEMO-001"
+      ],
       "branch": "feat/DEMO-001-rich-seed",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/126",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "HEALTH-001": {
       "status": "done",
@@ -2164,10 +2668,17 @@
       "spec": "backlog/specs/HEALTH-001-admin-dashboard.md",
       "milestone": "WAVE2",
       "phase": "1",
-      "depends_on": ["DEMO-001"],
+      "depends_on": [
+        "DEMO-001"
+      ],
       "branch": "feat/DEMO-001-rich-seed",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/126",
-      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "POLISH-001": {
       "status": "pending",
@@ -2185,7 +2696,9 @@
       "spec": "backlog/specs/POLISH-002-dashboard-widgets.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": ["POLISH-001"]
+      "depends_on": [
+        "POLISH-001"
+      ]
     },
     "POLISH-003": {
       "status": "pending",
