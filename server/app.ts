@@ -113,6 +113,7 @@ import { parVendorsRoutes } from "./routes/parVendors"; // PAR-003: vendor/payee
 import { parSettingsRoutes } from "./routes/parSettings"; // PAR-003: org settings
 // PAR Phase B routes
 import { parRoutes } from "./routes/par"; // PAR-101/102/103: request CRUD + line items + payee
+import { parAttachmentsRoutes } from "./routes/parAttachments"; // PAR-104: attachments upload/list/delete
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -313,6 +314,8 @@ app.route("/api/par/settings", parSettingsRoutes);
 // PAR Phase B — request CRUD + line items + payee (PAR-101/102/103)
 // Mount AFTER /api/par/me and other more-specific paths to avoid path conflicts
 app.route("/api/par", parRoutes);
+// PAR-104: attachments — mounted under /api/par (handles /:id/attachments paths)
+app.route("/api/par", parAttachmentsRoutes);
 
 app.get("/api/health", async (c) => {
   try {
