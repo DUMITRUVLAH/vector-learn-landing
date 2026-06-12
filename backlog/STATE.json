@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "PAR-101",
-  "last_completed": "PAR-003",
-  "iterations": 148,
+  "current_item": null,
+  "last_completed": "PAR-103",
+  "iterations": 150,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "PAR",
@@ -63,7 +63,7 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/138"
     },
     "PAR-101": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-101-create-api.md",
@@ -73,29 +73,52 @@
         "PAR-002",
         "PAR-003"
       ],
-      "branch": "feat/PAR-faza-B-create"
+      "branch": "feat/PAR-faza-B-create",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/139"
     },
     "PAR-102": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-102-line-items.md",
       "milestone": "PAR",
       "phase": "B",
       "depends_on": [
         "PAR-101"
-      ]
+      ],
+      "branch": "feat/PAR-faza-B-create",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/139"
     },
     "PAR-103": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-103-enduse-payee.md",
       "milestone": "PAR",
       "phase": "B",
       "depends_on": [
         "PAR-101"
-      ]
+      ],
+      "branch": "feat/PAR-faza-B-create",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/139"
     },
     "PAR-104": {
       "status": "pending",
