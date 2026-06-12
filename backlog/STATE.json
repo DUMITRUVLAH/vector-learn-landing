@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "PAR-113",
-  "last_completed": "PAR-112",
-  "iterations": 159,
+  "current_item": null,
+  "last_completed": "PAR-113",
+  "iterations": 160,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "PAR",
@@ -291,7 +291,7 @@
       }
     },
     "PAR-113": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-113-payment-execution.md",
@@ -300,7 +300,14 @@
       "depends_on": [
         "PAR-112"
       ],
-      "branch": "feat/PAR-faza-D-finance"
+      "branch": "feat/PAR-faza-D-finance",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "adversarial": "APPROVED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-114": {
       "status": "pending",
