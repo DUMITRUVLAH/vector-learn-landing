@@ -27,11 +27,11 @@ Driver: [par/BUILD-SEQUENCE.md](par/BUILD-SEQUENCE.md). Tests: [par/TEST-SCENARI
 | B | `PAR-102` | Line items (section 10) + auto-sum + 10% note | pending | [PAR-102](specs/PAR-102-line-items.md) |
 | B | `PAR-103` | End-use (11) + payee (12) + IBAN/IDNP validation | pending | [PAR-103](specs/PAR-103-enduse-payee.md) |
 | B | `PAR-104` | Attachments (section 13) | pending | [PAR-104](specs/PAR-104-attachments.md) |
-| B | `PAR-105` | Create wizard UI `/app/par/new` | pending | [PAR-105](specs/PAR-105-create-wizard.md) |
-| B | `PAR-106` | Dashboard + list `/app/par` | pending | [PAR-106](specs/PAR-106-dashboard-list.md) |
-| C | `PAR-107` | DOA routing engine (submit → approval chain) | pending | [PAR-107](specs/PAR-107-routing-engine.md) |
-| C | `PAR-108` | Approver inbox + approve/reject/request-changes | pending | [PAR-108](specs/PAR-108-approver-inbox.md) |
-| C | `PAR-109` | Sequential multi-level approval + integrity | pending | [PAR-109](specs/PAR-109-sequential-approval.md) |
+| B | `PAR-105` | Create wizard UI `/app/par/new` | done | [PAR-105](specs/PAR-105-create-wizard.md) |
+| B | `PAR-106` | Dashboard + list `/app/par` | done | [PAR-106](specs/PAR-106-dashboard-list.md) |
+| C | `PAR-107` | DOA routing engine (submit → approval chain) | done | [PAR-107](specs/PAR-107-routing-engine.md) |
+| C | `PAR-108` | Approver inbox + approve/reject/request-changes | done | [PAR-108](specs/PAR-108-approver-inbox.md) |
+| C | `PAR-109` | Sequential multi-level approval + integrity | done | [PAR-109](specs/PAR-109-sequential-approval.md) |
 | C | `PAR-110` | Timeline & audit per PAR | pending | [PAR-110](specs/PAR-110-timeline-audit.md) |
 | C | `PAR-111` | Notifications (in-app + email) | pending | [PAR-111](specs/PAR-111-notifications.md) |
 | D | `PAR-112` | Finance queue + section 16 | pending | [PAR-112](specs/PAR-112-finance-queue.md) |
