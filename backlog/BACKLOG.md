@@ -36,13 +36,13 @@ Driver: [par/BUILD-SEQUENCE.md](par/BUILD-SEQUENCE.md). Tests: [par/TEST-SCENARI
 | C | `PAR-111` | Notifications (in-app + email) | pending | [PAR-111](specs/PAR-111-notifications.md) |
 | D | `PAR-112` | Finance queue + section 16 | done | [PAR-112](specs/PAR-112-finance-queue.md) |
 | D | `PAR-113` | Payment execution + 10% overage re-approval | done | [PAR-113](specs/PAR-113-payment-execution.md) |
-| E | `PAR-114` | PDF generator (faithful to the form) | pending | [PAR-114](specs/PAR-114-pdf-generator.md) |
-| E | `PAR-115` | Download PDF + attach to record | pending | [PAR-115](specs/PAR-115-pdf-download.md) |
+| E | `PAR-114` | PDF generator (faithful to the form) | done ✅ | [PAR-114](specs/PAR-114-pdf-generator.md) · [PR #142](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/142) |
+| E | `PAR-115` | Download PDF + attach to record | done ✅ | [PAR-115](specs/PAR-115-pdf-download.md) · [PR #142](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/142) |
 | F | `PAR-116` | Admin DOA matrix UI + members/roles | pending | [PAR-116](specs/PAR-116-admin-doa.md) |
 | F | `PAR-117` | Reports + CSV export | pending | [PAR-117](specs/PAR-117-reports.md) |
 | F | `PAR-118` | Full detail page (16 sections, role-aware actions) | pending | [PAR-118](specs/PAR-118-detail-page.md) |
 
-**PAR milestone: 0/21 done. Build in phase order A→F; one phase = one branch = one PR (§0.2).**
+**PAR milestone: 16/21 done (A–E complete). Remaining: Phase F (admin/reports/detail). Build in phase order A→F; one phase = one branch = one PR (§0.2).**
 
 ---
 
