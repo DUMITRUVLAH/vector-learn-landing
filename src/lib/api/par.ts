@@ -98,11 +98,19 @@ export interface ParApproval {
   approverUserId: string | null;
   approverRoleLabel: string | null;
   decision: "pending" | "approved" | "rejected" | "changes_requested";
+  /** PAR-107/109: true = step locked (prior step not yet approved) */
+  locked: boolean;
   decidedAt: string | null;
   comment: string | null;
   signatureName: string | null;
   signatureTitle: string | null;
   createdAt: string;
+}
+
+/** PAR-108: inbox item (PAR + active step info) */
+export interface ParInboxItem extends ParRequest {
+  my_step: number | null;
+  my_step_label: string | null;
 }
 
 export interface ParPayment {
@@ -184,11 +192,56 @@ export async function listPar(filters: ListParFilters = {}): Promise<{
   return api(`/api/par${qs ? `?${qs}` : ""}`);
 }
 
-/** Submit a PAR (transition from draft → pending_approval) */
+/** Submit a PAR (transition from draft → pending_approval, PAR-107) */
 export async function submitPar(id: string): Promise<ParRequest> {
   return api<ParRequest>(`/api/par/${id}/submit`, {
     method: "POST",
     body: JSON.stringify({}),
+  });
+}
+
+// ─── PAR-108: Approver inbox + decisions ─────────────────────────────────────
+
+/** Get PARs awaiting the current user's approval decision */
+export async function getParInbox(): Promise<{ inbox: ParInboxItem[]; total: number }> {
+  return api<{ inbox: ParInboxItem[]; total: number }>("/api/par/inbox");
+}
+
+export interface ApprovePayload {
+  comment?: string | null;
+  signatureName?: string | null;
+}
+
+export interface RejectPayload {
+  comment: string;
+  signatureName?: string | null;
+}
+
+export interface RequestChangesPayload {
+  comment: string;
+}
+
+/** Approve the active step for a PAR */
+export async function approvePar(id: string, payload: ApprovePayload = {}): Promise<ParRequest> {
+  return api<ParRequest>(`/api/par/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Reject a PAR (terminal) */
+export async function rejectPar(id: string, payload: RejectPayload): Promise<ParRequest> {
+  return api<ParRequest>(`/api/par/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Request changes on a PAR (sends back to requestor) */
+export async function requestParChanges(id: string, payload: RequestChangesPayload): Promise<ParRequest> {
+  return api<ParRequest>(`/api/par/${id}/request-changes`, {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 

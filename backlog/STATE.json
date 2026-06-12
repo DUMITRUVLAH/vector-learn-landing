@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-106",
-  "iterations": 150,
+  "last_completed": "PAR-109",
+  "iterations": 154,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "PAR",
@@ -181,8 +181,8 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/139"
     },
     "PAR-107": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-107-routing-engine.md",
       "milestone": "PAR",
@@ -190,29 +190,50 @@
       "depends_on": [
         "PAR-002",
         "PAR-101"
-      ]
+      ],
+      "branch": "feat/PAR-faza-C-approval",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-108": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-108-approver-inbox.md",
       "milestone": "PAR",
       "phase": "C",
       "depends_on": [
         "PAR-107"
-      ]
+      ],
+      "branch": "feat/PAR-faza-C-approval",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-109": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAR-109-sequential-approval.md",
       "milestone": "PAR",
       "phase": "C",
       "depends_on": [
         "PAR-108"
-      ]
+      ],
+      "branch": "feat/PAR-faza-C-approval",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-110": {
       "status": "pending",

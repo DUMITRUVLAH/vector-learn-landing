@@ -98,6 +98,8 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ParCreateWizard } from "./pages/par/ParCreateWizard";
 // PAR-106: Dashboard + list
 import { ParDashboard } from "./pages/par/ParDashboard";
+// PAR-108: Approver inbox
+import ParInbox from "./pages/par/ParInbox";
 
 function HomePage() {
   return (
@@ -228,6 +230,8 @@ function Routes() {
   if (path.startsWith("/app/kinder/incidents")) return <KinderIncidentsPage />;
   // PAR-105: /app/par/new — create wizard (must come before /app/par list)
   if (path.startsWith("/app/par/new")) return <ParCreateWizard />;
+  // PAR-108: /app/par/inbox — approver inbox (before /app/par generic)
+  if (path.startsWith("/app/par/inbox")) return <ParInbox />;
   // PAR-106: /app/par — dashboard + list
   if (path.startsWith("/app/par")) return <ParDashboard />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;

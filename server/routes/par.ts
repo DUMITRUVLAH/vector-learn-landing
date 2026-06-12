@@ -36,6 +36,8 @@ import { getUserPARRoles } from "../middleware/requirePARRole";
 import { generateRequestNo } from "../lib/par/requestNo";
 import { isValidMoldovaIBAN, isValidIDNP } from "../lib/par/validators";
 import { recalcParTotal } from "../lib/par/totals";
+import { submitPAR, buildBodyForHash } from "../lib/par/submit";
+import { verifyParBodyHash } from "../lib/par/integrity";
 
 export const parRoutes = new Hono<{ Variables: AuthVariables }>();
 parRoutes.use("*", requireAuth);
@@ -328,6 +330,25 @@ parRoutes.get("/:id", async (c) => {
         payeeBank: null,
       };
 
+  // PAR-109: body hash integrity check on display
+  let bodyHashValid: boolean | null = null;
+  if (par.bodyHash && par.status !== "draft" && par.status !== "changes_requested") {
+    const bodyForHash = await buildBodyForHash(parId, tenantId);
+    if (bodyForHash) {
+      const integrityResult = verifyParBodyHash(bodyForHash, par.bodyHash);
+      bodyHashValid = integrityResult.valid;
+      if (!integrityResult.valid) {
+        await writeAudit({
+          tenantId,
+          parId,
+          actorUserId: user.id,
+          event: "integrity_mismatch_display",
+          detail: integrityResult.detail,
+        });
+      }
+    }
+  }
+
   return c.json({
     ...parData,
     above_micro_threshold: par.totalEstimatedCents > threshold,
@@ -335,6 +356,8 @@ parRoutes.get("/:id", async (c) => {
     approvals,
     attachments,
     payment: payment ?? null,
+    /** PAR-109: null = not applicable (draft/no hash); true = body untampered; false = INTEGRITY VIOLATION */
+    body_hash_valid: bodyHashValid,
   });
 });
 
@@ -693,10 +716,10 @@ parRoutes.patch(
   }
 );
 
-// ─── POST /api/par/:id/submit — PAR-105 stub (full routing in PAR-107) ───────
-// Transitions draft → pending_approval. The DOA routing engine (PAR-107) will
-// generate the par_approvals chain; for now we just flip the status so the wizard
-// can redirect to /app/par/:id without blocking Phase B.
+// ─── POST /api/par/:id/submit — PAR-107 real routing engine ─────────────────
+// Replaces the PAR-105 stub. Validates completeness, resolves the DOA chain,
+// blocks self-approval, computes body hash, creates par_approvals rows, and
+// transitions the PAR to pending_approval.
 
 parRoutes.post("/:id/submit", async (c) => {
   const user = c.get("user");
@@ -710,36 +733,31 @@ parRoutes.post("/:id/submit", async (c) => {
     return c.json({ error: "forbidden: only the author can submit this PAR" }, 403);
   }
   if (!EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number])) {
+    // 409 for already pending_approval (idempotency guard)
+    if (par.status === "pending_approval") {
+      return c.json({ error: "conflict: PAR is already pending approval" }, 409);
+    }
     return c.json({ error: `PAR is not in a submittable status: ${par.status}` }, 400);
   }
 
-  // PAR-105 submit-time validation: execute_payment requires end_use
-  if (par.purpose === "execute_payment" && !par.endUse?.trim()) {
-    return c.json(
-      { error: "end_use_required: purpose=execute_payment requires end_use to be set" },
-      400
-    );
-  }
-
-  const [updated] = await db
-    .update(parRequests)
-    .set({
-      status: "pending_approval",
-      submittedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
-    .returning();
-
-  await writeAudit({
-    tenantId,
+  const result = await submitPAR({
     parId,
+    tenantId,
     actorUserId: user.id,
-    event: "submitted",
-    detail: `PAR ${par.requestNo} submitted for approval`,
+    requestorTitleSnapshot: par.requestorTitle ?? null,
   });
 
-  return c.json(updated);
+  if (!result.ok) {
+    if (result.code === "already_submitted") {
+      return c.json({ error: result.message }, 409);
+    }
+    if (result.code === "validation_errors") {
+      return c.json({ error: "validation_failed", errors: result.errors }, 400);
+    }
+    return c.json({ error: result.message ?? "submit_failed" }, 400);
+  }
+
+  return c.json({ ...result.par, approval_steps: result.approvalSteps });
 });
 
 // ─── DELETE /api/par/:id/line-items/:lineId ──────────────────────────────────
