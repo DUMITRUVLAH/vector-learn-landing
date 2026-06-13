@@ -113,6 +113,8 @@ import { parVendorsRoutes } from "./routes/parVendors"; // PAR-003: vendor/payee
 import { parSettingsRoutes } from "./routes/parSettings"; // PAR-003: org settings
 // PAR Phase B routes
 import { parRoutes } from "./routes/par"; // PAR-101/102/103: request CRUD + line items + payee
+// AGREEMENT-002: FinDesk contracts + services API
+import { finAgreementsRoutes } from "./routes/finAgreements";
 import { parAttachmentsRoutes } from "./routes/parAttachments"; // PAR-104: attachments upload/list/delete
 // PAR Phase C routes
 import { parApprovalsRoutes } from "./routes/parApprovals"; // PAR-108/113: approve/reject/request-changes + inbox + reapprove
@@ -326,6 +328,8 @@ app.route("/api/par", parPaymentsRoutes);
 // PAR Phase B — request CRUD + line items + payee (PAR-101/102/103)
 // Mount AFTER all more-specific paths to avoid path conflicts
 app.route("/api/par", parRoutes);
+// AGREEMENT-002: FinDesk contracts — specific /:id/services path registered first in the router
+app.route("/api/fin/agreements", finAgreementsRoutes);
 // PAR-104: attachments — mounted under /api/par (handles /:id/attachments paths)
 app.route("/api/par", parAttachmentsRoutes);
 // PAR Phase C — approval actions + inbox (PAR-108)
