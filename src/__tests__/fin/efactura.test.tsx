@@ -134,6 +134,9 @@ const issuedInvoice = {
   dueDate: null,
   notes: null,
   pdfKey: null,
+  efacturaMdSeria: null,
+  efacturaMdNumber: null,
+  efacturaMdStatus: null,
   createdAt: "2026-05-15T10:00:00Z",
   studentName: "Maria Ionescu",
 };

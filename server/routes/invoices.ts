@@ -1,12 +1,20 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, desc, sql, lte } from "drizzle-orm";
+import { and, eq, desc, sql, lte, isNotNull, notInArray } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { db } from "../db/client";
 import { invoices, students, subscriptions } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getBranchScope } from "../middleware/branchScope";
 import { generateUBL21 } from "../lib/efactura";
+import {
+  EfacturaMdClient,
+  EfacturaMdError,
+  EFACTURA_MD_STATUS,
+  generateSfsInvoiceXml,
+  deriveSfsIdentifier,
+} from "../lib/efacturaMoldova";
 
 const createInvoiceSchema = z.object({
   studentId: z.string().uuid(),
@@ -68,6 +76,9 @@ invoiceRoutes.get("/", async (c) => {
       dueDate: invoices.dueDate,
       notes: invoices.notes,
       pdfKey: invoices.pdfKey,
+      efacturaMdSeria: invoices.efacturaMdSeria,
+      efacturaMdNumber: invoices.efacturaMdNumber,
+      efacturaMdStatus: invoices.efacturaMdStatus,
       createdAt: invoices.createdAt,
       studentName: students.fullName,
     })
@@ -528,6 +539,261 @@ invoiceRoutes.get("/export/saga-csv", async (c) => {
   c.header("Content-Disposition", `attachment; filename="${filename}"`);
   return c.text(csv);
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// EFMD: SIA e-Factura Moldova (SFS) — transmitere semiautomatizată
+// Fără credențiale (EFACTURA_MD_USERNAME/PASSWORD) clientul rulează în mock
+// mode cu răspunsuri simulate, ca fluxul să fie testabil cu date de test.
+// ──────────────────────────────────────────────────────────────────────────────
+
+/** Statusuri SFS terminale — nu mai au nevoie de sync. */
+const EFMD_TERMINAL_STATUSES = [2, 3, 5, 6];
+
+const submitEfacturaMdSchema = z.object({
+  /** IDNO-ul cumpărătorului (13 cifre). Default: IDNO de test SFS. */
+  buyerIdno: z
+    .string()
+    .regex(/^\d{13}$/, "IDNO trebuie să aibă 13 cifre")
+    .default("1002600003354"),
+  /** Cota TVA aplicată (Moldova standard 20%). */
+  vatRate: z.number().int().min(0).max(20).default(20),
+});
+
+// POST /api/invoices/efactura-md/sync
+// Re-verifică la SFS statusul tuturor facturilor transmise ne-terminale.
+invoiceRoutes.post("/efactura-md/sync", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const client = new EfacturaMdClient();
+
+  const pending = await db
+    .select({
+      id: invoices.id,
+      seria: invoices.efacturaMdSeria,
+      number: invoices.efacturaMdNumber,
+      status: invoices.efacturaMdStatus,
+    })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.tenantId, tenantId),
+        isNotNull(invoices.efacturaMdSeria),
+        notInArray(invoices.efacturaMdStatus, EFMD_TERMINAL_STATUSES)
+      )
+    );
+
+  const items: Array<{
+    id: string;
+    seria: string;
+    number: string;
+    invoiceStatus: number;
+    invoiceStatusLabel: string;
+  }> = [];
+
+  for (const inv of pending) {
+    if (!inv.seria || !inv.number) continue;
+    try {
+      const result = await client.checkInvoiceStatus(inv.seria, inv.number, randomUUID());
+      if (!result) continue;
+      await db
+        .update(invoices)
+        .set({
+          efacturaMdStatus: result.invoiceStatus,
+          efacturaMdMessage: result.message,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(invoices.id, inv.id), eq(invoices.tenantId, tenantId)));
+      items.push({
+        id: inv.id,
+        seria: result.seria,
+        number: result.number,
+        invoiceStatus: result.invoiceStatus,
+        invoiceStatusLabel: result.invoiceStatusLabel,
+      });
+    } catch (err) {
+      if (err instanceof EfacturaMdError) {
+        await db
+          .update(invoices)
+          .set({ efacturaMdMessage: err.message, updatedAt: new Date() })
+          .where(and(eq(invoices.id, inv.id), eq(invoices.tenantId, tenantId)));
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  return c.json({ checked: pending.length, synced: items.length, mock: client.isMock, items });
+});
+
+// GET /api/invoices/efactura-md/taxpayer/:idno
+// Validează IDNO-ul cumpărătorului la SFS înainte de emitere.
+invoiceRoutes.get("/efactura-md/taxpayer/:idno", async (c) => {
+  const idno = c.req.param("idno");
+  if (!/^\d{13}$/.test(idno)) {
+    return c.json({ error: "invalid_idno", message: "IDNO trebuie să aibă 13 cifre" }, 400);
+  }
+  const client = new EfacturaMdClient();
+  try {
+    const info = await client.getTaxpayerInfo(idno, randomUUID());
+    if (!info) return c.json({ error: "not_found" }, 404);
+    return c.json({ ...info, mock: client.isMock });
+  } catch (err) {
+    if (err instanceof EfacturaMdError) {
+      return c.json({ error: "sfs_error", message: err.message }, 502);
+    }
+    throw err;
+  }
+});
+
+// POST /api/invoices/:id/efactura-md
+// Generează XML-ul SFS și transmite factura (nesemnată) prin PostInvoices.
+// Semnarea se face apoi manual în web UI-ul SFS (flux semiautomatizat).
+invoiceRoutes.post(
+  "/:id/efactura-md",
+  zValidator("json", submitEfacturaMdSchema),
+  async (c) => {
+    const id = c.req.param("id");
+    const tenantId = c.get("user").tenantId;
+    const body = c.req.valid("json");
+
+    const [inv] = await db
+      .select({
+        id: invoices.id,
+        number: invoices.number,
+        invoiceNumber: invoices.invoiceNumber,
+        issueDate: invoices.issueDate,
+        amountCents: invoices.amountCents,
+        currency: invoices.currency,
+        status: invoices.status,
+        notes: invoices.notes,
+        efacturaMdSeria: invoices.efacturaMdSeria,
+        studentName: students.fullName,
+      })
+      .from(invoices)
+      .innerJoin(students, eq(invoices.studentId, students.id))
+      .where(and(eq(invoices.id, id), eq(invoices.tenantId, tenantId)));
+
+    if (!inv) return c.json({ error: "not_found" }, 404);
+    if (inv.status === "cancelled") return c.json({ error: "invoice_cancelled" }, 409);
+    if (inv.efacturaMdSeria) return c.json({ error: "already_submitted" }, 409);
+
+    const client = new EfacturaMdClient();
+    const { seria, number } = deriveSfsIdentifier(inv.number);
+    const requestId = randomUUID();
+
+    // Suma e considerată cu TVA inclus; baza = total / (1 + cota/100)
+    const totalWithVat = inv.amountCents / 100;
+    const unitPriceWithoutVat = +(totalWithVat / (1 + body.vatRate / 100)).toFixed(2);
+
+    const xml = generateSfsInvoiceXml({
+      supplierIdno: client.supplierIdno,
+      supplierBankAccount: client.supplierBankAccount,
+      buyerIdno: body.buyerIdno,
+      deliveryDate: inv.issueDate,
+      internalId: inv.invoiceNumber,
+      lines: [
+        {
+          code: "1",
+          name: inv.notes ?? `Servicii educaționale — ${inv.studentName}`,
+          unitOfMeasure: "buc",
+          quantity: 1,
+          unitPriceWithoutVat,
+          vatRate: body.vatRate,
+        },
+      ],
+    });
+
+    try {
+      const result = await client.postInvoices(xml, requestId);
+      if (result.totalInvoicesPosted < 1) {
+        return c.json(
+          { error: "sfs_rejected", message: result.errorMessage ?? "factura nu a fost acceptată" },
+          502
+        );
+      }
+
+      await db
+        .update(invoices)
+        .set({
+          efacturaMdSeria: seria,
+          efacturaMdNumber: number,
+          efacturaMdStatus: 0, // Draft la SFS — așteaptă semnare manuală în web UI
+          efacturaMdRequestId: requestId,
+          efacturaMdSubmittedAt: new Date(),
+          efacturaMdMessage: null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(invoices.id, id), eq(invoices.tenantId, tenantId)));
+
+      return c.json({
+        ok: true,
+        seria,
+        number,
+        requestId,
+        mock: client.isMock,
+        invoiceStatus: 0,
+        invoiceStatusLabel: EFACTURA_MD_STATUS[0],
+        message: client.isMock
+          ? "Transmis în mod TEST (mock) — configurează EFACTURA_MD_USERNAME/PASSWORD pentru SFS real"
+          : "Transmis la SFS — semnează factura în cabinetul e-Factura",
+      });
+    } catch (err) {
+      if (err instanceof EfacturaMdError) {
+        return c.json({ error: "sfs_error", message: err.message }, 502);
+      }
+      throw err;
+    }
+  }
+);
+
+// POST /api/invoices/:id/efactura-md/cancel
+// Transmite anularea facturii la SFS (PostCanceledInvoices).
+invoiceRoutes.post(
+  "/:id/efactura-md/cancel",
+  zValidator("json", z.object({ comment: z.string().max(500).default("Anulare din Vector Learn") })),
+  async (c) => {
+    const id = c.req.param("id");
+    const tenantId = c.get("user").tenantId;
+    const { comment } = c.req.valid("json");
+
+    const [inv] = await db
+      .select({
+        id: invoices.id,
+        seria: invoices.efacturaMdSeria,
+        number: invoices.efacturaMdNumber,
+      })
+      .from(invoices)
+      .where(and(eq(invoices.id, id), eq(invoices.tenantId, tenantId)));
+
+    if (!inv) return c.json({ error: "not_found" }, 404);
+    if (!inv.seria || !inv.number) return c.json({ error: "not_submitted" }, 409);
+
+    const client = new EfacturaMdClient();
+    try {
+      const result = await client.cancelInvoice(inv.seria, inv.number, comment, randomUUID());
+      if (!result.ok) {
+        return c.json(
+          { error: "sfs_cancel_failed", message: result.message ?? "anulare refuzată" },
+          502
+        );
+      }
+      await db
+        .update(invoices)
+        .set({
+          efacturaMdStatus: 5, // Anulat de Furnizor
+          efacturaMdMessage: comment,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(invoices.id, id), eq(invoices.tenantId, tenantId)));
+
+      return c.json({ ok: true, mock: client.isMock, invoiceStatusLabel: EFACTURA_MD_STATUS[5] });
+    } catch (err) {
+      if (err instanceof EfacturaMdError) {
+        return c.json({ error: "sfs_error", message: err.message }, 502);
+      }
+      throw err;
+    }
+  }
+);
 
 // GET /api/invoices/:id/efactura
 // Generates UBL 2.1 XML for the invoice, sets efactura_status = 'pending'.
