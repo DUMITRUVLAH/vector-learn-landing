@@ -387,6 +387,155 @@ finInvoicesRoutes.get("/:id/lines", async (c) => {
   return c.json({ data: lines });
 });
 
+// ─── GET /api/fin/invoices/:id/pdf (BILL-004) ────────────────────────────────
+// Returns the invoice HTML for client-side PDF rendering.
+// ?lang=ro|ru|en (default ro). Pure data endpoint — PDF generation is client-side.
+
+finInvoicesRoutes.get("/:id/pdf", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const { id } = c.req.param();
+  const lang = (c.req.query("lang") ?? "ro") as "ro" | "ru" | "en";
+  const validLangs = ["ro", "ru", "en"] as const;
+  const resolvedLang = validLangs.includes(lang) ? lang : "ro";
+
+  const [invoice] = await db
+    .select()
+    .from(finInvoices)
+    .where(and(eq(finInvoices.id, id), eq(finInvoices.tenantId, tenantId)))
+    .limit(1);
+
+  if (!invoice) {
+    return c.json({ error: "Factura nu a fost găsită" }, 404);
+  }
+
+  const lines = await db
+    .select()
+    .from(finInvoiceLines)
+    .where(eq(finInvoiceLines.invoiceId, id))
+    .orderBy(finInvoiceLines.createdAt);
+
+  // Build HTML server-side for the client to render/print
+  // Labels keyed by lang — replicated inline to avoid importing client-side lib in server
+  const titleMap: Record<string, string> = {
+    ro: "FACTURĂ FISCALĂ",
+    ru: "СЧЁТ-ФАКТУРА",
+    en: "INVOICE",
+  };
+  const title = titleMap[resolvedLang] ?? "FACTURĂ FISCALĂ";
+
+  // Return the html + metadata; client renders via finInvoicePdf.buildFinInvoiceHtml
+  // or can print this html directly via window.print()
+  const html = buildInvoiceHtmlServer(invoice, lines, resolvedLang, title);
+
+  return c.json({ data: { html, invoiceNumber: invoice.invoiceNumber, lang: resolvedLang } });
+});
+
+// ─── Server-side minimal invoice HTML (mirrors buildFinInvoiceHtml from src/lib) ─────────────
+// Separated to avoid importing browser-only jspdf/html2canvas on the server.
+
+function buildInvoiceHtmlServer(
+  invoice: {
+    invoiceNumber: string;
+    currency: string;
+    issuedAt: Date | null;
+    dueDate: string | null;
+    totalCents: number;
+    vatTotalCents: number;
+    notes: string | null;
+  },
+  lines: Array<{
+    description: string;
+    quantity: number;
+    unitPriceCents: number;
+    vatPct: number;
+    lineTotalCents: number;
+  }>,
+  lang: "ro" | "ru" | "en",
+  title: string
+): string {
+  function esc(s: string | null | undefined): string {
+    if (!s) return "";
+    return s.replace(/[&<>"]/g, (c: string) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] ?? c)
+    );
+  }
+
+  function money(cents: number, cur: string): string {
+    const neg = cents < 0;
+    const v = Math.abs(Math.round(cents));
+    const whole = Math.floor(v / 100);
+    const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    const frac = v % 100;
+    const dec = frac ? "," + String(frac).padStart(2, "0") : "";
+    const sym = cur === "MDL" ? "L" : cur;
+    return `${neg ? "-" : ""}${sym} ${grouped}${dec}`;
+  }
+
+  function fmtDate(iso: Date | string | null | undefined): string {
+    if (!iso) return "—";
+    const d = new Date(iso instanceof Date ? iso.toISOString() : iso);
+    if (isNaN(d.getTime())) return String(iso);
+    const day = String(d.getDate()).padStart(2, "0");
+    const mon = String(d.getMonth() + 1).padStart(2, "0");
+    return `${day}.${mon}.${d.getFullYear()}`;
+  }
+
+  const cur = invoice.currency || "MDL";
+  const subtotalCents = invoice.totalCents - invoice.vatTotalCents;
+
+  const dueDateLabel: Record<string, string> = { ro: "Scadent la", ru: "Срок оплаты", en: "Due Date" };
+  const dateLabel: Record<string, string> = { ro: "Data", ru: "Дата", en: "Date" };
+  const sigLabel: Record<string, string> = { ro: "Semnătură", ru: "Подпись", en: "Signature" };
+  const totalLabel: Record<string, string> = { ro: "TOTAL DE PLATĂ", ru: "ИТОГО К ОПЛАТЕ", en: "TOTAL DUE" };
+
+  const lineRows = lines.map((l, i) => `
+    <tr style="background:${i % 2 === 1 ? "#f8fafc" : "#fff"}">
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">${esc(l.description)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:center;">${l.quantity}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;">${money(l.unitPriceCents, cur)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:center;">${l.vatPct}%</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;">${money(l.lineTotalCents, cur)}</td>
+    </tr>`).join("");
+
+  return `<!DOCTYPE html><html lang="${lang}"><head><meta charset="UTF-8">
+<style>* { box-sizing:border-box;margin:0;padding:0; } body { font-family:Arial,sans-serif;color:#0f172a;background:#fff; } table { border-collapse:collapse;width:100%; }</style>
+</head><body style="padding:24px;max-width:794px;margin:auto;">
+<div style="font-size:22px;font-weight:800;color:#1e40af;margin-bottom:8px;">${esc(title)}</div>
+<div style="font-size:14px;color:#64748b;margin-bottom:4px;">Nr.: <strong style="color:#0f172a;">${esc(invoice.invoiceNumber)}</strong></div>
+<div style="font-size:11px;color:#64748b;margin-bottom:4px;">${dateLabel[lang]}: <strong>${fmtDate(invoice.issuedAt)}</strong></div>
+<div style="font-size:11px;color:#64748b;margin-bottom:16px;">${dueDateLabel[lang]}: <strong>${invoice.dueDate ? fmtDate(invoice.dueDate) : "—"}</strong></div>
+<table style="border:1px solid #e2e8f0;margin-bottom:16px;">
+<thead><tr style="background:#1e40af;">
+<th style="padding:8px;text-align:left;font-size:11px;color:#fff;">Descriere/Description</th>
+<th style="padding:8px;text-align:center;font-size:11px;color:#fff;width:60px;">Cant./Qty</th>
+<th style="padding:8px;text-align:right;font-size:11px;color:#fff;width:110px;">Preț/Price</th>
+<th style="padding:8px;text-align:center;font-size:11px;color:#fff;width:70px;">TVA/VAT</th>
+<th style="padding:8px;text-align:right;font-size:11px;color:#fff;width:110px;">Total</th>
+</tr></thead><tbody>${lineRows}</tbody>
+</table>
+<table style="width:320px;margin-left:auto;border:1px solid #e2e8f0;margin-bottom:20px;">
+<tr><td style="padding:6px 12px;font-size:12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Subtotal</td><td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e2e8f0;">${money(subtotalCents, cur)}</td></tr>
+<tr><td style="padding:6px 12px;font-size:12px;color:#64748b;border-bottom:1px solid #e2e8f0;">TVA/VAT</td><td style="padding:6px 12px;text-align:right;border-bottom:1px solid #e2e8f0;">${money(invoice.vatTotalCents, cur)}</td></tr>
+<tr style="background:#eff6ff;"><td style="padding:10px 12px;font-size:14px;font-weight:800;color:#1e40af;">${totalLabel[lang]}</td><td style="padding:10px 12px;font-size:14px;font-weight:800;color:#1e40af;text-align:right;">${money(invoice.totalCents, cur)}</td></tr>
+</table>
+${invoice.notes ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;padding:10px 14px;margin-bottom:20px;font-size:12px;color:#64748b;">${esc(invoice.notes)}</div>` : ""}
+<table style="border:1px solid #e2e8f0;">
+<tr>
+<td style="width:50%;padding:12px 16px;border-right:1px solid #e2e8f0;vertical-align:top;">
+<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Emitent / Issuer</div>
+<div style="border-bottom:1px solid #e2e8f0;margin:32px 0 4px;"></div>
+<div style="font-size:10px;color:#64748b;">${sigLabel[lang]}</div>
+</td>
+<td style="width:50%;padding:12px 16px;vertical-align:top;">
+<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Beneficiar / Recipient</div>
+<div style="border-bottom:1px solid #e2e8f0;margin:32px 0 4px;"></div>
+<div style="font-size:10px;color:#64748b;">${sigLabel[lang]}</div>
+</td>
+</tr>
+</table>
+</body></html>`;
+}
+
 // ─── POST /api/fin/invoices/:id/lines ─────────────────────────────────────────
 
 finInvoicesRoutes.post(
