@@ -121,6 +121,8 @@ import { Anexa3Page } from "./pages/app/fin/itpark/Anexa3Page";
 import { Anexa4Page } from "./pages/app/fin/itpark/Anexa4Page";
 // ITPARK-501: Scrisori confirmare
 import { LettersPage } from "./pages/app/fin/itpark/LettersPage";
+// ITPARK-502: Declaratie pe proprie raspundere
+import { SelfDeclarationPage } from "./pages/app/fin/itpark/SelfDeclarationPage";
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
 
@@ -289,6 +291,8 @@ function Routes() {
   if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa4$/)) return <Anexa4Page />;
   // ITPARK-501: /app/fin/itpark/:id/scrisori — 5 confirmation letters
   if (path.match(/^\/app\/fin\/itpark\/[^/]+\/scrisori$/)) return <LettersPage />;
+  // ITPARK-502: /app/fin/itpark/:id/declaratie — self-declaration
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/declaratie$/)) return <SelfDeclarationPage />;
   // ITPARK-101: /app/fin/itpark/:id — dosar detaliu (before list)
   if (path.match(/^\/app\/fin\/itpark\/[^/]+$/)) return <ItparkDetail />;
   // ITPARK-101: /app/fin/itpark — lista dosarelor
