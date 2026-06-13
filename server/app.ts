@@ -308,6 +308,10 @@ app.route("/api", stripeWebhookRoutes); // /webhooks/stripe
 // INST-001: Institution type (gradinita | scoala | mixt) — drives module visibility
 app.route("/api/settings/institution", institutionRoutes);
 
+// FinDesk (SaaS finante MD/RO) — PARTY module (Phase 3)
+import { finPartiesRoutes } from "./routes/finParties"; // PARTY-002: parteneri CRUD
+app.route("/api/fin/parties", finPartiesRoutes);
+
 // PAR (Payment Action Request) module — Phase A
 // Specific-path prefixes MUST be registered BEFORE the generic /api/par/:id handlers.
 app.route("/api/par/me", parMeRoutes);
