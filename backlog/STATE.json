@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
-  "active_milestone": "PAR",
+  "current_item": "EINV-002",
+  "last_completed": "EINV-001",
+  "iterations": 210,
+  "last_run_at": "2026-06-14T00:00:00Z",
+  "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — EINV phase 6. Branch: feat/FIN-einv.",
+  "active_milestone": "FIN",
   "items": {
     "PAR-001": {
       "status": "done",
