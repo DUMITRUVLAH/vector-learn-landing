@@ -123,6 +123,7 @@ import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: financ
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
 // ITPARK (Moldova IT Park Audit Toolkit) routes
 import { itparkCaemRoutes } from "./routes/itparkCaem"; // ITPARK-002: CAEM codes nomenclator
+import { itparkSettingsRoutes } from "./routes/itparkSettings"; // ITPARK-003: settings GET/PUT
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -337,6 +338,7 @@ app.route("/api/par", parApprovalsRoutes);
 app.route("/api/par", parTimelineRoutes);
 // ITPARK routes
 app.route("/api/itpark/caem-codes", itparkCaemRoutes); // ITPARK-002: nomenclator CAEM
+app.route("/api/itpark/settings", itparkSettingsRoutes); // ITPARK-003: settings GET/PUT
 
 app.get("/api/health", async (c) => {
   try {
