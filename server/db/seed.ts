@@ -9,6 +9,12 @@ import {
   parBudgetCodes,
   parDoaMatrix,
 } from "./schema/par";
+import {
+  finOrgProfile,
+  finInvoiceSeries,
+  finMembers,
+  finOnboarding,
+} from "./schema/finCore";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -255,13 +261,121 @@ async function seed() {
   console.log(`   tenant id: ${tenant.id}`);
 }
 
+// ─── FinDesk demo seed (CORE-001) ─────────────────────────────────────────────
+// Studio Vega SRL — FinDesk B2B finance workspace demo
+// Idempotent: guarded by unique tenant slug check
+async function seedFinDesk() {
+  const FIN_SLUG = "demo-studio-vega";
+  const FIN_PASSWORD = "demo123456";
+  const existing = await db.query.tenants.findFirst({
+    where: eq(tenants.slug, FIN_SLUG),
+  });
+  if (existing) {
+    // eslint-disable-next-line no-console
+    console.warn(`FinDesk demo tenant already exists (${existing.id}). Skipping.`);
+    return;
+  }
+
+  const passwordHash = await hashPassword(FIN_PASSWORD);
+
+  const [vegaTenant] = await db
+    .insert(tenants)
+    .values({ name: "Studio Vega SRL", slug: FIN_SLUG, plan: "pro" })
+    .returning();
+
+  // 4 users: owner / accountant / cfo / viewer
+  const [vegaOwner] = await db
+    .insert(users)
+    .values({
+      tenantId: vegaTenant.id,
+      email: "owner@studio-vega.md",
+      passwordHash,
+      name: "Ion Vega",
+      role: "admin",
+    })
+    .returning();
+  const [vegaAccountant] = await db
+    .insert(users)
+    .values({
+      tenantId: vegaTenant.id,
+      email: "accountant@studio-vega.md",
+      passwordHash,
+      name: "Maria Contabila",
+      role: "teacher",
+    })
+    .returning();
+  const [vegaCfo] = await db
+    .insert(users)
+    .values({
+      tenantId: vegaTenant.id,
+      email: "cfo@studio-vega.md",
+      passwordHash,
+      name: "Andrei CFO",
+      role: "teacher",
+    })
+    .returning();
+  const [vegaViewer] = await db
+    .insert(users)
+    .values({
+      tenantId: vegaTenant.id,
+      email: "viewer@studio-vega.md",
+      passwordHash,
+      name: "Elena Viewer",
+      role: "teacher",
+    })
+    .returning();
+
+  // fin_org_profile (1 row per tenant)
+  await db.insert(finOrgProfile).values({
+    tenantId: vegaTenant.id,
+    legalName: "Studio Vega SRL",
+    idno: "1012345678901",
+    country: "MD",
+    vatRegime: "payer",
+    vatNumber: "MD1012345678901",
+    baseCurrency: "MDL",
+    address: "mun. Chisinau, str. Mihai Eminescu 45, of. 3",
+    fiscalYearStart: 1,
+  });
+
+  // fin_invoice_series — default invoice series
+  await db.insert(finInvoiceSeries).values({
+    tenantId: vegaTenant.id,
+    prefix: "VEGA-2026-",
+    nextNumber: 1,
+    padWidth: 4,
+    docType: "invoice",
+    isDefault: true,
+  });
+
+  // fin_members — role mapping for each user
+  await db.insert(finMembers).values([
+    { tenantId: vegaTenant.id, userId: vegaOwner.id, role: "owner" },
+    { tenantId: vegaTenant.id, userId: vegaAccountant.id, role: "accountant" },
+    { tenantId: vegaTenant.id, userId: vegaCfo.id, role: "cfo" },
+    { tenantId: vegaTenant.id, userId: vegaViewer.id, role: "viewer" },
+  ]);
+
+  // fin_onboarding — mark company step completed
+  await db.insert(finOnboarding).values({
+    tenantId: vegaTenant.id,
+    step: "parties",
+    completedSteps: ["company"],
+  });
+
+  // eslint-disable-next-line no-console
+  console.warn(`FinDesk demo: Studio Vega SRL | owner: ${vegaOwner.email}`);
+}
+
 seed()
   .then(async () => {
+    await seedFinDesk();
     await closeDb();
-    console.log("\n🎉 Seed complete.");
+    // eslint-disable-next-line no-console
+    console.warn("Seed complete.");
   })
   .catch(async (err) => {
-    console.error("❌ Seed failed:", err);
+    console.error("Seed failed:", err);
     await closeDb();
     process.exit(1);
   });

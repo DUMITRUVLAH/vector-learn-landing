@@ -87,3 +87,6 @@ export * from "./companyClients";
 export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
 export * from "./par"; // PAR-001: Payment Action Request module
+export * from "./finCore"; // CORE-001: FinDesk workspace foundation
+export * from "./itpark"; // ITPARK-301: Moldova IT Park Audit Toolkit
+
