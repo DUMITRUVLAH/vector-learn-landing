@@ -1,5 +1,6 @@
 /**
  * ITPARK-101: Engagement (Dosar de verificare) CRUD
+ * ITPARK-601: PATCH /:id/export — mark engagement as exported + audit entry
  * CORE: backlog/fin/itpark/ITPARK-CORE.md §2
  * Mounted in server/app.ts: app.route("/api/itpark/engagements", itparkEngagementsRoutes)
  *
@@ -9,13 +10,14 @@
  *   GET    /api/itpark/engagements/:id     → detaliu dosar (viewer+)
  *   PUT    /api/itpark/engagements/:id     → editare dosar (accountant)
  *   DELETE /api/itpark/engagements/:id     → ștergere dosar (accountant)
+ *   PATCH  /api/itpark/engagements/:id/export → status=exported + audit entry (ITPARK-601)
  */
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { eq, and, desc } from "drizzle-orm";
 import { db } from "../db/client";
-import { itparkEngagements } from "../db/schema/itpark";
+import { itparkEngagements, itparkAudit } from "../db/schema/itpark";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requireItparkRole } from "../lib/itparkAuth";
 
@@ -180,6 +182,55 @@ itparkEngagementsRoutes.put(
     return c.json({ engagement: updated });
   }
 );
+
+// ─── PATCH /:id/export — marchează dosarul ca exportat (ITPARK-601) ──────────
+
+itparkEngagementsRoutes.patch("/:id/export", async (c) => {
+  const deny = await requireItparkRole("accountant", c);
+  if (deny) return deny;
+
+  const user = c.get("user");
+  const id = c.req.param("id");
+
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+    return c.json({ error: "id invalid" }, 400);
+  }
+
+  const existing = await db.query.itparkEngagements.findFirst({
+    where: and(
+      eq(itparkEngagements.id, id),
+      eq(itparkEngagements.tenantId, user.tenantId)
+    ),
+  });
+  if (!existing) return c.json({ error: "not_found" }, 404);
+
+  const now = new Date();
+  const [updated] = await db
+    .update(itparkEngagements)
+    .set({ status: "exported", updatedAt: now })
+    .where(
+      and(
+        eq(itparkEngagements.id, id),
+        eq(itparkEngagements.tenantId, user.tenantId)
+      )
+    )
+    .returning();
+
+  // Audit entry — ITPARK-601
+  await db.insert(itparkAudit).values({
+    tenantId: user.tenantId,
+    engagementId: id,
+    userId: user.id,
+    action: "export_pdf",
+    entityType: "engagement",
+    entityId: id,
+    meta: { previousStatus: existing.status },
+  }).catch(() => {
+    // Best-effort — audit failure must not break the export
+  });
+
+  return c.json({ engagement: updated });
+});
 
 // ─── DELETE /:id — ștergere dosar ────────────────────────────────────────────
 

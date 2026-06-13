@@ -1,14 +1,17 @@
 /**
- * ITPARK-101/201/401/402/403: Detaliu dosar de verificare MITP
+ * ITPARK-101/201/401/402/403/601: Detaliu dosar de verificare MITP
  * Route: /app/fin/itpark/:id
  * CORE: backlog/fin/itpark/ITPARK-CORE.md §1
  *
  * Header: date dosar (rezident, IDNO, an, status)
- * Taburi: Anexa 2 | Anexa 3 (revenue lines) | Anexa 4 (lunar + consistency) | Scrisori (placeholder)
+ * Taburi: Anexa 2 | Anexa 3 (revenue lines) | Anexa 4 (lunar + consistency) | Scrisori | Declarație
  * ITPARK-403: Anexa 4 tab navigates to /app/fin/itpark/:id/anexa4 (full page with consistency gate)
+ * ITPARK-601: Export PDF button — whole-packet PDF + status=exported + audit
  */
 import { useState, useEffect, lazy, Suspense } from "react";
-import { getEngagement, type ItparkEngagement } from "../../../../lib/api/itparkEngagements";
+import { Download, Loader2, FileText } from "lucide-react";
+import { getEngagement, markEngagementExported, type ItparkEngagement } from "../../../../lib/api/itparkEngagements";
+import { listLines, type RevenueLine } from "../../../../lib/api/itparkLines";
 
 // ITPARK-201: Tabel linii venit (lazy pentru a nu bloca randarea paginii)
 const RevenueLinesTable = lazy(() => import("./RevenueLinesTable"));
@@ -49,13 +52,14 @@ const STATUS_CLASSES: Record<ItparkEngagement["status"], string> = {
   exported: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
 };
 
-type TabId = "anexa2" | "anexa3" | "anexa4" | "scrisori";
+type TabId = "anexa2" | "anexa3" | "anexa4" | "scrisori" | "declaratie";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "anexa2", label: "Anexa 2" },
   { id: "anexa3", label: "Anexa 3" },
   { id: "anexa4", label: "Anexa 4" },
   { id: "scrisori", label: "Scrisori" },
+  { id: "declaratie", label: "Declarație" },
 ];
 
 // ─── Tab link panel (for tabs that have dedicated pages) ──────────────────────
@@ -84,25 +88,66 @@ function TabLinkPanel({ label, description, href }: TabLinkPanelProps) {
   );
 }
 
+// ─── Export button (ITPARK-601) ────────────────────────────────────────────────
+
+interface ExportPacketButtonProps {
+  engagementId: string;
+  engagement: ItparkEngagement;
+  lines: RevenueLine[];
+  onExported: (updated: ItparkEngagement) => void;
+}
+
+function ExportPacketButton({ engagementId, engagement, lines, onExported }: ExportPacketButtonProps) {
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleExport() {
+    setExporting(true);
+    setError(null);
+    try {
+      // Lazy-load PDF module (html2canvas + jsPDF are heavy)
+      const { downloadItparkPacketPdf } = await import("../../../../lib/itpark/itparkPdf");
+      await downloadItparkPacketPdf(engagement, lines);
+      // Mark as exported server-side (status + audit)
+      const updated = await markEngagementExported(engagementId);
+      onExported(updated);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Eroare la export");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 items-end">
+      <button
+        type="button"
+        onClick={handleExport}
+        disabled={exporting}
+        aria-busy={exporting}
+        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        aria-label="Exportă tot pachetul ca PDF"
+      >
+        {exporting ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <Download className="h-4 w-4" aria-hidden="true" />
+        )}
+        {exporting ? "Se generează PDF..." : "Export pachet PDF"}
+      </button>
+      {error && (
+        <p className="text-xs text-destructive" role="alert">{error}</p>
+      )}
+    </div>
+  );
+}
+
 // ─── Placeholder tab content ───────────────────────────────────────────────────
 
 function TabPlaceholder({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
-      <svg
-        aria-hidden="true"
-        className="h-10 w-10 text-muted-foreground"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-        />
-      </svg>
+      <FileText className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
       <h3 className="mt-3 text-base font-medium text-foreground">{label}</h3>
       <p className="mt-1 text-sm text-muted-foreground max-w-xs">
         Această secțiune va fi disponibilă după introducerea liniilor de venit (Faza C).
@@ -116,6 +161,7 @@ function TabPlaceholder({ label }: { label: string }) {
 export default function ItparkDetail() {
   const id = useRouteId();
   const [engagement, setEngagement] = useState<ItparkEngagement | null>(null);
+  const [lines, setLines] = useState<RevenueLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("anexa2");
@@ -124,8 +170,14 @@ export default function ItparkDetail() {
     if (!id) return;
     setLoading(true);
     setError(null);
-    getEngagement(id)
-      .then(setEngagement)
+    Promise.all([
+      getEngagement(id),
+      listLines(id).catch(() => [] as RevenueLine[]),
+    ])
+      .then(([eng, revLines]) => {
+        setEngagement(eng);
+        setLines(revLines);
+      })
       .catch((e) => setError(e instanceof Error ? e.message : "Eroare"))
       .finally(() => setLoading(false));
   }, [id]);
@@ -181,16 +233,25 @@ export default function ItparkDetail() {
             </div>
             <p className="text-sm text-muted-foreground font-mono">IDNO: {engagement.idno}</p>
           </div>
-          <a
-            href={`#/app/fin/itpark/${id}/edit`}
-            className="shrink-0 inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-muted transition-colors min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            aria-label="Editează dosarul"
-          >
-            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-            Editează
-          </a>
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            {/* ITPARK-601: Export whole-packet PDF */}
+            <ExportPacketButton
+              engagementId={id}
+              engagement={engagement}
+              lines={lines}
+              onExported={setEngagement}
+            />
+            <a
+              href={`#/app/fin/itpark/${id}/edit`}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-muted transition-colors min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              aria-label="Editează dosarul"
+            >
+              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Editează
+            </a>
+          </div>
         </div>
 
         {/* Metadata grid */}
@@ -296,8 +357,14 @@ export default function ItparkDetail() {
               ) : tab.id === "scrisori" ? (
                 <TabLinkPanel
                   label="Scrisori de confirmare"
-                  description="5 scrisori pre-completate (ajustări, adresă, subdiviziuni, activitate, solvabilitate) + declarație pe proprie răspundere. Editare text, status draft/gata, tipărire."
+                  description="5 scrisori pre-completate (ajustări, adresă, subdiviziuni, activitate, solvabilitate). Editare text, status draft/gata, tipărire."
                   href={`#/app/fin/itpark/${id}/scrisori`}
+                />
+              ) : tab.id === "declaratie" ? (
+                <TabLinkPanel
+                  label="Declarație pe proprie răspundere"
+                  description="Declarație pre-completată cu datele dosarului. Referințe art. 312 Cod Penal + art. 18(1) Legea 77/2016."
+                  href={`#/app/fin/itpark/${id}/declaratie`}
                 />
               ) : (
                 <TabPlaceholder label={tab.label} />
