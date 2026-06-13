@@ -1,13 +1,16 @@
 /**
- * ITPARK-101: Detaliu dosar de verificare MITP
+ * ITPARK-101/201: Detaliu dosar de verificare MITP
  * Route: /app/fin/itpark/:id
  * CORE: backlog/fin/itpark/ITPARK-CORE.md §1
  *
  * Header: date dosar (rezident, IDNO, an, status)
- * Taburi: Anexa 2 | Anexa 3 | Anexa 4 | Scrisori (placeholder — umplute în fazele E/F)
+ * Taburi: Anexa 2 (placeholder) | Anexa 3 (revenue lines — ITPARK-201) | Anexa 4 (placeholder) | Scrisori (placeholder)
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { getEngagement, type ItparkEngagement } from "../../../../lib/api/itparkEngagements";
+
+// ITPARK-201: Tabel linii venit (lazy pentru a nu bloca randarea paginii)
+const RevenueLinesTable = lazy(() => import("./RevenueLinesTable"));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -240,9 +243,20 @@ export default function ItparkDetail() {
             id={`panel-${tab.id}`}
             aria-labelledby={`tab-${tab.id}`}
             hidden={activeTab !== tab.id}
+            className="p-4"
           >
             {activeTab === tab.id && (
-              <TabPlaceholder label={tab.label} />
+              tab.id === "anexa3" ? (
+                <Suspense fallback={
+                  <div className="flex items-center justify-center py-12" aria-busy="true">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" role="status" aria-label="Se încarcă liniile" />
+                  </div>
+                }>
+                  <RevenueLinesTable engagementId={id} />
+                </Suspense>
+              ) : (
+                <TabPlaceholder label={tab.label} />
+              )
             )}
           </div>
         ))}

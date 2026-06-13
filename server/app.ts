@@ -125,6 +125,7 @@ import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — 
 import { itparkCaemRoutes } from "./routes/itparkCaem"; // ITPARK-002: CAEM codes nomenclator
 import { itparkSettingsRoutes } from "./routes/itparkSettings"; // ITPARK-003: settings GET/PUT
 import { itparkEngagementsRoutes } from "./routes/itparkEngagements"; // ITPARK-101: engagement CRUD
+import { itparkLinesRoutes } from "./routes/itparkLines"; // ITPARK-201: revenue lines CRUD
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -341,6 +342,7 @@ app.route("/api/par", parTimelineRoutes);
 app.route("/api/itpark/caem-codes", itparkCaemRoutes); // ITPARK-002: nomenclator CAEM
 app.route("/api/itpark/settings", itparkSettingsRoutes); // ITPARK-003: settings GET/PUT
 app.route("/api/itpark/engagements", itparkEngagementsRoutes); // ITPARK-101: engagement CRUD
+app.route("/api/itpark/lines", itparkLinesRoutes); // ITPARK-201: revenue lines CRUD
 
 app.get("/api/health", async (c) => {
   try {
