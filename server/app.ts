@@ -114,6 +114,14 @@ import { parSettingsRoutes } from "./routes/parSettings"; // PAR-003: org settin
 // FinDesk routes — CORE-002
 import { finMembersRoutes } from "./routes/finMembers"; // CORE-002: FinDesk members CRUD + invite
 import { finOrgRoutes } from "./routes/finOrg"; // CORE-003: org profile + invoice series
+// ITPARK routes — Moldova IT Park Audit Toolkit (ITPARK-301+)
+import { itparkCalcRoutes } from "./routes/itparkCalc"; // ITPARK-301: computeAnexa3 endpoint
+import { itparkSettingsRoutes } from "./routes/itparkSettings"; // ITPARK-003: settings
+import { itparkCaemRoutes } from "./routes/itparkCaem"; // ITPARK-002: CAEM codes
+import { itparkEngagementsRoutes } from "./routes/itparkEngagements"; // ITPARK-101: engagement CRUD
+import { itparkLinesRoutes } from "./routes/itparkLines"; // ITPARK-201: revenue lines CRUD
+import { itparkImportRoutes } from "./routes/itparkImport"; // ITPARK-202: import linii
+import { itparkDocsRoutes } from "./routes/itparkDocs"; // ITPARK-501: packet documents CRUD
 // PAR Phase B routes
 import { parRoutes } from "./routes/par"; // PAR-101/102/103: request CRUD + line items + payee
 import { parAttachmentsRoutes } from "./routes/parAttachments"; // PAR-104: attachments upload/list/delete
@@ -341,6 +349,15 @@ app.route("/api/par", parTimelineRoutes);
 app.route("/api/fin/members", finMembersRoutes); // CORE-002: member CRUD + invite
 app.route("/api/fin", finOrgRoutes); // CORE-003: org profile + invoice series
 
+
+// ITPARK routes — Moldova IT Park Audit Toolkit
+app.route("/api/itpark/settings", itparkSettingsRoutes); // ITPARK-003: settings
+app.route("/api/itpark/caem-codes", itparkCaemRoutes); // ITPARK-002: CAEM codes
+app.route("/api/itpark/engagements", itparkEngagementsRoutes); // ITPARK-101: engagement CRUD
+app.route("/api/itpark/lines", itparkLinesRoutes); // ITPARK-201: revenue lines
+app.route("/api/itpark/import", itparkImportRoutes); // ITPARK-202: import linii
+app.route("/api/itpark/calc", itparkCalcRoutes); // ITPARK-301: computeAnexa3 endpoint
+app.route("/api/itpark/docs", itparkDocsRoutes); // ITPARK-501: packet documents CRUD
 app.get("/api/health", async (c) => {
   try {
     await db.execute(sql`SELECT 1 as ping`);
