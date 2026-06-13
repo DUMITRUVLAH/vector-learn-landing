@@ -111,6 +111,8 @@ import { parDepartmentsRoutes } from "./routes/parDepartments"; // PAR-003: depa
 import { parProjectsRoutes } from "./routes/parProjects"; // PAR-003: projects/programs
 import { parVendorsRoutes } from "./routes/parVendors"; // PAR-003: vendor/payee registry
 import { parSettingsRoutes } from "./routes/parSettings"; // PAR-003: org settings
+// FinDesk routes — CORE-002
+import { finMembersRoutes } from "./routes/finMembers"; // CORE-002: FinDesk members CRUD + invite
 // PAR Phase B routes
 import { parRoutes } from "./routes/par"; // PAR-101/102/103: request CRUD + line items + payee
 import { parAttachmentsRoutes } from "./routes/parAttachments"; // PAR-104: attachments upload/list/delete
@@ -333,6 +335,9 @@ app.route("/api/par", parAttachmentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
+
+// FinDesk routes
+app.route("/api/fin/members", finMembersRoutes); // CORE-002: member CRUD + invite
 
 app.get("/api/health", async (c) => {
   try {
