@@ -108,6 +108,8 @@ import ParDetailPage from "./pages/par/ParDetail";
 import ParAdmin from "./pages/par/ParAdmin";
 // PAR-117: Reports
 import { ParReports } from "./pages/par/ParReports";
+// REGISTRY-003: FinDesk fiscal registry admin
+import { FinRegistryPage } from "./pages/app/FinRegistryPage";
 // ITPARK-101: Engagement list + detail
 import ItparkList from "./pages/app/fin/itpark/ItparkList";
 import ItparkDetail from "./pages/app/fin/itpark/ItparkDetail";
@@ -285,6 +287,8 @@ function Routes() {
   if (path.match(/^\/app\/par\/[^/]+$/)) return <ParDetailPage />;
   // PAR-106: /app/par — dashboard + list
   if (path.startsWith("/app/par")) return <ParDashboard />;
+  // REGISTRY-003: /app/fin/registry — fiscal registry admin (tax rates + chart of accounts)
+  if (path.startsWith("/app/fin/registry")) return <FinRegistryPage />;
   // ITPARK-702: /app/fin/itpark/dashboard — MITP compliance dashboard
   if (path === "/app/fin/itpark/dashboard") return <ItparkDashboardPage />;
   // ITPARK-102: /app/fin/itpark/new — wizard creare dosar (must come before :id catch-all)
