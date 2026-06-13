@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "CORE-005",
-  "iterations": 187,
+  "last_completed": "ITPARK-701",
+  "iterations": 188,
   "last_run_at": "2026-06-13T00:00:00Z",
   "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
   "active_milestone": "FIN",
@@ -3217,8 +3217,8 @@
       }
     },
     "ITPARK-601": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-601.md",
       "milestone": "ITPARK",
@@ -3226,12 +3226,18 @@
       "depends_on": [
         "ITPARK-502"
       ],
-      "branch": "",
-      "pr": ""
+      "branch": "feat/ITPARK-faza-G-export",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/152",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "ITPARK-602": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-602.md",
       "milestone": "ITPARK",
@@ -3239,12 +3245,18 @@
       "depends_on": [
         "ITPARK-601"
       ],
-      "branch": "",
-      "pr": ""
+      "branch": "feat/ITPARK-faza-G-export",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/152",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "ITPARK-701": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-701.md",
       "milestone": "ITPARK",
@@ -3252,8 +3264,14 @@
       "depends_on": [
         "ITPARK-601"
       ],
-      "branch": "",
-      "pr": ""
+      "branch": "feat/ITPARK-faza-H-ai-polish",
+      "pr": "",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "ITPARK-702": {
       "status": "pending",
