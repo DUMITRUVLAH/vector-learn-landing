@@ -87,3 +87,4 @@ export * from "./companyClients";
 export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
 export * from "./par"; // PAR-001: Payment Action Request module
+export * from "./finAgreements"; // AGREEMENT-001: FinDesk commercial contracts

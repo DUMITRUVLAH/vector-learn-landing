@@ -9,6 +9,7 @@ import {
   parBudgetCodes,
   parDoaMatrix,
 } from "./schema/par";
+import { finAgreements, finAgreementServices } from "./schema/finAgreements";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -246,6 +247,96 @@ async function seed() {
     console.log(`   DOA matrix: ${deptAtic ? 6 : 0} rules seeded`);
   } else {
     console.log(`⚠️  PAR demo tenant already exists (${existingPar.id}). Skipping.`);
+  }
+
+  // AGREEMENT-001: seed 2 demo agreements with 2 services each (idempotent)
+  const existingAgreements = await db
+    .select({ id: finAgreements.id })
+    .from(finAgreements)
+    .where(eq(finAgreements.tenantId, tenant.id))
+    .limit(1);
+
+  if (existingAgreements.length === 0) {
+    const now = new Date();
+
+    // Agreement 1: recurring subscription with one-time setup
+    const [agr1] = await db
+      .insert(finAgreements)
+      .values({
+        tenantId: tenant.id,
+        partyId: null, // linked after PARTY branch is merged
+        title: "Contract servicii educaționale — Engleză B2",
+        status: "active",
+        startDate: "2026-01-01",
+        endDate: null,
+        currency: "MDL",
+        notes: "Abonament lunar cursuri + taxă înregistrare",
+      })
+      .returning();
+
+    await db.insert(finAgreementServices).values([
+      {
+        agreementId: agr1.id,
+        name: "Abonament lunar Engleză B2",
+        billingType: "recurring",
+        unitPriceCents: 28000, // 280 MDL/lună
+        quantity: 1,
+        vatPct: 0,
+        recurrencePeriod: "monthly",
+        nextBillDate: new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().split("T")[0],
+        isActive: true,
+      },
+      {
+        agreementId: agr1.id,
+        name: "Taxă înregistrare",
+        billingType: "one_time",
+        unitPriceCents: 10000, // 100 MDL
+        quantity: 1,
+        vatPct: 0,
+        isActive: true,
+      },
+    ]);
+
+    // Agreement 2: quarterly invoicing for corporate client
+    const [agr2] = await db
+      .insert(finAgreements)
+      .values({
+        tenantId: tenant.id,
+        partyId: null,
+        title: "Contract corporate Python — TechCorp SRL",
+        status: "active",
+        startDate: "2026-03-01",
+        currency: "MDL",
+        notes: "Formare angajați TechCorp, trimestrială",
+      })
+      .returning();
+
+    await db.insert(finAgreementServices).values([
+      {
+        agreementId: agr2.id,
+        name: "Formare Python avansat — 8 angajați",
+        billingType: "recurring",
+        unitPriceCents: 336000, // 8 × 420 MDL × 1 trimestru
+        quantity: 1,
+        vatPct: 20,
+        recurrencePeriod: "quarterly",
+        nextBillDate: "2026-07-01",
+        isActive: true,
+      },
+      {
+        agreementId: agr2.id,
+        name: "Licențe materiale didactice",
+        billingType: "one_time",
+        unitPriceCents: 50000, // 500 MDL
+        quantity: 8,
+        vatPct: 20,
+        isActive: true,
+      },
+    ]);
+
+    console.log("✅ FinDesk demo agreements seeded (2 contracts, 4 services).");
+  } else {
+    console.log("⚠️  FinDesk agreements already seeded. Skipping.");
   }
 
   console.log(`\n📌 Demo credentials:`);
