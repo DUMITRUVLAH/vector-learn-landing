@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
-  "active_milestone": "PAR",
+  "current_item": "ITPARK-701",
+  "last_completed": "ITPARK-602",
+  "iterations": 187,
+  "last_run_at": "2026-06-13T00:00:00Z",
+  "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
+  "active_milestone": "FIN",
   "items": {
     "PAR-001": {
       "status": "done",
@@ -2209,7 +2209,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2249,7 +2249,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical \u2014 allergies, immunization records, medication log",
+      "title": "Medical — allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -2842,6 +2842,432 @@
       "milestone": "POLISH",
       "phase": "1",
       "depends_on": []
+    },
+    "CORE-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CORE-001-schema.md",
+      "milestone": "FIN",
+      "phase": "CORE",
+      "depends_on": [],
+      "branch": "feat/FIN-core",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "CORE-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CORE-002-roles.md",
+      "milestone": "FIN",
+      "phase": "CORE",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-core",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "CORE-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CORE-003-profile-series.md",
+      "milestone": "FIN",
+      "phase": "CORE",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-core",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "CORE-004": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CORE-004-shell-nav.md",
+      "milestone": "FIN",
+      "phase": "CORE",
+      "depends_on": [
+        "CORE-002"
+      ],
+      "branch": "feat/FIN-core",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      }
+    },
+    "CORE-005": {
+      "status": "in_progress",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CORE-005-onboarding.md",
+      "milestone": "FIN",
+      "phase": "CORE",
+      "depends_on": [
+        "CORE-003",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-core"
+    },
+    "ITPARK-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-001.md",
+      "milestone": "ITPARK",
+      "phase": "A",
+      "depends_on": [],
+      "branch": "feat/ITPARK-faza-A-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/145",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-002.md",
+      "milestone": "ITPARK",
+      "phase": "A",
+      "depends_on": [],
+      "branch": "feat/ITPARK-faza-A-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/145",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-003.md",
+      "milestone": "ITPARK",
+      "phase": "A",
+      "depends_on": [],
+      "branch": "feat/ITPARK-faza-A-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/145",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-101": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-101.md",
+      "milestone": "ITPARK",
+      "phase": "B",
+      "depends_on": [
+        "ITPARK-001"
+      ],
+      "branch": "feat/ITPARK-faza-B-dosar",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/146",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-102": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-102.md",
+      "milestone": "ITPARK",
+      "phase": "B",
+      "depends_on": [
+        "ITPARK-101"
+      ],
+      "branch": "feat/ITPARK-faza-B-dosar",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/146",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-201": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-201.md",
+      "milestone": "ITPARK",
+      "phase": "C",
+      "depends_on": [
+        "ITPARK-101"
+      ],
+      "branch": "feat/ITPARK-faza-C-venit",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/147",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-202": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-202.md",
+      "milestone": "ITPARK",
+      "phase": "C",
+      "depends_on": [
+        "ITPARK-201"
+      ],
+      "branch": "feat/ITPARK-faza-C-venit",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/147",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-203": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-203.md",
+      "milestone": "ITPARK",
+      "phase": "C",
+      "depends_on": [
+        "ITPARK-201"
+      ],
+      "branch": "feat/ITPARK-faza-C-venit",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/147",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-301": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-301.md",
+      "milestone": "ITPARK",
+      "phase": "D",
+      "depends_on": [
+        "ITPARK-201"
+      ],
+      "branch": "feat/ITPARK-faza-D-calcul",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/148",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-302": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-302.md",
+      "milestone": "ITPARK",
+      "phase": "D",
+      "depends_on": [
+        "ITPARK-301"
+      ],
+      "branch": "feat/ITPARK-faza-D-calcul",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/148",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-401": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-401.md",
+      "milestone": "ITPARK",
+      "phase": "E",
+      "depends_on": [
+        "ITPARK-302"
+      ],
+      "branch": "feat/ITPARK-faza-E-anexe",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/149",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-402": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-402.md",
+      "milestone": "ITPARK",
+      "phase": "E",
+      "depends_on": [
+        "ITPARK-401"
+      ],
+      "branch": "feat/ITPARK-faza-E-anexe",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/149",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-403": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-403.md",
+      "milestone": "ITPARK",
+      "phase": "E",
+      "depends_on": [
+        "ITPARK-402"
+      ],
+      "branch": "feat/ITPARK-faza-E-anexe",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/149",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-501": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-501.md",
+      "milestone": "ITPARK",
+      "phase": "F",
+      "depends_on": [
+        "ITPARK-403"
+      ],
+      "branch": "feat/ITPARK-faza-F-scrisori",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/151",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-502": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-502.md",
+      "milestone": "ITPARK",
+      "phase": "F",
+      "depends_on": [
+        "ITPARK-501"
+      ],
+      "branch": "feat/ITPARK-faza-F-scrisori",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/151",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-601": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-601.md",
+      "milestone": "ITPARK",
+      "phase": "G",
+      "depends_on": [
+        "ITPARK-502"
+      ],
+      "branch": "feat/ITPARK-faza-G-export",
+      "pr": "",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
+    },
+    "ITPARK-602": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-602.md",
+      "milestone": "ITPARK",
+      "phase": "G",
+      "depends_on": [
+        "ITPARK-601"
+      ],
+      "branch": "feat/ITPARK-faza-G-export",
+      "pr": "",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
+    },
+    "ITPARK-701": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-701.md",
+      "milestone": "ITPARK",
+      "phase": "H",
+      "depends_on": [
+        "ITPARK-601"
+      ],
+      "branch": "",
+      "pr": ""
+    },
+    "ITPARK-702": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-702.md",
+      "milestone": "ITPARK",
+      "phase": "H",
+      "depends_on": [
+        "ITPARK-701"
+      ],
+      "branch": "",
+      "pr": ""
     }
   }
 }
