@@ -1,9 +1,11 @@
 /**
- * REGISTRY-001: FinDesk fiscal registry helpers
+ * REGISTRY-001/002: FinDesk fiscal registry helpers
  *
  * rateAt(tenantId, country, kind, date) — returns the applicable rate percentage (as number)
  * at a given date for a country/kind combination. Prefers tenant-specific override; falls back
  * to global (tenantId=null) seed data. Returns null if no rate found.
+ *
+ * tenantId may be null/undefined — in that case, only global seed rates are queried (REGISTRY-002).
  *
  * SEED_RATES — static seed data for MD (Moldova) 2024+ and RO (Romania) 2024+.
  * These are inserted by seed-fin-registry (or loaded in tests directly).
@@ -22,35 +24,37 @@ type TaxKind = "vat" | "income_tax" | "social_contribution" | "dividend_tax" | "
  * specified tenant/country/kind at the given date.
  *
  * Lookup order:
- *   1. Tenant-specific rate (tenantId matches) active on `date`
+ *   1. Tenant-specific rate (tenantId matches) active on `date` — skipped if tenantId is null/undefined
  *   2. Global seed rate (tenantId IS NULL) active on `date`
  * Returns null if no rate found (should not happen for standard MD/RO rates).
  */
 export async function rateAt(
-  tenantId: string,
+  tenantId: string | null | undefined,
   country: string,
   kind: TaxKind,
   date: Date = new Date()
 ): Promise<number | null> {
   const dateStr = date.toISOString().slice(0, 10); // "YYYY-MM-DD"
 
-  // Look for tenant-specific rate first
-  const tenantRates = await db
-    .select({ ratePct: finTaxRates.ratePct })
-    .from(finTaxRates)
-    .where(
-      and(
-        eq(finTaxRates.tenantId, tenantId),
-        eq(finTaxRates.country, country),
-        eq(finTaxRates.kind, kind as string),
-        lte(finTaxRates.effectiveFrom, dateStr),
-        or(isNull(finTaxRates.effectiveTo), lte(dateStr, finTaxRates.effectiveTo as never))
+  // Look for tenant-specific rate first (only when tenantId is provided)
+  if (tenantId) {
+    const tenantRates = await db
+      .select({ ratePct: finTaxRates.ratePct })
+      .from(finTaxRates)
+      .where(
+        and(
+          eq(finTaxRates.tenantId, tenantId),
+          eq(finTaxRates.country, country),
+          eq(finTaxRates.kind, kind as string),
+          lte(finTaxRates.effectiveFrom, dateStr),
+          or(isNull(finTaxRates.effectiveTo), lte(dateStr, finTaxRates.effectiveTo as never))
+        )
       )
-    )
-    .limit(1);
+      .limit(1);
 
-  if (tenantRates.length > 0 && tenantRates[0].ratePct != null) {
-    return Number(tenantRates[0].ratePct);
+    if (tenantRates.length > 0 && tenantRates[0].ratePct != null) {
+      return Number(tenantRates[0].ratePct);
+    }
   }
 
   // Fall back to global seed rate
@@ -91,7 +95,7 @@ export const SEED_RATES_MD: SeedRate[] = [
   { tenantId: null, country: "MD", kind: "income_tax", name: "Impozit pe venit 12%", ratePct: "12.0000", effectiveFrom: "2024-01-01", effectiveTo: null, isDefault: true },
   // Social contributions (employer)
   { tenantId: null, country: "MD", kind: "social_contribution", name: "CNAS angajator 24%", ratePct: "24.0000", effectiveFrom: "2024-01-01", effectiveTo: null, isDefault: true, notes: "Contribuție angajator la CNAS" },
-  { tenantId: null, country: "MD", kind: "social_contribution", name: "CNAM angajator 4.5%", ratePct: "4.5000", effectiveFrom: "2024-01-01", effectiveTo: null, isDefault: false, notes: "Contribuție angajator la CNAM" },
+  { tenantId: null, country: "MD", kind: "social_contribution", name: "CNAM angajator 4.5%", ratePct: "4.5000", effectiveFrom: "2024-01-01", effectiveTo: null, isDefault: false, notes: "Contribuție angajor la CNAM" },
   { tenantId: null, country: "MD", kind: "social_contribution", name: "CNAS angajat 6%", ratePct: "6.0000", effectiveFrom: "2024-01-01", effectiveTo: null, isDefault: false, notes: "Contribuție angajat la CNAS" },
 ];
 

@@ -122,7 +122,11 @@ import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: financ
 // PAR Phase F routes
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
 // ITPARK (Moldova IT Park Audit Toolkit) routes
+import { itparkAiRoutes } from "./routes/itparkAi"; // ITPARK-701: AI CAEM suggestion + invoice extraction
+import { itparkDocsRoutes } from "./routes/itparkDocs"; // ITPARK-501: packet documents CRUD
 import { itparkDashboardRoutes } from "./routes/itparkDashboard"; // ITPARK-702: compliance dashboard
+// REGISTRY-002: FinDesk fiscal nomenclature API (tax rates + chart of accounts)
+import { finRegistryRoutes } from "./routes/finRegistry";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -335,7 +339,11 @@ app.route("/api/par", parAttachmentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
+app.route("/api/itpark/ai", itparkAiRoutes); // ITPARK-701: AI CAEM suggestion + invoice extraction
+app.route("/api/itpark/docs", itparkDocsRoutes); // ITPARK-501: packet documents CRUD
 app.route("/api/itpark/dashboard", itparkDashboardRoutes); // ITPARK-702
+// REGISTRY-002: FinDesk fiscal registry API (tax rates + chart of accounts)
+app.route("/api/fin/registry", finRegistryRoutes);
 
 app.get("/api/health", async (c) => {
   try {
