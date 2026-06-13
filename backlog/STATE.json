@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "BILL-002",
-  "last_completed": "BILL-001",
-  "iterations": 202,
+  "current_item": "BILL-003",
+  "last_completed": "BILL-002",
+  "iterations": 204,
   "last_run_at": "2026-06-14T10:00:00Z",
   "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
   "active_milestone": "FIN",
@@ -3508,8 +3508,8 @@
       "pr": null
     },
     "BILL-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BILL-003.md",
       "milestone": "FIN",
@@ -3529,7 +3529,7 @@
       "milestone": "FIN",
       "phase": "5",
       "depends_on": [
-        "BILL-002"
+        "BILL-003"
       ],
       "branch": "feat/FIN-bill",
       "verdicts": {},
@@ -3543,8 +3543,7 @@
       "milestone": "FIN",
       "phase": "5",
       "depends_on": [
-        "BILL-002",
-        "CORE-004"
+        "BILL-004"
       ],
       "branch": "feat/FIN-bill",
       "verdicts": {},

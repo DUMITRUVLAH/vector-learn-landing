@@ -30,6 +30,7 @@ import { db } from "../db/client";
 import {
   finInvoices,
   finInvoiceLines,
+  finInvoiceReminders,
 } from "../db/schema/finInvoices";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
@@ -163,6 +164,201 @@ finInvoicesRoutes.get("/", async (c) => {
 
   const total = countRow[0]?.count ?? 0;
   return c.json({ data: rows, total });
+});
+
+// ─── BILL-003: AGING ROUTES (MUST be before /:id — hono-specific-route-before-param) ──────────
+//
+// KNOWN_PITFALL: docs/solutions/architecture-patterns/hono-specific-route-before-param.md
+// Registering /aging after /:id causes "aging" to be parsed as :id param → wrong handler.
+// Keep ALL literal-path routes above the /:id param routes.
+
+/** Helper: compute days overdue (positive = overdue, negative = not yet due). */
+function daysOverdue(dueDateStr: string | null): number {
+  if (!dueDateStr) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(dueDateStr);
+  due.setHours(0, 0, 0, 0);
+  return Math.floor((today.getTime() - due.getTime()) / 86_400_000);
+}
+
+/**
+ * GET /api/fin/invoices/aging
+ * Returns aging buckets + overdue invoice list for the authenticated tenant.
+ * Buckets: current (not overdue), overdue_0_30, overdue_31_60, overdue_60_plus.
+ */
+finInvoicesRoutes.get("/aging", async (c) => {
+  const tenantId = c.get("user").tenantId;
+
+  // Fetch all non-cancelled, non-draft invoices that have a dueDate or are issued
+  const rows = await db
+    .select({
+      id: finInvoices.id,
+      invoiceNumber: finInvoices.invoiceNumber,
+      partyId: finInvoices.partyId,
+      totalCents: finInvoices.totalCents,
+      dueDate: finInvoices.dueDate,
+      status: finInvoices.status,
+    })
+    .from(finInvoices)
+    .where(
+      and(
+        eq(finInvoices.tenantId, tenantId),
+        // Only active invoices (not cancelled/draft) for aging
+        or(
+          eq(finInvoices.status, "issued"),
+          eq(finInvoices.status, "overdue"),
+          eq(finInvoices.status, "paid")
+        )!
+      )
+    )
+    .orderBy(desc(finInvoices.createdAt));
+
+  interface AgingBucket {
+    count: number;
+    totalCents: number;
+  }
+
+  const buckets: Record<string, AgingBucket> = {
+    current: { count: 0, totalCents: 0 },
+    overdue_0_30: { count: 0, totalCents: 0 },
+    overdue_31_60: { count: 0, totalCents: 0 },
+    overdue_60_plus: { count: 0, totalCents: 0 },
+  };
+
+  const overdueInvoices: Array<{
+    id: string;
+    invoiceNumber: string;
+    partyId: string | null;
+    totalCents: number;
+    dueDate: string | null;
+    daysOverdue: number;
+  }> = [];
+
+  for (const row of rows) {
+    // Skip paid invoices from aging (they're collected)
+    if (row.status === "paid") continue;
+
+    const days = daysOverdue(row.dueDate);
+
+    if (days <= 0) {
+      // Not overdue yet (or no dueDate)
+      buckets.current.count++;
+      buckets.current.totalCents += row.totalCents;
+    } else if (days <= 30) {
+      buckets.overdue_0_30.count++;
+      buckets.overdue_0_30.totalCents += row.totalCents;
+      overdueInvoices.push({ ...row, daysOverdue: days });
+    } else if (days <= 60) {
+      buckets.overdue_31_60.count++;
+      buckets.overdue_31_60.totalCents += row.totalCents;
+      overdueInvoices.push({ ...row, daysOverdue: days });
+    } else {
+      buckets.overdue_60_plus.count++;
+      buckets.overdue_60_plus.totalCents += row.totalCents;
+      overdueInvoices.push({ ...row, daysOverdue: days });
+    }
+  }
+
+  return c.json({ data: { buckets, overdueInvoices } });
+});
+
+/**
+ * GET /api/fin/invoices/aging/count
+ * Returns the count of invoices that are overdue but have NOT yet received a reminder
+ * for the highest threshold they qualify for. Used as an in-app badge indicator.
+ */
+finInvoicesRoutes.get("/aging/count", async (c) => {
+  const tenantId = c.get("user").tenantId;
+
+  // Count overdue invoices (status = overdue OR issued+past dueDate)
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(finInvoices)
+    .where(
+      and(
+        eq(finInvoices.tenantId, tenantId),
+        or(
+          eq(finInvoices.status, "overdue"),
+          // issued but past due date
+          and(
+            eq(finInvoices.status, "issued"),
+            sql`${finInvoices.dueDate} < CURRENT_DATE`
+          )!
+        )!
+      )
+    );
+
+  return c.json({ data: { count: countRow?.count ?? 0 } });
+});
+
+/**
+ * POST /api/fin/invoices/aging/reminders
+ * Generates fin_invoice_reminders entries for invoices overdue >= 3, 7, or 14 days.
+ * Idempotent: uses ON CONFLICT DO NOTHING on unique(invoiceId, reminderDay).
+ * Returns { created: N, skipped: N }.
+ */
+finInvoicesRoutes.post("/aging/reminders", async (c) => {
+  const tenantId = c.get("user").tenantId;
+
+  // Fetch all non-cancelled, non-draft invoices with a dueDate
+  const overdueRows = await db
+    .select({
+      id: finInvoices.id,
+      dueDate: finInvoices.dueDate,
+      invoiceNumber: finInvoices.invoiceNumber,
+      totalCents: finInvoices.totalCents,
+    })
+    .from(finInvoices)
+    .where(
+      and(
+        eq(finInvoices.tenantId, tenantId),
+        or(
+          eq(finInvoices.status, "overdue"),
+          and(
+            eq(finInvoices.status, "issued"),
+            sql`${finInvoices.dueDate} < CURRENT_DATE`
+          )!
+        )!
+      )
+    );
+
+  const REMINDER_THRESHOLDS = [3, 7, 14] as const;
+  let created = 0;
+  let skipped = 0;
+
+  for (const row of overdueRows) {
+    const days = daysOverdue(row.dueDate);
+    if (days < 3) continue; // Not yet eligible for any reminder
+
+    for (const threshold of REMINDER_THRESHOLDS) {
+      if (days < threshold) continue;
+
+      const body = `Factură ${row.invoiceNumber} (${Math.round(row.totalCents / 100)} MDL) este scadentă de ${days} zile. Vă rugăm să efectuați plata.`;
+
+      // onConflictDoNothing + .returning() → inserted.length === 0 means conflict (already exists)
+      const inserted = await db
+        .insert(finInvoiceReminders)
+        .values({
+          tenantId,
+          invoiceId: row.id,
+          reminderDay: threshold,
+          channel: "email",
+          status: "sent",
+          body,
+        })
+        .onConflictDoNothing()
+        .returning({ id: finInvoiceReminders.id });
+
+      if (inserted.length > 0) {
+        created++;
+      } else {
+        skipped++;
+      }
+    }
+  }
+
+  return c.json({ data: { created, skipped } });
 });
 
 // ─── GET /api/fin/invoices/:id/lines (before /:id to avoid param shadow) ─────
