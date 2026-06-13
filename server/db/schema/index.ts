@@ -87,3 +87,4 @@ export * from "./companyClients";
 export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
 export * from "./par"; // PAR-001: Payment Action Request module
+export * from "./finInvoices"; // BILL-001: FinDesk B2B invoicing — fin_invoices, fin_invoice_lines, fin_invoice_reminders

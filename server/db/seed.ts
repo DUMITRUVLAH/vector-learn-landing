@@ -9,6 +9,7 @@ import {
   parBudgetCodes,
   parDoaMatrix,
 } from "./schema/par";
+import { finInvoices, finInvoiceLines } from "./schema/finInvoices";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -246,6 +247,92 @@ async function seed() {
     console.log(`   DOA matrix: ${deptAtic ? 6 : 0} rules seeded`);
   } else {
     console.log(`⚠️  PAR demo tenant already exists (${existingPar.id}). Skipping.`);
+  }
+
+  // ─── BILL-001: fin_invoices demo seed (B2B invoices, separate from student invoices) ─────
+  const existingFinInvoices = await db
+    .select({ id: finInvoices.id })
+    .from(finInvoices)
+    .where(eq(finInvoices.tenantId, tenant.id))
+    .limit(1);
+
+  if (existingFinInvoices.length === 0) {
+    // Invoice 1: 2 lines, TVA 20% (FIN-CORE Rule #1: vatPct per line)
+    const [inv1] = await db
+      .insert(finInvoices)
+      .values({
+        tenantId: tenant.id,
+        series: "FIN",
+        number: 1,
+        invoiceNumber: "FIN-2026-0001",
+        status: "issued",
+        currency: "MDL",
+        issuedAt: new Date("2026-06-01"),
+        dueDate: "2026-07-01",
+        totalCents: 120000, // 1200 MDL total (incl. TVA)
+        vatTotalCents: 20000, // 200 MDL TVA
+        notes: "Servicii contabilitate luna mai 2026",
+      })
+      .returning();
+
+    await db.insert(finInvoiceLines).values([
+      {
+        invoiceId: inv1.id,
+        description: "Servicii contabilitate lunară",
+        quantity: 1,
+        unitPriceCents: 50000, // 500 MDL
+        vatPct: 20,
+        lineTotalCents: 60000, // 600 MDL incl. TVA
+      },
+      {
+        invoiceId: inv1.id,
+        description: "Consultanță fiscală",
+        quantity: 2,
+        unitPriceCents: 25000, // 250 MDL × 2 = 500 MDL
+        vatPct: 20,
+        lineTotalCents: 60000, // 600 MDL incl. TVA
+      },
+    ]);
+
+    // Invoice 2: 2 lines, TVA 0% (export/exempte)
+    const [inv2] = await db
+      .insert(finInvoices)
+      .values({
+        tenantId: tenant.id,
+        series: "FIN",
+        number: 2,
+        invoiceNumber: "FIN-2026-0002",
+        status: "draft",
+        currency: "EUR",
+        dueDate: "2026-08-01",
+        totalCents: 50000, // 500 EUR total (no TVA on export)
+        vatTotalCents: 0,
+        notes: "Servicii IT export — scutit TVA",
+      })
+      .returning();
+
+    await db.insert(finInvoiceLines).values([
+      {
+        invoiceId: inv2.id,
+        description: "Implementare sistem ERP — Faza 1",
+        quantity: 1,
+        unitPriceCents: 30000, // 300 EUR
+        vatPct: 0,
+        lineTotalCents: 30000,
+      },
+      {
+        invoiceId: inv2.id,
+        description: "Training utilizatori (8 ore)",
+        quantity: 8,
+        unitPriceCents: 2500, // 25 EUR/h × 8 = 200 EUR
+        vatPct: 0,
+        lineTotalCents: 20000,
+      },
+    ]);
+
+    console.log(`✅ FIN demo invoices created: FIN-2026-0001 (MDL, issued), FIN-2026-0002 (EUR, draft)`);
+  } else {
+    console.log(`⚠️  FIN demo invoices already exist. Skipping.`);
   }
 
   console.log(`\n📌 Demo credentials:`);
