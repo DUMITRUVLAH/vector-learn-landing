@@ -108,6 +108,25 @@ import ParDetailPage from "./pages/par/ParDetail";
 import ParAdmin from "./pages/par/ParAdmin";
 // PAR-117: Reports
 import { ParReports } from "./pages/par/ParReports";
+// ITPARK-101: Engagement list + detail
+import ItparkList from "./pages/app/fin/itpark/ItparkList";
+import ItparkDetail from "./pages/app/fin/itpark/ItparkDetail";
+// ITPARK-102: Create wizard
+import ItparkWizard from "./pages/app/fin/itpark/ItparkWizard";
+// ITPARK-401: Anexa 2 render
+import { Anexa2Page } from "./pages/app/fin/itpark/Anexa2Page";
+// ITPARK-402: Anexa 3 render
+import { Anexa3Page } from "./pages/app/fin/itpark/Anexa3Page";
+// ITPARK-403: Anexa 4 render + consistency gate
+import { Anexa4Page } from "./pages/app/fin/itpark/Anexa4Page";
+// ITPARK-501: Scrisori confirmare
+import { LettersPage } from "./pages/app/fin/itpark/LettersPage";
+// ITPARK-502: Declarație pe proprie răspundere
+import { SelfDeclarationPage } from "./pages/app/fin/itpark/SelfDeclarationPage";
+// ITPARK-602: Checklist "Gata" — readiness gate before export
+import { ReadinessChecklistPage } from "./pages/app/fin/itpark/ReadinessChecklistPage";
+// ITPARK-702: MITP compliance dashboard
+import ItparkDashboardPage from "./pages/app/fin/itpark/ItparkDashboardPage";
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
 
@@ -266,6 +285,26 @@ function Routes() {
   if (path.match(/^\/app\/par\/[^/]+$/)) return <ParDetailPage />;
   // PAR-106: /app/par — dashboard + list
   if (path.startsWith("/app/par")) return <ParDashboard />;
+  // ITPARK-702: /app/fin/itpark/dashboard — MITP compliance dashboard
+  if (path === "/app/fin/itpark/dashboard") return <ItparkDashboardPage />;
+  // ITPARK-102: /app/fin/itpark/new — wizard creare dosar (must come before :id catch-all)
+  if (path === "/app/fin/itpark/new") return <ItparkWizard />;
+  // ITPARK-401: /app/fin/itpark/:id/anexa2 — Anexa 2 render
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa2$/)) return <Anexa2Page />;
+  // ITPARK-402: /app/fin/itpark/:id/anexa3 — Anexa 3 render
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa3$/)) return <Anexa3Page />;
+  // ITPARK-403: /app/fin/itpark/:id/anexa4 — Anexa 4 render + consistency gate
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa4$/)) return <Anexa4Page />;
+  // ITPARK-501: /app/fin/itpark/:id/scrisori — 5 confirmation letters
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/scrisori$/)) return <LettersPage />;
+  // ITPARK-502: /app/fin/itpark/:id/declaratie — declaratie pe proprie raspundere
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/declaratie$/)) return <SelfDeclarationPage />;
+  // ITPARK-602: /app/fin/itpark/:id/ready — readiness checklist
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/ready$/)) return <ReadinessChecklistPage />;
+  // ITPARK-101: /app/fin/itpark/:id — dosar detaliu (before list)
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+$/)) return <ItparkDetail />;
+  // ITPARK-101: /app/fin/itpark — lista dosarelor
+  if (path.startsWith("/app/fin/itpark")) return <ItparkList />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app/reports/kpi")) return <KpiDashboardPage />;
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
