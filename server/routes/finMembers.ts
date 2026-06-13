@@ -17,6 +17,7 @@ import { z } from "zod";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "../db/client";
 import { finMembers } from "../db/schema/finCore";
+import { finOrgProfile } from "../db/schema/finCore";
 import { users } from "../db/schema/users";
 import { userInvitations } from "../db/schema/userInvitations";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -56,6 +57,39 @@ async function countOwners(tenantId: string): Promise<number> {
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/fin/members/me — return current user's FinDesk membership + org profile.
+ * Used by FinLayout to determine role + company name without an owner-level list query.
+ * Returns 403 if the current user is not a fin member.
+ * CORE-004
+ */
+finMembersRoutes.get("/me", async (c) => {
+  const user = c.get("user");
+  const member = await db
+    .select({
+      id: finMembers.id,
+      role: finMembers.role,
+      permissions: finMembers.permissions,
+      userId: finMembers.userId,
+    })
+    .from(finMembers)
+    .leftJoin(users, eq(finMembers.userId, users.id))
+    .where(and(eq(finMembers.tenantId, user.tenantId), eq(finMembers.userId, user.id)))
+    .limit(1);
+
+  if (member.length === 0) {
+    return c.json({ error: "not_a_fin_member" }, 403);
+  }
+
+  const profileRows = await db
+    .select()
+    .from(finOrgProfile)
+    .where(eq(finOrgProfile.tenantId, user.tenantId))
+    .limit(1);
+
+  return c.json({ member: member[0], profile: profileRows[0] ?? null });
+});
 
 /** GET /api/fin/members — list members of the tenant */
 finMembersRoutes.get(
