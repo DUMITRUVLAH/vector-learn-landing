@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "current_item": "POLISH-001",
-  "last_completed": "ITPARK-702",
+  "current_item": "REGISTRY-003",
+  "last_completed": "REGISTRY-002",
   "iterations": 192,
   "last_run_at": "2026-06-14T00:16:00Z",
   "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) \u2014 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
@@ -3365,7 +3365,7 @@
       "pr": null
     },
     "REGISTRY-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/REGISTRY-002.md",
@@ -3379,8 +3379,8 @@
       "pr": null
     },
     "REGISTRY-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/REGISTRY-003.md",
       "milestone": "FIN",
