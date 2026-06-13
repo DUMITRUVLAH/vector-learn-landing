@@ -130,6 +130,8 @@ import { LettersPage } from "./pages/app/fin/itpark/LettersPage";
 import { SelfDeclarationPage } from "./pages/app/fin/itpark/SelfDeclarationPage";
 // ITPARK-602: Checklist "Gata" — readiness gate before export
 import { ReadinessChecklistPage } from "./pages/app/fin/itpark/ReadinessChecklistPage";
+// ITPARK-702: MITP compliance dashboard
+import ItparkDashboardPage from "./pages/app/fin/itpark/ItparkDashboardPage";
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
 
@@ -288,6 +290,8 @@ function Routes() {
   if (path.match(/^\/app\/par\/[^/]+$/)) return <ParDetailPage />;
   // PAR-106: /app/par — dashboard + list
   if (path.startsWith("/app/par")) return <ParDashboard />;
+  // ITPARK-702: /app/fin/itpark/dashboard — MITP compliance dashboard (must come before :id catch-all)
+  if (path === "/app/fin/itpark/dashboard") return <ItparkDashboardPage />;
   // ITPARK-102: /app/fin/itpark/new — wizard creare dosar (must come before :id catch-all)
   if (path === "/app/fin/itpark/new") return <ItparkWizard />;
   // ITPARK-401: /app/fin/itpark/:id/anexa2 — Anexa 2 render
