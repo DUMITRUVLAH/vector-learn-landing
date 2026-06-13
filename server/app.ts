@@ -111,6 +111,17 @@ import { parDepartmentsRoutes } from "./routes/parDepartments"; // PAR-003: depa
 import { parProjectsRoutes } from "./routes/parProjects"; // PAR-003: projects/programs
 import { parVendorsRoutes } from "./routes/parVendors"; // PAR-003: vendor/payee registry
 import { parSettingsRoutes } from "./routes/parSettings"; // PAR-003: org settings
+// FinDesk routes — CORE-002
+import { finMembersRoutes } from "./routes/finMembers"; // CORE-002: FinDesk members CRUD + invite
+import { finOrgRoutes } from "./routes/finOrg"; // CORE-003: org profile + invoice series
+// ITPARK routes — Moldova IT Park Audit Toolkit (ITPARK-301+)
+import { itparkCalcRoutes } from "./routes/itparkCalc"; // ITPARK-301: computeAnexa3 endpoint
+import { itparkSettingsRoutes } from "./routes/itparkSettings"; // ITPARK-003: settings
+import { itparkCaemRoutes } from "./routes/itparkCaem"; // ITPARK-002: CAEM codes
+import { itparkEngagementsRoutes } from "./routes/itparkEngagements"; // ITPARK-101: engagement CRUD
+import { itparkLinesRoutes } from "./routes/itparkLines"; // ITPARK-201: revenue lines CRUD
+import { itparkImportRoutes } from "./routes/itparkImport"; // ITPARK-202: import linii
+import { itparkDocsRoutes } from "./routes/itparkDocs"; // ITPARK-501: packet documents CRUD
 // PAR Phase B routes
 import { parRoutes } from "./routes/par"; // PAR-101/102/103: request CRUD + line items + payee
 import { parAttachmentsRoutes } from "./routes/parAttachments"; // PAR-104: attachments upload/list/delete
@@ -121,16 +132,6 @@ import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline /
 import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: finance queue + section 16 + pay
 // PAR Phase F routes
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
-// ITPARK routes — ITPARK-301: calc engine
-import { itparkCalcRoutes } from "./routes/itparkCalc"; // ITPARK-301: computeAnexa3 endpoint
-// ITPARK Phase A routes
-import { itparkSettingsRoutes } from "./routes/itparkSettings"; // ITPARK-003: settings
-import { itparkCaemRoutes } from "./routes/itparkCaem"; // ITPARK-002: CAEM codes
-// ITPARK Phase B routes
-import { itparkEngagementsRoutes } from "./routes/itparkEngagements"; // ITPARK-101: engagement CRUD
-// ITPARK Phase C routes
-import { itparkLinesRoutes } from "./routes/itparkLines"; // ITPARK-201: revenue lines CRUD
-import { itparkImportRoutes } from "./routes/itparkImport"; // ITPARK-202: import linii
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -344,14 +345,19 @@ app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
 
-// ITPARK (Moldova IT Park Audit Toolkit) routes
+// FinDesk routes
+app.route("/api/fin/members", finMembersRoutes); // CORE-002: member CRUD + invite
+app.route("/api/fin", finOrgRoutes); // CORE-003: org profile + invoice series
+
+
+// ITPARK routes — Moldova IT Park Audit Toolkit
 app.route("/api/itpark/settings", itparkSettingsRoutes); // ITPARK-003: settings
 app.route("/api/itpark/caem-codes", itparkCaemRoutes); // ITPARK-002: CAEM codes
 app.route("/api/itpark/engagements", itparkEngagementsRoutes); // ITPARK-101: engagement CRUD
 app.route("/api/itpark/lines", itparkLinesRoutes); // ITPARK-201: revenue lines
 app.route("/api/itpark/import", itparkImportRoutes); // ITPARK-202: import linii
 app.route("/api/itpark/calc", itparkCalcRoutes); // ITPARK-301: computeAnexa3 endpoint
-
+app.route("/api/itpark/docs", itparkDocsRoutes); // ITPARK-501: packet documents CRUD
 app.get("/api/health", async (c) => {
   try {
     await db.execute(sql`SELECT 1 as ping`);
