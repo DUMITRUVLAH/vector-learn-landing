@@ -121,6 +121,16 @@ import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline /
 import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: finance queue + section 16 + pay
 // PAR Phase F routes
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
+// ITPARK routes — ITPARK-301: calc engine
+import { itparkCalcRoutes } from "./routes/itparkCalc"; // ITPARK-301: computeAnexa3 endpoint
+// ITPARK Phase A routes
+import { itparkSettingsRoutes } from "./routes/itparkSettings"; // ITPARK-003: settings
+import { itparkCaemRoutes } from "./routes/itparkCaem"; // ITPARK-002: CAEM codes
+// ITPARK Phase B routes
+import { itparkEngagementsRoutes } from "./routes/itparkEngagements"; // ITPARK-101: engagement CRUD
+// ITPARK Phase C routes
+import { itparkLinesRoutes } from "./routes/itparkLines"; // ITPARK-201: revenue lines CRUD
+import { itparkImportRoutes } from "./routes/itparkImport"; // ITPARK-202: import linii
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -333,6 +343,14 @@ app.route("/api/par", parAttachmentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
+
+// ITPARK (Moldova IT Park Audit Toolkit) routes
+app.route("/api/itpark/settings", itparkSettingsRoutes); // ITPARK-003: settings
+app.route("/api/itpark/caem-codes", itparkCaemRoutes); // ITPARK-002: CAEM codes
+app.route("/api/itpark/engagements", itparkEngagementsRoutes); // ITPARK-101: engagement CRUD
+app.route("/api/itpark/lines", itparkLinesRoutes); // ITPARK-201: revenue lines
+app.route("/api/itpark/import", itparkImportRoutes); // ITPARK-202: import linii
+app.route("/api/itpark/calc", itparkCalcRoutes); // ITPARK-301: computeAnexa3 endpoint
 
 app.get("/api/health", async (c) => {
   try {
