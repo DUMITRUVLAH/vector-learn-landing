@@ -41,12 +41,16 @@ itparkCalcRoutes.get("/:engagementId", async (c) => {
   }
 
   // Verificăm că engagement aparține tenantului
-  const eng = await db.query.itparkEngagements.findFirst({
-    where: and(
-      eq(itparkEngagements.id, engagementId),
-      eq(itparkEngagements.tenantId, user.tenantId)
-    ),
-  });
+  const [eng] = await db
+    .select()
+    .from(itparkEngagements)
+    .where(
+      and(
+        eq(itparkEngagements.id, engagementId),
+        eq(itparkEngagements.tenantId, user.tenantId)
+      )
+    )
+    .limit(1);
   if (!eng) return c.json({ error: "engagement not found" }, 404);
 
   // Obținem toate liniile de venit

@@ -293,6 +293,12 @@ export default function ItparkDetail() {
                   description="12 luni + Total: venituri eligibile/total, cumulative YTD, pondere cumulativă. Gate de coerență cu Anexa 2 și 3."
                   href={`#/app/fin/itpark/${id}/anexa4`}
                 />
+              ) : tab.id === "scrisori" ? (
+                <TabLinkPanel
+                  label="Scrisori de confirmare"
+                  description="5 scrisori pre-completate (ajustări, adresă, subdiviziuni, activitate, solvabilitate) + declarație pe proprie răspundere. Editare text, status draft/gata, tipărire."
+                  href={`#/app/fin/itpark/${id}/scrisori`}
+                />
               ) : (
                 <TabPlaceholder label={tab.label} />
               )

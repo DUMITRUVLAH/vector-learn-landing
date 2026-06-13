@@ -94,17 +94,6 @@ import { ExportPage } from "./pages/app/ExportPage";
 import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
 import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-// ITPARK-101: Engagement list + detail
-import ItparkList from "./pages/app/fin/itpark/ItparkList";
-import ItparkDetail from "./pages/app/fin/itpark/ItparkDetail";
-// ITPARK-102: Create wizard
-import ItparkWizard from "./pages/app/fin/itpark/ItparkWizard";
-// ITPARK-401: Anexa 2 render
-import { Anexa2Page } from "./pages/app/fin/itpark/Anexa2Page";
-// ITPARK-402: Anexa 3 render
-import { Anexa3Page } from "./pages/app/fin/itpark/Anexa3Page";
-// ITPARK-403: Anexa 4 render + consistency gate
-import { Anexa4Page } from "./pages/app/fin/itpark/Anexa4Page";
 // PAR-105: Create wizard
 import { ParCreateWizard } from "./pages/par/ParCreateWizard";
 // PAR-106: Dashboard + list
@@ -119,6 +108,19 @@ import ParDetailPage from "./pages/par/ParDetail";
 import ParAdmin from "./pages/par/ParAdmin";
 // PAR-117: Reports
 import { ParReports } from "./pages/par/ParReports";
+// ITPARK-101: Engagement list + detail
+import ItparkList from "./pages/app/fin/itpark/ItparkList";
+import ItparkDetail from "./pages/app/fin/itpark/ItparkDetail";
+// ITPARK-102: Create wizard
+import ItparkWizard from "./pages/app/fin/itpark/ItparkWizard";
+// ITPARK-401: Anexa 2 render
+import { Anexa2Page } from "./pages/app/fin/itpark/Anexa2Page";
+// ITPARK-402: Anexa 3 render
+import { Anexa3Page } from "./pages/app/fin/itpark/Anexa3Page";
+// ITPARK-403: Anexa 4 render + consistency gate
+import { Anexa4Page } from "./pages/app/fin/itpark/Anexa4Page";
+// ITPARK-501: Scrisori confirmare
+import { LettersPage } from "./pages/app/fin/itpark/LettersPage";
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
 
@@ -263,18 +265,6 @@ function Routes() {
   if (path.startsWith("/app/kinder/compliance")) return <KinderCompliancePage />;
   // KINDER-007: incident/accident reports + parent acknowledgment
   if (path.startsWith("/app/kinder/incidents")) return <KinderIncidentsPage />;
-  // ITPARK-102: /app/fin/itpark/new — wizard creare dosar (must come before :id catch-all)
-  if (path === "/app/fin/itpark/new") return <ItparkWizard />;
-  // ITPARK-401: /app/fin/itpark/:id/anexa2 — Anexa 2 render
-  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa2$/)) return <Anexa2Page />;
-  // ITPARK-402: /app/fin/itpark/:id/anexa3 — Anexa 3 render
-  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa3$/)) return <Anexa3Page />;
-  // ITPARK-403: /app/fin/itpark/:id/anexa4 — Anexa 4 render + consistency gate
-  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa4$/)) return <Anexa4Page />;
-  // ITPARK-101: /app/fin/itpark/:id — dosar detaliu (before list)
-  if (path.match(/^\/app\/fin\/itpark\/[^/]+$/)) return <ItparkDetail />;
-  // ITPARK-101: /app/fin/itpark — lista dosarelor
-  if (path.startsWith("/app/fin/itpark")) return <ItparkList />;
   // PAR-105: /app/par/new — create wizard (must come before /app/par list)
   if (path.startsWith("/app/par/new")) return <ParCreateWizard />;
   // PAR-108: /app/par/inbox — approver inbox (before /app/par generic)
@@ -289,6 +279,20 @@ function Routes() {
   if (path.match(/^\/app\/par\/[^/]+$/)) return <ParDetailPage />;
   // PAR-106: /app/par — dashboard + list
   if (path.startsWith("/app/par")) return <ParDashboard />;
+  // ITPARK-102: /app/fin/itpark/new — wizard creare dosar (must come before :id catch-all)
+  if (path === "/app/fin/itpark/new") return <ItparkWizard />;
+  // ITPARK-401: /app/fin/itpark/:id/anexa2 — Anexa 2 render
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa2$/)) return <Anexa2Page />;
+  // ITPARK-402: /app/fin/itpark/:id/anexa3 — Anexa 3 render
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa3$/)) return <Anexa3Page />;
+  // ITPARK-403: /app/fin/itpark/:id/anexa4 — Anexa 4 render + consistency gate
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa4$/)) return <Anexa4Page />;
+  // ITPARK-501: /app/fin/itpark/:id/scrisori — 5 confirmation letters
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/scrisori$/)) return <LettersPage />;
+  // ITPARK-101: /app/fin/itpark/:id — dosar detaliu (before list)
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+$/)) return <ItparkDetail />;
+  // ITPARK-101: /app/fin/itpark — lista dosarelor
+  if (path.startsWith("/app/fin/itpark")) return <ItparkList />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app/reports/kpi")) return <KpiDashboardPage />;
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
