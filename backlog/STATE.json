@@ -1,9 +1,9 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "REGISTRY-001",
-  "iterations": 189,
-  "last_run_at": "2026-06-13T00:00:00Z",
+  "last_completed": "ITPARK-702",
+  "iterations": 193,
+  "last_run_at": "2026-06-14T00:25:00Z",
   "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
   "active_milestone": "FIN",
   "items": {
@@ -2815,33 +2815,57 @@
       }
     },
     "POLISH-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-001-nav-quick-search.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/POLISH-faza-1-ux-polish",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/128",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "POLISH-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-002-dashboard-widgets.md",
       "milestone": "POLISH",
       "phase": "1",
       "depends_on": [
         "POLISH-001"
-      ]
+      ],
+      "branch": "feat/POLISH-faza-1-ux-polish",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/128",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "POLISH-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-003-empty-states.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/POLISH-faza-1-ux-polish",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/128",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "CORE-001": {
       "status": "done",
@@ -3285,7 +3309,7 @@
       }
     },
     "ITPARK-702": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-702.md",
@@ -3295,7 +3319,13 @@
         "ITPARK-701"
       ],
       "branch": "feat/ITPARK-faza-H-ai-polish",
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/153"
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/153",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "N/A"
+      }
     }
   }
 }
