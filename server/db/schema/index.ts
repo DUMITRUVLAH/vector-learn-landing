@@ -88,3 +88,4 @@ export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
 export * from "./par"; // PAR-001: Payment Action Request module
 export * from "./itpark"; // ITPARK-001: Moldova IT Park Audit Toolkit
+export * from "./finRegistry"; // REGISTRY-001: FinDesk tax rates + chart of accounts

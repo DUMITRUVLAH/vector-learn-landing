@@ -122,6 +122,8 @@ import { itparkEngagementsRoutes } from "./routes/itparkEngagements"; // ITPARK-
 import { itparkLinesRoutes } from "./routes/itparkLines"; // ITPARK-201: revenue lines CRUD
 import { itparkImportRoutes } from "./routes/itparkImport"; // ITPARK-202: import linii
 import { itparkDocsRoutes } from "./routes/itparkDocs"; // ITPARK-501: packet documents CRUD
+import { itparkAiRoutes } from "./routes/itparkAi"; // ITPARK-701: AI CAEM suggestion + invoice extraction
+import { itparkDashboardRoutes } from "./routes/itparkDashboard"; // ITPARK-702: MITP compliance dashboard
 // PAR Phase B routes
 import { parRoutes } from "./routes/par"; // PAR-101/102/103: request CRUD + line items + payee
 import { parAttachmentsRoutes } from "./routes/parAttachments"; // PAR-104: attachments upload/list/delete
@@ -358,6 +360,8 @@ app.route("/api/itpark/lines", itparkLinesRoutes); // ITPARK-201: revenue lines
 app.route("/api/itpark/import", itparkImportRoutes); // ITPARK-202: import linii
 app.route("/api/itpark/calc", itparkCalcRoutes); // ITPARK-301: computeAnexa3 endpoint
 app.route("/api/itpark/docs", itparkDocsRoutes); // ITPARK-501: packet documents CRUD
+app.route("/api/itpark/ai", itparkAiRoutes); // ITPARK-701: AI CAEM + invoice extraction
+app.route("/api/itpark/dashboard", itparkDashboardRoutes); // ITPARK-702: MITP compliance dashboard
 app.get("/api/health", async (c) => {
   try {
     await db.execute(sql`SELECT 1 as ping`);

@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "ITPARK-702",
   "last_completed": "ITPARK-701",
-  "iterations": 188,
+  "iterations": 189,
   "last_run_at": "2026-06-13T00:00:00Z",
   "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
   "active_milestone": "FIN",
@@ -3269,8 +3269,8 @@
       }
     },
     "ITPARK-702": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-702.md",
       "milestone": "ITPARK",
@@ -3278,8 +3278,8 @@
       "depends_on": [
         "ITPARK-701"
       ],
-      "branch": "",
-      "pr": ""
+      "branch": "feat/ITPARK-faza-H-ai-polish",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/153"
     }
   }
 }
