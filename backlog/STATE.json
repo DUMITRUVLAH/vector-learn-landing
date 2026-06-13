@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
-  "active_milestone": "PAR",
+  "current_item": "BILL-002",
+  "last_completed": "BILL-001",
+  "iterations": 202,
+  "last_run_at": "2026-06-14T10:00:00Z",
+  "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
+  "active_milestone": "FIN",
   "items": {
     "PAR-001": {
       "status": "done",
@@ -2209,7 +2209,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2249,7 +2249,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical \u2014 allergies, immunization records, medication log",
+      "title": "Medical — allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -2815,13 +2815,14 @@
       }
     },
     "POLISH-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-001-nav-quick-search.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/POLISH-faza-1-ux-polish"
     },
     "POLISH-002": {
       "status": "pending",
@@ -2842,6 +2843,1617 @@
       "milestone": "POLISH",
       "phase": "1",
       "depends_on": []
+    },
+    "CORE-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CORE-001-schema.md",
+      "milestone": "FIN",
+      "phase": "CORE",
+      "depends_on": [],
+      "branch": "feat/FIN-core",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "CORE-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CORE-002-roles.md",
+      "milestone": "FIN",
+      "phase": "CORE",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-core",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "CORE-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CORE-003-profile-series.md",
+      "milestone": "FIN",
+      "phase": "CORE",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-core",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "CORE-004": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CORE-004-shell-nav.md",
+      "milestone": "FIN",
+      "phase": "CORE",
+      "depends_on": [
+        "CORE-002"
+      ],
+      "branch": "feat/FIN-core",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      }
+    },
+    "CORE-005": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CORE-005-onboarding.md",
+      "milestone": "FIN",
+      "phase": "CORE",
+      "depends_on": [
+        "CORE-003",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-core",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "REGISTRY-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/REGISTRY-001-tax-rates-chart.md",
+      "milestone": "FIN",
+      "phase": "REGISTRY",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-registry",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-001.md",
+      "milestone": "ITPARK",
+      "phase": "A",
+      "depends_on": [],
+      "branch": "feat/ITPARK-faza-A-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/145",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-002.md",
+      "milestone": "ITPARK",
+      "phase": "A",
+      "depends_on": [],
+      "branch": "feat/ITPARK-faza-A-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/145",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-003.md",
+      "milestone": "ITPARK",
+      "phase": "A",
+      "depends_on": [],
+      "branch": "feat/ITPARK-faza-A-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/145",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-101": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-101.md",
+      "milestone": "ITPARK",
+      "phase": "B",
+      "depends_on": [
+        "ITPARK-001"
+      ],
+      "branch": "feat/ITPARK-faza-B-dosar",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/146",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-102": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-102.md",
+      "milestone": "ITPARK",
+      "phase": "B",
+      "depends_on": [
+        "ITPARK-101"
+      ],
+      "branch": "feat/ITPARK-faza-B-dosar",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/146",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-201": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-201.md",
+      "milestone": "ITPARK",
+      "phase": "C",
+      "depends_on": [
+        "ITPARK-101"
+      ],
+      "branch": "feat/ITPARK-faza-C-venit",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/147",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-202": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-202.md",
+      "milestone": "ITPARK",
+      "phase": "C",
+      "depends_on": [
+        "ITPARK-201"
+      ],
+      "branch": "feat/ITPARK-faza-C-venit",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/147",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-203": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-203.md",
+      "milestone": "ITPARK",
+      "phase": "C",
+      "depends_on": [
+        "ITPARK-201"
+      ],
+      "branch": "feat/ITPARK-faza-C-venit",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/147",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-301": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-301.md",
+      "milestone": "ITPARK",
+      "phase": "D",
+      "depends_on": [
+        "ITPARK-201"
+      ],
+      "branch": "feat/ITPARK-faza-D-calcul",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/148",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-302": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-302.md",
+      "milestone": "ITPARK",
+      "phase": "D",
+      "depends_on": [
+        "ITPARK-301"
+      ],
+      "branch": "feat/ITPARK-faza-D-calcul",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/148",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-401": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-401.md",
+      "milestone": "ITPARK",
+      "phase": "E",
+      "depends_on": [
+        "ITPARK-302"
+      ],
+      "branch": "feat/ITPARK-faza-E-anexe",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/149",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-402": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-402.md",
+      "milestone": "ITPARK",
+      "phase": "E",
+      "depends_on": [
+        "ITPARK-401"
+      ],
+      "branch": "feat/ITPARK-faza-E-anexe",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/149",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-403": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-403.md",
+      "milestone": "ITPARK",
+      "phase": "E",
+      "depends_on": [
+        "ITPARK-402"
+      ],
+      "branch": "feat/ITPARK-faza-E-anexe",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/149",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-501": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-501.md",
+      "milestone": "ITPARK",
+      "phase": "F",
+      "depends_on": [
+        "ITPARK-403"
+      ],
+      "branch": "feat/ITPARK-faza-F-scrisori",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/151",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-502": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-502.md",
+      "milestone": "ITPARK",
+      "phase": "F",
+      "depends_on": [
+        "ITPARK-501"
+      ],
+      "branch": "feat/ITPARK-faza-F-scrisori",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/151",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
+    },
+    "ITPARK-601": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-601.md",
+      "milestone": "ITPARK",
+      "phase": "G",
+      "depends_on": [
+        "ITPARK-502"
+      ],
+      "branch": "feat/ITPARK-faza-G-export",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/152",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
+    },
+    "ITPARK-602": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-602.md",
+      "milestone": "ITPARK",
+      "phase": "G",
+      "depends_on": [
+        "ITPARK-601"
+      ],
+      "branch": "feat/ITPARK-faza-G-export",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/152",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
+    },
+    "ITPARK-701": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-701.md",
+      "milestone": "ITPARK",
+      "phase": "H",
+      "depends_on": [
+        "ITPARK-601"
+      ],
+      "branch": "feat/ITPARK-faza-H-ai-polish",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/153",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
+    },
+    "ITPARK-702": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-702.md",
+      "milestone": "ITPARK",
+      "phase": "H",
+      "depends_on": [
+        "ITPARK-701"
+      ],
+      "branch": "feat/ITPARK-faza-H-ai-polish",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/153",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "N/A"
+      }
+    },
+    "PARTY-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/PARTY-001.md",
+      "milestone": "FIN",
+      "phase": "3",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-party",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "N/A",
+        "student": "N/A"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/156"
+    },
+    "PARTY-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/PARTY-002.md",
+      "milestone": "FIN",
+      "phase": "3",
+      "depends_on": [
+        "PARTY-001"
+      ],
+      "branch": "feat/FIN-party",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "N/A"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/156"
+    },
+    "PARTY-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/PARTY-003.md",
+      "milestone": "FIN",
+      "phase": "3",
+      "depends_on": [
+        "PARTY-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-party",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/156"
+    },
+    "PARTY-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PARTY-004.md",
+      "milestone": "FIN",
+      "phase": "3",
+      "depends_on": [
+        "PARTY-003",
+        "BILL-001"
+      ],
+      "branch": "feat/FIN-party",
+      "verdicts": {},
+      "pr": null
+    },
+    "REGISTRY-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/REGISTRY-002.md",
+      "milestone": "FIN",
+      "phase": "2",
+      "depends_on": [
+        "REGISTRY-001"
+      ],
+      "branch": "feat/FIN-registry",
+      "verdicts": {},
+      "pr": null
+    },
+    "REGISTRY-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/REGISTRY-003.md",
+      "milestone": "FIN",
+      "phase": "REGISTRY",
+      "depends_on": [
+        "REGISTRY-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-registry",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "N/A"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/154"
+    },
+    "AGREEMENT-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AGREEMENT-001.md",
+      "milestone": "FIN",
+      "phase": "4",
+      "depends_on": [
+        "PARTY-001"
+      ],
+      "branch": "feat/FIN-agreement",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/157"
+    },
+    "AGREEMENT-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AGREEMENT-002.md",
+      "milestone": "FIN",
+      "phase": "4",
+      "depends_on": [
+        "AGREEMENT-001"
+      ],
+      "branch": "feat/FIN-agreement",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/157"
+    },
+    "AGREEMENT-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/AGREEMENT-003.md",
+      "milestone": "FIN",
+      "phase": "4",
+      "depends_on": [
+        "AGREEMENT-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-agreement",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/157"
+    },
+    "BILL-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/BILL-001.md",
+      "milestone": "FIN",
+      "phase": "5",
+      "depends_on": [
+        "CORE-001",
+        "PARTY-001"
+      ],
+      "branch": "feat/FIN-bill",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
+      "pr": null
+    },
+    "BILL-002": {
+      "status": "in_progress",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/BILL-002.md",
+      "milestone": "FIN",
+      "phase": "5",
+      "depends_on": [
+        "BILL-001",
+        "REGISTRY-002",
+        "AGREEMENT-001"
+      ],
+      "branch": "feat/FIN-bill",
+      "verdicts": {},
+      "pr": null
+    },
+    "BILL-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BILL-003.md",
+      "milestone": "FIN",
+      "phase": "5",
+      "depends_on": [
+        "BILL-002"
+      ],
+      "branch": "feat/FIN-bill",
+      "verdicts": {},
+      "pr": null
+    },
+    "BILL-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BILL-004.md",
+      "milestone": "FIN",
+      "phase": "5",
+      "depends_on": [
+        "BILL-002"
+      ],
+      "branch": "feat/FIN-bill",
+      "verdicts": {},
+      "pr": null
+    },
+    "BILL-005": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BILL-005.md",
+      "milestone": "FIN",
+      "phase": "5",
+      "depends_on": [
+        "BILL-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-bill",
+      "verdicts": {},
+      "pr": null
+    },
+    "EINV-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/EINV-001.md",
+      "milestone": "FIN",
+      "phase": "6",
+      "depends_on": [
+        "BILL-001"
+      ],
+      "branch": "feat/FIN-einv",
+      "verdicts": {},
+      "pr": null
+    },
+    "EINV-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/EINV-002.md",
+      "milestone": "FIN",
+      "phase": "6",
+      "depends_on": [
+        "EINV-001",
+        "BILL-002"
+      ],
+      "branch": "feat/FIN-einv",
+      "verdicts": {},
+      "pr": null
+    },
+    "EINV-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/EINV-003.md",
+      "milestone": "FIN",
+      "phase": "6",
+      "depends_on": [
+        "EINV-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-einv",
+      "verdicts": {},
+      "pr": null
+    },
+    "SPEND-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPEND-001.md",
+      "milestone": "FIN",
+      "phase": "7",
+      "depends_on": [
+        "CORE-001",
+        "PARTY-001"
+      ],
+      "branch": "feat/FIN-spend",
+      "verdicts": {},
+      "pr": null
+    },
+    "SPEND-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPEND-002.md",
+      "milestone": "FIN",
+      "phase": "7",
+      "depends_on": [
+        "SPEND-001",
+        "REGISTRY-002"
+      ],
+      "branch": "feat/FIN-spend",
+      "verdicts": {},
+      "pr": null
+    },
+    "SPEND-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPEND-003.md",
+      "milestone": "FIN",
+      "phase": "7",
+      "depends_on": [
+        "SPEND-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-spend",
+      "verdicts": {},
+      "pr": null
+    },
+    "CAPTURE-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CAPTURE-001.md",
+      "milestone": "FIN",
+      "phase": "8",
+      "depends_on": [
+        "SPEND-001"
+      ],
+      "branch": "feat/FIN-capture",
+      "verdicts": {},
+      "pr": null
+    },
+    "CAPTURE-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CAPTURE-002.md",
+      "milestone": "FIN",
+      "phase": "8",
+      "depends_on": [
+        "CAPTURE-001"
+      ],
+      "branch": "feat/FIN-capture",
+      "verdicts": {},
+      "pr": null
+    },
+    "CAPTURE-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CAPTURE-003.md",
+      "milestone": "FIN",
+      "phase": "8",
+      "depends_on": [
+        "CAPTURE-002",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-capture",
+      "verdicts": {},
+      "pr": null
+    },
+    "CASH-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CASH-001.md",
+      "milestone": "FIN",
+      "phase": "9",
+      "depends_on": [
+        "BILL-001"
+      ],
+      "branch": "feat/FIN-cash",
+      "verdicts": {},
+      "pr": null
+    },
+    "CASH-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CASH-002.md",
+      "milestone": "FIN",
+      "phase": "9",
+      "depends_on": [
+        "CASH-001"
+      ],
+      "branch": "feat/FIN-cash",
+      "verdicts": {},
+      "pr": null
+    },
+    "CASH-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CASH-003.md",
+      "milestone": "FIN",
+      "phase": "9",
+      "depends_on": [
+        "CASH-002",
+        "BILL-002"
+      ],
+      "branch": "feat/FIN-cash",
+      "verdicts": {},
+      "pr": null
+    },
+    "CASH-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CASH-004.md",
+      "milestone": "FIN",
+      "phase": "9",
+      "depends_on": [
+        "CASH-003",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-cash",
+      "verdicts": {},
+      "pr": null
+    },
+    "FISC-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FISC-001.md",
+      "milestone": "FIN",
+      "phase": "10",
+      "depends_on": [
+        "REGISTRY-001"
+      ],
+      "branch": "feat/FIN-fisc",
+      "verdicts": {},
+      "pr": null
+    },
+    "FISC-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FISC-002.md",
+      "milestone": "FIN",
+      "phase": "10",
+      "depends_on": [
+        "FISC-001",
+        "BILL-002",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-fisc",
+      "verdicts": {},
+      "pr": null
+    },
+    "FISC-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FISC-003.md",
+      "milestone": "FIN",
+      "phase": "10",
+      "depends_on": [
+        "FISC-002"
+      ],
+      "branch": "feat/FIN-fisc",
+      "verdicts": {},
+      "pr": null
+    },
+    "FISC-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FISC-004.md",
+      "milestone": "FIN",
+      "phase": "10",
+      "depends_on": [
+        "FISC-003",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-fisc",
+      "verdicts": {},
+      "pr": null
+    },
+    "PAY-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAY-001.md",
+      "milestone": "FIN",
+      "phase": "11",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-pay",
+      "verdicts": {},
+      "pr": null
+    },
+    "PAY-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAY-002.md",
+      "milestone": "FIN",
+      "phase": "11",
+      "depends_on": [
+        "PAY-001",
+        "REGISTRY-002",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-pay",
+      "verdicts": {},
+      "pr": null
+    },
+    "PAY-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/PAY-003.md",
+      "milestone": "FIN",
+      "phase": "11",
+      "depends_on": [
+        "PAY-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-pay",
+      "verdicts": {},
+      "pr": null
+    },
+    "ASSET-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ASSET-001.md",
+      "milestone": "FIN",
+      "phase": "12",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-asset",
+      "verdicts": {},
+      "pr": null
+    },
+    "ASSET-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ASSET-002.md",
+      "milestone": "FIN",
+      "phase": "12",
+      "depends_on": [
+        "ASSET-001",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-asset",
+      "verdicts": {},
+      "pr": null
+    },
+    "ASSET-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ASSET-003.md",
+      "milestone": "FIN",
+      "phase": "12",
+      "depends_on": [
+        "ASSET-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-asset",
+      "verdicts": {},
+      "pr": null
+    },
+    "INSIGHT-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/INSIGHT-001.md",
+      "milestone": "FIN",
+      "phase": "13",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-insight",
+      "verdicts": {},
+      "pr": null
+    },
+    "INSIGHT-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/INSIGHT-002.md",
+      "milestone": "FIN",
+      "phase": "13",
+      "depends_on": [
+        "INSIGHT-001",
+        "BILL-002",
+        "SPEND-002",
+        "CASH-003",
+        "FISC-002"
+      ],
+      "branch": "feat/FIN-insight",
+      "verdicts": {},
+      "pr": null
+    },
+    "INSIGHT-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/INSIGHT-003.md",
+      "milestone": "FIN",
+      "phase": "13",
+      "depends_on": [
+        "INSIGHT-002"
+      ],
+      "branch": "feat/FIN-insight",
+      "verdicts": {},
+      "pr": null
+    },
+    "INSIGHT-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/INSIGHT-004.md",
+      "milestone": "FIN",
+      "phase": "13",
+      "depends_on": [
+        "INSIGHT-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-insight",
+      "verdicts": {},
+      "pr": null
+    },
+    "CALENDAR-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CALENDAR-001.md",
+      "milestone": "FIN",
+      "phase": "14",
+      "depends_on": [
+        "FISC-001"
+      ],
+      "branch": "feat/FIN-calendar",
+      "verdicts": {},
+      "pr": null
+    },
+    "CALENDAR-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CALENDAR-002.md",
+      "milestone": "FIN",
+      "phase": "14",
+      "depends_on": [
+        "CALENDAR-001",
+        "FISC-002",
+        "PAY-002"
+      ],
+      "branch": "feat/FIN-calendar",
+      "verdicts": {},
+      "pr": null
+    },
+    "CALENDAR-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CALENDAR-003.md",
+      "milestone": "FIN",
+      "phase": "14",
+      "depends_on": [
+        "CALENDAR-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-calendar",
+      "verdicts": {},
+      "pr": null
+    },
+    "MASS-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/MASS-001.md",
+      "milestone": "FIN",
+      "phase": "15",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-mass",
+      "verdicts": {},
+      "pr": null
+    },
+    "MASS-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/MASS-002.md",
+      "milestone": "FIN",
+      "phase": "15",
+      "depends_on": [
+        "MASS-001",
+        "AGREEMENT-002",
+        "BILL-002",
+        "EINV-002"
+      ],
+      "branch": "feat/FIN-mass",
+      "verdicts": {},
+      "pr": null
+    },
+    "MASS-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/MASS-003.md",
+      "milestone": "FIN",
+      "phase": "15",
+      "depends_on": [
+        "MASS-001",
+        "PARTY-002",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-mass",
+      "verdicts": {},
+      "pr": null
+    },
+    "MASS-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/MASS-004.md",
+      "milestone": "FIN",
+      "phase": "15",
+      "depends_on": [
+        "MASS-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-mass",
+      "verdicts": {},
+      "pr": null
+    },
+    "TRUST-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/TRUST-001.md",
+      "milestone": "FIN",
+      "phase": "16",
+      "depends_on": [
+        "CORE-001",
+        "CAPTURE-002"
+      ],
+      "branch": "feat/FIN-trust",
+      "verdicts": {},
+      "pr": null
+    },
+    "TRUST-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/TRUST-002.md",
+      "milestone": "FIN",
+      "phase": "16",
+      "depends_on": [
+        "TRUST-001"
+      ],
+      "branch": "feat/FIN-trust",
+      "verdicts": {},
+      "pr": null
+    },
+    "TRUST-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/TRUST-003.md",
+      "milestone": "FIN",
+      "phase": "16",
+      "depends_on": [
+        "TRUST-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-trust",
+      "verdicts": {},
+      "pr": null
+    },
+    "LEDGER-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/LEDGER-001.md",
+      "milestone": "FIN",
+      "phase": "17",
+      "depends_on": [
+        "CORE-001",
+        "REGISTRY-001"
+      ],
+      "branch": "feat/FIN-ledger",
+      "verdicts": {},
+      "pr": null
+    },
+    "LEDGER-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/LEDGER-002.md",
+      "milestone": "FIN",
+      "phase": "17",
+      "depends_on": [
+        "LEDGER-001",
+        "BILL-002",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-ledger",
+      "verdicts": {},
+      "pr": null
+    },
+    "LEDGER-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/LEDGER-003.md",
+      "milestone": "FIN",
+      "phase": "17",
+      "depends_on": [
+        "LEDGER-002",
+        "PAY-002",
+        "ASSET-002"
+      ],
+      "branch": "feat/FIN-ledger",
+      "verdicts": {},
+      "pr": null
+    },
+    "LEDGER-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/LEDGER-004.md",
+      "milestone": "FIN",
+      "phase": "17",
+      "depends_on": [
+        "LEDGER-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-ledger",
+      "verdicts": {},
+      "pr": null
+    },
+    "BANKLINK-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BANKLINK-001.md",
+      "milestone": "FIN",
+      "phase": "18",
+      "depends_on": [
+        "CASH-001"
+      ],
+      "branch": "feat/FIN-banklink",
+      "verdicts": {},
+      "pr": null
+    },
+    "BANKLINK-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BANKLINK-002.md",
+      "milestone": "FIN",
+      "phase": "18",
+      "depends_on": [
+        "BANKLINK-001"
+      ],
+      "branch": "feat/FIN-banklink",
+      "verdicts": {},
+      "pr": null
+    },
+    "BANKLINK-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BANKLINK-003.md",
+      "milestone": "FIN",
+      "phase": "18",
+      "depends_on": [
+        "BANKLINK-002",
+        "CASH-003"
+      ],
+      "branch": "feat/FIN-banklink",
+      "verdicts": {},
+      "pr": null
+    },
+    "INVENTORY-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/INVENTORY-001.md",
+      "milestone": "FIN",
+      "phase": "19",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-inventory",
+      "verdicts": {},
+      "pr": null
+    },
+    "INVENTORY-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/INVENTORY-002.md",
+      "milestone": "FIN",
+      "phase": "19",
+      "depends_on": [
+        "INVENTORY-001",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-inventory",
+      "verdicts": {},
+      "pr": null
+    },
+    "INVENTORY-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/INVENTORY-003.md",
+      "milestone": "FIN",
+      "phase": "19",
+      "depends_on": [
+        "INVENTORY-002",
+        "BILL-002"
+      ],
+      "branch": "feat/FIN-inventory",
+      "verdicts": {},
+      "pr": null
+    },
+    "INVENTORY-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/INVENTORY-004.md",
+      "milestone": "FIN",
+      "phase": "19",
+      "depends_on": [
+        "INVENTORY-003",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-inventory",
+      "verdicts": {},
+      "pr": null
+    },
+    "BUDGET-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BUDGET-001.md",
+      "milestone": "FIN",
+      "phase": "20",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-budget",
+      "verdicts": {},
+      "pr": null
+    },
+    "BUDGET-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BUDGET-002.md",
+      "milestone": "FIN",
+      "phase": "20",
+      "depends_on": [
+        "BUDGET-001",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-budget",
+      "verdicts": {},
+      "pr": null
+    },
+    "BUDGET-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BUDGET-003.md",
+      "milestone": "FIN",
+      "phase": "20",
+      "depends_on": [
+        "BUDGET-002",
+        "INSIGHT-002"
+      ],
+      "branch": "feat/FIN-budget",
+      "verdicts": {},
+      "pr": null
+    },
+    "EXPORT-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/EXPORT-001.md",
+      "milestone": "FIN",
+      "phase": "21",
+      "depends_on": [
+        "LEDGER-002"
+      ],
+      "branch": "feat/FIN-export",
+      "verdicts": {},
+      "pr": null
+    },
+    "EXPORT-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/EXPORT-002.md",
+      "milestone": "FIN",
+      "phase": "21",
+      "depends_on": [
+        "EXPORT-001",
+        "FISC-002"
+      ],
+      "branch": "feat/FIN-export",
+      "verdicts": {},
+      "pr": null
+    },
+    "EXPORT-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/EXPORT-003.md",
+      "milestone": "FIN",
+      "phase": "21",
+      "depends_on": [
+        "EXPORT-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-export",
+      "verdicts": {},
+      "pr": null
+    },
+    "CLIENTPORTAL-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CLIENTPORTAL-001.md",
+      "milestone": "FIN",
+      "phase": "22",
+      "depends_on": [
+        "BILL-002",
+        "PARTY-001"
+      ],
+      "branch": "feat/FIN-clientportal",
+      "verdicts": {},
+      "pr": null
+    },
+    "CLIENTPORTAL-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CLIENTPORTAL-002.md",
+      "milestone": "FIN",
+      "phase": "22",
+      "depends_on": [
+        "CLIENTPORTAL-001",
+        "CASH-003"
+      ],
+      "branch": "feat/FIN-clientportal",
+      "verdicts": {},
+      "pr": null
+    },
+    "CLIENTPORTAL-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CLIENTPORTAL-003.md",
+      "milestone": "FIN",
+      "phase": "22",
+      "depends_on": [
+        "CLIENTPORTAL-002"
+      ],
+      "branch": "feat/FIN-clientportal",
+      "verdicts": {},
+      "pr": null
+    },
+    "MULTICURRENCY-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/MULTICURRENCY-001.md",
+      "milestone": "FIN",
+      "phase": "23",
+      "depends_on": [
+        "CORE-001",
+        "REGISTRY-001"
+      ],
+      "branch": "feat/FIN-multicurrency",
+      "verdicts": {},
+      "pr": null
+    },
+    "MULTICURRENCY-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/MULTICURRENCY-002.md",
+      "milestone": "FIN",
+      "phase": "23",
+      "depends_on": [
+        "MULTICURRENCY-001",
+        "LEDGER-002"
+      ],
+      "branch": "feat/FIN-multicurrency",
+      "verdicts": {},
+      "pr": null
+    },
+    "APPROVAL-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/APPROVAL-001.md",
+      "milestone": "FIN",
+      "phase": "24",
+      "depends_on": [
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-approval",
+      "verdicts": {},
+      "pr": null
+    },
+    "APPROVAL-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/APPROVAL-002.md",
+      "milestone": "FIN",
+      "phase": "24",
+      "depends_on": [
+        "APPROVAL-001",
+        "CASH-003"
+      ],
+      "branch": "feat/FIN-approval",
+      "verdicts": {},
+      "pr": null
     }
   }
 }
