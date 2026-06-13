@@ -113,6 +113,7 @@ import { parVendorsRoutes } from "./routes/parVendors"; // PAR-003: vendor/payee
 import { parSettingsRoutes } from "./routes/parSettings"; // PAR-003: org settings
 // FinDesk routes — CORE-002
 import { finMembersRoutes } from "./routes/finMembers"; // CORE-002: FinDesk members CRUD + invite
+import { finOrgRoutes } from "./routes/finOrg"; // CORE-003: org profile + invoice series
 // PAR Phase B routes
 import { parRoutes } from "./routes/par"; // PAR-101/102/103: request CRUD + line items + payee
 import { parAttachmentsRoutes } from "./routes/parAttachments"; // PAR-104: attachments upload/list/delete
@@ -338,6 +339,7 @@ app.route("/api/par", parTimelineRoutes);
 
 // FinDesk routes
 app.route("/api/fin/members", finMembersRoutes); // CORE-002: member CRUD + invite
+app.route("/api/fin", finOrgRoutes); // CORE-003: org profile + invoice series
 
 app.get("/api/health", async (c) => {
   try {

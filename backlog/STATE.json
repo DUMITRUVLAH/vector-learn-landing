@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "CORE-003",
-  "last_completed": "ITPARK-501",
-  "iterations": 182,
+  "current_item": null,
+  "last_completed": "CORE-003",
+  "iterations": 183,
   "last_run_at": "2026-06-13T00:00:00Z",
-  "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
+  "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) \u2014 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -2209,7 +2209,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2249,7 +2249,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical — allergies, immunization records, medication log",
+      "title": "Medical \u2014 allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -2878,8 +2878,8 @@
       }
     },
     "CORE-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CORE-003-profile-series.md",
       "milestone": "FIN",
@@ -2887,7 +2887,13 @@
       "depends_on": [
         "CORE-001"
       ],
-      "branch": "feat/FIN-core"
+      "branch": "feat/FIN-core",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "CORE-004": {
       "status": "pending",
