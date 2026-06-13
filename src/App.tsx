@@ -108,6 +108,9 @@ import ParDetailPage from "./pages/par/ParDetail";
 import ParAdmin from "./pages/par/ParAdmin";
 // PAR-117: Reports
 import { ParReports } from "./pages/par/ParReports";
+// CORE-004: FinDesk shell — /app/fin and sub-routes
+import { FinHome } from "./pages/fin/FinHome";
+import { FinCompany } from "./pages/fin/FinCompany";
 // ITPARK-101: Engagement list + detail
 import ItparkList from "./pages/app/fin/itpark/ItparkList";
 import ItparkDetail from "./pages/app/fin/itpark/ItparkDetail";
@@ -297,6 +300,11 @@ function Routes() {
   if (path.match(/^\/app\/fin\/itpark\/[^/]+$/)) return <ItparkDetail />;
   // ITPARK-101: /app/fin/itpark — lista dosarelor
   if (path.startsWith("/app/fin/itpark")) return <ItparkList />;
+  // CORE-004: FinDesk shell routes — must come AFTER the more specific /app/fin/itpark/* above
+  if (path === "/app/fin/company" || path.startsWith("/app/fin/company/")) return <FinCompany />;
+  if (path === "/app/fin" || path === "/app/fin/") return <FinHome />;
+  // CORE-004: catch-all for /app/fin/* routes not yet built — render FinHome as graceful fallback
+  if (path.startsWith("/app/fin/")) return <FinHome />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app/reports/kpi")) return <KpiDashboardPage />;
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
