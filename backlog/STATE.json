@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
+  "last_completed": "ITPARK-701",
+  "iterations": 189,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "PAR",
@@ -2842,6 +2842,68 @@
       "milestone": "POLISH",
       "phase": "1",
       "depends_on": []
+    },
+    "ITPARK-601": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-601.md",
+      "milestone": "ITPARK",
+      "phase": "G",
+      "depends_on": ["ITPARK-502"],
+      "branch": "feat/ITPARK-faza-G-export",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/152",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
+    },
+    "ITPARK-602": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-602.md",
+      "milestone": "ITPARK",
+      "phase": "G",
+      "depends_on": ["ITPARK-601"],
+      "branch": "feat/ITPARK-faza-G-export",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/152",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
+    },
+    "ITPARK-701": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-701.md",
+      "milestone": "ITPARK",
+      "phase": "H",
+      "depends_on": ["ITPARK-601"],
+      "branch": "feat/ITPARK-faza-H-ai-polish",
+      "pr": "",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
+    },
+    "ITPARK-702": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-702.md",
+      "milestone": "ITPARK",
+      "phase": "H",
+      "depends_on": ["ITPARK-701"],
+      "branch": "",
+      "pr": ""
     }
   }
 }
