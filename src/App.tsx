@@ -94,6 +94,11 @@ import { ExportPage } from "./pages/app/ExportPage";
 import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
 import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+// ITPARK-101: Engagement list + detail
+import ItparkList from "./pages/app/fin/itpark/ItparkList";
+import ItparkDetail from "./pages/app/fin/itpark/ItparkDetail";
+// ITPARK-102: Create wizard
+import ItparkWizard from "./pages/app/fin/itpark/ItparkWizard";
 // PAR-105: Create wizard
 import { ParCreateWizard } from "./pages/par/ParCreateWizard";
 // PAR-106: Dashboard + list
@@ -252,6 +257,12 @@ function Routes() {
   if (path.startsWith("/app/kinder/compliance")) return <KinderCompliancePage />;
   // KINDER-007: incident/accident reports + parent acknowledgment
   if (path.startsWith("/app/kinder/incidents")) return <KinderIncidentsPage />;
+  // ITPARK-102: /app/fin/itpark/new — wizard creare dosar (must come before :id catch-all)
+  if (path === "/app/fin/itpark/new") return <ItparkWizard />;
+  // ITPARK-101: /app/fin/itpark/:id — dosar detaliu (before list)
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+$/)) return <ItparkDetail />;
+  // ITPARK-101: /app/fin/itpark — lista dosarelor
+  if (path.startsWith("/app/fin/itpark")) return <ItparkList />;
   // PAR-105: /app/par/new — create wizard (must come before /app/par list)
   if (path.startsWith("/app/par/new")) return <ParCreateWizard />;
   // PAR-108: /app/par/inbox — approver inbox (before /app/par generic)

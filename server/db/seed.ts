@@ -9,6 +9,12 @@ import {
   parBudgetCodes,
   parDoaMatrix,
 } from "./schema/par";
+import {
+  itparkCaemCodes,
+  itparkEngagements,
+  itparkRevenueLines,
+  itparkSettings,
+} from "./schema/itpark";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -246,6 +252,107 @@ async function seed() {
     console.log(`   DOA matrix: ${deptAtic ? 6 : 0} rules seeded`);
   } else {
     console.log(`⚠️  PAR demo tenant already exists (${existingPar.id}). Skipping.`);
+  }
+
+  // ── ITPARK-001: Seed CAEM codes + Vector Academy demo engagement ─────────────
+  const ITPARK_CAEM_EFFECTIVE = "2024-01-01";
+  const existingCaem = await db.query.itparkCaemCodes.findFirst();
+  if (!existingCaem) {
+    // Seed lista oficială MITP (CORE §4) — toate codurile cu eligible=true
+    await db.insert(itparkCaemCodes).values([
+      { code: "62.01", label: "Realizarea de software la comandă", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "58.21", label: "Editare jocuri de calculator", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "58.29", label: "Editare alte produse software", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "62.02", label: "Consultanță în tehnologia informației", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "62.03", label: "Managementul mijloacelor de calcul", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "62.09", label: "Alte activități de servicii în tehnologia informației", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "63.11", label: "Prelucrarea datelor, administrarea paginilor web (hosting)", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "63.12", label: "Activități ale portalurilor web", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "85.59", label: "Alte forme de învățământ (instruire în domeniul digital)", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "72.19", label: "Cercetare-dezvoltare în alte domenii ale științelor naturale și tehnice (IT)", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "72.11", label: "Cercetare-dezvoltare în biotehnologie", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "26.11", label: "Fabricarea componentelor electronice", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "59.12", label: "Activități post-producție cinematografică și video (tehnice)", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "59.20", label: "Activități de înregistrare a sunetului și editare muzicală (tehnice digitale)", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "74.10", label: "Activități de design specializat", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "78.30", label: "Alte servicii de asigurare a resurselor umane (IT)", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+      { code: "82.20", label: "Activități ale centrelor de telecomunicații", eligible: true, effectiveFrom: ITPARK_CAEM_EFFECTIVE },
+    ]);
+    console.log(`✅ ITPARK CAEM codes seeded (17 coduri eligibile)`);
+  } else {
+    console.log(`⚠️  ITPARK CAEM codes already exist. Skipping.`);
+  }
+
+  // Vector Academy SRL — dosar demo 2025 (fixture de aur: 1,971,197.19 MDL eligibil / 2,227,917.19 total / 88.48%)
+  const ITPARK_SLUG = "demo-vector-academy-itpark";
+  const existingItparkTenant = await db.query.tenants.findFirst({ where: eq(tenants.slug, ITPARK_SLUG) });
+  if (!existingItparkTenant) {
+    const [itparkTenant] = await db
+      .insert(tenants)
+      .values({ name: "Vector Academy SRL", slug: ITPARK_SLUG, plan: "growth" })
+      .returning();
+
+    const [itparkAdmin] = await db
+      .insert(users)
+      .values([
+        { tenantId: itparkTenant.id, email: "contabil@vectoracademy.demo.io", passwordHash: demoPasswordHash, name: "Elena Marin", role: "admin" },
+      ])
+      .returning();
+
+    // Settings: prag 70%, toleranță 2, MDL
+    await db.insert(itparkSettings).values({
+      tenantId: itparkTenant.id,
+      eligibilityThresholdPct: "70.00",
+      toleranceMonths: 2,
+      defaultCurrency: "MDL",
+      defaultAuditFirm: "Audit Moldova SRL",
+    });
+
+    // Dosar demo: Vector Academy SRL 2025
+    const [engagement] = await db.insert(itparkEngagements).values({
+      tenantId: itparkTenant.id,
+      residentName: "Vector Academy SRL",
+      idno: "1024600035737",
+      mitpContractNo: "2368",
+      mitpContractDate: "2024-07-18",
+      legalAddress: "mun. Chișinău, str. Ismail 90/1, of. 25",
+      vatPayer: false,
+      periodStart: "2025-01-01",
+      periodEnd: "2025-12-31",
+      reportingYear: 2025,
+      auditFirmName: "Audit Moldova SRL",
+      status: "in_progress",
+      subcontractorCostsCents: 0,
+      adjustedRevenueCents: 0,
+    }).returning();
+
+    // Subset reprezentativ de linii de venit (fixture de aur parțial)
+    // Total eligibile: 62.02 = 9,800,000 cents (98,000 MDL) + 85.59 = 187,319,719 cents (1,873,197.19 MDL) = 197,119,719 cents
+    // Total neeligibile: 25,672,000 cents (256,720 MDL) — servicii non-CAEM
+    // Total: 222,791,719 cents (2,227,917.19 MDL)
+    // Pondere eligibile: 197,119,719 / 222,791,719 = 88.48%
+    await db.insert(itparkRevenueLines).values([
+      // Cod 62.02 — Consultanță IT (eligibil)
+      { tenantId: itparkTenant.id, engagementId: engagement.id, rowNo: 1, clientName: "Softline International", documentRefs: "Factura EBC000276700 din 15.01.25", serviceDescription: "Consultanță în tehnologia informației — implementare sistem CRM", caemCode: "62.02", amountCents: 3200000, isEligible: true, month: 1 },
+      { tenantId: itparkTenant.id, engagementId: engagement.id, rowNo: 2, clientName: "Orange Moldova SA", documentRefs: "Factura EBC000276720 din 28.02.25", serviceDescription: "Consultanță IT — arhitectură cloud", caemCode: "62.02", amountCents: 2800000, isEligible: true, month: 2 },
+      { tenantId: itparkTenant.id, engagementId: engagement.id, rowNo: 3, clientName: "BancTransilvania SA", documentRefs: "Factura EBC000276745 din 31.03.25", serviceDescription: "Consultanță IT — securitate cibernetică", caemCode: "62.02", amountCents: 3800000, isEligible: true, month: 3 },
+      // Cod 85.59 — Instruire digitală (eligibil) — linii principale
+      { tenantId: itparkTenant.id, engagementId: engagement.id, rowNo: 4, clientName: "Persoane Fizice — cursuri programare ian-mar", documentRefs: "Facturi grupate ian-mar 2025", serviceDescription: "Instruire în domeniul digital — programare web JavaScript/React", caemCode: "85.59", amountCents: 52800000, isEligible: true, month: null },
+      { tenantId: itparkTenant.id, engagementId: engagement.id, rowNo: 5, clientName: "Persoane Fizice — cursuri programare apr-iun", documentRefs: "Facturi grupate apr-iun 2025", serviceDescription: "Instruire în domeniul digital — programare Python/AI", caemCode: "85.59", amountCents: 48900000, isEligible: true, month: null },
+      { tenantId: itparkTenant.id, engagementId: engagement.id, rowNo: 6, clientName: "Persoane Fizice — cursuri programare iul-sep", documentRefs: "Facturi grupate iul-sep 2025", serviceDescription: "Instruire în domeniul digital — mobile development Flutter", caemCode: "85.59", amountCents: 44700000, isEligible: true, month: null },
+      { tenantId: itparkTenant.id, engagementId: engagement.id, rowNo: 7, clientName: "Persoane Fizice — cursuri programare oct-dec", documentRefs: "Facturi grupate oct-dec 2025", serviceDescription: "Instruire în domeniul digital — DevOps & Cloud", caemCode: "85.59", amountCents: 40619719, isEligible: true, month: null },
+      // Venituri neeligibile (non-CAEM) — taxate standard
+      { tenantId: itparkTenant.id, engagementId: engagement.id, rowNo: 8, clientName: "Diverse — chirie spațiu", documentRefs: "Diverse facturi chirie 2025", serviceDescription: "Închiriere săli de curs terților", caemCode: "68.20", amountCents: 12000000, isEligible: false, month: null },
+      { tenantId: itparkTenant.id, engagementId: engagement.id, rowNo: 9, clientName: "Diverse — vânzare materiale", documentRefs: "Diverse facturi materiale 2025", serviceDescription: "Vânzare materiale didactice fizice", caemCode: "47.11", amountCents: 8100000, isEligible: false, month: null },
+      { tenantId: itparkTenant.id, engagementId: engagement.id, rowNo: 10, clientName: "Restaurant Corp SRL", documentRefs: "Factura EBC000276766 din 27.10.25", serviceDescription: "Consultanță organizare evenimente corporative", caemCode: "56.21", amountCents: 5572000, isEligible: false, month: 10 },
+    ]);
+
+    console.log(`✅ ITPARK demo tenant created: Vector Academy SRL`);
+    console.log(`   Contabil: ${itparkAdmin.email}`);
+    console.log(`   Dosar: Vector Academy 2025, IDNO 1024600035737`);
+    console.log(`   Linii de venit: 10 (fixture de aur parțial — pondere ≈88.48%)`);
+  } else {
+    console.log(`⚠️  ITPARK demo tenant (Vector Academy) already exists. Skipping.`);
   }
 
   console.log(`\n📌 Demo credentials:`);
