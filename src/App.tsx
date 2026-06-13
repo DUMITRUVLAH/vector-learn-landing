@@ -111,6 +111,8 @@ import { ParReports } from "./pages/par/ParReports";
 // CORE-004: FinDesk shell — /app/fin and sub-routes
 import { FinHome } from "./pages/fin/FinHome";
 import { FinCompany } from "./pages/fin/FinCompany";
+// CORE-005: FinDesk onboarding wizard
+import { FinOnboarding } from "./pages/fin/FinOnboarding";
 // ITPARK-101: Engagement list + detail
 import ItparkList from "./pages/app/fin/itpark/ItparkList";
 import ItparkDetail from "./pages/app/fin/itpark/ItparkDetail";
@@ -302,6 +304,8 @@ function Routes() {
   if (path.startsWith("/app/fin/itpark")) return <ItparkList />;
   // CORE-004: FinDesk shell routes — must come AFTER the more specific /app/fin/itpark/* above
   if (path === "/app/fin/company" || path.startsWith("/app/fin/company/")) return <FinCompany />;
+  // CORE-005: FinDesk onboarding wizard
+  if (path === "/app/fin/onboarding" || path.startsWith("/app/fin/onboarding/")) return <FinOnboarding />;
   if (path === "/app/fin" || path === "/app/fin/") return <FinHome />;
   // CORE-004: catch-all for /app/fin/* routes not yet built — render FinHome as graceful fallback
   if (path.startsWith("/app/fin/")) return <FinHome />;

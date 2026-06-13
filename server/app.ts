@@ -111,9 +111,10 @@ import { parDepartmentsRoutes } from "./routes/parDepartments"; // PAR-003: depa
 import { parProjectsRoutes } from "./routes/parProjects"; // PAR-003: projects/programs
 import { parVendorsRoutes } from "./routes/parVendors"; // PAR-003: vendor/payee registry
 import { parSettingsRoutes } from "./routes/parSettings"; // PAR-003: org settings
-// FinDesk routes — CORE-002
+// FinDesk routes — CORE-002..005
 import { finMembersRoutes } from "./routes/finMembers"; // CORE-002: FinDesk members CRUD + invite
 import { finOrgRoutes } from "./routes/finOrg"; // CORE-003: org profile + invoice series
+import { finOnboardingRoutes } from "./routes/finOnboarding"; // CORE-005: onboarding wizard
 // ITPARK routes — Moldova IT Park Audit Toolkit (ITPARK-301+)
 import { itparkCalcRoutes } from "./routes/itparkCalc"; // ITPARK-301: computeAnexa3 endpoint
 import { itparkSettingsRoutes } from "./routes/itparkSettings"; // ITPARK-003: settings
@@ -122,6 +123,7 @@ import { itparkEngagementsRoutes } from "./routes/itparkEngagements"; // ITPARK-
 import { itparkLinesRoutes } from "./routes/itparkLines"; // ITPARK-201: revenue lines CRUD
 import { itparkImportRoutes } from "./routes/itparkImport"; // ITPARK-202: import linii
 import { itparkDocsRoutes } from "./routes/itparkDocs"; // ITPARK-501: packet documents CRUD
+import { itparkAiRoutes } from "./routes/itparkAi"; // ITPARK-701: AI CAEM suggest + invoice extract
 // PAR Phase B routes
 import { parRoutes } from "./routes/par"; // PAR-101/102/103: request CRUD + line items + payee
 import { parAttachmentsRoutes } from "./routes/parAttachments"; // PAR-104: attachments upload/list/delete
@@ -347,6 +349,7 @@ app.route("/api/par", parTimelineRoutes);
 
 // FinDesk routes
 app.route("/api/fin/members", finMembersRoutes); // CORE-002: member CRUD + invite
+app.route("/api/fin/onboarding", finOnboardingRoutes); // CORE-005: onboarding wizard
 app.route("/api/fin", finOrgRoutes); // CORE-003: org profile + invoice series
 
 
@@ -358,6 +361,7 @@ app.route("/api/itpark/lines", itparkLinesRoutes); // ITPARK-201: revenue lines
 app.route("/api/itpark/import", itparkImportRoutes); // ITPARK-202: import linii
 app.route("/api/itpark/calc", itparkCalcRoutes); // ITPARK-301: computeAnexa3 endpoint
 app.route("/api/itpark/docs", itparkDocsRoutes); // ITPARK-501: packet documents CRUD
+app.route("/api/itpark/ai", itparkAiRoutes); // ITPARK-701: AI CAEM suggest + invoice extract
 app.get("/api/health", async (c) => {
   try {
     await db.execute(sql`SELECT 1 as ping`);
