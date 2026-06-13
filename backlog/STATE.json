@@ -2852,6 +2852,7 @@
       "phase": "A",
       "depends_on": [],
       "branch": "feat/ITPARK-faza-A-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/145",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
@@ -2868,6 +2869,7 @@
       "phase": "A",
       "depends_on": ["ITPARK-001"],
       "branch": "feat/ITPARK-faza-A-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/145",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
@@ -2884,6 +2886,7 @@
       "phase": "A",
       "depends_on": ["ITPARK-001"],
       "branch": "feat/ITPARK-faza-A-fundatie",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/145",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
