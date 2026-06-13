@@ -4,7 +4,7 @@
   "last_completed": "REGISTRY-002",
   "iterations": 192,
   "last_run_at": "2026-06-14T00:16:00Z",
-  "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) \u2014 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
+  "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -2209,7 +2209,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2249,7 +2249,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical \u2014 allergies, immunization records, medication log",
+      "title": "Medical — allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -4057,6 +4057,361 @@
         "CORE-004"
       ],
       "branch": "feat/FIN-trust",
+      "verdicts": {},
+      "pr": null
+    },
+    "LEDGER-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/LEDGER-001.md",
+      "milestone": "FIN",
+      "phase": "17",
+      "depends_on": [
+        "CORE-001",
+        "REGISTRY-001"
+      ],
+      "branch": "feat/FIN-ledger",
+      "verdicts": {},
+      "pr": null
+    },
+    "LEDGER-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/LEDGER-002.md",
+      "milestone": "FIN",
+      "phase": "17",
+      "depends_on": [
+        "LEDGER-001",
+        "BILL-002",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-ledger",
+      "verdicts": {},
+      "pr": null
+    },
+    "LEDGER-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/LEDGER-003.md",
+      "milestone": "FIN",
+      "phase": "17",
+      "depends_on": [
+        "LEDGER-002",
+        "PAY-002",
+        "ASSET-002"
+      ],
+      "branch": "feat/FIN-ledger",
+      "verdicts": {},
+      "pr": null
+    },
+    "LEDGER-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/LEDGER-004.md",
+      "milestone": "FIN",
+      "phase": "17",
+      "depends_on": [
+        "LEDGER-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-ledger",
+      "verdicts": {},
+      "pr": null
+    },
+    "BANKLINK-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BANKLINK-001.md",
+      "milestone": "FIN",
+      "phase": "18",
+      "depends_on": [
+        "CASH-001"
+      ],
+      "branch": "feat/FIN-banklink",
+      "verdicts": {},
+      "pr": null
+    },
+    "BANKLINK-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BANKLINK-002.md",
+      "milestone": "FIN",
+      "phase": "18",
+      "depends_on": [
+        "BANKLINK-001"
+      ],
+      "branch": "feat/FIN-banklink",
+      "verdicts": {},
+      "pr": null
+    },
+    "BANKLINK-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BANKLINK-003.md",
+      "milestone": "FIN",
+      "phase": "18",
+      "depends_on": [
+        "BANKLINK-002",
+        "CASH-003"
+      ],
+      "branch": "feat/FIN-banklink",
+      "verdicts": {},
+      "pr": null
+    },
+    "INVENTORY-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/INVENTORY-001.md",
+      "milestone": "FIN",
+      "phase": "19",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-inventory",
+      "verdicts": {},
+      "pr": null
+    },
+    "INVENTORY-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/INVENTORY-002.md",
+      "milestone": "FIN",
+      "phase": "19",
+      "depends_on": [
+        "INVENTORY-001",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-inventory",
+      "verdicts": {},
+      "pr": null
+    },
+    "INVENTORY-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/INVENTORY-003.md",
+      "milestone": "FIN",
+      "phase": "19",
+      "depends_on": [
+        "INVENTORY-002",
+        "BILL-002"
+      ],
+      "branch": "feat/FIN-inventory",
+      "verdicts": {},
+      "pr": null
+    },
+    "INVENTORY-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/INVENTORY-004.md",
+      "milestone": "FIN",
+      "phase": "19",
+      "depends_on": [
+        "INVENTORY-003",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-inventory",
+      "verdicts": {},
+      "pr": null
+    },
+    "BUDGET-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BUDGET-001.md",
+      "milestone": "FIN",
+      "phase": "20",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-budget",
+      "verdicts": {},
+      "pr": null
+    },
+    "BUDGET-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BUDGET-002.md",
+      "milestone": "FIN",
+      "phase": "20",
+      "depends_on": [
+        "BUDGET-001",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-budget",
+      "verdicts": {},
+      "pr": null
+    },
+    "BUDGET-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/BUDGET-003.md",
+      "milestone": "FIN",
+      "phase": "20",
+      "depends_on": [
+        "BUDGET-002",
+        "INSIGHT-002"
+      ],
+      "branch": "feat/FIN-budget",
+      "verdicts": {},
+      "pr": null
+    },
+    "EXPORT-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/EXPORT-001.md",
+      "milestone": "FIN",
+      "phase": "21",
+      "depends_on": [
+        "LEDGER-002"
+      ],
+      "branch": "feat/FIN-export",
+      "verdicts": {},
+      "pr": null
+    },
+    "EXPORT-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/EXPORT-002.md",
+      "milestone": "FIN",
+      "phase": "21",
+      "depends_on": [
+        "EXPORT-001",
+        "FISC-002"
+      ],
+      "branch": "feat/FIN-export",
+      "verdicts": {},
+      "pr": null
+    },
+    "EXPORT-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/EXPORT-003.md",
+      "milestone": "FIN",
+      "phase": "21",
+      "depends_on": [
+        "EXPORT-002",
+        "CORE-004"
+      ],
+      "branch": "feat/FIN-export",
+      "verdicts": {},
+      "pr": null
+    },
+    "CLIENTPORTAL-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CLIENTPORTAL-001.md",
+      "milestone": "FIN",
+      "phase": "22",
+      "depends_on": [
+        "BILL-002",
+        "PARTY-001"
+      ],
+      "branch": "feat/FIN-clientportal",
+      "verdicts": {},
+      "pr": null
+    },
+    "CLIENTPORTAL-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CLIENTPORTAL-002.md",
+      "milestone": "FIN",
+      "phase": "22",
+      "depends_on": [
+        "CLIENTPORTAL-001",
+        "CASH-003"
+      ],
+      "branch": "feat/FIN-clientportal",
+      "verdicts": {},
+      "pr": null
+    },
+    "CLIENTPORTAL-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CLIENTPORTAL-003.md",
+      "milestone": "FIN",
+      "phase": "22",
+      "depends_on": [
+        "CLIENTPORTAL-002"
+      ],
+      "branch": "feat/FIN-clientportal",
+      "verdicts": {},
+      "pr": null
+    },
+    "MULTICURRENCY-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/MULTICURRENCY-001.md",
+      "milestone": "FIN",
+      "phase": "23",
+      "depends_on": [
+        "CORE-001",
+        "REGISTRY-001"
+      ],
+      "branch": "feat/FIN-multicurrency",
+      "verdicts": {},
+      "pr": null
+    },
+    "MULTICURRENCY-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/MULTICURRENCY-002.md",
+      "milestone": "FIN",
+      "phase": "23",
+      "depends_on": [
+        "MULTICURRENCY-001",
+        "LEDGER-002"
+      ],
+      "branch": "feat/FIN-multicurrency",
+      "verdicts": {},
+      "pr": null
+    },
+    "APPROVAL-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/APPROVAL-001.md",
+      "milestone": "FIN",
+      "phase": "24",
+      "depends_on": [
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-approval",
+      "verdicts": {},
+      "pr": null
+    },
+    "APPROVAL-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/APPROVAL-002.md",
+      "milestone": "FIN",
+      "phase": "24",
+      "depends_on": [
+        "APPROVAL-001",
+        "CASH-003"
+      ],
+      "branch": "feat/FIN-approval",
       "verdicts": {},
       "pr": null
     }
