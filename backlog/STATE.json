@@ -3183,13 +3183,8 @@
       "depends_on": [
         "ITPARK-403"
       ],
-<<<<<<< Updated upstream
       "branch": "feat/ITPARK-faza-F-scrisori",
-      "pr": "TBD",
-=======
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/151",
-      "branch": "feat/ITPARK-faza-F-scrisori",
->>>>>>> Stashed changes
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
@@ -3265,7 +3260,7 @@
         "ITPARK-601"
       ],
       "branch": "feat/ITPARK-faza-H-ai-polish",
-      "pr": "",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/153",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
