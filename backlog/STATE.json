@@ -3073,16 +3073,21 @@
       }
     },
     "ITPARK-403": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-403-anexa4-consistency.md",
       "milestone": "ITPARK",
       "phase": "E",
-      "depends_on": [
-        "ITPARK-401",
-        "ITPARK-402"
-      ]
+      "depends_on": ["ITPARK-401", "ITPARK-402"],
+      "branch": "feat/ITPARK-faza-E-anexe",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/149",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "OK"
+      }
     },
     "ITPARK-501": {
       "status": "pending",
