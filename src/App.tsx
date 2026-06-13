@@ -94,6 +94,8 @@ import { ExportPage } from "./pages/app/ExportPage";
 import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
 import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+// AGREEMENT-003: FinDesk contracts
+import { AgreementsPage } from "./pages/fin/AgreementsPage";
 // PAR-105: Create wizard
 import { ParCreateWizard } from "./pages/par/ParCreateWizard";
 // PAR-106: Dashboard + list
@@ -252,6 +254,8 @@ function Routes() {
   if (path.startsWith("/app/kinder/compliance")) return <KinderCompliancePage />;
   // KINDER-007: incident/accident reports + parent acknowledgment
   if (path.startsWith("/app/kinder/incidents")) return <KinderIncidentsPage />;
+  // AGREEMENT-003: /app/fin/agreements — FinDesk contracts page
+  if (path.startsWith("/app/fin/agreements")) return <AgreementsPage />;
   // PAR-105: /app/par/new — create wizard (must come before /app/par list)
   if (path.startsWith("/app/par/new")) return <ParCreateWizard />;
   // PAR-108: /app/par/inbox — approver inbox (before /app/par generic)
