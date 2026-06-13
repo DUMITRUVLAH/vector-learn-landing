@@ -1,11 +1,13 @@
 /**
  * ITPARK-002: Nomenclator CAEM versionat — API read
- * CORE: backlog/fin/itpark/ITPARK-CORE.md §4
+ * ITPARK-203: GET /api/itpark/caem-codes/suggest?q=:text → sugestie CAEM deterministă
+ * CORE: backlog/fin/itpark/ITPARK-CORE.md §4 + §6
  * Mounted in server/app.ts: app.route("/api/itpark/caem-codes", itparkCaemRoutes)
  *
  * Routes:
- *   GET /api/itpark/caem-codes          → lista coduri CAEM active (la data curentă)
- *   GET /api/itpark/caem-codes/:code    → detalii cod specific
+ *   GET /api/itpark/caem-codes              → lista coduri CAEM active (la data curentă)
+ *   GET /api/itpark/caem-codes/suggest?q=  → sugestie CAEM deterministă (ITPARK-203)
+ *   GET /api/itpark/caem-codes/:code        → detalii cod specific
  *
  * Query params:
  *   ?eligible=true|false   → filtrare după eligibilitate
@@ -16,6 +18,8 @@ import { eq, lte, ilike, or, and } from "drizzle-orm";
 import { db } from "../db/client";
 import { itparkCaemCodes } from "../db/schema/itpark";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+// ITPARK-203: helper determinist (config-driven, nu scattered literals)
+import { suggestCaem } from "../../src/lib/itpark/caemSuggest";
 
 export const itparkCaemRoutes = new Hono<{ Variables: AuthVariables }>();
 itparkCaemRoutes.use("*", requireAuth);
@@ -74,6 +78,15 @@ itparkCaemRoutes.get("/", async (c) => {
     .where(and(...conditions));
 
   return c.json({ caemCodes: rows });
+});
+
+// ─── GET /suggest?q=:text — sugestie CAEM deterministă (ITPARK-203) ─────────
+// Sugestie ONLY — nu suprascrie cod manual. Config-driven via CAEM_RULES.
+// Răspuns: { suggestion: { code, confidence, reason } | null }
+itparkCaemRoutes.get("/suggest", (c) => {
+  const q = c.req.query("q") ?? "";
+  const suggestion = suggestCaem(q);
+  return c.json({ suggestion });
 });
 
 // GET /api/itpark/caem-codes/:code

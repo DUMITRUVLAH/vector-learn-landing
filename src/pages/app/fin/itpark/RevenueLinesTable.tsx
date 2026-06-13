@@ -21,7 +21,7 @@ import {
   type RevenueLine,
   type RevenueLineWrite,
 } from "../../../../lib/api/itparkLines";
-import { fetchCaemCodes, isEligibleCaemLocal, type CaemCode } from "../../../../lib/api/itparkCaem";
+import { fetchCaemCodes, isEligibleCaemLocal, suggestCaem, type CaemCode } from "../../../../lib/api/itparkCaem";
 import RevenueImportDialog from "./RevenueImportDialog";
 
 // ─── Month labels ─────────────────────────────────────────────────────────────
@@ -85,9 +85,18 @@ interface RowEditorProps {
 }
 
 function RowEditor({ row, caemCodes, onChange, onSave, onCancel, saving }: RowEditorProps) {
+  // ITPARK-203: sugestie CAEM deterministă din serviceDescription
+  const suggestion = row.caemCode ? null : suggestCaem(row.serviceDescription);
+
   function handleCaemChange(code: string) {
     const eligible = isEligibleCaemLocal(code, caemCodes);
     onChange({ caemCode: code, isEligible: eligible, isEligibleOverridden: false });
+  }
+
+  function applySuggestion() {
+    if (!suggestion) return;
+    const eligible = isEligibleCaemLocal(suggestion.code, caemCodes);
+    onChange({ caemCode: suggestion.code, isEligible: eligible, isEligibleOverridden: false });
   }
 
   function handleEligibleToggle() {
@@ -148,6 +157,21 @@ function RowEditor({ row, caemCodes, onChange, onSave, onCancel, saving }: RowEd
             </option>
           ))}
         </select>
+        {/* ITPARK-203: sugestie deterministă — sugestie ONLY, nu override */}
+        {suggestion && (
+          <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+            <span>Sugestie:</span>
+            <button
+              type="button"
+              onClick={applySuggestion}
+              aria-label={`Aplică sugestia cod CAEM ${suggestion.code} (${suggestion.reason})`}
+              className="font-mono text-primary underline underline-offset-2 hover:no-underline"
+            >
+              {suggestion.code}
+            </button>
+            <span className="text-xs opacity-60">({Math.round(suggestion.confidence * 100)}%)</span>
+          </div>
+        )}
       </td>
       <td className="px-2 py-2 text-right">
         <input

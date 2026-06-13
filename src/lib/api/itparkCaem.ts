@@ -1,8 +1,11 @@
 /**
  * ITPARK-002: Client API pentru nomenclatorul CAEM
- * CORE: backlog/fin/itpark/ITPARK-CORE.md §4
+ * ITPARK-203: suggestCaemApi(q) — sugestie CAEM via server (+ local fallback)
+ * CORE: backlog/fin/itpark/ITPARK-CORE.md §4 + §6
  * Codurile vin din API — NICIODATĂ hardcodate în .tsx
  */
+// Re-export helper-ul local pentru utilizare client-side fără network request
+export { suggestCaem, type CaemSuggestion } from "../itpark/caemSuggest";
 
 export interface CaemCode {
   id: string;
@@ -57,4 +60,17 @@ export async function fetchCaemCode(code: string): Promise<CaemCode | null> {
 export function isEligibleCaemLocal(code: string, caemCodes: CaemCode[]): boolean {
   const found = caemCodes.find((c) => c.code === code);
   return found?.eligible ?? false;
+}
+
+/**
+ * suggestCaemApi(q) — sugestie CAEM via server endpoint (ITPARK-203)
+ * Returnează sugestia sau null. Sugestie ONLY — nu suprascrie cod manual.
+ */
+export async function suggestCaemApi(q: string): Promise<import("../itpark/caemSuggest").CaemSuggestion | null> {
+  if (!q.trim()) return null;
+  const url = `/api/itpark/caem-codes/suggest?q=${encodeURIComponent(q)}`;
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) return null;
+  const data = await res.json() as { suggestion: import("../itpark/caemSuggest").CaemSuggestion | null };
+  return data.suggestion;
 }

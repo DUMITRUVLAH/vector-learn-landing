@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "ITPARK-203",
-  "last_completed": "ITPARK-202",
-  "iterations": 174,
+  "current_item": "ITPARK-301",
+  "last_completed": "ITPARK-203",
+  "iterations": 175,
   "last_run_at": "2026-06-13T00:00:00Z",
   "milestone_status": "ITPARK (Moldova IT Park Audit Toolkit) Phase B — Engagement CRUD + Wizard. CORE: backlog/fin/itpark/ITPARK-CORE.md. Driver: backlog/fin/itpark/BUILD-SEQUENCE.md. Phase B branch: feat/ITPARK-faza-B-dosar.",
   "active_milestone": "ITPARK",
@@ -2959,14 +2959,20 @@
       }
     },
     "ITPARK-203": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-203-caem-suggest.md",
       "milestone": "ITPARK",
       "phase": "C",
       "depends_on": ["ITPARK-201", "ITPARK-002"],
-      "branch": "feat/ITPARK-faza-C-venit"
+      "branch": "feat/ITPARK-faza-C-venit",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "ITPARK-301": {
       "status": "pending",
