@@ -22,6 +22,7 @@ import {
   type RevenueLineWrite,
 } from "../../../../lib/api/itparkLines";
 import { fetchCaemCodes, isEligibleCaemLocal, type CaemCode } from "../../../../lib/api/itparkCaem";
+import RevenueImportDialog from "./RevenueImportDialog";
 
 // ─── Month labels ─────────────────────────────────────────────────────────────
 
@@ -224,6 +225,7 @@ export default function RevenueLinesTable({ engagementId }: RevenueLinesTablePro
   const [editRow, setEditRow] = useState<EditingRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   // Totaluri live
   const totalCents = lines.reduce((s, l) => s + l.amountCents, 0);
@@ -334,22 +336,49 @@ export default function RevenueLinesTable({ engagementId }: RevenueLinesTablePro
 
   return (
     <div className="space-y-4">
+      {/* Import dialog */}
+      {showImportDialog && (
+        <RevenueImportDialog
+          engagementId={engagementId}
+          onImported={(count) => {
+            // Reîncarcă lista după import
+            listLines(engagementId)
+              .then(setLines)
+              .catch(console.error);
+            setShowImportDialog(false);
+          }}
+          onClose={() => setShowImportDialog(false)}
+        />
+      )}
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="text-sm text-muted-foreground">
           {lines.length} {lines.length === 1 ? "linie" : "linii"}
         </div>
-        <button
-          onClick={startNew}
-          disabled={editingId !== null}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed min-h-[36px]"
-          aria-label="Adaugă linie nouă"
-        >
-          <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Linie nouă
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowImportDialog(true)}
+            disabled={editingId !== null}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-60 disabled:cursor-not-allowed min-h-[36px]"
+            aria-label="Importă linii din clipboard, CSV sau facturi"
+          >
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Importă
+          </button>
+          <button
+            onClick={startNew}
+            disabled={editingId !== null}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed min-h-[36px]"
+            aria-label="Adaugă linie nouă"
+          >
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Linie nouă
+          </button>
+        </div>
       </div>
 
       {/* Table */}
