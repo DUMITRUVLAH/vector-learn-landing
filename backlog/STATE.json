@@ -3073,8 +3073,8 @@
       }
     },
     "ITPARK-403": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-403-anexa4-consistency.md",
       "milestone": "ITPARK",
@@ -3082,18 +3082,34 @@
       "depends_on": [
         "ITPARK-401",
         "ITPARK-402"
-      ]
+      ],
+      "branch": "feat/ITPARK-faza-F-scrisori",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/149",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "ITPARK-501": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-501-confirmation-letters.md",
       "milestone": "ITPARK",
       "phase": "F",
       "depends_on": [
         "ITPARK-403"
-      ]
+      ],
+      "branch": "feat/ITPARK-faza-F-scrisori",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/151",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "ITPARK-502": {
       "status": "done",
@@ -3106,7 +3122,7 @@
         "ITPARK-501"
       ],
       "branch": "feat/ITPARK-faza-F-scrisori",
-      "pr": "TBD",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/151",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
