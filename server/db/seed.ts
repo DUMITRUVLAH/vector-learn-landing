@@ -9,6 +9,7 @@ import {
   parBudgetCodes,
   parDoaMatrix,
 } from "./schema/par";
+import { finParties, finPartyContacts } from "./schema/finParties";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -246,6 +247,88 @@ async function seed() {
     console.log(`   DOA matrix: ${deptAtic ? 6 : 0} rules seeded`);
   } else {
     console.log(`⚠️  PAR demo tenant already exists (${existingPar.id}). Skipping.`);
+  }
+
+  // ─── PARTY-001: FinDesk demo partners ──────────────────────────────────────
+  const existingParties = await db
+    .select({ id: finParties.id })
+    .from(finParties)
+    .where(eq(finParties.tenantId, tenant.id))
+    .limit(1);
+
+  if (existingParties.length === 0) {
+    const [clientMD] = await db.insert(finParties).values({
+      tenantId: tenant.id,
+      kind: "client",
+      name: "SRL Edu Solutions MD",
+      country: "MD",
+      idno: "1234567890123",
+      iban: "MD24AG000225100013104168",
+      address: "str. Columna 170",
+      city: "Chișinău",
+      postalCode: "MD-2004",
+      email: "contact@edusolutions.md",
+      phone: "+373 22 123456",
+      isActive: true,
+      notes: "Client demo — plătitor de TVA",
+    }).returning();
+
+    const [supplierRO] = await db.insert(finParties).values({
+      tenantId: tenant.id,
+      kind: "supplier",
+      name: "SRL Soft Vendor RO",
+      country: "RO",
+      idno: "RO12345678",
+      vatCode: "RO12345678",
+      iban: "RO49AAAA1B31007593840000",
+      address: "str. Victoriei 22",
+      city: "București",
+      postalCode: "010016",
+      email: "facturi@softvendor.ro",
+      isActive: true,
+    }).returning();
+
+    const [both] = await db.insert(finParties).values({
+      tenantId: tenant.id,
+      kind: "both",
+      name: "SA PolyBusiness",
+      country: "MD",
+      idno: "9876543210987",
+      iban: "MD24AG000225100013104999",
+      city: "Bălți",
+      isActive: true,
+      notes: "Și client și furnizor — servicii IT",
+    }).returning();
+
+    await db.insert(finPartyContacts).values([
+      {
+        partyId: clientMD.id,
+        name: "Maria Ionescu",
+        role: "Contabilă",
+        email: "maria@edusolutions.md",
+        phone: "+373 69 111111",
+        isPrimary: true,
+      },
+      {
+        partyId: supplierRO.id,
+        name: "Andrei Popescu",
+        role: "Director vânzări",
+        email: "andrei@softvendor.ro",
+        isPrimary: true,
+      },
+      {
+        partyId: both.id,
+        name: "Victor Rusu",
+        role: "Director",
+        email: "victor@polybusiness.md",
+        phone: "+373 68 222222",
+        isPrimary: true,
+      },
+    ]);
+
+    console.log(`✅ FinDesk demo partners seeded: 3 parties, 3 contacts`);
+  } else {
+    console.log(`⚠️  FinDesk demo parties already exist. Skipping.`);
   }
 
   console.log(`\n📌 Demo credentials:`);
