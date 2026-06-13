@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "current_item": "PARTY-002",
-  "last_completed": "PARTY-001",
-  "iterations": 195,
-  "last_run_at": "2026-06-14T01:13:00Z",
+  "current_item": null,
+  "last_completed": "PARTY-002",
+  "iterations": 196,
+  "last_run_at": "2026-06-14T01:17:00Z",
   "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) \u2014 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
   "active_milestone": "FIN",
   "items": {
@@ -3326,8 +3326,8 @@
       "pr": null
     },
     "PARTY-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PARTY-002.md",
       "milestone": "FIN",
@@ -3336,7 +3336,12 @@
         "PARTY-001"
       ],
       "branch": "feat/FIN-party",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "N/A"
+      },
       "pr": null
     },
     "PARTY-003": {
