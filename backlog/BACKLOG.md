@@ -345,3 +345,18 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | POLISH-001 | high | Global quick search + command palette (Cmd+K) | pending | [spec](specs/POLISH-001-nav-quick-search.md) |
 | POLISH-002 | high | Dashboard widget customization | pending | [spec](specs/POLISH-002-dashboard-widgets.md) |
 | POLISH-003 | normal | Empty states cu CTA pentru paginile cheie | pending | [spec](specs/POLISH-003-empty-states.md) |
+
+## Active milestone: FIN — FinDesk (Finanțe SaaS MD/RO)
+
+| ID | Priority | Title | Status | Branch |
+|----|----------|-------|--------|--------|
+| CORE-001 | high | Schema fundație FinDesk (entități, tenanți, users) | done | feat/FIN-core |
+| CORE-002 | high | Migrare DB + seed inițial | done | feat/FIN-core |
+| CORE-003 | high | Auth/session pentru FinDesk | done | feat/FIN-core |
+| CORE-004 | high | AppShell + navigare FinDesk | done | feat/FIN-core |
+| CORE-005 | high | Smoke tests + CI | done | feat/FIN-core |
+| REGISTRY-001 | high | Schema fin_tax_rates + fin_chart_of_accounts + migrare | done | feat/FIN-registry |
+| REGISTRY-002 | high | API fiscal registry (tax-rates CRUD, chart-of-accounts list) | done | feat/FIN-registry |
+| REGISTRY-003 | high | UI admin cote fiscale + plan de conturi | done | feat/FIN-registry |
+| PARTY-001 | high | Schema fin_parties + fin_party_contacts + migrare | pending | feat/FIN-party |
+| PARTY-002 | high | API parteneri CRUD (client/supplier/both, IDNO/IBAN) | pending | feat/FIN-party |
