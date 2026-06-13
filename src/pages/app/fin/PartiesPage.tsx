@@ -1,9 +1,10 @@
 /**
- * PARTY-003: FinDesk — /app/fin/parties
+ * PARTY-003/004: FinDesk — /app/fin/parties
  *
  * List page for business partners (clients, suppliers, both).
  * Features: search (debounced), kind filter, isActive toggle,
  *   + Partener nou modal, clickable rows → detail page.
+ * PARTY-004: Top Clienți tab with segment badges.
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -14,6 +15,8 @@ import {
   Loader2,
   ChevronDown,
   X,
+  TrendingUp,
+  Medal,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -21,8 +24,13 @@ import { useRouter } from "@/router/HashRouter";
 import {
   listParties,
   createParty,
+  getTopClients,
+  getSegmentDistribution,
   type Party,
   type PartyKind,
+  type PartySegment,
+  type TopClient,
+  type SegmentDistribution,
   type CreatePartyPayload,
 } from "@/lib/api/finParties";
 import { cn } from "@/lib/utils";
@@ -35,12 +43,138 @@ const KIND_META: Record<PartyKind, { label: string; cls: string }> = {
   both: { label: "Ambele", cls: "bg-success/15 text-success" },
 };
 
+/** Segment badge — semantic tokens only, WCAG AA (PARTY-004) */
+const SEGMENT_META: Record<PartySegment, { label: string; cls: string }> = {
+  VIP:     { label: "VIP",     cls: "bg-primary/15 text-primary border border-primary/30" },
+  Regular: { label: "Regular", cls: "bg-secondary/15 text-secondary-foreground border border-border" },
+  New:     { label: "Nou",     cls: "bg-muted text-muted-foreground border border-border" },
+};
+
+function formatMDL(cents: number): string {
+  return new Intl.NumberFormat("ro-MD", {
+    style: "currency",
+    currency: "MDL",
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
 const KIND_OPTIONS: Array<{ value: PartyKind | ""; label: string }> = [
   { value: "", label: "Toate tipurile" },
   { value: "client", label: "Client" },
   { value: "supplier", label: "Furnizor" },
   { value: "both", label: "Ambele" },
 ];
+
+// ─── Top Clients section (PARTY-004) ─────────────────────────────────────────
+
+interface TopClientsSectionProps {
+  onSelectParty: (partyId: string) => void;
+}
+
+function TopClientsSection({ onSelectParty }: TopClientsSectionProps) {
+  const [topClients, setTopClients] = useState<TopClient[]>([]);
+  const [segments, setSegments] = useState<SegmentDistribution | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([getTopClients(10), getSegmentDistribution()])
+      .then(([tRes, sRes]) => {
+        setTopClients(tRes.data);
+        setSegments(sRes.data);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Eroare la analytics."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-32">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-md bg-destructive/10 text-destructive px-4 py-3 text-sm">{error}</div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Segment distribution chips */}
+      {segments && (
+        <div className="flex flex-wrap gap-3">
+          {(["VIP", "Regular", "New"] as PartySegment[]).map((seg) => (
+            <div
+              key={seg}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium",
+                SEGMENT_META[seg].cls
+              )}
+            >
+              <span>{SEGMENT_META[seg].label}</span>
+              <span className="font-semibold">{segments[seg]}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Top clients table */}
+      {topClients.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-32 text-muted-foreground gap-2">
+          <Medal className="w-10 h-10 opacity-30" />
+          <p className="text-sm">Date insuficiente. Emite facturi pentru a vedea clasamentul.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">#</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Partener</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Venit cumulat</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Sold deschis</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Segment</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {topClients.map((client, idx) => (
+                <tr
+                  key={client.partyId}
+                  onClick={() => onSelectParty(client.partyId)}
+                  className="cursor-pointer hover:bg-muted/40 transition-colors"
+                >
+                  <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{idx + 1}</td>
+                  <td className="px-4 py-3 font-medium">{client.partyName}</td>
+                  <td className="px-4 py-3 text-right font-mono text-success">
+                    {formatMDL(client.totalRevenueCents)}
+                  </td>
+                  <td className={cn(
+                    "px-4 py-3 text-right font-mono",
+                    client.openBalanceCents > 0 ? "text-warning" : "text-muted-foreground"
+                  )}>
+                    {formatMDL(client.openBalanceCents)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={cn(
+                      "inline-block px-2 py-0.5 rounded-full text-xs font-medium",
+                      SEGMENT_META[client.segment].cls
+                    )}>
+                      {SEGMENT_META[client.segment].label}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Add Party Modal ──────────────────────────────────────────────────────────
 
@@ -243,9 +377,13 @@ function AddPartyModal({ onClose, onCreated }: AddPartyModalProps) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+type PageTab = "lista" | "top";
+
 export function PartiesPage() {
   const { status: sessionStatus } = useSession();
   const { navigate } = useRouter();
+
+  const [pageTab, setPageTab] = useState<PageTab>("lista");
 
   const [items, setItems] = useState<Party[]>([]);
   const [total, setTotal] = useState(0);
@@ -322,7 +460,40 @@ export function PartiesPage() {
         </button>
       }
     >
-      {/* Filters bar */}
+      {/* Page tabs (PARTY-004) */}
+      <div className="border-b border-border mb-6">
+        <div className="flex gap-0" role="tablist">
+          {([
+            { id: "lista" as PageTab, label: "Listă parteneri", icon: Building2 },
+            { id: "top" as PageTab, label: "Top Clienți", icon: TrendingUp },
+          ] as const).map((tab) => (
+            <button
+              key={tab.id}
+              role="tab"
+              aria-selected={pageTab === tab.id}
+              onClick={() => setPageTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
+                pageTab === tab.id
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Top Clienți tab */}
+      {pageTab === "top" && (
+        <TopClientsSection onSelectParty={(id) => navigate(`/app/fin/parties/${id}`)} />
+      )}
+
+      {/* Lista tab */}
+      {pageTab === "lista" && (
+      <>
       <div className="flex flex-wrap items-center gap-3 mb-4">
         {/* Search */}
         <div className="relative flex-1 min-w-[180px]">
@@ -450,6 +621,10 @@ export function PartiesPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* End of lista tab */}
+      </>
       )}
 
       {/* Add modal */}

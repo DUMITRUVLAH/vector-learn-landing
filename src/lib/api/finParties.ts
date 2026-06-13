@@ -43,6 +43,8 @@ export interface PartyContact {
   updatedAt: string;
 }
 
+export type PartySegment = "VIP" | "Regular" | "New";
+
 export interface PartyMetrics {
   totalRevenue: number;  // cents, total invoiced to this party
   openBalance: number;   // cents, unpaid invoices
@@ -52,6 +54,27 @@ export interface PartyMetrics {
     d61_90: number;
     d90plus: number;
   };
+}
+
+export interface PartyAging {
+  d0_30: number;
+  d31_60: number;
+  d61_90: number;
+  d90plus: number;
+}
+
+export interface TopClient {
+  partyId: string;
+  partyName: string;
+  totalRevenueCents: number;
+  openBalanceCents: number;
+  segment: PartySegment;
+}
+
+export interface SegmentDistribution {
+  VIP: number;
+  Regular: number;
+  New: number;
 }
 
 export interface ListPartiesParams {
@@ -152,4 +175,20 @@ export async function deleteContact(partyId: string, contactId: string): Promise
 
 export async function getPartyMetrics(partyId: string): Promise<{ data: PartyMetrics }> {
   return api<{ data: PartyMetrics }>(`/api/fin/parties/${partyId}/metrics`);
+}
+
+// ─── Aging (PARTY-004) ─────────────────────────────────────────────────────
+
+export async function getPartyAging(partyId: string): Promise<{ data: PartyAging }> {
+  return api<{ data: PartyAging }>(`/api/fin/parties/${partyId}/aging`);
+}
+
+// ─── Analytics (PARTY-004) ─────────────────────────────────────────────────
+
+export async function getTopClients(limit = 10): Promise<{ data: TopClient[] }> {
+  return api<{ data: TopClient[] }>(`/api/fin/parties/analytics/top-clients?limit=${limit}`);
+}
+
+export async function getSegmentDistribution(): Promise<{ data: SegmentDistribution }> {
+  return api<{ data: SegmentDistribution }>("/api/fin/parties/analytics/segments");
 }

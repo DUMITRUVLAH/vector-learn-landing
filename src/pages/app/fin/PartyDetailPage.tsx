@@ -34,10 +34,13 @@ import {
   createContact,
   deleteContact,
   getPartyMetrics,
+  getPartyAging,
   type Party,
   type PartyKind,
   type PartyContact,
   type PartyMetrics,
+  type PartyAging,
+  type PartySegment,
   type CreatePartyPayload,
   type CreateContactPayload,
 } from "@/lib/api/finParties";
@@ -58,6 +61,13 @@ function formatMDL(cents: number): string {
     maximumFractionDigits: 0,
   }).format(cents / 100);
 }
+
+/** Segment badge — semantic tokens only, WCAG AA */
+const SEGMENT_META: Record<PartySegment, { label: string; cls: string }> = {
+  VIP:     { label: "VIP",     cls: "bg-primary/15 text-primary border border-primary/30" },
+  Regular: { label: "Regular", cls: "bg-secondary/15 text-secondary-foreground border border-border" },
+  New:     { label: "Nou",     cls: "bg-muted text-muted-foreground border border-border" },
+};
 
 type Tab = "fiscal" | "contacts" | "metrics";
 
@@ -393,13 +403,20 @@ interface MetricsTabProps {
 
 function MetricsTab({ partyId }: MetricsTabProps) {
   const [metrics, setMetrics] = useState<PartyMetrics | null>(null);
+  const [aging, setAging] = useState<PartyAging | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
-    getPartyMetrics(partyId)
-      .then((res) => setMetrics(res.data))
+    Promise.all([
+      getPartyMetrics(partyId),
+      getPartyAging(partyId),
+    ])
+      .then(([mRes, aRes]) => {
+        setMetrics(mRes.data);
+        setAging(aRes.data);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : "Eroare la metrici."))
       .finally(() => setLoading(false));
   }, [partyId]);
@@ -422,6 +439,8 @@ function MetricsTab({ partyId }: MetricsTabProps) {
   }
 
   const m = metrics!;
+  // Use real aging from dedicated endpoint; fall back to metrics.aging if unavailable
+  const ag: PartyAging = aging ?? m.aging;
 
   return (
     <div className="space-y-6">
@@ -445,14 +464,14 @@ function MetricsTab({ partyId }: MetricsTabProps) {
           <Clock className="w-5 h-5 text-destructive mt-0.5 shrink-0" />
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Restant &gt; 30 zile</p>
-            <p className="text-xl font-semibold mt-1">{formatMDL(m.aging.d31_60 + m.aging.d61_90 + m.aging.d90plus)}</p>
+            <p className="text-xl font-semibold mt-1">{formatMDL(ag.d31_60 + ag.d61_90 + ag.d90plus)}</p>
           </div>
         </div>
       </div>
 
-      {/* Aging breakdown */}
+      {/* Aging breakdown — real data from /aging endpoint (PARTY-004) */}
       <div>
-        <h3 className="text-sm font-medium mb-3">Aging (restanțe pe intervale)</h3>
+        <h3 className="text-sm font-medium mb-3">Aging restanțe (date reale)</h3>
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
@@ -464,24 +483,24 @@ function MetricsTab({ partyId }: MetricsTabProps) {
             <tbody className="divide-y divide-border">
               <tr>
                 <td className="px-4 py-3">0 – 30 zile</td>
-                <td className="px-4 py-3 text-right font-mono">{formatMDL(m.aging.d0_30)}</td>
+                <td className="px-4 py-3 text-right font-mono text-success">{formatMDL(ag.d0_30)}</td>
               </tr>
               <tr>
                 <td className="px-4 py-3">31 – 60 zile</td>
-                <td className={cn("px-4 py-3 text-right font-mono", m.aging.d31_60 > 0 && "text-warning")}>
-                  {formatMDL(m.aging.d31_60)}
+                <td className={cn("px-4 py-3 text-right font-mono", ag.d31_60 > 0 ? "text-warning" : "text-muted-foreground")}>
+                  {formatMDL(ag.d31_60)}
                 </td>
               </tr>
               <tr>
                 <td className="px-4 py-3">61 – 90 zile</td>
-                <td className={cn("px-4 py-3 text-right font-mono", m.aging.d61_90 > 0 && "text-destructive/80")}>
-                  {formatMDL(m.aging.d61_90)}
+                <td className={cn("px-4 py-3 text-right font-mono", ag.d61_90 > 0 ? "text-destructive/80" : "text-muted-foreground")}>
+                  {formatMDL(ag.d61_90)}
                 </td>
               </tr>
               <tr>
                 <td className="px-4 py-3">90+ zile</td>
-                <td className={cn("px-4 py-3 text-right font-mono font-semibold", m.aging.d90plus > 0 && "text-destructive")}>
-                  {formatMDL(m.aging.d90plus)}
+                <td className={cn("px-4 py-3 text-right font-mono font-semibold", ag.d90plus > 0 ? "text-destructive" : "text-muted-foreground")}>
+                  {formatMDL(ag.d90plus)}
                 </td>
               </tr>
             </tbody>
@@ -510,7 +529,7 @@ export function PartyDetailPage() {
 
   const partyId = extractPartyId(path);
 
-  const [party, setParty] = useState<Party | null>(null);
+  const [party, setParty] = useState<(Party & { segment?: PartySegment }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("fiscal");
@@ -642,11 +661,20 @@ export function PartyDetailPage() {
           <Building2 className="w-6 h-6 text-muted-foreground" />
         </div>
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-semibold">{party.name}</h1>
             <span className={cn("inline-block px-2 py-0.5 rounded-full text-xs font-medium", kindMeta.cls)}>
               {kindMeta.label}
             </span>
+            {/* Segment badge (PARTY-004) */}
+            {party.segment && (
+              <span className={cn(
+                "inline-block px-2 py-0.5 rounded-full text-xs font-medium",
+                SEGMENT_META[party.segment].cls
+              )}>
+                {SEGMENT_META[party.segment].label}
+              </span>
+            )}
             {!party.isActive && (
               <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
                 Arhivat

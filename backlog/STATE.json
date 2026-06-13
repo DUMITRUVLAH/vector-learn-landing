@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "current_item": "PARTY-003",
-  "last_completed": "PARTY-002",
-  "iterations": 197,
-  "last_run_at": "2026-06-14T09:00:00Z",
+  "current_item": "PARTY-004",
+  "last_completed": "BILL-005",
+  "iterations": 208,
+  "last_run_at": "2026-06-14T10:00:00Z",
   "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
   "active_milestone": "FIN",
   "items": {
@@ -3345,7 +3345,7 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/156"
     },
     "PARTY-003": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PARTY-003.md",
@@ -3356,12 +3356,17 @@
         "CORE-004"
       ],
       "branch": "feat/FIN-party",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/156"
     },
     "PARTY-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PARTY-004.md",
       "milestone": "FIN",
@@ -3409,8 +3414,8 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/154"
     },
     "AGREEMENT-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/AGREEMENT-001.md",
       "milestone": "FIN",
@@ -3419,12 +3424,17 @@
         "PARTY-001"
       ],
       "branch": "feat/FIN-agreement",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/157"
     },
     "AGREEMENT-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/AGREEMENT-002.md",
       "milestone": "FIN",
@@ -3433,12 +3443,17 @@
         "AGREEMENT-001"
       ],
       "branch": "feat/FIN-agreement",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/157"
     },
     "AGREEMENT-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/AGREEMENT-003.md",
       "milestone": "FIN",
@@ -3448,12 +3463,17 @@
         "CORE-004"
       ],
       "branch": "feat/FIN-agreement",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/157"
     },
     "BILL-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BILL-001.md",
       "milestone": "FIN",
@@ -3463,12 +3483,17 @@
         "PARTY-001"
       ],
       "branch": "feat/FIN-bill",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
       "pr": null
     },
     "BILL-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BILL-002.md",
       "milestone": "FIN",
@@ -3483,8 +3508,8 @@
       "pr": null
     },
     "BILL-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BILL-003.md",
       "milestone": "FIN",
@@ -3497,29 +3522,28 @@
       "pr": null
     },
     "BILL-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BILL-004.md",
       "milestone": "FIN",
       "phase": "5",
       "depends_on": [
-        "BILL-002"
+        "BILL-003"
       ],
       "branch": "feat/FIN-bill",
       "verdicts": {},
       "pr": null
     },
     "BILL-005": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BILL-005.md",
       "milestone": "FIN",
       "phase": "5",
       "depends_on": [
-        "BILL-002",
-        "CORE-004"
+        "BILL-004"
       ],
       "branch": "feat/FIN-bill",
       "verdicts": {},
