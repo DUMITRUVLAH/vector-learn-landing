@@ -103,6 +103,8 @@ import ItparkWizard from "./pages/app/fin/itpark/ItparkWizard";
 import { Anexa2Page } from "./pages/app/fin/itpark/Anexa2Page";
 // ITPARK-402: Anexa 3 render
 import { Anexa3Page } from "./pages/app/fin/itpark/Anexa3Page";
+// ITPARK-403: Anexa 4 render + consistency gate
+import { Anexa4Page } from "./pages/app/fin/itpark/Anexa4Page";
 // PAR-105: Create wizard
 import { ParCreateWizard } from "./pages/par/ParCreateWizard";
 // PAR-106: Dashboard + list
@@ -267,6 +269,8 @@ function Routes() {
   if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa2$/)) return <Anexa2Page />;
   // ITPARK-402: /app/fin/itpark/:id/anexa3 — Anexa 3 render
   if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa3$/)) return <Anexa3Page />;
+  // ITPARK-403: /app/fin/itpark/:id/anexa4 — Anexa 4 render + consistency gate
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/anexa4$/)) return <Anexa4Page />;
   // ITPARK-101: /app/fin/itpark/:id — dosar detaliu (before list)
   if (path.match(/^\/app\/fin\/itpark\/[^/]+$/)) return <ItparkDetail />;
   // ITPARK-101: /app/fin/itpark — lista dosarelor
