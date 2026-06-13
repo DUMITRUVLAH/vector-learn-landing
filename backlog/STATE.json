@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "ITPARK-102",
   "last_completed": "ITPARK-003",
-  "iterations": 168,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
-  "active_milestone": "PAR",
+  "iterations": 169,
+  "last_run_at": "2026-06-13T00:00:00Z",
+  "milestone_status": "ITPARK (Moldova IT Park Audit Toolkit) Phase B — Engagement CRUD + Wizard. CORE: backlog/fin/itpark/ITPARK-CORE.md. Driver: backlog/fin/itpark/BUILD-SEQUENCE.md. Phase B branch: feat/ITPARK-faza-B-dosar.",
+  "active_milestone": "ITPARK",
   "items": {
     "PAR-001": {
       "status": "done",
@@ -2895,22 +2895,30 @@
       }
     },
     "ITPARK-101": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-101-engagement-crud.md",
       "milestone": "ITPARK",
       "phase": "B",
-      "depends_on": ["ITPARK-001", "ITPARK-003"]
+      "depends_on": ["ITPARK-001", "ITPARK-003"],
+      "branch": "feat/ITPARK-faza-B-dosar",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "ITPARK-102": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-102-engagement-wizard.md",
       "milestone": "ITPARK",
       "phase": "B",
-      "depends_on": ["ITPARK-101"]
+      "depends_on": ["ITPARK-101"],
+      "branch": "feat/ITPARK-faza-B-dosar"
     },
     "ITPARK-201": {
       "status": "pending",
