@@ -1,10 +1,11 @@
 /**
- * ITPARK-101/201: Detaliu dosar de verificare MITP
+ * ITPARK-101/201/401/402/403: Detaliu dosar de verificare MITP
  * Route: /app/fin/itpark/:id
  * CORE: backlog/fin/itpark/ITPARK-CORE.md §1
  *
  * Header: date dosar (rezident, IDNO, an, status)
- * Taburi: Anexa 2 (placeholder) | Anexa 3 (revenue lines — ITPARK-201) | Anexa 4 (placeholder) | Scrisori (placeholder)
+ * Taburi: Anexa 2 | Anexa 3 (revenue lines) | Anexa 4 (lunar + consistency) | Scrisori (placeholder)
+ * ITPARK-403: Anexa 4 tab navigates to /app/fin/itpark/:id/anexa4 (full page with consistency gate)
  */
 import { useState, useEffect, lazy, Suspense } from "react";
 import { getEngagement, type ItparkEngagement } from "../../../../lib/api/itparkEngagements";
@@ -56,6 +57,32 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "anexa4", label: "Anexa 4" },
   { id: "scrisori", label: "Scrisori" },
 ];
+
+// ─── Tab link panel (for tabs that have dedicated pages) ──────────────────────
+
+interface TabLinkPanelProps {
+  label: string;
+  description: string;
+  href: string;
+}
+
+function TabLinkPanel({ label, description, href }: TabLinkPanelProps) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 text-center gap-4">
+      <h3 className="text-base font-medium text-foreground">{label}</h3>
+      <p className="text-sm text-muted-foreground max-w-xs">{description}</p>
+      <a
+        href={href}
+        className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-muted transition-colors min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      >
+        Deschide pagina completă
+        <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </a>
+    </div>
+  );
+}
 
 // ─── Placeholder tab content ───────────────────────────────────────────────────
 
@@ -246,7 +273,13 @@ export default function ItparkDetail() {
             className="p-4"
           >
             {activeTab === tab.id && (
-              tab.id === "anexa3" ? (
+              tab.id === "anexa2" ? (
+                <TabLinkPanel
+                  label="Anexa 2 — Informații generale"
+                  description="Date rezident, perioadă, TVA, costuri subcontractori, total vânzări și eligibil."
+                  href={`#/app/fin/itpark/${id}/anexa2`}
+                />
+              ) : tab.id === "anexa3" ? (
                 <Suspense fallback={
                   <div className="flex items-center justify-center py-12" aria-busy="true">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" role="status" aria-label="Se încarcă liniile" />
@@ -254,6 +287,12 @@ export default function ItparkDetail() {
                 }>
                   <RevenueLinesTable engagementId={id} />
                 </Suspense>
+              ) : tab.id === "anexa4" ? (
+                <TabLinkPanel
+                  label="Anexa 4 — Raport lunar eligibilitate"
+                  description="12 luni + Total: venituri eligibile/total, cumulative YTD, pondere cumulativă. Gate de coerență cu Anexa 2 și 3."
+                  href={`#/app/fin/itpark/${id}/anexa4`}
+                />
               ) : (
                 <TabPlaceholder label={tab.label} />
               )
