@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "ITPARK-702",
-  "last_completed": "ITPARK-701",
-  "iterations": 189,
+  "current_item": null,
+  "last_completed": "REGISTRY-001",
+  "iterations": 190,
   "last_run_at": "2026-06-13T00:00:00Z",
-  "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
+  "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) \u2014 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -2850,7 +2850,9 @@
       "spec": "backlog/specs/ITPARK-601.md",
       "milestone": "ITPARK",
       "phase": "G",
-      "depends_on": ["ITPARK-502"],
+      "depends_on": [
+        "ITPARK-502"
+      ],
       "branch": "feat/ITPARK-faza-G-export",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/152",
       "verdicts": {
@@ -2867,7 +2869,9 @@
       "spec": "backlog/specs/ITPARK-602.md",
       "milestone": "ITPARK",
       "phase": "G",
-      "depends_on": ["ITPARK-601"],
+      "depends_on": [
+        "ITPARK-601"
+      ],
       "branch": "feat/ITPARK-faza-G-export",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/152",
       "verdicts": {
@@ -2884,7 +2888,9 @@
       "spec": "backlog/specs/ITPARK-701.md",
       "milestone": "ITPARK",
       "phase": "H",
-      "depends_on": ["ITPARK-601"],
+      "depends_on": [
+        "ITPARK-601"
+      ],
       "branch": "feat/ITPARK-faza-H-ai-polish",
       "pr": "",
       "verdicts": {
@@ -2906,6 +2912,24 @@
       ],
       "branch": "feat/ITPARK-faza-H-ai-polish",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/153"
+    },
+    "REGISTRY-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/REGISTRY-001-tax-rates-chart.md",
+      "milestone": "FIN",
+      "phase": "REGISTRY",
+      "depends_on": [
+        "CORE-001"
+      ],
+      "branch": "feat/FIN-registry",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     }
   }
 }
