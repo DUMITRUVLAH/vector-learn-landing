@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "current_item": "AGREEMENT-002",
-  "last_completed": "AGREEMENT-001",
+  "current_item": null,
+  "last_completed": "AGREEMENT-002",
   "iterations": 199,
   "last_run_at": "2026-06-14T09:00:00Z",
   "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
@@ -3362,7 +3362,7 @@
         "manager": "MAYBE",
         "student": "OK"
       },
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/156"
     },
     "PARTY-004": {
       "status": "pending",
@@ -3430,10 +3430,10 @@
         "manager": "MAYBE",
         "student": "PASS"
       },
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/157"
     },
     "AGREEMENT-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/AGREEMENT-002.md",
@@ -3443,8 +3443,13 @@
         "AGREEMENT-001"
       ],
       "branch": "feat/FIN-agreement",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/157"
     },
     "AGREEMENT-003": {
       "status": "pending",
