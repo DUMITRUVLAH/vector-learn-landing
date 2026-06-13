@@ -106,10 +106,23 @@ export async function deleteEngagement(id: string): Promise<void> {
   if (!res.ok) throw new Error(`deleteEngagement: ${res.status}`);
 }
 
-/**
- * ITPARK-601: Mark engagement as exported (status=exported + audit entry)
- * Called after PDF is generated and downloaded.
- */
+// ─── ITPARK-602: mark ready ───────────────────────────────────────────────────
+
+export async function markEngagementReady(id: string): Promise<ItparkEngagement> {
+  const res = await fetch(`${BASE}/${id}/ready`, {
+    method: "PATCH",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`markEngagementReady: ${res.status} ${JSON.stringify(err)}`);
+  }
+  const data = await res.json();
+  return data.engagement;
+}
+
+// ─── ITPARK-601: mark exported ────────────────────────────────────────────────
+
 export async function markEngagementExported(id: string): Promise<ItparkEngagement> {
   const res = await fetch(`${BASE}/${id}/export`, {
     method: "PATCH",

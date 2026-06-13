@@ -111,6 +111,8 @@ import { ParReports } from "./pages/par/ParReports";
 // CORE-004: FinDesk shell — /app/fin and sub-routes
 import { FinHome } from "./pages/fin/FinHome";
 import { FinCompany } from "./pages/fin/FinCompany";
+// CORE-005: FinDesk onboarding wizard
+import { FinOnboarding } from "./pages/fin/FinOnboarding";
 // ITPARK-101: Engagement list + detail
 import ItparkList from "./pages/app/fin/itpark/ItparkList";
 import ItparkDetail from "./pages/app/fin/itpark/ItparkDetail";
@@ -126,6 +128,8 @@ import { Anexa4Page } from "./pages/app/fin/itpark/Anexa4Page";
 import { LettersPage } from "./pages/app/fin/itpark/LettersPage";
 // ITPARK-502: Declarație pe proprie răspundere
 import { SelfDeclarationPage } from "./pages/app/fin/itpark/SelfDeclarationPage";
+// ITPARK-602: Checklist "Gata" — readiness gate before export
+import { ReadinessChecklistPage } from "./pages/app/fin/itpark/ReadinessChecklistPage";
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
 
@@ -296,12 +300,16 @@ function Routes() {
   if (path.match(/^\/app\/fin\/itpark\/[^/]+\/scrisori$/)) return <LettersPage />;
   // ITPARK-502: /app/fin/itpark/:id/declaratie — declaratie pe proprie raspundere
   if (path.match(/^\/app\/fin\/itpark\/[^/]+\/declaratie$/)) return <SelfDeclarationPage />;
+  // ITPARK-602: /app/fin/itpark/:id/ready — readiness checklist
+  if (path.match(/^\/app\/fin\/itpark\/[^/]+\/ready$/)) return <ReadinessChecklistPage />;
   // ITPARK-101: /app/fin/itpark/:id — dosar detaliu (before list)
   if (path.match(/^\/app\/fin\/itpark\/[^/]+$/)) return <ItparkDetail />;
   // ITPARK-101: /app/fin/itpark — lista dosarelor
   if (path.startsWith("/app/fin/itpark")) return <ItparkList />;
   // CORE-004: FinDesk shell routes — must come AFTER the more specific /app/fin/itpark/* above
   if (path === "/app/fin/company" || path.startsWith("/app/fin/company/")) return <FinCompany />;
+  // CORE-005: FinDesk onboarding wizard
+  if (path === "/app/fin/onboarding" || path.startsWith("/app/fin/onboarding/")) return <FinOnboarding />;
   if (path === "/app/fin" || path === "/app/fin/") return <FinHome />;
   // CORE-004: catch-all for /app/fin/* routes not yet built — render FinHome as graceful fallback
   if (path.startsWith("/app/fin/")) return <FinHome />;
