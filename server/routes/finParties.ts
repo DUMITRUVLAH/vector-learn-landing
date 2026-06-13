@@ -125,6 +125,87 @@ finPartiesRoutes.get("/", async (c) => {
   return c.json({ data: rows, total: countResult[0]?.count ?? 0 });
 });
 
+// ─── Metrics (PARTY-003) — specific route must come before /:id ──────────────
+
+/**
+ * GET /api/fin/parties/:id/metrics
+ * Returns totalRevenue, openBalance, and aging breakdown for the party.
+ * If fin_invoices doesn't exist yet, returns graceful zeros (stub-safe).
+ */
+finPartiesRoutes.get("/:id/metrics", async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+
+  // Verify party belongs to tenant
+  const party = await db
+    .select({ id: finParties.id })
+    .from(finParties)
+    .where(and(eq(finParties.id, id), eq(finParties.tenantId, user.tenantId)))
+    .limit(1);
+
+  if (party.length === 0) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  // Graceful stub: fin_invoices table doesn't exist yet (BILL-001 will create it).
+  // Return zeroed metrics so the UI works without crashing.
+  const zeroMetrics = {
+    totalRevenue: 0,
+    openBalance: 0,
+    aging: { d0_30: 0, d31_60: 0, d61_90: 0, d90plus: 0 },
+  };
+
+  try {
+    // Once BILL-001 lands, this block will be replaced with real queries.
+    // For now, try querying fin_invoices; fall back to zeros on any error.
+    const now = new Date();
+
+    // Dynamic import to avoid hard dependency on a not-yet-existing table.
+    // If fin_invoices schema isn't exported yet, the catch block returns zeros.
+    const schemaModule = await import("../db/schema/index.js").catch(() => null);
+    if (!schemaModule || !("finInvoices" in schemaModule)) {
+      return c.json({ data: zeroMetrics });
+    }
+
+    // finInvoices exists — compute real metrics
+    const { finInvoices } = schemaModule as { finInvoices: { partyId: unknown; status: unknown; totalCents: unknown; dueDate: unknown } };
+    const { eq: eqOp, and: andOp, sql: sqlFn, inArray } = await import("drizzle-orm");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const inv = finInvoices as any;
+
+    const [revenue, open] = await Promise.all([
+      db
+        .select({ total: sqlFn<number>`coalesce(sum(${inv.totalCents}),0)::int` })
+        .from(inv)
+        .where(andOp(eqOp(inv.partyId, id), eqOp(inv.status, "paid"))),
+      db
+        .select({ total: sqlFn<number>`coalesce(sum(${inv.totalCents}),0)::int`, dueDate: inv.dueDate })
+        .from(inv)
+        .where(andOp(eqOp(inv.partyId, id), inArray(inv.status, ["issued", "overdue"]))),
+    ]);
+
+    const totalRevenue = revenue[0]?.total ?? 0;
+    const openRows = open as Array<{ total: number; dueDate: string }>;
+    const openBalance = openRows.reduce((s, r) => s + r.total, 0);
+
+    const aging = { d0_30: 0, d31_60: 0, d61_90: 0, d90plus: 0 };
+    for (const row of openRows) {
+      if (!row.dueDate) continue;
+      const days = Math.floor((now.getTime() - new Date(row.dueDate).getTime()) / 86_400_000);
+      if (days <= 30) aging.d0_30 += row.total;
+      else if (days <= 60) aging.d31_60 += row.total;
+      else if (days <= 90) aging.d61_90 += row.total;
+      else aging.d90plus += row.total;
+    }
+
+    return c.json({ data: { totalRevenue, openBalance, aging } });
+  } catch {
+    // fin_invoices not ready yet — return stub zeros
+    return c.json({ data: zeroMetrics });
+  }
+});
+
 // ─── Get single party ─────────────────────────────────────────────────────────
 
 finPartiesRoutes.get("/:id", async (c) => {
