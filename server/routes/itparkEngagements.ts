@@ -260,3 +260,54 @@ itparkEngagementsRoutes.delete("/:id", async (c) => {
 
   return c.json({ ok: true });
 });
+
+// ─── PATCH /:id/ready — marchează dosar ca "gata" (ITPARK-602) ───────────────
+
+itparkEngagementsRoutes.patch("/:id/ready", async (c) => {
+  const deny = await requireItparkRole("accountant", c);
+  if (deny) return deny;
+
+  const user = c.get("user");
+  const id = c.req.param("id");
+
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+    return c.json({ error: "id invalid" }, 400);
+  }
+
+  const existing = await db.query.itparkEngagements.findFirst({
+    where: and(
+      eq(itparkEngagements.id, id),
+      eq(itparkEngagements.tenantId, user.tenantId)
+    ),
+  });
+  if (!existing) return c.json({ error: "not_found" }, 404);
+
+  const now = new Date();
+  const [updated] = await db
+    .update(itparkEngagements)
+    .set({ status: "ready", updatedAt: now })
+    .where(
+      and(
+        eq(itparkEngagements.id, id),
+        eq(itparkEngagements.tenantId, user.tenantId)
+      )
+    )
+    .returning();
+
+  // Best-effort audit log
+  await db
+    .insert(itparkAudit)
+    .values({
+      tenantId: user.tenantId,
+      engagementId: id,
+      userId: user.id,
+      action: "mark_ready",
+      entityType: "engagement",
+      entityId: id,
+      meta: { previousStatus: existing.status },
+    })
+    .catch(() => {});
+
+  return c.json({ engagement: updated });
+});
+

@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "CORE-005",
-  "last_completed": "CORE-004",
-  "iterations": 186,
+  "current_item": "ITPARK-701",
+  "last_completed": "ITPARK-602",
+  "iterations": 187,
   "last_run_at": "2026-06-13T00:00:00Z",
   "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
   "active_milestone": "FIN",
@@ -2914,8 +2914,8 @@
       }
     },
     "CORE-005": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CORE-005-onboarding.md",
       "milestone": "FIN",
@@ -3206,8 +3206,8 @@
       }
     },
     "ITPARK-601": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-601.md",
       "milestone": "ITPARK",
@@ -3215,12 +3215,18 @@
       "depends_on": [
         "ITPARK-502"
       ],
-      "branch": "",
-      "pr": ""
+      "branch": "feat/ITPARK-faza-G-export",
+      "pr": "",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "ITPARK-602": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ITPARK-602.md",
       "milestone": "ITPARK",
@@ -3228,8 +3234,14 @@
       "depends_on": [
         "ITPARK-601"
       ],
-      "branch": "",
-      "pr": ""
+      "branch": "feat/ITPARK-faza-G-export",
+      "pr": "",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "ITPARK-701": {
       "status": "pending",
