@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "ITPARK-001",
   "last_completed": "PAR-118",
-  "iterations": 164,
+  "iterations": 165,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "PAR",
@@ -2842,6 +2842,180 @@
       "milestone": "POLISH",
       "phase": "1",
       "depends_on": []
+    },
+    "ITPARK-001": {
+      "status": "in_progress",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-001-schema.md",
+      "milestone": "ITPARK",
+      "phase": "A",
+      "depends_on": [],
+      "branch": "feat/ITPARK-faza-A-fundatie"
+    },
+    "ITPARK-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-002-caem-registry.md",
+      "milestone": "ITPARK",
+      "phase": "A",
+      "depends_on": ["ITPARK-001"],
+      "branch": "feat/ITPARK-faza-A-fundatie"
+    },
+    "ITPARK-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-003-roles-settings.md",
+      "milestone": "ITPARK",
+      "phase": "A",
+      "depends_on": ["ITPARK-001"],
+      "branch": "feat/ITPARK-faza-A-fundatie"
+    },
+    "ITPARK-101": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-101-engagement-crud.md",
+      "milestone": "ITPARK",
+      "phase": "B",
+      "depends_on": ["ITPARK-001", "ITPARK-003"]
+    },
+    "ITPARK-102": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-102-engagement-wizard.md",
+      "milestone": "ITPARK",
+      "phase": "B",
+      "depends_on": ["ITPARK-101"]
+    },
+    "ITPARK-201": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-201-revenue-lines.md",
+      "milestone": "ITPARK",
+      "phase": "C",
+      "depends_on": ["ITPARK-101"]
+    },
+    "ITPARK-202": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-202-revenue-import.md",
+      "milestone": "ITPARK",
+      "phase": "C",
+      "depends_on": ["ITPARK-201"]
+    },
+    "ITPARK-203": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-203-caem-suggest.md",
+      "milestone": "ITPARK",
+      "phase": "C",
+      "depends_on": ["ITPARK-201", "ITPARK-002"]
+    },
+    "ITPARK-301": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-301-calc-engine.md",
+      "milestone": "ITPARK",
+      "phase": "D",
+      "depends_on": ["ITPARK-201"]
+    },
+    "ITPARK-302": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-302-monthly-threshold.md",
+      "milestone": "ITPARK",
+      "phase": "D",
+      "depends_on": ["ITPARK-301"]
+    },
+    "ITPARK-401": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-401-anexa2.md",
+      "milestone": "ITPARK",
+      "phase": "E",
+      "depends_on": ["ITPARK-301"]
+    },
+    "ITPARK-402": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-402-anexa3.md",
+      "milestone": "ITPARK",
+      "phase": "E",
+      "depends_on": ["ITPARK-301"]
+    },
+    "ITPARK-403": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-403-anexa4-consistency.md",
+      "milestone": "ITPARK",
+      "phase": "E",
+      "depends_on": ["ITPARK-401", "ITPARK-402"]
+    },
+    "ITPARK-501": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-501-confirmation-letters.md",
+      "milestone": "ITPARK",
+      "phase": "F",
+      "depends_on": ["ITPARK-403"]
+    },
+    "ITPARK-502": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-502-self-declaration.md",
+      "milestone": "ITPARK",
+      "phase": "F",
+      "depends_on": ["ITPARK-501"]
+    },
+    "ITPARK-601": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-601-pdf-export.md",
+      "milestone": "ITPARK",
+      "phase": "G",
+      "depends_on": ["ITPARK-501", "ITPARK-502"]
+    },
+    "ITPARK-602": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-602-ready-checklist.md",
+      "milestone": "ITPARK",
+      "phase": "G",
+      "depends_on": ["ITPARK-601"]
+    },
+    "ITPARK-701": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-701-ai-capture.md",
+      "milestone": "ITPARK",
+      "phase": "H",
+      "depends_on": ["ITPARK-201"]
+    },
+    "ITPARK-702": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/ITPARK-702-compliance-dashboard.md",
+      "milestone": "ITPARK",
+      "phase": "H",
+      "depends_on": ["ITPARK-302"]
     }
   }
 }
