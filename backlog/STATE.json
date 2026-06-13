@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "PARTY-004",
-  "last_completed": "BILL-005",
-  "iterations": 208,
+  "current_item": "EINV-001",
+  "last_completed": "PARTY-004",
+  "iterations": 209,
   "last_run_at": "2026-06-14T10:00:00Z",
   "milestone_status": "FinDesk (SaaS finante+automatizare MD/RO) — 2026-06-13 owner request. CORE: backlog/fin/FIN-CORE.md. Driver: backlog/fin/BUILD-SEQUENCE.md. Migrations start > 0114. Specs CORE-001..005 written. Branch: feat/FIN-core.",
   "active_milestone": "FIN",
@@ -3365,7 +3365,7 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/156"
     },
     "PARTY-004": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PARTY-004.md",
@@ -3376,8 +3376,13 @@
         "BILL-001"
       ],
       "branch": "feat/FIN-party",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/156"
     },
     "REGISTRY-002": {
       "status": "done",
