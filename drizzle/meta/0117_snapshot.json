@@ -1,0 +1,64 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "id": "0117_fin_registry",
+  "prevId": "0114_par_approval_engine",
+  "tables": {
+    "fin_tax_rates": {
+      "name": "fin_tax_rates",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "tenant_id": { "name": "tenant_id", "type": "uuid", "primaryKey": false, "notNull": false },
+        "country": { "name": "country", "type": "char(2)", "primaryKey": false, "notNull": true },
+        "kind": { "name": "kind", "type": "fin_tax_kind", "primaryKey": false, "notNull": true },
+        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true },
+        "rate_pct": { "name": "rate_pct", "type": "numeric(6, 4)", "primaryKey": false, "notNull": true },
+        "effective_from": { "name": "effective_from", "type": "date", "primaryKey": false, "notNull": true },
+        "effective_to": { "name": "effective_to", "type": "date", "primaryKey": false, "notNull": false },
+        "is_default": { "name": "is_default", "type": "boolean", "primaryKey": false, "notNull": true, "default": false },
+        "notes": { "name": "notes", "type": "text", "primaryKey": false, "notNull": false },
+        "created_at": { "name": "created_at", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()" },
+        "updated_at": { "name": "updated_at", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {
+        "fin_tax_rates_tenant_country_idx": { "name": "fin_tax_rates_tenant_country_idx", "columns": ["tenant_id", "country"], "isUnique": false },
+        "fin_tax_rates_country_kind_idx": { "name": "fin_tax_rates_country_kind_idx", "columns": ["country", "kind"], "isUnique": false }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "fin_chart_of_accounts": {
+      "name": "fin_chart_of_accounts",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "tenant_id": { "name": "tenant_id", "type": "uuid", "primaryKey": false, "notNull": false },
+        "country": { "name": "country", "type": "char(2)", "primaryKey": false, "notNull": true },
+        "account_code": { "name": "account_code", "type": "text", "primaryKey": false, "notNull": true },
+        "account_name": { "name": "account_name", "type": "text", "primaryKey": false, "notNull": true },
+        "account_type": { "name": "account_type", "type": "fin_account_type", "primaryKey": false, "notNull": true },
+        "parent_code": { "name": "parent_code", "type": "text", "primaryKey": false, "notNull": false },
+        "is_active": { "name": "is_active", "type": "boolean", "primaryKey": false, "notNull": true, "default": true },
+        "created_at": { "name": "created_at", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()" },
+        "updated_at": { "name": "updated_at", "type": "timestamp", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {
+        "fin_chart_tenant_country_idx": { "name": "fin_chart_tenant_country_idx", "columns": ["tenant_id", "country"], "isUnique": false },
+        "fin_chart_tenant_code_uniq": { "name": "fin_chart_tenant_code_uniq", "columns": ["tenant_id", "account_code", "country"], "isUnique": true }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "fin_chart_tenant_code_uniq": { "name": "fin_chart_tenant_code_uniq", "nullsNotDistinct": false, "columns": ["tenant_id", "account_code", "country"] }
+      }
+    }
+  },
+  "enums": {
+    "fin_tax_kind": { "name": "fin_tax_kind", "values": ["vat", "income_tax", "social_contribution", "dividend_tax", "other"] },
+    "fin_account_type": { "name": "fin_account_type", "values": ["asset", "liability", "equity", "revenue", "expense", "cost_of_goods", "tax"] }
+  },
+  "schemas": {},
+  "sequences": {}
+}
