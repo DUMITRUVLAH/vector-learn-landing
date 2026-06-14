@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "SPLIT-204",
   "last_completed": "SPLIT-203",
   "iterations": 175,
   "last_run_at": "2026-06-14T00:00:00Z",
@@ -4205,8 +4205,8 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/180"
     },
     "SPLIT-204": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPLIT-204.md",
       "milestone": "SPLIT",
