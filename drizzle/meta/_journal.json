@@ -806,6 +806,13 @@
       "when": 1780910000000,
       "tag": "0114_par_approval_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1749900000000,
+      "tag": "0123_fin_data_settings",
+      "breakpoints": true
     }
   ]
 }
