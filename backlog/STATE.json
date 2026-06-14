@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "LEDGER-001",
-  "iterations": 165,
+  "last_completed": "LEDGER-002",
+  "iterations": 166,
   "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "FIN \u2014 LEDGER phase (17): LEDGER-001 done. Next: LEDGER-002 on same branch feat/FIN-ledger.",
+  "milestone_status": "FIN \u2014 LEDGER phase (17): LEDGER-002 done (61/85 from this branch perspective). Next: LEDGER-003.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3701,8 +3701,8 @@
       "pr": null
     },
     "LEDGER-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/LEDGER-002.md",
       "milestone": "FIN",
@@ -3713,7 +3713,12 @@
         "SPEND-002"
       ],
       "branch": "feat/FIN-ledger",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "LEDGER-003": {
