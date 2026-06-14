@@ -121,6 +121,8 @@ import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline /
 import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: finance queue + section 16 + pay
 // PAR Phase F routes
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
+// CLIENTPORTAL-001/002/003: client financial portal (magic-link, invoices, documents)
+import { finClientPortalRoutes } from "./routes/finClientPortal";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -333,6 +335,12 @@ app.route("/api/par", parAttachmentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
+
+// CLIENTPORTAL-001/002/003: client financial portal — public (token-based) + admin routes
+// Public routes (/me, /invoices, /documents) must be registered BEFORE tagRoutes requireAuth
+// but finClientPortalRoutes handles its own auth internally, so order with /api/fin is fine.
+// Mount at /api/fin/client-portal so it doesn't conflict with /api/portal (student portal).
+app.route("/api/fin/client-portal", finClientPortalRoutes);
 
 app.get("/api/health", async (c) => {
   try {

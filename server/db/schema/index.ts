@@ -87,3 +87,5 @@ export * from "./companyClients";
 export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
 export * from "./par"; // PAR-001: Payment Action Request module
+export * from "./finClientPortalTokens"; // CLIENTPORTAL-001: client financial portal tokens
+export * from "./finClientPortalDocuments"; // CLIENTPORTAL-003: documents uploaded via portal
