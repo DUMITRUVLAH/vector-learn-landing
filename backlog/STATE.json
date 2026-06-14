@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "INVENTORY-002",
-  "iterations": 177,
+  "last_completed": "INVENTORY-003",
+  "iterations": 179,
   "last_run_at": "2026-06-14T09:35:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "FIN",
@@ -3824,8 +3824,8 @@
       "pr": null
     },
     "INVENTORY-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/INVENTORY-003.md",
       "milestone": "FIN",
@@ -3835,7 +3835,12 @@
         "BILL-002"
       ],
       "branch": "feat/FIN-inventory",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "INVENTORY-004": {
