@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "last_completed": "CASH-004",
+  "iterations": 173,
+  "last_run_at": "2026-06-14T07:00:00Z",
+  "milestone_status": "FIN FinDesk — 37/85 done. CASH-001..004 done → PR #162. Next: FISC-001 (feat/FIN-fisc, from main).",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3248,8 +3248,8 @@
       "pr": null
     },
     "CAPTURE-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CAPTURE-003.md",
       "milestone": "FIN",
@@ -3259,12 +3259,17 @@
         "SPEND-002"
       ],
       "branch": "feat/FIN-capture",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "CASH-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-001.md",
       "milestone": "FIN",
@@ -3273,12 +3278,17 @@
         "BILL-001"
       ],
       "branch": "feat/FIN-cash",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-002.md",
       "milestone": "FIN",
@@ -3287,12 +3297,17 @@
         "CASH-001"
       ],
       "branch": "feat/FIN-cash",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-003.md",
       "milestone": "FIN",
@@ -3302,12 +3317,17 @@
         "BILL-002"
       ],
       "branch": "feat/FIN-cash",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-004.md",
       "milestone": "FIN",
@@ -3317,8 +3337,13 @@
         "CORE-004"
       ],
       "branch": "feat/FIN-cash",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "FISC-001": {
       "status": "pending",

@@ -9,6 +9,11 @@ import {
   parBudgetCodes,
   parDoaMatrix,
 } from "./schema/par";
+import {
+  finBankTransactions,
+  finPayments,
+  finPaymentAllocations,
+} from "./schema/finCash";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -248,7 +253,112 @@ async function seed() {
     console.log(`⚠️  PAR demo tenant already exists (${existingPar.id}). Skipping.`);
   }
 
-  console.log(`\n📌 Demo credentials:`);
+  // ── CASH-001: Seed demo bank transactions + payments + allocations ────────────
+  const FIN_CASH_SLUG = "demo-findesk";
+  const existingFinDesk = await db.query.tenants.findFirst({ where: eq(tenants.slug, FIN_CASH_SLUG) });
+  if (!existingFinDesk) {
+    const [finTenant] = await db
+      .insert(tenants)
+      .values({ name: "FinDesk Demo SRL", slug: FIN_CASH_SLUG, plan: "growth" })
+      .returning();
+
+    const batchId = "00000000-0000-0000-0000-000000000001";
+
+    // 3 bank transactions (2 in, 1 out)
+    const [tx1, tx2, tx3] = await db
+      .insert(finBankTransactions)
+      .values([
+        {
+          tenantId: finTenant.id,
+          accountLabel: "MAIB MDL",
+          txDate: "2026-06-01",
+          amountCents: 1500000, // 15,000 MDL
+          currency: "MDL",
+          reference: "INV-2026-0001",
+          counterparty: "Omega Tech SRL",
+          direction: "in",
+          importBatchId: batchId,
+          matchStatus: "matched",
+          matchScoreBp: 10000,
+        },
+        {
+          tenantId: finTenant.id,
+          accountLabel: "MAIB MDL",
+          txDate: "2026-06-05",
+          amountCents: 800000, // 8,000 MDL
+          currency: "MDL",
+          reference: "OP-123456",
+          counterparty: "Beta Services SRL",
+          direction: "in",
+          importBatchId: batchId,
+          matchStatus: "unmatched",
+          matchScoreBp: 0,
+        },
+        {
+          tenantId: finTenant.id,
+          accountLabel: "MAIB MDL",
+          txDate: "2026-06-10",
+          amountCents: 250000, // 2,500 MDL
+          currency: "MDL",
+          reference: "CHIRIE-IUNIE",
+          counterparty: "ImoInvest SRL",
+          direction: "out",
+          importBatchId: batchId,
+          matchStatus: "matched",
+          matchScoreBp: 8500,
+        },
+      ])
+      .returning();
+
+    // 2 payments
+    const [pay1, pay2] = await db
+      .insert(finPayments)
+      .values([
+        {
+          tenantId: finTenant.id,
+          partyId: null,
+          receivedDate: "2026-06-01",
+          amountCents: 1500000, // 15,000 MDL
+          currency: "MDL",
+          accountLabel: "MAIB MDL",
+          allocatedCents: 1000000, // 10,000 MDL alocat
+          bankTxId: tx1.id,
+          notes: "Plată factură INV-2026-0001 (parțial)",
+        },
+        {
+          tenantId: finTenant.id,
+          partyId: null,
+          receivedDate: "2026-06-05",
+          amountCents: 800000,
+          currency: "MDL",
+          accountLabel: "MAIB MDL",
+          allocatedCents: 0,
+          bankTxId: tx2.id,
+          notes: "Plată neidentificată — așteptă alocare manuală",
+        },
+      ])
+      .returning();
+
+    // 1 allocation: pay1 → invoice placeholder
+    const INVOICE_PLACEHOLDER_ID = "aaaaaaaa-0000-0000-0000-000000000001";
+    await db.insert(finPaymentAllocations).values([
+      {
+        tenantId: finTenant.id,
+        paymentId: pay1.id,
+        invoiceId: INVOICE_PLACEHOLDER_ID,
+        amountCents: 1000000, // 10,000 MDL
+      },
+    ]);
+
+    console.log(`CASH-001 seed: FinDesk demo tenant created (${finTenant.slug})`);
+    console.log(`  - 3 fin_bank_transactions (2 in, 1 out)`);
+    console.log(`  - 2 fin_payments (1 partial allocated, 1 unmatched)`);
+    console.log(`  - 1 fin_payment_allocation`);
+  } else {
+    console.log(`CASH demo tenant already exists (${existingFinDesk.id}). Skipping.`);
+  }
+
+  console.log(`\n Demo credentials:`);
   console.log(`   email: ${admin.email}`);
   console.log(`   password: ${DEMO_PASSWORD}`);
   console.log(`   tenant slug: ${tenant.slug}`);
