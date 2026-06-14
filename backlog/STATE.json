@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "CASH-004",
-  "last_completed": "CASH-003",
-  "iterations": 172,
-  "last_run_at": "2026-06-14T06:30:00Z",
-  "milestone_status": "FIN FinDesk — 36/85 done. CASH-003 done. CASH-004 in_progress.",
+  "current_item": null,
+  "last_completed": "CASH-004",
+  "iterations": 173,
+  "last_run_at": "2026-06-14T07:00:00Z",
+  "milestone_status": "FIN FinDesk — 37/85 done. CASH-001..004 done → PR #162. Next: FISC-001 (feat/FIN-fisc, from main).",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3326,7 +3326,7 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-004": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-004.md",
@@ -3337,8 +3337,13 @@
         "CORE-004"
       ],
       "branch": "feat/FIN-cash",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "FISC-001": {
       "status": "pending",
