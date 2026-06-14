@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAY-001",
-  "iterations": 179,
+  "last_completed": "PAY-002",
+  "iterations": 180,
   "last_run_at": "2026-06-14T08:00:00Z",
-  "milestone_status": "FIN FinDesk \u2014 41/85 done. PAY-001 done (schema). Next: PAY-002.",
+  "milestone_status": "FIN FinDesk \u2014 42/85 done. FISC phase done. PAY-001+PAY-002 done on feat/FIN-pay.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3419,8 +3419,8 @@
       "pr": null
     },
     "PAY-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAY-002.md",
       "milestone": "FIN",
@@ -3431,7 +3431,12 @@
         "SPEND-002"
       ],
       "branch": "feat/FIN-pay",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "PAY-003": {
