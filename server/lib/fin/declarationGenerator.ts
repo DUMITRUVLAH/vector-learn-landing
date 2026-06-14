@@ -15,7 +15,7 @@
  */
 
 import { jsPDF } from "jspdf";
-import type { FinTaxDeclaration, FinTaxPeriod } from "../db/schema/finTax";
+import type { FinTaxDeclaration, FinTaxPeriod } from "../../db/schema/finTax";
 
 // Re-export types pentru a evita import circular în routes
 export type { FinTaxDeclaration, FinTaxPeriod };

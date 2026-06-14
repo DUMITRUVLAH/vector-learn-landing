@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "FISC-004",
   "last_completed": "FISC-003",
-  "iterations": 177,
+  "iterations": 178,
   "last_run_at": "2026-06-14T08:00:00Z",
-  "milestone_status": "FIN FinDesk — 39/85 done. FISC-001+002+003 done → feat/FIN-fisc (PR pending). Next: FISC-004 (calendar termene).",
+  "milestone_status": "FIN FinDesk \u2014 39/85 done. FISC-004 in_progress.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -2209,7 +2209,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2249,7 +2249,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical — allergies, immunization records, medication log",
+      "title": "Medical \u2014 allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -3380,8 +3380,8 @@
       "pr": null
     },
     "FISC-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FISC-004.md",
       "milestone": "FIN",

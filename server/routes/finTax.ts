@@ -36,6 +36,11 @@ import {
   generateDeclaration,
   type ExportFormat,
 } from "../lib/fin/declarationGenerator";
+import {
+  computeDeadlinesForPeriod,
+  declarationTypeLabel,
+  type DeadlineWithStatus,
+} from "../lib/fin/taxDeadlines";
 
 export const finTaxRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -413,6 +418,109 @@ finTaxRoutes.get("/declarations/:id/export", async (c) => {
       "Content-Type": result.contentType,
       "Content-Disposition": `attachment; filename="${result.filename}"`,
     },
+  });
+});
+
+// ─── GET /api/fin/tax/dashboard — calendar termene, alerte, istoric ──────────
+//
+// FISC-004: returnează:
+//   upcoming_deadlines  — termene cu days_until > 7 şi nedepuse
+//   upcoming_alerts     — termene cu 0 <= days_until <= 7 şi nedepuse (roşu/galben în UI)
+//   overdue_alerts      — termene depăşite şi nedepuse
+//   recent_filings      — ultimele 20 declaraţii depuse (status=filed), descrescător
+//
+// Nu face niciun calcul fiscal — doar vizualizare şi tracking al statusului.
+// DETERMINIST: termene calculate cu taxDeadlines.ts (nu AI).
+
+finTaxRoutes.get("/dashboard", async (c) => {
+  const tenantId = c.get("user").tenantId;
+
+  // Preia toate perioadele cu declaraţiile lor (pentru calcul termene)
+  const periods = await db.query.finTaxPeriods.findMany({
+    where: eq(finTaxPeriods.tenantId, tenantId),
+    orderBy: [desc(finTaxPeriods.year), desc(sql`coalesce(${finTaxPeriods.month}, ${finTaxPeriods.quarter} * 3, 12)`)],
+    with: {
+      declarations: {
+        orderBy: [desc(finTaxDeclarations.createdAt)],
+      },
+    },
+  });
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const allDeadlines: DeadlineWithStatus[] = [];
+
+  for (const p of periods) {
+    const label = p.month
+      ? `${p.year}-${String(p.month).padStart(2, "0")}`
+      : p.quarter
+        ? `${p.year} T${p.quarter}`
+        : String(p.year);
+
+    const deadlines = computeDeadlinesForPeriod(
+      {
+        periodId: p.id,
+        periodLabel: label,
+        periodType: p.periodType,
+        year: p.year,
+        month: p.month,
+        quarter: p.quarter,
+        endDate: p.endDate,
+        declarations: p.declarations.map((d) => ({
+          id: d.id,
+          declarationType: d.declarationType,
+          status: d.status,
+          filedAt: d.filedAt ? d.filedAt.toISOString() : null,
+        })),
+      },
+      today
+    );
+
+    allDeadlines.push(...deadlines);
+  }
+
+  // Sortează: urgente primele, apoi după daysUntil
+  allDeadlines.sort((a, b) => a.daysUntil - b.daysUntil);
+
+  const upcomingDeadlines = allDeadlines.filter(
+    (d) => d.daysUntil > 7 && !d.isOverdue && !d.isUrgent
+  );
+  const upcomingAlerts = allDeadlines.filter((d) => d.isUrgent);
+  const overdueAlerts = allDeadlines.filter((d) => d.isOverdue);
+
+  // Ultimele 20 declaraţii depuse (filed)
+  const recentFilings = await db.query.finTaxDeclarations.findMany({
+    where: and(
+      eq(finTaxDeclarations.tenantId, tenantId),
+      eq(finTaxDeclarations.status, "filed")
+    ),
+    orderBy: [desc(finTaxDeclarations.filedAt)],
+    limit: 20,
+    with: { period: true },
+  });
+
+  const recentFilingsOut = recentFilings.map((d) => ({
+    id: d.id,
+    declarationType: d.declarationType,
+    declarationTypeLabel: declarationTypeLabel(d.declarationType),
+    periodId: d.periodId,
+    periodLabel: d.period
+      ? (d.period.month
+          ? `${d.period.year}-${String(d.period.month).padStart(2, "0")}`
+          : d.period.quarter
+            ? `${d.period.year} T${d.period.quarter}`
+            : String(d.period.year))
+      : "",
+    filedAt: d.filedAt ? d.filedAt.toISOString() : null,
+    notes: d.notes,
+  }));
+
+  return c.json({
+    upcoming_deadlines: upcomingDeadlines,
+    upcoming_alerts: upcomingAlerts,
+    overdue_alerts: overdueAlerts,
+    recent_filings: recentFilingsOut,
+    generated_at: new Date().toISOString(),
   });
 });
 
