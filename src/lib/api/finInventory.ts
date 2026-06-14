@@ -167,3 +167,55 @@ export function createStockMovement(
 export function getStockValue(): Promise<StockValueSummary> {
   return api<StockValueSummary>("/api/fin/inventory/stock-value");
 }
+
+// ─── INVENTORY-004: Rapoarte ──────────────────────────────────────────────────
+
+export interface StockSnapshotRow {
+  id: string;
+  name: string;
+  sku: string | null;
+  category: string | null;
+  unit: string;
+  qty: number;
+  avgCostCents: number;
+  valueCents: number;
+  minQtyAlert: number;
+}
+
+export interface StockSnapshot {
+  date: string;
+  rows: StockSnapshotRow[];
+  totalValueCents: number;
+}
+
+export interface PeriodReportRow {
+  id: string;
+  name: string;
+  sku: string | null;
+  category: string | null;
+  unit: string;
+  inQty: number;
+  inValueCents: number;
+  outQty: number;
+  outValueCents: number;
+  netQty: number;
+}
+
+export interface PeriodReport {
+  from: string;
+  to: string;
+  rows: PeriodReportRow[];
+}
+
+export function getStockSnapshot(date?: string): Promise<StockSnapshot> {
+  const qs = date ? `?date=${date}` : "";
+  return api<StockSnapshot>(`/api/fin/inventory/report/stock-snapshot${qs}`);
+}
+
+export function getPeriodReport(from?: string, to?: string): Promise<PeriodReport> {
+  const qs = new URLSearchParams();
+  if (from) qs.set("from", from);
+  if (to) qs.set("to", to);
+  const q = qs.toString();
+  return api<PeriodReport>(`/api/fin/inventory/report/period${q ? `?${q}` : ""}`);
+}

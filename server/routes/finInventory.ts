@@ -3,17 +3,20 @@
  * Montare: app.route("/api/fin/inventory", finInventoryRoutes)
  *
  * Endpoints:
- *   GET  /items                  — lista articolelor (cu filtre)
- *   POST /items                  — creare articol nou
- *   PATCH /items/:id             — actualizare articol
- *   GET  /movements              — jurnal mișcări
- *   POST /movements              — înregistrare mișcare manuală
+ *   GET  /items                     — lista articolelor (cu filtre)
+ *   POST /items                     — creare articol nou
+ *   PATCH /items/:id                — actualizare articol
+ *   GET  /movements                 — jurnal mișcări
+ *   POST /movements                 — înregistrare mișcare manuală
+ *   GET  /stock-value               — sumar valoare stoc curent
+ *   GET  /report/stock-snapshot     — (INVENTORY-004) stoc la dată
+ *   GET  /report/period             — (INVENTORY-004) mișcări în perioadă
  */
 
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, desc, asc } from "drizzle-orm";
+import { and, eq, desc, asc, lte, gte } from "drizzle-orm";
 import { db } from "../db/client";
 import { finInventoryItems, finStockMovements } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -461,3 +464,207 @@ finInventoryRoutes.get("/stock-value", async (c) => {
     belowMinAlert,
   });
 });
+
+// ─── INVENTORY-004: GET /report/stock-snapshot ────────────────────────────────
+// Stocul fiecărui articol calculat pe baza mișcărilor până la data dată.
+// Query param: date=YYYY-MM-DD (default: astăzi)
+// Returnează array de articole cu qty calculat + valoare la data.
+
+finInventoryRoutes.get(
+  "/report/stock-snapshot",
+  zValidator(
+    "query",
+    z.object({
+      date: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD")
+        .optional(),
+    })
+  ),
+  async (c) => {
+    const tenantId = c.get("user").tenantId;
+    const { date } = c.req.valid("query");
+    const snapshotDate = date ? new Date(`${date}T23:59:59.999Z`) : new Date();
+
+    // Toate articolele active ale tenant-ului
+    const items = await db
+      .select({
+        id: finInventoryItems.id,
+        name: finInventoryItems.name,
+        sku: finInventoryItems.sku,
+        category: finInventoryItems.category,
+        unit: finInventoryItems.unit,
+        avgCostCents: finInventoryItems.avgCostCents,
+        minQtyAlert: finInventoryItems.minQtyAlert,
+      })
+      .from(finInventoryItems)
+      .where(and(eq(finInventoryItems.tenantId, tenantId), eq(finInventoryItems.isActive, true)))
+      .orderBy(asc(finInventoryItems.name));
+
+    if (items.length === 0) {
+      return c.json({ date: date ?? new Date().toISOString().slice(0, 10), rows: [], totalValueCents: 0 });
+    }
+
+    // Mișcările până la data dată (sumă algebrică per articol)
+    const movements = await db
+      .select({
+        itemId: finStockMovements.itemId,
+        movementType: finStockMovements.movementType,
+        qty: finStockMovements.qty,
+        unitCostCents: finStockMovements.unitCostCents,
+        totalCostCents: finStockMovements.totalCostCents,
+      })
+      .from(finStockMovements)
+      .where(
+        and(
+          eq(finStockMovements.tenantId, tenantId),
+          lte(finStockMovements.movedAt, snapshotDate)
+        )
+      );
+
+    // Agregare per articol
+    const qtyMap = new Map<string, number>();
+    const lastCostMap = new Map<string, number>();
+    for (const mv of movements) {
+      const prev = qtyMap.get(mv.itemId) ?? 0;
+      const isIn = ["purchase", "transfer_in"].includes(mv.movementType);
+      const isOut = ["sale", "transfer_out"].includes(mv.movementType);
+      if (isIn) {
+        qtyMap.set(mv.itemId, prev + mv.qty);
+        lastCostMap.set(mv.itemId, mv.unitCostCents);
+      } else if (isOut) {
+        qtyMap.set(mv.itemId, prev - mv.qty);
+      } else {
+        // adjustment: poate fi pozitiv sau negativ — stocăm qty cu semn în notes
+        qtyMap.set(mv.itemId, prev + mv.qty);
+      }
+    }
+
+    let totalValueCents = 0;
+    const rows = items.map((item) => {
+      const qty = qtyMap.get(item.id) ?? 0;
+      const costCents = lastCostMap.get(item.id) ?? item.avgCostCents;
+      const valueCents = Math.max(0, qty) * costCents;
+      totalValueCents += valueCents;
+      return {
+        id: item.id,
+        name: item.name,
+        sku: item.sku,
+        category: item.category,
+        unit: item.unit,
+        qty: Math.max(0, qty),
+        avgCostCents: costCents,
+        valueCents,
+        minQtyAlert: item.minQtyAlert ?? 0,
+      };
+    });
+
+    return c.json({
+      date: date ?? new Date().toISOString().slice(0, 10),
+      rows,
+      totalValueCents,
+    });
+  }
+);
+
+// ─── INVENTORY-004: GET /report/period ────────────────────────────────────────
+// Mișcări în perioadă: intrări vs ieșiri per articol (pivot simplu).
+// Query params: from=YYYY-MM-DD, to=YYYY-MM-DD (default: luna curentă)
+
+finInventoryRoutes.get(
+  "/report/period",
+  zValidator(
+    "query",
+    z.object({
+      from: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "from must be YYYY-MM-DD")
+        .optional(),
+      to: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "to must be YYYY-MM-DD")
+        .optional(),
+    })
+  ),
+  async (c) => {
+    const tenantId = c.get("user").tenantId;
+    const { from, to } = c.req.valid("query");
+    const now = new Date();
+    const fromDate = from ? new Date(`${from}T00:00:00.000Z`) : new Date(now.getFullYear(), now.getMonth(), 1);
+    const toDate = to ? new Date(`${to}T23:59:59.999Z`) : new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    // Articolele active
+    const items = await db
+      .select({
+        id: finInventoryItems.id,
+        name: finInventoryItems.name,
+        sku: finInventoryItems.sku,
+        category: finInventoryItems.category,
+        unit: finInventoryItems.unit,
+      })
+      .from(finInventoryItems)
+      .where(and(eq(finInventoryItems.tenantId, tenantId), eq(finInventoryItems.isActive, true)))
+      .orderBy(asc(finInventoryItems.name));
+
+    // Mișcările din perioadă
+    const movements = await db
+      .select({
+        itemId: finStockMovements.itemId,
+        movementType: finStockMovements.movementType,
+        qty: finStockMovements.qty,
+        totalCostCents: finStockMovements.totalCostCents,
+      })
+      .from(finStockMovements)
+      .where(
+        and(
+          eq(finStockMovements.tenantId, tenantId),
+          gte(finStockMovements.movedAt, fromDate),
+          lte(finStockMovements.movedAt, toDate)
+        )
+      );
+
+    // Agregare pivot per articol
+    type PivotRow = {
+      inQty: number;
+      inValueCents: number;
+      outQty: number;
+      outValueCents: number;
+    };
+    const pivotMap = new Map<string, PivotRow>();
+    for (const mv of movements) {
+      const row = pivotMap.get(mv.itemId) ?? { inQty: 0, inValueCents: 0, outQty: 0, outValueCents: 0 };
+      if (["purchase", "transfer_in", "adjustment"].includes(mv.movementType)) {
+        row.inQty += mv.qty;
+        row.inValueCents += mv.totalCostCents;
+      } else {
+        row.outQty += mv.qty;
+        row.outValueCents += mv.totalCostCents;
+      }
+      pivotMap.set(mv.itemId, row);
+    }
+
+    const rows = items
+      .filter((item) => pivotMap.has(item.id))
+      .map((item) => {
+        const p = pivotMap.get(item.id)!;
+        return {
+          id: item.id,
+          name: item.name,
+          sku: item.sku,
+          category: item.category,
+          unit: item.unit,
+          inQty: p.inQty,
+          inValueCents: p.inValueCents,
+          outQty: p.outQty,
+          outValueCents: p.outValueCents,
+          netQty: p.inQty - p.outQty,
+        };
+      });
+
+    return c.json({
+      from: from ?? fromDate.toISOString().slice(0, 10),
+      to: to ?? toDate.toISOString().slice(0, 10),
+      rows,
+    });
+  }
+);
