@@ -1,13 +1,14 @@
 /**
- * ASSET-002 (FIN): FinDesk — Rute API modul Active Fixe
+ * ASSET-002/003 (FIN): FinDesk — Rute API modul Active Fixe
  *
  * Endpoints:
- *   GET  /api/fin/assets                              — lista active per tenant
- *   POST /api/fin/assets                              — creare activ nou
- *   GET  /api/fin/assets/:id                          — detaliu activ
- *   POST /api/fin/assets/depreciate                   — calculează amortizarea lunii (batch)
- *   POST /api/fin/assets/:id/confirm-depreciation     — confirmă amortizarea + postare fin_expenses
- *   GET  /api/fin/assets/:id/depreciation-entries     — istoricul amortizărilor per activ
+ *   GET   /api/fin/assets                              — lista active per tenant
+ *   POST  /api/fin/assets                              — creare activ nou
+ *   GET   /api/fin/assets/:id                          — detaliu activ
+ *   PATCH /api/fin/assets/:id                          — actualizare status (casare: scrapped)
+ *   POST  /api/fin/assets/depreciate                   — calculează amortizarea lunii (batch)
+ *   POST  /api/fin/assets/:id/confirm-depreciation     — confirmă amortizarea + postare fin_expenses
+ *   GET   /api/fin/assets/:id/depreciation-entries     — istoricul amortizărilor per activ
  *
  * Calculul amortizării este DETERMINIST (nu AI) — FIN-CORE regula #4.
  * La confirmare, se postează cheltuiala în fin_expenses — FIN-CORE regula #3.
@@ -144,6 +145,39 @@ finAssetsRoutes.get("/:id", async (c) => {
 
   return c.json({ asset });
 });
+
+// ─── PATCH /api/fin/assets/:id — actualizare status (casare) ─────────────────
+
+const patchAssetSchema = z.object({
+  status: z.enum(["active", "fully_depreciated", "sold", "scrapped"]),
+});
+
+finAssetsRoutes.patch(
+  "/:id",
+  zValidator("json", patchAssetSchema),
+  async (c) => {
+    const tenantId = c.get("user").tenantId;
+    const assetId = c.req.param("id");
+    const { status } = c.req.valid("json");
+
+    const existing = await db.query.finAssets.findFirst({
+      where: and(eq(finAssets.id, assetId), eq(finAssets.tenantId, tenantId)),
+      columns: { id: true },
+    });
+
+    if (!existing) {
+      return c.json({ error: "Activ negăsit." }, 404);
+    }
+
+    const [updated] = await db
+      .update(finAssets)
+      .set({ status: status as FinAssetStatus, updatedAt: new Date() })
+      .where(and(eq(finAssets.id, assetId), eq(finAssets.tenantId, tenantId)))
+      .returning();
+
+    return c.json({ asset: updated });
+  }
+);
 
 // ─── GET /api/fin/assets/:id/depreciation-entries — istoricul amortizărilor ──
 

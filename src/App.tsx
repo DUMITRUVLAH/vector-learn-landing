@@ -108,6 +108,7 @@ import ParDetailPage from "./pages/par/ParDetail";
 import ParAdmin from "./pages/par/ParAdmin";
 // PAR-117: Reports
 import { ParReports } from "./pages/par/ParReports";
+import { AssetsPage } from "./pages/app/AssetsPage"; // ASSET-003: FinDesk Active Fixe
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
 
@@ -224,6 +225,7 @@ function Routes() {
   if (path.startsWith("/app/contracts")) return <ContractsPage />;
   if (path.startsWith("/app/feedback")) return <FeedbackPage />;
   if (path.startsWith("/app/invoices")) return <InvoicesPage />;
+  if (path.startsWith("/app/fin/assets")) return <AssetsPage />; // ASSET-003: FinDesk Active Fixe
   // CONT-PLATA: payment accounts ("cont de plată") with registry lookup
   if (path.startsWith("/app/conturi-plata/setari")) return <SellerProfilePage />;
   if (path.startsWith("/app/conturi-plata/nou")) return <PaymentAccountEditorPage />;
