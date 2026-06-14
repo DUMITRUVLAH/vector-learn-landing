@@ -110,6 +110,7 @@ export const JOURNAL_SOURCE_TYPES = [
   "SPEND",
   "PAY",
   "ASSET",
+  "SALARY",
   "MANUAL",
 ] as const;
 export type JournalSourceType = (typeof JOURNAL_SOURCE_TYPES)[number];

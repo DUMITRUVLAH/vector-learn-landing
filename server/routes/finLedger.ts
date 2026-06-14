@@ -1,5 +1,5 @@
 /**
- * LEDGER-001/002: General Ledger routes for FinDesk
+ * LEDGER-001/002/003/004: General Ledger routes for FinDesk
  *
  * Routes (LEDGER-001):
  *   GET  /api/fin/ledger/accounts            — list chart of accounts (filterable by class, active)
@@ -11,6 +11,14 @@
  *   POST /api/fin/ledger/post-payment/:id    — quick-post from a payment (idempotent)
  *   GET  /api/fin/ledger/entries             — paginated journal entries list
  *
+ * Routes (LEDGER-003):
+ *   POST /api/fin/ledger/post-payroll/:id    — auto-post salary entry Debit 811 / Credit 531
+ *   POST /api/fin/ledger/post-depreciation   — post asset depreciation Debit 713 / Credit 121|124
+ *   GET  /api/fin/ledger/reconcile           — compare GL entries vs source tables (payments, payroll)
+ *
+ * Routes (LEDGER-004):
+ *   GET  /api/fin/ledger/account/:code       — carte mare: all movements for one account with running balance
+ *
  * Design:
  * - Tenant isolation via session.tenantId.
  * - No raw .execute().rows — Drizzle query builder throughout.
@@ -20,7 +28,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, gte, lte, lt, sum, count, inArray, asc, desc } from "drizzle-orm";
+import { and, eq, gte, lte, lt, sum, count, inArray, asc, desc, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   finLedgerAccounts,
@@ -28,6 +36,7 @@ import {
   finJournalLines,
 } from "../db/schema/finLedger";
 import { payments } from "../db/schema/payments";
+import { payrollEntries } from "../db/schema/payroll";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { seedLedgerAccounts } from "../lib/finLedgerSeed";
 
@@ -414,5 +423,508 @@ finLedgerRoutes.get(
     ]);
 
     return c.json({ data, total: Number(total), page }, 200);
+  }
+);
+
+// ─── LEDGER-003: POST /post-payroll/:payrollEntryId ───────────────────────────
+// Quick-post for a salary entry: Debit 811 / Credit 531.
+// Idempotent: if a SALARY entry already exists for this payrollEntryId, returns existing.
+
+finLedgerRoutes.post("/post-payroll/:payrollEntryId", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const payrollEntryId = c.req.param("payrollEntryId");
+
+  // Idempotency check: look for existing SALARY entry for this payroll
+  const [existing] = await db
+    .select({ id: finJournalEntries.id })
+    .from(finJournalEntries)
+    .where(
+      and(
+        eq(finJournalEntries.tenantId, tenantId),
+        eq(finJournalEntries.sourceType, "SALARY"),
+        eq(finJournalEntries.sourceId, payrollEntryId)
+      )
+    )
+    .limit(1);
+
+  if (existing) {
+    return c.json({ entryId: existing.id, existing: true }, 200);
+  }
+
+  // Lookup payroll entry
+  const [payroll] = await db
+    .select({
+      id: payrollEntries.id,
+      totalCents: payrollEntries.totalCents,
+      month: payrollEntries.month,
+      status: payrollEntries.status,
+    })
+    .from(payrollEntries)
+    .where(
+      and(
+        eq(payrollEntries.id, payrollEntryId),
+        eq(payrollEntries.tenantId, tenantId)
+      )
+    )
+    .limit(1);
+
+  if (!payroll) {
+    return c.json({ error: "payroll_entry_not_found" }, 404);
+  }
+
+  // Use last day of the month as entry date
+  const [year, mon] = payroll.month.split("-").map(Number);
+  const lastDay = new Date(year, mon, 0); // day 0 of next month = last day of current month
+  const entryDate = lastDay.toISOString().slice(0, 10);
+
+  const amountCents = payroll.totalCents;
+
+  // Double-entry: Debit 811 Cheltuieli retribuire / Credit 531 Numerar
+  const [entry] = await db
+    .insert(finJournalEntries)
+    .values({
+      tenantId,
+      entryDate,
+      description: `Salarii ${payroll.month} — înregistrare contabilă`,
+      reference: payrollEntryId,
+      sourceType: "SALARY",
+      sourceId: payrollEntryId,
+      status: "posted",
+      createdBy: user.id,
+    })
+    .returning({ id: finJournalEntries.id });
+
+  await db.insert(finJournalLines).values([
+    {
+      entryId: entry.id,
+      accountCode: "811",
+      debitCents: amountCents,
+      creditCents: 0,
+      currency: "MDL",
+      description: "Cheltuieli privind retribuirea muncii",
+    },
+    {
+      entryId: entry.id,
+      accountCode: "531",
+      debitCents: 0,
+      creditCents: amountCents,
+      currency: "MDL",
+      description: "Numerar / Bancă — plată salarii",
+    },
+  ]);
+
+  return c.json({ entryId: entry.id, existing: false }, 201);
+});
+
+// ─── LEDGER-003: POST /post-depreciation ─────────────────────────────────────
+// Post monthly asset depreciation: Debit 713 / Credit 121 (fixed) or 124 (intangible).
+// Idempotent: one entry per (assetRef, periodMonth).
+
+const postDepreciationSchema = z.object({
+  assetRef: z.string().min(1).max(100),
+  assetType: z.enum(["fixed", "intangible"]),
+  periodMonth: z.string().regex(/^\d{4}-\d{2}$/, "Format perioadă: YYYY-MM"),
+  depreciationCents: z.number().int().min(1),
+  description: z.string().max(500).optional(),
+});
+
+finLedgerRoutes.post(
+  "/post-depreciation",
+  zValidator("json", postDepreciationSchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const body = c.req.valid("json");
+
+    // Idempotency: check for existing ASSET entry with this assetRef + periodMonth as reference
+    const idempotencyRef = `DEPR:${body.assetRef}:${body.periodMonth}`;
+
+    const [existing] = await db
+      .select({ id: finJournalEntries.id })
+      .from(finJournalEntries)
+      .where(
+        and(
+          eq(finJournalEntries.tenantId, tenantId),
+          eq(finJournalEntries.sourceType, "ASSET"),
+          eq(finJournalEntries.reference, idempotencyRef)
+        )
+      )
+      .limit(1);
+
+    if (existing) {
+      return c.json({ entryId: existing.id, existing: true }, 200);
+    }
+
+    // Credit account: 121 for fixed assets, 124 for intangible assets
+    const creditAccountCode = body.assetType === "fixed" ? "121" : "124";
+    const creditAccountName =
+      body.assetType === "fixed"
+        ? "Amortizarea mijloacelor fixe"
+        : "Amortizarea activelor nemateriale";
+
+    // Entry date: last day of periodMonth
+    const [year, mon] = body.periodMonth.split("-").map(Number);
+    const lastDay = new Date(year, mon, 0);
+    const entryDate = lastDay.toISOString().slice(0, 10);
+
+    const [entry] = await db
+      .insert(finJournalEntries)
+      .values({
+        tenantId,
+        entryDate,
+        description:
+          body.description ??
+          `Depreciere ${body.assetRef} — ${body.periodMonth}`,
+        reference: idempotencyRef,
+        sourceType: "ASSET",
+        sourceId: null,
+        status: "posted",
+        createdBy: user.id,
+      })
+      .returning({ id: finJournalEntries.id });
+
+    await db.insert(finJournalLines).values([
+      {
+        entryId: entry.id,
+        accountCode: "713",
+        debitCents: body.depreciationCents,
+        creditCents: 0,
+        currency: "MDL",
+        description: `Cheltuieli uzură/depreciere — ${body.assetRef}`,
+      },
+      {
+        entryId: entry.id,
+        accountCode: creditAccountCode,
+        debitCents: 0,
+        creditCents: body.depreciationCents,
+        currency: "MDL",
+        description: creditAccountName,
+      },
+    ]);
+
+    return c.json({ entryId: entry.id, existing: false }, 201);
+  }
+);
+
+// ─── LEDGER-003: GET /reconcile ────────────────────────────────────────────────
+// Compare GL entries vs source tables (payments, payroll_entries).
+// Returns { ok, gaps: [{ sourceType, sourceId, amountCents, date }] }.
+
+const reconcileQuerySchema = z.object({
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Format dată: YYYY-MM-DD")
+    .optional(),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Format dată: YYYY-MM-DD")
+    .optional(),
+});
+
+finLedgerRoutes.get(
+  "/reconcile",
+  zValidator("query", reconcileQuerySchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const { from, to } = c.req.valid("query");
+
+    // ── 1. Payments: get all payments in range ──────────────────────────
+    const paymentFilters = [eq(payments.tenantId, tenantId)];
+    if (from) paymentFilters.push(gte(payments.paidAt, new Date(from)));
+    if (to) paymentFilters.push(lte(payments.paidAt, new Date(to + "T23:59:59Z")));
+
+    const allPayments = await db
+      .select({
+        id: payments.id,
+        amountCents: payments.amountCents,
+        paidAt: payments.paidAt,
+      })
+      .from(payments)
+      .where(and(...paymentFilters));
+
+    // ── 2. Posted PAY entries in GL ────────────────────────────────────
+    const postedPayEntries = await db
+      .select({ sourceId: finJournalEntries.sourceId })
+      .from(finJournalEntries)
+      .where(
+        and(
+          eq(finJournalEntries.tenantId, tenantId),
+          eq(finJournalEntries.sourceType, "PAY"),
+          eq(finJournalEntries.status, "posted")
+        )
+      );
+
+    const postedPayIds = new Set(
+      postedPayEntries.map((e) => e.sourceId).filter(Boolean)
+    );
+
+    // ── 3. Payroll entries: get paid payroll in range ──────────────────
+    const payrollFilters = [
+      eq(payrollEntries.tenantId, tenantId),
+      eq(payrollEntries.status, "paid"),
+    ];
+    // payroll uses month (YYYY-MM), convert to range
+    if (from) payrollFilters.push(gte(payrollEntries.month, from.slice(0, 7)));
+    if (to) payrollFilters.push(lte(payrollEntries.month, to.slice(0, 7)));
+
+    const allPayroll = await db
+      .select({
+        id: payrollEntries.id,
+        totalCents: payrollEntries.totalCents,
+        month: payrollEntries.month,
+      })
+      .from(payrollEntries)
+      .where(and(...payrollFilters));
+
+    // ── 4. Posted SALARY entries in GL ───────────────────────────────
+    const postedSalaryEntries = await db
+      .select({ sourceId: finJournalEntries.sourceId })
+      .from(finJournalEntries)
+      .where(
+        and(
+          eq(finJournalEntries.tenantId, tenantId),
+          eq(finJournalEntries.sourceType, "SALARY"),
+          eq(finJournalEntries.status, "posted")
+        )
+      );
+
+    const postedSalaryIds = new Set(
+      postedSalaryEntries.map((e) => e.sourceId).filter(Boolean)
+    );
+
+    // ── 5. Build gap lists ─────────────────────────────────────────────
+    type ReconcileGap = {
+      sourceType: string;
+      sourceId: string;
+      amountCents: number;
+      date: string | null;
+    };
+
+    const gaps: ReconcileGap[] = [];
+
+    for (const p of allPayments) {
+      if (!postedPayIds.has(p.id)) {
+        gaps.push({
+          sourceType: "PAY",
+          sourceId: p.id,
+          amountCents: p.amountCents,
+          date: p.paidAt ? p.paidAt.toISOString().slice(0, 10) : null,
+        });
+      }
+    }
+
+    for (const pr of allPayroll) {
+      if (!postedSalaryIds.has(pr.id)) {
+        gaps.push({
+          sourceType: "SALARY",
+          sourceId: pr.id,
+          amountCents: pr.totalCents,
+          date: pr.month,
+        });
+      }
+    }
+
+    return c.json(
+      {
+        ok: gaps.length === 0,
+        postedPayments: postedPayIds.size,
+        unpostedPayments: allPayments.length - postedPayIds.size,
+        postedPayroll: postedSalaryIds.size,
+        unpostedPayroll: allPayroll.length - postedSalaryIds.size,
+        gaps,
+        periodFrom: from ?? null,
+        periodTo: to ?? null,
+      },
+      200
+    );
+  }
+);
+
+// ─── LEDGER-004: GET /account/:code ──────────────────────────────────────────
+// Carte mare: all journal line movements for one account, with running balance.
+// Returns: { account, openingBalance, closingBalance, lines: AccountLedgerLine[] }
+
+const accountLedgerQuerySchema = z.object({
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Format dată: YYYY-MM-DD")
+    .optional(),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Format dată: YYYY-MM-DD")
+    .optional(),
+});
+
+finLedgerRoutes.get(
+  "/account/:code",
+  zValidator("query", accountLedgerQuerySchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const accountCode = c.req.param("code");
+    const { from, to } = c.req.valid("query");
+
+    // Fetch account metadata
+    const [account] = await db
+      .select()
+      .from(finLedgerAccounts)
+      .where(
+        and(
+          eq(finLedgerAccounts.tenantId, tenantId),
+          eq(finLedgerAccounts.code, accountCode)
+        )
+      )
+      .limit(1);
+
+    if (!account) {
+      return c.json({ error: "account_not_found" }, 404);
+    }
+
+    // Build date filters on journal entries
+    const entryFilters = [
+      eq(finJournalEntries.tenantId, tenantId),
+      eq(finJournalEntries.status, "posted"),
+    ];
+
+    // Calculate opening balance (all movements BEFORE from date)
+    let openingBalance = 0;
+    if (from) {
+      const priorEntries = await db
+        .select({ id: finJournalEntries.id })
+        .from(finJournalEntries)
+        .where(
+          and(
+            eq(finJournalEntries.tenantId, tenantId),
+            eq(finJournalEntries.status, "posted"),
+            lt(finJournalEntries.entryDate, from)
+          )
+        );
+
+      if (priorEntries.length > 0) {
+        const priorIds = priorEntries.map((e) => e.id);
+        const priorAgg = await db
+          .select({
+            debitSum: sum(finJournalLines.debitCents),
+            creditSum: sum(finJournalLines.creditCents),
+          })
+          .from(finJournalLines)
+          .where(
+            and(
+              inArray(finJournalLines.entryId, priorIds),
+              eq(finJournalLines.accountCode, accountCode)
+            )
+          );
+
+        const pr = priorAgg[0];
+        openingBalance =
+          Number(pr?.debitSum ?? 0) - Number(pr?.creditSum ?? 0);
+      }
+    }
+
+    // Get movements in range
+    if (from) {
+      entryFilters.push(gte(finJournalEntries.entryDate, from));
+    }
+    if (to) {
+      entryFilters.push(lte(finJournalEntries.entryDate, to));
+    }
+
+    const rangeEntries = await db
+      .select({
+        id: finJournalEntries.id,
+        entryDate: finJournalEntries.entryDate,
+        description: finJournalEntries.description,
+        reference: finJournalEntries.reference,
+        sourceType: finJournalEntries.sourceType,
+      })
+      .from(finJournalEntries)
+      .where(and(...entryFilters))
+      .orderBy(asc(finJournalEntries.entryDate), asc(finJournalEntries.createdAt));
+
+    if (rangeEntries.length === 0) {
+      return c.json({
+        account,
+        openingBalance,
+        closingBalance: openingBalance,
+        lines: [],
+        periodFrom: from ?? null,
+        periodTo: to ?? null,
+      });
+    }
+
+    const rangeIds = rangeEntries.map((e) => e.id);
+
+    // Fetch matching journal lines for this account in range
+    const matchingLines = await db
+      .select({
+        entryId: finJournalLines.entryId,
+        debitCents: finJournalLines.debitCents,
+        creditCents: finJournalLines.creditCents,
+        description: finJournalLines.description,
+      })
+      .from(finJournalLines)
+      .where(
+        and(
+          inArray(finJournalLines.entryId, rangeIds),
+          eq(finJournalLines.accountCode, accountCode)
+        )
+      );
+
+    // Build a map entryId → lines
+    const linesMap = new Map<string, typeof matchingLines>();
+    for (const l of matchingLines) {
+      const arr = linesMap.get(l.entryId) ?? [];
+      arr.push(l);
+      linesMap.set(l.entryId, arr);
+    }
+
+    // Build output lines with running balance
+    let runningBalance = openingBalance;
+    type AccountLedgerLine = {
+      date: string;
+      entryId: string;
+      description: string | null;
+      reference: string | null;
+      sourceType: string;
+      debitCents: number;
+      creditCents: number;
+      runningBalance: number;
+    };
+
+    const outputLines: AccountLedgerLine[] = [];
+
+    for (const entry of rangeEntries) {
+      const entryLines = linesMap.get(entry.id) ?? [];
+      if (entryLines.length === 0) continue; // entry doesn't affect this account
+
+      const totalDebit = entryLines.reduce((s, l) => s + Number(l.debitCents), 0);
+      const totalCredit = entryLines.reduce(
+        (s, l) => s + Number(l.creditCents),
+        0
+      );
+      runningBalance += totalDebit - totalCredit;
+
+      outputLines.push({
+        date: entry.entryDate,
+        entryId: entry.id,
+        description: entry.description ?? null,
+        reference: entry.reference ?? null,
+        sourceType: entry.sourceType,
+        debitCents: totalDebit,
+        creditCents: totalCredit,
+        runningBalance,
+      });
+    }
+
+    return c.json({
+      account,
+      openingBalance,
+      closingBalance: runningBalance,
+      lines: outputLines,
+      periodFrom: from ?? null,
+      periodTo: to ?? null,
+    });
   }
 );

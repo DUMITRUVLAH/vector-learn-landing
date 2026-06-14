@@ -28,6 +28,7 @@ CREATE INDEX IF NOT EXISTS "fla_tenant_idx" ON "fin_ledger_accounts" ("tenant_id
 CREATE INDEX IF NOT EXISTS "fla_class_idx" ON "fin_ledger_accounts" ("tenant_id", "account_class");
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "fla_active_idx" ON "fin_ledger_accounts" ("tenant_id", "is_active");
+--> statement-breakpoint
 
 -- ── fin_journal_entries (Journal entry headers) ────────────────────────────
 --> statement-breakpoint
@@ -62,6 +63,7 @@ CREATE INDEX IF NOT EXISTS "fje_tenant_date_idx" ON "fin_journal_entries" ("tena
 CREATE INDEX IF NOT EXISTS "fje_source_idx" ON "fin_journal_entries" ("tenant_id", "source_type", "source_id");
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "fje_status_idx" ON "fin_journal_entries" ("tenant_id", "status");
+--> statement-breakpoint
 
 -- ── fin_journal_lines (Debit/credit pairs) ─────────────────────────────────
 --> statement-breakpoint
