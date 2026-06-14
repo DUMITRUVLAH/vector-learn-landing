@@ -91,6 +91,7 @@ import { KpiDashboardPage } from "./pages/app/KpiDashboardPage";
 import { RevenueChartsPage } from "./pages/app/RevenueChartsPage";
 import { StudentRetentionPage } from "./pages/app/StudentRetentionPage";
 import { ExportPage } from "./pages/app/ExportPage";
+import { FinExportCenter } from "./pages/app/fin/ExportCenter"; // EXPORT-003: /app/fin/export
 import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
 import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -271,6 +272,8 @@ function Routes() {
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
   if (path.startsWith("/app/reports/retention")) return <StudentRetentionPage />;
   if (path.startsWith("/app/reports/export")) return <ExportPage />;
+  // EXPORT-003: /app/fin/export — export center contabil (1C, SAGA, SAF-T, SFS)
+  if (path.startsWith("/app/fin/export")) return <FinExportCenter />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // PAY-003: /portal/invoice/:id — parent-facing invoice portal (no auth)
   if (path.match(/^\/portal\/invoice\/[^/]+$/)) return <InvoicePortalPage />;
