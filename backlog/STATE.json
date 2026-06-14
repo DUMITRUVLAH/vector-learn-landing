@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "ASSET-001",
-  "last_completed": "PAY-003",
-  "iterations": 183,
-  "last_run_at": "2026-06-14T10:00:00Z",
-  "milestone_status": "FIN FinDesk — 43/85 done. PAY phase COMPLETE (PR #164). ASSET-001 in_progress on feat/FIN-asset.",
+  "current_item": "ASSET-002",
+  "last_completed": "ASSET-001",
+  "iterations": 184,
+  "last_run_at": "2026-06-14T10:30:00Z",
+  "milestone_status": "FIN FinDesk — 44/85 done. PAY COMPLETE. ASSET-001 done. ASSET-002 in_progress on feat/FIN-asset.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3429,7 +3429,7 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/164"
     },
     "ASSET-001": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ASSET-001.md",
@@ -3439,19 +3439,23 @@
         "CORE-001"
       ],
       "branch": "feat/FIN-asset",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "ASSET-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ASSET-002.md",
       "milestone": "FIN",
       "phase": "12",
       "depends_on": [
-        "ASSET-001",
-        "SPEND-002"
+        "ASSET-001"
       ],
       "branch": "feat/FIN-asset",
       "verdicts": {},
