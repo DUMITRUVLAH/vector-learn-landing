@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { db, closeDb } from "./client";
 import { tenants, users, students, teachers, courses, lessons, branches, leads } from "./schema";
+import { finBudgets, finBudgetLines } from "./schema/finBudgets";
 import {
   parMembers,
   parSettings,
@@ -157,6 +158,30 @@ async function seed() {
     ])
     .returning();
   console.log(`✅ ${leadRows.length} leads created`);
+
+  // ── BUDGET-001: Seed buget demo pentru centrul de limbi ──────────────────────
+  const [demoBudget] = await db
+    .insert(finBudgets)
+    .values({
+      tenantId: tenant.id,
+      name: "Buget operațional 2026 — Demo Lingua School",
+      fiscalYear: 2026,
+      department: "General",
+      status: "active",
+      notes: "Buget demo generat automat la seed.",
+      createdBy: admin.id,
+    })
+    .returning();
+
+  await db.insert(finBudgetLines).values([
+    { tenantId: tenant.id, budgetId: demoBudget.id, category: "rent", label: "Chirie sediu + filiale", budgetedCents: 12_000_00, displayOrder: 0 },
+    { tenantId: tenant.id, budgetId: demoBudget.id, category: "utilities", label: "Utilități (electricitate, internet)", budgetedCents: 3_000_00, displayOrder: 1 },
+    { tenantId: tenant.id, budgetId: demoBudget.id, category: "salaries", label: "Salarii personal", budgetedCents: 80_000_00, displayOrder: 2 },
+    { tenantId: tenant.id, budgetId: demoBudget.id, category: "marketing", label: "Marketing digital + print", budgetedCents: 8_000_00, displayOrder: 3 },
+    { tenantId: tenant.id, budgetId: demoBudget.id, category: "supplies", label: "Materiale didactice", budgetedCents: 5_000_00, displayOrder: 4 },
+  ]);
+
+  console.log(`✅ Budget demo seeded: ${demoBudget.name} (5 linii)`);
 
   // ── PAR-001: Seed NGO demo tenant for Payment Action Request module ──────────
   const PAR_SLUG = "demo-atic-ngo";
