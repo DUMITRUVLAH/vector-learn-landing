@@ -121,6 +121,8 @@ import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline /
 import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: finance queue + section 16 + pay
 // PAR Phase F routes
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
+// SPEND-002: FinDesk Cheltuieli API
+import { finExpensesRoutes } from "./routes/finExpenses"; // SPEND-002: /expenses CRUD + summary + categories
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -333,6 +335,9 @@ app.route("/api/par", parAttachmentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
+
+// SPEND-002: FinDesk Cheltuieli — /expenses routes (specific paths before /:id — see finExpenses.ts)
+app.route("/api/fin", finExpensesRoutes);
 
 app.get("/api/health", async (c) => {
   try {
