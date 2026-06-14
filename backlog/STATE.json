@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "MASS-001",
   "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "iterations": 200,
+  "last_run_at": "2026-06-14T08:00:00Z",
+  "milestone_status": "FIN FinDesk — MASS phase (15): MASS-001 in_progress on feat/FIN-mass. Bulk operations infrastructure.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3454,7 +3454,7 @@
       "pr": null
     },
     "ASSET-003": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/ASSET-003.md",
@@ -3469,7 +3469,7 @@
       "pr": null
     },
     "INSIGHT-001": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-001.md",
@@ -3483,7 +3483,7 @@
       "pr": null
     },
     "INSIGHT-002": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-002.md",
@@ -3501,7 +3501,7 @@
       "pr": null
     },
     "INSIGHT-003": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-003.md",
@@ -3515,7 +3515,7 @@
       "pr": null
     },
     "INSIGHT-004": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-004.md",
@@ -3530,7 +3530,7 @@
       "pr": null
     },
     "CALENDAR-001": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/CALENDAR-001.md",
@@ -3544,7 +3544,7 @@
       "pr": null
     },
     "CALENDAR-002": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/CALENDAR-002.md",
@@ -3560,7 +3560,7 @@
       "pr": null
     },
     "CALENDAR-003": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/CALENDAR-003.md",
@@ -3575,21 +3575,21 @@
       "pr": null
     },
     "MASS-001": {
-      "status": "done",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MASS-001.md",
       "milestone": "FIN",
       "phase": "15",
       "depends_on": [
-        "CORE-001"
+        "CALENDAR-001"
       ],
       "branch": "feat/FIN-mass",
       "verdicts": {},
       "pr": null
     },
     "MASS-002": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/MASS-002.md",
@@ -3606,7 +3606,7 @@
       "pr": null
     },
     "MASS-003": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/MASS-003.md",

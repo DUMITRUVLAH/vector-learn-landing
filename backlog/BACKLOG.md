@@ -345,3 +345,13 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | POLISH-001 | high | Global quick search + command palette (Cmd+K) | pending | [spec](specs/POLISH-001-nav-quick-search.md) |
 | POLISH-002 | high | Dashboard widget customization | pending | [spec](specs/POLISH-002-dashboard-widgets.md) |
 | POLISH-003 | normal | Empty states cu CTA pentru paginile cheie | pending | [spec](specs/POLISH-003-empty-states.md) |
+
+
+## Active milestone: FIN faza-15 — Operații Bulk (feat/FIN-mass)
+
+| ID | Priority | Title | Status | Spec |
+|----|----------|-------|--------|------|
+| MASS-001 | high | Schema fin_bulk_jobs + fin_bulk_rows + migration 0115 + runner async | in_progress | [spec](specs/MASS-001.md) |
+| MASS-002 | high | Facturi recurente bulk: AGREEMENT→BILL→EINV job async + UI | pending | [spec](specs/MASS-002.md) |
+| MASS-003 | high | Import bulk clienți/cheltuieli din CSV + raport per rând + re-try | pending | [spec](specs/MASS-003.md) |
+| MASS-004 | normal | Bulk retry manual + anulare job + notificare finalizare | pending | [spec](specs/MASS-004.md) |
