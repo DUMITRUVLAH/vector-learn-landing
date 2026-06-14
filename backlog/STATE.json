@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "TRUST-001",
-  "iterations": 165,
+  "last_completed": "TRUST-002",
+  "iterations": 166,
   "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "FIN \u2014 TRUST phase (16): TRUST-001 done. Next: LEDGER-001 on feat/FIN-ledger.",
+  "milestone_status": "FIN \u2014 TRUST phase (16): TRUST-002 done (59/85). Next: TRUST-003.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3657,8 +3657,8 @@
       "pr": null
     },
     "TRUST-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/TRUST-002.md",
       "milestone": "FIN",
@@ -3667,7 +3667,12 @@
         "TRUST-001"
       ],
       "branch": "feat/FIN-trust",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
       "pr": null
     },
     "TRUST-003": {

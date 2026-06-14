@@ -123,6 +123,8 @@ import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: financ
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
 // TRUST-001: FinDesk Data Trust & Privacy Settings
 import { finDataSettingsRoutes } from "./routes/finDataSettings";
+// TRUST-002: FinDesk AI Audit Log
+import { finAiAuditRoutes } from "./routes/finAiAudit";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -338,6 +340,8 @@ app.route("/api/par", parTimelineRoutes);
 
 // TRUST-001: FinDesk Data Trust & Privacy Settings
 app.route("/api/fin/data-settings", finDataSettingsRoutes);
+// TRUST-002: FinDesk AI Audit Log
+app.route("/api/fin/ai-audit", finAiAuditRoutes);
 
 app.get("/api/health", async (c) => {
   try {
