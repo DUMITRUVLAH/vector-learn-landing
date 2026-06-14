@@ -111,6 +111,7 @@ import { ParReports } from "./pages/par/ParReports";
 // CASH-002: FinDesk cash — import + overview
 import CashPage from "./pages/fin/CashPage";
 import CashImportPage from "./pages/fin/CashImportPage";
+import FinPaymentsPage from "./pages/fin/PaymentsPage";
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
 
@@ -273,6 +274,8 @@ function Routes() {
   if (path.startsWith("/app/fin/cash/import")) return <CashImportPage />;
   // CASH-002: /app/fin/cash — overview tranzacții
   if (path.startsWith("/app/fin/cash")) return <CashPage />;
+  // CASH-004: /app/fin/payments — registru plăți + alocare + coada nepotrivite
+  if (path.startsWith("/app/fin/payments")) return <FinPaymentsPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app/reports/kpi")) return <KpiDashboardPage />;
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
