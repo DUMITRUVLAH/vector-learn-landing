@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "MASS-001",
-  "last_completed": "PAR-118",
-  "iterations": 200,
-  "last_run_at": "2026-06-14T08:00:00Z",
-  "milestone_status": "FIN FinDesk — MASS phase (15): MASS-001 in_progress on feat/FIN-mass. Bulk operations infrastructure.",
+  "current_item": "MASS-002",
+  "last_completed": "MASS-001",
+  "iterations": 201,
+  "last_run_at": "2026-06-14T09:00:00Z",
+  "milestone_status": "FIN FinDesk — MASS phase (15): MASS-001 done, MASS-002 in_progress on feat/FIN-mass.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3575,7 +3575,7 @@
       "pr": null
     },
     "MASS-001": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MASS-001.md",
@@ -3585,21 +3585,26 @@
         "CALENDAR-001"
       ],
       "branch": "feat/FIN-mass",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "MASS-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MASS-002.md",
       "milestone": "FIN",
       "phase": "15",
       "depends_on": [
         "MASS-001",
-        "AGREEMENT-002",
-        "BILL-002",
-        "EINV-002"
+        "AGREEMENT-001",
+        "BILL-001",
+        "EINV-001"
       ],
       "branch": "feat/FIN-mass",
       "verdicts": {},

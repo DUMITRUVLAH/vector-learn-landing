@@ -351,7 +351,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 
 | ID | Priority | Title | Status | Spec |
 |----|----------|-------|--------|------|
-| MASS-001 | high | Schema fin_bulk_jobs + fin_bulk_rows + migration 0115 + runner async | in_progress | [spec](specs/MASS-001.md) |
+| MASS-001 | high | Schema fin_bulk_jobs + fin_bulk_rows + migration 0115 + runner async | done | [spec](specs/MASS-001.md) |
 | MASS-002 | high | Facturi recurente bulk: AGREEMENT→BILL→EINV job async + UI | pending | [spec](specs/MASS-002.md) |
 | MASS-003 | high | Import bulk clienți/cheltuieli din CSV + raport per rând + re-try | pending | [spec](specs/MASS-003.md) |
 | MASS-004 | normal | Bulk retry manual + anulare job + notificare finalizare | pending | [spec](specs/MASS-004.md) |
