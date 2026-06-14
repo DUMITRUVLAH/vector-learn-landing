@@ -87,3 +87,5 @@ export * from "./companyClients";
 export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
 export * from "./par"; // PAR-001: Payment Action Request module
+export * from "./finExchangeRates"; // MULTICURRENCY-001: BNM daily exchange rates
+export * from "./finLedger"; // MULTICURRENCY-002: FIN general ledger entries (fx_revaluation)
