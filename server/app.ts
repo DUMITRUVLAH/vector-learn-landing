@@ -121,6 +121,46 @@ import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline /
 import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: finance queue + section 16 + pay
 // PAR Phase F routes
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
+import { finMembersRoutes } from "./routes/finMembers"
+import { finOrgRoutes } from "./routes/finOrg"
+import { finOnboardingRoutes } from "./routes/finOnboarding"
+import { finRegistryRoutes } from "./routes/finRegistry"
+import { finPartiesRoutes } from "./routes/finParties"
+import { finAgreementsRoutes } from "./routes/finAgreements"
+import { finInvoicesRoutes } from "./routes/finInvoices"
+import { finEinvoicesRoutes } from "./routes/finEinvoices"
+import { finExpensesRoutes } from "./routes/finExpenses"
+import { finCapturesRoutes } from "./routes/finCaptures"
+import { finCashRoutes } from "./routes/finCash"
+import { finCashAllocationsRoutes } from "./routes/finCashAllocations"
+import { finTaxRoutes } from "./routes/finTax"
+import { finPayrollRoutes } from "./routes/finPayroll"
+import { finAssetsRoutes } from "./routes/finAssets"
+import { finCalendarRoutes } from "./routes/finCalendar"
+import { finMassRoutes } from "./routes/finMass"
+import { finDataSettingsRoutes } from "./routes/finDataSettings"
+import { finAiAuditRoutes } from "./routes/finAiAudit"
+import { finGdprRoutes } from "./routes/finGdpr"
+import { finLedgerRoutes } from "./routes/finLedger"
+import { finBankLinkRoutes } from "./routes/finBankLink"
+import { finInventoryRoutes } from "./routes/finInventory"
+import { finBudgetRoutes } from "./routes/finBudget"
+import { finExportRoutes } from "./routes/finExport"
+import { finClientPortalRoutes } from "./routes/finClientPortal"
+import { finExchangeRatesRoutes } from "./routes/finExchangeRates"
+import { finRevaluationRoutes } from "./routes/finRevaluation"
+import { finPaymentApprovalRoutes } from "./routes/finPaymentApproval"
+// SPLIT-003: Business Suite authentication (separate login for app_kind='business')
+import { businessAuthRoutes } from "./routes/businessAuth"
+// ITPark module routes (built on demo/findesk-complet but not yet mounted)
+import { itparkAiRoutes } from "./routes/itparkAi"
+import { itparkCaemRoutes } from "./routes/itparkCaem"
+import { itparkCalcRoutes } from "./routes/itparkCalc"
+import { itparkDocsRoutes } from "./routes/itparkDocs"
+import { itparkEngagementsRoutes } from "./routes/itparkEngagements"
+import { itparkImportRoutes } from "./routes/itparkImport"
+import { itparkLinesRoutes } from "./routes/itparkLines"
+import { itparkSettingsRoutes } from "./routes/itparkSettings"
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -162,6 +202,18 @@ app.post("/api/public/forms/:slug/ping", publicFormPingHandler);
 app.route("/api/auth", authRoutes);
 app.route("/api/auth/2fa", twoFactorRoutes); // AUTH-004: /setup, /verify, /enable, /disable
 app.route("/api/auth/sessions", sessionMgmtRoutes); // list + revoke active sessions
+// SPLIT-003: Business Suite auth — /api/business/auth/login, /logout, /me
+app.route("/api/business", businessAuthRoutes);
+// ITPark module routes (ITPARK-101..502 — built on demo but not mounted until now)
+// Specific prefixes first, then generic engagements last (Hono order matters)
+app.route("/api/itpark/ai", itparkAiRoutes);
+app.route("/api/itpark/caem-codes", itparkCaemRoutes);
+app.route("/api/itpark/calc", itparkCalcRoutes);
+app.route("/api/itpark/docs", itparkDocsRoutes);
+app.route("/api/itpark/import", itparkImportRoutes);
+app.route("/api/itpark/lines", itparkLinesRoutes);
+app.route("/api/itpark/settings", itparkSettingsRoutes);
+app.route("/api/itpark/engagements", itparkEngagementsRoutes); // most generic last
 app.route("/api/students", studentRoutes);
 app.route("/api/teachers", teacherRoutes);
 app.route("/api/courses", courseRoutes);
@@ -333,6 +385,35 @@ app.route("/api/par", parAttachmentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
+  app.route("/api/fin/members", finMembersRoutes)
+  app.route("/api/fin/onboarding", finOnboardingRoutes)
+  app.route("/api/fin", finOrgRoutes)
+  app.route("/api/fin/registry", finRegistryRoutes)
+  app.route("/api/fin/parties", finPartiesRoutes)
+  app.route("/api/fin/agreements", finAgreementsRoutes)
+  app.route("/api/fin/invoices", finInvoicesRoutes)
+  app.route("/api/fin", finEinvoicesRoutes)
+  app.route("/api/fin", finExpensesRoutes)
+  app.route("/api/fin", finCapturesRoutes)
+  app.route("/api/fin/cash", finCashRoutes)
+  app.route("/api/fin/cash", finCashAllocationsRoutes)
+  app.route("/api/fin/tax", finTaxRoutes)
+  app.route("/api/fin/payroll", finPayrollRoutes)
+  app.route("/api/fin/assets", finAssetsRoutes)
+  app.route("/api/fin/calendar", finCalendarRoutes)
+  app.route("/api/fin/mass", finMassRoutes)
+  app.route("/api/fin/data-settings", finDataSettingsRoutes)
+  app.route("/api/fin/ai-audit", finAiAuditRoutes)
+  app.route("/api/fin/gdpr", finGdprRoutes)
+  app.route("/api/fin/ledger", finLedgerRoutes)
+  app.route("/api/fin/banklink", finBankLinkRoutes)
+  app.route("/api/fin/inventory", finInventoryRoutes)
+  app.route("/api/fin/budget", finBudgetRoutes)
+  app.route("/api/fin/export", finExportRoutes)
+  app.route("/api/fin/client-portal", finClientPortalRoutes)
+  app.route("/api/fin/exchange-rates", finExchangeRatesRoutes)
+  app.route("/api/fin/revaluation", finRevaluationRoutes)
+  app.route("/api/payments", finPaymentApprovalRoutes)
 
 app.get("/api/health", async (c) => {
   try {

@@ -335,6 +335,59 @@ specs/STATE directly (tighten acceptance criteria, fix `depends_on`, mark reuse,
 tests) and proposes 0–3 high-value enhancements. It writes `backlog/reports/<MODULE>-backlog-critique.md`.
 Never build a freshly-written item that hasn't passed the critic. (Wired into orchestrator PLAN step 8.)
 
+### 3.5.1quater Multi-branch integration & migration lessons (2026-06-14, FinDesk) — NON-NEGOTIABLE
+A whole module (FinDesk, 24 phase-branches off `main`) integrated into one branch surfaced a
+recurring class of breakage. These rules are now the contract; the orchestrator, feature-builder,
+and anyone assembling a `demo/*` integration branch MUST follow them.
+
+1. **Migration prefixes are global and sequential — collisions are guaranteed across sibling
+   branches and MUST be resolved at integration.** Drizzle numbers from the branch point, so 12
+   branches all minted `0115_*`. When combining branches: renumber every fin migration so each
+   prefix is unique AND `> max(origin/main)`, rename the `.sql` + `meta/<idx>_snapshot.json`, and
+   rebuild `_journal.json` so `idx` values are unique and contiguous (no dup `idx`, no gaps). A
+   colliding prefix or a journal with a duplicate `idx` 500s every DB route. `db:reset` is the gate:
+   it must reach `✅ Migrations applied.` before the branch is considered integrated.
+
+2. **Never `ADD CONSTRAINT IF NOT EXISTS` — Postgres/PGlite reject it (syntax error 42601).** Wrap
+   FK/constraint adds in an idempotent guard:
+   `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='X') THEN ALTER TABLE … ADD CONSTRAINT "X" …; END IF; END $$;`
+   (Columns CAN use `ADD COLUMN IF NOT EXISTS`; constraints CANNOT.)
+
+3. **Two modules must never `CREATE TABLE` the same table with different shapes.** CASH and BANKLINK
+   both created `fin_bank_transactions` with divergent columns; the second `CREATE TABLE IF NOT
+   EXISTS` was skipped, then its FK referenced a column that didn't exist. Rule: one table = one
+   owning module/migration. If a later module needs columns on a shared table, it `ADD COLUMN IF NOT
+   EXISTS` them (and guards the FK per rule 2) instead of re-creating the table. integration-architect
+   flags this as `COMPETING_SYSTEM` / shared-table drift.
+
+4. **Two files with the same path on different branches = silent loss at integration.** When a
+   branch built `server/db/schema/finLedger.ts` with one shape and another branch (that started from
+   a `main` lacking the real ledger) wrote a *different* `finLedger.ts`, the last checkout won and
+   broke every importer (`does not provide an export named …`). Rule: a schema/route file has ONE
+   canonical owning branch; pull it from there, and verify every consumer's named imports resolve
+   (`check-undefined-refs` must be clean) after integration.
+
+5. **Wiring must be re-verified after integration, not assumed.** Combining file-by-file does NOT
+   carry over the shared glue files (`schema/index.ts` exports, `app.ts` route mounts, `App.tsx`
+   routes). After assembling: every `fin*` schema has `export * from "./X"` in `schema/index.ts`;
+   every `*Routes` is mounted in `app.ts`; every page referenced in `App.tsx` has a resolving import.
+   Gates: `check-undefined-refs` + `check-route-mounts` clean, then `vite build` green.
+
+6. **`db:reset` wipes data — re-seed before relying on the DB, and restart the server after seeding.**
+   `db:reset` runs migrations only (no seed). PGlite is single-writer: a server started before
+   `db:seed` holds a stale in-memory view and login fails with `invalid_credentials` even though the
+   row exists. Order: `db:reset` → `db:migrate` (implicit) → `db:seed` → (re)start the server.
+
+7. **`zod`: `.superRefine()` / `.refine()` return a `ZodEffects`, which has NO `.partial()`,
+   `.pick()`, `.omit()`, `.extend()`.** Build the plain `z.object({...})` first, derive
+   `.partial()` from it, THEN apply `.superRefine()` to each variant. (`createX.partial()` on a
+   refined schema is a runtime `TypeError` that only fails when the route module loads.)
+
+8. **Local full-app smoke is the real gate** (not just unit tests, which run on isolated PGlite and
+   pass while the integrated app is broken). After integrating: `db:reset && db:seed`, `npm run
+   stack:dev`, then `POST /api/auth/login` returns a user — only then is the branch demonstrably
+   runnable. See [[local-dev-db-and-autopilot-gotchas]] and [[local-e2e-full-app-run]].
+
 ### 3.5.2 Review → improve loop (don't ship the first draft)
 Each item goes through three reviewers, whose findings are handed to an **improver** pass
 (feature-builder) that applies the fixes; then it is re-reviewed. Repeat until clean (max 3

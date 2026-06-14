@@ -90,6 +90,13 @@ export interface ParDetail extends ParRequest {
   approvals: ParApproval[];
   attachments: ParAttachment[];
   payment: ParPayment | null;
+  /** Resolved display names for the PDF/print form (UUIDs stay in the *Id fields). */
+  requestedByName?: string | null;
+  departmentName?: string | null;
+  projectName?: string | null;
+  budgetCodeLabel?: string | null;
+  receivedByName?: string | null;
+  assignedToName?: string | null;
 }
 
 export interface ParApproval {
@@ -129,7 +136,16 @@ export interface ParPayment {
 export interface ParDepartment { id: string; name: string; active: boolean; }
 export interface ParProject { id: string; name: string; donor: string | null; active: boolean; }
 export interface ParBudgetCode { id: string; code: string; name: string; active: boolean; }
-export interface ParVendor { id: string; name: string; idnp: string | null; iban: string | null; bank: string | null; active: boolean; }
+export interface ParVendor {
+  id: string;
+  name: string;
+  idnp: string | null;
+  iban: string | null;
+  bank: string | null;
+  active: boolean;
+  /** SPLIT-201: linked fin_parties id for shared PARTY identity */
+  finPartyId?: string | null;
+}
 
 // ─── PAR CRUD ─────────────────────────────────────────────────────────────────
 
@@ -538,7 +554,7 @@ export async function deleteBudgetCode(id: string): Promise<{ ok: boolean }> {
 export async function createVendor(payload: { name: string; idnp?: string | null; iban?: string | null; bank?: string | null }): Promise<ParVendor> {
   return api("/api/par/vendors", { method: "POST", body: JSON.stringify(payload) });
 }
-export async function updateVendor(id: string, payload: Partial<{ name: string; idnp?: string | null; iban?: string | null; bank?: string | null; active: boolean }>): Promise<ParVendor> {
+export async function updateVendor(id: string, payload: Partial<{ name: string; idnp?: string | null; iban?: string | null; bank?: string | null; active: boolean; fin_party_id?: string | null }>): Promise<ParVendor> {
   return api(`/api/par/vendors/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 export async function deleteVendor(id: string): Promise<{ ok: boolean }> {
