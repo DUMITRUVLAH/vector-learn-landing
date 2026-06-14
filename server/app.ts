@@ -334,6 +334,10 @@ app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
 
+// FinDesk e-Factura Moldova (SFS) — EINV-002
+import { finEinvoicesRoutes } from "./routes/finEinvoices"; // EINV-002: e-Factura SFS submit/sync/cancel
+app.route("/api/fin", finEinvoicesRoutes);
+
 app.get("/api/health", async (c) => {
   try {
     await db.execute(sql`SELECT 1 as ping`);
