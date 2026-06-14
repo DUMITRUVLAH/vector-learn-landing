@@ -1,5 +1,5 @@
 /**
- * LEDGER-001/002: FinDesk General Ledger API client
+ * LEDGER-001/002/003/004: FinDesk General Ledger API client
  */
 import { api } from "../api";
 
@@ -77,6 +77,48 @@ export interface PostPaymentResponse {
   existing: boolean;
 }
 
+// LEDGER-003 types
+
+export interface ReconcileGap {
+  sourceType: string;
+  sourceId: string;
+  amountCents: number;
+  date: string | null;
+}
+
+export interface ReconcileResponse {
+  ok: boolean;
+  postedPayments: number;
+  unpostedPayments: number;
+  postedPayroll: number;
+  unpostedPayroll: number;
+  gaps: ReconcileGap[];
+  periodFrom: string | null;
+  periodTo: string | null;
+}
+
+// LEDGER-004 types
+
+export interface AccountLedgerLine {
+  date: string;
+  entryId: string;
+  description: string | null;
+  reference: string | null;
+  sourceType: string;
+  debitCents: number;
+  creditCents: number;
+  runningBalance: number;
+}
+
+export interface AccountLedgerResponse {
+  account: LedgerAccount;
+  openingBalance: number;
+  closingBalance: number;
+  lines: AccountLedgerLine[];
+  periodFrom: string | null;
+  periodTo: string | null;
+}
+
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export async function listLedgerAccounts(params?: {
@@ -143,6 +185,69 @@ export async function seedLedgerAccounts(): Promise<{
   message: string;
 }> {
   return api("/api/fin/ledger/accounts/seed", { method: "POST" });
+}
+
+// LEDGER-003: reconcile GL vs source tables
+
+export async function reconcileLedger(params?: {
+  from?: string;
+  to?: string;
+}): Promise<ReconcileResponse> {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set("from", params.from);
+  if (params?.to) qs.set("to", params.to);
+  const url = `/api/fin/ledger/reconcile${qs.toString() ? `?${qs.toString()}` : ""}`;
+  return api<ReconcileResponse>(url);
+}
+
+// LEDGER-004: carte mare per account
+
+export async function getAccountLedger(
+  accountCode: string,
+  params?: { from?: string; to?: string }
+): Promise<AccountLedgerResponse> {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set("from", params.from);
+  if (params?.to) qs.set("to", params.to);
+  const url = `/api/fin/ledger/account/${encodeURIComponent(accountCode)}${
+    qs.toString() ? `?${qs.toString()}` : ""
+  }`;
+  return api<AccountLedgerResponse>(url);
+}
+
+// LEDGER-004: CSV export helper
+
+export function exportJournalCsv(
+  entries: JournalEntry[],
+  from: string,
+  to: string
+): void {
+  const header = [
+    "Data",
+    "Descriere",
+    "Referinta",
+    "Sursa",
+    "Status",
+    "Creat la",
+  ].join(",");
+  const rows = entries.map((e) =>
+    [
+      e.entryDate,
+      `"${(e.description ?? "").replace(/"/g, '""')}"`,
+      e.reference ?? "",
+      e.sourceType,
+      e.status,
+      e.createdAt,
+    ].join(",")
+  );
+  const csv = [header, ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `jurnal-${from}-${to}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ─── Formatting helpers ───────────────────────────────────────────────────────
