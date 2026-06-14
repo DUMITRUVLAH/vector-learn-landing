@@ -16,6 +16,9 @@
  * POST /api/analytics/fin/saved-views  — creare vedere salvată
  * GET /api/analytics/fin/narratives    — lista narativele anului
  * PUT /api/analytics/fin/narratives/:month — upsert narativă
+ *
+ * INSIGHT-003 (FIN) — AI narativă CFO
+ * POST /api/analytics/fin/ai-narrative  — generare narativă AI din date reale DB
  */
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
@@ -29,6 +32,7 @@ import {
 } from "../db/schema";
 import { finSavedViews, finNarratives } from "../db/schema/finInsight";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { callAi } from "../lib/ai/client";
 
 export const analyticsRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -1044,5 +1048,247 @@ analyticsRoutes.put(
     }
 
     return c.json({ narrative });
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INSIGHT-003 (FIN): AI narativă CFO — generare din date REALE din DB
+// FIN-CORE regula #4: AI narează, nu calculează. Cifrele vin din query determinist.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const aiNarrativeSchema = z.object({
+  month: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/, "Format lună invalid. Folosiți YYYY-MM.")
+    .optional(),
+});
+
+// POST /api/analytics/fin/ai-narrative
+analyticsRoutes.post(
+  "/fin/ai-narrative",
+  zValidator("json", aiNarrativeSchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const userId = user.id;
+
+    const { month: requestedMonth } = c.req.valid("json");
+
+    // Default: luna curentă
+    const now = new Date();
+    const month =
+      requestedMonth ??
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return c.json({ error: "Format lună invalid. Folosiți YYYY-MM." }, 422);
+    }
+
+    // ── AC4: 409 dacă există narativă manuală ─────────────────────────────────
+    const existingNarrative = await db.query.finNarratives.findFirst({
+      where: and(
+        eq(finNarratives.tenantId, tenantId),
+        eq(finNarratives.month, month)
+      ),
+    });
+
+    if (existingNarrative && existingNarrative.generatedBy === "manual") {
+      return c.json(
+        {
+          error:
+            "Narativă manuală existentă. Șterge-o mai întâi dacă vrei să o înlocuiești cu AI.",
+        },
+        409
+      );
+    }
+
+    // ── Calcul DETERMINIST (FIN-CORE regula #4) ────────────────────────────────
+    // Interval: prima zi a lunii → ultima zi a lunii
+    const [year, monthNum] = month.split("-").map(Number);
+    const periodStart = new Date(year, monthNum - 1, 1);
+    const periodEnd = new Date(year, monthNum, 0, 23, 59, 59); // ultima zi a lunii
+
+    // Revenue: payments status='paid' în luna curentă
+    const revenueRows = await db
+      .select({ total: sql<string>`COALESCE(SUM(${payments.amountCents}), 0)` })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.tenantId, tenantId),
+          eq(payments.status, "paid"),
+          gte(payments.paidAt, periodStart),
+          lte(payments.paidAt, periodEnd)
+        )
+      );
+    const revenue = Number(revenueRows[0]?.total ?? 0);
+
+    // Receivable: invoices status='issued' emise în luna curentă
+    const receivableRows = await db
+      .select({ total: sql<string>`COALESCE(SUM(${invoices.amountCents}), 0)` })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.tenantId, tenantId),
+          eq(invoices.status, "issued"),
+          gte(invoices.issueDate, periodStart),
+          lte(invoices.issueDate, periodEnd)
+        )
+      );
+    const receivable = Number(receivableRows[0]?.total ?? 0);
+
+    const profit = revenue - receivable;
+
+    // Aging 0-30 și 90+ (totale din tabel, nu limitate la lună — starea curentă)
+    const today = new Date();
+    const day30 = new Date(today);
+    day30.setDate(today.getDate() - 30);
+    const day90 = new Date(today);
+    day90.setDate(today.getDate() - 90);
+
+    const aging030Rows = await db
+      .select({ total: sql<string>`COALESCE(SUM(${invoices.amountCents}), 0)` })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.tenantId, tenantId),
+          inArray(invoices.status, ["issued", "draft"]),
+          lt(invoices.dueDate, today),
+          gte(invoices.dueDate, day30)
+        )
+      );
+    const aging030 = Number(aging030Rows[0]?.total ?? 0);
+
+    const aging90plusRows = await db
+      .select({ total: sql<string>`COALESCE(SUM(${invoices.amountCents}), 0)` })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.tenantId, tenantId),
+          inArray(invoices.status, ["issued", "draft"]),
+          lt(invoices.dueDate, day90)
+        )
+      );
+    const aging90plus = Number(aging90plusRows[0]?.total ?? 0);
+
+    const agingTotal = aging030 + aging90plus;
+
+    // Top surse venit (group by course name via lessons join, max 3)
+    // Simplu: top categorii din payments prin curs
+    const topSourceRows = await db
+      .select({
+        name: courses.name,
+        total: sql<string>`COALESCE(SUM(${payments.amountCents}), 0)`,
+      })
+      .from(payments)
+      .leftJoin(courses, eq(payments.courseId, courses.id))
+      .where(
+        and(
+          eq(payments.tenantId, tenantId),
+          eq(payments.status, "paid"),
+          gte(payments.paidAt, periodStart),
+          lte(payments.paidAt, periodEnd)
+        )
+      )
+      .groupBy(courses.name)
+      .orderBy(desc(sql<number>`SUM(${payments.amountCents})`))
+      .limit(3);
+
+    const topSources = topSourceRows
+      .map((r) => `${r.name ?? "Alte surse"}: ${Math.round(Number(r.total) / 100)} MDL`)
+      .join(", ");
+
+    // ── Construiește prompt cu date reale ──────────────────────────────────────
+    const revenueMDL = (revenue / 100).toFixed(0);
+    const receivableMDL = (receivable / 100).toFixed(0);
+    const profitMDL = (profit / 100).toFixed(0);
+    const aging030MDL = (aging030 / 100).toFixed(0);
+    const aging90plusMDL = (aging90plus / 100).toFixed(0);
+
+    const systemPrompt =
+      "Ești CFO-ul unui centru educațional. Scrie narativă concisă pentru boardul de directori. " +
+      "Folosești EXCLUSIV datele furnizate — nu inventa cifre sau fapte. Scrie în română, 3-5 propoziții.";
+
+    const userMessage =
+      `Luna ${month}: ` +
+      `Venituri încasate: ${revenueMDL} MDL, ` +
+      `Creanțe emise: ${receivableMDL} MDL, ` +
+      `Profit estimat: ${profitMDL} MDL. ` +
+      `Restanțe 0-30 zile: ${aging030MDL} MDL, ` +
+      `Restanțe >90 zile: ${aging90plusMDL} MDL. ` +
+      (topSources ? `Top surse venit: ${topSources}. ` : "") +
+      "Scrie narativa performanței financiare pentru board, în română.";
+
+    // ── Apel AI (cu fallback stub) ─────────────────────────────────────────────
+    const aiResult = await callAi({
+      action: "fin_narrative",
+      systemPrompt,
+      userMessage,
+      tenantId,
+      userId,
+      entityType: "fin_narrative",
+      entityId: month,
+      maxTokens: 512,
+    });
+
+    // ── Detectare sentiment DETERMINIST ───────────────────────────────────────
+    let sentiment: "positive" | "neutral" | "negative" = "neutral";
+    if (profit > 0 && receivable <= revenue * 0.2) {
+      sentiment = "positive";
+    } else if (receivable > revenue * 0.3 || aging90plus > 0) {
+      sentiment = "negative";
+    }
+
+    // ── Upsert în fin_narratives ───────────────────────────────────────────────
+    const title = `Narativă AI — ${month}`;
+
+    let narrative;
+    if (existingNarrative) {
+      // Există narativă AI — o suprascriem
+      const [updated] = await db
+        .update(finNarratives)
+        .set({
+          title,
+          body: aiResult.text,
+          generatedBy: "ai",
+          sentiment,
+          publishedAt: null, // draft — directorul aprobă
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(finNarratives.id, existingNarrative.id),
+            eq(finNarratives.tenantId, tenantId)
+          )
+        )
+        .returning();
+      narrative = updated;
+    } else {
+      const [inserted] = await db
+        .insert(finNarratives)
+        .values({
+          tenantId,
+          authorId: userId,
+          month,
+          title,
+          body: aiResult.text,
+          generatedBy: "ai",
+          sentiment,
+          publishedAt: null, // draft
+        })
+        .returning();
+      narrative = inserted;
+    }
+
+    return c.json({
+      narrative,
+      auditId: aiResult.auditId,
+      isStub: aiResult.isStub,
+      metrics: {
+        revenue,
+        receivable,
+        profit,
+        agingTotal,
+      },
+    });
   }
 );

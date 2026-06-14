@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "INSIGHT-003",
   "last_completed": "INSIGHT-002",
-  "iterations": 191,
-  "last_run_at": "2026-06-14T12:30:00Z",
-  "milestone_status": "FIN FinDesk \u2014 49/85 done. INSIGHT-001+002 done on feat/FIN-insight.",
+  "iterations": 192,
+  "last_run_at": "2026-06-14T14:00:00Z",
+  "milestone_status": "FIN FinDesk \u2014 49/85 done. INSIGHT-001+002 done. Building INSIGHT-003.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3511,8 +3511,8 @@
       "pr": null
     },
     "INSIGHT-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-003.md",
       "milestone": "FIN",

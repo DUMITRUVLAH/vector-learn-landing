@@ -187,3 +187,35 @@ export function upsertNarrative(
     }
   );
 }
+
+// ─── INSIGHT-003: AI narativă CFO ────────────────────────────────────────────
+
+export interface AiNarrativeMetrics {
+  revenue: number; // cenți
+  receivable: number;
+  profit: number;
+  agingTotal: number;
+}
+
+export interface AiNarrativeResponse {
+  narrative: FinNarrative;
+  auditId: string;
+  isStub: boolean;
+  metrics: AiNarrativeMetrics;
+}
+
+/**
+ * Generează o narativă AI a lunii specificate (sau luna curentă).
+ * AI narează cifrele REALE din DB — nu inventează date (FIN-CORE regula #4).
+ * Returnează narativa draft (publishedAt = null) + datele metrice folosite.
+ *
+ * Aruncă eroare 409 dacă există o narativă manuală pentru luna respectivă.
+ */
+export function generateAiNarrative(
+  month?: string
+): Promise<AiNarrativeResponse> {
+  return api<AiNarrativeResponse>("/api/analytics/fin/ai-narrative", {
+    method: "POST",
+    body: JSON.stringify(month ? { month } : {}),
+  });
+}
