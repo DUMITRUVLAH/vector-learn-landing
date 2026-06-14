@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_item": "SPLIT-204",
+  "current_item": "SPLIT-301",
   "last_completed": "SPLIT-203",
   "iterations": 175,
   "last_run_at": "2026-06-14T00:00:00Z",
@@ -4205,7 +4205,7 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/180"
     },
     "SPLIT-204": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPLIT-204.md",
@@ -4216,12 +4216,17 @@
         "SPLIT-203"
       ],
       "branch": "feat/SPLIT-integration",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/180"
     },
     "SPLIT-301": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPLIT-301.md",
       "milestone": "SPLIT",
