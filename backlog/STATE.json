@@ -3889,8 +3889,8 @@
       "pr": null
     },
     "EXPORT-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/EXPORT-001.md",
       "milestone": "FIN",
