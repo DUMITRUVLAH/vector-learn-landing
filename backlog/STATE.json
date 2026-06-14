@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "EXPORT-002",
-  "last_completed": "EXPORT-001",
-  "iterations": 165,
+  "current_item": "EXPORT-003",
+  "last_completed": "EXPORT-002",
+  "iterations": 166,
   "last_run_at": "2026-06-14T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "FIN",
@@ -3908,7 +3908,7 @@
       "pr": null
     },
     "EXPORT-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/EXPORT-002.md",
@@ -3919,12 +3919,17 @@
         "FISC-002"
       ],
       "branch": "feat/FIN-export",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
       "pr": null
     },
     "EXPORT-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/EXPORT-003.md",
       "milestone": "FIN",
