@@ -353,3 +353,5 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | LEDGER-003 | high | GL auto-postings din salarii + deprecieri + reconciliere | done | feat/FIN-ledger | #170 |
 | LEDGER-004 | high | UI registru general — jurnal, carte mare, balanță tabs | done | feat/FIN-ledger | #170 |
 | BANKLINK-001 | high | Schema conectori bancari MD + import OFX/MT940 + dedup | done | feat/FIN-banklink | #171 |
+| BANKLINK-002 | high | UI wizard import + gestionare conexiuni bancare | done | feat/FIN-banklink | pending |
+| BANKLINK-003 | high | Auto-match tranzacții bancare → reconciliere CASH | done | feat/FIN-banklink | pending |

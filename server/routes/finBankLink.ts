@@ -1,5 +1,5 @@
 /**
- * BANKLINK-001: BankLink — bank connector management + OFX/MT940 import
+ * BankLink — bank connector management + OFX/MT940 import + auto-match (BANKLINK-001/002/003)
  *
  * Routes:
  *   GET    /api/fin/banklink/connections             — list active connections for tenant
@@ -8,26 +8,39 @@
  *   GET    /api/fin/banklink/transactions            — list imported transactions (paginated)
  *   POST   /api/fin/banklink/import                 — upload OFX/MT940, parse, dedup, insert
  *   POST   /api/fin/banklink/seed                   — seed demo data (dev/demo use)
+ *   POST   /api/fin/banklink/auto-match             — run match engine on all unmatched tx [BANKLINK-003]
+ *   PATCH  /api/fin/banklink/transactions/:id/match — manual match/ignore [BANKLINK-003]
+ *   GET    /api/fin/banklink/queue                  — unmatched tx with candidate suggestions [BANKLINK-003]
  *
  * Design:
  * - Tenant isolation via session.tenantId.
  * - No raw .execute().rows — Drizzle query builder throughout.
  * - Dedup: import skips transactions with existing (bankConnectionId, externalId).
+ * - Auto-match: determinist engine, proposes matches, user confirms (FIN-CORE #4/#5).
  * - GAP-ANALYSIS G2: bank integration — key differentiator for multi-branch academies.
  */
 
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, gte, lte, count, desc, asc } from "drizzle-orm";
+import { and, eq, gte, lte, count, desc, asc, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   finBankConnections,
   finBankTransactions,
 } from "../db/schema/finBankLink";
+import { invoices } from "../db/schema/invoices";
+import { payments } from "../db/schema/payments";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { parseOFX, parseMT940 } from "../lib/finBankParser";
 import { seedBankLink } from "../lib/finBankLinkSeed";
+import {
+  matchTransaction as engineMatch,
+  getCandidates,
+  type InvoiceCandidate,
+  type PaymentCandidate,
+  type BankTxForMatch,
+} from "../lib/finBankMatchEngine";
 
 export const finBankLinkRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -311,3 +324,277 @@ finBankLinkRoutes.post("/seed", async (c) => {
     200
   );
 });
+
+// ─── BANKLINK-003 ─────────────────────────────────────────────────────────────
+
+// ─── POST /auto-match ─────────────────────────────────────────────────────────
+// Runs the match engine on all unmatched transactions for the tenant.
+// Loads invoices + payments from DB, scores each tx, updates status + score.
+
+finBankLinkRoutes.post("/auto-match", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+
+  // Load all unmatched transactions for this tenant (credit only — positive amount)
+  const unmatchedRows = await db
+    .select({
+      id: finBankTransactions.id,
+      amountCents: finBankTransactions.amountCents,
+      transactionDate: finBankTransactions.transactionDate,
+      description: finBankTransactions.description,
+      reference: finBankTransactions.reference,
+    })
+    .from(finBankTransactions)
+    .where(
+      and(
+        eq(finBankTransactions.tenantId, tenantId),
+        eq(finBankTransactions.status, "unmatched")
+      )
+    );
+
+  if (unmatchedRows.length === 0) {
+    return c.json({ matched: 0, unmatched: 0, skipped: 0 }, 200);
+  }
+
+  // Load invoices for this tenant (only unpaid/partial)
+  const invRows = await db
+    .select({
+      id: invoices.id,
+      amountCents: invoices.amountCents,
+      dueDate: invoices.dueDate,
+      invoiceNumber: invoices.invoiceNumber,
+    })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.tenantId, tenantId),
+        inArray(invoices.status, ["draft", "issued"])
+      )
+    );
+
+  const invCandidates: InvoiceCandidate[] = invRows.map((r) => ({
+    id: r.id,
+    amountCents: r.amountCents,
+    dueDate: r.dueDate ? r.dueDate.toISOString().slice(0, 10) : null,
+    invoiceNumber: r.invoiceNumber ?? null,
+    tenantId,
+  }));
+
+  // Load payments for this tenant (pending or completed)
+  const payRows = await db
+    .select({
+      id: payments.id,
+      amountCents: payments.amountCents,
+      paidAt: payments.paidAt,
+      notes: payments.description,
+    })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.tenantId, tenantId),
+        inArray(payments.status, ["pending", "paid"])
+      )
+    );
+
+  const payCandidates: PaymentCandidate[] = payRows.map((r) => ({
+    id: r.id,
+    amountCents: r.amountCents,
+    paidAt: r.paidAt ? r.paidAt.toISOString() : null,
+    notes: r.notes ?? null,
+    tenantId,
+  }));
+
+  // Score and update each unmatched transaction
+  let matched = 0;
+  let skipped = 0;
+
+  for (const tx of unmatchedRows) {
+    const txForMatch: BankTxForMatch = {
+      id: tx.id,
+      amountCents: tx.amountCents,
+      transactionDate: tx.transactionDate,
+      description: tx.description ?? null,
+      reference: tx.reference ?? null,
+    };
+
+    const result = engineMatch(txForMatch, invCandidates, payCandidates);
+
+    if (result.scoreBp > 0 || result.status === "matched") {
+      await db
+        .update(finBankTransactions)
+        .set({
+          status: result.status,
+          matchedScoreBp: result.scoreBp,
+          ...(result.sourceType && result.sourceId
+            ? {
+                matchedSourceType: result.sourceType,
+                matchedSourceId: result.sourceId,
+              }
+            : {}),
+        })
+        .where(eq(finBankTransactions.id, tx.id));
+
+      if (result.status === "matched") matched++;
+    } else {
+      skipped++;
+    }
+  }
+
+  const unmatched = unmatchedRows.length - matched - skipped;
+
+  return c.json({ matched, unmatched: unmatched + skipped, skipped }, 200);
+});
+
+// ─── PATCH /transactions/:id/match ───────────────────────────────────────────
+// Manual match/ignore a transaction.
+
+const manualMatchSchema = z.object({
+  action: z.enum(["match", "ignore"]),
+  sourceType: z.string().max(30).optional(),
+  sourceId: z.string().uuid().optional(),
+});
+
+finBankLinkRoutes.patch(
+  "/transactions/:id/match",
+  zValidator("json", manualMatchSchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const id = c.req.param("id");
+    const body = c.req.valid("json");
+
+    // Verify ownership
+    const [tx] = await db
+      .select({ id: finBankTransactions.id })
+      .from(finBankTransactions)
+      .where(
+        and(
+          eq(finBankTransactions.id, id),
+          eq(finBankTransactions.tenantId, tenantId)
+        )
+      )
+      .limit(1);
+
+    if (!tx) {
+      return c.json({ error: "transaction_not_found" }, 404);
+    }
+
+    const newStatus = body.action === "match" ? "matched" : "ignored";
+
+    const [updated] = await db
+      .update(finBankTransactions)
+      .set({
+        status: newStatus,
+        matchedSourceType: body.action === "match" ? (body.sourceType ?? null) : null,
+        matchedSourceId: body.action === "match" ? (body.sourceId ?? null) : null,
+        matchedScoreBp: body.action === "match" ? 10000 : 0, // manual = 100%
+      })
+      .where(eq(finBankTransactions.id, id))
+      .returning();
+
+    return c.json({ transaction: updated }, 200);
+  }
+);
+
+// ─── GET /queue ───────────────────────────────────────────────────────────────
+// Returns unmatched transactions with candidate suggestions for the reconciliation queue UI.
+
+const queueQuerySchema = z.object({
+  connectionId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+finBankLinkRoutes.get(
+  "/queue",
+  zValidator("query", queueQuerySchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const { connectionId, page, limit } = c.req.valid("query");
+    const offset = (page - 1) * limit;
+
+    const filters = [
+      eq(finBankTransactions.tenantId, tenantId),
+      eq(finBankTransactions.status, "unmatched"),
+    ];
+
+    if (connectionId) {
+      filters.push(eq(finBankTransactions.bankConnectionId, connectionId));
+    }
+
+    const where = and(...filters);
+
+    const [txRows, [{ total }]] = await Promise.all([
+      db
+        .select()
+        .from(finBankTransactions)
+        .where(where)
+        .orderBy(desc(finBankTransactions.transactionDate))
+        .limit(limit)
+        .offset(offset),
+      db.select({ total: count() }).from(finBankTransactions).where(where),
+    ]);
+
+    // For each transaction, compute candidates
+    const invRows = await db
+      .select({
+        id: invoices.id,
+        amountCents: invoices.amountCents,
+        dueDate: invoices.dueDate,
+        invoiceNumber: invoices.invoiceNumber,
+      })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.tenantId, tenantId),
+          inArray(invoices.status, ["draft", "issued"])
+        )
+      );
+
+    const payRows = await db
+      .select({
+        id: payments.id,
+        amountCents: payments.amountCents,
+        paidAt: payments.paidAt,
+        notes: payments.description,
+      })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.tenantId, tenantId),
+          inArray(payments.status, ["pending", "paid"])
+        )
+      );
+
+    const invCandidates: InvoiceCandidate[] = invRows.map((r) => ({
+      id: r.id,
+      amountCents: r.amountCents,
+      dueDate: r.dueDate ? r.dueDate.toISOString().slice(0, 10) : null,
+      invoiceNumber: r.invoiceNumber ?? null,
+      tenantId,
+    }));
+
+    const payCandidates: PaymentCandidate[] = payRows.map((r) => ({
+      id: r.id,
+      amountCents: r.amountCents,
+      paidAt: r.paidAt ? r.paidAt.toISOString() : null,
+      notes: r.notes ?? null,
+      tenantId,
+    }));
+
+    const data = txRows.map((tx) => {
+      const txForMatch: BankTxForMatch = {
+        id: tx.id,
+        amountCents: tx.amountCents,
+        transactionDate: tx.transactionDate,
+        description: tx.description ?? null,
+        reference: tx.reference ?? null,
+      };
+      const candidates = getCandidates(txForMatch, invCandidates, payCandidates);
+      return { ...tx, candidates };
+    });
+
+    return c.json({ data, total: Number(total), page }, 200);
+  }
+);

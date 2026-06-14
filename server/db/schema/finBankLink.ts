@@ -164,6 +164,13 @@ export const finBankTransactions = pgTable(
     /** If matched, the UUID of the linked record */
     matchedSourceId: uuid("matched_source_id"),
 
+    /**
+     * Match confidence score in basis points (0..10000 = 0..100%).
+     * Produced by the auto-match engine. 0 = no match or not yet scored.
+     * Stored as integer for PGlite compatibility (no NUMERIC needed).
+     */
+    matchedScoreBp: bigint("matched_score_bp", { mode: "number" }).default(0),
+
     /** When this transaction was imported into the system */
     importedAt: timestamp("imported_at", { withTimezone: true })
       .notNull()
