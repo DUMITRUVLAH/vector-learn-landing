@@ -75,6 +75,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Cont de plată", href: "/app/conturi-plata", icon: Landmark }, // CONT-PLATA
       { label: "Contracte", href: "/app/contracts", icon: FileText },
       { label: "Salarizare", href: "/app/hr/payroll", icon: DollarSign },
+      { label: "Calendar Fiscal", href: "/app/fin/calendar", icon: Calendar }, // CALENDAR-003
     ],
   },
   {

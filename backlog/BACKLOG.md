@@ -345,3 +345,11 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | POLISH-001 | high | Global quick search + command palette (Cmd+K) | pending | [spec](specs/POLISH-001-nav-quick-search.md) |
 | POLISH-002 | high | Dashboard widget customization | pending | [spec](specs/POLISH-002-dashboard-widgets.md) |
 | POLISH-003 | normal | Empty states cu CTA pentru paginile cheie | pending | [spec](specs/POLISH-003-empty-states.md) |
+
+## Active milestone: FIN faza-14 — Calendar Fiscal (feat/FIN-calendar)
+
+| ID | Priority | Title | Status | Spec |
+|----|----------|-------|--------|------|
+| CALENDAR-001 | high | Schema fin_obligations + fin_period_locks + migration 0115 | done | [spec](specs/CALENDAR-001.md) |
+| CALENDAR-002 | high | Generator obligații fiscale MD 2026 + API /api/fin/calendar/* | done | [spec](specs/CALENDAR-002.md) |
+| CALENDAR-003 | high | Period close (lock #8) + UI /app/fin/calendar | done | [spec](specs/CALENDAR-003.md) |
