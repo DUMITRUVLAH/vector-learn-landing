@@ -1002,6 +1002,13 @@
       "when": 1700008520000,
       "tag": "0142_banklink_match",
       "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1700008580000,
+      "tag": "0143_fin_ledger_entries",
+      "breakpoints": true
     }
   ]
 }

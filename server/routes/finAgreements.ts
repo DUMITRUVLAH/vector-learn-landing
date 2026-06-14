@@ -39,7 +39,7 @@ const createAgreementSchema = z.object({
 
 const updateAgreementSchema = createAgreementSchema.partial();
 
-const createServiceSchema = z.object({
+const serviceShape = z.object({
   name: z.string().min(1, "Denumirea serviciului este obligatorie").max(500),
   description: z.string().max(2000).optional().nullable(),
   billingType: z.enum(["recurring", "one_time"]),
@@ -49,7 +49,9 @@ const createServiceSchema = z.object({
   recurrencePeriod: z.enum(["monthly", "quarterly", "yearly"]).optional().nullable(),
   nextBillDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   isActive: z.boolean().optional().default(true),
-}).superRefine((data, ctx) => {
+});
+
+const recurringRefine = (data: { billingType?: string; recurrencePeriod?: unknown }, ctx: z.RefinementCtx) => {
   if (data.billingType === "recurring" && !data.recurrencePeriod) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -57,9 +59,12 @@ const createServiceSchema = z.object({
       path: ["recurrencePeriod"],
     });
   }
-});
+};
 
-const updateServiceSchema = createServiceSchema.partial();
+const createServiceSchema = serviceShape.superRefine(recurringRefine);
+
+// .partial() must be called on the plain object (ZodEffects has no .partial())
+const updateServiceSchema = serviceShape.partial().superRefine(recurringRefine);
 
 // ─── Helper: compute next_bill_date ───────────────────────────────────────────
 
