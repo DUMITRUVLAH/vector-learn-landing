@@ -92,6 +92,7 @@ import { RevenueChartsPage } from "./pages/app/RevenueChartsPage";
 import { StudentRetentionPage } from "./pages/app/StudentRetentionPage";
 import { ExportPage } from "./pages/app/ExportPage";
 import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
+import { ClientPortalPage } from "./pages/portal/ClientPortalPage"; // CLIENTPORTAL-001/002/003
 import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 // PAR-105: Create wizard
@@ -272,6 +273,12 @@ function Routes() {
   if (path.startsWith("/app/reports/retention")) return <StudentRetentionPage />;
   if (path.startsWith("/app/reports/export")) return <ExportPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
+  // CLIENTPORTAL-001/002/003: /portal/client — financial client portal (magic-link, no auth)
+  if (path === "/portal/client" || path.startsWith("/portal/client?")) {
+    const searchParams = new URLSearchParams(window.location.search);
+    const token = searchParams.get("token") ?? "";
+    return <ClientPortalPage token={token} />;
+  }
   // PAY-003: /portal/invoice/:id — parent-facing invoice portal (no auth)
   if (path.match(/^\/portal\/invoice\/[^/]+$/)) return <InvoicePortalPage />;
   // /feedback/:token — public no-auth page for students
