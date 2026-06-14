@@ -148,6 +148,8 @@ import { RevaluationPage } from "./pages/app/RevaluationPage";
 // SPLIT-003: Business Suite auth pages
 import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
 import { BusinessDashboardPage } from "./pages/business/BusinessDashboardPage";
+// SPLIT-102: Business Suite landing page
+import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
 
 /** PAR-116: Role-aware wrapper — fetches current user's PAR roles then renders ParAdmin */
 function ParAdminPage() {
@@ -218,6 +220,8 @@ function Routes() {
   if (path.startsWith("/m/")) return <StudentDashboardPage />;
   // MOB-102: Teacher grading
   if (path.startsWith("/app/grading")) return <GradingPage />;
+  // SPLIT-102: Business Suite landing page — exact /business (before /business/*)
+  if (path === "/business" || path === "/business/") return <BusinessLandingPage />;
   // SPLIT-003: Business Suite routes (checked before /app/* to avoid cross-match)
   if (path.startsWith("/business/login")) return <BusinessLoginPage />;
   if (path.startsWith("/business/dashboard")) return <BusinessDashboardPage />;
