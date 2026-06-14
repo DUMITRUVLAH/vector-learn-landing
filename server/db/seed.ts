@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { db, closeDb } from "./client";
 import { tenants, users, students, teachers, courses, lessons, branches, leads } from "./schema";
+import { finExpenses } from "./schema/finExpenses"; // SPEND-001
 import {
   parMembers,
   parSettings,
@@ -247,6 +248,61 @@ async function seed() {
   } else {
     console.log(`⚠️  PAR demo tenant already exists (${existingPar.id}). Skipping.`);
   }
+
+  // SPEND-001: Seed demo expenses
+  await db.insert(finExpenses).values([
+    {
+      tenantId: tenant.id,
+      category: "rent",
+      amountCents: 350000, // 3500 MDL
+      currency: "MDL",
+      vatDeductible: false,
+      vatAmountCents: 0,
+      source: "manual",
+      status: "approved",
+      description: "Chirie sediu principal — mai 2026",
+      vendorName: "Imobil SRL",
+      reference: "CHR-2026-05",
+      expenseDate: "2026-05-01",
+      approvedBy: admin.id,
+      approvedAt: new Date("2026-05-02T09:00:00Z"),
+      createdBy: admin.id,
+    },
+    {
+      tenantId: tenant.id,
+      category: "utilities",
+      amountCents: 48000, // 480 MDL
+      currency: "MDL",
+      vatDeductible: true,
+      vatAmountCents: 8000, // 80 MDL TVA 20%
+      source: "manual",
+      status: "paid",
+      description: "Electricitate mai 2026",
+      vendorName: "Union Fenosa",
+      reference: "UTIL-2026-05-01",
+      expenseDate: "2026-05-15",
+      paidAt: new Date("2026-05-16T10:00:00Z"),
+      approvedBy: admin.id,
+      approvedAt: new Date("2026-05-16T09:00:00Z"),
+      createdBy: admin.id,
+    },
+    {
+      tenantId: tenant.id,
+      category: "software",
+      amountCents: 19900, // 199 MDL
+      currency: "MDL",
+      vatDeductible: true,
+      vatAmountCents: 3983, // ~20% TVA
+      source: "manual",
+      status: "draft",
+      description: "Abonament Zoom — iunie 2026",
+      vendorName: "Zoom Video Communications",
+      reference: "ZOOM-2026-06",
+      expenseDate: "2026-06-01",
+      createdBy: admin.id,
+    },
+  ]).onConflictDoNothing();
+  console.log("✅ SPEND-001: 3 cheltuieli demo inserate.");
 
   console.log(`\n📌 Demo credentials:`);
   console.log(`   email: ${admin.email}`);

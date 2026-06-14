@@ -1,12 +1,49 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
-  "active_milestone": "PAR",
+  "current_item": "SPEND-001",
+  "last_completed": "EINV-003",
+  "iterations": 213,
+  "last_run_at": "2026-06-14T00:00:00Z",
+  "milestone_status": "FinDesk — SPEND-001 in_progress (schema fin_expenses). Branch: feat/FIN-spend.",
+  "active_milestone": "FIN",
   "items": {
+    "EINV-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/EINV-003-ui-efactura.md",
+      "milestone": "FIN",
+      "phase": "einv",
+      "depends_on": ["EINV-001", "EINV-002"],
+      "branch": "feat/FIN-einv",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/159"
+    },
+    "SPEND-001": {
+      "status": "in_progress",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPEND-001-schema.md",
+      "milestone": "FIN",
+      "phase": "spend",
+      "depends_on": [],
+      "branch": "feat/FIN-spend"
+    },
+    "SPEND-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPEND-002-api.md",
+      "milestone": "FIN",
+      "phase": "spend",
+      "depends_on": ["SPEND-001"],
+      "branch": "feat/FIN-spend"
+    },
     "PAR-001": {
       "status": "done",
       "attempts": 1,
