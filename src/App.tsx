@@ -110,6 +110,11 @@ import ParAdmin from "./pages/par/ParAdmin";
 import { ParReports } from "./pages/par/ParReports";
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
+// PAY-002: FinDesk Payroll page
+import { PayrollFINPage } from "./pages/fin/PayrollPage";
+// PAY-003: FinDesk Payroll employees + run detail pages
+import { PayrollEmployeesPage } from "./pages/fin/PayrollEmployeesPage";
+import { PayrollRunDetailPage } from "./pages/fin/PayrollRunDetailPage";
 
 /** PAR-116: Role-aware wrapper — fetches current user's PAR roles then renders ParAdmin */
 function ParAdminPage() {
@@ -202,6 +207,12 @@ function Routes() {
   if (path.startsWith("/app/analytics/crm")) return <AnalyticsPage />;
   if (path.startsWith("/app/analytics")) return <AdvancedAnalyticsPage />; // GAP-016
   if (path.startsWith("/app/hr/payroll")) return <PayrollPage />;
+  // PAY-003: /app/fin/payroll/employees — management angajați
+  if (path.startsWith("/app/fin/payroll/employees")) return <PayrollEmployeesPage />;
+  // PAY-003: /app/fin/payroll/runs/:id — detaliu rulaj
+  if (path.match(/^\/app\/fin\/payroll\/runs\/[^/]+/)) return <PayrollRunDetailPage />;
+  // PAY-002: /app/fin/payroll — FinDesk salarizare cu motor DETERMINIST
+  if (path.startsWith("/app/fin/payroll")) return <PayrollFINPage />;
   // /app/hr/teachers/:id/stats
   if (path.match(/^\/app\/hr\/teachers\/[^/]+\/stats$/)) {
     const id = path.split("/")[4];

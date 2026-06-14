@@ -87,3 +87,4 @@ export * from "./companyClients";
 export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
 export * from "./par"; // PAR-001: Payment Action Request module
+export * from "./finPayroll"; // PAY-001: FinDesk Payroll — fin_employees + fin_payroll_runs + fin_payroll_items

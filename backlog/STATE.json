@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "last_completed": "PAY-003",
+  "iterations": 182,
+  "last_run_at": "2026-06-14T09:30:00Z",
+  "milestone_status": "FIN FinDesk \u2014 43/85 done. PAY phase COMPLETE (PAY-001+PAY-002+PAY-003 on feat/FIN-pay). Next: ASSET-001 on feat/FIN-asset.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -2209,7 +2209,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2249,7 +2249,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical — allergies, immunization records, medication log",
+      "title": "Medical \u2014 allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -3263,8 +3263,8 @@
       "pr": null
     },
     "CASH-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-001.md",
       "milestone": "FIN",
@@ -3274,11 +3274,11 @@
       ],
       "branch": "feat/FIN-cash",
       "verdicts": {},
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-002.md",
       "milestone": "FIN",
@@ -3288,11 +3288,11 @@
       ],
       "branch": "feat/FIN-cash",
       "verdicts": {},
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-003.md",
       "milestone": "FIN",
@@ -3303,11 +3303,11 @@
       ],
       "branch": "feat/FIN-cash",
       "verdicts": {},
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-004.md",
       "milestone": "FIN",
@@ -3318,11 +3318,11 @@
       ],
       "branch": "feat/FIN-cash",
       "verdicts": {},
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "FISC-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FISC-001.md",
       "milestone": "FIN",
@@ -3331,12 +3331,17 @@
         "REGISTRY-001"
       ],
       "branch": "feat/FIN-fisc",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
       "pr": null
     },
     "FISC-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FISC-002.md",
       "milestone": "FIN",
@@ -3347,12 +3352,17 @@
         "SPEND-002"
       ],
       "branch": "feat/FIN-fisc",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "FISC-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FISC-003.md",
       "milestone": "FIN",
@@ -3361,12 +3371,17 @@
         "FISC-002"
       ],
       "branch": "feat/FIN-fisc",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "FISC-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FISC-004.md",
       "milestone": "FIN",
@@ -3376,12 +3391,17 @@
         "CORE-004"
       ],
       "branch": "feat/FIN-fisc",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "PAY-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAY-001.md",
       "milestone": "FIN",
@@ -3390,12 +3410,17 @@
         "CORE-001"
       ],
       "branch": "feat/FIN-pay",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "PAY-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAY-002.md",
       "milestone": "FIN",
@@ -3406,22 +3431,31 @@
         "SPEND-002"
       ],
       "branch": "feat/FIN-pay",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "PAY-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAY-003.md",
       "milestone": "FIN",
       "phase": "11",
       "depends_on": [
-        "PAY-002",
-        "CORE-004"
+        "PAY-002"
       ],
       "branch": "feat/FIN-pay",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "ASSET-001": {
