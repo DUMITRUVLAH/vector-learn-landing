@@ -345,3 +345,11 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | POLISH-001 | high | Global quick search + command palette (Cmd+K) | pending | [spec](specs/POLISH-001-nav-quick-search.md) |
 | POLISH-002 | high | Dashboard widget customization | pending | [spec](specs/POLISH-002-dashboard-widgets.md) |
 | POLISH-003 | normal | Empty states cu CTA pentru paginile cheie | pending | [spec](specs/POLISH-003-empty-states.md) |
+
+## Active milestone: FIN faza-17/18 — LEDGER + BANKLINK GAP modules
+
+| ID | Priority | Title | Status | Branch | PR |
+|----|----------|-------|--------|--------|----|
+| LEDGER-003 | high | GL auto-postings din salarii + deprecieri + reconciliere | done | feat/FIN-ledger | #170 |
+| LEDGER-004 | high | UI registru general — jurnal, carte mare, balanță tabs | done | feat/FIN-ledger | #170 |
+| BANKLINK-001 | high | Schema conectori bancari MD + import OFX/MT940 + dedup | done | feat/FIN-banklink | #171 |
