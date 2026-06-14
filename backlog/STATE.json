@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "last_completed": "INSIGHT-004",
+  "iterations": 194,
+  "last_run_at": "2026-06-14T15:00:00Z",
+  "milestone_status": "FIN FinDesk \u2014 51/85 done. INSIGHT phase (13) COMPLETE: 001..004 on PR #166.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -2209,7 +2209,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2249,7 +2249,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical — allergies, immunization records, medication log",
+      "title": "Medical \u2014 allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -3454,8 +3454,8 @@
       "pr": null
     },
     "ASSET-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ASSET-003.md",
       "milestone": "FIN",
@@ -3469,8 +3469,8 @@
       "pr": null
     },
     "INSIGHT-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-001.md",
       "milestone": "FIN",
@@ -3479,12 +3479,17 @@
         "CORE-001"
       ],
       "branch": "feat/FIN-insight",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "OK"
+      },
       "pr": null
     },
     "INSIGHT-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-002.md",
       "milestone": "FIN",
@@ -3497,12 +3502,17 @@
         "FISC-002"
       ],
       "branch": "feat/FIN-insight",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "INSIGHT-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-003.md",
       "milestone": "FIN",
@@ -3511,23 +3521,33 @@
         "INSIGHT-002"
       ],
       "branch": "feat/FIN-insight",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/166"
     },
     "INSIGHT-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-004.md",
       "milestone": "FIN",
       "phase": "13",
       "depends_on": [
         "INSIGHT-002",
-        "CORE-004"
+        "INSIGHT-003"
       ],
       "branch": "feat/FIN-insight",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/166"
     },
     "CALENDAR-001": {
       "status": "pending",
