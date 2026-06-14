@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "INSIGHT-004",
-  "last_completed": "INSIGHT-003",
-  "iterations": 193,
-  "last_run_at": "2026-06-14T14:30:00Z",
-  "milestone_status": "FIN FinDesk \u2014 50/85 done. INSIGHT-001..003 done on feat/FIN-insight. Building INSIGHT-004.",
+  "current_item": null,
+  "last_completed": "INSIGHT-004",
+  "iterations": 194,
+  "last_run_at": "2026-06-14T15:00:00Z",
+  "milestone_status": "FIN FinDesk \u2014 51/85 done. INSIGHT phase (13) COMPLETE: 001..004 on PR #166.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3527,10 +3527,10 @@
         "manager": "MAYBE",
         "student": "PASS"
       },
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/166"
     },
     "INSIGHT-004": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-004.md",
@@ -3541,8 +3541,13 @@
         "INSIGHT-003"
       ],
       "branch": "feat/FIN-insight",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/166"
     },
     "CALENDAR-001": {
       "status": "pending",
