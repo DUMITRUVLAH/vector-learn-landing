@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "current_item": "CASH-002",
+  "last_completed": "CASH-001",
+  "iterations": 167,
+  "last_run_at": "2026-06-14T00:00:00Z",
+  "milestone_status": "FIN FinDesk \u2014 building CAPTURE-003 (UI confirmare c\u00e2mp), then CASH-001/002. 32/85 done. Branch: feat/FIN-capture (CAPTURE), feat/FIN-cash (CASH).",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -2209,7 +2209,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2249,7 +2249,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical — allergies, immunization records, medication log",
+      "title": "Medical \u2014 allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -3248,8 +3248,8 @@
       "pr": null
     },
     "CAPTURE-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CAPTURE-003.md",
       "milestone": "FIN",
@@ -3259,12 +3259,17 @@
         "SPEND-002"
       ],
       "branch": "feat/FIN-capture",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "CASH-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-001.md",
       "milestone": "FIN",
@@ -3273,12 +3278,17 @@
         "BILL-001"
       ],
       "branch": "feat/FIN-cash",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "CASH-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-002.md",
       "milestone": "FIN",
