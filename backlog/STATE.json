@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
+  "current_item": "EXPORT-001",
+  "last_completed": "BUDGET-003",
+  "iterations": 186,
+  "last_run_at": "2026-06-14T12:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "FIN",
   "items": {
@@ -3830,8 +3830,8 @@
       "pr": null
     },
     "INVENTORY-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/INVENTORY-004.md",
       "milestone": "FIN",
@@ -3841,12 +3841,17 @@
         "CORE-004"
       ],
       "branch": "feat/FIN-inventory",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/172"
     },
     "BUDGET-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BUDGET-001.md",
       "milestone": "FIN",
@@ -3855,12 +3860,17 @@
         "CORE-001"
       ],
       "branch": "feat/FIN-budget",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/173"
     },
     "BUDGET-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BUDGET-002.md",
       "milestone": "FIN",
@@ -3870,12 +3880,17 @@
         "SPEND-002"
       ],
       "branch": "feat/FIN-budget",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/173"
     },
     "BUDGET-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BUDGET-003.md",
       "milestone": "FIN",
