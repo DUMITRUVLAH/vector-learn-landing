@@ -1,5 +1,5 @@
 /**
- * EXPORT-001: API client pentru modulul Export Contabil FinDesk
+ * EXPORT-001/002: API client pentru modulul Export Contabil FinDesk
  * Endpoint-uri: /api/fin/export/*
  *
  * Toate funcțiile returnează un Blob pentru descărcare directă în browser.
@@ -76,4 +76,52 @@ export async function downloadSaftRoXml(params?: SaftExportParams): Promise<Blob
   if (params?.year) p.year = String(params.year);
   if (params?.period) p.period = params.period;
   return downloadBlob("/api/fin/export/saf-t-ro", p);
+}
+
+// ─── EXPORT-002: formate suplimentare ────────────────────────────────────────
+
+export interface ExportFormat {
+  id: string;
+  label: string;
+  description: string;
+  mime: string;
+  endpoint: string;
+  params: string[];
+}
+
+/** Returnează lista formatelor disponibile din /api/fin/export/formats */
+export async function getExportFormats(): Promise<ExportFormat[]> {
+  const res = await fetch("/api/fin/export/formats", { credentials: "include" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json() as { formats: ExportFormat[] };
+  return data.formats;
+}
+
+export interface DateRangeParams {
+  from?: string;  // YYYY-MM-DD
+  to?: string;    // YYYY-MM-DD
+}
+
+/** Export XML 1C:Accounting */
+export async function downloadOneCXml(params?: DateRangeParams): Promise<Blob> {
+  const p: Record<string, string> = {};
+  if (params?.from) p.from = params.from;
+  if (params?.to) p.to = params.to;
+  return downloadBlob("/api/fin/export/1c-xml", p);
+}
+
+/** Export CSV SAGA C (România) */
+export async function downloadSagaCsv(params?: DateRangeParams): Promise<Blob> {
+  const p: Record<string, string> = {};
+  if (params?.from) p.from = params.from;
+  if (params?.to) p.to = params.to;
+  return downloadBlob("/api/fin/export/saga-csv", p);
+}
+
+/** Export SAF-T RO complet cu TaxTable TVA */
+export async function downloadSaftRoFull(params?: SaftExportParams): Promise<Blob> {
+  const p: Record<string, string> = {};
+  if (params?.year) p.year = String(params.year);
+  if (params?.period) p.period = params.period;
+  return downloadBlob("/api/fin/export/saf-t-ro-full", p);
 }

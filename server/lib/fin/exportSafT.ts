@@ -1,5 +1,6 @@
 /**
- * EXPORT-001: Generator SAF-T RO simplificat (XML).
+ * EXPORT-001/002: Generator SAF-T RO (XML).
+ * EXPORT-002 extinde cu opțiunea `includeTax` pentru secțiunea TaxTable.
  *
  * Structură minimă implementată (OECD SAF-T pentru România):
  *   <AuditFile xmlns="urn:StandardAuditFile-Taxation-Financial:RO">
@@ -52,6 +53,17 @@ export interface SaftJournalEntry {
   ref?: string | null;
 }
 
+export interface SaftTaxEntry {
+  /** Cod TVA: ex "TVA20", "TVA0", "SCUTIT" */
+  taxCode: string;
+  /** Descriere: ex "TVA 20%", "TVA 0% export" */
+  taxDescription: string;
+  /** Procent: ex 20, 12, 0 */
+  taxPercentage: number;
+  /** Tip: "VAT" | "NONE" */
+  taxType: string;
+}
+
 export interface SaftOptions {
   /** Denumire companie */
   companyName: string;
@@ -65,13 +77,38 @@ export interface SaftOptions {
   accounts: SaftAccount[];
   /** Înregistrări jurnal GL */
   entries: SaftJournalEntry[];
+  /**
+   * EXPORT-002: dacă true, adaugă secțiunea <TaxTable> cu TVA standard MD/RO.
+   * Default: false (compatibil cu EXPORT-001).
+   */
+  includeTax?: boolean;
+  /** EXPORT-002: intrări TVA custom; dacă absent și includeTax=true → TVA MD implicit */
+  taxEntries?: SaftTaxEntry[];
 }
 
+/** Intrări TVA implicite pentru Moldova (conform Codul Fiscal MD) */
+const DEFAULT_MD_TAX_ENTRIES: SaftTaxEntry[] = [
+  { taxCode: "TVA20", taxDescription: "TVA 20% (standard MD)", taxPercentage: 20, taxType: "VAT" },
+  { taxCode: "TVA12", taxDescription: "TVA 12% (alimentar/agricol)", taxPercentage: 12, taxType: "VAT" },
+  { taxCode: "TVA0", taxDescription: "TVA 0% (export)", taxPercentage: 0, taxType: "VAT" },
+  { taxCode: "SCUTIT", taxDescription: "Scutit de TVA", taxPercentage: 0, taxType: "NONE" },
+];
+
 /**
- * Generează un fișier SAF-T RO simplificat ca string XML.
+ * Generează un fișier SAF-T RO ca string XML.
+ * EXPORT-002: dacă opts.includeTax=true → adaugă secțiunea TaxTable.
  */
 export function generateSafT(opts: SaftOptions): string {
-  const { companyName, taxRegistrationNumber, startDate, endDate, accounts, entries } = opts;
+  const {
+    companyName,
+    taxRegistrationNumber,
+    startDate,
+    endDate,
+    accounts,
+    entries,
+    includeTax = false,
+    taxEntries,
+  } = opts;
 
   const accountsXml = accounts
     .map(
@@ -113,6 +150,23 @@ ${linesXml}
     })
     .join("\n");
 
+  // EXPORT-002: secțiunea TaxTable (opțională)
+  let taxTableXml = "";
+  if (includeTax) {
+    const taxes = taxEntries ?? DEFAULT_MD_TAX_ENTRIES;
+    const taxLines = taxes
+      .map(
+        (t) => `    <TaxCodeDetails>
+      <TaxCode>${xmlEscape(t.taxCode)}</TaxCode>
+      <TaxType>${xmlEscape(t.taxType)}</TaxType>
+      <Description>${xmlEscape(t.taxDescription)}</Description>
+      <TaxPercentage>${t.taxPercentage.toFixed(2)}</TaxPercentage>
+    </TaxCodeDetails>`
+      )
+      .join("\n");
+    taxTableXml = `  <TaxTable>\n${taxLines}\n  </TaxTable>\n`;
+  }
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <AuditFile xmlns="urn:StandardAuditFile-Taxation-Financial:RO">
   <Header>
@@ -128,7 +182,7 @@ ${linesXml}
 ${accountsXml}
     </GeneralLedgerAccounts>
   </MasterFiles>
-  <GeneralLedgerEntries>
+${taxTableXml}  <GeneralLedgerEntries>
 ${journalXml}
   </GeneralLedgerEntries>
 </AuditFile>`;
