@@ -60,6 +60,8 @@ import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
 // TRUST-002: FinDesk AI Audit Log
 import { FinAiAuditPage } from "./pages/fin/FinAiAuditPage";
+// TRUST-003: FinDesk Security & Privacy Settings
+import { FinSecuritySettingsPage } from "./pages/fin/FinSecuritySettingsPage";
 import { PaymentAccountsPage } from "./pages/app/PaymentAccountsPage"; // CONT-PLATA
 import { PaymentAccountEditorPage } from "./pages/app/PaymentAccountEditorPage"; // CONT-PLATA
 import { PaymentAccountViewPage } from "./pages/app/PaymentAccountViewPage"; // CONT-PLATA
@@ -228,6 +230,8 @@ function Routes() {
   if (path.startsWith("/app/invoices")) return <InvoicesPage />;
   // TRUST-002: FinDesk AI Audit Log
   if (path.startsWith("/app/fin/settings/ai-audit")) return <FinAiAuditPage />;
+  // TRUST-003: FinDesk Security & Privacy Settings
+  if (path.startsWith("/app/fin/settings/security")) return <FinSecuritySettingsPage />;
   // CONT-PLATA: payment accounts ("cont de plată") with registry lookup
   if (path.startsWith("/app/conturi-plata/setari")) return <SellerProfilePage />;
   if (path.startsWith("/app/conturi-plata/nou")) return <PaymentAccountEditorPage />;

@@ -1,10 +1,11 @@
 /**
- * TRUST-001: FinDesk Data Trust & Privacy Settings (FIN-CORE §1.16)
+ * TRUST-001/003: FinDesk Data Trust & Privacy Settings (FIN-CORE §1.16)
  *
  * One row per tenant. Controls how the FinDesk AI features handle personal data:
- * - pseudonymize_ai_prompts: strip PII from prompts before sending to LLM (default: true)
- * - ai_log_retention_days:   purge ai_audit_log entries older than N days (default: 90)
- * - ai_opt_in:               tenant explicitly opted in to AI processing (default: false)
+ * - pseudonymize_ai_prompts:    strip PII from prompts before sending to LLM (default: true)
+ * - ai_log_retention_days:      purge ai_audit_log entries older than N days (default: 90)
+ * - ai_opt_in:                  tenant explicitly opted in to AI processing (default: false)
+ * - retention_days_students:    anonymize student PII older than N days (default: 1825 = 5 ani)
  *
  * Used by the PII anonymizer (server/lib/piiAnonymizer.ts) and the budget guard.
  */
@@ -52,6 +53,17 @@ export const finDataSettings = pgTable(
      */
     aiOptIn: boolean("ai_opt_in").notNull().default(false),
 
+    /**
+     * TRUST-003: How long to keep student personal data before anonymisation.
+     * After N days of inactivity, PII fields (name, email, phone, dateOfBirth)
+     * are replaced with GDPR removal markers via POST /api/fin/gdpr/anonymize-old.
+     * Default: 1825 days (5 years) — typical educational record retention.
+     * Range: 365–3650 days.
+     */
+    retentionDaysStudents: integer("retention_days_students")
+      .notNull()
+      .default(1825),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -85,4 +97,5 @@ export const FIN_DATA_SETTINGS_DEFAULTS = {
   pseudonymizeAiPrompts: true,
   aiLogRetentionDays: 90,
   aiOptIn: false,
+  retentionDaysStudents: 1825,
 } as const;

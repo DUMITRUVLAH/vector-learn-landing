@@ -125,6 +125,8 @@ import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — 
 import { finDataSettingsRoutes } from "./routes/finDataSettings";
 // TRUST-002: FinDesk AI Audit Log
 import { finAiAuditRoutes } from "./routes/finAiAudit";
+// TRUST-003: FinDesk GDPR Export + Anonymisation
+import { finGdprRoutes } from "./routes/finGdpr";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -342,6 +344,8 @@ app.route("/api/par", parTimelineRoutes);
 app.route("/api/fin/data-settings", finDataSettingsRoutes);
 // TRUST-002: FinDesk AI Audit Log
 app.route("/api/fin/ai-audit", finAiAuditRoutes);
+// TRUST-003: FinDesk GDPR Export + Anonymisation
+app.route("/api/fin/gdpr", finGdprRoutes);
 
 app.get("/api/health", async (c) => {
   try {
