@@ -22,7 +22,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "../db/client";
 import { finSfsSettings, finEinvoices } from "../db/schema/finEinvoices";
@@ -83,6 +83,43 @@ async function loadSfsConfig(
 
   return { config, settings: s };
 }
+
+// ─── GET /api/fin/einvoices ──────────────────────────────────────────────────
+// EINV-003: list all e-invoices for the tenant (ordered newest first)
+
+finEinvoicesRoutes.get("/einvoices", async (c) => {
+  const user = c.get("user");
+  const statusParam = c.req.query("status") as string | undefined;
+
+  const rows = await db
+    .select()
+    .from(finEinvoices)
+    .where(
+      statusParam
+        ? and(
+            eq(finEinvoices.tenantId, user.tenantId),
+            eq(finEinvoices.sfsStatus, statusParam as typeof finEinvoices.$inferSelect["sfsStatus"])
+          )
+        : eq(finEinvoices.tenantId, user.tenantId)
+    )
+    .orderBy(desc(finEinvoices.createdAt))
+    .limit(200);
+
+  return c.json({
+    items: rows.map((r) => ({
+      id: r.id,
+      finInvoiceId: r.finInvoiceId,
+      sfsStatus: r.sfsStatus,
+      sfsSerialNumber: r.sfsSerialNumber,
+      sfsInvoiceId: r.sfsInvoiceId,
+      sfsRequestStatus: r.sfsRequestStatus,
+      sfsErrorMessage: r.sfsErrorMessage,
+      submittedAt: r.submittedAt?.toISOString() ?? null,
+      lastSyncAt: r.lastSyncAt?.toISOString() ?? null,
+      createdAt: r.createdAt.toISOString(),
+    })),
+  });
+});
 
 // ─── GET /api/fin/sfs-settings ───────────────────────────────────────────────
 
