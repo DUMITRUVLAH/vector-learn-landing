@@ -1,12 +1,67 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
-  "active_milestone": "PAR",
+  "current_item": "CAPTURE-001",
+  "last_completed": "SPEND-003",
+  "iterations": 219,
+  "last_run_at": "2026-06-14T00:00:00Z",
+  "milestone_status": "FIN \u2014 SPEND-003, CAPTURE-001, CAPTURE-002 pending (PLAN step)",
+  "active_milestone": "FIN",
   "items": {
+    "EINV-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/EINV-003-ui-efactura.md",
+      "milestone": "FIN",
+      "phase": "einv",
+      "depends_on": [
+        "EINV-001",
+        "EINV-002"
+      ],
+      "branch": "feat/FIN-einv",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/159"
+    },
+    "SPEND-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPEND-001-schema.md",
+      "milestone": "FIN",
+      "phase": "spend",
+      "depends_on": [],
+      "branch": "feat/FIN-spend",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "SPEND-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPEND-002-api.md",
+      "milestone": "FIN",
+      "phase": "spend",
+      "depends_on": [
+        "SPEND-001"
+      ],
+      "branch": "feat/FIN-spend",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/160"
+    },
     "PAR-001": {
       "status": "done",
       "attempts": 1,
@@ -2842,6 +2897,50 @@
       "milestone": "POLISH",
       "phase": "1",
       "depends_on": []
+    },
+    "SPEND-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPEND-003-ui-expenses.md",
+      "milestone": "FIN",
+      "phase": "spend",
+      "depends_on": [
+        "SPEND-001",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-spend",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/160"
+    },
+    "CAPTURE-001": {
+      "status": "in_progress",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/CAPTURE-001-schema.md",
+      "milestone": "FIN",
+      "phase": "capture",
+      "depends_on": [
+        "SPEND-001"
+      ],
+      "branch": "feat/FIN-capture"
+    },
+    "CAPTURE-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CAPTURE-002-ai-pipeline.md",
+      "milestone": "FIN",
+      "phase": "capture",
+      "depends_on": [
+        "CAPTURE-001"
+      ],
+      "branch": "feat/FIN-capture"
     }
   }
 }
