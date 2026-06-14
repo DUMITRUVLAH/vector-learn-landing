@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "current_item": "MULTICURRENCY-002",
-  "last_completed": "MULTICURRENCY-001",
+  "current_item": null,
+  "last_completed": "MULTICURRENCY-002",
   "iterations": 165,
   "last_run_at": "2026-06-14T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
@@ -3994,7 +3994,7 @@
       "pr": null
     },
     "MULTICURRENCY-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MULTICURRENCY-002.md",
@@ -4004,7 +4004,12 @@
         "MULTICURRENCY-001"
       ],
       "branch": "feat/FIN-multicurrency",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "APPROVAL-001": {

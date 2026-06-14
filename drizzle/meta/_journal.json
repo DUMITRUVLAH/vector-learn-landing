@@ -813,6 +813,13 @@
       "when": 1781000000000,
       "tag": "0115_fin_exchange_rates",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1781001000000,
+      "tag": "0116_fin_ledger",
+      "breakpoints": true
     }
   ]
 }
