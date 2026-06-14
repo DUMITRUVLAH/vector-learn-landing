@@ -13,6 +13,7 @@ import {
   jsonb,
   index,
   unique,
+  // MASS-003: meta column added via migration 0122
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { tenants } from "./tenants";
@@ -77,6 +78,8 @@ export const finBulkRows = pgTable(
     // ID of the created object (invoice_id, party_id, etc.)
     resultRef: varchar("result_ref", { length: 200 }),
     processedAt: timestamp("processed_at", { withTimezone: true }),
+    // MASS-003: per-row metadata (csv_line, csv_headers, created_by for CSV import jobs)
+    meta: jsonb("meta").default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

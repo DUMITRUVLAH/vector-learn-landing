@@ -29,6 +29,10 @@ import {
   makeRecurringInvoiceProcessor,
   type RecurringJobMeta,
 } from "../lib/finRecurringProcessor";
+import {
+  makePartyImportProcessor,
+  makeSpendImportProcessor,
+} from "../lib/finCsvImportProcessor";
 
 export const finMassRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -207,4 +211,153 @@ finMassRoutes.get("/jobs/:jobId", async (c) => {
     .orderBy(finBulkRows.rowIndex);
 
   return c.json({ job, rows }, 200);
+});
+
+// ─── POST /import/parties ─────────────────────────────────────────────────────
+
+/**
+ * Import clients/suppliers from CSV multipart upload.
+ * Expects a multipart/form-data body with a "file" field containing CSV text.
+ * Returns { jobId, totalRows } immediately; processing is async.
+ *
+ * CSV headers (first row): kind,name,country,idno,iban,address,city,email,phone
+ */
+finMassRoutes.post("/import/parties", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+
+  let csvText: string;
+  try {
+    const contentType = c.req.header("content-type") ?? "";
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await c.req.formData();
+      const file = formData.get("file");
+      if (!file || typeof file === "string") {
+        return c.json({ error: "Missing file field in multipart form" }, 400);
+      }
+      csvText = await (file as File).text();
+    } else {
+      // Also accept raw CSV text body (for programmatic use)
+      csvText = await c.req.text();
+    }
+  } catch {
+    return c.json({ error: "Failed to read request body" }, 400);
+  }
+
+  const lines = csvText.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (lines.length < 2) {
+    return c.json({ error: "CSV must have a header row and at least one data row" }, 400);
+  }
+
+  const [headers, ...dataLines] = lines;
+  const totalRows = dataLines.length;
+
+  // Create bulk job
+  const [job] = await db
+    .insert(finBulkJobs)
+    .values({
+      tenantId,
+      jobType: "import_parties",
+      status: "pending",
+      totalRows,
+      meta: { fileName: "parties.csv" },
+      createdBy: user.id,
+    })
+    .returning();
+
+  // Create one row per CSV data line
+  await db.insert(finBulkRows).values(
+    dataLines.map((line, i) => ({
+      jobId: job.id,
+      rowIndex: i,
+      externalRef: null,
+      meta: { csv_line: line, csv_headers: headers } as unknown as Record<string, unknown>,
+    }))
+  );
+
+  // Run async
+  const processor = makePartyImportProcessor(tenantId);
+  setImmediate(() => {
+    runBulkJob(job.id, processor).catch((err) => {
+      console.error(`[finMass] party import job ${job.id} failed:`, err);
+    });
+  });
+
+  return c.json({ jobId: job.id, totalRows }, 200);
+});
+
+// ─── POST /import/spend ───────────────────────────────────────────────────────
+
+/**
+ * Import expense records from CSV multipart upload.
+ * Expects a multipart/form-data body with a "file" field containing CSV text.
+ * Returns { jobId, totalRows } immediately; processing is async.
+ *
+ * CSV headers: category,amount_cents,currency,vat_deductible,description,vendor_name,expense_date,reference
+ */
+finMassRoutes.post("/import/spend", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+
+  let csvText: string;
+  try {
+    const contentType = c.req.header("content-type") ?? "";
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await c.req.formData();
+      const file = formData.get("file");
+      if (!file || typeof file === "string") {
+        return c.json({ error: "Missing file field in multipart form" }, 400);
+      }
+      csvText = await (file as File).text();
+    } else {
+      csvText = await c.req.text();
+    }
+  } catch {
+    return c.json({ error: "Failed to read request body" }, 400);
+  }
+
+  const lines = csvText.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (lines.length < 2) {
+    return c.json({ error: "CSV must have a header row and at least one data row" }, 400);
+  }
+
+  const [headers, ...dataLines] = lines;
+  const totalRows = dataLines.length;
+
+  // Create bulk job
+  const [job] = await db
+    .insert(finBulkJobs)
+    .values({
+      tenantId,
+      jobType: "import_spend",
+      status: "pending",
+      totalRows,
+      meta: { fileName: "spend.csv" },
+      createdBy: user.id,
+    })
+    .returning();
+
+  // Create one row per CSV data line, storing created_by in meta for the processor
+  await db.insert(finBulkRows).values(
+    dataLines.map((line, i) => ({
+      jobId: job.id,
+      rowIndex: i,
+      externalRef: null,
+      meta: {
+        csv_line: line,
+        csv_headers: headers,
+        created_by: user.id,
+      } as unknown as Record<string, unknown>,
+    }))
+  );
+
+  // Run async
+  const processor = makeSpendImportProcessor(tenantId);
+  setImmediate(() => {
+    runBulkJob(job.id, processor).catch((err) => {
+      console.error(`[finMass] spend import job ${job.id} failed:`, err);
+    });
+  });
+
+  return c.json({ jobId: job.id, totalRows }, 200);
 });

@@ -89,3 +89,28 @@ export async function getBulkJob(jobId: string): Promise<{
     `/api/fin/mass/jobs/${jobId}`
   );
 }
+
+/** Import parties (clients/suppliers) from a CSV File object */
+export async function importPartiesFromCsv(
+  file: File
+): Promise<{ jobId: string; totalRows: number }> {
+  const form = new FormData();
+  form.append("file", file);
+  return api<{ jobId: string; totalRows: number }>("/api/fin/mass/import/parties", {
+    method: "POST",
+    body: form,
+    // Don't set Content-Type — browser sets it with boundary for multipart
+  });
+}
+
+/** Import spend (expense) records from a CSV File object */
+export async function importSpendFromCsv(
+  file: File
+): Promise<{ jobId: string; totalRows: number }> {
+  const form = new FormData();
+  form.append("file", file);
+  return api<{ jobId: string; totalRows: number }>("/api/fin/mass/import/spend", {
+    method: "POST",
+    body: form,
+  });
+}

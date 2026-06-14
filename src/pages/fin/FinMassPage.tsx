@@ -29,9 +29,12 @@ import {
   startRecurringInvoicesJob,
   listBulkJobs,
   getBulkJob,
+  importPartiesFromCsv,
+  importSpendFromCsv,
   type FinBulkJob,
   type FinBulkRow,
 } from "@/lib/api/finMass";
+import { CsvImportZone } from "@/components/fin/CsvImportZone";
 import { cn } from "@/lib/utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -218,6 +221,8 @@ export function FinMassPage() {
   const [error, setError] = useState<string | null>(null);
   const [includeEinv, setIncludeEinv] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [csvPartyUploading, setCsvPartyUploading] = useState(false);
+  const [csvSpendUploading, setCsvSpendUploading] = useState(false);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [jobRows, setJobRows] = useState<Record<string, FinBulkRow[] | null>>(
     {}
@@ -278,6 +283,46 @@ export function FinMassPage() {
     },
     [expandedJob, jobRows]
   );
+
+  // Upload parties CSV
+  const handlePartyCsvUpload = async (file: File) => {
+    setCsvPartyUploading(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const result = await importPartiesFromCsv(file);
+      setSuccessMessage(
+        `Import clienți pornit — ${result.totalRows} rând(uri) de procesat. ID job: ${result.jobId}`
+      );
+      await fetchJobs();
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Eroare la importul CSV clienți."
+      );
+    } finally {
+      setCsvPartyUploading(false);
+    }
+  };
+
+  // Upload spend CSV
+  const handleSpendCsvUpload = async (file: File) => {
+    setCsvSpendUploading(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const result = await importSpendFromCsv(file);
+      setSuccessMessage(
+        `Import cheltuieli pornit — ${result.totalRows} rând(uri) de procesat. ID job: ${result.jobId}`
+      );
+      await fetchJobs();
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Eroare la importul CSV cheltuieli."
+      );
+    } finally {
+      setCsvSpendUploading(false);
+    }
+  };
 
   // Start recurring invoices job
   const handleStartRecurring = async () => {
@@ -406,6 +451,78 @@ export function FinMassPage() {
               <XCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
               {error}
             </div>
+          )}
+        </section>
+
+        {/* ── Import CSV Clienți ───────────────────────────────────────── */}
+        <section
+          className="rounded-xl border border-border bg-card p-6 space-y-4"
+          aria-label="Import CSV clienți/furnizori"
+        >
+          <div className="flex items-center gap-3">
+            <FileText
+              className="h-6 w-6 text-primary flex-shrink-0"
+              aria-hidden="true"
+            />
+            <div>
+              <h2 className="text-base font-semibold text-foreground">
+                Import CSV Clienți / Furnizori
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Importă parteneri B2B dintr-un fișier CSV. Rândurile deja
+                existente (după IDNO) sunt omise automat.
+              </p>
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 font-mono">
+            Antet CSV: kind, name, country, idno, iban, address, city, email, phone
+          </div>
+          <CsvImportZone
+            onUpload={handlePartyCsvUpload}
+            label="Trage fișierul CSV clienți sau apasă pentru a selecta"
+            disabled={csvPartyUploading || hasRunningJob}
+          />
+          {csvPartyUploading && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1" role="status" aria-live="polite">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              Se pornește importul…
+            </p>
+          )}
+        </section>
+
+        {/* ── Import CSV Cheltuieli ─────────────────────────────────────── */}
+        <section
+          className="rounded-xl border border-border bg-card p-6 space-y-4"
+          aria-label="Import CSV cheltuieli"
+        >
+          <div className="flex items-center gap-3">
+            <FileText
+              className="h-6 w-6 text-primary flex-shrink-0"
+              aria-hidden="true"
+            />
+            <div>
+              <h2 className="text-base font-semibold text-foreground">
+                Import CSV Cheltuieli
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Importă înregistrări de cheltuieli dintr-un fișier CSV.
+                Rândurile duplicate (hash SHA-256 identic) sunt omise automat.
+              </p>
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 font-mono">
+            Antet CSV: category, amount_cents, currency, vat_deductible, description, vendor_name, expense_date, reference
+          </div>
+          <CsvImportZone
+            onUpload={handleSpendCsvUpload}
+            label="Trage fișierul CSV cheltuieli sau apasă pentru a selecta"
+            disabled={csvSpendUploading || hasRunningJob}
+          />
+          {csvSpendUploading && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1" role="status" aria-live="polite">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              Se pornește importul…
+            </p>
           )}
         </section>
 
