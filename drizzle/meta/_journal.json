@@ -5,806 +5,1023 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1780030450014,
+      "when": 1700000000000,
       "tag": "0000_married_scarlet_spider",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1780032827327,
+      "when": 1700000060000,
       "tag": "0001_petite_sister_grimm",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1780052358876,
+      "when": 1700000120000,
       "tag": "0002_tricky_malice",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "7",
-      "when": 1780059061059,
+      "when": 1700000180000,
       "tag": "0003_crm109_interaction_metadata",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "7",
-      "when": 1780059777033,
+      "when": 1700000240000,
       "tag": "0004_crm110_automations",
       "breakpoints": true
     },
     {
       "idx": 5,
       "version": "7",
-      "when": 1780060431899,
+      "when": 1700000300000,
       "tag": "0005_crm111_families_score",
       "breakpoints": true
     },
     {
       "idx": 6,
       "version": "7",
-      "when": 1780060944620,
+      "when": 1700000360000,
       "tag": "0006_crm112_analytics",
       "breakpoints": true
     },
     {
       "idx": 7,
       "version": "7",
-      "when": 1780088159440,
+      "when": 1700000420000,
       "tag": "0007_crm115_tags_custom_fields",
       "breakpoints": true
     },
     {
       "idx": 8,
       "version": "7",
-      "when": 1780089485085,
+      "when": 1700000480000,
       "tag": "0008_comm201_messages",
       "breakpoints": true
     },
     {
       "idx": 9,
       "version": "7",
-      "when": 1780090522431,
+      "when": 1700000540000,
       "tag": "0009_comm204_broadcasts",
       "breakpoints": true
     },
     {
       "idx": 10,
       "version": "7",
-      "when": 1780091500000,
+      "when": 1700000600000,
       "tag": "0010_comm205_notification_queue",
       "breakpoints": true
     },
     {
       "idx": 11,
       "version": "7",
-      "when": 1780092703763,
+      "when": 1700000660000,
       "tag": "0011_hr401_payroll",
       "breakpoints": true
     },
     {
       "idx": 12,
       "version": "7",
-      "when": 1780093342817,
+      "when": 1700000720000,
       "tag": "0012_hr403_teacher_availability",
       "breakpoints": true
     },
     {
       "idx": 13,
       "version": "7",
-      "when": 1780093602612,
+      "when": 1700000780000,
       "tag": "0013_hr404_audit_log",
       "breakpoints": true
     },
     {
       "idx": 14,
       "version": "7",
-      "when": 1780094110520,
+      "when": 1700000840000,
       "tag": "0014_sched501_rooms",
       "breakpoints": true
     },
     {
       "idx": 15,
       "version": "7",
-      "when": 1780125177020,
+      "when": 1700000900000,
       "tag": "0015_sched502_lesson_series",
       "breakpoints": true
     },
     {
       "idx": 16,
       "version": "7",
-      "when": 1780151000000,
+      "when": 1700000960000,
       "tag": "0016_crm119_saved_views",
       "breakpoints": true
     },
     {
       "idx": 17,
       "version": "7",
-      "when": 1780151100000,
+      "when": 1700001020000,
       "tag": "0017_crm123_notifications",
       "breakpoints": true
     },
     {
       "idx": 18,
       "version": "7",
-      "when": 1780151200000,
+      "when": 1700001080000,
       "tag": "0018_crm124_sla",
       "breakpoints": true
     },
     {
       "idx": 19,
       "version": "7",
-      "when": 1780151300000,
+      "when": 1700001140000,
       "tag": "0019_crm125_forecast",
       "breakpoints": true
     },
     {
       "idx": 20,
       "version": "7",
-      "when": 1780151400000,
+      "when": 1700001200000,
       "tag": "0020_crm127_audit_log",
       "breakpoints": true
     },
     {
       "idx": 21,
       "version": "7",
-      "when": 1780151500000,
+      "when": 1700001260000,
       "tag": "0021_crm126_cadences",
       "breakpoints": true
     },
     {
       "idx": 22,
       "version": "7",
-      "when": 1780151600000,
+      "when": 1700001320000,
       "tag": "0022_contract501_contracts",
       "breakpoints": true
     },
     {
       "idx": 23,
       "version": "7",
-      "when": 1780151700000,
+      "when": 1700001380000,
       "tag": "0023_feedback601_forms",
       "breakpoints": true
     },
     {
       "idx": 24,
       "version": "7",
-      "when": 1780301485492,
+      "when": 1700001440000,
       "tag": "0024_fin_invoices_subscriptions",
       "breakpoints": true
     },
     {
       "idx": 25,
       "version": "7",
-      "when": 1748736000000,
+      "when": 1700001500000,
       "tag": "0025_cx701_cohorts",
       "breakpoints": true
     },
     {
       "idx": 26,
       "version": "7",
-      "when": 1748736100000,
+      "when": 1700001560000,
       "tag": "0026_cx703_cohort_participants",
       "breakpoints": true
     },
     {
       "idx": 27,
       "version": "7",
-      "when": 1780304207442,
+      "when": 1700001620000,
       "tag": "0027_fearless_orphan",
       "breakpoints": true
     },
     {
       "idx": 28,
       "version": "7",
-      "when": 1780400000000,
+      "when": 1700001680000,
       "tag": "0028_forms001_engine",
       "breakpoints": true
     },
     {
       "idx": 29,
       "version": "7",
-      "when": 1780401000000,
+      "when": 1700001740000,
       "tag": "0029_forms004_logic",
       "breakpoints": true
     },
     {
       "idx": 30,
       "version": "7",
-      "when": 1780402000000,
+      "when": 1700001800000,
       "tag": "0030_forms005_analytics",
       "breakpoints": true
     },
     {
       "idx": 31,
       "version": "7",
-      "when": 1780344399598,
+      "when": 1700001860000,
       "tag": "0031_branch701_schema",
       "breakpoints": true
     },
     {
       "idx": 32,
       "version": "7",
-      "when": 1780345201832,
+      "when": 1700001920000,
       "tag": "0032_branch703_user_branch_scope",
       "breakpoints": true
     },
     {
       "idx": 33,
       "version": "7",
-      "when": 1780346177875,
+      "when": 1700001980000,
       "tag": "0033_set801_invitations_is_active",
       "breakpoints": true
     },
     {
       "idx": 34,
       "version": "7",
-      "when": 1780500200000,
+      "when": 1700002040000,
       "tag": "0034_set802_notification_preferences",
       "breakpoints": true
     },
     {
       "idx": 35,
       "version": "7",
-      "when": 1780500300000,
+      "when": 1700002100000,
       "tag": "0035_set803_branding",
       "breakpoints": true
     },
     {
       "idx": 36,
       "version": "7",
-      "when": 1780500000000,
+      "when": 1700002160000,
       "tag": "0036_integ101_leads_course_branch",
       "breakpoints": true
     },
     {
       "idx": 37,
       "version": "7",
-      "when": 1780501000000,
+      "when": 1700002220000,
       "tag": "0037_integ102_payments_invoices_course",
       "breakpoints": true
     },
     {
       "idx": 38,
       "version": "7",
-      "when": 1780502000000,
+      "when": 1700002280000,
       "tag": "0038_integ103_cohorts_branch_id",
       "breakpoints": true
     },
     {
       "idx": 39,
       "version": "7",
-      "when": 1780503000000,
+      "when": 1700002340000,
       "tag": "0039_integ202_contracts_course_fk",
       "breakpoints": true
     },
     {
       "idx": 40,
       "version": "7",
-      "when": 1780350459525,
+      "when": 1700002400000,
       "tag": "0040_int901_api_keys",
       "breakpoints": true
     },
     {
       "idx": 41,
       "version": "7",
-      "when": 1780350909866,
+      "when": 1700002460000,
       "tag": "0041_int902_webhooks",
       "breakpoints": true
     },
     {
       "idx": 42,
       "version": "7",
-      "when": 1780500000000,
+      "when": 1700002520000,
       "tag": "0042_branch701_branches",
       "breakpoints": true
     },
     {
       "idx": 43,
       "version": "7",
-      "when": 1780500100000,
+      "when": 1700002580000,
       "tag": "0043_branch702_user_branch_scope",
       "breakpoints": true
     },
     {
       "idx": 44,
       "version": "7",
-      "when": 1780353800536,
+      "when": 1700002640000,
       "tag": "0044_ai_a01_audit_log",
       "breakpoints": true
     },
     {
       "idx": 45,
       "version": "7",
-      "when": 1780354331978,
+      "when": 1700002700000,
       "tag": "0045_ai_a02_churn_scores",
       "breakpoints": true
     },
     {
       "idx": 46,
       "version": "7",
-      "when": 1780354669300,
+      "when": 1700002760000,
       "tag": "0046_ai_a03_lead_qualification",
       "breakpoints": true
     },
     {
       "idx": 47,
       "version": "7",
-      "when": 1780355186042,
+      "when": 1700002820000,
       "tag": "0047_ai_a04_feature_flags",
       "breakpoints": true
     },
     {
       "idx": 48,
       "version": "7",
-      "when": 1780500000000,
+      "when": 1700002880000,
       "tag": "0048_course101_status_cefr",
       "breakpoints": true
     },
     {
       "idx": 49,
       "version": "7",
-      "when": 1780500100000,
+      "when": 1700002940000,
       "tag": "0049_course102_groups",
       "breakpoints": true
     },
     {
       "idx": 50,
       "version": "7",
-      "when": 1780500200000,
+      "when": 1700003000000,
       "tag": "0050_course103_group_enrollments",
       "breakpoints": true
     },
     {
       "idx": 51,
       "version": "7",
-      "when": 1780600000000,
+      "when": 1700003060000,
       "tag": "0051_stu202_student_notes",
       "breakpoints": true
     },
     {
       "idx": 52,
       "version": "7",
-      "when": 1780381117036,
+      "when": 1700003120000,
       "tag": "0052_quick_unus",
       "breakpoints": true
     },
     {
       "idx": 53,
       "version": "7",
-      "when": 1780700000000,
+      "when": 1700003180000,
       "tag": "0053_course202_groups_waitlist",
       "breakpoints": true
     },
     {
       "idx": 54,
       "version": "7",
-      "when": 1780701000000,
+      "when": 1700003240000,
       "tag": "0054_course203_promo_codes",
       "breakpoints": true
     },
     {
       "idx": 55,
       "version": "7",
-      "when": 1780384057016,
+      "when": 1700003300000,
       "tag": "0055_young_magus",
       "breakpoints": true
     },
     {
       "idx": 56,
       "version": "7",
-      "when": 1780500000000,
+      "when": 1700003360000,
       "tag": "0056_pay004_stripe_settings",
       "breakpoints": true
     },
     {
       "idx": 57,
       "version": "7",
-      "when": 1780501000000,
+      "when": 1700003420000,
       "tag": "0057_pay005_invoice_reminders",
       "breakpoints": true
     },
     {
       "idx": 58,
       "version": "7",
-      "when": 1780502000000,
+      "when": 1700003480000,
       "tag": "0058_pay006_payment_plans",
       "breakpoints": true
     },
     {
       "idx": 59,
       "version": "7",
-      "when": 1780503000000,
+      "when": 1700003540000,
       "tag": "0059_pay007_refunds",
       "breakpoints": true
     },
     {
       "idx": 60,
       "version": "7",
-      "when": 1780504000000,
+      "when": 1700003600000,
       "tag": "0060_pay008_accounting_mappings",
       "breakpoints": true
     },
     {
       "idx": 61,
       "version": "7",
-      "when": 1780392444313,
+      "when": 1700003660000,
       "tag": "0061_broad_cyclops",
       "breakpoints": true
     },
     {
       "idx": 62,
       "version": "7",
-      "when": 1780392818612,
+      "when": 1700003720000,
       "tag": "0062_demonic_doomsday",
       "breakpoints": true
     },
     {
       "idx": 63,
       "version": "7",
-      "when": 1780500000000,
+      "when": 1700003780000,
       "tag": "0063_mob104_parent_links_chat",
       "breakpoints": true
     },
     {
       "idx": 64,
       "version": "7",
-      "when": 1780501000000,
+      "when": 1700003840000,
       "tag": "0064_mob105_gamification",
       "breakpoints": true
     },
     {
       "idx": 65,
       "version": "7",
-      "when": 1780394861238,
+      "when": 1700003900000,
       "tag": "0065_auth001_password_reset_tokens",
       "breakpoints": true
     },
     {
       "idx": 66,
       "version": "7",
-      "when": 1780395301976,
+      "when": 1700003960000,
       "tag": "0066_auth002_user_invitations",
       "breakpoints": true
     },
     {
       "idx": 67,
       "version": "7",
-      "when": 1780395542946,
+      "when": 1700004020000,
       "tag": "0067_auth003_user_profile_gdpr",
       "breakpoints": true
     },
     {
       "idx": 68,
       "version": "7",
-      "when": 1780396027309,
+      "when": 1700004080000,
       "tag": "0068_auth004_2fa_sessions",
       "breakpoints": true
     },
     {
       "idx": 69,
       "version": "7",
-      "when": 1780200000000,
-      "tag": "0069_crm126_cadences",
+      "when": 1700004140000,
+      "tag": "0069_fin601_invoices",
       "breakpoints": true
     },
     {
       "idx": 70,
       "version": "7",
-      "when": 1780200060000,
-      "tag": "0070_crm127_audit_log",
+      "when": 1700004200000,
+      "tag": "0070_fin602_debt_reconcile",
       "breakpoints": true
     },
     {
       "idx": 71,
       "version": "7",
-      "when": 1780300000000,
-      "tag": "0071_fin601_invoices",
+      "when": 1700004260000,
+      "tag": "0071_perpetual_shaman",
       "breakpoints": true
     },
     {
       "idx": 72,
       "version": "7",
-      "when": 1780300060000,
-      "tag": "0072_fin602_debt_reconcile",
+      "when": 1700004320000,
+      "tag": "0072_acoustic_alex_power",
       "breakpoints": true
     },
     {
       "idx": 73,
       "version": "7",
-      "when": 1780143485378,
-      "tag": "0073_perpetual_shaman",
+      "when": 1700004380000,
+      "tag": "0073_shocking_captain_cross",
       "breakpoints": true
     },
     {
       "idx": 74,
       "version": "7",
-      "when": 1780144108215,
-      "tag": "0074_acoustic_alex_power",
+      "when": 1700004440000,
+      "tag": "0074_branch703_user_scope",
       "breakpoints": true
     },
     {
       "idx": 75,
       "version": "7",
-      "when": 1780144580052,
-      "tag": "0075_shocking_captain_cross",
+      "when": 1700004500000,
+      "tag": "0075_glorious_bug",
       "breakpoints": true
     },
     {
       "idx": 76,
       "version": "7",
-      "when": 1780145179788,
-      "tag": "0076_branch703_user_scope",
+      "when": 1700004560000,
+      "tag": "0076_slim_luke_cage",
       "breakpoints": true
     },
     {
       "idx": 77,
       "version": "7",
-      "when": 1780151646940,
-      "tag": "0077_glorious_bug",
+      "when": 1700004620000,
+      "tag": "0077_gap001_preferred_schedule",
       "breakpoints": true
     },
     {
       "idx": 78,
       "version": "7",
-      "when": 1780151883806,
-      "tag": "0078_slim_luke_cage",
+      "when": 1700004680000,
+      "tag": "0078_gap003_trial_lessons",
       "breakpoints": true
     },
     {
       "idx": 79,
       "version": "7",
-      "when": 1780319050576,
-      "tag": "0079_gap001_preferred_schedule",
+      "when": 1700004740000,
+      "tag": "0079_gap004_lesson_packages",
       "breakpoints": true
     },
     {
       "idx": 80,
       "version": "7",
-      "when": 1780319726622,
-      "tag": "0080_gap003_trial_lessons",
+      "when": 1700004800000,
+      "tag": "0080_gap009_recovery_requests",
       "breakpoints": true
     },
     {
       "idx": 81,
       "version": "7",
-      "when": 1780320158523,
-      "tag": "0081_gap004_lesson_packages",
+      "when": 1700004860000,
+      "tag": "0081_gap005_006_waitlist_packages",
       "breakpoints": true
     },
     {
       "idx": 82,
       "version": "7",
-      "when": 1780320602367,
-      "tag": "0082_gap009_recovery_requests",
+      "when": 1700004920000,
+      "tag": "0082_gap010_student_portal",
       "breakpoints": true
     },
     {
       "idx": 83,
       "version": "7",
-      "when": 1780322262150,
-      "tag": "0083_gap005_006_waitlist_packages",
+      "when": 1700004980000,
+      "tag": "0083_gap017_portal_notif_prefs",
       "breakpoints": true
     },
     {
       "idx": 84,
       "version": "7",
-      "when": 1780400000000,
-      "tag": "0084_gap010_student_portal",
+      "when": 1700005040000,
+      "tag": "0084_gap011_enrollment",
       "breakpoints": true
     },
     {
       "idx": 85,
       "version": "7",
-      "when": 1780400100000,
-      "tag": "0085_gap017_portal_notif_prefs",
+      "when": 1700005100000,
+      "tag": "0085_gap012_progress",
       "breakpoints": true
     },
     {
       "idx": 86,
       "version": "7",
-      "when": 1780401000000,
-      "tag": "0086_gap011_enrollment",
+      "when": 1700005160000,
+      "tag": "0086_gap013_makeup_credits",
       "breakpoints": true
     },
     {
       "idx": 87,
       "version": "7",
-      "when": 1780492800000,
-      "tag": "0087_gap012_progress",
+      "when": 1700005220000,
+      "tag": "0087_gap014_stripe_invoices",
       "breakpoints": true
     },
     {
       "idx": 88,
       "version": "7",
-      "when": 1780579200000,
-      "tag": "0088_gap013_makeup_credits",
+      "when": 1700005280000,
+      "tag": "0088_gap015_homework",
       "breakpoints": true
     },
     {
       "idx": 89,
       "version": "7",
-      "when": 1780665600000,
-      "tag": "0089_gap014_stripe_invoices",
+      "when": 1700005340000,
+      "tag": "0089_school001_academic_years_classes",
       "breakpoints": true
     },
     {
       "idx": 90,
       "version": "7",
-      "when": 1748808000000,
-      "tag": "0090_gap015_homework",
+      "when": 1700005400000,
+      "tag": "0090_school003_attendance",
       "breakpoints": true
     },
     {
       "idx": 91,
       "version": "7",
-      "when": 1748822400000,
-      "tag": "0091_school001_academic_years_classes",
+      "when": 1700005460000,
+      "tag": "0091_school002_gradebook",
       "breakpoints": true
     },
     {
       "idx": 92,
       "version": "7",
-      "when": 1748822500000,
-      "tag": "0092_school003_attendance",
+      "when": 1700005520000,
+      "tag": "0092_school004_tuition",
       "breakpoints": true
     },
     {
       "idx": 93,
       "version": "7",
-      "when": 1748822600000,
-      "tag": "0093_school002_gradebook",
+      "when": 1700005580000,
+      "tag": "0093_school005_admissions",
       "breakpoints": true
     },
     {
       "idx": 94,
       "version": "7",
-      "when": 1748822700000,
-      "tag": "0094_school004_tuition",
+      "when": 1700005640000,
+      "tag": "0094_school006_timetable",
       "breakpoints": true
     },
     {
       "idx": 95,
       "version": "7",
-      "when": 1748822800000,
-      "tag": "0095_school005_admissions",
+      "when": 1700005700000,
+      "tag": "0095_guardian001_student_guardians",
       "breakpoints": true
     },
     {
       "idx": 96,
       "version": "7",
-      "when": 1748908800000,
-      "tag": "0096_school006_timetable",
+      "when": 1700005760000,
+      "tag": "0096_school007_news",
       "breakpoints": true
     },
     {
       "idx": 97,
       "version": "7",
-      "when": 1748908900000,
-      "tag": "0097_guardian001_student_guardians",
+      "when": 1700005820000,
+      "tag": "0097_consent001_forms",
       "breakpoints": true
     },
     {
       "idx": 98,
       "version": "7",
-      "when": 1748909000000,
-      "tag": "0098_school007_news",
+      "when": 1700005880000,
+      "tag": "0098_gap019_badges",
       "breakpoints": true
     },
     {
       "idx": 99,
       "version": "7",
-      "when": 1748909100000,
-      "tag": "0099_consent001_forms",
+      "when": 1700005940000,
+      "tag": "0099_parched_arclight",
       "breakpoints": true
     },
     {
       "idx": 100,
       "version": "7",
-      "when": 1780338758904,
-      "tag": "0100_gap019_badges",
+      "when": 1700006000000,
+      "tag": "0100_kinder001_checkin",
       "breakpoints": true
     },
     {
       "idx": 101,
       "version": "7",
-      "when": 1780303394592,
-      "tag": "0101_parched_arclight",
+      "when": 1700006060000,
+      "tag": "0101_kinder002_diary",
       "breakpoints": true
     },
     {
       "idx": 102,
       "version": "7",
-      "when": 1780340892198,
-      "tag": "0102_kinder001_checkin",
+      "when": 1700006120000,
+      "tag": "0102_kinder003_ratio",
       "breakpoints": true
     },
     {
       "idx": 103,
       "version": "7",
-      "when": 1780341531396,
-      "tag": "0103_kinder002_diary",
+      "when": 1700006180000,
+      "tag": "0103_kinder004_medical",
       "breakpoints": true
     },
     {
       "idx": 104,
       "version": "7",
-      "when": 1780341788431,
-      "tag": "0104_kinder003_ratio",
+      "when": 1700006240000,
+      "tag": "0104_kinder005_messages",
       "breakpoints": true
     },
     {
       "idx": 105,
       "version": "7",
-      "when": 1780342221389,
-      "tag": "0105_kinder004_medical",
+      "when": 1700006300000,
+      "tag": "0105_kinder007_incidents",
       "breakpoints": true
     },
     {
       "idx": 106,
       "version": "7",
-      "when": 1780342742444,
-      "tag": "0106_kinder005_messages",
+      "when": 1700006360000,
+      "tag": "0106_cont_plata",
       "breakpoints": true
     },
     {
       "idx": 107,
       "version": "7",
-      "when": 1780343635345,
-      "tag": "0107_kinder007_incidents",
+      "when": 1700006420000,
+      "tag": "0107_institution_type",
       "breakpoints": true
     },
     {
       "idx": 108,
       "version": "7",
-      "when": 1780801000000,
-      "tag": "0108_cont_plata",
+      "when": 1700006480000,
+      "tag": "0108_schema_drift_backfill",
       "breakpoints": true
     },
     {
       "idx": 109,
       "version": "7",
-      "when": 1780424841282,
-      "tag": "0109_institution_type",
+      "when": 1700006540000,
+      "tag": "0109_lead_attachment_url_text",
       "breakpoints": true
     },
     {
       "idx": 110,
       "version": "7",
-      "when": 1780801002000,
-      "tag": "0110_schema_drift_backfill",
+      "when": 1700006600000,
+      "tag": "0110_google_oauth",
       "breakpoints": true
     },
     {
       "idx": 111,
       "version": "7",
-      "when": 1780801003000,
-      "tag": "0111_lead_attachment_url_text",
+      "when": 1700006660000,
+      "tag": "0111_par_core",
       "breakpoints": true
     },
     {
       "idx": 112,
       "version": "7",
-      "when": 1780801004000,
-      "tag": "0112_google_oauth",
+      "when": 1700006720000,
+      "tag": "0112_par_approval_engine",
       "breakpoints": true
     },
     {
       "idx": 113,
       "version": "7",
-      "when": 1780900000000,
-      "tag": "0113_par_core",
+      "when": 1700006780000,
+      "tag": "0113_fin_approval_link",
       "breakpoints": true
     },
     {
       "idx": 114,
       "version": "7",
-      "when": 1780910000000,
-      "tag": "0114_par_approval_engine",
+      "when": 1700006840000,
+      "tag": "0114_fin_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1700006900000,
+      "tag": "0115_fin_budgets",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1700006960000,
+      "tag": "0116_fin_bulk",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1700007020000,
+      "tag": "0117_fin_calendar",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1700007080000,
+      "tag": "0118_fin_captures",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1700007140000,
+      "tag": "0119_fin_client_portal_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1700007200000,
+      "tag": "0120_fin_exchange_rates",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1700007260000,
+      "tag": "0121_fin_insight_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1700007320000,
+      "tag": "0122_fin_inventory",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1700007380000,
+      "tag": "0123_fin_parties",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1700007440000,
+      "tag": "0124_fin_payroll",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1700007500000,
+      "tag": "0125_fin_agreements",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1700007560000,
+      "tag": "0126_fin_client_portal_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1700007620000,
+      "tag": "0127_fin_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1700007680000,
+      "tag": "0128_fin_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1700007740000,
+      "tag": "0129_inventory_spend_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1700007800000,
+      "tag": "0130_fin_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1700007860000,
+      "tag": "0131_fin_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1700007920000,
+      "tag": "0132_fin_einvoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1700007980000,
+      "tag": "0133_fin_expenses",
+      "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1700008040000,
+      "tag": "0134_fin_cash",
+      "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1700008100000,
+      "tag": "0135_fin_spend_import_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1700008160000,
+      "tag": "0136_fin_tax",
+      "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1700008220000,
+      "tag": "0137_fin_bulk_rows_meta",
+      "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1700008280000,
+      "tag": "0138_fin_data_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1700008340000,
+      "tag": "0139_fin_data_settings_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1700008400000,
+      "tag": "0140_fin_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1700008460000,
+      "tag": "0141_fin_banklink",
+      "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1700008520000,
+      "tag": "0142_banklink_match",
+      "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1700008580000,
+      "tag": "0143_fin_ledger_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1700008640000,
+      "tag": "0144_split_app_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1700008700000,
+      "tag": "0145_fix_fin_ledger_entries",
       "breakpoints": true
     }
   ]

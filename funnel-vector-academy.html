@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vector Academy — Funnel AI Trainings (v4)</title>
+<style>
+  :root {
+    --pink:#f8a5a0; --pink-bg:#fdeceb;
+    --blue:#8ecae6; --blue-bg:#e7f4fa;
+    --yellow:#ffd97d; --yellow-bg:#fff6e0;
+    --green:#95d5b2; --green-bg:#e7f7ee;
+    --purple:#c8b6e2; --purple-bg:#f1ecf9;
+    --ink:#2b2b2b; --muted:#6b6b6b; --line:#c9c9c9; --accent:#ff6b35;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; padding:0; background:#fff; color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; }
+
+  .board { position:relative; width:1680px; height:1180px; margin:0 auto; padding:0; }
+
+  h1.title { position:absolute; top:30px; left:48px; font-size:30px; font-weight:800; margin:0; letter-spacing:-0.3px; }
+  .subtitle { position:absolute; top:68px; left:48px; font-size:13.5px; color:var(--muted); margin:0; }
+  .subtitle b { color:var(--accent); }
+
+  /* stage headers */
+  .stage-head { position:absolute; top:300px; font-size:22px; font-weight:700; }
+  .stage-head small { display:block; font-size:12px; font-weight:500; color:var(--muted); margin-top:2px; }
+  .sh-top    { left:48px; }
+  .sh-middle { left:632px; }
+  .sh-bottom { left:1190px; }
+
+  .sep { position:absolute; top:288px; height:858px; width:2px; background:var(--accent); opacity:.5; }
+  .sep-1 { left:600px; } .sep-2 { left:1158px; }
+
+  /* SVG link layer sits UNDER the notes */
+  svg.links { position:absolute; inset:0; width:1680px; height:1180px; z-index:1; pointer-events:none; }
+
+  /* notes positioned absolutely */
+  .note { position:absolute; z-index:2; border-radius:9px; padding:11px 13px;
+    font-size:12.5px; line-height:1.42; box-shadow:0 2px 6px rgba(0,0,0,.10); }
+  .note .label { font-weight:700; font-size:13px; display:block; margin-bottom:2px; }
+  .note .sub { font-size:11px; color:rgba(0,0,0,.62); display:block; }
+  .note ul { margin:5px 0 0; padding-left:15px; }
+  .note li { margin-bottom:1px; font-size:10.7px; }
+
+  .n-pink{background:var(--pink-bg);border:1px solid var(--pink);}
+  .n-blue{background:var(--blue-bg);border:1px solid var(--blue);}
+  .n-yellow{background:var(--yellow-bg);border:1px solid var(--yellow);}
+  .n-green{background:var(--green-bg);border:1px solid var(--green);}
+  .n-purple{background:var(--purple-bg);border:1px solid var(--purple);}
+
+  .pill { display:inline-block; font-size:9.5px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.4px; padding:2px 7px; border-radius:20px; margin-bottom:5px; }
+  .pill-cta{background:var(--accent);color:#fff;} .pill-gate{background:#2b2b2b;color:#fff;}
+  .pill-money{background:#1b7a3e;color:#fff;} .pill-auto{background:var(--blue);color:#0b3a4d;}
+  .pill-manual{background:var(--pink);color:#5a1410;}
+
+  /* engine banner */
+  .engine { position:absolute; top:96px; left:48px; width:1584px; height:168px;
+    border:2px dashed var(--purple); background:var(--purple-bg); border-radius:12px; padding:14px 18px; z-index:2; }
+  .engine h3 { margin:0; font-size:15.5px; }
+  .engine .flow { display:flex; align-items:center; gap:12px; margin-top:12px; }
+  .src { background:#fff; border:2px solid var(--purple); border-radius:8px; padding:10px 14px;
+    font-size:12px; font-weight:700; text-align:center; flex:0 0 178px; }
+  .src small { font-weight:400; font-size:9.5px; color:var(--muted); }
+  .arrow-right { width:0;height:0; border-top:7px solid transparent; border-bottom:7px solid transparent;
+    border-left:11px solid var(--accent); flex:0 0 auto; }
+  .chips { display:flex; flex-wrap:wrap; gap:7px; flex:1; }
+  .chip { background:var(--blue-bg); border:1px solid var(--blue); border-radius:18px; padding:5px 10px;
+    font-size:11px; font-weight:600; }
+  .chip small { display:block; font-weight:400; font-size:9px; color:var(--muted); }
+
+  .badge { position:absolute; z-index:3; font-size:10px; font-weight:700; padding:2px 8px;
+    border-radius:14px; background:#fff; border:1.5px solid var(--accent); color:var(--accent); }
+  .lbl { position:absolute; z-index:3; font-size:11px; font-weight:700; color:var(--accent); background:#fff; padding:0 4px; }
+  .lbl-muted { color:var(--muted); }
+
+  .legend { position:absolute; bottom:18px; left:48px; right:48px; display:flex; flex-wrap:wrap;
+    gap:16px; font-size:11px; color:var(--muted); border-top:1px solid var(--line); padding-top:12px; }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .swatch { width:13px; height:13px; border-radius:3px; display:inline-block; }
+
+  @media print { @page { size:1740px 1220px; margin:0; }
+    body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
+</style>
+</head>
+<body>
+<div class="board">
+
+  <h1 class="title">Vector Academy — Funnel AI Trainings <span style="font-size:16px;color:var(--muted);font-weight:600">v4</span></h1>
+  <p class="subtitle">Structură automatizată solo-founder · scara de valoare <b>free → 15€ → 100€ → corporate → consultanță</b> · piață MD/RO</p>
+
+  <!-- ENGINE -->
+  <div class="engine">
+    <h3>⚙️ Motorul de conținut — 1 video vertical / săptămână, derivat AUTOMAT în jos (nu Telegram→sus)</h3>
+    <div class="flow">
+      <div class="src">📹 1 VIDEO VERTICAL<br>/ săptămână<br><small>9:16 · hook 2s · subtitrări · nativ TikTok/Reels</small></div>
+      <div class="arrow-right"></div>
+      <div class="chips">
+        <div class="chip">TikTok<small>CTA: link în bio</small></div>
+        <div class="chip">Insta Reels<small>CTA: DM „CURS"</small></div>
+        <div class="chip">Telegram<small>post + context</small></div>
+        <div class="chip">LinkedIn personal<small>link în comentariu</small></div>
+        <div class="chip">FB Vector Academy<small>foto / digest</small></div>
+        <div class="chip">Blog (site)<small>text lung</small></div>
+        <div class="chip">Weekly newsletter<small>+ events push</small></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- stage headers + separators -->
+  <div class="stage-head sh-top">TOP <small>ATENȚIE</small></div>
+  <div class="stage-head sh-middle">MIDDLE <small>RELAȚIE + PRIMA TRANZACȚIE</small></div>
+  <div class="stage-head sh-bottom">BOTTOM <small>CONVERSIE</small></div>
+  <div class="sep sep-1"></div>
+  <div class="sep sep-2"></div>
+
+  <!-- ============ SVG LINK LAYER ============ -->
+  <svg class="links" viewBox="0 0 1680 1180" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arrow" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto">
+        <path d="M0,0 L9,4 L0,8 Z" fill="#ff6b35"/>
+      </marker>
+      <marker id="arrowMuted" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto">
+        <path d="M0,0 L9,4 L0,8 Z" fill="#9aa0a6"/>
+      </marker>
+    </defs>
+
+    <!-- TOP funnel: 3 sources converge into CTA -->
+    <path d="M 175,440 C 230,470 250,500 280,520" fill="none" stroke="#ff6b35" stroke-width="2.2" marker-end="url(#arrow)"/>
+    <path d="M 175,540 C 230,540 250,535 280,533" fill="none" stroke="#ff6b35" stroke-width="2.2" marker-end="url(#arrow)"/>
+    <path d="M 175,640 C 230,610 250,565 280,548" fill="none" stroke="#ff6b35" stroke-width="2.2" marker-end="url(#arrow)"/>
+
+    <!-- CTA -> Email gate -->
+    <path d="M 175,600 C 175,640 175,665 175,690" fill="none" stroke="#ff6b35" stroke-width="2.6" marker-end="url(#arrow)"/>
+
+    <!-- Email gate -> split (down to B2C, right+down to B2B) -->
+    <!-- B2C branch: gate -> middle email seq -->
+    <path d="M 360,760 C 470,760 560,640 632,610" fill="none" stroke="#ff6b35" stroke-width="2.6" marker-end="url(#arrow)"/>
+    <!-- B2B branch: gate -> bottom B2B lead magnet (long curve to far right) -->
+    <path d="M 360,800 C 700,930 1000,900 1208,810" fill="none" stroke="#e85d75" stroke-width="2.6" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+
+    <!-- MIDDLE B2C vertical chain: emails -> tripwire -> masterclass -> nurture -->
+    <path d="M 760,640 C 760,668 760,680 760,700" fill="none" stroke="#ff6b35" stroke-width="2.6" marker-end="url(#arrow)"/>
+    <path d="M 760,790 C 760,815 760,825 760,845" fill="none" stroke="#ff6b35" stroke-width="2.6" marker-end="url(#arrow)"/>
+    <path d="M 760,930 C 760,952 760,958 760,975" fill="none" stroke="#9aa0a6" stroke-width="2.2" marker-end="url(#arrowMuted)"/>
+
+    <!-- MIDDLE -> BOTTOM B2C training -->
+    <path d="M 905,745 C 1030,745 1130,520 1208,500" fill="none" stroke="#ff6b35" stroke-width="2.6" marker-end="url(#arrow)"/>
+
+    <!-- BOTTOM B2C: training -> (loop back testimonial to middle) -->
+    <path d="M 1340,575 C 1180,720 980,860 905,1010" fill="none" stroke="#1b7a3e" stroke-width="2" stroke-dasharray="3 5" marker-end="url(#arrow)"/>
+    <!-- training -> B2B (bring me to your company) -->
+    <path d="M 1340,560 C 1360,640 1310,700 1300,748" fill="none" stroke="#e85d75" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+
+    <!-- BOTTOM B2B vertical chain -->
+    <path d="M 1300,850 C 1300,872 1300,880 1300,898" fill="none" stroke="#e85d75" stroke-width="2.4" marker-end="url(#arrow)"/>
+    <path d="M 1300,950 C 1300,968 1300,975 1300,992" fill="none" stroke="#e85d75" stroke-width="2.4" marker-end="url(#arrow)"/>
+    <path d="M 1300,1042 C 1300,1058 1300,1062 1300,1075" fill="none" stroke="#e85d75" stroke-width="2.4" marker-end="url(#arrow)"/>
+  </svg>
+
+  <!-- ============ NOTES ============ -->
+
+  <!-- TOP column -->
+  <div class="note n-pink" style="top:392px; left:48px; width:128px;">
+    <span class="label">Hub organic</span>
+    <span class="sub">TikTok · Insta · LinkedIn · FB · Blog</span>
+  </div>
+  <div class="note n-blue" style="top:500px; left:48px; width:128px;">
+    <span class="label">Ads — video views</span>
+    <span class="sub">+ retargeting DOAR aici: viewers + site visitors → free course</span>
+  </div>
+  <div class="note n-yellow" style="top:610px; left:48px; width:128px;">
+    <span class="label">Free Meetups</span>
+    <span class="sub">awareness</span>
+  </div>
+
+  <div class="note n-yellow" style="top:518px; left:280px; width:128px; text-align:center;">
+    <span class="pill pill-cta">CTA unic</span>
+    <span class="label">FREE COURSE</span>
+  </div>
+
+  <div class="note n-green" style="top:690px; left:230px; width:225px;">
+    <span class="pill pill-gate">Gate</span>
+    <span class="label">DOAR EMAIL = lead</span>
+    <ul>
+      <li>Telegram = bonus opțional (nu blochează RO)</li>
+      <li>Detecție B2B auto: email corporate ≠ gmail</li>
+      <li>Bot: „pentru tine sau pentru echipa ta?"</li>
+    </ul>
+  </div>
+  <div class="lbl" style="top:572px; left:478px;">↓ B2C</div>
+  <div class="lbl" style="top:892px; left:560px; color:#e85d75;">B2B →</div>
+
+  <!-- MIDDLE column (B2C automat) -->
+  <div class="badge" style="top:560px; left:632px;">B2C · 100% automat</div>
+  <div class="note n-pink" style="top:585px; left:632px; width:256px;">
+    <span class="label">Secvență emails (5)</span>
+    <ul>
+      <li>1 · Welcome + livrare free course</li>
+      <li>2 · Quick win (rezultat în 10 min)</li>
+      <li>3 · Poveste + obiecții</li>
+      <li>4 · <b>Ofertă tripwire 15€</b></li>
+      <li>5 · Testimonial + last call</li>
+    </ul>
+  </div>
+  <div class="note n-yellow" style="top:700px; left:632px; width:256px;">
+    <span class="pill pill-money">prima tranzacție</span>
+    <span class="label">TRIPWIRE: curs online 15€</span>
+    <span class="sub">Checkout: Lemon Squeezy / Paddle (merchant-of-record — Apple/Google Pay, taxe rezolvate, fără entitate RO). Preț în moneda vizitatorului.</span>
+  </div>
+  <div class="note n-purple" style="top:845px; left:632px; width:256px;">
+    <span class="label">Masterclass evergreen (45 min)</span>
+    <span class="sub">Trigger: <b>achiziție + 3 zile</b> (NU la completare — 70-90% nu termină). Pitch training 100€ + pitch în lecția 2 a cursului.</span>
+  </div>
+  <div class="note n-blue" style="top:975px; left:632px; width:256px;">
+    <span class="label">Nurture continuu</span>
+    <span class="sub">pe email + Telegram (owned), NU pe ads</span>
+  </div>
+  <div class="note n-green" style="top:1040px; left:632px; width:256px;">
+    <span class="label">Social proof → alimentează tot funnel-ul</span>
+    <span class="sub">testimoniale video meetups + REZULTATE → emails, ads, masterclass</span>
+  </div>
+
+  <!-- BOTTOM column: B2C top, B2B bottom -->
+  <div class="badge" style="top:455px; left:1208px;">B2C · auto</div>
+  <div class="note n-yellow" style="top:478px; left:1208px; width:268px;">
+    <span class="pill pill-money">100€ · 5h</span>
+    <span class="label">TRAINING 100€ — cohortă LUNARĂ</span>
+    <span class="sub">nu bi-weekly (matematica lead-urilor nu o susține). Regulă: sub N înscriși → se mută automat la data următoare. „Locuri limitate" = real.</span>
+  </div>
+  <div class="lbl lbl-muted" style="top:760px; left:1010px; color:#1b7a3e;">↺ testimonial → MIDDLE</div>
+  <div class="lbl" style="top:660px; left:1330px; color:#e85d75;">↻ „adu-mă în firma ta"</div>
+
+  <div class="badge" style="top:785px; left:1208px; border-color:#e85d75; color:#e85d75;">B2B · manual & prioritar</div>
+  <div class="note n-pink" style="top:808px; left:1208px; width:268px;">
+    <span class="label">Lead magnet B2B (LinkedIn)</span>
+    <span class="sub">„Checklist: e echipa ta pregătită pentru AI?" → direct book-a-call (FĂRĂ tripwire). + cold-start: 2-3 pilot-uri gratuite → primele case studies.</span>
+  </div>
+  <div class="note n-pink" style="top:898px; left:1208px; width:268px;">
+    <span class="label">Secvență B2B (3 emails)</span>
+    <span class="sub">case study → valoare echipă → call. + notificare Dima → follow-up personal în 24h.</span>
+  </div>
+  <div class="note n-green" style="top:992px; left:1208px; width:268px;">
+    <span class="pill pill-manual">human</span>
+    <span class="label">BOOK A CALL (15-30 min)</span>
+  </div>
+  <div class="note n-yellow" style="top:1075px; left:1208px; width:130px;">
+    <span class="pill pill-money">1-2k€</span>
+    <span class="label">Corporativ</span>
+  </div>
+  <div class="note n-yellow" style="top:1075px; left:1348px; width:128px;">
+    <span class="pill pill-money">high</span>
+    <span class="label">Consultanță</span>
+    <span class="sub">↺ case study → LinkedIn</span>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--pink)"></i> Paid / B2B manual</span>
+    <span><i class="swatch" style="background:var(--blue)"></i> Owned / automat</span>
+    <span><i class="swatch" style="background:var(--yellow)"></i> Ofertă / produs (€)</span>
+    <span><i class="swatch" style="background:var(--green)"></i> Gate / acțiune</span>
+    <span><i class="swatch" style="background:var(--purple)"></i> Motor de conținut</span>
+    <span style="color:#ff6b35;font-weight:700">→ flux principal</span>
+    <span style="color:#e85d75;font-weight:700">--→ traseu B2B</span>
+    <span style="color:#1b7a3e;font-weight:700">··→ buclă feedback</span>
+  </div>
+
+</div>
+</body>
+</html>

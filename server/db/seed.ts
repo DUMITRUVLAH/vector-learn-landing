@@ -248,6 +248,37 @@ async function seed() {
     console.log(`⚠️  PAR demo tenant already exists (${existingPar.id}). Skipping.`);
   }
 
+  // ── SPLIT-001: Seed Business Suite demo tenant ────────────────────────────
+  const BUSINESS_SLUG = "demo-business-suite";
+  const existingBusiness = await db.query.tenants.findFirst({ where: eq(tenants.slug, BUSINESS_SLUG) });
+  if (!existingBusiness) {
+    const [businessTenant] = await db
+      .insert(tenants)
+      .values({
+        name: "Demo Business Suite",
+        slug: BUSINESS_SLUG,
+        plan: "growth",
+        appKind: "business",
+      })
+      .returning();
+
+    const [businessAdmin] = await db
+      .insert(users)
+      .values({
+        tenantId: businessTenant.id,
+        email: "admin@demo.business.io",
+        passwordHash: demoPasswordHash,
+        name: "Business Admin",
+        role: "admin",
+      })
+      .returning();
+
+    console.log(`✅ Business Suite demo tenant created: ${businessTenant.name}`);
+    console.log(`   Business admin: ${businessAdmin.email}`);
+  } else {
+    console.log(`⚠️  Business Suite demo tenant already exists (${existingBusiness.id}). Skipping.`);
+  }
+
   console.log(`\n📌 Demo credentials:`);
   console.log(`   email: ${admin.email}`);
   console.log(`   password: ${DEMO_PASSWORD}`);

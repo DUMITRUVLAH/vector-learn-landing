@@ -1,11 +1,11 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
-  "active_milestone": "FIN",
+  "last_completed": "SPLIT-103",
+  "iterations": 171,
+  "last_run_at": "2026-06-14T00:00:00Z",
+  "milestone_status": "SPLIT (2026-06-14, owner): same repo, 2 distinct apps. APP1=CRM Educational (/app/*, /app/login, AppShell). APP2=Business Suite (/business/*, /business/login, BusinessShell) = FinDesk+PAR+ITPark INTEGRATED (PAR->FinDesk payments, ITPark->FinDesk invoices, shared PARTY, unified dashboard). Login fully separate via tenants.app_kind. CORE: backlog/split/SPLIT-CORE.md. Driver: backlog/split/BUILD-SEQUENCE.md. 13 items/4 phases. Build on demo/findesk-complet base (has FinDesk+ITPark+PAR present).",
+  "active_milestone": "SPLIT",
   "items": {
     "PAR-001": {
       "status": "done",
@@ -4032,6 +4032,218 @@
         "CASH-003"
       ],
       "branch": "feat/FIN-approval",
+      "verdicts": {},
+      "pr": null
+    },
+    "SPLIT-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-001.md",
+      "milestone": "SPLIT",
+      "phase": "1",
+      "depends_on": [],
+      "branch": "feat/SPLIT-foundation",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/178"
+    },
+    "SPLIT-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-002.md",
+      "milestone": "SPLIT",
+      "phase": "1",
+      "depends_on": [
+        "SPLIT-001"
+      ],
+      "branch": "feat/SPLIT-foundation",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/178"
+    },
+    "SPLIT-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-003.md",
+      "milestone": "SPLIT",
+      "phase": "1",
+      "depends_on": [
+        "SPLIT-002"
+      ],
+      "branch": "feat/SPLIT-foundation",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/178"
+    },
+    "SPLIT-101": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-101.md",
+      "milestone": "SPLIT",
+      "phase": "2",
+      "depends_on": [
+        "SPLIT-003"
+      ],
+      "branch": "feat/SPLIT-business-shell",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/179"
+    },
+    "SPLIT-102": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-102.md",
+      "milestone": "SPLIT",
+      "phase": "2",
+      "depends_on": [
+        "SPLIT-001"
+      ],
+      "branch": "feat/SPLIT-business-shell",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/179"
+    },
+    "SPLIT-103": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-103.md",
+      "milestone": "SPLIT",
+      "phase": "2",
+      "depends_on": [
+        "SPLIT-101"
+      ],
+      "branch": "feat/SPLIT-business-shell",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/179"
+    },
+    "SPLIT-201": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-201.md",
+      "milestone": "SPLIT",
+      "phase": "3",
+      "depends_on": [
+        "SPLIT-103"
+      ],
+      "branch": "feat/SPLIT-integration",
+      "verdicts": {},
+      "pr": null
+    },
+    "SPLIT-202": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-202.md",
+      "milestone": "SPLIT",
+      "phase": "3",
+      "depends_on": [
+        "SPLIT-201"
+      ],
+      "branch": "feat/SPLIT-integration",
+      "verdicts": {},
+      "pr": null
+    },
+    "SPLIT-203": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-203.md",
+      "milestone": "SPLIT",
+      "phase": "3",
+      "depends_on": [
+        "SPLIT-201"
+      ],
+      "branch": "feat/SPLIT-integration",
+      "verdicts": {},
+      "pr": null
+    },
+    "SPLIT-204": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-204.md",
+      "milestone": "SPLIT",
+      "phase": "3",
+      "depends_on": [
+        "SPLIT-202",
+        "SPLIT-203"
+      ],
+      "branch": "feat/SPLIT-integration",
+      "verdicts": {},
+      "pr": null
+    },
+    "SPLIT-301": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-301.md",
+      "milestone": "SPLIT",
+      "phase": "4",
+      "depends_on": [
+        "SPLIT-101"
+      ],
+      "branch": "feat/SPLIT-crm-cleanup",
+      "verdicts": {},
+      "pr": null
+    },
+    "SPLIT-302": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-302.md",
+      "milestone": "SPLIT",
+      "phase": "4",
+      "depends_on": [
+        "SPLIT-102"
+      ],
+      "branch": "feat/SPLIT-crm-cleanup",
+      "verdicts": {},
+      "pr": null
+    },
+    "SPLIT-303": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-303.md",
+      "milestone": "SPLIT",
+      "phase": "4",
+      "depends_on": [
+        "SPLIT-204",
+        "SPLIT-301"
+      ],
+      "branch": "feat/SPLIT-crm-cleanup",
       "verdicts": {},
       "pr": null
     }

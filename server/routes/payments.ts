@@ -3,6 +3,8 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, desc, sql } from "drizzle-orm";
 import { db } from "../db/client";
+// APPROVAL-001: payment approval guard
+import { checkApprovalRequired } from "./finPaymentApproval";
 import { payments, students, invoices, courses, promoCodes } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
@@ -37,6 +39,8 @@ paymentRoutes.get("/", async (c) => {
       description: payments.description,
       /** INTEG-102 */
       courseId: payments.courseId,
+      /** APPROVAL-002: PAR request linked to this payment */
+      parRequestId: payments.parRequestId,
       createdAt: payments.createdAt,
       studentName: students.fullName,
       courseName: courses.name,
@@ -146,6 +150,14 @@ paymentRoutes.patch("/:id", zValidator("json", updatePaymentSchema), async (c) =
   const id = c.req.param("id");
   const tenantId = c.get("user").tenantId;
   const body = c.req.valid("json");
+
+  // APPROVAL-001: block "paid" transition if payment exceeds threshold and no approved PAR
+  if (body.status === "paid") {
+    const approvalError = await checkApprovalRequired(tenantId, id, "paid");
+    if (approvalError) {
+      return c.json(approvalError, 422);
+    }
+  }
 
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   if (body.amountCents !== undefined) patch.amountCents = body.amountCents;
