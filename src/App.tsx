@@ -58,6 +58,9 @@ import { ContractsPage } from "./pages/app/ContractsPage";
 import { FeedbackPage } from "./pages/app/FeedbackPage";
 import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
+// LEDGER-002/004: General Ledger UI
+import { FinLedgerPage } from "./pages/fin/FinLedgerPage";
+import { FinLedgerCarteMare } from "./pages/fin/FinLedgerCarteMare";
 import { PaymentAccountsPage } from "./pages/app/PaymentAccountsPage"; // CONT-PLATA
 import { PaymentAccountEditorPage } from "./pages/app/PaymentAccountEditorPage"; // CONT-PLATA
 import { PaymentAccountViewPage } from "./pages/app/PaymentAccountViewPage"; // CONT-PLATA
@@ -224,6 +227,13 @@ function Routes() {
   if (path.startsWith("/app/contracts")) return <ContractsPage />;
   if (path.startsWith("/app/feedback")) return <FeedbackPage />;
   if (path.startsWith("/app/invoices")) return <InvoicesPage />;
+  // LEDGER-004: Carte mare per account (must come before /app/fin/ledger generic)
+  if (path.match(/^\/app\/fin\/ledger\/account\/[^/]+$/)) {
+    const accountCode = path.split("/").pop()!;
+    return <FinLedgerCarteMare accountCode={accountCode} />;
+  }
+  // LEDGER-002: General Ledger trial balance + tabs
+  if (path.startsWith("/app/fin/ledger")) return <FinLedgerPage />;
   // CONT-PLATA: payment accounts ("cont de plată") with registry lookup
   if (path.startsWith("/app/conturi-plata/setari")) return <SellerProfilePage />;
   if (path.startsWith("/app/conturi-plata/nou")) return <PaymentAccountEditorPage />;

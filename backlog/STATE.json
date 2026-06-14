@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
+  "last_completed": "LEDGER-004",
+  "iterations": 169,
   "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "milestone_status": "FIN — LEDGER phase (17): LEDGER-003+004 done. Next: BANKLINK-001 on feat/FIN-banklink",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3681,8 +3681,8 @@
       "pr": null
     },
     "LEDGER-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/LEDGER-001.md",
       "milestone": "FIN",
@@ -3692,12 +3692,17 @@
         "REGISTRY-001"
       ],
       "branch": "feat/FIN-ledger",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "N/A"
+      },
       "pr": null
     },
     "LEDGER-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/LEDGER-002.md",
       "milestone": "FIN",
@@ -3708,12 +3713,17 @@
         "SPEND-002"
       ],
       "branch": "feat/FIN-ledger",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "LEDGER-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/LEDGER-003.md",
       "milestone": "FIN",
@@ -3724,12 +3734,17 @@
         "ASSET-002"
       ],
       "branch": "feat/FIN-ledger",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "OK"
+      },
       "pr": null
     },
     "LEDGER-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/LEDGER-004.md",
       "milestone": "FIN",
@@ -3739,7 +3754,12 @@
         "CORE-004"
       ],
       "branch": "feat/FIN-ledger",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "OK"
+      },
       "pr": null
     },
     "BANKLINK-001": {
