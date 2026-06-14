@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark, Building2 } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark, Building2, Package, Banknote } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { BranchSwitcher } from "@/components/app/BranchSwitcher";
@@ -75,6 +75,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Cont de plată", href: "/app/conturi-plata", icon: Landmark }, // CONT-PLATA
       { label: "Contracte", href: "/app/contracts", icon: FileText },
       { label: "Salarizare", href: "/app/hr/payroll", icon: DollarSign },
+      { label: "Inventar", href: "/app/fin/inventory", icon: Package }, // INVENTORY-001
+      { label: "BankLink", href: "/app/fin/banklink", icon: Banknote }, // BANKLINK-001/002/003
     ],
   },
   {

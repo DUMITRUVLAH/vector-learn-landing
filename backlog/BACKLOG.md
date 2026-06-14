@@ -345,3 +345,12 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | POLISH-001 | high | Global quick search + command palette (Cmd+K) | pending | [spec](specs/POLISH-001-nav-quick-search.md) |
 | POLISH-002 | high | Dashboard widget customization | pending | [spec](specs/POLISH-002-dashboard-widgets.md) |
 | POLISH-003 | normal | Empty states cu CTA pentru paginile cheie | pending | [spec](specs/POLISH-003-empty-states.md) |
+
+## Active milestone: FIN — FinDesk gap modules (phase 18–19, 2026-06-13/14)
+
+| Phase | ID | Title | Status | Branch/PR |
+|-------|----|-------|--------|-----------|
+| 18 | `BANKLINK-001` | Schema fin_bank_connections + fin_bank_transactions + migration 0125 | done | feat/FIN-banklink · PR #171 |
+| 18 | `BANKLINK-002` | UI import wizard + connections management + BankLink pages | done | feat/FIN-banklink · PR #171 |
+| 18 | `BANKLINK-003` | Auto-match imported bank tx la CASH reconciliation (CMP engine) | done | feat/FIN-banklink · PR #171 |
+| 19 | `INVENTORY-001` | Schema fin_inventory_items + fin_stock_movements + CMP engine + seed | done | feat/FIN-inventory · [PR #172](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/172) |

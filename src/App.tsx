@@ -58,6 +58,8 @@ import { ContractsPage } from "./pages/app/ContractsPage";
 import { FeedbackPage } from "./pages/app/FeedbackPage";
 import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
 import { InvoicesPage } from "./pages/app/InvoicesPage";
+import { InventoryPage } from "./pages/app/InventoryPage"; // INVENTORY-003
+import { InventoryReportPage } from "./pages/app/InventoryReportPage"; // INVENTORY-004
 import { PaymentAccountsPage } from "./pages/app/PaymentAccountsPage"; // CONT-PLATA
 import { PaymentAccountEditorPage } from "./pages/app/PaymentAccountEditorPage"; // CONT-PLATA
 import { PaymentAccountViewPage } from "./pages/app/PaymentAccountViewPage"; // CONT-PLATA
@@ -224,6 +226,10 @@ function Routes() {
   if (path.startsWith("/app/contracts")) return <ContractsPage />;
   if (path.startsWith("/app/feedback")) return <FeedbackPage />;
   if (path.startsWith("/app/invoices")) return <InvoicesPage />;
+  // INVENTORY-004: /app/fin/inventory/report must come before /app/fin/inventory
+  if (path.startsWith("/app/fin/inventory/report")) return <InventoryReportPage />;
+  // INVENTORY-003: /app/fin/inventory — catalog + jurnal + mișcare manuală
+  if (path.startsWith("/app/fin/inventory")) return <InventoryPage />;
   // CONT-PLATA: payment accounts ("cont de plată") with registry lookup
   if (path.startsWith("/app/conturi-plata/setari")) return <SellerProfilePage />;
   if (path.startsWith("/app/conturi-plata/nou")) return <PaymentAccountEditorPage />;

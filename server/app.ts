@@ -102,6 +102,8 @@ import { userRoutes } from "./routes/users";
 import { waitlistRoutes } from "./routes/waitlist";
 import { twoFactorRoutes } from "./routes/auth/twoFactor"; // AUTH-004: 2FA setup/verify/disable
 import { sessionMgmtRoutes } from "./routes/auth/sessions"; // active session management
+// INVENTORY-001: Gestiune stoc materiale didactice (fin_inventory_items + fin_stock_movements)
+import { finInventoryRoutes } from "./routes/finInventory";
 // PAR (Payment Action Request) module — Phase A routes
 import { parMeRoutes } from "./routes/parMe"; // PAR-002: GET /api/par/me
 import { parMembersRoutes } from "./routes/parMembers"; // PAR-002: members CRUD
@@ -211,6 +213,8 @@ app.route("/api/audit-log", auditRoutes);
 app.route("/api/contracts", contractRoutes);
 // FIN-601..604: invoices, debt reconciliation, recurring billing, e-Factura export
 app.route("/api/invoices", invoiceRoutes);
+// INVENTORY-001: Gestiune stoc articole + mișcări CMP
+app.route("/api/fin/inventory", finInventoryRoutes);
 // CRM-137: team members endpoint for AssigneePicker
 app.route("/api/team", teamRoutes);
 // AUTH-002: public (no-auth) team routes — accept-invitation
