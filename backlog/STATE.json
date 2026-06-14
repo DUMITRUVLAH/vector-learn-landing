@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "MASS-002",
-  "last_completed": "MASS-001",
-  "iterations": 201,
-  "last_run_at": "2026-06-14T09:00:00Z",
-  "milestone_status": "FIN FinDesk — MASS phase (15): MASS-001 done, MASS-002 in_progress on feat/FIN-mass.",
+  "current_item": "MASS-003",
+  "last_completed": "MASS-002",
+  "iterations": 202,
+  "last_run_at": "2026-06-14T10:00:00Z",
+  "milestone_status": "FIN FinDesk — MASS phase (15): MASS-001+002 done, MASS-003 in_progress on feat/FIN-mass.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3594,7 +3594,7 @@
       "pr": null
     },
     "MASS-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MASS-002.md",
@@ -3607,20 +3607,25 @@
         "EINV-001"
       ],
       "branch": "feat/FIN-mass",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "MASS-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MASS-003.md",
       "milestone": "FIN",
       "phase": "15",
       "depends_on": [
         "MASS-001",
-        "PARTY-002",
-        "SPEND-002"
+        "PARTY-001",
+        "SPEND-001"
       ],
       "branch": "feat/FIN-mass",
       "verdicts": {},

@@ -1,0 +1,77 @@
+{
+  "id": "c5e0a4f3-7d6b-5c1f-0e9d-4a3b2c5d8f1a",
+  "prevId": "b4d9f3e2-6c5a-4b0e-9d8c-3f2a1b4c7e0f",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.fin_invoices": {
+      "name": "fin_invoices",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "tenant_id": { "name": "tenant_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "agreement_id": { "name": "agreement_id", "type": "uuid", "primaryKey": false, "notNull": false },
+        "party_id": { "name": "party_id", "type": "uuid", "primaryKey": false, "notNull": false },
+        "series": { "name": "series", "type": "varchar(20)", "primaryKey": false, "notNull": true, "default": "'FIN'" },
+        "number": { "name": "number", "type": "integer", "primaryKey": false, "notNull": true },
+        "invoice_number": { "name": "invoice_number", "type": "varchar(30)", "primaryKey": false, "notNull": true },
+        "status": { "name": "status", "type": "fin_invoice_status", "primaryKey": false, "notNull": true, "default": "'draft'" },
+        "currency": { "name": "currency", "type": "varchar(3)", "primaryKey": false, "notNull": true, "default": "'MDL'" },
+        "issued_at": { "name": "issued_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": false },
+        "due_date": { "name": "due_date", "type": "date", "primaryKey": false, "notNull": false },
+        "total_cents": { "name": "total_cents", "type": "integer", "primaryKey": false, "notNull": true, "default": 0 },
+        "vat_total_cents": { "name": "vat_total_cents", "type": "integer", "primaryKey": false, "notNull": true, "default": 0 },
+        "notes": { "name": "notes", "type": "text", "primaryKey": false, "notNull": false },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" },
+        "updated_at": { "name": "updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.fin_invoice_lines": {
+      "name": "fin_invoice_lines",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "invoice_id": { "name": "invoice_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "service_id": { "name": "service_id", "type": "uuid", "primaryKey": false, "notNull": false },
+        "description": { "name": "description", "type": "text", "primaryKey": false, "notNull": true },
+        "quantity": { "name": "quantity", "type": "integer", "primaryKey": false, "notNull": true, "default": 1 },
+        "unit_price_cents": { "name": "unit_price_cents", "type": "integer", "primaryKey": false, "notNull": true },
+        "vat_pct": { "name": "vat_pct", "type": "integer", "primaryKey": false, "notNull": true, "default": 0 },
+        "line_total_cents": { "name": "line_total_cents", "type": "integer", "primaryKey": false, "notNull": true, "default": 0 },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.fin_invoice_reminders": {
+      "name": "fin_invoice_reminders",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "tenant_id": { "name": "tenant_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "invoice_id": { "name": "invoice_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "reminder_day": { "name": "reminder_day", "type": "integer", "primaryKey": false, "notNull": true },
+        "channel": { "name": "channel", "type": "varchar(20)", "primaryKey": false, "notNull": true, "default": "'email'" },
+        "status": { "name": "status", "type": "varchar(20)", "primaryKey": false, "notNull": true, "default": "'sent'" },
+        "body": { "name": "body", "type": "varchar(2000)", "primaryKey": false, "notNull": false },
+        "sent_at": { "name": "sent_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {
+    "public.fin_invoice_status": { "name": "fin_invoice_status", "schema": "public", "values": ["draft", "issued", "paid", "overdue", "cancelled"] }
+  },
+  "schemas": {},
+  "_meta": { "columns": {}, "schemas": {}, "tables": {} }
+}

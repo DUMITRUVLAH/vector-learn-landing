@@ -813,6 +813,27 @@
       "when": 1781000000000,
       "tag": "0115_fin_bulk",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1781001000000,
+      "tag": "0116_fin_agreements",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1781002000000,
+      "tag": "0117_fin_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1781003000000,
+      "tag": "0118_fin_einvoices",
+      "breakpoints": true
     }
   ]
 }
