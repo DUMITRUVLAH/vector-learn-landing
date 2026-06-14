@@ -338,6 +338,14 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | BRANCH-703 | done | Branch-scoped permissions (branch_scope pe users) | done |
 | BRANCH-704 | done | Rapoarte consolidate vs per-filială | done |
 
+## Active milestone: FIN FinDesk — SPEND + CAPTURE phases
+
+| ID | Phase | Title | Status | Branch/PR |
+|----|-------|-------|--------|-----------|
+| SPEND-003 | spend | UI cheltuieli /app/fin/expenses — liste, categorii, top furnizori, KPI | done | feat/FIN-spend · [PR #160](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/160) |
+| CAPTURE-001 | capture | Schema fin_captures + migration 0115 + seed | done | feat/FIN-capture · [PR #161](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/161) |
+| CAPTURE-002 | capture | Pipeline AI OCR — captureExtractor + rute Hono | done | feat/FIN-capture · [PR #161](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/161) |
+
 ## Active milestone: POLISH faza-1 — UX Polish
 
 | ID | Priority | Title | Status | Spec |

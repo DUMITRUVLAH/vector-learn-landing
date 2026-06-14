@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { db, closeDb } from "./client";
 import { tenants, users, students, teachers, courses, lessons, branches, leads } from "./schema";
+import { finCaptures } from "./schema/finCaptures"; // CAPTURE-001
 import {
   parMembers,
   parSettings,
@@ -247,6 +248,48 @@ async function seed() {
   } else {
     console.log(`⚠️  PAR demo tenant already exists (${existingPar.id}). Skipping.`);
   }
+
+  // ── CAPTURE-001: Seed demo OCR captures ──────────────────────────────────────
+  await db.insert(finCaptures).values([
+    {
+      tenantId: tenant.id,
+      fileKey: "demo/bon-lidl-2026-06-01.jpg",
+      fileName: "bon-lidl-2026-06-01.jpg",
+      mimeType: "image/jpeg",
+      sizeBytes: 245312,
+      status: "extracted",
+      extractedFields: {
+        vendor_name: { value: "Lidl Moldova SRL", confidence: 0.94 },
+        amount_cents: { value: 23700, confidence: 0.97 },
+        vat_amount_cents: { value: 3950, confidence: 0.88 },
+        vat_deductible: { value: false, confidence: 0.62, low_confidence: true },
+        expense_date: { value: "2026-06-01", confidence: 0.99 },
+        category: { value: "supplies", confidence: 0.81 },
+      },
+      rawText: "LIDL MOLDOVA SRL\nData: 01.06.2026\nTotal: 237.00 MDL\nTVA 20%: 39.50 MDL",
+      createdBy: admin.id,
+    },
+    {
+      tenantId: tenant.id,
+      fileKey: "demo/factura-telekom-2026-06-05.pdf",
+      fileName: "factura-telekom-2026-06-05.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 87654,
+      status: "extracted",
+      extractedFields: {
+        vendor_name: { value: "Moldtelecom SA", confidence: 0.98 },
+        amount_cents: { value: 54000, confidence: 0.96 },
+        vat_amount_cents: { value: 9000, confidence: 0.95 },
+        vat_deductible: { value: true, confidence: 0.91 },
+        expense_date: { value: "2026-06-05", confidence: 0.99 },
+        iban: { value: "MD24AG000225100013104168", confidence: 0.82 },
+        category: { value: "utilities", confidence: 0.93 },
+      },
+      rawText: "MOLDTELECOM SA\nFactura nr. 2026-060012\nData: 05.06.2026\nTotal: 540.00 MDL\nTVA: 90.00 MDL\nIBAN: MD24AG000225100013104168",
+      createdBy: admin.id,
+    },
+  ]).onConflictDoNothing();
+  console.log(`✅ 2 demo fin_captures seeded`);
 
   console.log(`\n📌 Demo credentials:`);
   console.log(`   email: ${admin.email}`);
