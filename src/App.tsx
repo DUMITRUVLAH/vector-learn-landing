@@ -150,6 +150,8 @@ import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
 import { BusinessDashboardPage } from "./pages/business/BusinessDashboardPage";
 // SPLIT-102: Business Suite landing page
 import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
+// SPLIT-103: Business guard HOC for delegated routes
+import { BusinessGuardPage } from "./components/business/BusinessGuardPage";
 
 /** PAR-116: Role-aware wrapper — fetches current user's PAR roles then renders ParAdmin */
 function ParAdminPage() {
@@ -225,6 +227,51 @@ function Routes() {
   // SPLIT-003: Business Suite routes (checked before /app/* to avoid cross-match)
   if (path.startsWith("/business/login")) return <BusinessLoginPage />;
   if (path.startsWith("/business/dashboard")) return <BusinessDashboardPage />;
+
+  // SPLIT-103: /business/* routes — business session guard + delegate to existing pages.
+  // Pages render with their own shells (FinLayout, AppShell); guard ensures business-only access.
+  // Phase 2: top-level + common sub-routes. Path-based IDs (detail pages) handled in Phase 3.
+  // FinDesk routes under /business/fin/*
+  if (path.startsWith("/business/fin/banklink/transactions")) return <BusinessGuardPage><BankLinkTransactionsPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/payroll/employees")) return <BusinessGuardPage><PayrollEmployeesPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/settings/ai-audit")) return <BusinessGuardPage><FinAiAuditPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/settings/security")) return <BusinessGuardPage><FinSecuritySettingsPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/inventory/report")) return <BusinessGuardPage><InventoryReportPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/banklink/import")) return <BusinessGuardPage><BankLinkImportPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/banklink/queue")) return <BusinessGuardPage><BankLinkQueuePage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/cash/import")) return <BusinessGuardPage><CashImportPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/revaluation")) return <BusinessGuardPage><RevaluationPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/agreements")) return <BusinessGuardPage><AgreementsPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/einvoices")) return <BusinessGuardPage><FinEinvoicesPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/inventory")) return <BusinessGuardPage><InventoryPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/registry")) return <BusinessGuardPage><FinRegistryPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/invoices")) return <BusinessGuardPage><FinInvoicesPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/expenses")) return <BusinessGuardPage><FinExpensesPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/captures")) return <BusinessGuardPage><CapturesListPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/payments")) return <BusinessGuardPage><FinPaymentsPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/calendar")) return <BusinessGuardPage><FinCalendarPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/banklink")) return <BusinessGuardPage><BankLinkPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/parties")) return <BusinessGuardPage><PartiesPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/payroll")) return <BusinessGuardPage><PayrollFINPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/itpark")) return <BusinessGuardPage><ItparkList /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/assets")) return <BusinessGuardPage><AssetsPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/ledger")) return <BusinessGuardPage><FinLedgerPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/budget")) return <BusinessGuardPage><BudgetPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/export")) return <BusinessGuardPage><FinExportCenter /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/cash")) return <BusinessGuardPage><CashPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/mass")) return <BusinessGuardPage><FinMassPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/tax")) return <BusinessGuardPage><TaxPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/")) return <BusinessGuardPage><FinHome /></BusinessGuardPage>;
+  // PAR routes under /business/par/*
+  if (path.startsWith("/business/par/new")) return <BusinessGuardPage><ParCreateWizard /></BusinessGuardPage>;
+  if (path.startsWith("/business/par/inbox")) return <BusinessGuardPage><ParInbox /></BusinessGuardPage>;
+  if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParFinanceQueue /></BusinessGuardPage>;
+  if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParAdminPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParReports /></BusinessGuardPage>;
+  if (path.startsWith("/business/par")) return <BusinessGuardPage><ParDashboard /></BusinessGuardPage>;
+  // ITPark routes under /business/itpark/*
+  if (path.startsWith("/business/itpark/dashboard")) return <BusinessGuardPage><ItparkDashboardPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/itpark")) return <BusinessGuardPage><ItparkList /></BusinessGuardPage>;
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
   // GAP-019: /app/students/:id detail page must come before /app/students list
