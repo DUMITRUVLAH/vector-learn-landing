@@ -13,9 +13,10 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, isNotNull } from "drizzle-orm";
 import { db } from "../db/client";
 import { itparkEngagements } from "../db/schema/itpark";
+import { finParties } from "../db/schema/finParties";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requireItparkRole } from "../lib/itparkAuth";
 
@@ -54,14 +55,23 @@ const engagementWriteSchema = z.object({
 });
 
 // ─── GET /  — lista dosarelor ─────────────────────────────────────────────────
+// Query params:
+//   ?finPartyId=<uuid>  — SPLIT-203: filter by linked fin_parties id (for FinDesk party detail page)
+//   ?linked=true        — only return engagements that have a fin_party_id set
 
 itparkEngagementsRoutes.get("/", async (c) => {
   const user = c.get("user");
+  const finPartyId = c.req.query("finPartyId");
+  const linkedOnly = c.req.query("linked") === "true";
+
+  const conditions = [eq(itparkEngagements.tenantId, user.tenantId)];
+  if (finPartyId) conditions.push(eq(itparkEngagements.finPartyId, finPartyId));
+  if (linkedOnly && !finPartyId) conditions.push(isNotNull(itparkEngagements.finPartyId));
 
   const rows = await db
     .select()
     .from(itparkEngagements)
-    .where(eq(itparkEngagements.tenantId, user.tenantId))
+    .where(and(...conditions))
     .orderBy(desc(itparkEngagements.reportingYear), itparkEngagements.residentName);
 
   return c.json({ engagements: rows });
@@ -178,6 +188,90 @@ itparkEngagementsRoutes.put(
       .returning();
 
     return c.json({ engagement: updated });
+  }
+);
+
+// ─── POST /:id/link-party — SPLIT-203: auto-create fin_parties entry from engagement data ──
+
+itparkEngagementsRoutes.post("/:id/link-party", async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+
+  const existing = await db.query.itparkEngagements.findFirst({
+    where: and(
+      eq(itparkEngagements.id, id),
+      eq(itparkEngagements.tenantId, user.tenantId)
+    ),
+  });
+  if (!existing) return c.json({ error: "not_found" }, 404);
+
+  // Idempotent: if already linked, return existing link without creating a duplicate
+  if (existing.finPartyId) {
+    return c.json({ fin_party_id: existing.finPartyId, created: false });
+  }
+
+  // GDPR note: residentName and idno come from the engagement (server-side), not from request body
+  const [newParty] = await db
+    .insert(finParties)
+    .values({
+      tenantId: user.tenantId,
+      name: existing.residentName,
+      // ITPark residents are companies, kind='both' (they receive invoices and may pay expenses)
+      kind: "both",
+      country: "MD",
+      idno: existing.idno ?? undefined,
+    })
+    .returning();
+
+  // Link the engagement to the new party
+  const [updated] = await db
+    .update(itparkEngagements)
+    .set({ finPartyId: newParty.id, updatedAt: new Date() })
+    .where(
+      and(
+        eq(itparkEngagements.id, id),
+        eq(itparkEngagements.tenantId, user.tenantId)
+      )
+    )
+    .returning();
+
+  return c.json({ fin_party_id: updated.finPartyId, created: true }, 201);
+});
+
+// ─── PATCH /:id/party — SPLIT-201: link/unlink to fin_parties ───────────────
+
+const partyLinkSchema = z.object({
+  fin_party_id: z.string().uuid().nullable(),
+});
+
+itparkEngagementsRoutes.patch(
+  "/:id/party",
+  zValidator("json", partyLinkSchema),
+  async (c) => {
+    const user = c.get("user");
+    const id = c.req.param("id");
+    const { fin_party_id } = c.req.valid("json");
+
+    const existing = await db.query.itparkEngagements.findFirst({
+      where: and(
+        eq(itparkEngagements.id, id),
+        eq(itparkEngagements.tenantId, user.tenantId)
+      ),
+    });
+    if (!existing) return c.json({ error: "not_found" }, 404);
+
+    const [updated] = await db
+      .update(itparkEngagements)
+      .set({ finPartyId: fin_party_id, updatedAt: new Date() })
+      .where(
+        and(
+          eq(itparkEngagements.id, id),
+          eq(itparkEngagements.tenantId, user.tenantId)
+        )
+      )
+      .returning();
+
+    return c.json({ id: updated.id, fin_party_id: updated.finPartyId });
   }
 );
 

@@ -44,6 +44,14 @@ export const tenants = pgTable("tenants", {
   iban: varchar("iban", { length: 34 }),
   /** CONT-PLATA: tenant bank BIC/SWIFT (migration 0108) */
   bic: varchar("bic", { length: 11 }),
+  /**
+   * SPLIT-001: Application kind — separates the two apps in this repo.
+   * 'learn'    → CRM Educațional (/app/*, /app/login, AppShell)
+   * 'business' → Business Suite (/business/*, /business/login, BusinessShell)
+   * Default 'learn' keeps all existing tenants in the CRM app.
+   * Migration 0144 adds this column with ADD COLUMN IF NOT EXISTS.
+   */
+  appKind: varchar("app_kind", { length: 20 }).notNull().default("learn"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

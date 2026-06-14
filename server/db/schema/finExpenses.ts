@@ -43,6 +43,7 @@ export const finExpenseSourceEnum = pgEnum("fin_expense_source", [
   "capture",
   "payroll",
   "asset",
+  "par", // SPLIT-202: auto-created from approved/paid PAR request
 ]);
 
 export const finExpenseStatusEnum = pgEnum("fin_expense_status", [
@@ -85,6 +86,13 @@ export const finExpenses = pgTable(
      * Null for manually-created expenses.
      */
     importHash: varchar("import_hash", { length: 64 }),
+    /**
+     * SPLIT-202: PAR → FinDesk bridge.
+     * When a PAR is marked paid/approved, a fin_expense is auto-created with source='par'.
+     * This FK links back to the originating par_request (SET NULL on PAR deletion).
+     * Migration: drizzle/0148_split_par_findesk_bridge.sql
+     */
+    parRequestId: uuid("par_request_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -125,6 +133,7 @@ export const finExpenseAttachments = pgTable(
 
 export type FinExpense = typeof finExpenses.$inferSelect;
 export type InsertFinExpense = typeof finExpenses.$inferInsert;
+export type FinExpenseSource = typeof finExpenseSourceEnum.enumValues[number];
 export type FinExpenseAttachment = typeof finExpenseAttachments.$inferSelect;
 export type InsertFinExpenseAttachment = typeof finExpenseAttachments.$inferInsert;
 

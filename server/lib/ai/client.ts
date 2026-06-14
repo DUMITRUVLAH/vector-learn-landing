@@ -62,12 +62,6 @@ const STUB_RESPONSES: Record<string, string> = {
     "Bună ziua! Vă mulțumim pentru mesaj. " +
     "Vă contactăm în cel mai scurt timp cu detaliile solicitate. " +
     "Echipa Vector Learn",
-  fin_narrative:
-    "Luna analizată a înregistrat venituri în linie cu targetul bugetat, cu o rată de colectare satisfăcătoare. " +
-    "Creanțele curentemse află în limite normale, fără presiuni de lichiditate pe termen scurt. " +
-    "Restanțele de peste 90 de zile necesită atenție — recomandăm contactarea proactivă a debitorilor. " +
-    "Performanța generală este pozitivă și susține planurile de investiție pentru trimestrul următor. " +
-    "[Narativă generată în mod demo — configurați AI_API_KEY pentru analiză reală.]",
   default:
     "Răspuns generat de AI. [Configurați AI_API_KEY pentru răspunsuri reale.]",
 };

@@ -3,7 +3,6 @@ import { tenants } from "./tenants";
 import { students } from "./students";
 import { promoCodes } from "./promoCodes"; // COURSE-203
 import { courses } from "./courses"; // INTEG-102
-// APPROVAL-001: lazy import to avoid circular dep — we reference par_requests by id only
 
 export const paymentStatusEnum = pgEnum("payment_status", [
   "pending",
@@ -36,13 +35,6 @@ export const payments = pgTable(
     originalAmountCents: integer("original_amount_cents"), // before discount
     /** INTEG-102: optional FK to the course this payment is for */
     courseId: uuid("course_id").references(() => courses.id, { onDelete: "set null" }),
-    /**
-     * APPROVAL-001: PAR request that authorized this payment.
-     * Large payments (>= threshold_cents) require an approved PAR before
-     * the status can be set to "paid".
-     * FK to par_requests.id — SET NULL on delete (PAR deletion doesn't block payment).
-     */
-    parRequestId: uuid("par_request_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

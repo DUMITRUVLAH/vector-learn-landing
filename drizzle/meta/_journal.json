@@ -493,10 +493,24 @@
       "breakpoints": true
     },
     {
+      "idx": 69,
+      "version": "7",
+      "when": 1700004140000,
+      "tag": "0069_crm126_cadences",
+      "breakpoints": true
+    },
+    {
       "idx": 70,
       "version": "7",
       "when": 1700004200000,
       "tag": "0070_fin602_debt_reconcile",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1700004200000,
+      "tag": "0070_crm127_audit_log",
       "breakpoints": true
     },
     {
@@ -1008,6 +1022,41 @@
       "version": "7",
       "when": 1700008580000,
       "tag": "0143_fin_ledger_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1700008640000,
+      "tag": "0144_split_app_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1700008700000,
+      "tag": "0145_fix_fin_ledger_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1700008760000,
+      "tag": "0146_itpark_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1700008820000,
+      "tag": "0147_split_party_bridge",
+      "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1700008880000,
+      "tag": "0148_split_par_findesk_bridge",
       "breakpoints": true
     }
   ]

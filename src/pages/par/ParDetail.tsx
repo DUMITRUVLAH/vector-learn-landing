@@ -750,6 +750,32 @@ export function ParDetailPage() {
           )}
         </div>
 
+        {/* SPLIT-202: FinDesk integration link — shown when PAR is paid */}
+        {par.status === "paid" && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 mt-2">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0" aria-hidden="true">
+                <svg className="h-3.5 w-3.5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-foreground">FinDesk</p>
+                <p className="text-xs text-muted-foreground">
+                  Cheltuiala a fost înregistrată automat în FinDesk cu sursa „PAR".
+                </p>
+              </div>
+              <a
+                href={`#/app/fin/expenses?par_id=${par.id}`}
+                className="shrink-0 text-xs font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded"
+                aria-label="Vezi cheltuiala FinDesk"
+              >
+                Vezi cheltuiala →
+              </a>
+            </div>
+          </div>
+        )}
+
         {/* Status footer */}
         <div className="text-xs text-muted-foreground text-right pt-2">
           Status: <strong>{PAR_STATUS_LABELS[par.status] ?? par.status}</strong>

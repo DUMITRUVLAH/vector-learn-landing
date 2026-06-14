@@ -166,6 +166,13 @@ export const parVendors = pgTable(
     bank: varchar("bank", { length: 300 }),
     notes: text("notes"),
     active: boolean("active").notNull().default(true),
+    /**
+     * SPLIT-201: link to fin_parties for shared PARTY identity across Business Suite.
+     * A PAR vendor (payee) is the same contact as a FinDesk partner.
+     * Nullable — existing vendors not yet linked to fin_parties are still valid.
+     * Migration: drizzle/0146_split_party_bridge.sql
+     */
+    finPartyId: uuid("fin_party_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

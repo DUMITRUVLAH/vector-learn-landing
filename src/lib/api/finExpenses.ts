@@ -26,7 +26,7 @@ export type ExpenseCategory =
   | "maintenance"
   | "other";
 
-export type ExpenseSource = "manual" | "capture" | "payroll" | "asset";
+export type ExpenseSource = "manual" | "capture" | "payroll" | "asset" | "par";
 export type ExpenseStatus = "draft" | "approved" | "rejected" | "paid";
 
 export interface FinExpense {
@@ -47,6 +47,11 @@ export interface FinExpense {
   approvedBy: string | null;
   approvedAt: string | null;
   createdBy: string;
+  /**
+   * SPLIT-202: FK to par_requests.id when source='par'.
+   * Null for manually-created or other-source expenses.
+   */
+  parRequestId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -338,13 +338,6 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | BRANCH-703 | done | Branch-scoped permissions (branch_scope pe users) | done |
 | BRANCH-704 | done | Rapoarte consolidate vs per-filială | done |
 
-## Milestone: FIN faza-24 — APPROVAL (Payment Authorization) — DONE, PR #177
-
-| ID | Phase | Title | Status | Spec |
-|----|-------|-------|--------|------|
-| APPROVAL-001 | 24 | Flux aprobare plăți FIN — integrare cu PAR existent | done | [spec](specs/APPROVAL-001.md) |
-| APPROVAL-002 | 24 | UI flux aprobare plăți mari — PaymentApprovalQueue + badge + link PAR | done | [spec](specs/APPROVAL-002.md) |
-
 ## Active milestone: POLISH faza-1 — UX Polish
 
 | ID | Priority | Title | Status | Spec |

@@ -1001,24 +1001,35 @@ function ParReferenceData() {
       )}
 
       {section === "vendors" && (
-        <SimpleRefTable
-          title="Furnizori / Plătitori"
-          items={vendors}
-          columns={[
-            { label: "Nume", key: "name" as const },
-            { label: "IBAN", key: "iban" as const },
-            { label: "Bancă", key: "bank" as const },
-          ]}
-          onAdd={(payload) => createVendor(payload as { name: string; idnp?: string; iban?: string; bank?: string }).then(load)}
-          onEdit={(id, payload) => updateVendor(id, payload as Partial<{ name: string; idnp?: string; iban?: string; bank?: string }>).then(load)}
-          onDelete={(id) => deleteVendor(id).then(load)}
-          addFields={[
-            { id: "name", label: "Nume", placeholder: "Daria Roitman" },
-            { id: "idnp", label: "IDNP (13 cifre)", placeholder: "2008001007903" },
-            { id: "iban", label: "IBAN", placeholder: "MD48ML000002259A19498121" },
-            { id: "bank", label: "Bancă", placeholder: 'BC "Moldindconbank" S.A.' },
-          ]}
-        />
+        <>
+          <SimpleRefTable
+            title="Furnizori / Plătitori"
+            items={vendors}
+            columns={[
+              { label: "Nume", key: "name" as const },
+              { label: "IBAN", key: "iban" as const },
+              { label: "Bancă", key: "bank" as const },
+            ]}
+            onAdd={(payload) => createVendor(payload as { name: string; idnp?: string; iban?: string; bank?: string }).then(load)}
+            onEdit={(id, payload) => updateVendor(id, payload as Partial<{ name: string; idnp?: string; iban?: string; bank?: string }>).then(load)}
+            onDelete={(id) => deleteVendor(id).then(load)}
+            addFields={[
+              { id: "name", label: "Nume", placeholder: "Daria Roitman" },
+              { id: "idnp", label: "IDNP (13 cifre)", placeholder: "2008001007903" },
+              { id: "iban", label: "IBAN", placeholder: "MD48ML000002259A19498121" },
+              { id: "bank", label: "Bancă", placeholder: 'BC "Moldindconbank" S.A.' },
+            ]}
+          />
+          {/* SPLIT-201: FinDesk party link indicator */}
+          {vendors.some(v => v.finPartyId) && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                FinDesk
+              </span>{" "}
+              {vendors.filter(v => v.finPartyId).length} din {vendors.length} furnizori legați la un partener FinDesk.
+            </p>
+          )}
+        </>
       )}
     </div>
   );

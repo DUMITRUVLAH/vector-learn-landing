@@ -7,7 +7,7 @@
  * Taburi: Anexa 2 (placeholder) | Anexa 3 (revenue lines — ITPARK-201) | Anexa 4 (placeholder) | Scrisori (placeholder)
  */
 import { useState, useEffect, lazy, Suspense } from "react";
-import { getEngagement, type ItparkEngagement } from "../../../../lib/api/itparkEngagements";
+import { getEngagement, autoLinkEngagementParty, type ItparkEngagement } from "../../../../lib/api/itparkEngagements";
 
 // ITPARK-201: Tabel linii venit (lazy pentru a nu bloca randarea paginii)
 const RevenueLinesTable = lazy(() => import("./RevenueLinesTable"));
@@ -86,6 +86,88 @@ function TabPlaceholder({ label }: { label: string }) {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+// ─── FinDesk section (SPLIT-201) ────────────────────────────────────────────
+
+interface FinDeskSectionProps {
+  engagement: ItparkEngagement;
+  onLinked: (finPartyId: string | null) => void;
+}
+
+function FinDeskSection({ engagement, onLinked }: FinDeskSectionProps) {
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+
+  async function handleCreateLink() {
+    setLinking(true);
+    setLinkError(null);
+    try {
+      // SPLIT-203: auto-creates fin_parties from engagement data (residentName + IDNO)
+      const result = await autoLinkEngagementParty(engagement.id);
+      onLinked(result.fin_party_id);
+    } catch (e) {
+      setLinkError(e instanceof Error ? e.message : "Eroare la asociere");
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card shadow-sm p-6">
+      <h2 className="text-sm font-semibold text-foreground mb-4 uppercase tracking-wide">FinDesk</h2>
+      {engagement.finPartyId ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0" aria-hidden="true">
+              <svg className="h-4 w-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-muted-foreground">Partener FinDesk</p>
+              <a
+                href={`#/app/fin/parties/${engagement.finPartyId}`}
+                className="text-sm font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded truncate block"
+              >
+                {engagement.residentName}
+              </a>
+            </div>
+            <a
+              href={`#/app/fin/invoices?partyId=${engagement.finPartyId}`}
+              className="shrink-0 text-xs font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded"
+              aria-label="Vezi facturile FinDesk ale acestui rezident"
+            >
+              Facturi FinDesk →
+            </a>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-4">
+          <p className="text-sm text-muted-foreground flex-1">
+            Rezidentul nu este legat la un partener FinDesk. Asociere pentru a vedea facturile și cheltuielile.
+          </p>
+          <button
+            type="button"
+            onClick={handleCreateLink}
+            disabled={linking}
+            aria-busy={linking}
+            className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[44px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            {linking ? (
+              <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground" role="status" aria-label="Se procesează" />
+            ) : null}
+            Asociere partener FinDesk
+          </button>
+        </div>
+      )}
+      {linkError && (
+        <p className="mt-2 text-sm text-destructive" role="alert">{linkError}</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
 export default function ItparkDetail() {
   const id = useRouteId();
   const [engagement, setEngagement] = useState<ItparkEngagement | null>(null);
@@ -102,6 +184,12 @@ export default function ItparkDetail() {
       .catch((e) => setError(e instanceof Error ? e.message : "Eroare"))
       .finally(() => setLoading(false));
   }, [id]);
+
+  function handlePartyLinked(finPartyId: string | null) {
+    if (engagement) {
+      setEngagement({ ...engagement, finPartyId });
+    }
+  }
 
   if (loading) {
     return (
@@ -207,6 +295,9 @@ export default function ItparkDetail() {
           )}
         </dl>
       </div>
+
+      {/* SPLIT-201: FinDesk integration section */}
+      <FinDeskSection engagement={engagement} onLinked={handlePartyLinked} />
 
       {/* Tabs */}
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">

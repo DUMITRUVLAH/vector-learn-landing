@@ -110,6 +110,13 @@ export const itparkEngagements = pgTable(
     adjustedRevenueCents: bigint("adjusted_revenue_cents", { mode: "number" }).notNull().default(0),
     /** Procedura de informare a angajaților (Anexa 2 rând 10) — text liber */
     employeeInfoProcedure: text("employee_info_procedure"),
+    /**
+     * SPLIT-201: link to fin_parties for shared PARTY identity across Business Suite.
+     * A resident/company in ITPark is the same partner as in FinDesk.
+     * Nullable — existing engagements without a FinDesk partner link remain valid.
+     * Migration: drizzle/0146_split_party_bridge.sql
+     */
+    finPartyId: uuid("fin_party_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

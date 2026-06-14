@@ -110,41 +110,6 @@ import ParAdmin from "./pages/par/ParAdmin";
 import { ParReports } from "./pages/par/ParReports";
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
-import ItparkList from "./pages/app/fin/itpark/ItparkList"
-import ItparkDetail from "./pages/app/fin/itpark/ItparkDetail"
-import ItparkWizard from "./pages/app/fin/itpark/ItparkWizard"
-import ItparkDashboardPage from "./pages/app/fin/itpark/ItparkDashboardPage"
-import CapturePage from "./pages/fin/CapturePage"
-import CapturesListPage from "./pages/fin/CapturesListPage"
-import CashPage from "./pages/fin/CashPage"
-import CashImportPage from "./pages/fin/CashImportPage"
-import FinPaymentsPage from "./pages/fin/PaymentsPage"
-import BankLinkPage from "./pages/fin/BankLinkPage"
-import BankLinkImportPage from "./pages/fin/BankLinkImportPage"
-import BankLinkTransactionsPage from "./pages/fin/BankLinkTransactionsPage"
-import BankLinkQueuePage from "./pages/fin/BankLinkQueuePage"
-import { FinInsightsPage } from "./pages/finance/FinInsightsPage";
-import { FinEinvoicesPage } from "./pages/app/FinEinvoicesPage";
-import { FinAiAuditPage } from "./pages/fin/FinAiAuditPage";
-import { AssetsPage } from "./pages/app/AssetsPage";
-import { FinHome } from "./pages/fin/FinHome";
-import { PayrollFINPage } from "./pages/fin/PayrollPage";
-import { BudgetPage } from "./pages/app/BudgetPage";
-import { FinExpensesPage } from "./pages/app/FinExpensesPage";
-import { InventoryReportPage } from "./pages/app/InventoryReportPage";
-import { FinInvoicesPage } from "./pages/app/FinInvoicesPage";
-import { FinExportCenter } from "./pages/app/fin/ExportCenter";
-import { PartiesPage } from "./pages/app/fin/PartiesPage";
-import { AgreementsPage } from "./pages/fin/AgreementsPage";
-import { PayrollEmployeesPage } from "./pages/fin/PayrollEmployeesPage";
-import { FinMassPage } from "./pages/fin/FinMassPage";
-import { TaxPage } from "./pages/fin/TaxPage";
-import { InventoryPage } from "./pages/app/InventoryPage";
-import { FinRegistryPage } from "./pages/app/FinRegistryPage";
-import { FinLedgerPage } from "./pages/fin/FinLedgerPage";
-import { FinSecuritySettingsPage } from "./pages/fin/FinSecuritySettingsPage";
-import { FinCalendarPage } from "./pages/fin/FinCalendarPage";
-import { RevaluationPage } from "./pages/app/RevaluationPage";
 
 /** PAR-116: Role-aware wrapper — fetches current user's PAR roles then renders ParAdmin */
 function ParAdminPage() {
@@ -306,37 +271,6 @@ function Routes() {
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
   if (path.startsWith("/app/reports/retention")) return <StudentRetentionPage />;
   if (path.startsWith("/app/reports/export")) return <ExportPage />;
-  if (path.startsWith("/app/fin/banklink/transactions")) return <BankLinkTransactionsPage />;
-  if (path.startsWith("/app/fin/payroll/employees")) return <PayrollEmployeesPage />;
-  if (path.startsWith("/app/fin/settings/ai-audit")) return <FinAiAuditPage />;
-  if (path.startsWith("/app/fin/settings/security")) return <FinSecuritySettingsPage />;
-  if (path.startsWith("/app/fin/inventory/report")) return <InventoryReportPage />;
-  if (path.startsWith("/app/fin/banklink/import")) return <BankLinkImportPage />;
-  if (path.startsWith("/app/fin/banklink/queue")) return <BankLinkQueuePage />;
-  if (path.startsWith("/app/finance/insights")) return <FinInsightsPage />;
-  if (path.startsWith("/app/fin/cash/import")) return <CashImportPage />;
-  if (path.startsWith("/app/fin/revaluation")) return <RevaluationPage />;
-  if (path.startsWith("/app/fin/agreements")) return <AgreementsPage />;
-  if (path.startsWith("/app/fin/einvoices")) return <FinEinvoicesPage />;
-  if (path.startsWith("/app/fin/inventory")) return <InventoryPage />;
-  if (path.startsWith("/app/fin/registry")) return <FinRegistryPage />;
-  if (path.startsWith("/app/fin/invoices")) return <FinInvoicesPage />;
-  if (path.startsWith("/app/fin/expenses")) return <FinExpensesPage />;
-  if (path.startsWith("/app/fin/captures")) return <CapturesListPage />;
-  if (path.startsWith("/app/fin/payments")) return <FinPaymentsPage />;
-  if (path.startsWith("/app/fin/calendar")) return <FinCalendarPage />;
-  if (path.startsWith("/app/fin/banklink")) return <BankLinkPage />;
-  if (path.startsWith("/app/fin/parties")) return <PartiesPage />;
-  if (path.startsWith("/app/fin/payroll")) return <PayrollFINPage />;
-  if (path.startsWith("/app/fin/itpark")) return <ItparkList />;
-  if (path.startsWith("/app/fin/assets")) return <AssetsPage />;
-  if (path.startsWith("/app/fin/ledger")) return <FinLedgerPage />;
-  if (path.startsWith("/app/fin/budget")) return <BudgetPage />;
-  if (path.startsWith("/app/fin/export")) return <FinExportCenter />;
-  if (path.startsWith("/app/fin/cash")) return <CashPage />;
-  if (path.startsWith("/app/fin/mass")) return <FinMassPage />;
-  if (path.startsWith("/app/fin/tax")) return <TaxPage />;
-  if (path.startsWith("/app/fin/")) return <FinHome />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // PAY-003: /portal/invoice/:id — parent-facing invoice portal (no auth)
   if (path.match(/^\/portal\/invoice\/[^/]+$/)) return <InvoicePortalPage />;

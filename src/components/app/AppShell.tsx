@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark, Building2 } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark, Building2, Briefcase } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { BranchSwitcher } from "@/components/app/BranchSwitcher";
@@ -243,6 +243,17 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
               </div>
             ))}
           </nav>
+          {/* SPLIT-301: Business Suite discreet link — FinDesk/PAR/ITPark live in Business Suite, not CRM */}
+          <div className="mt-auto pt-4 border-t border-border/60 mx-1">
+            <a
+              href="#/business"
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Deschide Business Suite (FinDesk, PAR, ITPark)"
+            >
+              <Briefcase className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>Business Suite</span>
+            </a>
+          </div>
         </aside>
 
         <main className="flex-1 min-w-0">

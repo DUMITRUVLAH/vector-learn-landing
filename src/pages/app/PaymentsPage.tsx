@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Loader2, Plus, CheckCircle2, X, Wallet, Clock, AlertCircle, ShieldAlert } from "lucide-react";
+import { Loader2, Plus, CheckCircle2, X, Wallet, Clock, AlertCircle } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
@@ -14,12 +14,6 @@ import {
 import { listStudents, type Student } from "@/lib/api/students";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-// APPROVAL-002: inline badge + link dialog for large payments
-import { PaymentApprovalBadge } from "@/components/fin/PaymentApprovalBadge";
-import { LinkParDialog } from "@/components/fin/LinkParDialog";
-
-/** Payments >= this amount require PAR approval before marking "paid" (mirrors server default) */
-const APPROVAL_THRESHOLD_MDL = 5000;
 
 const STATUS_META: Record<Payment["status"], { label: string; cls: string }> = {
   pending: { label: "În așteptare", cls: "bg-warning/15 text-warning" },
@@ -47,8 +41,6 @@ export function PaymentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
-  // APPROVAL-002: link-PAR dialog target
-  const [linkTarget, setLinkTarget] = useState<Payment | null>(null);
 
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -88,17 +80,8 @@ export function PaymentsPage() {
       await updatePaymentStatus(id, "paid");
       setToast({ kind: "success", message: "Marcat ca plătit" });
       void fetchAll();
-    } catch (err) {
-      // APPROVAL-002: surface approval-required error distinctly
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("approval_required") || msg.includes("approval")) {
-        setToast({
-          kind: "error",
-          message: "Plata necesită un PAR aprobat. Folosește 'Leagă PAR' pentru a autoriza.",
-        });
-      } else {
-        setToast({ kind: "error", message: "Nu pot actualiza" });
-      }
+    } catch {
+      setToast({ kind: "error", message: "Nu pot actualiza" });
     }
   };
 
@@ -107,25 +90,14 @@ export function PaymentsPage() {
       pageTitle="Plăți"
       pageDescription={`${items.length} facturi în total`}
       actions={
-        <div className="flex items-center gap-2">
-          {/* APPROVAL-002: link to approval queue */}
-          <button
-            type="button"
-            onClick={() => navigate("/app/payments/approval")}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <ShieldAlert className="h-4 w-4 text-warning" aria-hidden />
-            Aprobări
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Plus className="h-4 w-4" aria-hidden />
-            Adaugă plată
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+        >
+          <Plus className="h-4 w-4" />
+          Adaugă plată
+        </button>
       }
     >
       {stats && (
@@ -170,9 +142,6 @@ export function PaymentsPage() {
                   <th scope="col" className="text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-4 py-2.5">
                     Sumă
                   </th>
-                  <th scope="col" className="text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-4 py-2.5 hidden lg:table-cell">
-                    Aprobare
-                  </th>
                   <th scope="col" className="text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-4 py-2.5">
                     Status
                   </th>
@@ -184,11 +153,6 @@ export function PaymentsPage() {
               <tbody className="divide-y divide-border">
                 {items.map((p) => {
                   const meta = STATUS_META[p.status];
-                  // APPROVAL-002: check if this payment needs approval
-                  const amountMdl = p.amountCents / 100;
-                  const needsApproval = amountMdl >= APPROVAL_THRESHOLD_MDL;
-                  const hasApprovedPar = needsApproval && !!p.parRequestId;
-                  const blockPay = needsApproval && !hasApprovedPar;
                   return (
                     <tr key={p.id} className="hover:bg-muted/30">
                       <td className="px-4 py-3 font-medium">{p.studentName}</td>
@@ -198,54 +162,23 @@ export function PaymentsPage() {
                       <td className="px-4 py-3 text-right font-semibold tabular-nums">
                         {formatEur(p.amountCents, p.currency)}
                       </td>
-                      {/* APPROVAL-002: inline badge for large payments */}
-                      <td className="px-4 py-3 hidden lg:table-cell">
-                        <PaymentApprovalBadge
-                          parRequestId={p.parRequestId ?? null}
-                          paymentAmountCents={p.amountCents}
-                          thresholdMdl={APPROVAL_THRESHOLD_MDL}
-                        />
-                      </td>
                       <td className="px-4 py-3 text-right">
                         <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold", meta.cls)}>
                           {meta.label}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {(p.status === "pending" || p.status === "overdue") && (
-                          <div className="inline-flex items-center gap-1">
-                            {/* Show "Leagă PAR" when approval needed */}
-                            {blockPay && (
-                              <button
-                                type="button"
-                                onClick={() => setLinkTarget(p)}
-                                aria-label={`Leagă PAR pentru plata ${p.studentName}`}
-                                className="inline-flex items-center gap-1 rounded-md bg-primary/10 text-primary px-2 py-1 text-[11px] font-semibold hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                              >
-                                <ShieldAlert className="h-3 w-3" aria-hidden />
-                                Leagă PAR
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => !blockPay && handleMarkPaid(p.id)}
-                              aria-label={`Marchează ${p.studentName} ca plătit`}
-                              aria-disabled={blockPay}
-                              disabled={blockPay}
-                              title={blockPay ? `Necesită PAR aprobat (≥${APPROVAL_THRESHOLD_MDL.toLocaleString("ro-MD")} MDL)` : undefined}
-                              className={cn(
-                                "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold",
-                                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                blockPay
-                                  ? "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
-                                  : "bg-success/10 text-success hover:bg-success/20"
-                              )}
-                            >
-                              <CheckCircle2 className="h-3 w-3" aria-hidden />
-                              Marchează plătit
-                            </button>
-                          </div>
-                        )}
+                        {p.status === "pending" || p.status === "overdue" ? (
+                          <button
+                            type="button"
+                            onClick={() => handleMarkPaid(p.id)}
+                            aria-label={`Marchează ${p.studentName} ca plătit`}
+                            className="inline-flex items-center gap-1 rounded-md bg-success/10 text-success px-2 py-1 text-[11px] font-semibold hover:bg-success/20"
+                          >
+                            <CheckCircle2 className="h-3 w-3" />
+                            Marchează plătit
+                          </button>
+                        ) : null}
                       </td>
                     </tr>
                   );
@@ -266,20 +199,6 @@ export function PaymentsPage() {
             void fetchAll();
           }}
           onError={(m) => setToast({ kind: "error", message: m })}
-        />
-      )}
-
-      {/* APPROVAL-002: link PAR dialog */}
-      {linkTarget && (
-        <LinkParDialog
-          paymentId={linkTarget.id}
-          paymentAmountCents={linkTarget.amountCents}
-          onLinked={() => {
-            setLinkTarget(null);
-            setToast({ kind: "success", message: "PAR legat — plata poate fi procesată" });
-            void fetchAll();
-          }}
-          onClose={() => setLinkTarget(null)}
         />
       )}
 
