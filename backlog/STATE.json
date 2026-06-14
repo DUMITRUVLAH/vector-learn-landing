@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "SPLIT-101",
   "last_completed": "SPLIT-003",
-  "iterations": 168,
-  "last_run_at": "2026-06-12T00:00:00Z",
+  "iterations": 169,
+  "last_run_at": "2026-06-14T00:00:00Z",
   "milestone_status": "SPLIT (2026-06-14, owner): same repo, 2 distinct apps. APP1=CRM Educational (/app/*, /app/login, AppShell). APP2=Business Suite (/business/*, /business/login, BusinessShell) = FinDesk+PAR+ITPark INTEGRATED (PAR->FinDesk payments, ITPark->FinDesk invoices, shared PARTY, unified dashboard). Login fully separate via tenants.app_kind. CORE: backlog/split/SPLIT-CORE.md. Driver: backlog/split/BUILD-SEQUENCE.md. 13 items/4 phases. Build on demo/findesk-complet base (has FinDesk+ITPark+PAR present).",
   "active_milestone": "SPLIT",
   "items": {
@@ -4091,8 +4091,8 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/178"
     },
     "SPLIT-101": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPLIT-101.md",
       "milestone": "SPLIT",
