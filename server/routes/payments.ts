@@ -39,6 +39,8 @@ paymentRoutes.get("/", async (c) => {
       description: payments.description,
       /** INTEG-102 */
       courseId: payments.courseId,
+      /** APPROVAL-002: PAR request linked to this payment */
+      parRequestId: payments.parRequestId,
       createdAt: payments.createdAt,
       studentName: students.fullName,
       courseName: courses.name,
