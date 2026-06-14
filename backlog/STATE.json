@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "SPEND-003",
   "last_completed": "SPEND-002",
-  "iterations": 215,
+  "iterations": 217,
   "last_run_at": "2026-06-14T00:00:00Z",
-  "milestone_status": "FinDesk \u2014 SPEND phase done. PR #160. 3 items built this run: EINV-003, SPEND-001, SPEND-002.",
+  "milestone_status": "FIN \u2014 SPEND-003, CAPTURE-001, CAPTURE-002 pending (PLAN step)",
   "active_milestone": "FIN",
   "items": {
     "EINV-003": {
@@ -2897,6 +2897,43 @@
       "milestone": "POLISH",
       "phase": "1",
       "depends_on": []
+    },
+    "SPEND-003": {
+      "status": "in_progress",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPEND-003-ui-expenses.md",
+      "milestone": "FIN",
+      "phase": "spend",
+      "depends_on": [
+        "SPEND-001",
+        "SPEND-002"
+      ],
+      "branch": "feat/FIN-spend"
+    },
+    "CAPTURE-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CAPTURE-001-schema.md",
+      "milestone": "FIN",
+      "phase": "capture",
+      "depends_on": [
+        "SPEND-001"
+      ],
+      "branch": "feat/FIN-capture"
+    },
+    "CAPTURE-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/CAPTURE-002-ai-pipeline.md",
+      "milestone": "FIN",
+      "phase": "capture",
+      "depends_on": [
+        "CAPTURE-001"
+      ],
+      "branch": "feat/FIN-capture"
     }
   }
 }

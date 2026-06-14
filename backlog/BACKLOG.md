@@ -235,6 +235,22 @@ Features observate în CRM-ul de producție al owner-ului, lipsă din spec-ul in
 | 3 | `FIN-603` | Abonamente recurente — generare automată facturi lunare | 3 | done ✅ | [specs/FIN-603-recurring-billing.md](specs/FIN-603-recurring-billing.md) · [PR #78](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/78) |
 | 4 | `FIN-604` | e-Factura export stub (UBL 2.1 XML) + export SAGA CSV | 4 | done ✅ | [specs/FIN-604-efactura-stub.md](specs/FIN-604-efactura-stub.md) · [PR #79](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/79) |
 
+## Active milestone: FIN FinDesk — SPEND + CAPTURE phases
+
+> FinDesk: cheltuieli cu aprobare, TVA deductibil, OCR AI (diferențiator vs competiție).
+> Branch SPEND: `feat/FIN-spend` → PR #160. Branch CAPTURE: `feat/FIN-capture` (nou).
+
+| # | ID | Titlu | Fază | Status | Spec |
+|---|----|-------|------|--------|------|
+| 1 | `EINV-001` | e-Factura Moldova schema + migration | einv | done ✅ | PR #157 |
+| 2 | `EINV-002` | e-Factura SOAP client + SFS API | einv | done ✅ | PR #158 |
+| 3 | `EINV-003` | UI e-Factura /app/fin/efactura | einv | done ✅ | [PR #159](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/159) |
+| 4 | `SPEND-001` | Schema fin_expenses + migration 0119 | spend | done ✅ | feat/FIN-spend |
+| 5 | `SPEND-002` | API cheltuieli CRUD + categorii + TVA | spend | done ✅ | [PR #160](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/160) |
+| 6 | `SPEND-003` | UI cheltuieli /app/fin/expenses + KPI + top furnizori | spend | pending | [specs/SPEND-003-ui-expenses.md](specs/SPEND-003-ui-expenses.md) |
+| 7 | `CAPTURE-001` | Schema fin_captures + migration 0120 + seed | capture | pending | [specs/CAPTURE-001-schema.md](specs/CAPTURE-001-schema.md) |
+| 8 | `CAPTURE-002` | Pipeline AI OCR — extrage câmpuri cu confidence | capture | pending | [specs/CAPTURE-002-ai-pipeline.md](specs/CAPTURE-002-ai-pipeline.md) |
+
 ## Active milestone: BRANCH — Modulul Multifiliale (branches + scoped access + reports)
 
 > Fundație multi-branch: branches table, branch_id pe entități, switcher UI, scoped permissions,
