@@ -1,9 +1,10 @@
 /**
- * CAPTURE-002: FinDesk — Capturi OCR AI (fin_captures)
+ * CAPTURE-002/003: FinDesk — Capturi OCR AI (fin_captures)
  *
  * Mounted at /api/fin (shared cu finExpenses).
  *
  * Routes (specifice ÎNAINTE de /:id — regula hono-specific-route-before-param):
+ *   GET    /api/fin/captures              — lista capturi paginate (CAPTURE-003)
  *   POST   /api/fin/captures              — upload + creare capture (multipart)
  *   GET    /api/fin/captures/:id          — detaliu capture cu extracted_fields
  *   POST   /api/fin/captures/:id/confirm  — confirmă + creează fin_expense (mai specific → montat înainte de /:id)
@@ -23,7 +24,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { db } from "../db/client";
 import { finCaptures, type ExtractedFields } from "../db/schema/finCaptures";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -91,6 +92,24 @@ function serializeCapture(c: typeof finCaptures.$inferSelect) {
     updatedAt: c.updatedAt.toISOString(),
   };
 }
+
+// ─── GET /api/fin/captures — lista capturi (CAPTURE-003) ─────────────────────
+
+finCapturesRoutes.get("/captures", async (c) => {
+  const user = c.get("user");
+  const page = Math.max(1, parseInt(c.req.query("page") ?? "1", 10));
+  const limit = 50;
+  const offset = (page - 1) * limit;
+
+  const rows = await db.query.finCaptures.findMany({
+    where: eq(finCaptures.tenantId, user.tenantId),
+    orderBy: [desc(finCaptures.createdAt)],
+    limit,
+    offset,
+  });
+
+  return c.json({ captures: rows.map(serializeCapture), total: rows.length });
+});
 
 // ─── POST /api/fin/captures — upload + extracție AI ──────────────────────────
 
