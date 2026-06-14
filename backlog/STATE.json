@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "CASH-002",
-  "last_completed": "CASH-001",
-  "iterations": 167,
+  "current_item": null,
+  "last_completed": "CASH-002",
+  "iterations": 168,
   "last_run_at": "2026-06-14T00:00:00Z",
   "milestone_status": "FIN FinDesk \u2014 building CAPTURE-003 (UI confirmare c\u00e2mp), then CASH-001/002. 32/85 done. Branch: feat/FIN-capture (CAPTURE), feat/FIN-cash (CASH).",
   "active_milestone": "FIN",
@@ -3287,7 +3287,7 @@
       "pr": null
     },
     "CASH-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-002.md",
@@ -3297,7 +3297,12 @@
         "CASH-001"
       ],
       "branch": "feat/FIN-cash",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "CASH-003": {

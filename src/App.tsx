@@ -108,6 +108,9 @@ import ParDetailPage from "./pages/par/ParDetail";
 import ParAdmin from "./pages/par/ParAdmin";
 // PAR-117: Reports
 import { ParReports } from "./pages/par/ParReports";
+// CASH-002: FinDesk cash — import + overview
+import CashPage from "./pages/fin/CashPage";
+import CashImportPage from "./pages/fin/CashImportPage";
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
 
@@ -266,6 +269,10 @@ function Routes() {
   if (path.match(/^\/app\/par\/[^/]+$/)) return <ParDetailPage />;
   // PAR-106: /app/par — dashboard + list
   if (path.startsWith("/app/par")) return <ParDashboard />;
+  // CASH-002: /app/fin/cash/import — import page (before generic cash)
+  if (path.startsWith("/app/fin/cash/import")) return <CashImportPage />;
+  // CASH-002: /app/fin/cash — overview tranzacții
+  if (path.startsWith("/app/fin/cash")) return <CashPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app/reports/kpi")) return <KpiDashboardPage />;
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
