@@ -121,6 +121,11 @@ authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, user.tenantId) });
   if (!tenant) return c.json({ error: "tenant_not_found" }, 500);
 
+  // SPLIT-003: CRM login is only for 'learn' tenants — reject business users
+  if (tenant.appKind === "business") {
+    return c.json({ error: "wrong_app" }, 403);
+  }
+
   // AUTH-004: check if 2FA is enabled for this user
   const tfRow = await db.query.twoFactorSettings.findFirst({
     where: eq(twoFactorSettings.userId, user.id),
