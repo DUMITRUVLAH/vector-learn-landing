@@ -264,3 +264,200 @@ finInventoryRoutes.post("/movements", zValidator("json", createMovementSchema), 
 
   return c.json({ movement, newQtyOnHand, newAvgCostCents }, 201);
 });
+
+// ─── POST /hook/invoice-issued ─────────────────────────────────────────────────
+// INVENTORY-002: Declanșat la emiterea unei facturi — creează mișcări de ieșire pentru
+// fiecare articol din factură.
+
+const invoiceIssuedSchema = z.object({
+  invoiceId: z.string().uuid(),
+  lines: z.array(
+    z.object({
+      itemId: z.string().uuid(),
+      qty: z.number().int().min(1),
+    })
+  ).min(1, "Cel puțin o linie este necesară"),
+});
+
+finInventoryRoutes.post(
+  "/hook/invoice-issued",
+  zValidator("json", invoiceIssuedSchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const { invoiceId, lines } = c.req.valid("json");
+
+    // Verifică stocul disponibil pentru fiecare articol (atomic — toate sau nimic)
+    const insufficientItems: Array<{ itemId: string; available: number; requested: number }> = [];
+
+    const itemsData: Map<string, typeof finInventoryItems.$inferSelect> = new Map();
+
+    for (const line of lines) {
+      const [item] = await db
+        .select()
+        .from(finInventoryItems)
+        .where(and(eq(finInventoryItems.id, line.itemId), eq(finInventoryItems.tenantId, tenantId)));
+
+      if (!item) {
+        return c.json({ error: "item_not_found", itemId: line.itemId }, 404);
+      }
+
+      if (item.qtyOnHand < line.qty) {
+        insufficientItems.push({
+          itemId: line.itemId,
+          available: item.qtyOnHand,
+          requested: line.qty,
+        });
+      }
+
+      itemsData.set(line.itemId, item);
+    }
+
+    if (insufficientItems.length > 0) {
+      return c.json({ error: "insufficient_stock", items: insufficientItems }, 422);
+    }
+
+    // Crează mișcările de ieșire
+    const movements = [];
+    for (const line of lines) {
+      const item = itemsData.get(line.itemId)!;
+      const exitResult = calculateExitCost(item.qtyOnHand, item.avgCostCents, line.qty);
+
+      if (!exitResult.ok) {
+        // Nu ar trebui să ajungă aici după validarea de mai sus, dar este o protecție suplimentară
+        return c.json({ error: "insufficient_stock", itemId: line.itemId }, 422);
+      }
+
+      const [movement] = await db
+        .insert(finStockMovements)
+        .values({
+          tenantId,
+          itemId: line.itemId,
+          movementType: "sale",
+          qty: line.qty,
+          unitCostCents: exitResult.unitCostCents,
+          totalCostCents: exitResult.totalCostCents,
+          invoiceId,
+          reference: `INV-${invoiceId.slice(0, 8)}`,
+          movedBy: user.id,
+          movedAt: new Date(),
+        })
+        .returning();
+
+      await db
+        .update(finInventoryItems)
+        .set({ qtyOnHand: exitResult.remainingQty, updatedAt: new Date() })
+        .where(eq(finInventoryItems.id, line.itemId));
+
+      movements.push(movement);
+    }
+
+    return c.json({ movements, itemsUpdated: movements.length }, 201);
+  }
+);
+
+// ─── POST /hook/purchase ───────────────────────────────────────────────────────
+// INVENTORY-002: Înregistrează o intrare de tip achiziție cu recalculare CMP.
+
+const purchaseHookSchema = z.object({
+  itemId: z.string().uuid(),
+  qty: z.number().int().min(1),
+  unitCostCents: z.number().int().min(0),
+  reference: z.string().max(100).optional().nullable(),
+  spendId: z.string().uuid().optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+});
+
+finInventoryRoutes.post(
+  "/hook/purchase",
+  zValidator("json", purchaseHookSchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const body = c.req.valid("json");
+
+    const [item] = await db
+      .select()
+      .from(finInventoryItems)
+      .where(and(eq(finInventoryItems.id, body.itemId), eq(finInventoryItems.tenantId, tenantId)));
+
+    if (!item) {
+      return c.json({ error: "item_not_found" }, 404);
+    }
+
+    const result = calculateAvgCost({
+      oldQty: item.qtyOnHand,
+      oldAvgCostCents: item.avgCostCents,
+      qtyIn: body.qty,
+      unitCostCents: body.unitCostCents,
+    });
+
+    const [movement] = await db
+      .insert(finStockMovements)
+      .values({
+        tenantId,
+        itemId: body.itemId,
+        movementType: "purchase",
+        qty: body.qty,
+        unitCostCents: body.unitCostCents,
+        totalCostCents: result.entryTotalCostCents,
+        reference: body.reference ?? null,
+        notes: body.notes ?? null,
+        spendId: body.spendId ?? null,
+        movedBy: user.id,
+        movedAt: new Date(),
+      })
+      .returning();
+
+    await db
+      .update(finInventoryItems)
+      .set({
+        qtyOnHand: result.newQtyOnHand,
+        avgCostCents: result.newAvgCostCents,
+        updatedAt: new Date(),
+      })
+      .where(eq(finInventoryItems.id, body.itemId));
+
+    return c.json({
+      movement,
+      newQtyOnHand: result.newQtyOnHand,
+      newAvgCostCents: result.newAvgCostCents,
+    }, 201);
+  }
+);
+
+// ─── GET /stock-value ──────────────────────────────────────────────────────────
+// INVENTORY-002: Valoarea totală a stocului per tenant + număr articole sub alertă.
+
+finInventoryRoutes.get("/stock-value", async (c) => {
+  const tenantId = c.get("user").tenantId;
+
+  const items = await db
+    .select({
+      id: finInventoryItems.id,
+      qtyOnHand: finInventoryItems.qtyOnHand,
+      avgCostCents: finInventoryItems.avgCostCents,
+      minQtyAlert: finInventoryItems.minQtyAlert,
+    })
+    .from(finInventoryItems)
+    .where(and(eq(finInventoryItems.tenantId, tenantId), eq(finInventoryItems.isActive, true)));
+
+  let totalQty = 0;
+  let totalValueCents = 0;
+  let belowMinAlert = 0;
+
+  for (const item of items) {
+    totalQty += item.qtyOnHand;
+    totalValueCents += item.qtyOnHand * item.avgCostCents;
+    if (item.minQtyAlert !== null && item.minQtyAlert > 0 && item.qtyOnHand < item.minQtyAlert) {
+      belowMinAlert++;
+    }
+  }
+
+  return c.json({
+    totalItems: items.length,
+    totalQty,
+    totalValueCents,
+    belowMinAlert,
+  });
+});

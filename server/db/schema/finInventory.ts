@@ -122,6 +122,12 @@ export const finStockMovements = pgTable("fin_stock_movements", {
   /** Utilizatorul care a înregistrat mișcarea */
   movedBy: uuid("moved_by").references(() => users.id, { onDelete: "set null" }),
 
+  /**
+   * ID document de achiziție extern (SPEND) — fără FK hard, tabela spend nu există încă.
+   * Stocat pentru trasabilitate: leagă mișcarea de intrare de documentul de achiziție.
+   */
+  spendId: uuid("spend_id"),
+
   movedAt: timestamp("moved_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

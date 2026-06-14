@@ -813,6 +813,13 @@
       "when": 1749996000000,
       "tag": "0115_fin_inventory",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1749996100000,
+      "tag": "0116_inventory_spend_id",
+      "breakpoints": true
     }
   ]
 }
