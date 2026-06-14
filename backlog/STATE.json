@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
+  "last_completed": "SPLIT-303",
   "iterations": 164,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
@@ -4034,6 +4034,57 @@
       "branch": "feat/FIN-approval",
       "verdicts": {},
       "pr": null
+    },
+    "SPLIT-301": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-301.md",
+      "milestone": "SPLIT",
+      "phase": "4",
+      "depends_on": ["SPLIT-101"],
+      "branch": "feat/SPLIT-crm-cleanup",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/181"
+    },
+    "SPLIT-302": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-302.md",
+      "milestone": "SPLIT",
+      "phase": "4",
+      "depends_on": ["SPLIT-102"],
+      "branch": "feat/SPLIT-crm-cleanup",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/181"
+    },
+    "SPLIT-303": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-303.md",
+      "milestone": "SPLIT",
+      "phase": "4",
+      "depends_on": ["SPLIT-204", "SPLIT-301"],
+      "branch": "feat/SPLIT-crm-cleanup",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/181"
     }
   }
 }
