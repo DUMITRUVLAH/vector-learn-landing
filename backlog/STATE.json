@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
+  "current_item": "MULTICURRENCY-002",
+  "last_completed": "MULTICURRENCY-001",
+  "iterations": 165,
+  "last_run_at": "2026-06-14T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "FIN",
   "items": {
@@ -2209,7 +2209,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2249,7 +2249,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical — allergies, immunization records, medication log",
+      "title": "Medical \u2014 allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -3977,30 +3977,31 @@
       "pr": null
     },
     "MULTICURRENCY-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MULTICURRENCY-001.md",
       "milestone": "FIN",
       "phase": "23",
-      "depends_on": [
-        "CORE-001",
-        "REGISTRY-001"
-      ],
+      "depends_on": [],
       "branch": "feat/FIN-multicurrency",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "MULTICURRENCY-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MULTICURRENCY-002.md",
       "milestone": "FIN",
       "phase": "23",
       "depends_on": [
-        "MULTICURRENCY-001",
-        "LEDGER-002"
+        "MULTICURRENCY-001"
       ],
       "branch": "feat/FIN-multicurrency",
       "verdicts": {},
@@ -4013,9 +4014,7 @@
       "spec": "backlog/specs/APPROVAL-001.md",
       "milestone": "FIN",
       "phase": "24",
-      "depends_on": [
-        "SPEND-002"
-      ],
+      "depends_on": [],
       "branch": "feat/FIN-approval",
       "verdicts": {},
       "pr": null
