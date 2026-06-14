@@ -2,9 +2,9 @@
   "version": 1,
   "current_item": null,
   "last_completed": "CASH-002",
-  "iterations": 168,
-  "last_run_at": "2026-06-14T00:00:00Z",
-  "milestone_status": "FIN FinDesk \u2014 building CAPTURE-003 (UI confirmare c\u00e2mp), then CASH-001/002. 32/85 done. Branch: feat/FIN-capture (CAPTURE), feat/FIN-cash (CASH).",
+  "iterations": 170,
+  "last_run_at": "2026-06-14T01:00:00Z",
+  "milestone_status": "FIN FinDesk — 35/85 done. CAPTURE-003 → PR #161, CASH-001+002 → PR #162. Next: CASH-003+.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -2209,7 +2209,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2249,7 +2249,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical \u2014 allergies, immunization records, medication log",
+      "title": "Medical — allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -3284,7 +3284,7 @@
         "manager": "BUY",
         "student": "PASS"
       },
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-002": {
       "status": "done",
@@ -3303,7 +3303,7 @@
         "manager": "BUY",
         "student": "PASS"
       },
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-003": {
       "status": "pending",
