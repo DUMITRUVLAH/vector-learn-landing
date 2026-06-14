@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "current_item": "ASSET-001",
+  "last_completed": "PAY-003",
+  "iterations": 183,
+  "last_run_at": "2026-06-14T10:00:00Z",
+  "milestone_status": "FIN FinDesk — 43/85 done. PAY phase COMPLETE (PR #164). ASSET-001 in_progress on feat/FIN-asset.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3410,23 +3410,27 @@
       "pr": null
     },
     "PAY-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAY-003.md",
       "milestone": "FIN",
       "phase": "11",
       "depends_on": [
-        "PAY-002",
-        "CORE-004"
+        "PAY-002"
       ],
       "branch": "feat/FIN-pay",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/164"
     },
     "ASSET-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ASSET-001.md",
       "milestone": "FIN",

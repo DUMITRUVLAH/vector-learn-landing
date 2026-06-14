@@ -189,14 +189,14 @@ export function buildParHtml(par: ParDetail): string {
       <tbody>
         <tr>
           ${cell("1. Date of Request", fmtDate(req.dateOfRequest), "16%")}
-          ${cell("2. Requested By", esc(req.requestedByUserId), "21%")}
+          ${cell("2. Requested By", esc(req.requestedByName ?? req.requestedByUserId), "21%")}
           ${cell("3. Title / Code", esc(req.requestorTitle), "21%")}
-          ${cell("4. Department", esc(req.departmentId), "21%")}
+          ${cell("4. Department", esc(req.departmentName ?? req.departmentId), "21%")}
           ${cell("5. Date Needed", fmtDate(req.dateNeeded), "21%")}
         </tr>
         <tr>
-          ${cell("6. Requested For / Deliver To", esc(req.projectId), "40%")}
-          ${cell("7. Budget Code", [esc(req.budgetCodeId), esc(req.budgetCodeNote)].filter(Boolean).join(" — ") || "&nbsp;", "60%")}
+          ${cell("6. Requested For / Deliver To", esc(req.projectName ?? req.projectId), "40%")}
+          ${cell("7. Budget Code", [esc(req.budgetCodeLabel ?? req.budgetCodeId), esc(req.budgetCodeNote)].filter(Boolean).join(" — ") || "&nbsp;", "60%")}
         </tr>
       </tbody>
     </table>
@@ -330,8 +330,8 @@ export function buildParHtml(par: ParDetail): string {
             <tr>
               <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};">${esc(pmt?.parBl)}</td>
               <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};">${fmtDate(pmt?.receivedAt)}</td>
-              <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};">${esc(pmt?.receivedByUserId)}</td>
-              <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};">${esc(pmt?.assignedToUserId)}</td>
+              <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};">${esc(req.receivedByName ?? pmt?.receivedByUserId)}</td>
+              <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};">${esc(req.assignedToName ?? pmt?.assignedToUserId)}</td>
             </tr>
           </tbody>
         </table>
