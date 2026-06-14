@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "ASSET-002",
-  "last_completed": "ASSET-001",
-  "iterations": 184,
-  "last_run_at": "2026-06-14T10:30:00Z",
-  "milestone_status": "FIN FinDesk — 44/85 done. PAY COMPLETE. ASSET-001 done. ASSET-002 in_progress on feat/FIN-asset.",
+  "current_item": null,
+  "last_completed": "ASSET-002",
+  "iterations": 185,
+  "last_run_at": "2026-06-14T11:00:00Z",
+  "milestone_status": "FIN FinDesk — 45/85 done. PAY COMPLETE (PR #164). ASSET-001+ASSET-002 done on feat/FIN-asset.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3448,7 +3448,7 @@
       "pr": null
     },
     "ASSET-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ASSET-002.md",
@@ -3458,7 +3458,12 @@
         "ASSET-001"
       ],
       "branch": "feat/FIN-asset",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "ASSET-003": {
