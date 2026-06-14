@@ -9,6 +9,7 @@ import {
   parBudgetCodes,
   parDoaMatrix,
 } from "./schema/par";
+import { finBulkJobs, finBulkRows } from "./schema/finBulk";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -246,6 +247,61 @@ async function seed() {
     console.log(`   DOA matrix: ${deptAtic ? 6 : 0} rules seeded`);
   } else {
     console.log(`⚠️  PAR demo tenant already exists (${existingPar.id}). Skipping.`);
+  }
+
+  // ── MASS-001: FinDesk Bulk Jobs seed ─────────────────────────────────────
+  // Seed a demo completed bulk job with 3 rows (2 success, 1 fail)
+  const existingBulkJob = await db.query.finBulkJobs.findFirst({
+    where: eq(finBulkJobs.tenantId, tenant.id),
+  });
+
+  if (!existingBulkJob) {
+    const [demoJob] = await db
+      .insert(finBulkJobs)
+      .values({
+        tenantId: tenant.id,
+        jobType: "recurring_invoices",
+        status: "done",
+        totalRows: 3,
+        successRows: 2,
+        failRows: 1,
+        meta: { period: "2026-01", include_einv: false },
+        startedAt: new Date("2026-01-31T09:00:00Z"),
+        finishedAt: new Date("2026-01-31T09:01:00Z"),
+      })
+      .returning();
+
+    await db.insert(finBulkRows).values([
+      {
+        jobId: demoJob.id,
+        rowIndex: 0,
+        externalRef: "agr-demo-1",
+        status: "success",
+        resultRef: "inv-demo-1",
+        processedAt: new Date("2026-01-31T09:00:30Z"),
+      },
+      {
+        jobId: demoJob.id,
+        rowIndex: 1,
+        externalRef: "agr-demo-2",
+        status: "success",
+        resultRef: "inv-demo-2",
+        processedAt: new Date("2026-01-31T09:00:45Z"),
+      },
+      {
+        jobId: demoJob.id,
+        rowIndex: 2,
+        externalRef: "agr-demo-3",
+        status: "fail",
+        errorMessage: "Client inactiv — contractul a expirat la 2025-12-31",
+        retryCount: 3,
+        processedAt: new Date("2026-01-31T09:01:00Z"),
+      },
+    ]);
+
+    console.log(`✅ MASS demo bulk job seeded: ${demoJob.id}`);
+  } else {
+    console.log(`⚠️  FinDesk bulk jobs already seeded. Skipping.`);
   }
 
   console.log(`\n📌 Demo credentials:`);

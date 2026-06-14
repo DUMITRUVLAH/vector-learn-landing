@@ -1,0 +1,56 @@
+{
+  "id": "d6f1b5a4-8e7c-6d2a-1f0e-5b4c3d6e9a2b",
+  "prevId": "c5e0a4f3-7d6b-5c1f-0e9d-4a3b2c5d8f1a",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.fin_sfs_settings": {
+      "name": "fin_sfs_settings",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "tenant_id": { "name": "tenant_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "idno": { "name": "idno", "type": "varchar(13)", "primaryKey": false, "notNull": true },
+        "bank_account": { "name": "bank_account", "type": "varchar(34)", "primaryKey": false, "notNull": true },
+        "environment": { "name": "environment", "type": "fin_sfs_env", "primaryKey": false, "notNull": true, "default": "'mock'" },
+        "username_encrypted": { "name": "username_encrypted", "type": "text", "primaryKey": false, "notNull": false },
+        "password_encrypted": { "name": "password_encrypted", "type": "text", "primaryKey": false, "notNull": false },
+        "last_tested_at": { "name": "last_tested_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": false },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" },
+        "updated_at": { "name": "updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.fin_einvoices": {
+      "name": "fin_einvoices",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "tenant_id": { "name": "tenant_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "fin_invoice_id": { "name": "fin_invoice_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "sfs_status": { "name": "sfs_status", "type": "fin_einvoice_status", "primaryKey": false, "notNull": true, "default": "'pending'" },
+        "sfs_serial_number": { "name": "sfs_serial_number", "type": "varchar(50)", "primaryKey": false, "notNull": false },
+        "sfs_invoice_id": { "name": "sfs_invoice_id", "type": "varchar(100)", "primaryKey": false, "notNull": false },
+        "sfs_request_status": { "name": "sfs_request_status", "type": "integer", "primaryKey": false, "notNull": false },
+        "sfs_error_message": { "name": "sfs_error_message", "type": "text", "primaryKey": false, "notNull": false },
+        "submitted_at": { "name": "submitted_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": false },
+        "last_sync_at": { "name": "last_sync_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": false },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" },
+        "updated_at": { "name": "updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {
+    "public.fin_sfs_env": { "name": "fin_sfs_env", "schema": "public", "values": ["mock", "test", "prod"] },
+    "public.fin_einvoice_status": { "name": "fin_einvoice_status", "schema": "public", "values": ["pending", "sent", "accepted", "rejected", "cancelled"] }
+  },
+  "schemas": {},
+  "_meta": { "columns": {}, "schemas": {}, "tables": {} }
+}

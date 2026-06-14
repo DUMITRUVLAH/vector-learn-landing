@@ -121,6 +121,8 @@ import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline /
 import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: finance queue + section 16 + pay
 // PAR Phase F routes
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
+// MASS Phase 15 routes
+import { finMassRoutes } from "./routes/finMass"; // MASS-002/003: bulk operations — recurring invoices + CSV import
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -333,6 +335,9 @@ app.route("/api/par", parAttachmentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
+
+// MASS-002/003: FinDesk Bulk Operations — recurring invoices + CSV import
+app.route("/api/fin/mass", finMassRoutes);
 
 app.get("/api/health", async (c) => {
   try {

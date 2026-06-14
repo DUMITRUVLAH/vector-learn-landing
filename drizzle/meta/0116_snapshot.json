@@ -1,0 +1,60 @@
+{
+  "id": "b4d9f3e2-6c5a-4b0e-9d8c-3f2a1b4c7e0f",
+  "prevId": "a3c8f2d1-5b4e-4a9f-8c7d-2e1f0a3b6d9e",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.fin_agreements": {
+      "name": "fin_agreements",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "tenant_id": { "name": "tenant_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "party_id": { "name": "party_id", "type": "uuid", "primaryKey": false, "notNull": false },
+        "title": { "name": "title", "type": "text", "primaryKey": false, "notNull": true },
+        "status": { "name": "status", "type": "fin_agreement_status", "primaryKey": false, "notNull": true, "default": "'draft'" },
+        "start_date": { "name": "start_date", "type": "date", "primaryKey": false, "notNull": false },
+        "end_date": { "name": "end_date", "type": "date", "primaryKey": false, "notNull": false },
+        "currency": { "name": "currency", "type": "char(3)", "primaryKey": false, "notNull": true, "default": "'MDL'" },
+        "notes": { "name": "notes", "type": "text", "primaryKey": false, "notNull": false },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" },
+        "updated_at": { "name": "updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.fin_agreement_services": {
+      "name": "fin_agreement_services",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "agreement_id": { "name": "agreement_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true },
+        "description": { "name": "description", "type": "text", "primaryKey": false, "notNull": false },
+        "billing_type": { "name": "billing_type", "type": "fin_billing_type", "primaryKey": false, "notNull": true },
+        "unit_price_cents": { "name": "unit_price_cents", "type": "integer", "primaryKey": false, "notNull": true },
+        "quantity": { "name": "quantity", "type": "integer", "primaryKey": false, "notNull": true, "default": 1 },
+        "vat_pct": { "name": "vat_pct", "type": "integer", "primaryKey": false, "notNull": true, "default": 0 },
+        "recurrence_period": { "name": "recurrence_period", "type": "fin_recurrence_period", "primaryKey": false, "notNull": false },
+        "next_bill_date": { "name": "next_bill_date", "type": "date", "primaryKey": false, "notNull": false },
+        "last_billed_at": { "name": "last_billed_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": false },
+        "is_active": { "name": "is_active", "type": "boolean", "primaryKey": false, "notNull": true, "default": true },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" },
+        "updated_at": { "name": "updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {
+    "public.fin_agreement_status": { "name": "fin_agreement_status", "schema": "public", "values": ["draft", "active", "paused", "cancelled"] },
+    "public.fin_billing_type": { "name": "fin_billing_type", "schema": "public", "values": ["recurring", "one_time"] },
+    "public.fin_recurrence_period": { "name": "fin_recurrence_period", "schema": "public", "values": ["monthly", "quarterly", "yearly"] }
+  },
+  "schemas": {},
+  "_meta": { "columns": {}, "schemas": {}, "tables": {} }
+}

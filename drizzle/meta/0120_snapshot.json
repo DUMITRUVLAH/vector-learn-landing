@@ -1,0 +1,70 @@
+{
+  "id": "f8b3d7c6-0g9e-8f4c-3h2g-7d6e5f8g1c4d",
+  "prevId": "e7a2c6b5-9f8d-7e3b-2g1f-6c5d4e7f0b3c",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.fin_expenses": {
+      "name": "fin_expenses",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "tenant_id": { "name": "tenant_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "category": { "name": "category", "type": "fin_expense_category", "primaryKey": false, "notNull": true },
+        "amount_cents": { "name": "amount_cents", "type": "integer", "primaryKey": false, "notNull": true },
+        "currency": { "name": "currency", "type": "varchar(3)", "primaryKey": false, "notNull": true, "default": "'MDL'" },
+        "vat_deductible": { "name": "vat_deductible", "type": "boolean", "primaryKey": false, "notNull": true },
+        "vat_amount_cents": { "name": "vat_amount_cents", "type": "integer", "primaryKey": false, "notNull": true, "default": 0 },
+        "source": { "name": "source", "type": "fin_expense_source", "primaryKey": false, "notNull": true, "default": "'manual'" },
+        "status": { "name": "status", "type": "fin_expense_status", "primaryKey": false, "notNull": true, "default": "'draft'" },
+        "description": { "name": "description", "type": "text", "primaryKey": false, "notNull": false },
+        "reference": { "name": "reference", "type": "varchar(100)", "primaryKey": false, "notNull": false },
+        "vendor_name": { "name": "vendor_name", "type": "varchar(200)", "primaryKey": false, "notNull": false },
+        "expense_date": { "name": "expense_date", "type": "date", "primaryKey": false, "notNull": true },
+        "paid_at": { "name": "paid_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": false },
+        "approved_by": { "name": "approved_by", "type": "uuid", "primaryKey": false, "notNull": false },
+        "approved_at": { "name": "approved_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": false },
+        "created_by": { "name": "created_by", "type": "uuid", "primaryKey": false, "notNull": true },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" },
+        "updated_at": { "name": "updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {
+        "fin_expenses_tenant_idx": { "name": "fin_expenses_tenant_idx", "columns": ["tenant_id"], "isUnique": false },
+        "fin_expenses_tenant_category_idx": { "name": "fin_expenses_tenant_category_idx", "columns": ["tenant_id", "category"], "isUnique": false },
+        "fin_expenses_tenant_status_idx": { "name": "fin_expenses_tenant_status_idx", "columns": ["tenant_id", "status"], "isUnique": false },
+        "fin_expenses_tenant_date_idx": { "name": "fin_expenses_tenant_date_idx", "columns": ["tenant_id", "expense_date"], "isUnique": false }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.fin_expense_attachments": {
+      "name": "fin_expense_attachments",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "tenant_id": { "name": "tenant_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "expense_id": { "name": "expense_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "file_key": { "name": "file_key", "type": "varchar(500)", "primaryKey": false, "notNull": true },
+        "file_name": { "name": "file_name", "type": "varchar(255)", "primaryKey": false, "notNull": true },
+        "mime_type": { "name": "mime_type", "type": "varchar(100)", "primaryKey": false, "notNull": true },
+        "size_bytes": { "name": "size_bytes", "type": "integer", "primaryKey": false, "notNull": true },
+        "uploaded_at": { "name": "uploaded_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {
+        "fin_expense_att_expense_idx": { "name": "fin_expense_att_expense_idx", "columns": ["expense_id"], "isUnique": false },
+        "fin_expense_att_tenant_idx": { "name": "fin_expense_att_tenant_idx", "columns": ["tenant_id"], "isUnique": false }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {
+    "public.fin_expense_category": { "name": "fin_expense_category", "schema": "public", "values": ["rent", "utilities", "salaries", "marketing", "supplies", "software", "maintenance", "other"] },
+    "public.fin_expense_source": { "name": "fin_expense_source", "schema": "public", "values": ["manual", "capture", "payroll", "asset"] },
+    "public.fin_expense_status": { "name": "fin_expense_status", "schema": "public", "values": ["draft", "approved", "rejected", "paid"] }
+  },
+  "schemas": {},
+  "_meta": { "columns": {}, "schemas": {}, "tables": {} }
+}

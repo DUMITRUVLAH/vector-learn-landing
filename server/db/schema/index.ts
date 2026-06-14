@@ -87,3 +87,9 @@ export * from "./companyClients";
 export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
 export * from "./par"; // PAR-001: Payment Action Request module
+export * from "./finBulk"; // MASS-001: FinDesk Bulk Operations
+export * from "./finAgreements"; // MASS-002: from feat/FIN-agreement (merged into MASS branch for bulk use)
+export * from "./finInvoices"; // MASS-002: from feat/FIN-bill (merged into MASS branch for bulk use)
+export * from "./finEinvoices"; // MASS-002: from feat/FIN-einv (merged into MASS branch for bulk use)
+export * from "./finParties"; // MASS-003: from feat/FIN-party (merged into MASS branch for CSV import)
+export * from "./finExpenses"; // MASS-003: from feat/FIN-spend + import_hash column (MASS-003 AC10)

@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "last_completed": "MASS-004",
+  "iterations": 204,
+  "last_run_at": "2026-06-14T12:00:00Z",
+  "milestone_status": "FIN FinDesk \u2014 MASS phase (15) COMPLETE (4/4). Next: TRUST-001 on new branch feat/FIN-trust.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -2209,7 +2209,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2249,7 +2249,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical — allergies, immunization records, medication log",
+      "title": "Medical \u2014 allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -3454,7 +3454,7 @@
       "pr": null
     },
     "ASSET-003": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/ASSET-003.md",
@@ -3469,7 +3469,7 @@
       "pr": null
     },
     "INSIGHT-001": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-001.md",
@@ -3483,7 +3483,7 @@
       "pr": null
     },
     "INSIGHT-002": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-002.md",
@@ -3501,7 +3501,7 @@
       "pr": null
     },
     "INSIGHT-003": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-003.md",
@@ -3515,7 +3515,7 @@
       "pr": null
     },
     "INSIGHT-004": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-004.md",
@@ -3530,7 +3530,7 @@
       "pr": null
     },
     "CALENDAR-001": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/CALENDAR-001.md",
@@ -3544,7 +3544,7 @@
       "pr": null
     },
     "CALENDAR-002": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/CALENDAR-002.md",
@@ -3560,7 +3560,7 @@
       "pr": null
     },
     "CALENDAR-003": {
-      "status": "done",
+      "status": "pending",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/CALENDAR-003.md",
@@ -3576,54 +3576,69 @@
     },
     "MASS-001": {
       "status": "done",
-      "attempts": 0,
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MASS-001.md",
       "milestone": "FIN",
       "phase": "15",
       "depends_on": [
-        "CORE-001"
+        "CALENDAR-001"
       ],
       "branch": "feat/FIN-mass",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "MASS-002": {
       "status": "done",
-      "attempts": 0,
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MASS-002.md",
       "milestone": "FIN",
       "phase": "15",
       "depends_on": [
         "MASS-001",
-        "AGREEMENT-002",
-        "BILL-002",
-        "EINV-002"
+        "AGREEMENT-001",
+        "BILL-001",
+        "EINV-001"
       ],
       "branch": "feat/FIN-mass",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "MASS-003": {
       "status": "done",
-      "attempts": 0,
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MASS-003.md",
       "milestone": "FIN",
       "phase": "15",
       "depends_on": [
         "MASS-001",
-        "PARTY-002",
-        "SPEND-002"
+        "PARTY-001",
+        "SPEND-001"
       ],
       "branch": "feat/FIN-mass",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "N/A"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/168"
     },
     "MASS-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/MASS-004.md",
       "milestone": "FIN",
@@ -3633,8 +3648,13 @@
         "CORE-004"
       ],
       "branch": "feat/FIN-mass",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "N/A"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/168"
     },
     "TRUST-001": {
       "status": "pending",

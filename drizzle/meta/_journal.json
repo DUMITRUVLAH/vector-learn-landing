@@ -806,6 +806,62 @@
       "when": 1780910000000,
       "tag": "0114_par_approval_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1781000000000,
+      "tag": "0115_fin_bulk",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1781001000000,
+      "tag": "0116_fin_agreements",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1781002000000,
+      "tag": "0117_fin_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1781003000000,
+      "tag": "0118_fin_einvoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1781004000000,
+      "tag": "0119_fin_parties",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1781005000000,
+      "tag": "0120_fin_expenses",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1781006000000,
+      "tag": "0121_fin_spend_import_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1781007000000,
+      "tag": "0122_fin_bulk_rows_meta",
+      "breakpoints": true
     }
   ]
 }

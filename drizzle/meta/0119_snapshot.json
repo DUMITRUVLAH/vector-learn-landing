@@ -1,0 +1,62 @@
+{
+  "id": "e7a2c6b5-9f8d-7e3b-2g1f-6c5d4e7f0b3c",
+  "prevId": "d6f1b5a4-8e7c-6d2a-1f0e-5b4c3d6e9a2b",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.fin_parties": {
+      "name": "fin_parties",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "tenant_id": { "name": "tenant_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "kind": { "name": "kind", "type": "fin_party_kind", "primaryKey": false, "notNull": true },
+        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true },
+        "country": { "name": "country", "type": "char(2)", "primaryKey": false, "notNull": true },
+        "idno": { "name": "idno", "type": "varchar(13)", "primaryKey": false, "notNull": false },
+        "vat_code": { "name": "vat_code", "type": "varchar(20)", "primaryKey": false, "notNull": false },
+        "iban": { "name": "iban", "type": "varchar(34)", "primaryKey": false, "notNull": false },
+        "address": { "name": "address", "type": "text", "primaryKey": false, "notNull": false },
+        "city": { "name": "city", "type": "varchar(100)", "primaryKey": false, "notNull": false },
+        "postal_code": { "name": "postal_code", "type": "varchar(20)", "primaryKey": false, "notNull": false },
+        "email": { "name": "email", "type": "varchar(254)", "primaryKey": false, "notNull": false },
+        "phone": { "name": "phone", "type": "varchar(30)", "primaryKey": false, "notNull": false },
+        "is_active": { "name": "is_active", "type": "boolean", "primaryKey": false, "notNull": true, "default": true },
+        "notes": { "name": "notes", "type": "text", "primaryKey": false, "notNull": false },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" },
+        "updated_at": { "name": "updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {
+        "fin_parties_tenant_idx": { "name": "fin_parties_tenant_idx", "columns": ["tenant_id"], "isUnique": false },
+        "fin_parties_kind_idx": { "name": "fin_parties_kind_idx", "columns": ["tenant_id", "kind"], "isUnique": false }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.fin_party_contacts": {
+      "name": "fin_party_contacts",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "party_id": { "name": "party_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true },
+        "role": { "name": "role", "type": "varchar(100)", "primaryKey": false, "notNull": false },
+        "email": { "name": "email", "type": "varchar(254)", "primaryKey": false, "notNull": false },
+        "phone": { "name": "phone", "type": "varchar(30)", "primaryKey": false, "notNull": false },
+        "is_primary": { "name": "is_primary", "type": "boolean", "primaryKey": false, "notNull": true, "default": false },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" },
+        "updated_at": { "name": "updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {
+    "public.fin_party_kind": { "name": "fin_party_kind", "schema": "public", "values": ["client", "supplier", "both"] }
+  },
+  "schemas": {},
+  "_meta": { "columns": {}, "schemas": {}, "tables": {} }
+}
