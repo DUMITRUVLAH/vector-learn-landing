@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "last_completed": "CALENDAR-003",
+  "iterations": 199,
+  "last_run_at": "2026-06-14T07:00:00Z",
+  "milestone_status": "FIN FinDesk — 54/85 done. CALENDAR phase (14): CALENDAR-001/002/003 done on feat/FIN-calendar. PR pending.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3530,8 +3530,8 @@
       "pr": null
     },
     "CALENDAR-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CALENDAR-001.md",
       "milestone": "FIN",
@@ -3540,12 +3540,17 @@
         "FISC-001"
       ],
       "branch": "feat/FIN-calendar",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "CALENDAR-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CALENDAR-002.md",
       "milestone": "FIN",
@@ -3556,12 +3561,17 @@
         "PAY-002"
       ],
       "branch": "feat/FIN-calendar",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "N/A"
+      },
       "pr": null
     },
     "CALENDAR-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CALENDAR-003.md",
       "milestone": "FIN",
@@ -3571,7 +3581,12 @@
         "CORE-004"
       ],
       "branch": "feat/FIN-calendar",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "MASS-001": {

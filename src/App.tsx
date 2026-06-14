@@ -108,6 +108,8 @@ import ParDetailPage from "./pages/par/ParDetail";
 import ParAdmin from "./pages/par/ParAdmin";
 // PAR-117: Reports
 import { ParReports } from "./pages/par/ParReports";
+// CALENDAR-003: Calendar Fiscal
+import { FinCalendarPage } from "./pages/fin/FinCalendarPage";
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
 
@@ -271,6 +273,8 @@ function Routes() {
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
   if (path.startsWith("/app/reports/retention")) return <StudentRetentionPage />;
   if (path.startsWith("/app/reports/export")) return <ExportPage />;
+  // CALENDAR-003: /app/fin/calendar — Calendar Fiscal
+  if (path.startsWith("/app/fin/calendar")) return <FinCalendarPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // PAY-003: /portal/invoice/:id — parent-facing invoice portal (no auth)
   if (path.match(/^\/portal\/invoice\/[^/]+$/)) return <InvoicePortalPage />;
