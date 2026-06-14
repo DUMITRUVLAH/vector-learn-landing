@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "SPEND-001",
-  "last_completed": "EINV-003",
-  "iterations": 213,
+  "current_item": "SPEND-002",
+  "last_completed": "SPEND-001",
+  "iterations": 214,
   "last_run_at": "2026-06-14T00:00:00Z",
-  "milestone_status": "FinDesk — SPEND-001 in_progress (schema fin_expenses). Branch: feat/FIN-spend.",
+  "milestone_status": "FinDesk — SPEND-002 in_progress (API cheltuieli). Branch: feat/FIN-spend.",
   "active_milestone": "FIN",
   "items": {
     "EINV-003": {
@@ -25,18 +25,24 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/159"
     },
     "SPEND-001": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPEND-001-schema.md",
       "milestone": "FIN",
       "phase": "spend",
       "depends_on": [],
-      "branch": "feat/FIN-spend"
+      "branch": "feat/FIN-spend",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SPEND-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPEND-002-api.md",
       "milestone": "FIN",
