@@ -7,17 +7,27 @@
  *
  * BRANCH-704 — Branch KPI analytics
  * GET /api/analytics/branches — per-branch KPIs (MRR, active students, lessons this month)
+ *
+ * INSIGHT-002 (FIN) — FinDesk Insights metrici
+ * GET /api/analytics/fin/metrics       — venituri/receivable/profit per perioadă
+ * GET /api/analytics/fin/aging         — aging receivable 0-30/31-60/61-90/90+z
+ * GET /api/analytics/fin/cashflow-forecast — forecast 60z 3 scenarii DETERMINISTE
+ * GET /api/analytics/fin/saved-views   — lista vederi salvate fin_saved_views
+ * POST /api/analytics/fin/saved-views  — creare vedere salvată
+ * GET /api/analytics/fin/narratives    — lista narativele anului
+ * PUT /api/analytics/fin/narratives/:month — upsert narativă
  */
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, count, eq, gte, isNotNull, lt, lte, sql, sum, gt, ne } from "drizzle-orm";
+import { and, asc, count, eq, gte, isNotNull, lt, lte, sql, sum, gt, ne, isNull, inArray, desc } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   leads, adCampaignBudgets, pipelineStages,
   lessons, courses, teachers, invoices, students, studentLessons,
   branches, payments, users,
 } from "../db/schema";
+import { finSavedViews, finNarratives } from "../db/schema/finInsight";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const analyticsRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -672,3 +682,367 @@ analyticsRoutes.get("/churn-risk", async (c) => {
 
   return c.json(result);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INSIGHT-002 (FIN): FinDesk Insights — metrici financiare
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Calculează data de start pentru o perioadă. DETERMINIST — FIN-CORE regula #4. */
+function getPeriodStart(period: string): Date {
+  const now = new Date();
+  switch (period) {
+    case "this_month":
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    case "last_month":
+      return new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    case "last_3m":
+      return new Date(now.getFullYear(), now.getMonth() - 3, 1);
+    case "last_6m":
+      return new Date(now.getFullYear(), now.getMonth() - 6, 1);
+    case "ytd":
+      return new Date(now.getFullYear(), 0, 1);
+    default:
+      return new Date(now.getFullYear(), now.getMonth() - 6, 1);
+  }
+}
+
+/** Calculează data de final pentru o perioadă. */
+function getPeriodEnd(period: string): Date {
+  const now = new Date();
+  if (period === "last_month") {
+    return new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+  }
+  return now;
+}
+
+/** Formatează o dată ca YYYY-MM pentru groupBy=month. */
+function toYearMonth(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// GET /api/analytics/fin/metrics — venituri/receivable/profit per perioadă
+analyticsRoutes.get("/fin/metrics", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const period = c.req.query("period") ?? "last_6m";
+  const groupBy = (c.req.query("groupBy") ?? "month") as "month" | "day";
+
+  const start = getPeriodStart(period);
+  const end = getPeriodEnd(period);
+  const startISO = start.toISOString();
+  const endISO = end.toISOString();
+
+  // Revenue = payments status='paid' in interval
+  const revenueRows = await db
+    .select({
+      amountCents: payments.amountCents,
+      paidAt: payments.paidAt,
+    })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.tenantId, tenantId),
+        eq(payments.status, "paid"),
+        isNotNull(payments.paidAt),
+        gte(payments.paidAt, sql`${startISO}::timestamptz`),
+        lte(payments.paidAt, sql`${endISO}::timestamptz`)
+      )
+    );
+
+  // Receivable = invoices status='issued' in interval (outstanding)
+  const receivableRows = await db
+    .select({
+      amountCents: invoices.amountCents,
+      issueDate: invoices.issueDate,
+    })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.tenantId, tenantId),
+        eq(invoices.status, "issued"),
+        gte(invoices.issueDate, sql`${startISO}::timestamptz`),
+        lte(invoices.issueDate, sql`${endISO}::timestamptz`)
+      )
+    );
+
+  // Aggregate by period bucket (DETERMINIST)
+  const buckets: Record<string, { revenue: number; receivable: number }> = {};
+
+  const addToBucket = (
+    date: Date,
+    field: "revenue" | "receivable",
+    cents: number
+  ) => {
+    const key = groupBy === "month"
+      ? toYearMonth(date)
+      : date.toISOString().substring(0, 10);
+    if (!buckets[key]) buckets[key] = { revenue: 0, receivable: 0 };
+    buckets[key][field] += cents;
+  };
+
+  const revArr = Array.isArray(revenueRows) ? revenueRows : [];
+  const rcvArr = Array.isArray(receivableRows) ? receivableRows : [];
+
+  for (const r of revArr) {
+    if (r.paidAt) addToBucket(new Date(r.paidAt as Date), "revenue", r.amountCents);
+  }
+  for (const r of rcvArr) {
+    if (r.issueDate) addToBucket(new Date(r.issueDate as Date), "receivable", r.amountCents);
+  }
+
+  const metrics = Object.entries(buckets)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([p, data]) => ({
+      period: p,
+      revenue: data.revenue,
+      receivable: data.receivable,
+      // Profit approximation: revenue - receivable (DETERMINIST, simplified)
+      profit: data.revenue - data.receivable,
+    }));
+
+  return c.json({ metrics, period, groupBy });
+});
+
+// GET /api/analytics/fin/aging — aging receivable
+analyticsRoutes.get("/fin/aging", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const now = new Date();
+  const nowISO = now.toISOString();
+
+  const overdueRows = await db
+    .select({
+      amountCents: invoices.amountCents,
+      dueDate: invoices.dueDate,
+    })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.tenantId, tenantId),
+        inArray(invoices.status, ["issued", "draft"]),
+        isNotNull(invoices.dueDate),
+        lt(invoices.dueDate, sql`${nowISO}::timestamptz`)
+      )
+    );
+
+  const overdueArr = Array.isArray(overdueRows) ? overdueRows : [];
+
+  const aging = { "0_30": 0, "31_60": 0, "61_90": 0, "90_plus": 0, total: 0 };
+
+  for (const row of overdueArr) {
+    if (!row.dueDate) continue;
+    const daysOverdue = Math.floor(
+      (now.getTime() - new Date(row.dueDate as Date).getTime()) / (1000 * 60 * 60 * 24)
+    );
+    const cents = row.amountCents;
+    aging.total += cents;
+    if (daysOverdue <= 30) aging["0_30"] += cents;
+    else if (daysOverdue <= 60) aging["31_60"] += cents;
+    else if (daysOverdue <= 90) aging["61_90"] += cents;
+    else aging["90_plus"] += cents;
+  }
+
+  return c.json({ aging });
+});
+
+// GET /api/analytics/fin/cashflow-forecast — forecast 60z, 3 scenarii DETERMINISTE
+analyticsRoutes.get("/fin/cashflow-forecast", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const now = new Date();
+
+  // Baza: media veniturilor săptămânale din ultimele 12 săptămâni (DETERMINIST)
+  const twelveWeeksAgo = new Date(now.getTime() - 12 * 7 * 24 * 60 * 60 * 1000);
+  const twelveWeeksISO = twelveWeeksAgo.toISOString();
+  const nowISO = now.toISOString();
+
+  const paidRows = await db
+    .select({ amountCents: payments.amountCents })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.tenantId, tenantId),
+        eq(payments.status, "paid"),
+        isNotNull(payments.paidAt),
+        gte(payments.paidAt, sql`${twelveWeeksISO}::timestamptz`),
+        lte(payments.paidAt, sql`${nowISO}::timestamptz`)
+      )
+    );
+
+  const paidArr = Array.isArray(paidRows) ? paidRows : [];
+  const totalCents = paidArr.reduce((s, r) => s + r.amountCents, 0);
+  const weeklyAvgCents = Math.round(totalCents / 12);
+  const dailyBase = Math.round(weeklyAvgCents / 7);
+  const dailyGood = Math.round(dailyBase * 1.2);
+  const dailyPessimistic = Math.round(dailyBase * 0.8);
+
+  type ForecastDay = { date: string; cumulativeCents: number };
+  const base: ForecastDay[] = [];
+  const good: ForecastDay[] = [];
+  const pessimistic: ForecastDay[] = [];
+
+  let cumBase = 0, cumGood = 0, cumPessimistic = 0;
+
+  for (let i = 0; i < 60; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() + i);
+    const dateStr = d.toISOString().substring(0, 10);
+
+    cumBase += dailyBase;
+    cumGood += dailyGood;
+    cumPessimistic += dailyPessimistic;
+
+    base.push({ date: dateStr, cumulativeCents: cumBase });
+    good.push({ date: dateStr, cumulativeCents: cumGood });
+    pessimistic.push({ date: dateStr, cumulativeCents: cumPessimistic });
+  }
+
+  return c.json({
+    scenarios: { good, base, pessimistic },
+    weeklyAvgCents,
+    generatedAt: now.toISOString(),
+  });
+});
+
+// ─── fin_saved_views CRUD ─────────────────────────────────────────────────────
+
+// GET /api/analytics/fin/saved-views
+analyticsRoutes.get("/fin/saved-views", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
+
+  const views = await db.query.finSavedViews.findMany({
+    where: and(
+      eq(finSavedViews.tenantId, tenantId),
+      sql`(${finSavedViews.userId} = ${userId}::uuid OR ${finSavedViews.isPublic} = true)`
+    ),
+    orderBy: [desc(finSavedViews.updatedAt)],
+  });
+
+  return c.json({ views });
+});
+
+const createSavedViewSchema = z.object({
+  name: z.string().min(1).max(200),
+  metric: z.enum(["revenue", "expenses", "profit", "vat", "cashflow"]),
+  period: z.enum(["this_month", "last_month", "last_3m", "last_6m", "ytd", "custom"]).default("this_month"),
+  groupBy: z.enum(["day", "week", "month", "category"]).default("month"),
+  filters: z.record(z.unknown()).default({}),
+  isDefault: z.boolean().default(false),
+  isPublic: z.boolean().default(false),
+});
+
+// POST /api/analytics/fin/saved-views
+analyticsRoutes.post(
+  "/fin/saved-views",
+  zValidator("json", createSavedViewSchema),
+  async (c) => {
+    const tenantId = c.get("user").tenantId;
+    const userId = c.get("user").id;
+    const data = c.req.valid("json");
+
+    const [view] = await db
+      .insert(finSavedViews)
+      .values({
+        tenantId,
+        userId,
+        name: data.name,
+        metric: data.metric,
+        period: data.period,
+        groupBy: data.groupBy,
+        filters: data.filters as { accountType?: string; category?: string },
+        isDefault: data.isDefault,
+        isPublic: data.isPublic,
+      })
+      .returning();
+
+    return c.json({ view }, 201);
+  }
+);
+
+// ─── fin_narratives CRUD ──────────────────────────────────────────────────────
+
+// GET /api/analytics/fin/narratives
+analyticsRoutes.get("/fin/narratives", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const year = c.req.query("year") ?? new Date().getFullYear().toString();
+
+  const narratives = await db.query.finNarratives.findMany({
+    where: and(
+      eq(finNarratives.tenantId, tenantId),
+      sql`left(${finNarratives.month}, 4) = ${year}`
+    ),
+    orderBy: [desc(finNarratives.month)],
+  });
+
+  return c.json({ narratives });
+});
+
+const upsertNarrativeSchema = z.object({
+  title: z.string().min(1).max(300),
+  body: z.string().min(1),
+  generatedBy: z.enum(["manual", "ai"]).default("manual"),
+  sentiment: z.enum(["positive", "neutral", "negative"]).default("neutral"),
+  publishedAt: z.string().datetime().optional().nullable(),
+});
+
+// PUT /api/analytics/fin/narratives/:month
+analyticsRoutes.put(
+  "/fin/narratives/:month",
+  zValidator("json", upsertNarrativeSchema),
+  async (c) => {
+    const tenantId = c.get("user").tenantId;
+    const userId = c.get("user").id;
+    const month = c.req.param("month");
+
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return c.json({ error: "Format lună invalid. Folosiți YYYY-MM." }, 422);
+    }
+
+    const data = c.req.valid("json");
+
+    // Upsert: insert or update by (tenant_id, month) unique constraint
+    const existing = await db.query.finNarratives.findFirst({
+      where: and(
+        eq(finNarratives.tenantId, tenantId),
+        eq(finNarratives.month, month)
+      ),
+    });
+
+    let narrative;
+    if (existing) {
+      const [updated] = await db
+        .update(finNarratives)
+        .set({
+          title: data.title,
+          body: data.body,
+          generatedBy: data.generatedBy,
+          sentiment: data.sentiment,
+          publishedAt: data.publishedAt ? new Date(data.publishedAt) : null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(finNarratives.id, existing.id),
+            eq(finNarratives.tenantId, tenantId)
+          )
+        )
+        .returning();
+      narrative = updated;
+    } else {
+      const [inserted] = await db
+        .insert(finNarratives)
+        .values({
+          tenantId,
+          authorId: userId,
+          month,
+          title: data.title,
+          body: data.body,
+          generatedBy: data.generatedBy,
+          sentiment: data.sentiment,
+          publishedAt: data.publishedAt ? new Date(data.publishedAt) : null,
+        })
+        .returning();
+      narrative = inserted;
+    }
+
+    return c.json({ narrative });
+  }
+);

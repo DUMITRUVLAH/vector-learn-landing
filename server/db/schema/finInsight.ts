@@ -133,8 +133,7 @@ export const finNarratives = pgTable(
 
     /** Autorul narativei; null = sistem/AI fără user asociat. */
     authorId: uuid("author_id")
-      .references(() => users.id, { onDelete: "set null" })
-      .default(null),
+      .references(() => users.id, { onDelete: "set null" }),
 
     /** Luna narativei (YYYY-MM). */
     month: varchar("month", { length: 7 }).notNull(),
@@ -152,7 +151,7 @@ export const finNarratives = pgTable(
     sentiment: finNarrativeSentimentEnum("sentiment").notNull().default("neutral"),
 
     /** null = ciornă; non-null = publicată. */
-    publishedAt: timestamp("published_at", { withTimezone: true }).default(undefined),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

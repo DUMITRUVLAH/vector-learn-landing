@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "INSIGHT-002",
   "last_completed": "INSIGHT-001",
-  "iterations": 189,
+  "iterations": 190,
   "last_run_at": "2026-06-14T12:30:00Z",
   "milestone_status": "FIN FinDesk \u2014 48/85 done. INSIGHT-001 done. Starting INSIGHT-002 (API metrici + cashflow 60z).",
   "active_milestone": "FIN",
@@ -3488,8 +3488,8 @@
       "pr": null
     },
     "INSIGHT-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-002.md",
       "milestone": "FIN",
