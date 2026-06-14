@@ -94,6 +94,10 @@ import { ExportPage } from "./pages/app/ExportPage";
 import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
 import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+// BANKLINK-002: BankLink — conexiuni bancare + import OFX/MT940 + tranzacții
+import BankLinkPage from "./pages/fin/BankLinkPage";
+import BankLinkImportPage from "./pages/fin/BankLinkImportPage";
+import BankLinkTransactionsPage from "./pages/fin/BankLinkTransactionsPage";
 // PAR-105: Create wizard
 import { ParCreateWizard } from "./pages/par/ParCreateWizard";
 // PAR-106: Dashboard + list
@@ -271,6 +275,10 @@ function Routes() {
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;
   if (path.startsWith("/app/reports/retention")) return <StudentRetentionPage />;
   if (path.startsWith("/app/reports/export")) return <ExportPage />;
+  // BANKLINK-002: /app/fin/banklink — specific routes before generic
+  if (path.startsWith("/app/fin/banklink/import")) return <BankLinkImportPage />;
+  if (path.startsWith("/app/fin/banklink/transactions")) return <BankLinkTransactionsPage />;
+  if (path.startsWith("/app/fin/banklink")) return <BankLinkPage />;
   if (path.startsWith("/app")) return <DashboardPage />;
   // PAY-003: /portal/invoice/:id — parent-facing invoice portal (no auth)
   if (path.match(/^\/portal\/invoice\/[^/]+$/)) return <InvoicePortalPage />;

@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "BANKLINK-001",
-  "iterations": 171,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "FIN — BANKLINK phase (18): BANKLINK-001 done. Next: BANKLINK-002",
+  "current_item": "BANKLINK-003",
+  "last_completed": "BANKLINK-002",
+  "iterations": 173,
+  "last_run_at": "2026-06-14T00:00:00Z",
+  "milestone_status": "FIN — BANKLINK phase (18): BANKLINK-002 done, building BANKLINK-003 auto-match",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3782,8 +3782,8 @@
       "pr": null
     },
     "BANKLINK-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BANKLINK-002.md",
       "milestone": "FIN",
@@ -3792,7 +3792,12 @@
         "BANKLINK-001"
       ],
       "branch": "feat/FIN-banklink",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "BANKLINK-003": {
