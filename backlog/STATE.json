@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "FISC-003",
-  "last_completed": "FISC-002",
-  "iterations": 176,
+  "current_item": null,
+  "last_completed": "FISC-003",
+  "iterations": 177,
   "last_run_at": "2026-06-14T08:00:00Z",
-  "milestone_status": "FIN FinDesk — 38/85 done. FISC-001+002 done. Building FISC-003 (generare declarații PDF+CSV).",
+  "milestone_status": "FIN FinDesk — 39/85 done. FISC-001+002+003 done → feat/FIN-fisc (PR pending). Next: FISC-004 (calendar termene).",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3361,7 +3361,7 @@
       "pr": null
     },
     "FISC-003": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FISC-003.md",
@@ -3371,7 +3371,12 @@
         "FISC-002"
       ],
       "branch": "feat/FIN-fisc",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "FISC-004": {

@@ -110,6 +110,8 @@ import ParAdmin from "./pages/par/ParAdmin";
 import { ParReports } from "./pages/par/ParReports";
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
+// FISC-003: FinDesk fiscal declarations page
+import { TaxPage } from "./pages/fin/TaxPage";
 
 /** PAR-116: Role-aware wrapper — fetches current user's PAR roles then renders ParAdmin */
 function ParAdminPage() {
@@ -266,6 +268,8 @@ function Routes() {
   if (path.match(/^\/app\/par\/[^/]+$/)) return <ParDetailPage />;
   // PAR-106: /app/par — dashboard + list
   if (path.startsWith("/app/par")) return <ParDashboard />;
+  // FISC-003: /app/fin/tax — declarații fiscale TVA + impozit venit
+  if (path.startsWith("/app/fin/tax")) return <TaxPage />;
   if (path.startsWith("/app/leads")) return <LeadsPage />;
   if (path.startsWith("/app/reports/kpi")) return <KpiDashboardPage />;
   if (path.startsWith("/app/reports/revenue")) return <RevenueChartsPage />;

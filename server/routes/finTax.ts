@@ -1,13 +1,14 @@
 /**
- * FISC-002: FinDesk — Rute API modul fiscal
+ * FISC-002 + FISC-003: FinDesk — Rute API modul fiscal
  *
  * Endpoints:
- *   POST /api/fin/tax/periods              — creare perioadă fiscală
- *   GET  /api/fin/tax/periods              — lista perioade (cu declarații)
- *   GET  /api/fin/tax/periods/:id/summary  — detaliu perioadă + payload calcul
- *   POST /api/fin/tax/calculate            — calcul TVA + impozit venit pentru o perioadă
- *   GET  /api/fin/tax/declarations         — lista declarații (cu filtre)
- *   PATCH /api/fin/tax/declarations/:id/file — marchează declarație ca depusă
+ *   POST /api/fin/tax/periods                        — creare perioadă fiscală
+ *   GET  /api/fin/tax/periods                        — lista perioade (cu declarații)
+ *   GET  /api/fin/tax/periods/:id/summary            — detaliu perioadă + payload calcul
+ *   POST /api/fin/tax/calculate                      — calcul TVA + impozit venit pentru o perioadă
+ *   GET  /api/fin/tax/declarations                   — lista declarații (cu filtre)
+ *   GET  /api/fin/tax/declarations/:id/export        — export PDF sau CSV (?format=pdf|csv)
+ *   PATCH /api/fin/tax/declarations/:id/file         — marchează declarație ca depusă
  *
  * Toate rutele necesită autentificare și filtrează după tenant_id.
  * Calculul este DETERMINIST (nu AI) — FIN-CORE regula #4.
@@ -31,6 +32,10 @@ import {
   DEFAULT_INCOME_TAX_RATES,
   type TaxLineItem,
 } from "../lib/fin/taxCalculator";
+import {
+  generateDeclaration,
+  type ExportFormat,
+} from "../lib/fin/declarationGenerator";
 
 export const finTaxRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -353,6 +358,62 @@ finTaxRoutes.get("/declarations", async (c) => {
   }
 
   return c.json({ declarations });
+});
+
+// ─── GET /api/fin/tax/declarations/:id/export — export PDF sau CSV ────────────
+
+finTaxRoutes.get("/declarations/:id/export", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const declId = c.req.param("id");
+  const format = (c.req.query("format") ?? "pdf") as ExportFormat;
+
+  if (!["pdf", "csv"].includes(format)) {
+    return c.json({ error: "Format invalid. Folosiți ?format=pdf sau ?format=csv." }, 400);
+  }
+
+  // Verifică declarația + perioada
+  const declaration = await db.query.finTaxDeclarations.findFirst({
+    where: and(
+      eq(finTaxDeclarations.id, declId),
+      eq(finTaxDeclarations.tenantId, tenantId)
+    ),
+    with: { period: true },
+  });
+
+  if (!declaration) {
+    return c.json({ error: "Declarație negăsită." }, 404);
+  }
+
+  if (!declaration.period) {
+    return c.json({ error: "Perioadă fiscală negăsită." }, 404);
+  }
+
+  // Payload gol → nu se poate genera
+  const payload = declaration.payload as Record<string, unknown>;
+  const isEmpty = !payload || Object.keys(payload).length === 0;
+  if (isEmpty) {
+    return c.json({
+      error: "Payload gol — rulați POST /calculate mai întâi.",
+    }, 422);
+  }
+
+  const result = generateDeclaration(declaration, declaration.period, format);
+
+  if (format === "pdf") {
+    return new Response(result.data as Buffer, {
+      headers: {
+        "Content-Type": result.contentType,
+        "Content-Disposition": `attachment; filename="${result.filename}"`,
+      },
+    });
+  }
+
+  return new Response(result.data as string, {
+    headers: {
+      "Content-Type": result.contentType,
+      "Content-Disposition": `attachment; filename="${result.filename}"`,
+    },
+  });
 });
 
 // ─── PATCH /api/fin/tax/declarations/:id/file — marchează ca depusă ──────────
