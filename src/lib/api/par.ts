@@ -90,6 +90,13 @@ export interface ParDetail extends ParRequest {
   approvals: ParApproval[];
   attachments: ParAttachment[];
   payment: ParPayment | null;
+  /** Resolved display names for the PDF/print form (UUIDs stay in the *Id fields). */
+  requestedByName?: string | null;
+  departmentName?: string | null;
+  projectName?: string | null;
+  budgetCodeLabel?: string | null;
+  receivedByName?: string | null;
+  assignedToName?: string | null;
 }
 
 export interface ParApproval {

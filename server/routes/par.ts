@@ -30,7 +30,11 @@ import {
   parAudit,
   parSettings,
   parVendors,
+  parDepartments,
+  parProjects,
+  parBudgetCodes,
 } from "../db/schema/par";
+import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { generateRequestNo } from "../lib/par/requestNo";
@@ -349,6 +353,44 @@ parRoutes.get("/:id", async (c) => {
     }
   }
 
+  // PAR-114-fix: resolve UUIDs → human-readable names for the PDF/print form.
+  // The raw *Id columns are kept for the API; these *_name fields are display labels.
+  const userIdsToResolve = [
+    par.requestedByUserId,
+    payment?.receivedByUserId ?? null,
+    payment?.assignedToUserId ?? null,
+  ].filter((v): v is string => !!v);
+
+  const userRows = userIdsToResolve.length
+    ? await db
+        .select({ id: users.id, name: users.name })
+        .from(users)
+        .where(and(eq(users.tenantId, tenantId), inArray(users.id, userIdsToResolve)))
+    : [];
+  const userName = (id: string | null | undefined) =>
+    (id && userRows.find((u) => u.id === id)?.name) || null;
+
+  const [dept] = par.departmentId
+    ? await db
+        .select({ name: parDepartments.name })
+        .from(parDepartments)
+        .where(and(eq(parDepartments.tenantId, tenantId), eq(parDepartments.id, par.departmentId)))
+    : [];
+
+  const [proj] = par.projectId
+    ? await db
+        .select({ name: parProjects.name })
+        .from(parProjects)
+        .where(and(eq(parProjects.tenantId, tenantId), eq(parProjects.id, par.projectId)))
+    : [];
+
+  const [bc] = par.budgetCodeId
+    ? await db
+        .select({ code: parBudgetCodes.code, name: parBudgetCodes.name })
+        .from(parBudgetCodes)
+        .where(and(eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.id, par.budgetCodeId)))
+    : [];
+
   return c.json({
     ...parData,
     above_micro_threshold: par.totalEstimatedCents > threshold,
@@ -356,6 +398,13 @@ parRoutes.get("/:id", async (c) => {
     approvals,
     attachments,
     payment: payment ?? null,
+    // Resolved display names (UUIDs stay in the *Id fields above)
+    requestedByName: userName(par.requestedByUserId),
+    departmentName: dept?.name ?? null,
+    projectName: proj?.name ?? null,
+    budgetCodeLabel: bc ? [bc.code, bc.name].filter(Boolean).join(" — ") : null,
+    receivedByName: userName(payment?.receivedByUserId),
+    assignedToName: userName(payment?.assignedToUserId),
     /** PAR-109: null = not applicable (draft/no hash); true = body untampered; false = INTEGRITY VIOLATION */
     body_hash_valid: bodyHashValid,
   });

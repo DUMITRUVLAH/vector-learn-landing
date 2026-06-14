@@ -13,6 +13,8 @@ export interface Payment {
   courseId?: string | null;
   /** INTEG-102: course name resolved server-side */
   courseName?: string | null;
+  /** APPROVAL-002: PAR request that authorized this payment */
+  parRequestId?: string | null;
   createdAt: string;
   studentName: string;
 }
@@ -63,4 +65,22 @@ export function linkPaymentToInvoice(paymentId: string, invoiceId: string): Prom
     method: "PATCH",
     body: JSON.stringify({ invoiceId }),
   });
+}
+
+// APPROVAL-002: Link an approved PAR to a payment
+export function linkParToPayment(paymentId: string, parRequestId: string): Promise<{
+  id: string;
+  par_request_id: string | null;
+  amount_cents: number;
+  status: string;
+}> {
+  return api(`/api/payments/${paymentId}/link-par`, {
+    method: "POST",
+    body: JSON.stringify({ par_request_id: parRequestId }),
+  });
+}
+
+// APPROVAL-002: List payments that still need PAR approval
+export function listPendingApproval(): Promise<{ items: Payment[]; threshold_mdl: number }> {
+  return api<{ items: Payment[]; threshold_mdl: number }>("/api/payments/pending-approval");
 }
