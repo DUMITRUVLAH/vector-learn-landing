@@ -122,6 +122,9 @@ import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: financ
 // PAR Phase F routes
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
 
+// CALENDAR Phase routes (FIN-CALENDAR)
+import { finCalendarRoutes } from "./routes/finCalendar"; // CALENDAR-002/003: fin_obligations + fin_period_locks
+
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
  * static-file serving. Shared by:
@@ -333,6 +336,9 @@ app.route("/api/par", parAttachmentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
+
+// CALENDAR-002/003: Calendar Fiscal — obligații + period locks
+app.route("/api/fin/calendar", finCalendarRoutes);
 
 app.get("/api/health", async (c) => {
   try {
