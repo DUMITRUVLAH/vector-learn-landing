@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
+  "last_completed": "TRUST-003",
+  "iterations": 167,
   "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "milestone_status": "FIN \u2014 TRUST phase (16) COMPLETE (60/85). Next: LEDGER-002 on feat/FIN-ledger.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -2209,7 +2209,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2249,7 +2249,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical — allergies, immunization records, medication log",
+      "title": "Medical \u2014 allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -3637,8 +3637,8 @@
       "pr": null
     },
     "TRUST-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/TRUST-001.md",
       "milestone": "FIN",
@@ -3648,12 +3648,17 @@
         "CAPTURE-002"
       ],
       "branch": "feat/FIN-trust",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "N/A"
+      },
       "pr": null
     },
     "TRUST-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/TRUST-002.md",
       "milestone": "FIN",
@@ -3662,12 +3667,17 @@
         "TRUST-001"
       ],
       "branch": "feat/FIN-trust",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
       "pr": null
     },
     "TRUST-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/TRUST-003.md",
       "milestone": "FIN",
@@ -3677,7 +3687,12 @@
         "CORE-004"
       ],
       "branch": "feat/FIN-trust",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "LEDGER-001": {
