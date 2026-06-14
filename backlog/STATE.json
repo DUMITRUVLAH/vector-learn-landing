@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "INSIGHT-001",
-  "last_completed": "PAR-118",
-  "iterations": 188,
+  "current_item": null,
+  "last_completed": "INSIGHT-001",
+  "iterations": 189,
   "last_run_at": "2026-06-14T12:30:00Z",
-  "milestone_status": "FIN FinDesk \u2014 47/85 done. ASSET done (feat/FIN-asset PR #165). Starting INSIGHT phase on feat/FIN-insight.",
+  "milestone_status": "FIN FinDesk \u2014 48/85 done. INSIGHT-001 done. Starting INSIGHT-002 (API metrici + cashflow 60z).",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3469,7 +3469,7 @@
       "pr": null
     },
     "INSIGHT-001": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-001.md",
@@ -3479,7 +3479,12 @@
         "CORE-001"
       ],
       "branch": "feat/FIN-insight",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "OK"
+      },
       "pr": null
     },
     "INSIGHT-002": {
