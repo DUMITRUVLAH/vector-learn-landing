@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
+  "last_completed": "SPLIT-003",
+  "iterations": 168,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "SPLIT (2026-06-14, owner): same repo, 2 distinct apps. APP1=CRM Educational (/app/*, /app/login, AppShell). APP2=Business Suite (/business/*, /business/login, BusinessShell) = FinDesk+PAR+ITPark INTEGRATED (PAR->FinDesk payments, ITPark->FinDesk invoices, shared PARTY, unified dashboard). Login fully separate via tenants.app_kind. CORE: backlog/split/SPLIT-CORE.md. Driver: backlog/split/BUILD-SEQUENCE.md. 13 items/4 phases. Build on demo/findesk-complet base (has FinDesk+ITPark+PAR present).",
   "active_milestone": "SPLIT",
@@ -4036,20 +4036,25 @@
       "pr": null
     },
     "SPLIT-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPLIT-001.md",
       "milestone": "SPLIT",
       "phase": "1",
       "depends_on": [],
       "branch": "feat/SPLIT-foundation",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "SPLIT-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPLIT-002.md",
       "milestone": "SPLIT",
@@ -4058,12 +4063,17 @@
         "SPLIT-001"
       ],
       "branch": "feat/SPLIT-foundation",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "SPLIT-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPLIT-003.md",
       "milestone": "SPLIT",
@@ -4072,7 +4082,12 @@
         "SPLIT-002"
       ],
       "branch": "feat/SPLIT-foundation",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "SPLIT-101": {

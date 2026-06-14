@@ -150,6 +150,17 @@ import { finClientPortalRoutes } from "./routes/finClientPortal"
 import { finExchangeRatesRoutes } from "./routes/finExchangeRates"
 import { finRevaluationRoutes } from "./routes/finRevaluation"
 import { finPaymentApprovalRoutes } from "./routes/finPaymentApproval"
+// SPLIT-003: Business Suite authentication (separate login for app_kind='business')
+import { businessAuthRoutes } from "./routes/businessAuth"
+// ITPark module routes (built on demo/findesk-complet but not yet mounted)
+import { itparkAiRoutes } from "./routes/itparkAi"
+import { itparkCaemRoutes } from "./routes/itparkCaem"
+import { itparkCalcRoutes } from "./routes/itparkCalc"
+import { itparkDocsRoutes } from "./routes/itparkDocs"
+import { itparkEngagementsRoutes } from "./routes/itparkEngagements"
+import { itparkImportRoutes } from "./routes/itparkImport"
+import { itparkLinesRoutes } from "./routes/itparkLines"
+import { itparkSettingsRoutes } from "./routes/itparkSettings"
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -191,6 +202,18 @@ app.post("/api/public/forms/:slug/ping", publicFormPingHandler);
 app.route("/api/auth", authRoutes);
 app.route("/api/auth/2fa", twoFactorRoutes); // AUTH-004: /setup, /verify, /enable, /disable
 app.route("/api/auth/sessions", sessionMgmtRoutes); // list + revoke active sessions
+// SPLIT-003: Business Suite auth — /api/business/auth/login, /logout, /me
+app.route("/api/business", businessAuthRoutes);
+// ITPark module routes (ITPARK-101..502 — built on demo but not mounted until now)
+// Specific prefixes first, then generic engagements last (Hono order matters)
+app.route("/api/itpark/ai", itparkAiRoutes);
+app.route("/api/itpark/caem-codes", itparkCaemRoutes);
+app.route("/api/itpark/calc", itparkCalcRoutes);
+app.route("/api/itpark/docs", itparkDocsRoutes);
+app.route("/api/itpark/import", itparkImportRoutes);
+app.route("/api/itpark/lines", itparkLinesRoutes);
+app.route("/api/itpark/settings", itparkSettingsRoutes);
+app.route("/api/itpark/engagements", itparkEngagementsRoutes); // most generic last
 app.route("/api/students", studentRoutes);
 app.route("/api/teachers", teacherRoutes);
 app.route("/api/courses", courseRoutes);

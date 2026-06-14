@@ -145,6 +145,9 @@ import { FinLedgerPage } from "./pages/fin/FinLedgerPage";
 import { FinSecuritySettingsPage } from "./pages/fin/FinSecuritySettingsPage";
 import { FinCalendarPage } from "./pages/fin/FinCalendarPage";
 import { RevaluationPage } from "./pages/app/RevaluationPage";
+// SPLIT-003: Business Suite auth pages
+import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
+import { BusinessDashboardPage } from "./pages/business/BusinessDashboardPage";
 
 /** PAR-116: Role-aware wrapper — fetches current user's PAR roles then renders ParAdmin */
 function ParAdminPage() {
@@ -215,6 +218,9 @@ function Routes() {
   if (path.startsWith("/m/")) return <StudentDashboardPage />;
   // MOB-102: Teacher grading
   if (path.startsWith("/app/grading")) return <GradingPage />;
+  // SPLIT-003: Business Suite routes (checked before /app/* to avoid cross-match)
+  if (path.startsWith("/business/login")) return <BusinessLoginPage />;
+  if (path.startsWith("/business/dashboard")) return <BusinessDashboardPage />;
   if (path.startsWith("/app/login")) return <LoginPage />;
   if (path.startsWith("/app/signup")) return <SignupPage />;
   // GAP-019: /app/students/:id detail page must come before /app/students list

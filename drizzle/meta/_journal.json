@@ -1009,6 +1009,20 @@
       "when": 1700008580000,
       "tag": "0143_fin_ledger_entries",
       "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1700008640000,
+      "tag": "0144_split_app_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1700008700000,
+      "tag": "0145_fix_fin_ledger_entries",
+      "breakpoints": true
     }
   ]
 }
