@@ -3454,7 +3454,7 @@
       "pr": null
     },
     "ASSET-003": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/ASSET-003.md",
@@ -3469,7 +3469,7 @@
       "pr": null
     },
     "INSIGHT-001": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-001.md",
@@ -3483,7 +3483,7 @@
       "pr": null
     },
     "INSIGHT-002": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-002.md",
@@ -3501,7 +3501,7 @@
       "pr": null
     },
     "INSIGHT-003": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-003.md",
@@ -3515,7 +3515,7 @@
       "pr": null
     },
     "INSIGHT-004": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/INSIGHT-004.md",
@@ -3530,7 +3530,7 @@
       "pr": null
     },
     "CALENDAR-001": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/CALENDAR-001.md",
@@ -3544,7 +3544,7 @@
       "pr": null
     },
     "CALENDAR-002": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/CALENDAR-002.md",
@@ -3560,7 +3560,7 @@
       "pr": null
     },
     "CALENDAR-003": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/CALENDAR-003.md",
@@ -3575,7 +3575,7 @@
       "pr": null
     },
     "MASS-001": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/MASS-001.md",
@@ -3589,7 +3589,7 @@
       "pr": null
     },
     "MASS-002": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/MASS-002.md",
@@ -3606,7 +3606,7 @@
       "pr": null
     },
     "MASS-003": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/MASS-003.md",
