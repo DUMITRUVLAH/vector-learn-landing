@@ -23,6 +23,7 @@ import {
   parSettings,
   parApprovals,
 } from "../db/schema/par";
+import { finExpenses } from "../db/schema/finExpenses";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { notifyPaid } from "../services/par/notify";
@@ -377,6 +378,49 @@ parPaymentsRoutes.post(
         .select()
         .from(parRequests)
         .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+
+      // SPLIT-202: PAR → FinDesk bridge — upsert fin_expenses with source='par'
+      // Idempotent: if a fin_expense already exists for this par_request_id, update it.
+      try {
+        const existingExpenses = await db
+          .select({ id: finExpenses.id })
+          .from(finExpenses)
+          .where(eq(finExpenses.parRequestId, parId));
+
+        const expenseData = {
+          tenantId,
+          source: "par" as const,
+          status: "paid" as const,
+          amountCents: body.actual_amount_cents,
+          currency: par.currency ?? "MDL",
+          category: "other" as const,
+          vatDeductible: false,
+          vatAmountCents: 0,
+          expenseDate: paidAt.toISOString().split("T")[0],
+          description: `PAR ${par.requestNo}`,
+          vendorName: par.payeeName ?? null,
+          paidAt,
+          parRequestId: parId,
+          updatedAt: paidAt,
+        };
+
+        if (existingExpenses.length > 0) {
+          // Update the existing expense (idempotency)
+          await db
+            .update(finExpenses)
+            .set(expenseData)
+            .where(eq(finExpenses.id, existingExpenses[0].id));
+        } else {
+          // Create new expense
+          await db.insert(finExpenses).values({
+            ...expenseData,
+            createdBy: user.id,
+          });
+        }
+      } catch {
+        // Best-effort: don't fail the PAR payment if FinDesk upsert fails
+        // (the PAR is already marked paid — log would go here in production)
+      }
 
       return c.json({ status: "paid", par: updatedPar });
     }

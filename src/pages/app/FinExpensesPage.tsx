@@ -871,6 +871,16 @@ export function FinExpensesPage() {
                                 {exp.reference}
                               </span>
                             )}
+                            {/* SPLIT-202: PAR source badge with link */}
+                            {exp.source === "par" && exp.parRequestId && (
+                              <a
+                                href={`#/app/par/${exp.parRequestId}`}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                                aria-label="Vezi PAR sursă"
+                              >
+                                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-primary text-[10px] font-semibold">PAR</span>
+                              </a>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-muted-foreground">
                             {CATEGORY_LABELS[exp.category]}
