@@ -121,6 +121,8 @@ import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline /
 import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: finance queue + section 16 + pay
 // PAR Phase F routes
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
+// APPROVAL-001: payment→PAR approval link endpoint
+import { finPaymentApprovalRoutes } from "./routes/finPaymentApproval";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -211,6 +213,8 @@ app.route("/api/audit-log", auditRoutes);
 app.route("/api/contracts", contractRoutes);
 // FIN-601..604: invoices, debt reconciliation, recurring billing, e-Factura export
 app.route("/api/invoices", invoiceRoutes);
+// APPROVAL-001: payment→PAR approval link (POST /api/payments/:id/link-par)
+app.route("/api/payments", finPaymentApprovalRoutes);
 // CRM-137: team members endpoint for AssigneePicker
 app.route("/api/team", teamRoutes);
 // AUTH-002: public (no-auth) team routes — accept-invitation

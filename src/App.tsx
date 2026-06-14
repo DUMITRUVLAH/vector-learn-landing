@@ -108,6 +108,8 @@ import ParDetailPage from "./pages/par/ParDetail";
 import ParAdmin from "./pages/par/ParAdmin";
 // PAR-117: Reports
 import { ParReports } from "./pages/par/ParReports";
+// APPROVAL-002: Payment approval queue page
+import { PaymentApprovalQueuePage } from "./pages/app/PaymentApprovalQueuePage";
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
 
@@ -191,6 +193,8 @@ function Routes() {
   if (path.startsWith("/app/gamification")) return <GamificationPage />; // GAP-020
   if (path.startsWith("/app/schedule")) return <SchedulePage />;
   if (path.startsWith("/app/teachers")) return <TeachersPage />;
+  // APPROVAL-002: approval queue must be checked before /app/payments
+  if (path === "/app/payments/approval") return <PaymentApprovalQueuePage />;
   if (path.startsWith("/app/payments")) return <PaymentsPage />;
   // CRM-120: /app/leads/today dashboard
   if (path.startsWith("/app/leads/today")) return <TodayDashboardPage />;
