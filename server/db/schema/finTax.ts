@@ -36,6 +36,7 @@ import {
   jsonb,
   index,
 } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { tenants } from "./tenants";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -235,3 +236,24 @@ export const FIN_DECLARATION_STATUS_LABELS: Record<FinDeclarationStatus, string>
   ready: "Gata",
   filed: "Depusă",
 };
+
+// ─── Drizzle relations ────────────────────────────────────────────────────────
+
+/**
+ * finTaxPeriods → declarations (one-to-many).
+ * Permite `db.query.finTaxPeriods.findMany({ with: { declarations: true } })`.
+ */
+export const finTaxPeriodsRelations = relations(finTaxPeriods, ({ many }) => ({
+  declarations: many(finTaxDeclarations),
+}));
+
+/**
+ * finTaxDeclarations → period (many-to-one).
+ * Permite `db.query.finTaxDeclarations.findMany({ with: { period: true } })`.
+ */
+export const finTaxDeclarationsRelations = relations(finTaxDeclarations, ({ one }) => ({
+  period: one(finTaxPeriods, {
+    fields: [finTaxDeclarations.periodId],
+    references: [finTaxPeriods.id],
+  }),
+}));
