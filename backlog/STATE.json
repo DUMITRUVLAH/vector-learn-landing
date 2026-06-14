@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "CAPTURE-002",
-  "last_completed": "CAPTURE-001",
-  "iterations": 220,
+  "current_item": null,
+  "last_completed": "CAPTURE-002",
+  "iterations": 223,
   "last_run_at": "2026-06-14T00:00:00Z",
-  "milestone_status": "FIN \u2014 SPEND-003, CAPTURE-001, CAPTURE-002 pending (PLAN step)",
+  "milestone_status": "FIN \u2014 SPEND-003 done, CAPTURE-001 done, CAPTURE-002 done",
   "active_milestone": "FIN",
   "items": {
     "EINV-003": {
@@ -2937,7 +2937,7 @@
       }
     },
     "CAPTURE-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CAPTURE-002-ai-pipeline.md",
@@ -2946,7 +2946,14 @@
       "depends_on": [
         "CAPTURE-001"
       ],
-      "branch": "feat/FIN-capture"
+      "branch": "feat/FIN-capture",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/161"
     }
   }
 }
