@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "BUDGET-003",
   "last_completed": "BUDGET-002",
-  "iterations": 184,
-  "last_run_at": "2026-06-14T11:00:00Z",
+  "iterations": 185,
+  "last_run_at": "2026-06-14T12:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "FIN",
   "items": {
@@ -3889,8 +3889,8 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/173"
     },
     "BUDGET-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/BUDGET-003.md",
       "milestone": "FIN",

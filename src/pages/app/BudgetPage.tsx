@@ -1,12 +1,16 @@
 /**
- * BUDGET-002: Pagina gestionare bugete FinDesk
+ * BUDGET-002 + BUDGET-003: Pagina gestionare bugete FinDesk
  * Ruta: /app/fin/budget
  *
  * Secțiuni:
  *   1. KPI cards — total bugete active, total bugetat, realizat, % execuție medie
- *   2. Tabel bugete — toate bugetele tenant-ului cu progress bar
- *   3. Dialog creare buget nou
- *   4. Detaliu buget — linii cu comparație bugetat vs realizat
+ *   2. Panou alerte active (BUDGET-003) — linii ≥ 80% din toate bugetele active
+ *   3. Tabel bugete — toate bugetele tenant-ului cu progress bar
+ *   4. Dialog creare buget nou
+ *   5. Detaliu buget — linii cu comparație bugetat vs realizat
+ *      + grafic bară plan vs realizat (BUDGET-003)
+ *      + progress ring execuție globală (BUDGET-003)
+ *      + color-coding rânduri la 80%/100% (BUDGET-003)
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -20,6 +24,7 @@ import {
   X,
   ChevronLeft,
   Bell,
+  BarChart2,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -34,6 +39,12 @@ import {
   type BudgetReport,
   type CreateBudgetInput,
 } from "@/lib/api/finBudget";
+import { BudgetBarChart } from "@/components/fin/BudgetBarChart";
+import { BudgetProgressRing } from "@/components/fin/BudgetProgressRing";
+import {
+  BudgetAlertsPanel,
+  type BudgetAlertItem,
+} from "@/components/fin/BudgetAlertsPanel";
 import { cn } from "@/lib/utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -46,18 +57,35 @@ function formatMDL(cents: number): string {
   }).format(cents / 100);
 }
 
-function pctColor(pct: number | null): string {
+/** Returnează clasa Tailwind semantic (fără hex) pentru progress bar orizontal. */
+function pctProgressClass(pct: number | null): string {
   if (pct === null) return "bg-muted";
-  if (pct >= 100) return "bg-red-500 dark:bg-red-600";
-  if (pct >= 80) return "bg-amber-400 dark:bg-amber-500";
-  return "bg-green-500 dark:bg-green-600";
+  if (pct >= 100) return "bg-destructive";
+  if (pct >= 80) return "bg-warning";
+  return "bg-success";
+}
+
+/** Returnează clasa Tailwind semantic pentru culoarea textului %. */
+function pctTextClass(pct: number | null): string {
+  if (pct === null) return "text-muted-foreground";
+  if (pct >= 100) return "text-destructive font-semibold";
+  if (pct >= 80) return "text-warning";
+  return "text-muted-foreground";
+}
+
+/** Returnează clasa pentru rândul de tabel (color-coding la 80% / 100%). */
+function lineRowClass(pct: number | null): string {
+  if (pct === null) return "";
+  if (pct >= 100) return "bg-destructive/10";
+  if (pct >= 80) return "bg-warning/10";
+  return "";
 }
 
 function statusBadge(status: string): JSX.Element {
   const map: Record<string, { label: string; cls: string }> = {
     draft: { label: "Ciornă", cls: "bg-muted text-muted-foreground" },
-    active: { label: "Activ", cls: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" },
-    closed: { label: "Închis", cls: "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400" },
+    active: { label: "Activ", cls: "bg-success/20 text-success" },
+    closed: { label: "Închis", cls: "bg-muted text-muted-foreground" },
   };
   const m = map[status] ?? map.draft;
   return (
@@ -239,6 +267,7 @@ function BudgetDetail({ budgetId, onBack }: BudgetDetailProps): JSX.Element {
   const [report, setReport] = useState<BudgetReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
+  const [showChart, setShowChart] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -312,20 +341,36 @@ function BudgetDetail({ budgetId, onBack }: BudgetDetailProps): JSX.Element {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => void handleCheckAlerts()}
-          className="h-8 inline-flex items-center gap-1.5 px-3 rounded-md border border-border text-xs text-foreground hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Verifică alerte depășire buget"
-        >
-          <Bell className="h-3.5 w-3.5" aria-hidden="true" />
-          Verifică alerte
-        </button>
+
+        {/* Progress ring — execuție globală (BUDGET-003) */}
+        <div className="flex items-center gap-3">
+          <BudgetProgressRing pct={execPct} size={72} strokeWidth={7} label="Execuție" />
+          <div className="flex flex-col gap-1.5">
+            <button
+              onClick={() => void handleCheckAlerts()}
+              className="h-8 inline-flex items-center gap-1.5 px-3 rounded-md border border-border text-xs text-foreground hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Verifică alerte depășire buget"
+            >
+              <Bell className="h-3.5 w-3.5" aria-hidden="true" />
+              Verifică alerte
+            </button>
+            <button
+              onClick={() => setShowChart((v) => !v)}
+              className="h-8 inline-flex items-center gap-1.5 px-3 rounded-md border border-border text-xs text-foreground hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={showChart ? "Ascunde grafic" : "Afișează grafic plan vs realizat"}
+              aria-pressed={showChart}
+            >
+              <BarChart2 className="h-3.5 w-3.5" aria-hidden="true" />
+              {showChart ? "Ascunde grafic" : "Grafic"}
+            </button>
+          </div>
+        </div>
       </div>
 
       {alertMsg && (
         <div
           role="status"
-          className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-4 py-2 text-sm text-amber-800 dark:text-amber-300"
+          className="rounded-md border border-warning/50 bg-warning/10 px-4 py-2 text-sm text-warning"
         >
           {alertMsg}
         </div>
@@ -345,6 +390,17 @@ function BudgetDetail({ budgetId, onBack }: BudgetDetailProps): JSX.Element {
           </div>
         ))}
       </div>
+
+      {/* Grafic bară plan vs realizat (BUDGET-003) */}
+      {showChart && report.lines.length > 0 && (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <h3 className="text-sm font-medium text-foreground mb-4 flex items-center gap-2">
+            <BarChart2 className="h-4 w-4 text-primary" aria-hidden="true" />
+            Plan vs Realizat per categorie
+          </h3>
+          <BudgetBarChart lines={report.lines} />
+        </div>
+      )}
 
       {/* Tabel linii */}
       <div className="rounded-lg border border-border overflow-hidden">
@@ -367,7 +423,11 @@ function BudgetDetail({ budgetId, onBack }: BudgetDetailProps): JSX.Element {
               </tr>
             ) : (
               report.lines.map((line) => (
-                <tr key={line.id} className="hover:bg-muted/30 transition-colors">
+                /* Color-coding rând per pct (BUDGET-003) */
+                <tr
+                  key={line.id}
+                  className={cn("hover:bg-muted/30 transition-colors", lineRowClass(line.pct))}
+                >
                   <td className="px-4 py-3">
                     <p className="font-medium text-foreground">{line.label}</p>
                     <p className="text-xs text-muted-foreground">{line.category}</p>
@@ -380,7 +440,7 @@ function BudgetDetail({ budgetId, onBack }: BudgetDetailProps): JSX.Element {
                   </td>
                   <td className={cn(
                     "px-4 py-3 text-right tabular-nums font-medium",
-                    line.remainingCents < 0 ? "text-red-700 dark:text-red-400" : "text-foreground"
+                    line.remainingCents < 0 ? "text-destructive" : "text-foreground"
                   )}>
                     {formatMDL(line.remainingCents)}
                   </td>
@@ -388,7 +448,7 @@ function BudgetDetail({ budgetId, onBack }: BudgetDetailProps): JSX.Element {
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                         <div
-                          className={cn("h-full rounded-full transition-all", pctColor(line.pct))}
+                          className={cn("h-full rounded-full transition-all", pctProgressClass(line.pct))}
                           style={{ width: `${Math.min(100, line.pct ?? 0)}%` }}
                           role="progressbar"
                           aria-valuenow={line.pct ?? 0}
@@ -397,21 +457,18 @@ function BudgetDetail({ budgetId, onBack }: BudgetDetailProps): JSX.Element {
                           aria-label={`${line.label}: ${line.pct ?? 0}% executat`}
                         />
                       </div>
+                      {/* Badge % color-coded (BUDGET-003) */}
                       <span className={cn(
                         "text-xs tabular-nums w-10 text-right",
-                        (line.pct ?? 0) >= 100
-                          ? "text-red-700 dark:text-red-400 font-semibold"
-                          : (line.pct ?? 0) >= 80
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-muted-foreground"
+                        pctTextClass(line.pct)
                       )}>
                         {line.pct !== null ? `${line.pct}%` : "—"}
                       </span>
                       {(line.pct ?? 0) >= 100 && (
-                        <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-400 flex-shrink-0" aria-label="Depășire buget" />
+                        <AlertTriangle className="h-3.5 w-3.5 text-destructive flex-shrink-0" aria-label="Depășire buget" />
                       )}
                       {(line.pct ?? 0) >= 80 && (line.pct ?? 0) < 100 && (
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" aria-label="Avertisment buget 80%" />
+                        <AlertTriangle className="h-3.5 w-3.5 text-warning flex-shrink-0" aria-label="Avertisment buget 80%" />
                       )}
                     </div>
                   </td>
@@ -434,6 +491,8 @@ export function BudgetPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [alerts] = useState<BudgetAlertItem[]>([]);
+  const [alertsDismissed, setAlertsDismissed] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -464,6 +523,17 @@ export function BudgetPage(): JSX.Element {
 
   // KPI cards
   const activeBudgets = budgets.filter((b) => b.status === "active");
+
+  // Handler pentru "Verifică alerte" pe fiecare buget din panou (BUDGET-003)
+  async function handleCheckAlertsForBudget(budgetId: string) {
+    try {
+      await checkBudgetAlerts(budgetId);
+      // Re-load după verificare
+      await load();
+    } catch {
+      // ignore
+    }
+  }
 
   return (
     <AppShell pageTitle="Bugete">
@@ -513,14 +583,23 @@ export function BudgetPage(): JSX.Element {
                 </div>
                 <div className="rounded-lg border border-border bg-card p-4">
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <TrendingUp className="h-3 w-3 text-green-600" aria-hidden="true" />
+                    <TrendingUp className="h-3 w-3 text-success" aria-hidden="true" />
                     Activitate
                   </p>
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+                  <p className="text-2xl font-bold text-success mt-1">
                     {activeBudgets.length > 0 ? "ON" : "—"}
                   </p>
                 </div>
               </div>
+            )}
+
+            {/* Panou alerte active (BUDGET-003) */}
+            {!loading && alerts.length > 0 && !alertsDismissed && (
+              <BudgetAlertsPanel
+                alerts={alerts}
+                onDismiss={() => setAlertsDismissed(true)}
+                onCheckAlerts={(id) => void handleCheckAlertsForBudget(id)}
+              />
             )}
 
             {/* Error */}
@@ -587,7 +666,7 @@ export function BudgetPage(): JSX.Element {
                         <td className="px-4 py-3 text-center">
                           <button
                             onClick={() => setSelectedId(b.id)}
-                            className="text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-1"
+                            className="text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded px-1 min-h-[44px]"
                             aria-label={`Deschide bugetul ${b.name}`}
                           >
                             Deschide
@@ -617,3 +696,4 @@ export function BudgetPage(): JSX.Element {
     </AppShell>
   );
 }
+
