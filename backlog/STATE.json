@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "SPEND-002",
-  "last_completed": "SPEND-001",
-  "iterations": 214,
+  "current_item": null,
+  "last_completed": "SPEND-002",
+  "iterations": 215,
   "last_run_at": "2026-06-14T00:00:00Z",
-  "milestone_status": "FinDesk — SPEND-002 in_progress (API cheltuieli). Branch: feat/FIN-spend.",
+  "milestone_status": "FinDesk \u2014 SPEND phase done. PR #160. 3 items built this run: EINV-003, SPEND-001, SPEND-002.",
   "active_milestone": "FIN",
   "items": {
     "EINV-003": {
@@ -14,7 +14,10 @@
       "spec": "backlog/specs/EINV-003-ui-efactura.md",
       "milestone": "FIN",
       "phase": "einv",
-      "depends_on": ["EINV-001", "EINV-002"],
+      "depends_on": [
+        "EINV-001",
+        "EINV-002"
+      ],
       "branch": "feat/FIN-einv",
       "verdicts": {
         "reviewer": "APPROVED",
@@ -41,14 +44,23 @@
       }
     },
     "SPEND-002": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPEND-002-api.md",
       "milestone": "FIN",
       "phase": "spend",
-      "depends_on": ["SPEND-001"],
-      "branch": "feat/FIN-spend"
+      "depends_on": [
+        "SPEND-001"
+      ],
+      "branch": "feat/FIN-spend",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/160"
     },
     "PAR-001": {
       "status": "done",
