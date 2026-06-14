@@ -121,6 +121,8 @@ import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline /
 import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: finance queue + section 16 + pay
 // PAR Phase F routes
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
+// LEDGER-001: General Ledger (double-entry)
+import { finLedgerRoutes } from "./routes/finLedger";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -333,6 +335,9 @@ app.route("/api/par", parAttachmentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
+
+// LEDGER-001: General Ledger (double-entry)
+app.route("/api/fin/ledger", finLedgerRoutes);
 
 app.get("/api/health", async (c) => {
   try {
