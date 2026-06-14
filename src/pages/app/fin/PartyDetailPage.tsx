@@ -44,6 +44,10 @@ import {
   type CreatePartyPayload,
   type CreateContactPayload,
 } from "@/lib/api/finParties";
+import {
+  listEngagementsForParty,
+  type ItparkEngagement,
+} from "@/lib/api/itparkEngagements";
 import { cn } from "@/lib/utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -547,6 +551,10 @@ export function PartyDetailPage() {
 
   const [toast, setToast] = useState<string | null>(null);
 
+  // SPLIT-203: ITPark dossier linked to this fin_party
+  const [itparkEngagements, setItparkEngagements] = useState<ItparkEngagement[]>([]);
+  const [itparkLoaded, setItparkLoaded] = useState(false);
+
   // Auth guard
   useEffect(() => {
     if (sessionStatus === "unauthenticated") navigate("/app/login");
@@ -561,6 +569,20 @@ export function PartyDetailPage() {
       .catch((err) => setError(err instanceof Error ? err.message : "Partenerul nu a fost găsit."))
       .finally(() => setLoading(false));
   }, [partyId]);
+
+  // SPLIT-203: Load ITPark dossiers linked to this party (best-effort, non-blocking)
+  useEffect(() => {
+    if (!partyId || itparkLoaded) return;
+    listEngagementsForParty(partyId)
+      .then((rows) => {
+        setItparkEngagements(rows);
+        setItparkLoaded(true);
+      })
+      .catch(() => {
+        // Non-blocking: ITPark module may not be available for all tenants
+        setItparkLoaded(true);
+      });
+  }, [partyId, itparkLoaded]);
 
   // Load contacts on tab switch
   const loadContacts = useCallback(async () => {
@@ -749,6 +771,31 @@ export function PartyDetailPage() {
             <div className="bg-muted/30 rounded-lg px-4 py-3">
               <p className="text-xs text-muted-foreground mb-0.5">Note</p>
               <p className="text-sm whitespace-pre-wrap">{party.notes}</p>
+            </div>
+          )}
+
+          {/* SPLIT-203: ITPark dossier indicator — shown only when engagements are linked */}
+          {itparkLoaded && itparkEngagements.length > 0 && (
+            <div className="rounded-lg border border-border bg-muted/20 px-4 py-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Dosar ITPark
+              </p>
+              <div className="space-y-1.5">
+                {itparkEngagements.map((eng) => (
+                  <div key={eng.id} className="flex items-center justify-between">
+                    <span className="text-sm">
+                      {eng.residentName} — {eng.reportingYear}
+                    </span>
+                    <a
+                      href={`#/app/fin/itpark/${eng.id}`}
+                      className="text-xs font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded"
+                      aria-label={`Deschide dosarul ITPark ${eng.residentName} ${eng.reportingYear}`}
+                    >
+                      Deschide →
+                    </a>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

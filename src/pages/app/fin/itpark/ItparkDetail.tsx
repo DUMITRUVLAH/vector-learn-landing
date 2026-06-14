@@ -7,7 +7,7 @@
  * Taburi: Anexa 2 (placeholder) | Anexa 3 (revenue lines — ITPARK-201) | Anexa 4 (placeholder) | Scrisori (placeholder)
  */
 import { useState, useEffect, lazy, Suspense } from "react";
-import { getEngagement, linkEngagementParty, type ItparkEngagement } from "../../../../lib/api/itparkEngagements";
+import { getEngagement, autoLinkEngagementParty, type ItparkEngagement } from "../../../../lib/api/itparkEngagements";
 
 // ITPARK-201: Tabel linii venit (lazy pentru a nu bloca randarea paginii)
 const RevenueLinesTable = lazy(() => import("./RevenueLinesTable"));
@@ -101,8 +101,8 @@ function FinDeskSection({ engagement, onLinked }: FinDeskSectionProps) {
     setLinking(true);
     setLinkError(null);
     try {
-      const result = await linkEngagementParty(engagement.id, null);
-      // null triggers the backend to auto-create a fin_party from the engagement data
+      // SPLIT-203: auto-creates fin_parties from engagement data (residentName + IDNO)
+      const result = await autoLinkEngagementParty(engagement.id);
       onLinked(result.fin_party_id);
     } catch (e) {
       setLinkError(e instanceof Error ? e.message : "Eroare la asociere");
@@ -115,19 +115,28 @@ function FinDeskSection({ engagement, onLinked }: FinDeskSectionProps) {
     <div className="rounded-xl border border-border bg-card shadow-sm p-6">
       <h2 className="text-sm font-semibold text-foreground mb-4 uppercase tracking-wide">FinDesk</h2>
       {engagement.finPartyId ? (
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0" aria-hidden="true">
-            <svg className="h-4 w-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-            </svg>
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">Partener FinDesk</p>
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0" aria-hidden="true">
+              <svg className="h-4 w-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-muted-foreground">Partener FinDesk</p>
+              <a
+                href={`#/app/fin/parties/${engagement.finPartyId}`}
+                className="text-sm font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded truncate block"
+              >
+                {engagement.residentName}
+              </a>
+            </div>
             <a
-              href={`#/app/fin/parties/${engagement.finPartyId}`}
-              className="text-sm font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded truncate block"
+              href={`#/app/fin/invoices?partyId=${engagement.finPartyId}`}
+              className="shrink-0 text-xs font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded"
+              aria-label="Vezi facturile FinDesk ale acestui rezident"
             >
-              {engagement.residentName}
+              Facturi FinDesk →
             </a>
           </div>
         </div>

@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "SPLIT-203",
-  "last_completed": "SPLIT-202",
-  "iterations": 174,
+  "current_item": null,
+  "last_completed": "SPLIT-203",
+  "iterations": 175,
   "last_run_at": "2026-06-14T00:00:00Z",
   "milestone_status": "SPLIT (2026-06-14, owner): same repo, 2 distinct apps. APP1=CRM Educational (/app/*, /app/login, AppShell). APP2=Business Suite (/business/*, /business/login, BusinessShell) = FinDesk+PAR+ITPark INTEGRATED (PAR->FinDesk payments, ITPark->FinDesk invoices, shared PARTY, unified dashboard). Login fully separate via tenants.app_kind. CORE: backlog/split/SPLIT-CORE.md. Driver: backlog/split/BUILD-SEQUENCE.md. 13 items/4 phases. Build on demo/findesk-complet base (has FinDesk+ITPark+PAR present).",
   "active_milestone": "SPLIT",
@@ -4186,8 +4186,8 @@
       "pr": null
     },
     "SPLIT-203": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPLIT-203.md",
       "milestone": "SPLIT",
@@ -4196,7 +4196,12 @@
         "SPLIT-201"
       ],
       "branch": "feat/SPLIT-integration",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "SPLIT-204": {

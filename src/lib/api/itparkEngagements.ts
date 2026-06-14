@@ -60,6 +60,19 @@ export async function listEngagements(): Promise<ItparkEngagement[]> {
   return Array.isArray(data.engagements) ? data.engagements : [];
 }
 
+/**
+ * SPLIT-203: List ITPark engagements linked to a specific fin_parties entry.
+ * Used by the FinDesk party detail page to show the "Dosar ITPark" indicator.
+ */
+export async function listEngagementsForParty(finPartyId: string): Promise<ItparkEngagement[]> {
+  const res = await fetch(`${BASE}?finPartyId=${encodeURIComponent(finPartyId)}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`listEngagementsForParty: ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data.engagements) ? data.engagements : [];
+}
+
 export async function getEngagement(id: string): Promise<ItparkEngagement> {
   const res = await fetch(`${BASE}/${id}`, { credentials: "include" });
   if (!res.ok) throw new Error(`getEngagement: ${res.status}`);
@@ -130,6 +143,24 @@ export async function linkEngagementParty(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(`linkEngagementParty: ${res.status} ${JSON.stringify(err)}`);
+  }
+  return res.json();
+}
+
+/**
+ * SPLIT-203: POST /api/itpark/engagements/:id/link-party
+ * Auto-creates a fin_parties entry from the engagement's residentName + IDNO,
+ * then links it. Idempotent: if already linked, returns existing link.
+ */
+export async function autoLinkEngagementParty(id: string): Promise<PartyLinkResult> {
+  const res = await fetch(`${BASE}/${id}/link-party`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`autoLinkEngagementParty: ${res.status} ${JSON.stringify(err)}`);
   }
   return res.json();
 }
