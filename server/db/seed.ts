@@ -9,6 +9,7 @@ import {
   parBudgetCodes,
   parDoaMatrix,
 } from "./schema/par";
+import { finAssets } from "./schema/finAssets"; // ASSET-001: Active Fixe seed
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -246,6 +247,68 @@ async function seed() {
     console.log(`   DOA matrix: ${deptAtic ? 6 : 0} rules seeded`);
   } else {
     console.log(`⚠️  PAR demo tenant already exists (${existingPar.id}). Skipping.`);
+  }
+
+  // ASSET-001: Seed active fixe demo pentru tenant principal
+  const existingAssets = await db.query.finAssets?.findMany({
+    where: eq(finAssets.tenantId, tenant.id),
+  }).catch(() => null);
+
+  if (!existingAssets || existingAssets.length === 0) {
+    try {
+      await db.insert(finAssets).values([
+        {
+          tenantId: tenant.id,
+          name: "Laptop Dell Latitude 5540",
+          description: "Laptop pentru administrație, nr. serie: DL-2024-001",
+          category: "IT",
+          acquisitionDate: "2024-01-15",
+          acquisitionCostCents: 1_200_000, // 12.000,00 MDL
+          residualValueCents: 0,
+          usefulLifeMonths: 36,
+          depreciationMethod: "linear",
+          status: "active",
+          notes: "Achiziționat de la Tehno-Plus SRL",
+        },
+        {
+          tenantId: tenant.id,
+          name: "Proiector Epson EB-S41",
+          description: "Proiector pentru sala de curs nr. 1",
+          category: "echipament",
+          acquisitionDate: "2023-09-01",
+          acquisitionCostCents: 800_000, // 8.000,00 MDL
+          residualValueCents: 0,
+          usefulLifeMonths: 60,
+          depreciationMethod: "linear",
+          status: "active",
+          notes: "Sala 1 — vedere frontală",
+        },
+        {
+          tenantId: tenant.id,
+          name: "Autoturism Volkswagen Polo",
+          description: "Vehicul de serviciu, nr. înmatriculare: TST 001",
+          category: "transport",
+          acquisitionDate: "2022-03-20",
+          acquisitionCostCents: 18_000_000, // 180.000,00 MDL
+          residualValueCents: 2_000_000, // 20.000,00 MDL valoare reziduală
+          usefulLifeMonths: 60,
+          depreciationMethod: "declining_balance",
+          status: "active",
+          notes: "Asigurare până la 2025-03-20",
+        },
+      ]);
+      console.log(`✅ ASSET-001: 3 active fixe demo seeded pentru tenant ${tenant.slug}`);
+    } catch (err: unknown) {
+      // fin_assets poate să nu existe pe această ramură (migrarea neaplicată)
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("does not exist") || msg.includes("undefined_table")) {
+        console.log(`⚠️  ASSET-001: fin_assets table missing — run db:migrate first.`);
+      } else {
+        console.warn(`⚠️  ASSET-001 seed failed: ${msg}`);
+      }
+    }
+  } else {
+    console.log(`⚠️  ASSET-001: active fixe already seeded (${existingAssets.length} assets). Skipping.`);
   }
 
   console.log(`\n📌 Demo credentials:`);

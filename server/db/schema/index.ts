@@ -87,3 +87,4 @@ export * from "./companyClients";
 export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
 export * from "./par"; // PAR-001: Payment Action Request module
+export * from "./finAssets"; // ASSET-001: FinDesk Fixed Assets module (fin_assets, fin_depreciation_entries)

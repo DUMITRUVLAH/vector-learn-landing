@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "last_completed": "ASSET-002",
+  "iterations": 185,
+  "last_run_at": "2026-06-14T11:00:00Z",
+  "milestone_status": "FIN FinDesk — 45/85 done. PAY COMPLETE (PR #164). ASSET-001+ASSET-002 done on feat/FIN-asset.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3410,23 +3410,27 @@
       "pr": null
     },
     "PAY-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/PAY-003.md",
       "milestone": "FIN",
       "phase": "11",
       "depends_on": [
-        "PAY-002",
-        "CORE-004"
+        "PAY-002"
       ],
       "branch": "feat/FIN-pay",
-      "verdicts": {},
-      "pr": null
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/164"
     },
     "ASSET-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ASSET-001.md",
       "milestone": "FIN",
@@ -3435,22 +3439,31 @@
         "CORE-001"
       ],
       "branch": "feat/FIN-asset",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "ASSET-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/ASSET-002.md",
       "milestone": "FIN",
       "phase": "12",
       "depends_on": [
-        "ASSET-001",
-        "SPEND-002"
+        "ASSET-001"
       ],
       "branch": "feat/FIN-asset",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      },
       "pr": null
     },
     "ASSET-003": {
