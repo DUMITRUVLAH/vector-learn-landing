@@ -121,6 +121,7 @@ import { parTimelineRoutes } from "./routes/parTimeline"; // PAR-110: timeline /
 import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: finance queue + section 16 + pay
 // PAR Phase F routes
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
+import { finCapturesRoutes } from "./routes/finCaptures"; // CAPTURE-002: OCR AI captures
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -333,6 +334,10 @@ app.route("/api/par", parAttachmentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
+
+// CAPTURE-002: FinDesk OCR AI captures
+// /api/fin/captures — POST (upload), GET /:id, POST /:id/confirm
+app.route("/api/fin", finCapturesRoutes);
 
 app.get("/api/health", async (c) => {
   try {

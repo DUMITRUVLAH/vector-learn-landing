@@ -62,6 +62,16 @@ const STUB_RESPONSES: Record<string, string> = {
     "Bună ziua! Vă mulțumim pentru mesaj. " +
     "Vă contactăm în cel mai scurt timp cu detaliile solicitate. " +
     "Echipa Vector Learn",
+  // CAPTURE-002: stub JSON pentru extracție bon/factură (mock mode fără API key)
+  capture_extract:
+    '{"vendor_name":{"value":"Demo Furnizor SRL","confidence":0.9},' +
+    '"amount_cents":{"value":10000,"confidence":0.9},' +
+    '"vat_amount_cents":{"value":2000,"confidence":0.9},' +
+    '"vat_deductible":{"value":true,"confidence":0.9},' +
+    '"expense_date":{"value":"2026-06-14","confidence":0.9},' +
+    '"iban":{"value":null,"confidence":0},' +
+    '"category":{"value":"other","confidence":0.9},' +
+    '"reference":{"value":null,"confidence":0}}',
   default:
     "Răspuns generat de AI. [Configurați AI_API_KEY pentru răspunsuri reale.]",
 };
