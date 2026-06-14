@@ -22,6 +22,8 @@ import {
   SkipForward,
   ChevronDown,
   ChevronRight,
+  RotateCcw,
+  Ban,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -31,6 +33,8 @@ import {
   getBulkJob,
   importPartiesFromCsv,
   importSpendFromCsv,
+  retryJobFailedRows,
+  cancelJob,
   type FinBulkJob,
   type FinBulkRow,
 } from "@/lib/api/finMass";
@@ -132,10 +136,54 @@ interface JobRowProps {
   onToggle: () => void;
   rows: FinBulkRow[] | null;
   loadingRows: boolean;
+  onRetry: (jobId: string) => Promise<void>;
+  onCancel: (jobId: string) => Promise<void>;
 }
 
-function JobRow({ job, expanded, onToggle, rows, loadingRows }: JobRowProps) {
+function JobRow({
+  job,
+  expanded,
+  onToggle,
+  rows,
+  loadingRows,
+  onRetry,
+  onCancel,
+}: JobRowProps) {
   const skipped = rows?.filter((r) => r.status === "skipped").length ?? 0;
+  const [retrying, setRetrying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+
+  const hasFailedRows = (rows ?? []).some(
+    (r) => r.status === "fail" && !r.errorMessage?.toLowerCase().includes("validation")
+  );
+  const canRetry = (job.status === "done" || job.status === "failed") && hasFailedRows;
+  const canCancel = job.status === "pending" || job.status === "running";
+
+  const handleRetry = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRetrying(true);
+    try {
+      await onRetry(job.id);
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const handleCancelClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConfirmCancel(true);
+  };
+
+  const handleCancelConfirm = async () => {
+    setCancelling(true);
+    try {
+      await onCancel(job.id);
+    } finally {
+      setCancelling(false);
+      setConfirmCancel(false);
+    }
+  };
 
   return (
     <>
@@ -176,9 +224,96 @@ function JobRow({ job, expanded, onToggle, rows, loadingRows }: JobRowProps) {
           {skipped}
         </td>
       </tr>
+
       {expanded && (
         <tr>
-          <td colSpan={8} className="pb-2">
+          <td colSpan={8} className="pb-4">
+            {/* ── Retry / Cancel actions ── */}
+            <div className="px-8 pt-3 pb-2 flex items-center gap-2 flex-wrap">
+              {canRetry && (
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  disabled={retrying}
+                  aria-label="Retry rânduri eșuate"
+                  data-testid="btn-retry"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg",
+                    "text-xs font-medium transition-colors focus-visible:outline-none",
+                    "focus-visible:ring-2 focus-visible:ring-ring",
+                    "bg-amber-100 text-amber-800 hover:bg-amber-200",
+                    "dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50",
+                    "disabled:opacity-50 disabled:cursor-not-allowed"
+                  )}
+                >
+                  {retrying ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                  {retrying ? "Se re-procesează…" : "Retry rânduri eșuate"}
+                </button>
+              )}
+
+              {canCancel && !confirmCancel && (
+                <button
+                  type="button"
+                  onClick={handleCancelClick}
+                  disabled={cancelling}
+                  aria-label="Anulează job"
+                  data-testid="btn-cancel"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg",
+                    "text-xs font-medium transition-colors focus-visible:outline-none",
+                    "focus-visible:ring-2 focus-visible:ring-ring",
+                    "bg-red-100 text-red-700 hover:bg-red-200",
+                    "dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50",
+                    "disabled:opacity-50 disabled:cursor-not-allowed"
+                  )}
+                >
+                  <Ban className="h-3.5 w-3.5" aria-hidden="true" />
+                  Anulează job
+                </button>
+              )}
+
+              {/* Confirm cancel dialog (inline) */}
+              {confirmCancel && (
+                <div
+                  role="alertdialog"
+                  aria-modal="true"
+                  aria-label="Confirmare anulare job"
+                  className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2"
+                >
+                  <span className="text-xs text-red-700 dark:text-red-300">
+                    Confirmi anularea job-ului? Această acțiune nu poate fi anulată.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCancelConfirm}
+                    disabled={cancelling}
+                    aria-label="Confirmă anularea"
+                    className={cn(
+                      "min-h-[32px] px-3 py-1 rounded-md text-xs font-medium",
+                      "bg-red-600 text-white hover:bg-red-700",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
+                  >
+                    {cancelling ? "Se anulează…" : "Da, anulează"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmCancel(false)}
+                    disabled={cancelling}
+                    aria-label="Renunță la anulare"
+                    className="min-h-[32px] px-3 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    Renunță
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ── Row details table ── */}
             {loadingRows ? (
               <div className="px-8 py-4 text-sm text-muted-foreground animate-pulse">
                 Se încarcă rândurile…
@@ -229,6 +364,8 @@ export function FinMassPage() {
   );
   const [loadingRows, setLoadingRows] = useState<Record<string, boolean>>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  // MASS-004: retry/cancel feedback
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -347,6 +484,45 @@ export function FinMassPage() {
     }
   };
 
+  // MASS-004: retry failed rows of a job
+  const handleRetryJob = useCallback(
+    async (jobId: string) => {
+      setActionMessage(null);
+      setError(null);
+      try {
+        const result = await retryJobFailedRows(jobId);
+        setActionMessage(
+          result.retried > 0
+            ? `Re-procesare pornită pentru ${result.retried} rând(uri) eșuate.`
+            : "Nu există rânduri eșuate ne-validare de re-procesat."
+        );
+        // Invalidate cached rows so the table refreshes on re-expand
+        setJobRows((prev) => ({ ...prev, [jobId]: null }));
+        await fetchJobs();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Eroare la retry.");
+      }
+    },
+    [fetchJobs]
+  );
+
+  // MASS-004: cancel a job
+  const handleCancelJob = useCallback(
+    async (jobId: string) => {
+      setActionMessage(null);
+      setError(null);
+      try {
+        await cancelJob(jobId);
+        setActionMessage("Job anulat.");
+        setJobRows((prev) => ({ ...prev, [jobId]: null }));
+        await fetchJobs();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Eroare la anulare.");
+      }
+    },
+    [fetchJobs]
+  );
+
   if (!session) return null;
 
   const hasRunningJob = jobs.some(
@@ -441,6 +617,16 @@ export function FinMassPage() {
             >
               <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
               {successMessage}
+            </div>
+          )}
+          {actionMessage && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex items-start gap-2 text-sm text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3"
+            >
+              <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+              {actionMessage}
             </div>
           )}
           {error && (
@@ -606,6 +792,8 @@ export function FinMassPage() {
                       onToggle={() => toggleJob(job.id)}
                       rows={jobRows[job.id] ?? null}
                       loadingRows={loadingRows[job.id] ?? false}
+                      onRetry={handleRetryJob}
+                      onCancel={handleCancelJob}
                     />
                   ))}
                 </tbody>

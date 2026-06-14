@@ -114,3 +114,21 @@ export async function importSpendFromCsv(
     body: form,
   });
 }
+
+/** MASS-004: Retry all failed (non-validation) rows in a job */
+export async function retryJobFailedRows(
+  jobId: string
+): Promise<{ retried: number }> {
+  return api<{ retried: number }>(`/api/fin/mass/jobs/${jobId}/retry`, {
+    method: "POST",
+  });
+}
+
+/** MASS-004: Cancel a pending or running job */
+export async function cancelJob(
+  jobId: string
+): Promise<{ cancelled: boolean }> {
+  return api<{ cancelled: boolean }>(`/api/fin/mass/jobs/${jobId}/cancel`, {
+    method: "POST",
+  });
+}
