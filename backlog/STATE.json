@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "CASH-003",
   "last_completed": "CASH-002",
-  "iterations": 170,
-  "last_run_at": "2026-06-14T01:00:00Z",
-  "milestone_status": "FIN FinDesk — 35/85 done. CAPTURE-003 → PR #161, CASH-001+002 → PR #162. Next: CASH-003+.",
+  "iterations": 171,
+  "last_run_at": "2026-06-14T06:00:00Z",
+  "milestone_status": "FIN FinDesk — 35/85 done. CASH-003 in_progress.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3306,8 +3306,8 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-003.md",
       "milestone": "FIN",
