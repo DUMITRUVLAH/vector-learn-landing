@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "SPLIT-303",
   "last_completed": "PAR-118",
   "iterations": 164,
   "last_run_at": "2026-06-12T00:00:00Z",
@@ -4033,6 +4033,57 @@
       ],
       "branch": "feat/FIN-approval",
       "verdicts": {},
+      "pr": null
+    },
+    "SPLIT-301": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-301.md",
+      "milestone": "SPLIT",
+      "phase": "4",
+      "depends_on": ["SPLIT-101"],
+      "branch": "feat/SPLIT-crm-cleanup",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": null
+    },
+    "SPLIT-302": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-302.md",
+      "milestone": "SPLIT",
+      "phase": "4",
+      "depends_on": ["SPLIT-102"],
+      "branch": "feat/SPLIT-crm-cleanup",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": null
+    },
+    "SPLIT-303": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-303.md",
+      "milestone": "SPLIT",
+      "phase": "4",
+      "depends_on": ["SPLIT-204", "SPLIT-301"],
+      "branch": "feat/SPLIT-crm-cleanup",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     }
   }
