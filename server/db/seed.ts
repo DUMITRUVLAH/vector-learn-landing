@@ -158,6 +158,62 @@ async function seed() {
     .returning();
   console.log(`✅ ${leadRows.length} leads created`);
 
+  // ── CALENDAR-001: Seed fin_obligations + fin_period_locks demo data ──────────
+  const { finObligations, finPeriodLocks } = await import("./schema/finCalendar");
+  const existingObligation = await db.query.finObligations.findFirst({
+    where: eq(finObligations.tenantId, tenant.id),
+  });
+  if (!existingObligation) {
+    await db.insert(finObligations).values([
+      {
+        tenantId: tenant.id,
+        obligationType: "tva_md",
+        description: "TVA lunar Ianuarie 2026",
+        periodYear: 2026,
+        periodMonth: 1,
+        dueDate: "2026-02-25",
+        amountCents: 0,
+        currency: "MDL",
+        status: "pending",
+      },
+      {
+        tenantId: tenant.id,
+        obligationType: "cas_employer",
+        description: "CAS angajator Ianuarie 2026",
+        periodYear: 2026,
+        periodMonth: 1,
+        dueDate: "2026-02-25",
+        amountCents: 0,
+        currency: "MDL",
+        status: "pending",
+      },
+      {
+        tenantId: tenant.id,
+        obligationType: "salary",
+        description: "Salarii Ianuarie 2026",
+        periodYear: 2026,
+        periodMonth: 1,
+        dueDate: "2026-01-31",
+        amountCents: 250000,
+        currency: "MDL",
+        status: "paid",
+        paidAt: new Date("2026-01-31T10:00:00Z"),
+      },
+    ]);
+
+    await db.insert(finPeriodLocks).values([
+      {
+        tenantId: tenant.id,
+        periodYear: 2025,
+        periodMonth: 12,
+        notes: "Decembrie 2025 reconciliat și blocat",
+      },
+    ]);
+    console.log("✅ fin_obligations (3) + fin_period_locks (1) seed created");
+  } else {
+    console.log("⚠️  fin_obligations already exist. Skipping.");
+  }
+
   // ── PAR-001: Seed NGO demo tenant for Payment Action Request module ──────────
   const PAR_SLUG = "demo-atic-ngo";
   const existingPar = await db.query.tenants.findFirst({ where: eq(tenants.slug, PAR_SLUG) });

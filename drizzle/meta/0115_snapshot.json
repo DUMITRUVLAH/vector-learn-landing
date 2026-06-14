@@ -1,0 +1,97 @@
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.fin_obligations": {
+      "name": "fin_obligations",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "tenant_id": { "name": "tenant_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "obligation_type": { "name": "obligation_type", "type": "varchar(50)", "primaryKey": false, "notNull": true },
+        "description": { "name": "description", "type": "varchar(500)", "primaryKey": false, "notNull": false },
+        "period_year": { "name": "period_year", "type": "integer", "primaryKey": false, "notNull": true },
+        "period_month": { "name": "period_month", "type": "integer", "primaryKey": false, "notNull": true },
+        "due_date": { "name": "due_date", "type": "date", "primaryKey": false, "notNull": true },
+        "amount_cents": { "name": "amount_cents", "type": "bigint", "primaryKey": false, "notNull": true, "default": 0 },
+        "currency": { "name": "currency", "type": "char(3)", "primaryKey": false, "notNull": true, "default": "'MDL'" },
+        "status": { "name": "status", "type": "varchar(20)", "primaryKey": false, "notNull": true, "default": "'pending'" },
+        "paid_at": { "name": "paid_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": false },
+        "declaration_id": { "name": "declaration_id", "type": "uuid", "primaryKey": false, "notNull": false },
+        "notes": { "name": "notes", "type": "text", "primaryKey": false, "notNull": false },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" },
+        "updated_at": { "name": "updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" }
+      },
+      "indexes": {
+        "fob_tenant_idx": { "name": "fob_tenant_idx", "columns": ["tenant_id"], "isUnique": false },
+        "fob_tenant_year_month_idx": { "name": "fob_tenant_year_month_idx", "columns": ["tenant_id", "period_year", "period_month"], "isUnique": false },
+        "fob_due_date_idx": { "name": "fob_due_date_idx", "columns": ["due_date"], "isUnique": false }
+      },
+      "foreignKeys": {
+        "fin_obligations_tenant_id_tenants_id_fk": {
+          "name": "fin_obligations_tenant_id_tenants_id_fk",
+          "tableFrom": "fin_obligations",
+          "columnsFrom": ["tenant_id"],
+          "tableTo": "tenants",
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.fin_period_locks": {
+      "name": "fin_period_locks",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "uuid", "primaryKey": true, "notNull": true, "default": "gen_random_uuid()" },
+        "tenant_id": { "name": "tenant_id", "type": "uuid", "primaryKey": false, "notNull": true },
+        "period_year": { "name": "period_year", "type": "integer", "primaryKey": false, "notNull": true },
+        "period_month": { "name": "period_month", "type": "integer", "primaryKey": false, "notNull": true },
+        "locked_at": { "name": "locked_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true, "default": "now()" },
+        "locked_by": { "name": "locked_by", "type": "uuid", "primaryKey": false, "notNull": false },
+        "notes": { "name": "notes", "type": "text", "primaryKey": false, "notNull": false }
+      },
+      "indexes": {
+        "fpl_tenant_idx": { "name": "fpl_tenant_idx", "columns": ["tenant_id"], "isUnique": false },
+        "fpl_tenant_year_month_uniq": { "name": "fpl_tenant_year_month_uniq", "columns": ["tenant_id", "period_year", "period_month"], "isUnique": true }
+      },
+      "foreignKeys": {
+        "fin_period_locks_tenant_id_tenants_id_fk": {
+          "name": "fin_period_locks_tenant_id_tenants_id_fk",
+          "tableFrom": "fin_period_locks",
+          "columnsFrom": ["tenant_id"],
+          "tableTo": "tenants",
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "fin_period_locks_locked_by_users_id_fk": {
+          "name": "fin_period_locks_locked_by_users_id_fk",
+          "tableFrom": "fin_period_locks",
+          "columnsFrom": ["locked_by"],
+          "tableTo": "users",
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
