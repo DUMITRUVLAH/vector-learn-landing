@@ -158,6 +158,61 @@ async function seed() {
     .returning();
   console.log(`✅ ${leadRows.length} leads created`);
 
+  // ── INSIGHT-001: Seed fin_saved_views + fin_narratives demo ──────────────────
+  try {
+    const { finSavedViews, finNarratives } = await import("./schema/finInsight");
+
+    // 2 vederi salvate demo
+    await db.insert(finSavedViews).values([
+      {
+        tenantId: tenant.id,
+        userId: admin.id,
+        name: "Venituri luna curentă",
+        metric: "revenue",
+        period: "this_month",
+        groupBy: "day",
+        filters: {},
+        isDefault: true,
+        isPublic: true,
+      },
+      {
+        tenantId: tenant.id,
+        userId: admin.id,
+        name: "Cheltuieli Q4 IT",
+        metric: "expenses",
+        period: "last_3m",
+        groupBy: "category",
+        filters: { category: "IT" },
+        isDefault: false,
+        isPublic: false,
+      },
+    ]).onConflictDoNothing();
+
+    // 1 narativă publicată demo
+    await db.insert(finNarratives).values([
+      {
+        tenantId: tenant.id,
+        authorId: admin.id,
+        month: "2026-01",
+        title: "Performanță Ianuarie 2026",
+        body: "**Ianuarie** a depășit targetul cu 12%. Creșterea a venit în principal din cursurile de Engleză B2 și Python avansat. Cheltuielile operaționale au rămas în buget.",
+        generatedBy: "manual",
+        sentiment: "positive",
+        publishedAt: new Date("2026-02-01"),
+      },
+    ]).onConflictDoNothing();
+
+    console.log(`✅ FinDesk Insights demo: 2 vederi salvate + 1 narativă`);
+  } catch (err) {
+    // INSIGHT tables may not exist yet (migration not run) — non-fatal in seed
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("does not exist") || msg.includes("undefined_table")) {
+      console.log(`⚠️  fin_saved_views / fin_narratives tables not found — run migrations first`);
+    } else {
+      console.warn(`⚠️  FinDesk Insights seed warning: ${msg}`);
+    }
+  }
+
   // ── PAR-001: Seed NGO demo tenant for Payment Action Request module ──────────
   const PAR_SLUG = "demo-atic-ngo";
   const existingPar = await db.query.tenants.findFirst({ where: eq(tenants.slug, PAR_SLUG) });
