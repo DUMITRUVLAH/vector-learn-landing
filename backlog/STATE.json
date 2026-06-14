@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
+  "current_item": "FISC-002",
+  "last_completed": "FISC-001",
+  "iterations": 175,
+  "last_run_at": "2026-06-14T08:00:00Z",
+  "milestone_status": "FIN FinDesk — 37/85 done. FISC-001 done → feat/FIN-fisc. Building FISC-002 (motor TVA determinist).",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3263,8 +3263,8 @@
       "pr": null
     },
     "CASH-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-001.md",
       "milestone": "FIN",
@@ -3274,11 +3274,11 @@
       ],
       "branch": "feat/FIN-cash",
       "verdicts": {},
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-002.md",
       "milestone": "FIN",
@@ -3288,11 +3288,11 @@
       ],
       "branch": "feat/FIN-cash",
       "verdicts": {},
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-003.md",
       "milestone": "FIN",
@@ -3303,11 +3303,11 @@
       ],
       "branch": "feat/FIN-cash",
       "verdicts": {},
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "CASH-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/CASH-004.md",
       "milestone": "FIN",
@@ -3318,11 +3318,11 @@
       ],
       "branch": "feat/FIN-cash",
       "verdicts": {},
-      "pr": null
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/162"
     },
     "FISC-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FISC-001.md",
       "milestone": "FIN",
@@ -3331,12 +3331,17 @@
         "REGISTRY-001"
       ],
       "branch": "feat/FIN-fisc",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "MAYBE",
+        "student": "PASS"
+      },
       "pr": null
     },
     "FISC-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FISC-002.md",
       "milestone": "FIN",
