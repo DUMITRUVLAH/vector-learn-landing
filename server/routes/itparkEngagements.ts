@@ -181,6 +181,43 @@ itparkEngagementsRoutes.put(
   }
 );
 
+// ─── PATCH /:id/party — SPLIT-201: link/unlink to fin_parties ───────────────
+
+const partyLinkSchema = z.object({
+  fin_party_id: z.string().uuid().nullable(),
+});
+
+itparkEngagementsRoutes.patch(
+  "/:id/party",
+  zValidator("json", partyLinkSchema),
+  async (c) => {
+    const user = c.get("user");
+    const id = c.req.param("id");
+    const { fin_party_id } = c.req.valid("json");
+
+    const existing = await db.query.itparkEngagements.findFirst({
+      where: and(
+        eq(itparkEngagements.id, id),
+        eq(itparkEngagements.tenantId, user.tenantId)
+      ),
+    });
+    if (!existing) return c.json({ error: "not_found" }, 404);
+
+    const [updated] = await db
+      .update(itparkEngagements)
+      .set({ finPartyId: fin_party_id, updatedAt: new Date() })
+      .where(
+        and(
+          eq(itparkEngagements.id, id),
+          eq(itparkEngagements.tenantId, user.tenantId)
+        )
+      )
+      .returning();
+
+    return c.json({ id: updated.id, fin_party_id: updated.finPartyId });
+  }
+);
+
 // ─── DELETE /:id — ștergere dosar ────────────────────────────────────────────
 
 itparkEngagementsRoutes.delete("/:id", async (c) => {

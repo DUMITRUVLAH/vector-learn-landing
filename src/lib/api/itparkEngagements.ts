@@ -25,6 +25,8 @@ export interface ItparkEngagement {
   totalSalesCents: number | null;
   adjustedRevenueCents: number;
   employeeInfoProcedure: string | null;
+  /** SPLIT-201: linked fin_parties id for shared PARTY identity. Null when not yet associated. */
+  finPartyId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -104,6 +106,32 @@ export async function deleteEngagement(id: string): Promise<void> {
     credentials: "include",
   });
   if (!res.ok) throw new Error(`deleteEngagement: ${res.status}`);
+}
+
+// ─── SPLIT-201: link/unlink engagement to fin_parties (PARTY bridge) ─────────
+
+export interface PartyLinkResult {
+  id: string;
+  fin_party_id: string | null;
+  created?: boolean;
+}
+
+/** PATCH /api/itpark/engagements/:id/party — set or clear fin_party_id link */
+export async function linkEngagementParty(
+  id: string,
+  finPartyId: string | null
+): Promise<PartyLinkResult> {
+  const res = await fetch(`${BASE}/${id}/party`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fin_party_id: finPartyId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`linkEngagementParty: ${res.status} ${JSON.stringify(err)}`);
+  }
+  return res.json();
 }
 
 // ─── ITPARK-602: mark ready ───────────────────────────────────────────────────

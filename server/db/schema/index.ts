@@ -87,6 +87,7 @@ export * from "./companyClients";
 export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
 export * from "./par"; // PAR-001: Payment Action Request module
+export * from "./itpark"; // ITPARK: Moldova IT Park Audit Toolkit (SPLIT-201: adds fin_party_id bridge)
 export * from "./finAgreements";
 export * from "./finAssets";
 export * from "./finBankLink";
