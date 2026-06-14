@@ -20,6 +20,8 @@ import {
   Plus,
   RefreshCw,
   ChevronRight,
+  ExternalLink,
+  Banknote,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -58,7 +60,7 @@ const STATUS_CONFIG: Record<
   },
   paid: {
     label: "Plătit",
-    icon: CheckCircle,
+    icon: Banknote,
     className:
       "bg-primary/10 text-primary border-primary/20",
   },
@@ -193,6 +195,16 @@ export function PayrollFINPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <a
+              href="#/app/fin/payroll/employees"
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium",
+                "bg-background text-foreground hover:bg-muted transition-colors"
+              )}
+            >
+              <Users className="h-4 w-4" aria-hidden="true" />
+              Angajați
+            </a>
             <button
               type="button"
               onClick={() => void load()}
@@ -410,6 +422,17 @@ export function PayrollFINPage() {
                               : "Plătit"}
                           </span>
                         )}
+                        <a
+                          href={`#/app/fin/payroll/runs/${run.id}`}
+                          aria-label={`Deschide detaliu rulaj ${run.periodMonth}`}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium",
+                            "border border-border bg-background text-foreground hover:bg-muted transition-colors"
+                          )}
+                        >
+                          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                          Detalii
+                        </a>
                       </div>
                     </td>
                   </tr>

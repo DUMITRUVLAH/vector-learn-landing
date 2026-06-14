@@ -444,3 +444,86 @@ finPayrollRoutes.post("/runs/:id/confirm", async (c) => {
     itemCount: run.items.length,
   });
 });
+
+// ─── PATCH /api/fin/payroll/employees/:id — editare angajat ──────────────────
+
+const patchEmployeeSchema = z.object({
+  fullName: z.string().min(2).max(255).optional(),
+  jobTitle: z.string().max(255).nullable().optional(),
+  contractType: z.enum(["employee", "contractor"]).optional(),
+  baseSalaryCents: z.number().int().min(0).optional(),
+  currency: z.enum(["MDL", "RON", "EUR", "USD"]).optional(),
+  status: z.enum(["active", "inactive"]).optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+finPayrollRoutes.patch(
+  "/employees/:id",
+  zValidator("json", patchEmployeeSchema),
+  async (c) => {
+    const tenantId = c.get("user").tenantId;
+    const employeeId = c.req.param("id");
+    const data = c.req.valid("json");
+
+    const existing = await db.query.finEmployees.findFirst({
+      where: and(eq(finEmployees.id, employeeId), eq(finEmployees.tenantId, tenantId)),
+    });
+
+    if (!existing) {
+      return c.json({ error: "Angajat negăsit." }, 404);
+    }
+
+    const updates: Partial<typeof finEmployees.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+    if (data.fullName !== undefined) updates.fullName = data.fullName;
+    if (data.jobTitle !== undefined) updates.jobTitle = data.jobTitle;
+    if (data.contractType !== undefined) updates.contractType = data.contractType;
+    if (data.baseSalaryCents !== undefined) updates.baseSalaryCents = data.baseSalaryCents;
+    if (data.currency !== undefined) updates.currency = data.currency;
+    if (data.status !== undefined) updates.status = data.status;
+    if (data.notes !== undefined) updates.notes = data.notes;
+
+    const [updated] = await db
+      .update(finEmployees)
+      .set(updates)
+      .where(and(eq(finEmployees.id, employeeId), eq(finEmployees.tenantId, tenantId)))
+      .returning();
+
+    return c.json({ employee: updated });
+  }
+);
+
+// ─── POST /api/fin/payroll/runs/:id/mark-paid — marcare plată efectuată ──────
+
+finPayrollRoutes.post("/runs/:id/mark-paid", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const runId = c.req.param("id");
+
+  const run = await db.query.finPayrollRuns.findFirst({
+    where: and(eq(finPayrollRuns.id, runId), eq(finPayrollRuns.tenantId, tenantId)),
+  });
+
+  if (!run) {
+    return c.json({ error: "Rulaj negăsit." }, 404);
+  }
+
+  if (run.status !== "confirmed") {
+    return c.json(
+      { error: "Doar rulajele confirmate pot fi marcate ca plătite." },
+      422
+    );
+  }
+
+  const [updatedRun] = await db
+    .update(finPayrollRuns)
+    .set({
+      status: "paid" as FinPayrollRunStatus,
+      paidAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(finPayrollRuns.id, runId), eq(finPayrollRuns.tenantId, tenantId)))
+    .returning();
+
+  return c.json({ run: updatedRun });
+});
