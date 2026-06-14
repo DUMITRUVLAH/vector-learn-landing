@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "current_item": "FISC-004",
-  "last_completed": "FISC-003",
+  "current_item": null,
+  "last_completed": "FISC-004",
   "iterations": 178,
   "last_run_at": "2026-06-14T08:00:00Z",
-  "milestone_status": "FIN FinDesk \u2014 39/85 done. FISC-004 in_progress.",
+  "milestone_status": "FIN FinDesk \u2014 40/85 done. FISC phase complete (001-004). Next: PAY-001 on feat/FIN-pay.",
   "active_milestone": "FIN",
   "items": {
     "PAR-001": {
@@ -3380,7 +3380,7 @@
       "pr": null
     },
     "FISC-004": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FISC-004.md",
@@ -3391,7 +3391,12 @@
         "CORE-004"
       ],
       "branch": "feat/FIN-fisc",
-      "verdicts": {},
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
       "pr": null
     },
     "PAY-001": {
