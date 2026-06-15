@@ -32,6 +32,7 @@ import {
   finInvoiceLines,
   finInvoiceReminders,
 } from "../db/schema/finInvoices";
+import { finParties } from "../db/schema/finParties";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const finInvoicesRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -150,8 +151,12 @@ finInvoicesRoutes.get("/", async (c) => {
 
   const [rows, countRow] = await Promise.all([
     db
-      .select()
+      .select({
+        invoice: finInvoices,
+        partyName: finParties.name,
+      })
       .from(finInvoices)
+      .leftJoin(finParties, eq(finInvoices.partyId, finParties.id))
       .where(and(...conditions))
       .orderBy(desc(finInvoices.createdAt))
       .limit(limit)
@@ -163,7 +168,9 @@ finInvoicesRoutes.get("/", async (c) => {
   ]);
 
   const total = countRow[0]?.count ?? 0;
-  return c.json({ data: rows, total });
+  // Flatten {invoice, partyName} → invoice fields + partyName (UI shows the name, not the id)
+  const data = rows.map((r) => ({ ...r.invoice, partyName: r.partyName ?? null }));
+  return c.json({ data, total });
 });
 
 // ─── BILL-003: AGING ROUTES (MUST be before /:id — hono-specific-route-before-param) ──────────

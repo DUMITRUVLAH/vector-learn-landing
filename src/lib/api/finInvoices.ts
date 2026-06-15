@@ -16,6 +16,7 @@ export interface FinInvoice {
   tenantId: string;
   agreementId: string | null;
   partyId: string | null;
+  partyName?: string | null;
   series: string;
   number: number;
   invoiceNumber: string;

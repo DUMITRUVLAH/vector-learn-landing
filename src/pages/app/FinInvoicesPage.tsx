@@ -357,10 +357,10 @@ export function FinInvoicesPage() {
                           {inv.invoiceNumber}
                         </td>
                         <td className="px-4 py-3 text-foreground">
-                          {inv.partyId ? (
-                            <span className="text-muted-foreground text-xs">
-                              {inv.partyId.slice(0, 8)}…
-                            </span>
+                          {inv.partyName ? (
+                            <span>{inv.partyName}</span>
+                          ) : inv.partyId ? (
+                            <span className="text-muted-foreground text-xs">{inv.partyId.slice(0, 8)}…</span>
                           ) : (
                             <span className="text-muted-foreground italic text-xs">Ad-hoc</span>
                           )}
