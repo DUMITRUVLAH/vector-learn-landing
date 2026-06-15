@@ -302,6 +302,7 @@ finEinvoicesRoutes.post("/einvoices/:invoiceId/submit", async (c) => {
   };
 
   const requestId = randomUUID();
+  const now = new Date();
 
   let xml: string;
   try {
@@ -309,6 +310,8 @@ finEinvoicesRoutes.post("/einvoices/:invoiceId/submit", async (c) => {
       supplierIdno: config.supplierIdno,
       supplierBankAccount: config.supplierBankAccount,
       buyerIdno: "0000000000000", // placeholder — real value from fin_parties.idno
+      deliveryDate: now,
+      internalId: invoiceId,
       lines: [placeholderLine],
     });
   } catch (err) {
@@ -317,8 +320,6 @@ finEinvoicesRoutes.post("/einvoices/:invoiceId/submit", async (c) => {
       500
     );
   }
-
-  const now = new Date();
 
   try {
     const result = await client.postInvoices(xml, requestId);
