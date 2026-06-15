@@ -1065,6 +1065,13 @@
       "when": 1781551114177,
       "tag": "0149_fin_captures_team_docs",
       "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1781552540134,
+      "tag": "0150_fin_vat_import_companies",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark, Building2, Briefcase } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark, Building2, Briefcase, RefreshCw } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { BranchSwitcher } from "@/components/app/BranchSwitcher";
@@ -136,6 +136,7 @@ const BUSINESS_NAV_GROUPS: NavGroup[] = [
       { label: "Buget", href: "/business/fin/budget", icon: BarChart3 },
       { label: "Tablou de bord", href: "/business/fin/insights", icon: TrendingUp },
       { label: "Documente AI", href: "/business/fin/captures", icon: Zap },
+      { label: "Reconciliere & TVA import", href: "/business/fin/reconcile", icon: RefreshCw },
       { label: "Bancă", href: "/business/fin/banklink", icon: Landmark },
       { label: "Calendar fiscal", href: "/business/fin/calendar", icon: Calendar },
       { label: "Operațiuni în masă", href: "/business/fin/mass", icon: ListChecks },

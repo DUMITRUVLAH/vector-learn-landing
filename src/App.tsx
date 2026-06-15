@@ -115,6 +115,7 @@ import { getParMe } from "./lib/api/par";
 const ItparkList = lazy(() => import("./pages/app/fin/itpark/ItparkList"));
 const ItparkDashboardPage = lazy(() => import("./pages/app/fin/itpark/ItparkDashboardPage"));
 const CapturesListPage = lazy(() => import("./pages/fin/CapturesListPage"));
+const ReconcilePage = lazy(() => import("./pages/fin/ReconcilePage"));
 const CashPage = lazy(() => import("./pages/fin/CashPage"));
 const CashImportPage = lazy(() => import("./pages/fin/CashImportPage"));
 const FinPaymentsPage = lazy(() => import("./pages/fin/PaymentsPage"));
@@ -247,6 +248,7 @@ function Routes() {
   if (path.startsWith("/business/fin/invoices")) return <BusinessGuardPage><FinInvoicesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/expenses")) return <BusinessGuardPage><FinExpensesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/captures")) return <BusinessGuardPage><CapturesListPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/reconcile")) return <BusinessGuardPage><ReconcilePage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/payments")) return <BusinessGuardPage><FinPaymentsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/calendar")) return <BusinessGuardPage><FinCalendarPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/banklink")) return <BusinessGuardPage><BankLinkPage /></BusinessGuardPage>;
@@ -379,6 +381,7 @@ function Routes() {
   if (path.startsWith("/app/fin/invoices")) return <FinInvoicesPage />;
   if (path.startsWith("/app/fin/expenses")) return <FinExpensesPage />;
   if (path.startsWith("/app/fin/captures")) return <CapturesListPage />;
+  if (path.startsWith("/app/fin/reconcile")) return <ReconcilePage />;
   if (path.startsWith("/app/fin/payments")) return <FinPaymentsPage />;
   if (path.startsWith("/app/fin/calendar")) return <FinCalendarPage />;
   if (path.startsWith("/app/fin/banklink")) return <BankLinkPage />;

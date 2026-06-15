@@ -131,4 +131,5 @@ export * from "./finParties";
 export * from "./finPayroll";
 export * from "./finRegistry";
 export * from "./finTax";
+export * from "./finVatImports";
 export * from "./itpark";

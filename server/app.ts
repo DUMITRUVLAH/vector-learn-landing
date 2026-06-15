@@ -132,6 +132,7 @@ import { finBudgetRoutes } from "./routes/finBudget";
 import { finCalendarRoutes } from "./routes/finCalendar";
 import { finCapturesRoutes } from "./routes/finCaptures";
 import { finCashRoutes } from "./routes/finCash";
+import { finReconcileRoutes } from "./routes/finReconcile"; // Team Docs: sync + VAT-on-imports
 import { finCashAllocationsRoutes } from "./routes/finCashAllocations";
 import { finClientPortalRoutes } from "./routes/finClientPortal";
 import { finDataSettingsRoutes } from "./routes/finDataSettings";
@@ -383,6 +384,7 @@ app.route("/api/fin/banklink", finBankLinkRoutes);
 app.route("/api/fin/budget", finBudgetRoutes);
 app.route("/api/fin/calendar", finCalendarRoutes);
 app.route("/api/fin", finCapturesRoutes);
+app.route("/api/fin/reconcile", finReconcileRoutes);
 app.route("/api/fin/cash", finCashRoutes);
 app.route("/api/fin/cash", finCashAllocationsRoutes);
 app.route("/api/fin/client-portal", finClientPortalRoutes);
