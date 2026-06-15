@@ -122,6 +122,45 @@ import { parPaymentsRoutes } from "./routes/parPayments"; // PAR-112/113: financ
 // PAR Phase F routes
 import { parReportsRoutes } from "./routes/parReports"; // PAR-117: reports — by-budget/dept/project/charge-to + aging + cycle-time + export.csv
 import { businessAuthRoutes } from "./routes/businessAuth";
+import { mobileRoutes } from "./routes/mobile";
+import { webhookRoutes } from "./routes/webhooks";
+import { finAgreementsRoutes } from "./routes/finAgreements";
+import { finAiAuditRoutes } from "./routes/finAiAudit";
+import { finAssetsRoutes } from "./routes/finAssets";
+import { finBankLinkRoutes } from "./routes/finBankLink";
+import { finBudgetRoutes } from "./routes/finBudget";
+import { finCalendarRoutes } from "./routes/finCalendar";
+import { finCapturesRoutes } from "./routes/finCaptures";
+import { finCashRoutes } from "./routes/finCash";
+import { finCashAllocationsRoutes } from "./routes/finCashAllocations";
+import { finClientPortalRoutes } from "./routes/finClientPortal";
+import { finDataSettingsRoutes } from "./routes/finDataSettings";
+import { finEinvoicesRoutes } from "./routes/finEinvoices";
+import { finExchangeRatesRoutes } from "./routes/finExchangeRates";
+import { finExpensesRoutes } from "./routes/finExpenses";
+import { finExportRoutes } from "./routes/finExport";
+import { finGdprRoutes } from "./routes/finGdpr";
+import { finInventoryRoutes } from "./routes/finInventory";
+import { finInvoicesRoutes } from "./routes/finInvoices";
+import { finLedgerRoutes } from "./routes/finLedger";
+import { finMassRoutes } from "./routes/finMass";
+import { finMembersRoutes } from "./routes/finMembers";
+import { finOnboardingRoutes } from "./routes/finOnboarding";
+import { finOrgRoutes } from "./routes/finOrg";
+import { finPartiesRoutes } from "./routes/finParties";
+import { finPaymentApprovalRoutes } from "./routes/finPaymentApproval";
+import { finPayrollRoutes } from "./routes/finPayroll";
+import { finRegistryRoutes } from "./routes/finRegistry";
+import { finRevaluationRoutes } from "./routes/finRevaluation";
+import { finTaxRoutes } from "./routes/finTax";
+import { itparkAiRoutes } from "./routes/itparkAi";
+import { itparkCaemRoutes } from "./routes/itparkCaem";
+import { itparkCalcRoutes } from "./routes/itparkCalc";
+import { itparkDocsRoutes } from "./routes/itparkDocs";
+import { itparkEngagementsRoutes } from "./routes/itparkEngagements";
+import { itparkImportRoutes } from "./routes/itparkImport";
+import { itparkLinesRoutes } from "./routes/itparkLines";
+import { itparkSettingsRoutes } from "./routes/itparkSettings";
 
 /**
  * The configured Hono app (routes + middleware), with NO server binding and NO
@@ -335,6 +374,44 @@ app.route("/api/par", parAttachmentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 // PAR-110: timeline endpoint — mounted AFTER approval routes
 app.route("/api/par", parTimelineRoutes);
+app.route("/api/webhooks", webhookRoutes);
+app.route("/api/fin/agreements", finAgreementsRoutes);
+app.route("/api/fin/ai-audit", finAiAuditRoutes);
+app.route("/api/fin/assets", finAssetsRoutes);
+app.route("/api/fin/banklink", finBankLinkRoutes);
+app.route("/api/fin/budget", finBudgetRoutes);
+app.route("/api/fin/calendar", finCalendarRoutes);
+app.route("/api/fin", finCapturesRoutes);
+app.route("/api/fin/cash", finCashRoutes);
+app.route("/api/fin/cash", finCashAllocationsRoutes);
+app.route("/api/fin/client-portal", finClientPortalRoutes);
+app.route("/api/fin/data-settings", finDataSettingsRoutes);
+app.route("/api/fin", finEinvoicesRoutes);
+app.route("/api/fin/exchange-rates", finExchangeRatesRoutes);
+app.route("/api/fin", finExpensesRoutes);
+app.route("/api/fin/export", finExportRoutes);
+app.route("/api/fin/gdpr", finGdprRoutes);
+app.route("/api/fin/inventory", finInventoryRoutes);
+app.route("/api/fin/invoices", finInvoicesRoutes);
+app.route("/api/fin/ledger", finLedgerRoutes);
+app.route("/api/fin/mass", finMassRoutes);
+app.route("/api/fin/members", finMembersRoutes);
+app.route("/api/fin/onboarding", finOnboardingRoutes);
+app.route("/api/fin", finOrgRoutes);
+app.route("/api/fin/parties", finPartiesRoutes);
+app.route("/api/payments", finPaymentApprovalRoutes);
+app.route("/api/fin/payroll", finPayrollRoutes);
+app.route("/api/fin/registry", finRegistryRoutes);
+app.route("/api/fin/revaluation", finRevaluationRoutes);
+app.route("/api/fin/tax", finTaxRoutes);
+app.route("/api/itpark/ai", itparkAiRoutes);
+app.route("/api/itpark/caem-codes", itparkCaemRoutes);
+app.route("/api/itpark/calc", itparkCalcRoutes);
+app.route("/api/itpark/docs", itparkDocsRoutes);
+app.route("/api/itpark/engagements", itparkEngagementsRoutes);
+app.route("/api/itpark/import", itparkImportRoutes);
+app.route("/api/itpark/lines", itparkLinesRoutes);
+app.route("/api/itpark/settings", itparkSettingsRoutes);
 
 app.get("/api/health", async (c) => {
   try {
