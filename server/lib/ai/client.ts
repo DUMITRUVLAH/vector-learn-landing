@@ -46,6 +46,12 @@ export interface AiCallOptions {
   entityType?: string;
   entityId?: string;
   maxTokens?: number;
+  /**
+   * Optional image (or PDF page rendered to image) as a data URL
+   * ("data:image/png;base64,..."). When set and PROVIDER is OpenAI, the call uses
+   * vision so the model reads the document directly without pre-extracted text.
+   */
+  imageDataUrl?: string;
 }
 
 export interface AiCallResult {
@@ -94,6 +100,7 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
     entityType,
     entityId,
     maxTokens = 512,
+    imageDataUrl,
   } = opts;
 
   // --- AI-A04: Feature-disabled gate ---
@@ -207,13 +214,20 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
 
   try {
     if (PROVIDER === "openai") {
-      // OpenAI Chat Completions. System + user as two messages.
+      // OpenAI Chat Completions. System + user as two messages. When an image is
+      // provided, the user content becomes a [text, image_url] array (vision).
+      const userContent = imageDataUrl
+        ? [
+            { type: "text", text: userMessage },
+            { type: "image_url", image_url: { url: imageDataUrl } },
+          ]
+        : userMessage;
       const payload = {
         model: MODEL,
         max_tokens: maxTokens,
         messages: [
           ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
-          { role: "user", content: userMessage },
+          { role: "user", content: userContent },
         ],
       };
 

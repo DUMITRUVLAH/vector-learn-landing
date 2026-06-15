@@ -18,10 +18,10 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useRouter } from "@/router/HashRouter";
+import { apiUpload } from "@/lib/api";
 import {
   getCaptures,
   getCapturesSummary,
-  uploadCapture,
   formatMDLCents,
   CAPTURE_STATUS_LABELS,
   TEAM_LABELS,
@@ -66,22 +66,36 @@ function UploadPanel({
   onClose: () => void;
   onUploaded: () => void;
 }) {
-  const [fileName, setFileName] = useState("");
   const [team, setTeam] = useState<FinDocTeam>("marketing");
+  const [file, setFile] = useState<File | null>(null);
   const [rawText, setRawText] = useState("");
+  const [showText, setShowText] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const isPdf = file?.type === "application/pdf";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
+    if (!file && !rawText.trim()) {
+      setErr("Atașați un fișier (PDF/poză) sau lipiți textul facturii.");
+      return;
+    }
+    // PDFs can't be read by vision — require pasted text for them.
+    if (isPdf && !rawText.trim()) {
+      setErr("PDF-ul nu poate fi citit direct. Lipiți textul facturii din PDF mai jos.");
+      setShowText(true);
+      return;
+    }
     setSubmitting(true);
     try {
-      await uploadCapture({
-        fileName: fileName.trim() || "document.pdf",
-        team,
-        rawText: rawText.trim(),
-      });
+      const form = new FormData();
+      form.set("team", team);
+      if (file) form.set("file", file, file.name);
+      if (rawText.trim()) form.set("rawText", rawText.trim());
+      await apiUpload("/api/fin/captures", form);
       onUploaded();
       onClose();
     } catch (e2) {
@@ -96,7 +110,7 @@ function UploadPanel({
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
-          Document nou — AI extrage automat câmpurile
+          Document nou — AI citește factura automat
         </h2>
         <button
           onClick={onClose}
@@ -107,51 +121,94 @@ function UploadPanel({
         </button>
       </div>
       <form onSubmit={submit} className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label htmlFor="doc-name" className="block text-xs font-medium text-muted-foreground mb-1">
-              Nume fișier
-            </label>
+        <div>
+          <label htmlFor="doc-team" className="block text-xs font-medium text-muted-foreground mb-1">
+            Echipă
+          </label>
+          <select
+            id="doc-team"
+            value={team}
+            onChange={(e) => setTeam(e.target.value as FinDocTeam)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring sm:max-w-xs"
+          >
+            {TEAMS.map((t) => (
+              <option key={t} value={t}>
+                {TEAM_LABELS[t]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Drag-drop / file picker */}
+        <div>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">
+            Factura (poză JPG/PNG — AI o citește direct; sau PDF)
+          </label>
+          <label
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) setFile(f);
+            }}
+            className={cn(
+              "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors",
+              dragOver ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40",
+            )}
+          >
+            <Upload className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+            {file ? (
+              <span className="text-sm font-medium text-foreground">{file.name}</span>
+            ) : (
+              <>
+                <span className="text-sm text-foreground">Trage fișierul aici sau click pentru a alege</span>
+                <span className="text-xs text-muted-foreground">JPG, PNG, WebP sau PDF (max 8MB)</span>
+              </>
+            )}
             <input
-              id="doc-name"
-              value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
-              placeholder="facebook-ads-ianuarie.pdf"
+              type="file"
+              accept="image/*,application/pdf"
+              className="sr-only"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+          {isPdf && (
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+              PDF: lipiți și textul facturii mai jos (AI citește direct doar pozele).
+            </p>
+          )}
+        </div>
+
+        {/* Optional text fallback */}
+        {!showText ? (
+          <button
+            type="button"
+            onClick={() => setShowText(true)}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            + Adaugă text (dacă nu ai fișier sau pentru PDF)
+          </button>
+        ) : (
+          <div>
+            <label htmlFor="doc-text" className="block text-xs font-medium text-muted-foreground mb-1">
+              Textul facturii (opțional / pentru PDF)
+            </label>
+            <textarea
+              id="doc-text"
+              value={rawText}
+              onChange={(e) => setRawText(e.target.value)}
+              rows={4}
+              placeholder={"Meta Platforms Ireland\nFacebook Ads - campanie promovare\nTotal: 5.400,00 MDL (TVA 900,00)\nData: 2026-01-31"}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
-          <div>
-            <label htmlFor="doc-team" className="block text-xs font-medium text-muted-foreground mb-1">
-              Echipă
-            </label>
-            <select
-              id="doc-team"
-              value={team}
-              onChange={(e) => setTeam(e.target.value as FinDocTeam)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {TEAMS.map((t) => (
-                <option key={t} value={t}>
-                  {TEAM_LABELS[t]}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div>
-          <label htmlFor="doc-text" className="block text-xs font-medium text-muted-foreground mb-1">
-            Textul facturii (copiat din PDF / OCR)
-          </label>
-          <textarea
-            id="doc-text"
-            value={rawText}
-            onChange={(e) => setRawText(e.target.value)}
-            rows={5}
-            required
-            placeholder={"Meta Platforms Ireland\nFacebook Ads - campanie promovare\nTotal: 5.400,00 MDL (TVA 900,00)\nData: 2026-01-31"}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
+        )}
+
         {err && (
           <p className="flex items-center gap-1.5 text-xs text-destructive" role="alert">
             <AlertCircle className="h-3.5 w-3.5" /> {err}

@@ -29,7 +29,9 @@ REGULI ABSOLUTE:
 1. Dacă nu găsești un câmp → "value": null, "confidence": 0
 2. Nu inventa sume, IBAN-uri sau date. Mai bine null decât greșit.
 3. Confidence [0..1]: cât de sigur ești de valoare.
-4. amount_cents și vat_amount_cents sunt numere întregi (cenți, nu lei decimali).
+4. amount și vat_amount sunt sumele în LEI (unități majore, cu zecimale exact ca pe document).
+   Exemplu: dacă pe factură scrie "Total: 5.040,00 MDL", atunci amount = 5040.00 (NU 504000, NU 5040000).
+   NU înmulți cu 100 și NU adăuga zerouri — scrie suma EXACT ca pe document.
 5. expense_date format YYYY-MM-DD.
 6. category: una din ["rent","utilities","salaries","marketing","supplies","software","maintenance","other"].
    (ex. Facebook Ads / Google Ads / Meta / LinkedIn Ads → "marketing"; abonamente SaaS → "software".)
@@ -40,8 +42,8 @@ REGULI ABSOLUTE:
 Returnează DOAR JSON cu structura:
 {
   "vendor_name": { "value": "..." sau null, "confidence": 0.0 },
-  "amount_cents": { "value": 0 sau null, "confidence": 0.0 },
-  "vat_amount_cents": { "value": 0 sau null, "confidence": 0.0 },
+  "amount": { "value": 0.0 sau null, "confidence": 0.0 },
+  "vat_amount": { "value": 0.0 sau null, "confidence": 0.0 },
   "vat_deductible": { "value": true/false sau null, "confidence": 0.0 },
   "expense_date": { "value": "YYYY-MM-DD" sau null, "confidence": 0.0 },
   "iban": { "value": "..." sau null, "confidence": 0.0 },
@@ -76,10 +78,35 @@ function processFields(raw: Record<string, unknown>): ExtractedFields {
   // assign through a generic record and return it as ExtractedFields (runtime shape is correct).
   const result: Record<string, CapturedField<unknown>> = {};
 
+  // Money: the model returns MAJOR units (lei, e.g. 5040.00). We convert to cents in
+  // code (×100) — deterministic, avoids the model's ×100 math errors. Map the AI's
+  // `amount`/`vat_amount` onto the stored `amount_cents`/`vat_amount_cents`.
+  const moneyMap: Record<string, string> = {
+    amount: "amount_cents",
+    vat_amount: "vat_amount_cents",
+  };
+  for (const [aiKey, storeKey] of Object.entries(moneyMap)) {
+    const field = raw[aiKey] as { value: unknown; confidence: number } | undefined;
+    if (!field || typeof field.confidence !== "number" || field.value == null) {
+      result[storeKey] = { value: null, confidence: 0, low_confidence: true };
+      continue;
+    }
+    const major = typeof field.value === "number" ? field.value : parseFloat(String(field.value).replace(",", "."));
+    if (!Number.isFinite(major) || major < 0) {
+      result[storeKey] = { value: null, confidence: 0, low_confidence: true };
+      continue;
+    }
+    const conf = Math.min(1, Math.max(0, field.confidence));
+    result[storeKey] = {
+      value: Math.round(major * 100),
+      confidence: conf,
+      ...(conf < LOW_CONFIDENCE_THRESHOLD ? { low_confidence: true } : {}),
+    };
+  }
+
+  // Plain string/bool fields.
   const keys = [
     "vendor_name",
-    "amount_cents",
-    "vat_amount_cents",
     "vat_deductible",
     "expense_date",
     "iban",
@@ -91,7 +118,6 @@ function processFields(raw: Record<string, unknown>): ExtractedFields {
   for (const key of keys) {
     const field = raw[key] as { value: unknown; confidence: number } | undefined;
     if (!field || typeof field.confidence !== "number") {
-      // Câmp lipsă → marcat null cu confidence 0
       result[key] = { value: null, confidence: 0, low_confidence: true } as CapturedField<null>;
       continue;
     }
@@ -103,19 +129,6 @@ function processFields(raw: Record<string, unknown>): ExtractedFields {
 
     if (processed.confidence < LOW_CONFIDENCE_THRESHOLD) {
       processed.low_confidence = true;
-    }
-
-    // Validare specifică per câmp
-    if (key === "amount_cents" || key === "vat_amount_cents") {
-      const v = processed.value;
-      if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v < 0)) {
-        // Sumă invalidă → null (regula: nu inventa)
-        processed.value = null;
-        processed.confidence = 0;
-        processed.low_confidence = true;
-      } else if (typeof v === "number") {
-        processed.value = Math.round(v); // asigurăm întreg
-      }
     }
 
     if (key === "expense_date" && processed.value !== null) {
@@ -154,17 +167,22 @@ export async function extractCaptureFields(
   rawText: string,
   tenantId: string,
   userId: string,
-  captureId: string
+  captureId: string,
+  imageDataUrl?: string,
 ): Promise<CaptureExtractionResult> {
   const callOptions: AiCallOptions = {
     action: "capture_extract",
     systemPrompt: SYSTEM_PROMPT,
-    userMessage: `Extrage câmpurile financiare din textul OCR următor:\n\n${rawText}`,
+    // With an image, instruct the model to read the document; otherwise use the OCR text.
+    userMessage: imageDataUrl
+      ? "Extrage câmpurile financiare din factura/bonul din imaginea atașată."
+      : `Extrage câmpurile financiare din textul OCR următor:\n\n${rawText}`,
     tenantId,
     userId,
     entityType: "fin_capture",
     entityId: captureId,
     maxTokens: 500,
+    imageDataUrl,
   };
 
   const result = await callAi(callOptions);

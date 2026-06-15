@@ -208,6 +208,7 @@ finCapturesRoutes.post("/captures", async (c) => {
   let sizeBytes = 0;
   let rawText = "";
   let team = "other";
+  let imageDataUrl: string | undefined; // set for image uploads → OpenAI vision
 
   const contentType = c.req.header("content-type") ?? "";
 
@@ -242,6 +243,14 @@ finCapturesRoutes.post("/captures", async (c) => {
       // În production, fișierul e trimis la Vercel Blob/S3 și se obține fileKey
       // Aici stocăm un placeholder (storage real implementat separat)
       fileKey = `captures/${user.tenantId}/${Date.now()}-${fileName}`;
+
+      // Images (JPG/PNG/WebP) → data URL for OpenAI vision (model reads the doc directly).
+      // PDFs aren't accepted by the vision endpoint as image_url, so they fall back to
+      // any pasted text (rawText). Cap at ~8MB to stay within request limits.
+      if (mimeType.startsWith("image/") && sizeBytes <= 8_000_000) {
+        const buf = Buffer.from(await file.arrayBuffer());
+        imageDataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
+      }
     } else {
       return c.json({ error: "file_required" }, 400);
     }
@@ -275,7 +284,8 @@ finCapturesRoutes.post("/captures", async (c) => {
       rawText || `[Fișier: ${fileName}]`,
       user.tenantId,
       user.id,
-      capture.id
+      capture.id,
+      imageDataUrl,
     );
     extractedFields = result.extractedFields;
   } catch (err) {

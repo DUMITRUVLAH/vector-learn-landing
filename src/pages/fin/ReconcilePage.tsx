@@ -16,8 +16,10 @@ import {
   Trash2,
   Loader2,
   Building2,
+  Upload,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { apiUpload } from "@/lib/api";
 import { formatMDLCents } from "@/lib/api/finCaptures";
 import {
   runSync,
@@ -32,6 +34,8 @@ export default function ReconcilePage() {
   const [result, setResult] = useState<SyncResult | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   const [companies, setCompanies] = useState<VatImportCompany[]>([]);
   const [newName, setNewName] = useState("");
@@ -56,6 +60,29 @@ export default function ReconcilePage() {
       setError(e instanceof Error ? e.message : "Eroare la sincronizare");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const importStatement = async (file: File) => {
+    setImporting(true);
+    setImportMsg(null);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set("file", file, file.name);
+      const r = await apiUpload<{ imported?: number; duplicates?: number }>(
+        "/api/fin/cash/import",
+        form,
+      );
+      const imported = r.imported ?? 0;
+      const dup = r.duplicates ?? 0;
+      setImportMsg(
+        `Extras încărcat: ${imported} tranzacții noi${dup ? `, ${dup} duplicate ignorate` : ""}. Apăsați „Sincronizează".`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Eroare la încărcarea extrasului");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -94,15 +121,43 @@ export default function ReconcilePage() {
               Potrivește tranzacțiile bancare cu documentele încărcate de echipe și vezi ce lipsește.
             </p>
           </div>
-          <button
-            onClick={sync}
-            disabled={syncing}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-          >
-            <RefreshCw className={syncing ? "h-4 w-4 animate-spin" : "h-4 w-4"} aria-hidden="true" />
-            {syncing ? "Se sincronizează…" : "Sincronizează"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted focus-within:ring-2 focus-within:ring-ring">
+              {importing ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Upload className="h-4 w-4" aria-hidden="true" />
+              )}
+              {importing ? "Se încarcă…" : "Încarcă extras de cont"}
+              <input
+                type="file"
+                accept=".csv,.mt940,.sta,text/csv"
+                className="sr-only"
+                disabled={importing}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importStatement(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <button
+              onClick={sync}
+              disabled={syncing}
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              <RefreshCw className={syncing ? "h-4 w-4 animate-spin" : "h-4 w-4"} aria-hidden="true" />
+              {syncing ? "Se sincronizează…" : "Sincronizează"}
+            </button>
+          </div>
         </div>
+
+        {importMsg && (
+          <div className="flex items-center gap-2 rounded-lg bg-green-100 px-4 py-3 text-sm text-green-800 dark:bg-green-900/40 dark:text-green-300" role="status">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            {importMsg}
+          </div>
+        )}
 
         {error && (
           <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-destructive" role="alert">
