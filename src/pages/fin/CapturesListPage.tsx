@@ -80,15 +80,10 @@ function UploadPanel({
     e.preventDefault();
     setErr(null);
     if (!file && !rawText.trim()) {
-      setErr("Atașați un fișier (PDF/poză) sau lipiți textul facturii.");
+      setErr("Atașați un fișier (poză, PDF sau CSV) sau lipiți textul.");
       return;
     }
-    // PDFs can't be read by vision — require pasted text for them.
-    if (isPdf && !rawText.trim()) {
-      setErr("PDF-ul nu poate fi citit direct. Lipiți textul facturii din PDF mai jos.");
-      setShowText(true);
-      return;
-    }
+    // PDF/CSV: serverul extrage textul automat. Nu mai blocăm pe text lipit.
     setSubmitting(true);
     try {
       const form = new FormData();
@@ -142,7 +137,7 @@ function UploadPanel({
         {/* Drag-drop / file picker */}
         <div>
           <label className="block text-xs font-medium text-muted-foreground mb-1">
-            Factura (poză JPG/PNG — AI o citește direct; sau PDF)
+            Document (poză, PDF sau CSV — AI îl citește automat)
           </label>
           <label
             onDragOver={(e) => {
@@ -167,19 +162,19 @@ function UploadPanel({
             ) : (
               <>
                 <span className="text-sm text-foreground">Trage fișierul aici sau click pentru a alege</span>
-                <span className="text-xs text-muted-foreground">JPG, PNG, WebP sau PDF (max 8MB)</span>
+                <span className="text-xs text-muted-foreground">Poză, PDF, CSV / extras de cont (max 8MB)</span>
               </>
             )}
             <input
               type="file"
-              accept="image/*,application/pdf"
+              accept="image/*,application/pdf,.csv,.mt940,.sta,.txt,text/csv"
               className="sr-only"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
           </label>
           {isPdf && (
-            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-              PDF: lipiți și textul facturii mai jos (AI citește direct doar pozele).
+            <p className="mt-1 text-xs text-muted-foreground">
+              PDF: AI extrage textul automat. Dacă e scanat (poză), poți lipi textul mai jos.
             </p>
           )}
         </div>

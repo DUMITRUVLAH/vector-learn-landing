@@ -29,6 +29,7 @@ import { db } from "../db/client";
 import { finCaptures, type ExtractedFields, FIN_DOC_TEAMS } from "../db/schema/finCaptures";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { extractCaptureFields } from "../lib/ai/captureExtractor";
+import { extractPdfText } from "../lib/ai/pdfText";
 
 export const finCapturesRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -244,12 +245,24 @@ finCapturesRoutes.post("/captures", async (c) => {
       // Aici stocăm un placeholder (storage real implementat separat)
       fileKey = `captures/${user.tenantId}/${Date.now()}-${fileName}`;
 
+      const isPdf = mimeType === "application/pdf" || /\.pdf$/i.test(fileName);
+      const isCsvLike =
+        /csv|text\/plain/i.test(mimeType) || /\.(csv|mt940|sta|txt)$/i.test(fileName);
+
       // Images (JPG/PNG/WebP) → data URL for OpenAI vision (model reads the doc directly).
-      // PDFs aren't accepted by the vision endpoint as image_url, so they fall back to
-      // any pasted text (rawText). Cap at ~8MB to stay within request limits.
+      // Cap at ~8MB to stay within request limits.
       if (mimeType.startsWith("image/") && sizeBytes <= 8_000_000) {
         const buf = Buffer.from(await file.arrayBuffer());
         imageDataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
+      } else if (isPdf && !rawText.trim() && sizeBytes <= 8_000_000) {
+        // PDF digital (din Word/export) → extragem stratul de text pe server, ca
+        // utilizatorul să NU mai lipească manual. PDF scanat → text gol, cade pe
+        // fallback. Vision pe poze acoperă cazul scanat.
+        const buf = Buffer.from(await file.arrayBuffer());
+        rawText = await extractPdfText(buf);
+      } else if (isCsvLike && !rawText.trim() && sizeBytes <= 8_000_000) {
+        // CSV / extras de cont / text → citim conținutul ca text și-l dăm AI-ului.
+        rawText = await file.text();
       }
     } else {
       return c.json({ error: "file_required" }, 400);
