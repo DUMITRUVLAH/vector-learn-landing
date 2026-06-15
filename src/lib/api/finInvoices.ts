@@ -158,6 +158,26 @@ export async function getFinInvoicePdfHtml(
   return api(`/api/fin/invoices/${id}/pdf?lang=${lang}`);
 }
 
+/**
+ * Fetch the alternative "Cont de plată" document as a Blob.
+ * `format` "pdf" returns a real PDF (Playwright) or, where Chromium is unavailable,
+ * a print-ready HTML fallback — inspect `blob.type` to tell which you got.
+ * `format` "html" always returns the print-ready HTML (used for the live preview).
+ */
+export async function fetchFinInvoiceDocBlob(
+  id: string,
+  format: "pdf" | "html" = "pdf",
+  lang: "ro" | "ru" | "en" = "ro"
+): Promise<Blob> {
+  const res = await fetch(`/api/fin/invoices/${id}/document.${format}?lang=${lang}`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error(`Document fetch failed (${res.status})`);
+  }
+  return res.blob();
+}
+
 /** Utility: format cents as "L 1 200" or "€ 10,50" */
 export function formatFinMoney(cents: number, currency = "MDL"): string {
   const v = Math.abs(Math.round(cents));

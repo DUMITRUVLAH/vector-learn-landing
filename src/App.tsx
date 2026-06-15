@@ -133,6 +133,7 @@ const BudgetPage = named(() => import("./pages/app/BudgetPage"), "BudgetPage");
 const FinExpensesPage = named(() => import("./pages/app/FinExpensesPage"), "FinExpensesPage");
 const InventoryReportPage = named(() => import("./pages/app/InventoryReportPage"), "InventoryReportPage");
 const FinInvoicesPage = named(() => import("./pages/app/FinInvoicesPage"), "FinInvoicesPage");
+const FinInvoiceDocPage = named(() => import("./pages/app/FinInvoiceDocPage"), "FinInvoiceDocPage");
 const FinExportCenter = named(() => import("./pages/app/fin/ExportCenter"), "FinExportCenter");
 const PartiesPage = named(() => import("./pages/app/fin/PartiesPage"), "PartiesPage");
 const AgreementsPage = named(() => import("./pages/fin/AgreementsPage"), "AgreementsPage");
@@ -245,6 +246,7 @@ function Routes() {
   if (path.startsWith("/business/fin/einvoices")) return <BusinessGuardPage><FinEinvoicesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/inventory")) return <BusinessGuardPage><InventoryPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/registry")) return <BusinessGuardPage><FinRegistryPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/invoices/document")) return <BusinessGuardPage><FinInvoiceDocPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/invoices")) return <BusinessGuardPage><FinInvoicesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/expenses")) return <BusinessGuardPage><FinExpensesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/captures")) return <BusinessGuardPage><CapturesListPage /></BusinessGuardPage>;
@@ -378,6 +380,7 @@ function Routes() {
   if (path.startsWith("/app/fin/einvoices")) return <FinEinvoicesPage />;
   if (path.startsWith("/app/fin/inventory")) return <InventoryPage />;
   if (path.startsWith("/app/fin/registry")) return <FinRegistryPage />;
+  if (path.startsWith("/app/fin/invoices/document")) return <FinInvoiceDocPage />;
   if (path.startsWith("/app/fin/invoices")) return <FinInvoicesPage />;
   if (path.startsWith("/app/fin/expenses")) return <FinExpensesPage />;
   if (path.startsWith("/app/fin/captures")) return <CapturesListPage />;
