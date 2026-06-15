@@ -72,8 +72,37 @@ export interface ExtractedFields {
   iban?: CapturedField<string | null>;
   category?: CapturedField<string | null>;
   reference?: CapturedField<string | null>;
+  /** Team Docs: short "what was this for" summary the accountant reads at a glance. */
+  purpose?: CapturedField<string | null>;
   [key: string]: CapturedField<unknown> | undefined; // extensibil
 }
+
+/**
+ * Team Docs: which team uploaded the document, for month-end grouping.
+ * Lets non-finance teams (marketing, IT, ops…) drop invoices into one shared inbox.
+ */
+export const FIN_DOC_TEAMS = [
+  "marketing",
+  "sales",
+  "it",
+  "operations",
+  "hr",
+  "finance",
+  "management",
+  "other",
+] as const;
+export type FinDocTeam = (typeof FIN_DOC_TEAMS)[number];
+
+export const FIN_DOC_TEAM_LABELS: Record<FinDocTeam, string> = {
+  marketing: "Marketing",
+  sales: "Vânzări",
+  it: "IT",
+  operations: "Operațiuni",
+  hr: "HR",
+  finance: "Finanțe",
+  management: "Management",
+  other: "Altele",
+};
 
 // ─── fin_captures ─────────────────────────────────────────────────────────────
 
@@ -123,6 +152,12 @@ export const finCaptures = pgTable(
     status: finCaptureStatusEnum("status").notNull().default("pending"),
 
     /**
+     * Team Docs: echipa care a încărcat documentul (marketing, it, operations…).
+     * Permite gruparea pe echipe la raportul de sfârșit de lună. Vezi FIN_DOC_TEAMS.
+     */
+    team: varchar("team", { length: 20 }).notNull().default("other"),
+
+    /**
      * Câmpuri extrase de AI cu confidence score per câmp.
      * Structura: ExtractedFields (vezi mai sus).
      * null = extracția nu a rulat încă sau a eșuat.
@@ -155,6 +190,7 @@ export const finCaptures = pgTable(
     index("fin_captures_tenant_idx").on(t.tenantId),
     index("fin_captures_tenant_status_idx").on(t.tenantId, t.status),
     index("fin_captures_expense_idx").on(t.expenseId),
+    index("fin_captures_tenant_team_idx").on(t.tenantId, t.team),
   ]
 );
 

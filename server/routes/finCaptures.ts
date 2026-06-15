@@ -24,9 +24,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte, lte } from "drizzle-orm";
 import { db } from "../db/client";
-import { finCaptures, type ExtractedFields } from "../db/schema/finCaptures";
+import { finCaptures, type ExtractedFields, FIN_DOC_TEAMS } from "../db/schema/finCaptures";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { extractCaptureFields } from "../lib/ai/captureExtractor";
 
@@ -82,6 +82,7 @@ function serializeCapture(c: typeof finCaptures.$inferSelect) {
     mimeType: c.mimeType,
     sizeBytes: c.sizeBytes,
     status: c.status,
+    team: c.team,
     extractedFields: c.extractedFields,
     rawText: c.rawText,
     errorMessage: c.errorMessage,
@@ -101,14 +102,87 @@ finCapturesRoutes.get("/captures", async (c) => {
   const limit = 50;
   const offset = (page - 1) * limit;
 
+  // Team Docs filters: ?team=marketing & ?month=YYYY-MM (by upload date).
+  const team = c.req.query("team");
+  const month = c.req.query("month"); // YYYY-MM
+
+  const conditions = [eq(finCaptures.tenantId, user.tenantId)];
+  if (team && FIN_DOC_TEAMS.includes(team as never)) {
+    conditions.push(eq(finCaptures.team, team));
+  }
+  if (month && /^\d{4}-\d{2}$/.test(month)) {
+    const start = new Date(`${month}-01T00:00:00.000Z`);
+    const end = new Date(start);
+    end.setUTCMonth(end.getUTCMonth() + 1);
+    conditions.push(gte(finCaptures.createdAt, start));
+    conditions.push(lte(finCaptures.createdAt, end));
+  }
+
   const rows = await db.query.finCaptures.findMany({
-    where: eq(finCaptures.tenantId, user.tenantId),
+    where: and(...conditions),
     orderBy: [desc(finCaptures.createdAt)],
     limit,
     offset,
   });
 
   return c.json({ captures: rows.map(serializeCapture), total: rows.length });
+});
+
+// ─── GET /api/fin/captures/summary — raport sfârșit de lună (Team Docs) ───────
+// Grupează documentele lunii pe echipă și pe categorie, cu total pe fiecare.
+// Montat ÎNAINTE de /:id (regula hono: rută specifică > param).
+// Query: ?month=YYYY-MM (implicit luna curentă).
+finCapturesRoutes.get("/captures/summary", async (c) => {
+  const user = c.get("user");
+  const month = c.req.query("month") ?? new Date().toISOString().slice(0, 7); // YYYY-MM
+  const valid = /^\d{4}-\d{2}$/.test(month) ? month : new Date().toISOString().slice(0, 7);
+
+  const start = new Date(`${valid}-01T00:00:00.000Z`);
+  const end = new Date(start);
+  end.setUTCMonth(end.getUTCMonth() + 1);
+
+  const rows = await db.query.finCaptures.findMany({
+    where: and(
+      eq(finCaptures.tenantId, user.tenantId),
+      gte(finCaptures.createdAt, start),
+      lte(finCaptures.createdAt, end),
+    ),
+    orderBy: [desc(finCaptures.createdAt)],
+  });
+
+  const amountOf = (r: typeof finCaptures.$inferSelect): number => {
+    const v = r.extractedFields?.amount_cents?.value;
+    return typeof v === "number" ? v : 0;
+  };
+
+  const byTeam: Record<string, { count: number; totalCents: number }> = {};
+  const byCategory: Record<string, { count: number; totalCents: number }> = {};
+  let totalCents = 0;
+  let pendingReview = 0;
+
+  for (const r of rows) {
+    const amt = amountOf(r);
+    totalCents += amt;
+    if (r.status !== "confirmed") pendingReview += 1;
+
+    byTeam[r.team] ??= { count: 0, totalCents: 0 };
+    byTeam[r.team].count += 1;
+    byTeam[r.team].totalCents += amt;
+
+    const cat = (r.extractedFields?.category?.value as string | null) ?? "other";
+    byCategory[cat] ??= { count: 0, totalCents: 0 };
+    byCategory[cat].count += 1;
+    byCategory[cat].totalCents += amt;
+  }
+
+  return c.json({
+    month: valid,
+    totalDocuments: rows.length,
+    totalCents,
+    pendingReview,
+    byTeam: Object.entries(byTeam).map(([team, v]) => ({ team, ...v })),
+    byCategory: Object.entries(byCategory).map(([category, v]) => ({ category, ...v })),
+  });
 });
 
 // ─── POST /api/fin/captures — upload + extracție AI ──────────────────────────
@@ -133,6 +207,7 @@ finCapturesRoutes.post("/captures", async (c) => {
   let mimeType = "application/pdf";
   let sizeBytes = 0;
   let rawText = "";
+  let team = "other";
 
   const contentType = c.req.header("content-type") ?? "";
 
@@ -144,17 +219,21 @@ finCapturesRoutes.post("/captures", async (c) => {
       mimeType?: string;
       sizeBytes?: number;
       rawText?: string;
+      team?: string;
     }>();
     fileKey = body.fileKey ?? "upload/unknown";
     fileName = body.fileName ?? "document.pdf";
     mimeType = body.mimeType ?? "application/pdf";
     sizeBytes = body.sizeBytes ?? 0;
     rawText = body.rawText ?? "";
+    if (body.team && FIN_DOC_TEAMS.includes(body.team as never)) team = body.team;
   } else if (contentType.includes("multipart/form-data")) {
     // Multipart mode (real upload)
     const formData = await c.req.formData();
     const file = formData.get("file");
     rawText = (formData.get("rawText") as string | null) ?? "";
+    const teamField = formData.get("team") as string | null;
+    if (teamField && FIN_DOC_TEAMS.includes(teamField as never)) team = teamField;
 
     if (file && file instanceof File) {
       fileName = file.name;
@@ -180,6 +259,7 @@ finCapturesRoutes.post("/captures", async (c) => {
       mimeType,
       sizeBytes,
       status: "processing",
+      team,
       rawText: rawText || undefined,
       createdBy: user.id,
     })

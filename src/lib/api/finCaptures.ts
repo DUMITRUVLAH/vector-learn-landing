@@ -32,7 +32,30 @@ export interface ExtractedFields {
   iban?: CapturedField<string | null>;
   category?: CapturedField<string | null>;
   reference?: CapturedField<string | null>;
+  purpose?: CapturedField<string | null>;
 }
+
+/** Team Docs: which team uploaded the document (for month-end grouping). */
+export type FinDocTeam =
+  | "marketing"
+  | "sales"
+  | "it"
+  | "operations"
+  | "hr"
+  | "finance"
+  | "management"
+  | "other";
+
+export const TEAM_LABELS: Record<FinDocTeam, string> = {
+  marketing: "Marketing",
+  sales: "Vânzări",
+  it: "IT",
+  operations: "Operațiuni",
+  hr: "HR",
+  finance: "Finanțe",
+  management: "Management",
+  other: "Altele",
+};
 
 export interface FinCapture {
   id: string;
@@ -43,6 +66,7 @@ export interface FinCapture {
   mimeType: string;
   sizeBytes: number;
   status: FinCaptureStatus;
+  team: FinDocTeam;
   extractedFields: ExtractedFields | null;
   rawText: string | null;
   errorMessage: string | null;
@@ -104,8 +128,41 @@ export async function confirmCapture(
   });
 }
 
-export async function getCaptures(page = 1): Promise<CapturesListResult> {
-  return api<CapturesListResult>(`/api/fin/captures?page=${page}`);
+export async function getCaptures(
+  opts: { page?: number; team?: FinDocTeam; month?: string } = {},
+): Promise<CapturesListResult> {
+  const qs = new URLSearchParams({ page: String(opts.page ?? 1) });
+  if (opts.team) qs.set("team", opts.team);
+  if (opts.month) qs.set("month", opts.month);
+  return api<CapturesListResult>(`/api/fin/captures?${qs.toString()}`);
+}
+
+/** Upload a document (JSON mode with OCR text, or pass a File via FormData). */
+export async function uploadCapture(payload: {
+  fileName: string;
+  team: FinDocTeam;
+  rawText?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+}): Promise<{ capture: FinCapture }> {
+  return api<{ capture: FinCapture }>("/api/fin/captures", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface CapturesSummary {
+  month: string;
+  totalDocuments: number;
+  totalCents: number;
+  pendingReview: number;
+  byTeam: Array<{ team: FinDocTeam; count: number; totalCents: number }>;
+  byCategory: Array<{ category: string; count: number; totalCents: number }>;
+}
+
+export async function getCapturesSummary(month?: string): Promise<CapturesSummary> {
+  const qs = month ? `?month=${month}` : "";
+  return api<CapturesSummary>(`/api/fin/captures/summary${qs}`);
 }
 
 // ─── Formatters ───────────────────────────────────────────────────────────────

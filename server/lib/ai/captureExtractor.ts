@@ -14,7 +14,7 @@
  */
 
 import { callAi, type AiCallOptions } from "./client";
-import type { ExtractedFields, CapturedField } from "../db/schema/finCaptures";
+import type { ExtractedFields, CapturedField } from "../../db/schema/finCaptures";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -32,7 +32,10 @@ REGULI ABSOLUTE:
 4. amount_cents și vat_amount_cents sunt numere întregi (cenți, nu lei decimali).
 5. expense_date format YYYY-MM-DD.
 6. category: una din ["rent","utilities","salaries","marketing","supplies","software","maintenance","other"].
+   (ex. Facebook Ads / Google Ads / Meta / LinkedIn Ads → "marketing"; abonamente SaaS → "software".)
 7. vat_deductible: true dacă există factură cu TVA deductibil clar, false dacă e bon simplu.
+8. purpose: o frază scurtă (max 15 cuvinte) în română care explică PENTRU CE e cheltuiala
+   (ex. "Campanie Facebook Ads — promovare curs toamnă", "Licență Google Workspace echipă").
 
 Returnează DOAR JSON cu structura:
 {
@@ -43,7 +46,8 @@ Returnează DOAR JSON cu structura:
   "expense_date": { "value": "YYYY-MM-DD" sau null, "confidence": 0.0 },
   "iban": { "value": "..." sau null, "confidence": 0.0 },
   "category": { "value": "..." sau null, "confidence": 0.0 },
-  "reference": { "value": "..." sau null, "confidence": 0.0 }
+  "reference": { "value": "..." sau null, "confidence": 0.0 },
+  "purpose": { "value": "..." sau null, "confidence": 0.0 }
 }`;
 
 // ─── Stub response ────────────────────────────────────────────────────────────
@@ -56,8 +60,9 @@ export const CAPTURE_EXTRACT_STUB: ExtractedFields = {
   vat_deductible: { value: true, confidence: 0.9 },
   expense_date: { value: new Date().toISOString().slice(0, 10), confidence: 0.9 },
   iban: { value: null, confidence: 0, low_confidence: true },
-  category: { value: "other", confidence: 0.9 },
+  category: { value: "marketing", confidence: 0.9 },
   reference: { value: null, confidence: 0, low_confidence: true },
+  purpose: { value: "Cheltuială echipă — verificați descrierea", confidence: 0.6, low_confidence: true },
 };
 
 // ─── Field processing ─────────────────────────────────────────────────────────
@@ -67,7 +72,9 @@ export const CAPTURE_EXTRACT_STUB: ExtractedFields = {
  * Standardizează câmpurile returnate de AI.
  */
 function processFields(raw: Record<string, unknown>): ExtractedFields {
-  const result: ExtractedFields = {};
+  // Indexed write target: each key maps to a differently-typed CapturedField<T>, so we
+  // assign through a generic record and return it as ExtractedFields (runtime shape is correct).
+  const result: Record<string, CapturedField<unknown>> = {};
 
   const keys = [
     "vendor_name",
@@ -78,6 +85,7 @@ function processFields(raw: Record<string, unknown>): ExtractedFields {
     "iban",
     "category",
     "reference",
+    "purpose",
   ] as const;
 
   for (const key of keys) {
@@ -119,10 +127,10 @@ function processFields(raw: Record<string, unknown>): ExtractedFields {
       }
     }
 
-    result[key] = processed as CapturedField<unknown>;
+    result[key] = processed;
   }
 
-  return result;
+  return result as ExtractedFields;
 }
 
 // ─── Main extractor ───────────────────────────────────────────────────────────
