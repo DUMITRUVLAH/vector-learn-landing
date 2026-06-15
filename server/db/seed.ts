@@ -1,6 +1,14 @@
 import "dotenv/config";
 import { db, closeDb } from "./client";
 import { tenants, users, students, teachers, courses, lessons, branches, leads } from "./schema";
+import { finPayments } from "./schema/finCash";
+import { finInvoices } from "./schema/finInvoices";
+import { finParties } from "./schema/finParties";
+import {
+  itparkEngagements,
+  itparkMonthly,
+  itparkSettings,
+} from "./schema/itpark";
 import {
   parMembers,
   parSettings,
@@ -273,8 +281,77 @@ async function seed() {
       })
       .returning();
 
+    // ── FinDesk demo data so Business screens aren't empty on a fresh DB ──────
+    // (Previously the seed created only the tenant + admin; every FinDesk/ITPark
+    //  screen showed []. This populates parties → invoices → payments → an ITPark
+    //  engagement with monthly compliance rows the dashboard reads.)
+    const bt = businessTenant.id;
+
+    const seededParties = await db
+      .insert(finParties)
+      .values([
+        { tenantId: bt, kind: "client", name: "S.R.L. TechWave", country: "MD", idno: "1009600012345", vatCode: "0301234", email: "office@techwave.md", city: "Chișinău" },
+        { tenantId: bt, kind: "client", name: "Î.I. Andrei Codru", country: "MD", idno: "1014600054321", email: "andrei@codru.md", city: "Bălți" },
+        { tenantId: bt, kind: "supplier", name: "Orange Moldova S.A.", country: "MD", idno: "1002600045678", vatCode: "0204567", email: "facturi@orange.md", city: "Chișinău" },
+        { tenantId: bt, kind: "supplier", name: "Premier Energy S.R.L.", country: "MD", idno: "1003600098765", email: "billing@premierenergy.md", city: "Chișinău" },
+        { tenantId: bt, kind: "both", name: "S.R.L. NordContab", country: "MD", idno: "1011600011223", email: "contact@nordcontab.md", city: "Soroca" },
+        { tenantId: bt, kind: "client", name: "ICS Global Soft S.R.L.", country: "MD", idno: "1018600033445", vatCode: "0309988", email: "ap@globalsoft.md", city: "Chișinău" },
+      ])
+      .returning();
+
+    const year = new Date().getFullYear();
+    const clients = seededParties.filter((p) => p.kind === "client");
+    const seededInvoices = await db
+      .insert(finInvoices)
+      .values([
+        { tenantId: bt, partyId: clients[0].id, series: "FIN", number: 1, invoiceNumber: `FIN-${year}-0001`, status: "paid", currency: "MDL", issuedAt: new Date(`${year}-01-15`), totalCents: 4800000, vatTotalCents: 800000 },
+        { tenantId: bt, partyId: clients[0].id, series: "FIN", number: 2, invoiceNumber: `FIN-${year}-0002`, status: "issued", currency: "MDL", issuedAt: new Date(`${year}-02-12`), totalCents: 3600000, vatTotalCents: 600000 },
+        { tenantId: bt, partyId: clients[1].id, series: "FIN", number: 3, invoiceNumber: `FIN-${year}-0003`, status: "overdue", currency: "MDL", issuedAt: new Date(`${year}-02-20`), totalCents: 1500000, vatTotalCents: 250000 },
+        { tenantId: bt, partyId: clients[2].id, series: "FIN", number: 4, invoiceNumber: `FIN-${year}-0004`, status: "paid", currency: "MDL", issuedAt: new Date(`${year}-03-03`), totalCents: 9000000, vatTotalCents: 1500000 },
+        { tenantId: bt, partyId: clients[1].id, series: "FIN", number: 5, invoiceNumber: `FIN-${year}-0005`, status: "draft", currency: "MDL", issuedAt: new Date(`${year}-03-18`), totalCents: 2400000, vatTotalCents: 400000 },
+      ])
+      .returning();
+
+    await db.insert(finPayments).values([
+      { tenantId: bt, partyId: clients[0].id, receivedDate: `${year}-01-20`, amountCents: 4800000, currency: "MDL", accountLabel: "MAIB MDL", allocatedCents: 4800000, notes: `Achitare ${seededInvoices[0].invoiceNumber}` },
+      { tenantId: bt, partyId: clients[2].id, receivedDate: `${year}-03-08`, amountCents: 9000000, currency: "MDL", accountLabel: "MAIB MDL", allocatedCents: 9000000, notes: `Achitare ${seededInvoices[3].invoiceNumber}` },
+      { tenantId: bt, partyId: clients[1].id, receivedDate: `${year}-03-22`, amountCents: 500000, currency: "MDL", accountLabel: "Victoriabank MDL", allocatedCents: 0, notes: "Avans parțial — nealocat" },
+    ]);
+
+    // ITPark: settings + one resident engagement with monthly compliance share.
+    await db.insert(itparkSettings).values({
+      tenantId: bt,
+      eligibilityThresholdPct: "70.00",
+      toleranceMonths: 2,
+      defaultCurrency: "MDL",
+    });
+
+    const [engagement] = await db
+      .insert(itparkEngagements)
+      .values({
+        tenantId: bt,
+        residentName: "ICS Global Soft S.R.L.",
+        idno: "1018600033445",
+        vatPayer: true,
+        periodStart: `${year}-01-01`,
+        periodEnd: `${year}-12-31`,
+        reportingYear: year,
+        status: "in_progress",
+        subcontractorCostsCents: 0,
+        adjustedRevenueCents: 120_000_000,
+      })
+      .returning();
+
+    // Three months of cumulative eligible share, trending above the 70% threshold.
+    await db.insert(itparkMonthly).values([
+      { tenantId: bt, engagementId: engagement.id, month: 1, eligibleCents: 7_000_000, totalCents: 10_000_000, cumulativeEligibleCents: 7_000_000, cumulativeTotalCents: 10_000_000, monthlySharePct: "70.00" },
+      { tenantId: bt, engagementId: engagement.id, month: 2, eligibleCents: 8_500_000, totalCents: 11_000_000, cumulativeEligibleCents: 15_500_000, cumulativeTotalCents: 21_000_000, monthlySharePct: "73.81" },
+      { tenantId: bt, engagementId: engagement.id, month: 3, eligibleCents: 9_000_000, totalCents: 12_000_000, cumulativeEligibleCents: 24_500_000, cumulativeTotalCents: 33_000_000, monthlySharePct: "74.24" },
+    ]);
+
     console.log(`✅ Business Suite demo tenant created: ${businessTenant.name}`);
     console.log(`   Business admin: ${businessAdmin.email}`);
+    console.log(`   FinDesk demo: ${seededParties.length} parties, ${seededInvoices.length} invoices, 3 payments, 1 ITPark engagement`);
   } else {
     console.log(`⚠️  Business Suite demo tenant already exists (${existingBusiness.id}). Skipping.`);
   }

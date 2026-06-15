@@ -156,6 +156,7 @@ import { finTaxRoutes } from "./routes/finTax";
 import { itparkAiRoutes } from "./routes/itparkAi";
 import { itparkCaemRoutes } from "./routes/itparkCaem";
 import { itparkCalcRoutes } from "./routes/itparkCalc";
+import { itparkDashboardRoutes } from "./routes/itparkDashboard"; // ITPARK-702: MITP compliance dashboard
 import { itparkDocsRoutes } from "./routes/itparkDocs";
 import { itparkEngagementsRoutes } from "./routes/itparkEngagements";
 import { itparkImportRoutes } from "./routes/itparkImport";
@@ -407,6 +408,7 @@ app.route("/api/fin/tax", finTaxRoutes);
 app.route("/api/itpark/ai", itparkAiRoutes);
 app.route("/api/itpark/caem-codes", itparkCaemRoutes);
 app.route("/api/itpark/calc", itparkCalcRoutes);
+app.route("/api/itpark/dashboard", itparkDashboardRoutes);
 app.route("/api/itpark/docs", itparkDocsRoutes);
 app.route("/api/itpark/engagements", itparkEngagementsRoutes);
 app.route("/api/itpark/import", itparkImportRoutes);

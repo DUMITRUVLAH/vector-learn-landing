@@ -14,143 +14,142 @@ import { Testimonials } from "./components/Testimonials";
 import { FAQ } from "./components/FAQ";
 import { CTA } from "./components/CTA";
 import { Footer } from "./components/Footer";
-import { OrarPage } from "./pages/modules/OrarPage";
-import { FinantePage } from "./pages/modules/FinantePage";
-import { CRMPage } from "./pages/modules/CRMPage";
-import { ComunicarePage } from "./pages/modules/ComunicarePage";
-import { MobilePage } from "./pages/modules/MobilePage";
-import { RapoartePage } from "./pages/modules/RapoartePage";
-import { HRPage } from "./pages/modules/HRPage";
-import { MultifilalePage } from "./pages/modules/MultifilalePage";
-import { IntegrariPage } from "./pages/modules/IntegrariPage";
-import { AIPage } from "./pages/modules/AIPage";
-import { LimbiPage } from "./pages/audiences/LimbiPage";
-import { ProgramarePage } from "./pages/audiences/ProgramarePage";
-import { MuzicaPage } from "./pages/audiences/MuzicaPage";
-import { ExamenePage } from "./pages/audiences/ExamenePage";
-import { ROICalculatorPage } from "./pages/tools/ROICalculatorPage";
-import { MigrationEstimatorPage } from "./pages/tools/MigrationEstimatorPage";
-import { PricingConfiguratorPage } from "./pages/tools/PricingConfiguratorPage";
+import { lazy, Suspense } from "react";
+// PERF: route-level pages are code-split via React.lazy so each route ships its own
+// chunk instead of bundling the whole app (CRM + Business Suite + FinDesk + PAR + ITPark)
+// into one ~5MB synchronous bundle. `named()` adapts named exports to lazy()'s default-export shape.
+function named<T extends Record<string, unknown>, K extends keyof T>(
+  loader: () => Promise<T>,
+  name: K,
+) {
+  return lazy(() => loader().then((m) => ({ default: m[name] as React.ComponentType<unknown> })));
+}
+const OrarPage = named(() => import("./pages/modules/OrarPage"), "OrarPage");
+const FinantePage = named(() => import("./pages/modules/FinantePage"), "FinantePage");
+const CRMPage = named(() => import("./pages/modules/CRMPage"), "CRMPage");
+const ComunicarePage = named(() => import("./pages/modules/ComunicarePage"), "ComunicarePage");
+const MobilePage = named(() => import("./pages/modules/MobilePage"), "MobilePage");
+const RapoartePage = named(() => import("./pages/modules/RapoartePage"), "RapoartePage");
+const HRPage = named(() => import("./pages/modules/HRPage"), "HRPage");
+const MultifilalePage = named(() => import("./pages/modules/MultifilalePage"), "MultifilalePage");
+const IntegrariPage = named(() => import("./pages/modules/IntegrariPage"), "IntegrariPage");
+const AIPage = named(() => import("./pages/modules/AIPage"), "AIPage");
+const LimbiPage = named(() => import("./pages/audiences/LimbiPage"), "LimbiPage");
+const ProgramarePage = named(() => import("./pages/audiences/ProgramarePage"), "ProgramarePage");
+const MuzicaPage = named(() => import("./pages/audiences/MuzicaPage"), "MuzicaPage");
+const ExamenePage = named(() => import("./pages/audiences/ExamenePage"), "ExamenePage");
+const ROICalculatorPage = named(() => import("./pages/tools/ROICalculatorPage"), "ROICalculatorPage");
+const MigrationEstimatorPage = named(() => import("./pages/tools/MigrationEstimatorPage"), "MigrationEstimatorPage");
+const PricingConfiguratorPage = named(() => import("./pages/tools/PricingConfiguratorPage"), "PricingConfiguratorPage");
 import { BackendStatusBadge } from "./components/BackendStatusBadge";
-import { LoginPage } from "./pages/app/LoginPage";
-import { SignupPage } from "./pages/app/SignupPage";
-import { DashboardPage } from "./pages/app/DashboardPage";
-import { StudentsPage } from "./pages/app/StudentsPage";
-import { StudentDetailPage } from "./pages/app/StudentDetailPage"; // STU-201
-import { SchedulePage } from "./pages/app/SchedulePage";
-import { CheckInPage } from "./pages/app/CheckInPage"; // GAP-018
-import { TeachersPage } from "./pages/app/TeachersPage";
-import { PaymentsPage } from "./pages/app/PaymentsPage";
-import { LeadsPage } from "./pages/app/LeadsPage";
-import { LeadCardPage } from "./pages/app/LeadCardPage";
-import { TemplatesPage } from "./pages/app/TemplatesPage";
-import { AutomationsPage } from "./pages/app/AutomationsPage";
-import { AnalyticsPage } from "./pages/app/AnalyticsPage";
-import { AdvancedAnalyticsPage } from "./pages/app/AdvancedAnalyticsPage"; // GAP-016
-import { PayrollPage } from "./pages/app/PayrollPage";
-import { TeacherStatsPage } from "./pages/app/TeacherStatsPage";
-import { AvailabilityPage } from "./pages/app/AvailabilityPage";
-import { AuditLogPage } from "./pages/app/AuditLogPage";
-import { TodayDashboardPage } from "./pages/app/TodayDashboardPage";
-import { CadencesPage } from "./pages/app/CadencesPage";
-import { LeadAuditLogPage } from "./pages/app/LeadAuditLogPage";
-import { ContractsPage } from "./pages/app/ContractsPage";
-import { FeedbackPage } from "./pages/app/FeedbackPage";
-import { FeedbackPublicPage } from "./pages/app/FeedbackPublicPage";
-import { InvoicesPage } from "./pages/app/InvoicesPage";
-import { PaymentAccountsPage } from "./pages/app/PaymentAccountsPage"; // CONT-PLATA
-import { PaymentAccountEditorPage } from "./pages/app/PaymentAccountEditorPage"; // CONT-PLATA
-import { PaymentAccountViewPage } from "./pages/app/PaymentAccountViewPage"; // CONT-PLATA
-import { SellerProfilePage } from "./pages/app/SellerProfilePage"; // CONT-PLATA
-import { CXPage } from "./pages/app/CXPage";
-import { DiplomaPage } from "./pages/app/DiplomaPage";
-import { KinderCheckinPage } from "./pages/app/KinderCheckinPage";
-import { KinderPickupsPage } from "./pages/app/KinderPickupsPage";
-import { KinderDiaryPage } from "./pages/app/KinderDiaryPage";
-import { KinderRatioPage } from "./pages/app/KinderRatioPage";
-import { KinderMedicalPage } from "./pages/app/KinderMedicalPage";
-import { KinderImmunizationReportPage } from "./pages/app/KinderImmunizationReportPage";
-import { KinderParentFeedPage } from "./pages/app/KinderParentFeedPage";
-import { KinderCompliancePage } from "./pages/app/KinderCompliancePage";
-import KinderIncidentsPage from "./pages/app/KinderIncidentsPage";
-import { MobileSchedulePage } from "./pages/app/mobile/MobileSchedulePage";
-import { HomeworkPage } from "./pages/app/mobile/HomeworkPage";
-import { NotificationsSettingsPage } from "./pages/app/mobile/NotificationsSettingsPage";
-import { ParentDashboardPage } from "./pages/app/mobile/ParentDashboardPage";
-import { ChatPage } from "./pages/app/mobile/ChatPage";
-import { XpPage } from "./pages/app/mobile/XpPage";
-import { LeaderboardPage } from "./pages/app/mobile/LeaderboardPage";
-import { StudentDashboardPage } from "./pages/app/mobile/StudentDashboardPage";
-import { GradingPage } from "./pages/app/GradingPage";
-import { GamificationPage } from "./pages/app/GamificationPage";
-import { ApiKeysPage } from "./pages/app/settings/ApiKeysPage";
-import { WebhooksPage } from "./pages/app/settings/WebhooksPage";
-import { IntegrationsPage } from "./pages/app/settings/IntegrationsPage";
-import { InstitutionPage } from "./pages/app/settings/InstitutionPage";
-import { KpiDashboardPage } from "./pages/app/KpiDashboardPage";
-import { RevenueChartsPage } from "./pages/app/RevenueChartsPage";
-import { StudentRetentionPage } from "./pages/app/StudentRetentionPage";
-import { ExportPage } from "./pages/app/ExportPage";
-import { InvoicePortalPage } from "./pages/portal/InvoicePortalPage";
-import { VerifyCertificatePage } from "./pages/public/VerifyCertificatePage";
+const LoginPage = named(() => import("./pages/app/LoginPage"), "LoginPage");
+const SignupPage = named(() => import("./pages/app/SignupPage"), "SignupPage");
+const DashboardPage = named(() => import("./pages/app/DashboardPage"), "DashboardPage");
+const StudentsPage = named(() => import("./pages/app/StudentsPage"), "StudentsPage");
+const StudentDetailPage = named(() => import("./pages/app/StudentDetailPage"), "StudentDetailPage"); // STU-201
+const SchedulePage = named(() => import("./pages/app/SchedulePage"), "SchedulePage");
+const TeachersPage = named(() => import("./pages/app/TeachersPage"), "TeachersPage");
+const PaymentsPage = named(() => import("./pages/app/PaymentsPage"), "PaymentsPage");
+const LeadsPage = named(() => import("./pages/app/LeadsPage"), "LeadsPage");
+const LeadCardPage = named(() => import("./pages/app/LeadCardPage"), "LeadCardPage");
+const TemplatesPage = named(() => import("./pages/app/TemplatesPage"), "TemplatesPage");
+const AutomationsPage = named(() => import("./pages/app/AutomationsPage"), "AutomationsPage");
+const AnalyticsPage = named(() => import("./pages/app/AnalyticsPage"), "AnalyticsPage");
+const AdvancedAnalyticsPage = named(() => import("./pages/app/AdvancedAnalyticsPage"), "AdvancedAnalyticsPage"); // GAP-016
+const PayrollPage = named(() => import("./pages/app/PayrollPage"), "PayrollPage");
+const TeacherStatsPage = named(() => import("./pages/app/TeacherStatsPage"), "TeacherStatsPage");
+const AvailabilityPage = named(() => import("./pages/app/AvailabilityPage"), "AvailabilityPage");
+const AuditLogPage = named(() => import("./pages/app/AuditLogPage"), "AuditLogPage");
+const TodayDashboardPage = named(() => import("./pages/app/TodayDashboardPage"), "TodayDashboardPage");
+const CadencesPage = named(() => import("./pages/app/CadencesPage"), "CadencesPage");
+const LeadAuditLogPage = named(() => import("./pages/app/LeadAuditLogPage"), "LeadAuditLogPage");
+const ContractsPage = named(() => import("./pages/app/ContractsPage"), "ContractsPage");
+const FeedbackPage = named(() => import("./pages/app/FeedbackPage"), "FeedbackPage");
+const FeedbackPublicPage = named(() => import("./pages/app/FeedbackPublicPage"), "FeedbackPublicPage");
+const InvoicesPage = named(() => import("./pages/app/InvoicesPage"), "InvoicesPage");
+const PaymentAccountsPage = named(() => import("./pages/app/PaymentAccountsPage"), "PaymentAccountsPage"); // CONT-PLATA
+const PaymentAccountEditorPage = named(() => import("./pages/app/PaymentAccountEditorPage"), "PaymentAccountEditorPage"); // CONT-PLATA
+const PaymentAccountViewPage = named(() => import("./pages/app/PaymentAccountViewPage"), "PaymentAccountViewPage"); // CONT-PLATA
+const SellerProfilePage = named(() => import("./pages/app/SellerProfilePage"), "SellerProfilePage"); // CONT-PLATA
+const CXPage = named(() => import("./pages/app/CXPage"), "CXPage");
+const DiplomaPage = named(() => import("./pages/app/DiplomaPage"), "DiplomaPage");
+const KinderCheckinPage = named(() => import("./pages/app/KinderCheckinPage"), "KinderCheckinPage");
+const KinderPickupsPage = named(() => import("./pages/app/KinderPickupsPage"), "KinderPickupsPage");
+const KinderDiaryPage = named(() => import("./pages/app/KinderDiaryPage"), "KinderDiaryPage");
+const KinderRatioPage = named(() => import("./pages/app/KinderRatioPage"), "KinderRatioPage");
+const KinderMedicalPage = named(() => import("./pages/app/KinderMedicalPage"), "KinderMedicalPage");
+const KinderImmunizationReportPage = named(() => import("./pages/app/KinderImmunizationReportPage"), "KinderImmunizationReportPage");
+const KinderParentFeedPage = named(() => import("./pages/app/KinderParentFeedPage"), "KinderParentFeedPage");
+const KinderCompliancePage = named(() => import("./pages/app/KinderCompliancePage"), "KinderCompliancePage");
+const KinderIncidentsPage = lazy(() => import("./pages/app/KinderIncidentsPage"));
+const MobileSchedulePage = named(() => import("./pages/app/mobile/MobileSchedulePage"), "MobileSchedulePage");
+const HomeworkPage = named(() => import("./pages/app/mobile/HomeworkPage"), "HomeworkPage");
+const NotificationsSettingsPage = named(() => import("./pages/app/mobile/NotificationsSettingsPage"), "NotificationsSettingsPage");
+const ParentDashboardPage = named(() => import("./pages/app/mobile/ParentDashboardPage"), "ParentDashboardPage");
+const ChatPage = named(() => import("./pages/app/mobile/ChatPage"), "ChatPage");
+const XpPage = named(() => import("./pages/app/mobile/XpPage"), "XpPage");
+const LeaderboardPage = named(() => import("./pages/app/mobile/LeaderboardPage"), "LeaderboardPage");
+const StudentDashboardPage = named(() => import("./pages/app/mobile/StudentDashboardPage"), "StudentDashboardPage");
+const GradingPage = named(() => import("./pages/app/GradingPage"), "GradingPage");
+const GamificationPage = named(() => import("./pages/app/GamificationPage"), "GamificationPage");
+const ApiKeysPage = named(() => import("./pages/app/settings/ApiKeysPage"), "ApiKeysPage");
+const WebhooksPage = named(() => import("./pages/app/settings/WebhooksPage"), "WebhooksPage");
+const IntegrationsPage = named(() => import("./pages/app/settings/IntegrationsPage"), "IntegrationsPage");
+const InstitutionPage = named(() => import("./pages/app/settings/InstitutionPage"), "InstitutionPage");
+const KpiDashboardPage = named(() => import("./pages/app/KpiDashboardPage"), "KpiDashboardPage");
+const RevenueChartsPage = named(() => import("./pages/app/RevenueChartsPage"), "RevenueChartsPage");
+const StudentRetentionPage = named(() => import("./pages/app/StudentRetentionPage"), "StudentRetentionPage");
+const ExportPage = named(() => import("./pages/app/ExportPage"), "ExportPage");
+const InvoicePortalPage = named(() => import("./pages/portal/InvoicePortalPage"), "InvoicePortalPage");
+const VerifyCertificatePage = named(() => import("./pages/public/VerifyCertificatePage"), "VerifyCertificatePage");
 import { ErrorBoundary } from "./components/ErrorBoundary";
-// PAR-105: Create wizard
-import { ParCreateWizard } from "./pages/par/ParCreateWizard";
-// PAR-106: Dashboard + list
-import { ParDashboard } from "./pages/par/ParDashboard";
-// PAR-108: Approver inbox
-import ParInbox from "./pages/par/ParInbox";
-// PAR-112: Finance queue
-import ParFinanceQueue from "./pages/par/ParFinanceQueue";
-// PAR-115: PAR detail page with PDF download
-import ParDetailPage from "./pages/par/ParDetail";
-// PAR-116: Admin panel
-import ParAdmin from "./pages/par/ParAdmin";
-// PAR-117: Reports
-import { ParReports } from "./pages/par/ParReports";
+const ParCreateWizard = named(() => import("./pages/par/ParCreateWizard"), "ParCreateWizard"); // PAR-105
+const ParDashboard = named(() => import("./pages/par/ParDashboard"), "ParDashboard"); // PAR-106
+const ParInbox = lazy(() => import("./pages/par/ParInbox")); // PAR-108
+const ParFinanceQueue = lazy(() => import("./pages/par/ParFinanceQueue")); // PAR-112
+const ParDetailPage = lazy(() => import("./pages/par/ParDetail")); // PAR-115
+const ParAdmin = lazy(() => import("./pages/par/ParAdmin")); // PAR-116
+const ParReports = named(() => import("./pages/par/ParReports"), "ParReports"); // PAR-117
 import { useState, useEffect } from "react";
 import { getParMe } from "./lib/api/par";
-import ItparkList from "./pages/app/fin/itpark/ItparkList"
-import ItparkDetail from "./pages/app/fin/itpark/ItparkDetail"
-import ItparkWizard from "./pages/app/fin/itpark/ItparkWizard"
-import ItparkDashboardPage from "./pages/app/fin/itpark/ItparkDashboardPage"
-import CapturePage from "./pages/fin/CapturePage"
-import CapturesListPage from "./pages/fin/CapturesListPage"
-import CashPage from "./pages/fin/CashPage"
-import CashImportPage from "./pages/fin/CashImportPage"
-import FinPaymentsPage from "./pages/fin/PaymentsPage"
-import BankLinkPage from "./pages/fin/BankLinkPage"
-import BankLinkImportPage from "./pages/fin/BankLinkImportPage"
-import BankLinkTransactionsPage from "./pages/fin/BankLinkTransactionsPage"
-import BankLinkQueuePage from "./pages/fin/BankLinkQueuePage"
-import { FinInsightsPage } from "./pages/finance/FinInsightsPage";
-import { FinEinvoicesPage } from "./pages/app/FinEinvoicesPage";
-import { FinAiAuditPage } from "./pages/fin/FinAiAuditPage";
-import { AssetsPage } from "./pages/app/AssetsPage";
-import { FinHome } from "./pages/fin/FinHome";
-import { PayrollFINPage } from "./pages/fin/PayrollPage";
-import { BudgetPage } from "./pages/app/BudgetPage";
-import { FinExpensesPage } from "./pages/app/FinExpensesPage";
-import { InventoryReportPage } from "./pages/app/InventoryReportPage";
-import { FinInvoicesPage } from "./pages/app/FinInvoicesPage";
-import { FinExportCenter } from "./pages/app/fin/ExportCenter";
-import { PartiesPage } from "./pages/app/fin/PartiesPage";
-import { AgreementsPage } from "./pages/fin/AgreementsPage";
-import { PayrollEmployeesPage } from "./pages/fin/PayrollEmployeesPage";
-import { FinMassPage } from "./pages/fin/FinMassPage";
-import { TaxPage } from "./pages/fin/TaxPage";
-import { InventoryPage } from "./pages/app/InventoryPage";
-import { FinRegistryPage } from "./pages/app/FinRegistryPage";
-import { FinLedgerPage } from "./pages/fin/FinLedgerPage";
-import { FinSecuritySettingsPage } from "./pages/fin/FinSecuritySettingsPage";
-import { FinCalendarPage } from "./pages/fin/FinCalendarPage";
-import { RevaluationPage } from "./pages/app/RevaluationPage";
+const ItparkList = lazy(() => import("./pages/app/fin/itpark/ItparkList"));
+const ItparkDashboardPage = lazy(() => import("./pages/app/fin/itpark/ItparkDashboardPage"));
+const CapturesListPage = lazy(() => import("./pages/fin/CapturesListPage"));
+const CashPage = lazy(() => import("./pages/fin/CashPage"));
+const CashImportPage = lazy(() => import("./pages/fin/CashImportPage"));
+const FinPaymentsPage = lazy(() => import("./pages/fin/PaymentsPage"));
+const BankLinkPage = lazy(() => import("./pages/fin/BankLinkPage"));
+const BankLinkImportPage = lazy(() => import("./pages/fin/BankLinkImportPage"));
+const BankLinkTransactionsPage = lazy(() => import("./pages/fin/BankLinkTransactionsPage"));
+const BankLinkQueuePage = lazy(() => import("./pages/fin/BankLinkQueuePage"));
+const FinInsightsPage = named(() => import("./pages/finance/FinInsightsPage"), "FinInsightsPage");
+const FinEinvoicesPage = named(() => import("./pages/app/FinEinvoicesPage"), "FinEinvoicesPage");
+const FinAiAuditPage = named(() => import("./pages/fin/FinAiAuditPage"), "FinAiAuditPage");
+const AssetsPage = named(() => import("./pages/app/AssetsPage"), "AssetsPage");
+const FinHome = named(() => import("./pages/fin/FinHome"), "FinHome");
+const PayrollFINPage = named(() => import("./pages/fin/PayrollPage"), "PayrollFINPage");
+const BudgetPage = named(() => import("./pages/app/BudgetPage"), "BudgetPage");
+const FinExpensesPage = named(() => import("./pages/app/FinExpensesPage"), "FinExpensesPage");
+const InventoryReportPage = named(() => import("./pages/app/InventoryReportPage"), "InventoryReportPage");
+const FinInvoicesPage = named(() => import("./pages/app/FinInvoicesPage"), "FinInvoicesPage");
+const FinExportCenter = named(() => import("./pages/app/fin/ExportCenter"), "FinExportCenter");
+const PartiesPage = named(() => import("./pages/app/fin/PartiesPage"), "PartiesPage");
+const AgreementsPage = named(() => import("./pages/fin/AgreementsPage"), "AgreementsPage");
+const PayrollEmployeesPage = named(() => import("./pages/fin/PayrollEmployeesPage"), "PayrollEmployeesPage");
+const FinMassPage = named(() => import("./pages/fin/FinMassPage"), "FinMassPage");
+const TaxPage = named(() => import("./pages/fin/TaxPage"), "TaxPage");
+const InventoryPage = named(() => import("./pages/app/InventoryPage"), "InventoryPage");
+const FinRegistryPage = named(() => import("./pages/app/FinRegistryPage"), "FinRegistryPage");
+const FinLedgerPage = named(() => import("./pages/fin/FinLedgerPage"), "FinLedgerPage");
+const FinSecuritySettingsPage = named(() => import("./pages/fin/FinSecuritySettingsPage"), "FinSecuritySettingsPage");
+const FinCalendarPage = named(() => import("./pages/fin/FinCalendarPage"), "FinCalendarPage");
+const RevaluationPage = named(() => import("./pages/app/RevaluationPage"), "RevaluationPage");
 // SPLIT-003: Business Suite auth pages
-import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
-import { BusinessDashboardPage } from "./pages/business/BusinessDashboardPage";
+const BusinessLoginPage = named(() => import("./pages/business/BusinessLoginPage"), "BusinessLoginPage");
+const BusinessDashboardPage = named(() => import("./pages/business/BusinessDashboardPage"), "BusinessDashboardPage");
 // SPLIT-102: Business Suite landing page
-import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
-// SPLIT-103: Business guard HOC for delegated routes
+const BusinessLandingPage = named(() => import("./pages/business/BusinessLandingPage"), "BusinessLandingPage");
+// SPLIT-103: Business guard HOC for delegated routes (small wrapper — kept eager)
 import { BusinessGuardPage } from "./components/business/BusinessGuardPage";
 
 /** PAR-116: Role-aware wrapper — fetches current user's PAR roles then renders ParAdmin */
@@ -413,11 +412,26 @@ function Routes() {
 // Wraps the route tree in an ErrorBoundary keyed by the current path, so a render crash on one
 // page shows a recoverable error card instead of white-screening the whole SPA, and navigating
 // to another route clears it (IMPROVEMENTS #8).
+function RouteFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+      <span className="sr-only">Se încarcă…</span>
+      <div
+        className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary"
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
+
 function BoundedRoutes() {
   const { path } = useRouter();
   return (
     <ErrorBoundary resetKey={path}>
-      <Routes />
+      {/* PERF: Suspense boundary for the lazy-loaded route chunks */}
+      <Suspense fallback={<RouteFallback />}>
+        <Routes />
+      </Suspense>
     </ErrorBoundary>
   );
 }

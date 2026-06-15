@@ -6,7 +6,7 @@
  * On success → redirect to /business/dashboard.
  */
 import { useState } from "react";
-import { Loader2, LogIn, Briefcase } from "lucide-react";
+import { Loader2, LogIn } from "lucide-react";
 import { AuthLayout } from "@/components/app/AuthLayout";
 import { api, ApiError } from "@/lib/api";
 import { useRouter } from "@/router/HashRouter";
@@ -14,7 +14,7 @@ import { useRouter } from "@/router/HashRouter";
 export function BusinessLoginPage() {
   const { navigate } = useRouter();
   const [email, setEmail] = useState("admin@demo.business.io");
-  const [password, setPassword] = useState("demo123456");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,14 +61,6 @@ export function BusinessLoginPage() {
       }
     >
       <form onSubmit={submit} className="space-y-4">
-        {/* Demo credentials banner */}
-        <div className="rounded-md bg-info/10 border border-info/30 px-3 py-2 text-xs text-info flex items-center gap-2">
-          <Briefcase className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          <span>
-            <strong>Demo:</strong> admin@demo.business.io / demo123456 pre-completate
-          </span>
-        </div>
-
         <div>
           <label htmlFor="bs-email" className="block text-sm font-semibold mb-1.5">
             Email

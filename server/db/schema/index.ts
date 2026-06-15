@@ -90,7 +90,27 @@ export * from "./par"; // PAR-001: Payment Action Request module
 export { lessonHomework as homework } from "./homework";
 export * from "./finAgreements";
 export * from "./finAssets";
-export * from "./finBankLink";
+// NOTE: finBankLink and finCash BOTH declared `finBankTransactions` (+ FinBankTransaction /
+// InsertFinBankTransaction types). With two blanket `export *`, the duplicate name is dropped
+// from the merged namespace → `db.query.finBankTransactions` becomes undefined → 500 on every
+// relational query (e.g. GET /api/fin/cash/transactions). The physical table created by migration
+// 0134_fin_cash matches the finCash schema (tx_date / match_status), so finCash owns the
+// relational-query name. finBankLink's route imports its own table directly from ./finBankLink, so
+// here we re-export everything from finBankLink EXCEPT the colliding symbols. (§3.5.1 schema rule)
+export {
+  BANK_CODES_MD,
+  IMPORT_FORMATS,
+  finBankConnections,
+  BANK_TRANSACTION_STATUSES,
+  finBankConnectionsRelations,
+} from "./finBankLink";
+export type {
+  BankCodeMD,
+  ImportFormat,
+  BankTransactionStatus,
+  FinBankConnection,
+  InsertFinBankConnection,
+} from "./finBankLink";
 export * from "./finBudgets";
 export * from "./finBulk";
 export * from "./finCalendar";

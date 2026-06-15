@@ -25,7 +25,7 @@ function googleErrorFromHash(path: string): string | null {
 export function LoginPage() {
   const { navigate, path } = useRouter();
   const [email, setEmail] = useState("admin@demo.vectorlearn.io");
-  const [password, setPassword] = useState("demo123456");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(() => googleErrorFromHash(path));
 
@@ -72,10 +72,6 @@ export function LoginPage() {
       }
     >
       <form onSubmit={submit} className="space-y-4">
-        <div className="rounded-md bg-info/10 border border-info/30 px-3 py-2 text-xs text-info">
-          <strong>Demo:</strong> credentialele admin@demo.vectorlearn.io / demo123456 sunt pre-completate
-        </div>
-
         <div>
           <label htmlFor="email" className="block text-sm font-semibold mb-1.5">
             Email
