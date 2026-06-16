@@ -128,7 +128,9 @@ app.route("/api/fin/invoices", finInvoiceDocRoutes);
 // finExpensesRoutes defines paths as "/expenses/*" internally, so mount at /api/fin
 // (mounting at /api/fin/expenses doubled the segment → /api/fin/expenses/expenses/summary).
 app.route("/api/fin", finExpensesRoutes);
-app.route("/api/fin/captures", finCapturesRoutes);
+// finCapturesRoutes defines "/captures/*" internally → mount at /api/fin
+// (mounting at /api/fin/captures doubled the segment → /api/fin/captures/captures/summary 404'd).
+app.route("/api/fin", finCapturesRoutes);
 app.route("/api/fin/ledger", finLedgerRoutes);
 app.route("/api/fin/budget", finBudgetRoutes);
 app.route("/api/fin/cash", finCashAllocationsRoutes);
