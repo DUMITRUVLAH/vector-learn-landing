@@ -7,7 +7,12 @@
  *   2. Cereri   — one row per PAR, names resolved (not UUIDs), amounts numeric
  *   3. Articole — line items with their PAR number
  */
-import ExcelJS from "exceljs";
+// exceljs is loaded lazily (dynamic import inside buildParWorkbook) so the module —
+// and therefore the whole serverless function that transitively imports it via
+// parReports → app.ts — never requires the package at init. A top-level `import`
+// crashed every API route with FUNCTION_INVOCATION_FAILED when exceljs (marked
+// external in build-vercel.mjs) wasn't resolvable at function boot.
+import type ExcelJS from "exceljs";
 
 export interface ExcelParRow {
   requestNo: string;
@@ -77,7 +82,9 @@ export async function buildParWorkbook(params: {
   lines: ExcelLineRow[];
 }): Promise<Buffer> {
   const { orgName, pars, lines } = params;
-  const wb = new ExcelJS.Workbook();
+  // Lazy-load exceljs only when an export is actually requested (see note at top of file).
+  const { default: ExcelJSRuntime } = await import("exceljs");
+  const wb = new ExcelJSRuntime.Workbook();
   wb.creator = "Vector Finance";
   wb.created = new Date();
 
