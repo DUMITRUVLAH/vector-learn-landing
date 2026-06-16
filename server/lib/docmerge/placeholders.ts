@@ -20,14 +20,37 @@ export function extractPlaceholders(body: string): string[] {
 }
 
 /**
+ * Escape a string for safe HTML insertion.
+ * Prevents XSS / HTML-injection when substituting user-provided values
+ * (e.g. from an Excel cell) into an HTML template body.
+ */
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
  * Render a template by substituting context values.
+ * Values are HTML-escaped to prevent injection attacks (AC2 / T-DOCMERGE-003-2).
  * Unmatched placeholders are left as {{tag}} (visible in output — intentional).
+ *
+ * NOTE: The base renderTemplate in templates.ts does NOT escape — this wrapper
+ * adds escaping specifically for docmerge's use-case where values come from
+ * untrusted Excel cell data.
  */
 export function renderWithContext(
   body: string,
   context: Record<string, string>
 ): string {
-  return renderTemplate(body, context);
+  const escapedContext: Record<string, string> = {};
+  for (const [k, v] of Object.entries(context)) {
+    escapedContext[k] = escHtml(v);
+  }
+  return renderTemplate(body, escapedContext);
 }
 
 /**

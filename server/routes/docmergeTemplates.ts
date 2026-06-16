@@ -25,6 +25,8 @@ import {
   sampleContext,
 } from "../lib/docmerge/placeholders";
 import { parseWorkbook, autoMap as autoMapExcel } from "../lib/docmerge/excelImport";
+import { generateBatch } from "../lib/docmerge/generateBatch";
+import { buildPdfZip } from "../lib/docmerge/zipPdfs";
 
 export const docmergeTemplatesRoutes = new Hono<{
   Variables: AuthVariables;
@@ -262,6 +264,100 @@ docmergeTemplatesRoutes.post("/parse-excel", requireAuth, async (c) => {
     return c.json({ error: message }, 422);
   }
 });
+
+// ─── POST /api/docmerge/generate ─────────────────────────────────────────────
+
+const generateSchema = z.object({
+  templateId: z.string().uuid("templateId trebuie să fie un UUID valid"),
+  mapping: z.record(z.string()),
+  rows: z.array(z.record(z.string())).min(1, "Cel puțin un rând este necesar").max(5000, "Maxim 5000 rânduri"),
+  fileNameColumn: z.string().optional(),
+  delivery: z.enum(["zip", "single"]).default("zip"),
+});
+
+docmergeTemplatesRoutes.post(
+  "/generate",
+  requireAuth,
+  zValidator("json", generateSchema),
+  async (c) => {
+    const user = c.get("user");
+    const { templateId, mapping, rows, fileNameColumn, delivery } = c.req.valid("json");
+
+    // Validate mapping is non-empty
+    if (Object.keys(mapping).length === 0) {
+      return c.json({ error: "Maparea placeholderelor este goală." }, 400);
+    }
+
+    // Validate single delivery only for one row
+    if (delivery === "single" && rows.length !== 1) {
+      return c.json({ error: "delivery:single necesită exact un rând." }, 400);
+    }
+
+    // Fetch template and verify tenant ownership
+    const [template] = await db
+      .select({ bodyHtml: docmergeTemplates.bodyHtml, name: docmergeTemplates.name })
+      .from(docmergeTemplates)
+      .where(
+        and(
+          eq(docmergeTemplates.id, templateId),
+          eq(docmergeTemplates.tenantId, user.tenantId)
+        )
+      );
+
+    if (!template) {
+      return c.json({ error: "Template negăsit sau acces interzis." }, 403);
+    }
+
+    // Generate PDFs (one per row)
+    const files = await generateBatch({
+      bodyHtml: template.bodyHtml,
+      mapping,
+      rows,
+      fileNameColumn,
+    });
+
+    // Single delivery → return the first (and only) PDF directly
+    if (delivery === "single") {
+      const file = files[0];
+      const pdf = file?.pdf;
+      if (!pdf || pdf.length === 0) {
+        return c.json({ error: "Nu s-a putut genera PDF-ul. Playwright indisponibil." }, 503);
+      }
+      return new Response(pdf, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${file.name}"`,
+        },
+      });
+    }
+
+    // ZIP delivery → pack all PDFs
+    const allHavePdf = files.every((f) => f.pdf.length > 0);
+    if (!allHavePdf) {
+      return c.json({ error: "Nu s-au putut genera PDF-urile. Playwright indisponibil." }, 503);
+    }
+
+    const zipBuffer = await buildPdfZip(
+      files.map((f) => ({ name: f.name, pdf: Buffer.from(f.pdf) }))
+    );
+
+    const safeTemplateName = template.name
+      .replace(/[/:*?"<>|\\]/g, "_")
+      .replace(/\s+/g, "_")
+      .slice(0, 60);
+    const today = new Date().toISOString().slice(0, 10);
+    const zipFileName = `documente-${safeTemplateName}-${today}.zip`;
+
+    return new Response(zipBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="${zipFileName}"`,
+      },
+    });
+  }
+);
 
 // ─── POST /api/docmerge/automap ───────────────────────────────────────────────
 

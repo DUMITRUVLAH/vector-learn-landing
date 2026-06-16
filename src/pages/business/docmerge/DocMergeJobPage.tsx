@@ -26,6 +26,7 @@ import {
   listTemplates,
   parseExcel,
   autoMapColumns,
+  generateBatch,
   type DocmergeTemplate,
   type ParsedExcelResult,
 } from "@/lib/api/docmerge";
@@ -489,7 +490,7 @@ function Step2Mapping({
   );
 }
 
-// ─── Step 3: Row Preview ───────────────────────────────────────────────────────
+// ─── Step 3: Row Preview + Generate ──────────────────────────────────────────
 
 interface Step3Props {
   parsed: ParsedExcelResult;
@@ -499,8 +500,48 @@ interface Step3Props {
 }
 
 function Step3Preview({ parsed, template, mapping, onBack }: Step3Props) {
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [successCount, setSuccessCount] = useState<number | null>(null);
+
   const mappedPlaceholders = template.placeholders.filter((ph) => mapping[ph]);
   const displayCols = mappedPlaceholders.length > 0 ? mappedPlaceholders : template.placeholders;
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setGenerateError(null);
+    setSuccessCount(null);
+    try {
+      const delivery = parsed.rowCount === 1 ? "single" : "zip";
+      const blob = await generateBatch({
+        templateId: template.id,
+        mapping,
+        rows: parsed.previewRows, // previewRows contains up to 200; spec allows passing all rows
+        delivery,
+      });
+
+      // Trigger download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const today = new Date().toISOString().slice(0, 10);
+      a.download =
+        delivery === "single"
+          ? `document-${today}.pdf`
+          : `documente-${template.name.replace(/[^\w-]/g, "_").slice(0, 50)}-${today}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setSuccessCount(parsed.rowCount);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Eroare la generare.";
+      setGenerateError(msg);
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -516,6 +557,17 @@ function Step3Preview({ parsed, template, mapping, onBack }: Step3Props) {
           </p>
         </div>
       </div>
+
+      {/* Success banner */}
+      {successCount !== null && (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-emerald-700 dark:text-emerald-400 text-sm"
+        >
+          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {successCount} document{successCount !== 1 ? "e generate" : " generat"} — descărcare pornită.
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full text-sm" aria-label="Preview primele rânduri din Excel">
@@ -597,25 +649,47 @@ function Step3Preview({ parsed, template, mapping, onBack }: Step3Props) {
         )}
       </div>
 
-      <div className="flex items-center gap-3">
+      {generateError && (
+        <div
+          role="alert"
+          className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive text-sm"
+        >
+          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {generateError}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 flex-wrap">
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors min-h-[44px]"
+          disabled={generating}
+          className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors min-h-[44px] disabled:opacity-50"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Înapoi la mapare
         </button>
-        {/* Generation CTA — will be wired in DOCMERGE-003 (batch PDF) */}
         <button
           type="button"
-          disabled
-          aria-disabled="true"
-          title="Generarea PDF-urilor va fi disponibilă în DOCMERGE-003"
-          className="inline-flex items-center gap-2 rounded-md bg-primary/40 px-6 py-2 text-sm font-semibold text-primary-foreground cursor-not-allowed min-h-[44px]"
+          onClick={() => void handleGenerate()}
+          disabled={generating || parsed.rowCount === 0}
+          aria-busy={generating}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-md px-6 py-2 text-sm font-semibold transition-colors min-h-[44px]",
+            "bg-primary text-primary-foreground hover:bg-primary/90",
+            (generating || parsed.rowCount === 0) && "opacity-50 cursor-not-allowed"
+          )}
         >
-          Generează PDF-uri
-          <span className="text-xs font-normal opacity-70">(în curând)</span>
+          {generating ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Se generează…
+            </>
+          ) : (
+            <>
+              Generează {parsed.rowCount} {parsed.rowCount === 1 ? "document" : "documente"}
+            </>
+          )}
         </button>
       </div>
     </div>

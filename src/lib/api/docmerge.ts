@@ -113,3 +113,37 @@ export function autoMapColumns(
     body: JSON.stringify({ headers, placeholders }),
   });
 }
+
+// ─── DOCMERGE-003: Batch PDF / ZIP generation ────────────────────────────────
+
+export interface GenerateBatchPayload {
+  templateId: string;
+  mapping: Record<string, string>;
+  rows: Record<string, string>[];
+  fileNameColumn?: string;
+  delivery?: "zip" | "single";
+}
+
+/**
+ * Generate N PDFs from template + rows.
+ * Returns a Blob — either application/zip (delivery:"zip") or
+ * application/pdf (delivery:"single").
+ *
+ * NOTE: uses raw fetch (not the typed api() helper) because the response is
+ * a binary blob, not JSON. auth cookie is sent automatically (same-origin).
+ */
+export async function generateBatch(payload: GenerateBatchPayload): Promise<Blob> {
+  const res = await fetch("/api/docmerge/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(body || `Eroare la generare (${res.status})`);
+  }
+
+  return res.blob();
+}
