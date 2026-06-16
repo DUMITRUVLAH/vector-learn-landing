@@ -78,8 +78,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     section: "ITPark — Rezidenți",
     items: [
-      { label: "Rezidenți", href: "/business/itpark", icon: Building2 },
-      { label: "Dashboard ITPark", href: "/business/itpark/dashboard", icon: Landmark },
+      // FIX-503: ItparkDetail is mounted at /business/fin/itpark (not /business/itpark)
+      { label: "Rezidenți", href: "/business/fin/itpark", icon: Building2 },
+      // /business/itpark/dashboard has no dedicated route; redirect to the ITPark page
+      { label: "Dashboard ITPark", href: "/business/fin/itpark", icon: Landmark },
     ],
   },
   {

@@ -136,7 +136,8 @@ const BUSINESS_NAV_GROUPS: NavGroup[] = [
       { label: "Mijloace fixe", href: "/business/fin/assets", icon: Building2 },
       { label: "Stocuri", href: "/business/fin/inventory", icon: BookOpen },
       { label: "Buget", href: "/business/fin/budget", icon: BarChart3 },
-      { label: "Tablou de bord", href: "/business/fin/insights", icon: TrendingUp },
+      // FIX-503: /business/fin/insights has no route; FinInsightsPage is mounted at /business/fin/ledger
+      { label: "Tablou de bord", href: "/business/fin/ledger", icon: TrendingUp },
       { label: "Invoice Reporting", href: "/business/fin/captures", icon: Zap },
       { label: "Reconciliere & TVA import", href: "/business/fin/reconcile", icon: RefreshCw },
       { label: "Bancă", href: "/business/fin/banklink", icon: Landmark },

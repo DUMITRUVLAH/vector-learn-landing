@@ -33,6 +33,11 @@ jobs:
       - name: Route-mount gate
         run: node scripts/check-route-mounts.mjs
 
+      # 2b. Nav-link dead-link guard (FIX-503): FinNav + BusinessShell + AppShell(BUSINESS) hrefs
+      #     must all resolve to real App.tsx routes — a dead href ejects the user via RedirectToBusiness.
+      - name: Nav-links gate
+        run: node scripts/check-nav-links.mjs
+
       # 3. Multi-statement migrations must use "--> statement-breakpoint" or they crash a fresh DB.
       - name: Migration-breakpoint gate
         run: node scripts/check-migration-breakpoints.mjs
