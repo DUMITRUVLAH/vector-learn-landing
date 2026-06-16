@@ -47,11 +47,6 @@ await build({
     // exceljs is used only by the PAR Excel export (server/routes/parReports.ts). It pulls in
     // optional native/stream deps esbuild struggles to bundle; mark external so it resolves at runtime.
     "exceljs",
-    // pdfjs-dist (server/lib/ai/pdfText.ts) reads the text layer of uploaded PDFs (bank statements,
-    // invoices). When BUNDLED by esbuild, the dynamic import("pdfjs-dist/legacy/build/pdf.mjs")
-    // breaks on Vercel → extractPdfText() silently returns "" → statements extract 0 transactions.
-    // Externalize so it resolves from node_modules at runtime (same fix as exceljs/playwright).
-    "pdfjs-dist",
   ],
   // Provide a CJS require for any externalized require() calls in the ESM output.
   banner: {
@@ -59,21 +54,6 @@ await build({
   },
   logLevel: "info",
 });
-
-// 2b. Copy runtime-required externalized packages into the function's node_modules.
-// Externalized deps are NOT bundled, so they must physically exist next to the function
-// or `import("pkg")` throws ERR_MODULE_NOT_FOUND at runtime. pdfjs-dist MUST run on Vercel
-// (it extracts the text layer of uploaded PDFs), so copy it + its lone dep.
-const RUNTIME_DEPS = ["pdfjs-dist"];
-for (const dep of RUNTIME_DEPS) {
-  const src = `node_modules/${dep}`;
-  if (existsSync(src)) {
-    cpSync(src, `${FN}/node_modules/${dep}`, { recursive: true, dereference: true });
-    console.log(`  ↳ copied ${dep} into function node_modules`);
-  } else {
-    console.warn(`  ⚠ ${dep} not found in node_modules — runtime import will fail`);
-  }
-}
 
 writeFileSync(
   `${FN}/.vc-config.json`,
