@@ -457,7 +457,7 @@ authRoutes.get("/google", async (c) => {
 authRoutes.get("/google/callback", async (c) => {
   const config = getGoogleConfig();
   if (!config) {
-    return c.redirect(`${appUrl()}/#/app/login?error=google_not_configured`);
+    return c.redirect(`${appUrl()}/#/business/login?error=google_not_configured`);
   }
 
   const fail = (reason: string) =>
@@ -528,7 +528,10 @@ authRoutes.get("/google/callback", async (c) => {
     }
     const [tenant] = await db
       .insert(tenants)
-      .values({ name: baseName, slug, plan: "starter" })
+      // This is the Business Suite app — a new Google sign-up must land on a "business"
+      // tenant, else BusinessGuardPage (/api/business/auth/me) rejects it as wrong_app
+      // and bounces the user straight back to the login screen.
+      .values({ name: baseName, slug, plan: "starter", appKind: "business" })
       .returning();
     const [created] = await db
       .insert(users)
