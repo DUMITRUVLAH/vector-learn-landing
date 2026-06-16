@@ -3,7 +3,8 @@
  * Uses only Vector 365 semantic tokens; light + dark aware
  */
 import { cn } from "@/lib/utils";
-import { PAR_STATUS_COLORS, PAR_STATUS_LABELS, type ParStatus } from "@/lib/api/par";
+import { PAR_STATUS_COLORS, type ParStatus } from "@/lib/api/par";
+import { useT } from "@/lib/i18n";
 
 interface ParStatusChipProps {
   status: ParStatus;
@@ -11,6 +12,8 @@ interface ParStatusChipProps {
 }
 
 export function ParStatusChip({ status, className }: ParStatusChipProps) {
+  const { t } = useT();
+  const label = t(`status.${status}`); // VF-304: bilingual status labels
   return (
     <span
       className={cn(
@@ -18,9 +21,9 @@ export function ParStatusChip({ status, className }: ParStatusChipProps) {
         PAR_STATUS_COLORS[status],
         className
       )}
-      aria-label={`Status: ${PAR_STATUS_LABELS[status]}`}
+      aria-label={`Status: ${label}`}
     >
-      {PAR_STATUS_LABELS[status]}
+      {label}
     </span>
   );
 }

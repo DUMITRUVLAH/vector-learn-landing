@@ -30,6 +30,7 @@ import {
   getParReportAging,
   getParReportCycleTime,
   getParReportExportUrl,
+  getParReportExportXlsxUrl,
   type ParSpendByItem,
   type ParAgingItem,
   type ParCycleTimeItem,
@@ -269,6 +270,7 @@ export function ParReports() {
   const totalCount = byBudget.reduce((s, it) => s + it.count, 0);
 
   const exportUrl = getParReportExportUrl(filters);
+  const exportXlsxUrl = getParReportExportXlsxUrl(filters);
 
   return (
     <AppShell pageTitle="Rapoarte PAR">
@@ -280,15 +282,26 @@ export function ParReports() {
             <BarChart2 className="h-5 w-5 text-primary flex-shrink-0" aria-hidden />
             <h1 className="text-xl font-bold text-foreground">Rapoarte PAR</h1>
           </div>
-          <a
-            href={exportUrl}
-            download="par-export.csv"
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors min-h-[44px]"
-            aria-label="Exportă CSV"
-          >
-            <Download className="h-4 w-4" aria-hidden />
-            Export CSV
-          </a>
+          <div className="flex items-center gap-2">
+            <a
+              href={exportXlsxUrl}
+              download="par-export.xlsx"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px]"
+              aria-label="Exportă Excel"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Export Excel
+            </a>
+            <a
+              href={exportUrl}
+              download="par-export.csv"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors min-h-[44px]"
+              aria-label="Exportă CSV"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Export CSV
+            </a>
+          </div>
         </div>
 
         {/* Period filter */}

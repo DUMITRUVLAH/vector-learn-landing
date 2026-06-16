@@ -11,19 +11,24 @@
  * Design system: Vector 365 tokens only, light + dark, WCAG AA
  */
 import { useState, useEffect } from "react";
-import { Plus, Search, Filter, Loader2, FileText, AlertCircle } from "lucide-react";
+import { Plus, Search, Filter, Loader2, FileText, AlertCircle, Inbox, Landmark, ArrowRight, SlidersHorizontal, X } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useRouter } from "@/router/HashRouter";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import {
   listPar,
+  getParInbox,
+  getParMe,
+  getBudgetCodesUsage,
   formatMDL,
   type ParRequest,
   type ParStatus,
   type ParPurpose,
+  type BudgetCodeUsage,
   PAR_STATUS_LABELS,
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -46,19 +51,100 @@ const PURPOSE_OPTIONS: { value: ParPurpose | ""; label: string }[] = [
   { value: "provide_estimate", label: "Estimare costuri" },
 ];
 
+// ─── VF-105: filter persistence ───────────────────────────────────────────────
+
+const FILTERS_KEY = "vf.dashboard.filters";
+
+interface SavedFilters {
+  status?: ParStatus | "";
+  purpose?: ParPurpose | "";
+  q?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  minTotal?: string;
+  maxTotal?: string;
+}
+
+function loadSavedFilters(): SavedFilters {
+  try {
+    const raw = localStorage.getItem(FILTERS_KEY);
+    return raw ? (JSON.parse(raw) as SavedFilters) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveFilters(f: SavedFilters): void {
+  try {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify(f));
+  } catch {
+    /* ignore quota / unavailable */
+  }
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ParDashboard() {
   const { navigate } = useRouter();
+  const { t } = useT();
 
   const [requests, setRequests] = useState<(ParRequest & { above_micro_threshold: boolean })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters
-  const [statusFilter, setStatusFilter] = useState<ParStatus | "">("");
-  const [purposeFilter, setPurposeFilter] = useState<ParPurpose | "">("");
-  const [searchQ, setSearchQ] = useState("");
+  // VF-105: filters are restored from localStorage so they survive a reload.
+  const saved = loadSavedFilters();
+  const [statusFilter, setStatusFilter] = useState<ParStatus | "">(saved.status ?? "");
+  const [purposeFilter, setPurposeFilter] = useState<ParPurpose | "">(saved.purpose ?? "");
+  const [searchQ, setSearchQ] = useState(saved.q ?? "");
+  // VF-105: advanced filters (date range + total range in MDL units as strings)
+  const [dateFrom, setDateFrom] = useState(saved.dateFrom ?? "");
+  const [dateTo, setDateTo] = useState(saved.dateTo ?? "");
+  const [minTotal, setMinTotal] = useState(saved.minTotal ?? "");
+  const [maxTotal, setMaxTotal] = useState(saved.maxTotal ?? "");
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+
+  // Persist all filters on change.
+  useEffect(() => {
+    saveFilters({ status: statusFilter, purpose: purposeFilter, q: searchQ, dateFrom, dateTo, minTotal, maxTotal });
+  }, [statusFilter, purposeFilter, searchQ, dateFrom, dateTo, minTotal, maxTotal]);
+
+  const resetFilters = () => {
+    setStatusFilter(""); setPurposeFilter(""); setSearchQ("");
+    setDateFrom(""); setDateTo(""); setMinTotal(""); setMaxTotal("");
+  };
+  const hasActiveFilters = !!(statusFilter || purposeFilter || searchQ || dateFrom || dateTo || minTotal || maxTotal);
+
+  // "Te așteaptă" — real counts for the action banner (role-aware, loaded once)
+  const [inboxCount, setInboxCount] = useState(0);
+  const [isFinance, setIsFinance] = useState(false);
+
+  // VF-202: top budget codes near/over their limit (finance/par_admin only).
+  const [budgetAlerts, setBudgetAlerts] = useState<BudgetCodeUsage[]>([]);
+
+  useEffect(() => {
+    // Non-approvers get an empty inbox (no 403), so this is safe for everyone.
+    getParInbox()
+      .then((r) => setInboxCount(r.total))
+      .catch(() => setInboxCount(0));
+    getParMe()
+      .then((r) => {
+        const elevated = r.roles.includes("finance") || r.roles.includes("par_admin");
+        setIsFinance(elevated);
+        if (elevated) {
+          getBudgetCodesUsage()
+            .then((u) => {
+              const near = u.usage
+                .filter((c) => c.usedPct != null && c.usedPct >= 80)
+                .sort((a, b) => (b.usedPct ?? 0) - (a.usedPct ?? 0))
+                .slice(0, 3);
+              setBudgetAlerts(near);
+            })
+            .catch(() => setBudgetAlerts([]));
+        }
+      })
+      .catch(() => setIsFinance(false));
+  }, []);
 
   // Load data
   useEffect(() => {
@@ -66,10 +152,16 @@ export function ParDashboard() {
       setLoading(true);
       setError(null);
       try {
+        const minN = parseFloat(minTotal.replace(",", "."));
+        const maxN = parseFloat(maxTotal.replace(",", "."));
         const res = await listPar({
           status: statusFilter || undefined,
           purpose: purposeFilter || undefined,
           q: searchQ || undefined,
+          date_from: dateFrom || undefined,
+          date_to: dateTo || undefined,
+          min_total: Number.isFinite(minN) ? Math.round(minN * 100) : undefined,
+          max_total: Number.isFinite(maxN) ? Math.round(maxN * 100) : undefined,
         });
         setRequests(res.requests);
       } catch (e: unknown) {
@@ -79,7 +171,7 @@ export function ParDashboard() {
       }
     };
     load();
-  }, [statusFilter, purposeFilter, searchQ]);
+  }, [statusFilter, purposeFilter, searchQ, dateFrom, dateTo, minTotal, maxTotal]);
 
   // Derived sections
   const myRequests = requests;
@@ -96,15 +188,15 @@ export function ParDashboard() {
     .reduce((sum, r) => sum + r.totalEstimatedCents, 0);
 
   return (
-    <AppShell pageTitle="Cereri de plată (PAR)">
+    <AppShell pageTitle={t("dashboard.title")}>
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <FileText className="h-6 w-6 text-primary flex-shrink-0" aria-hidden />
             <div>
-              <h1 className="text-xl font-semibold text-foreground">Cereri de plată (PAR)</h1>
-              <p className="text-sm text-muted-foreground">Gestionează cererile de plată ale organizației</p>
+              <h1 className="text-xl font-semibold text-foreground">{t("dashboard.title")}</h1>
+              <p className="text-sm text-muted-foreground">{t("dashboard.subtitle")}</p>
             </div>
           </div>
           <button
@@ -118,12 +210,81 @@ export function ParDashboard() {
           </button>
         </div>
 
+        {/* "Te așteaptă" — one-click deep links to where decisions are needed */}
+        {(inboxCount > 0 || (isFinance && awaitingPayment.length > 0)) && (
+          <div className="space-y-2">
+            {inboxCount > 0 && (
+              <button
+                type="button"
+                onClick={() => navigate("/app/par/inbox")}
+                className="w-full flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-left hover:bg-primary/10 transition-colors min-h-[44px]"
+              >
+                <span className="flex items-center gap-3">
+                  <Inbox className="h-5 w-5 text-primary flex-shrink-0" aria-hidden />
+                  <span className="text-sm font-medium text-foreground">
+                    <strong>{inboxCount}</strong> {inboxCount === 1 ? "cerere așteaptă" : "cereri așteaptă"} decizia ta
+                  </span>
+                </span>
+                <span className="flex items-center gap-1 text-sm font-semibold text-primary">
+                  Deschide inbox <ArrowRight className="h-4 w-4" aria-hidden />
+                </span>
+              </button>
+            )}
+            {isFinance && awaitingPayment.length > 0 && (
+              <button
+                type="button"
+                onClick={() => navigate("/app/par/finance")}
+                className="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3 text-left hover:bg-muted transition-colors min-h-[44px]"
+              >
+                <span className="flex items-center gap-3">
+                  <Landmark className="h-5 w-5 text-primary flex-shrink-0" aria-hidden />
+                  <span className="text-sm font-medium text-foreground">
+                    <strong>{awaitingPayment.length}</strong> {awaitingPayment.length === 1 ? "cerere e" : "cereri sunt"} la finanțe, în așteptarea plății
+                  </span>
+                </span>
+                <span className="flex items-center gap-1 text-sm font-semibold text-primary">
+                  Deschide finanțe <ArrowRight className="h-4 w-4" aria-hidden />
+                </span>
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Summary cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <SummaryCard label="Total cereri" value={String(requests.length)} />
-          <SummaryCard label="Activ (estimat)" value={formatMDL(totalActive)} highlight />
-          <SummaryCard label="Total plătit" value={formatMDL(totalPaid)} />
+          <SummaryCard label={t("dashboard.total")} value={String(requests.length)} />
+          <SummaryCard label={t("dashboard.active")} value={formatMDL(totalActive)} highlight />
+          <SummaryCard label={t("dashboard.paid")} value={formatMDL(totalPaid)} />
         </div>
+
+        {/* VF-202: budget alerts (finance/par_admin only) */}
+        {isFinance && budgetAlerts.length > 0 && (
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Landmark className="h-4 w-4 text-primary" aria-hidden />
+              <h2 className="text-sm font-semibold text-foreground">Bugete aproape de limită</h2>
+            </div>
+            <div className="space-y-2.5">
+              {budgetAlerts.map((c) => {
+                const pct = c.usedPct ?? 0;
+                const bar = pct > 100 ? "bg-destructive" : "bg-yellow-500";
+                return (
+                  <div key={c.id}>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="font-medium text-foreground">{c.code}</span>
+                      <span className={pct > 100 ? "text-destructive font-medium" : "text-muted-foreground"}>
+                        {formatMDL(c.usedCents)} / {formatMDL(c.allocatedCents)} · {pct}%{pct > 100 ? " — depășit" : ""}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div className={cn("h-full rounded-full", bar)} style={{ width: `${Math.min(pct, 100)}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex flex-wrap gap-3 items-center">
@@ -169,7 +330,69 @@ export function ParDashboard() {
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
+
+          {/* VF-105: more filters toggle */}
+          <button
+            type="button"
+            onClick={() => setShowMoreFilters((v) => !v)}
+            aria-expanded={showMoreFilters}
+            className={cn(
+              "inline-flex items-center gap-1.5 h-10 rounded-md border px-3 text-sm min-h-[44px] transition-colors",
+              showMoreFilters || dateFrom || dateTo || minTotal || maxTotal
+                ? "border-primary text-primary bg-primary/5"
+                : "border-input text-muted-foreground hover:bg-muted"
+            )}
+          >
+            <SlidersHorizontal className="h-4 w-4" aria-hidden />
+            Mai multe filtre
+          </button>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center gap-1.5 h-10 rounded-md px-3 text-sm text-muted-foreground hover:text-foreground min-h-[44px]"
+            >
+              <X className="h-4 w-4" aria-hidden />
+              Resetează
+            </button>
+          )}
         </div>
+
+        {/* VF-105: advanced filters popover */}
+        {showMoreFilters && (
+          <div className="rounded-lg border border-border bg-card p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="date-from" className="block text-xs font-semibold mb-1.5 text-muted-foreground">De la data</label>
+              <input id="date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="vf-input" />
+            </div>
+            <div>
+              <label htmlFor="date-to" className="block text-xs font-semibold mb-1.5 text-muted-foreground">Până la data</label>
+              <input id="date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="vf-input" />
+            </div>
+            <div>
+              <label htmlFor="min-total" className="block text-xs font-semibold mb-1.5 text-muted-foreground">Sumă minimă (MDL)</label>
+              <input id="min-total" type="number" min={0} value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="0" className="vf-input" />
+            </div>
+            <div>
+              <label htmlFor="max-total" className="block text-xs font-semibold mb-1.5 text-muted-foreground">Sumă maximă (MDL)</label>
+              <input id="max-total" type="number" min={0} value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="∞" className="vf-input" />
+            </div>
+          </div>
+        )}
+
+        {/* VF-105: active filter chips */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap gap-2">
+            {searchQ && <FilterChip label={`Caută: "${searchQ}"`} onRemove={() => setSearchQ("")} />}
+            {statusFilter && <FilterChip label={`Status: ${PAR_STATUS_LABELS[statusFilter]}`} onRemove={() => setStatusFilter("")} />}
+            {purposeFilter && <FilterChip label={PURPOSE_OPTIONS.find((o) => o.value === purposeFilter)?.label ?? purposeFilter} onRemove={() => setPurposeFilter("")} />}
+            {dateFrom && <FilterChip label={`De la ${dateFrom}`} onRemove={() => setDateFrom("")} />}
+            {dateTo && <FilterChip label={`Până la ${dateTo}`} onRemove={() => setDateTo("")} />}
+            {minTotal && <FilterChip label={`≥ ${minTotal} MDL`} onRemove={() => setMinTotal("")} />}
+            {maxTotal && <FilterChip label={`≤ ${maxTotal} MDL`} onRemove={() => setMaxTotal("")} />}
+          </div>
+        )}
 
         {/* Error */}
         {error && (
@@ -203,7 +426,7 @@ export function ParDashboard() {
             {/* Pending my approval (only shown if there are any) */}
             {pendingApproval.length > 0 && (
               <Section
-                title="În așteptarea aprobării mele"
+                title="În proces de aprobare"
                 count={pendingApproval.length}
                 requests={pendingApproval}
                 onRowClick={(id) => navigate(`/app/par/${id}`)}
@@ -326,6 +549,18 @@ function Section({ title, count, requests, onRowClick, emptyMessage, highlight }
 }
 
 // ─── Summary card ─────────────────────────────────────────────────────────────
+
+// VF-105: removable active-filter chip
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary px-3 py-1 text-xs">
+      {label}
+      <button type="button" onClick={onRemove} aria-label={`Elimină filtrul ${label}`} className="hover:text-primary/70">
+        <X className="h-3 w-3" aria-hidden />
+      </button>
+    </span>
+  );
+}
 
 function SummaryCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (

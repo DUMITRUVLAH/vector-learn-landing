@@ -1,8 +1,15 @@
+export interface ApiFieldError {
+  field: string;
+  message: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
     public readonly code: string,
-    message?: string
+    message?: string,
+    /** Field-level validation errors, e.g. the PAR /submit endpoint's `errors` array. */
+    public readonly details: ApiFieldError[] = []
   ) {
     super(message ?? code);
   }
@@ -23,12 +30,15 @@ export async function api<T = unknown>(
 
   if (!res.ok) {
     let code = `http_${res.status}`;
+    let details: ApiFieldError[] = [];
     try {
-      // The API returns errors in two shapes:
-      //   - app errors:  { error: "some_code" }            (string)
-      //   - zod errors:  { error: { issues, name }, success }  (object)
-      // Coerce both to a readable string so the UI never shows "[object Object]".
-      const body = (await res.json()) as { error?: unknown };
+      // The API returns errors in a few shapes:
+      //   - app errors:        { error: "some_code" }                     (string)
+      //   - validation errors: { error: "validation_failed", errors:[{field,message}] }
+      //   - zod errors:        { error: { issues, name }, success }       (object)
+      // Coerce to a readable string so the UI never shows "[object Object]", and
+      // preserve any field-level `errors` array so the caller can map them.
+      const body = (await res.json()) as { error?: unknown; errors?: unknown };
       const e = body?.error;
       if (typeof e === "string") {
         code = e;
@@ -40,10 +50,16 @@ export async function api<T = unknown>(
           code = (e as { name?: string }).name ?? `http_${res.status}`;
         }
       }
+      if (Array.isArray(body?.errors)) {
+        details = (body.errors as unknown[])
+          .filter((x): x is ApiFieldError =>
+            !!x && typeof (x as ApiFieldError).field === "string")
+          .map((x) => ({ field: x.field, message: String(x.message ?? "invalid") }));
+      }
     } catch {
       // ignore — keep the http_<status> fallback
     }
-    throw new ApiError(res.status, code);
+    throw new ApiError(res.status, code, undefined, details);
   }
 
   if (res.status === 204) return undefined as T;

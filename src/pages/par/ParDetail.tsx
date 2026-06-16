@@ -19,6 +19,7 @@ import { useState, useEffect } from "react";
 import {
   FileText,
   Download,
+  Copy,
   Loader2,
   CheckCircle2,
   XCircle,
@@ -38,7 +39,11 @@ import { AppShell } from "@/components/app/AppShell";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { ParApprovalChain } from "@/components/par/ParApprovalChain";
 import { ParTimeline } from "@/components/par/ParTimeline";
+import { ParComments } from "@/components/par/ParComments";
+import { ReceiptSection } from "@/components/par/ReceiptSection";
+import { ThreeWayMatchPanel } from "@/components/par/ThreeWayMatchPanel";
 import { useRouter } from "@/router/HashRouter";
+import { useSession } from "@/hooks/useSession";
 import {
   getPar,
   uploadAttachment,
@@ -47,6 +52,9 @@ import {
   requestParChanges,
   submitPar,
   reapproveOverage,
+  duplicatePar,
+  getPurchaseOrder,
+  issuePurchaseOrder,
   getParMe,
   formatMDL,
   type ParDetail as ParDetailType,
@@ -77,6 +85,13 @@ function fmtDate(iso: string | null | undefined): string {
   return d.toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// VF-203: format minor units in the PAR's currency (MDL keeps the "L" symbol).
+function fmtCurrency(cents: number, currency: string): string {
+  if (currency === "MDL") return formatMDL(cents);
+  const v = (cents / 100).toLocaleString("ro-MD", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${v} ${currency}`;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 interface SectionProps {
@@ -104,6 +119,86 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
       <dt className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-0.5">{label}</dt>
       <dd className="text-sm text-foreground">{value || <span className="text-muted-foreground">—</span>}</dd>
     </div>
+  );
+}
+
+// ─── VF-103: Duplicate button ──────────────────────────────────────────────────
+
+function DuplicateButton({ parId, onNavigate }: { parId: string; onNavigate: (path: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(false);
+  const handle = async () => {
+    setBusy(true);
+    setErr(false);
+    try {
+      const { par } = await duplicatePar(parId);
+      onNavigate(`/app/par/${par.id}`);
+    } catch {
+      setErr(true);
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={handle}
+      disabled={busy}
+      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted transition-colors min-h-[44px] disabled:opacity-60"
+      aria-label="Duplică această cerere într-o ciornă nouă"
+      title={err ? "Eroare la duplicare" : "Duplică"}
+    >
+      {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
+      Duplică
+    </button>
+  );
+}
+
+// ─── VF-503: Purchase Order button (issue + download) ───────────────────────────
+
+function PoButton({ par, orgName }: { par: ParDetailType; orgName: string }) {
+  const [po, setPo] = useState<import("@/lib/api/par").ParPurchaseOrder | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    getPurchaseOrder(par.id).then(setPo).catch(() => setPo(null));
+  }, [par.id]);
+
+  const issue = async () => {
+    setBusy(true); setErr(null);
+    try { const created = await issuePurchaseOrder(par.id); setPo(created); }
+    catch { setErr("Nu am putut emite comanda."); }
+    finally { setBusy(false); }
+  };
+
+  const download = async () => {
+    if (!po) return;
+    setBusy(true);
+    try {
+      const { downloadPoPdf } = await import("@/lib/poPdf");
+      await downloadPoPdf(po, par, orgName);
+    } catch { setErr("Eroare la generarea PDF."); }
+    finally { setBusy(false); }
+  };
+
+  // Only meaningful once the PAR is approved and has a payee.
+  const eligible = ["approved", "in_finance", "paid"].includes(par.status) && (!!par.payeeName || !!par.vendorId);
+  if (!eligible && !po) return null;
+
+  return po ? (
+    <button type="button" onClick={download} disabled={busy}
+      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted transition-colors min-h-[44px] disabled:opacity-60"
+      aria-label={`Descarcă comanda ${po.poNumber}`} title={err ?? po.poNumber}>
+      {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <FileText className="h-4 w-4" aria-hidden />}
+      Descarcă PO
+    </button>
+  ) : (
+    <button type="button" onClick={issue} disabled={busy}
+      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted transition-colors min-h-[44px] disabled:opacity-60"
+      aria-label="Emite comandă de achiziție" title={err ?? "Emite comandă (PO)"}>
+      {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <FileText className="h-4 w-4" aria-hidden />}
+      Emite PO
+    </button>
   );
 }
 
@@ -211,6 +306,27 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [showChangesForm, setShowChangesForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // VF-202: advisory over-budget notice after submit (non-blocking).
+  const [budgetWarning, setBudgetWarning] = useState<string | null>(null);
+
+  const doSubmit = async () => {
+    setBusy("submit");
+    setError(null);
+    setBudgetWarning(null);
+    try {
+      const res = await submitPar(par.id);
+      if (res.over_budget?.over) {
+        setBudgetWarning(
+          `Atenție: bugetul a fost depășit cu ${formatMDL(res.over_budget.overByCents)} (folosit ${formatMDL(res.over_budget.usedCents)} din ${formatMDL(res.over_budget.allocatedCents)}). Cererea a fost trimisă oricum.`
+        );
+      }
+      onRefresh();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Eroare");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const isAdmin = currentRoles.includes("par_admin");
   const isFinance = currentRoles.includes("finance") || isAdmin;
@@ -248,7 +364,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
           key="submit"
           type="button"
           disabled={!!busy}
-          onClick={() => do_("submit", () => submitPar(par.id))}
+          onClick={doSubmit}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px] disabled:opacity-60"
           aria-label="Trimite cererea spre aprobare"
         >
@@ -263,7 +379,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
           key="resubmit"
           type="button"
           disabled={!!busy}
-          onClick={() => do_("submit", () => submitPar(par.id))}
+          onClick={doSubmit}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px] disabled:opacity-60"
           aria-label="Re-trimite cererea după modificări"
         >
@@ -403,6 +519,13 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
         </div>
       )}
 
+      {budgetWarning && (
+        <div role="status" className="flex items-start gap-2 p-2.5 rounded bg-yellow-500/10 border border-yellow-500/30 text-yellow-800 dark:text-yellow-300 text-xs">
+          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden />
+          <span>{budgetWarning}</span>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         {actions}
       </div>
@@ -484,6 +607,8 @@ export function ParDetailPage() {
   const router = useRouter();
   navigate = router.navigate;
   const { path } = router;
+  const { data: session } = useSession();
+  const orgName = session?.tenant.name ?? "Organizație";
   const id = path.replace(/^\/app\/par\//, "").split("/")[0];
 
   const [par, setPar] = useState<ParDetailType | null>(null);
@@ -571,7 +696,11 @@ export function ParDetailPage() {
               {` · Creat ${fmtDate(par.createdAt)}`}
             </p>
           </div>
-          <PdfDownloadButton par={par} onAttached={load} />
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <DuplicateButton parId={par.id} onNavigate={router.navigate} />
+            <PoButton par={par} orgName={orgName} />
+            <PdfDownloadButton par={par} onAttached={load} />
+          </div>
         </div>
 
         {/* Role-aware actions */}
@@ -651,9 +780,23 @@ export function ParDetailPage() {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-border bg-muted/30">
-                  <td colSpan={5} className="p-2 text-sm font-bold text-foreground text-right">TOTAL ESTIMATED COST (MDL)</td>
-                  <td className="p-2 text-right text-base font-bold text-primary whitespace-nowrap">{formatMDL(par.totalEstimatedCents)}</td>
+                  <td colSpan={5} className="p-2 text-sm font-bold text-foreground text-right">
+                    TOTAL ESTIMAT{par.currency !== "MDL" ? ` (${par.currency})` : " (MDL)"}
+                  </td>
+                  <td className="p-2 text-right text-base font-bold text-primary whitespace-nowrap">
+                    {fmtCurrency(par.totalEstimatedCents, par.currency)}
+                  </td>
                 </tr>
+                {par.currency !== "MDL" && par.totalMdlCents != null && (
+                  <tr className="bg-muted/10">
+                    <td colSpan={5} className="px-2 pb-2 text-xs text-muted-foreground text-right">
+                      Echivalent MDL{par.exchangeRate ? ` (curs ${Number(par.exchangeRate).toFixed(4)})` : ""}
+                    </td>
+                    <td className="px-2 pb-2 text-right text-xs text-muted-foreground whitespace-nowrap">
+                      {formatMDL(par.totalMdlCents)}
+                    </td>
+                  </tr>
+                )}
               </tfoot>
             </table>
           </div>
@@ -750,31 +893,19 @@ export function ParDetailPage() {
           )}
         </div>
 
-        {/* SPLIT-202: FinDesk integration link — shown when PAR is paid */}
-        {par.status === "paid" && (
-          <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 mt-2">
-            <div className="flex items-center gap-2">
-              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0" aria-hidden="true">
-                <svg className="h-3.5 w-3.5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-foreground">FinDesk</p>
-                <p className="text-xs text-muted-foreground">
-                  Cheltuiala a fost înregistrată automat în FinDesk cu sursa „PAR".
-                </p>
-              </div>
-              <a
-                href={`#/app/fin/expenses?par_id=${par.id}`}
-                className="shrink-0 text-xs font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded"
-                aria-label="Vezi cheltuiala FinDesk"
-              >
-                Vezi cheltuiala →
-              </a>
-            </div>
-          </div>
-        )}
+        {/* VF-504/505: goods receipt + 3-way match (finance/admin, PAR in_finance) */}
+        {par.status === "in_finance" &&
+          (currentRoles.includes("finance") || currentRoles.includes("par_admin")) && (
+            <>
+              <ThreeWayMatchPanel parId={par.id} />
+              {par.line_items && par.line_items.length > 0 && (
+                <ReceiptSection parId={par.id} lineItems={par.line_items} />
+              )}
+            </>
+          )}
+
+        {/* VF-104: comments */}
+        <ParComments parId={par.id} />
 
         {/* Status footer */}
         <div className="text-xs text-muted-foreground text-right pt-2">
