@@ -44,6 +44,9 @@ await build({
     // never required at runtime on the fallback path (the import throws before resolution).
     "playwright",
     "chromium-bidi",
+    // exceljs is used only by the PAR Excel export (server/routes/parReports.ts). It pulls in
+    // optional native/stream deps esbuild struggles to bundle; mark external so it resolves at runtime.
+    "exceljs",
   ],
   // Provide a CJS require for any externalized require() calls in the ESM output.
   banner: {

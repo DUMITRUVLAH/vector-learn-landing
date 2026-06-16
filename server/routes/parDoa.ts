@@ -7,13 +7,33 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, asc } from "drizzle-orm";
 import { db } from "../db/client";
-import { parDoaMatrix } from "../db/schema/par";
+import { parDoaMatrix, parMembers } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 
 export const parDoaRoutes = new Hono<{ Variables: AuthVariables }>();
 
 parDoaRoutes.use("*", requireAuth);
+
+// VF-002: a DOA row may pin a step to a specific user. That user must be a PAR member of this
+// tenant — the explicit assignment then grants them authority to decide that step (see the
+// /approve handler). Pinning to a non-member would create a step nobody can clear. Returns an
+// error string when invalid, or null when OK.
+async function validateApproverAssignment(
+  tenantId: string,
+  approverUserId: string | null | undefined
+): Promise<string | null> {
+  if (!approverUserId) return null;
+  const member = await db
+    .select({ id: parMembers.id })
+    .from(parMembers)
+    .where(and(eq(parMembers.tenantId, tenantId), eq(parMembers.userId, approverUserId)))
+    .limit(1);
+  if (member.length === 0) {
+    return "approver_not_a_member: the assigned user has no PAR role in this organization";
+  }
+  return null;
+}
 
 const doaRowSchema = z.object({
   chargeTo: z.enum(["operations", "program", "other"]).nullable().optional(),
@@ -49,6 +69,9 @@ parDoaRoutes.post(
     const tenantId = c.get("user").tenantId;
     const body = c.req.valid("json");
 
+    const assignErr = await validateApproverAssignment(tenantId, body.approverUserId);
+    if (assignErr) return c.json({ error: assignErr }, 400);
+
     const [row] = await db
       .insert(parDoaMatrix)
       .values({
@@ -78,6 +101,11 @@ parDoaRoutes.patch(
     const tenantId = c.get("user").tenantId;
     const id = c.req.param("id");
     const body = c.req.valid("json");
+
+    if (body.approverUserId !== undefined) {
+      const assignErr = await validateApproverAssignment(tenantId, body.approverUserId);
+      if (assignErr) return c.json({ error: assignErr }, 400);
+    }
 
     const [row] = await db
       .update(parDoaMatrix)

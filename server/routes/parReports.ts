@@ -23,7 +23,11 @@ import {
   parBudgetCodes,
   parDepartments,
   parProjects,
+  parLineItems,
 } from "../db/schema/par";
+import { users } from "../db/schema/users";
+import { tenants } from "../db/schema/tenants";
+import { buildParWorkbook } from "../lib/par/excelExport";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 
@@ -268,4 +272,70 @@ parReportsRoutes.get("/export.csv", async (c) => {
   c.header("Content-Type", "text/csv; charset=utf-8");
   c.header("Content-Disposition", `attachment; filename="par-export.csv"`);
   return c.text(csv);
+});
+
+/** VF-201: GET /api/par/reports/export.xlsx — Excel workbook (3 sheets, resolved names). */
+parReportsRoutes.get("/export.xlsx", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const { from, to } = periodSchema.parse(c.req.query());
+
+  // PARs with names resolved via joins (not UUIDs).
+  const parRows = await db
+    .select({
+      id: parRequests.id,
+      requestNo: parRequests.requestNo,
+      dateOfRequest: parRequests.dateOfRequest,
+      requestorName: users.name,
+      departmentName: parDepartments.name,
+      projectName: parProjects.name,
+      budgetCode: parBudgetCodes.code,
+      purpose: parRequests.purpose,
+      chargeTo: parRequests.chargeTo,
+      status: parRequests.status,
+      totalEstimatedCents: parRequests.totalEstimatedCents,
+      currency: parRequests.currency,
+      submittedAt: parRequests.submittedAt,
+      approvedAt: parRequests.approvedAt,
+      paidAt: parRequests.paidAt,
+    })
+    .from(parRequests)
+    .leftJoin(users, eq(users.id, parRequests.requestedByUserId))
+    .leftJoin(parDepartments, eq(parDepartments.id, parRequests.departmentId))
+    .leftJoin(parProjects, eq(parProjects.id, parRequests.projectId))
+    .leftJoin(parBudgetCodes, eq(parBudgetCodes.id, parRequests.budgetCodeId))
+    .where(buildPeriodWhere(tenantId, from, to))
+    .orderBy(parRequests.dateOfRequest);
+
+  const pars = Array.isArray(parRows) ? parRows : (parRows as { rows?: typeof parRows }).rows ?? [];
+
+  // Line items for the same PARs, joined to their request number.
+  const lineRows = await db
+    .select({
+      requestNo: parRequests.requestNo,
+      position: parLineItems.position,
+      description: parLineItems.description,
+      quantity: parLineItems.quantity,
+      unit: parLineItems.unit,
+      unitPriceCents: parLineItems.unitPriceCents,
+      lineTotalCents: parLineItems.lineTotalCents,
+      currency: parRequests.currency,
+    })
+    .from(parLineItems)
+    .innerJoin(parRequests, eq(parRequests.id, parLineItems.parId))
+    .where(buildPeriodWhere(tenantId, from, to))
+    .orderBy(parRequests.requestNo, parLineItems.position);
+
+  const lines = Array.isArray(lineRows) ? lineRows : (lineRows as { rows?: typeof lineRows }).rows ?? [];
+
+  const [tenant] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
+
+  const buffer = await buildParWorkbook({
+    orgName: tenant?.name ?? "Organizație",
+    pars: pars as Parameters<typeof buildParWorkbook>[0]["pars"],
+    lines: lines as Parameters<typeof buildParWorkbook>[0]["lines"],
+  });
+
+  c.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  c.header("Content-Disposition", `attachment; filename="par-export.xlsx"`);
+  return c.body(buffer);
 });

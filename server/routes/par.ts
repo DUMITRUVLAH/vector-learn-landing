@@ -19,7 +19,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, ilike, desc, asc, inArray } from "drizzle-orm";
+import { and, eq, ilike, desc, asc, inArray, or, gte, lte, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   parRequests,
@@ -30,7 +30,13 @@ import {
   parAudit,
   parSettings,
   parVendors,
+  parDepartments,
+  parProjects,
+  parBudgetCodes,
+  parComments,
+  parQuotes,
 } from "../db/schema/par";
+import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { generateRequestNo } from "../lib/par/requestNo";
@@ -81,6 +87,8 @@ const updateParSchema = z.object({
   // Section 13
   attachments_present: z.boolean().optional(),
   attachments_note: z.string().max(2000).optional().nullable(),
+  // VF-203: currency (MDL default). Only editable while draft.
+  currency: z.enum(["MDL", "EUR", "USD", "RON"]).optional(),
 });
 
 const lineItemSchema = z.object({
@@ -191,6 +199,335 @@ parRoutes.post(
   }
 );
 
+// ─── POST /api/par/:id/duplicate — VF-103 ─────────────────────────────────────
+// Anyone who can SEE a PAR can duplicate it into a fresh draft owned by themselves.
+// Copies header fields + line items; NOT attachments/approvals/payment/dateNeeded. Payee fields
+// are copied only if the user is allowed to see them (GDPR, same rule as GET /:id).
+parRoutes.post("/:id/duplicate", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const sourceId = c.req.param("id");
+
+  const source = await getPAR(sourceId, tenantId);
+  if (!source) return c.json({ error: "not_found" }, 404);
+
+  const roles = await getUserPARRoles(user.id, tenantId);
+  const hasElevatedRole = roles.some((r) => ["approver", "finance", "par_admin"].includes(r));
+  // Requestors can only see (hence duplicate) their own PARs.
+  if (!hasElevatedRole && source.requestedByUserId !== user.id) {
+    return c.json({ error: "not_found" }, 404);
+  }
+  const canSeePayee = source.requestedByUserId === user.id || hasElevatedRole;
+
+  const requestNo = await generateRequestNo(tenantId);
+  const [draft] = await db
+    .insert(parRequests)
+    .values({
+      tenantId,
+      requestNo,
+      dateOfRequest: new Date(),
+      requestedByUserId: user.id, // duplicator owns the copy
+      requestorTitle: source.requestorTitle,
+      departmentId: source.departmentId,
+      dateNeeded: null, // not copied
+      projectId: source.projectId,
+      budgetCodeId: source.budgetCodeId,
+      budgetCodeNote: source.budgetCodeNote,
+      purpose: source.purpose,
+      chargeTo: source.chargeTo,
+      chargeBillingCode: source.chargeBillingCode,
+      endUse: source.endUse,
+      vendorId: canSeePayee ? source.vendorId : null,
+      payeeName: canSeePayee ? source.payeeName : null,
+      payeeIdnp: canSeePayee ? source.payeeIdnp : null,
+      payeeIban: canSeePayee ? source.payeeIban : null,
+      payeeBank: canSeePayee ? source.payeeBank : null,
+      attachmentsPresent: false,
+      currency: source.currency,
+      totalEstimatedCents: 0,
+      status: "draft",
+    })
+    .returning();
+
+  // Copy line items.
+  const sourceLines = await db
+    .select()
+    .from(parLineItems)
+    .where(and(eq(parLineItems.parId, sourceId), eq(parLineItems.tenantId, tenantId)))
+    .orderBy(asc(parLineItems.position));
+
+  if (sourceLines.length > 0) {
+    await db.insert(parLineItems).values(
+      sourceLines.map((l) => ({
+        tenantId,
+        parId: draft.id,
+        position: l.position,
+        description: l.description,
+        quantity: l.quantity,
+        unit: l.unit,
+        unitPriceCents: l.unitPriceCents,
+        lineTotalCents: l.lineTotalCents,
+      }))
+    );
+  }
+
+  const total = await recalcParTotal(draft.id, tenantId);
+
+  await writeAudit({
+    tenantId,
+    parId: draft.id,
+    actorUserId: user.id,
+    event: "duplicated_from",
+    detail: `Duplicated from ${source.requestNo} (${sourceId})`,
+  });
+
+  const [finalDraft] = await db
+    .select()
+    .from(parRequests)
+    .where(and(eq(parRequests.id, draft.id), eq(parRequests.tenantId, tenantId)));
+
+  return c.json({ par: { ...finalDraft, totalEstimatedCents: total } }, 201);
+});
+
+// ─── VF-104: comments ─────────────────────────────────────────────────────────
+// Comments live under /:id, so they're safe inside parRoutes (no mount-order conflict).
+
+/** Can this user see (and thus comment on) the PAR? Same rule as GET /:id. */
+async function canSeePAR(userId: string, tenantId: string, par: { requestedByUserId: string }): Promise<boolean> {
+  const roles = await getUserPARRoles(userId, tenantId);
+  const hasElevatedRole = roles.some((r) => ["approver", "finance", "par_admin"].includes(r));
+  return hasElevatedRole || par.requestedByUserId === userId;
+}
+
+const commentSchema = z.object({ body: z.string().min(1).max(5000) });
+
+/** GET /api/par/:id/comments — list comments (author name resolved). */
+parRoutes.get("/:id/comments", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+  if (!(await canSeePAR(user.id, tenantId, par))) return c.json({ error: "not_found" }, 404);
+
+  const rows = await db
+    .select({
+      id: parComments.id,
+      body: parComments.body,
+      authorUserId: parComments.authorUserId,
+      authorName: users.name,
+      createdAt: parComments.createdAt,
+    })
+    .from(parComments)
+    .leftJoin(users, eq(users.id, parComments.authorUserId))
+    .where(and(eq(parComments.parId, parId), eq(parComments.tenantId, tenantId)))
+    .orderBy(asc(parComments.createdAt));
+
+  return c.json({ comments: rows });
+});
+
+/** POST /api/par/:id/comments — add a comment (any user who can see the PAR). */
+parRoutes.post("/:id/comments", zValidator("json", commentSchema), async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+  const { body } = c.req.valid("json");
+
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+  if (!(await canSeePAR(user.id, tenantId, par))) return c.json({ error: "not_found" }, 404);
+
+  const [comment] = await db
+    .insert(parComments)
+    .values({ tenantId, parId, authorUserId: user.id, body })
+    .returning();
+
+  return c.json(
+    { id: comment.id, body: comment.body, authorUserId: user.id, authorName: user.name, createdAt: comment.createdAt },
+    201
+  );
+});
+
+// ─── VF-501: quotes (RFQ) ─────────────────────────────────────────────────────
+// Quotes attach to an `obtain_quotations` PAR. Add/delete only while the PAR is editable and by
+// the author or a par_admin. Anyone who can see the PAR can list them.
+
+const quoteSchema = z.object({
+  vendor_id: z.string().uuid().optional().nullable(),
+  vendor_name: z.string().max(300).optional().nullable(),
+  total_cents: z.number().int().positive(),
+  currency: z.enum(["MDL", "EUR", "USD", "RON"]).optional(),
+  valid_until: z.string().datetime({ offset: true }).or(z.string().date()).optional().nullable(),
+  notes: z.string().max(2000).optional().nullable(),
+  file_url: z.string().max(2000).optional().nullable(),
+});
+
+/** GET /api/par/:id/quotes — list quotes (anyone who can see the PAR). */
+parRoutes.get("/:id/quotes", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+  if (!(await canSeePAR(user.id, tenantId, par))) return c.json({ error: "not_found" }, 404);
+
+  const rows = await db
+    .select()
+    .from(parQuotes)
+    .where(and(eq(parQuotes.parId, parId), eq(parQuotes.tenantId, tenantId)))
+    .orderBy(asc(parQuotes.totalCents));
+  return c.json({ quotes: rows });
+});
+
+/** POST /api/par/:id/quotes — add a quote (author/par_admin, editable PAR only). */
+parRoutes.post("/:id/quotes", zValidator("json", quoteSchema), async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+  const body = c.req.valid("json");
+
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+  const roles = await getUserPARRoles(user.id, tenantId);
+  const isAdmin = roles.includes("par_admin");
+  if (par.requestedByUserId !== user.id && !isAdmin) {
+    return c.json({ error: "forbidden: only the author can add quotes" }, 403);
+  }
+  if (!EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number])) {
+    return c.json({ error: `forbidden: PAR status '${par.status}' is not editable` }, 403);
+  }
+
+  // Resolve a vendor name: explicit name, or the registered vendor's name.
+  let vendorName = body.vendor_name?.trim() || null;
+  if (!vendorName && body.vendor_id) {
+    const [v] = await db
+      .select({ name: parVendors.name })
+      .from(parVendors)
+      .where(and(eq(parVendors.id, body.vendor_id), eq(parVendors.tenantId, tenantId)));
+    vendorName = v?.name ?? null;
+  }
+  if (!vendorName) {
+    return c.json({ error: "vendor_required", detail: "Indică un furnizor (din listă sau nume liber)." }, 400);
+  }
+
+  const [quote] = await db
+    .insert(parQuotes)
+    .values({
+      tenantId,
+      parId,
+      vendorId: body.vendor_id ?? null,
+      vendorName,
+      totalCents: body.total_cents,
+      currency: body.currency ?? par.currency ?? "MDL",
+      validUntil: body.valid_until ? new Date(body.valid_until) : null,
+      notes: body.notes ?? null,
+      fileUrl: body.file_url ?? null,
+      createdByUserId: user.id,
+    })
+    .returning();
+
+  return c.json(quote, 201);
+});
+
+/** DELETE /api/par/:id/quotes/:quoteId — remove a quote (author/par_admin, editable PAR). */
+parRoutes.delete("/:id/quotes/:quoteId", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+  const quoteId = c.req.param("quoteId");
+
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+  const roles = await getUserPARRoles(user.id, tenantId);
+  if (par.requestedByUserId !== user.id && !roles.includes("par_admin")) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+  if (!EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number])) {
+    return c.json({ error: `forbidden: status '${par.status}' not editable` }, 403);
+  }
+
+  const [deleted] = await db
+    .delete(parQuotes)
+    .where(and(eq(parQuotes.id, quoteId), eq(parQuotes.parId, parId), eq(parQuotes.tenantId, tenantId)))
+    .returning({ id: parQuotes.id });
+  if (!deleted) return c.json({ error: "not_found" }, 404);
+  return c.json({ ok: true });
+});
+
+// ─── VF-502: select winning quote + justification ─────────────────────────────
+
+const selectQuoteSchema = z.object({ reason: z.string().min(1).max(2000) });
+
+/** POST /api/par/:id/quotes/:quoteId/select — mark the winning quote, copy its payee into the PAR. */
+parRoutes.post("/:id/quotes/:quoteId/select", zValidator("json", selectQuoteSchema), async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+  const quoteId = c.req.param("quoteId");
+  const { reason } = c.req.valid("json");
+
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+  const roles = await getUserPARRoles(user.id, tenantId);
+  if (par.requestedByUserId !== user.id && !roles.includes("par_admin")) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+  if (!EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number])) {
+    return c.json({ error: `forbidden: status '${par.status}' not editable` }, 403);
+  }
+
+  const [quote] = await db
+    .select()
+    .from(parQuotes)
+    .where(and(eq(parQuotes.id, quoteId), eq(parQuotes.parId, parId), eq(parQuotes.tenantId, tenantId)));
+  if (!quote) return c.json({ error: "not_found" }, 404);
+
+  // Exactly one selected quote per PAR: clear the others, then mark this one.
+  await db
+    .update(parQuotes)
+    .set({ selected: false, selectionReason: null })
+    .where(and(eq(parQuotes.parId, parId), eq(parQuotes.tenantId, tenantId)));
+  await db
+    .update(parQuotes)
+    .set({ selected: true, selectionReason: reason })
+    .where(and(eq(parQuotes.id, quoteId), eq(parQuotes.tenantId, tenantId)));
+
+  // Copy the winning quote's payee + amount into the PAR so it flows through the rest of the process.
+  // Vendor snapshot respects what's available on the quote (registered vendor or free name).
+  const payeeUpdate: Record<string, unknown> = {
+    vendorId: quote.vendorId,
+    payeeName: quote.vendorName,
+    currency: quote.currency,
+    updatedAt: new Date(),
+  };
+  if (quote.vendorId) {
+    const [v] = await db
+      .select({ idnp: parVendors.idnp, iban: parVendors.iban, bank: parVendors.bank })
+      .from(parVendors)
+      .where(and(eq(parVendors.id, quote.vendorId), eq(parVendors.tenantId, tenantId)));
+    if (v) {
+      payeeUpdate.payeeIdnp = v.idnp;
+      payeeUpdate.payeeIban = v.iban;
+      payeeUpdate.payeeBank = v.bank;
+    }
+  }
+  await db
+    .update(parRequests)
+    .set(payeeUpdate)
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+
+  await writeAudit({
+    tenantId,
+    parId,
+    actorUserId: user.id,
+    event: "quote_selected",
+    detail: `Ofertă selectată: ${quote.vendorName} (${quote.totalCents / 100} ${quote.currency}). Motiv: ${reason.slice(0, 200)}`,
+  });
+
+  return c.json({ ok: true, quoteId, selected: true });
+});
+
 // ─── GET /api/par — list ─────────────────────────────────────────────────────
 
 parRoutes.get("/", async (c) => {
@@ -203,9 +540,14 @@ parRoutes.get("/", async (c) => {
   const purpose = c.req.query("purpose");
   const projectId = c.req.query("project_id");
   const q = c.req.query("q");
+  // VF-105: date range (on dateOfRequest) + total range (cents)
+  const dateFrom = c.req.query("date_from");
+  const dateTo = c.req.query("date_to");
+  const minTotal = c.req.query("min_total");
+  const maxTotal = c.req.query("max_total");
 
   // Build conditions
-  const conditions: ReturnType<typeof eq>[] = [eq(parRequests.tenantId, tenantId)];
+  const conditions = [eq(parRequests.tenantId, tenantId)];
 
   // Requestors see only their own PARs (unless they also have approver/finance/admin role)
   const hasElevatedRole = roles.some((r) =>
@@ -219,24 +561,52 @@ parRoutes.get("/", async (c) => {
     conditions.push(eq(parRequests.status, status as typeof parRequests.status.dataType));
   }
   if (purpose && parPurposeValues.includes(purpose as typeof parPurposeValues[number])) {
-    conditions.push(eq(parRequests.purpose, purpose as typeof parRequests.purpose.dataType));
+    conditions.push(eq(parRequests.purpose, purpose as typeof parPurposeValues[number]));
   }
   if (projectId) {
     conditions.push(eq(parRequests.projectId, projectId));
   }
+
+  // VF-105: full-text-ish search across requestNo, payeeName, endUse, and line-item descriptions.
+  if (q && q.trim()) {
+    const like = `%${q.trim()}%`;
+    const lineItemMatch = sql`EXISTS (
+      SELECT 1 FROM ${parLineItems} li
+      WHERE li.par_id = ${parRequests.id} AND li.description ILIKE ${like}
+    )`;
+    const orClause = or(
+      ilike(parRequests.requestNo, like),
+      ilike(parRequests.payeeName, like),
+      ilike(parRequests.endUse, like),
+      lineItemMatch
+    );
+    if (orClause) conditions.push(orClause as typeof conditions[number]);
+  }
+
+  // VF-105: date range on dateOfRequest.
+  if (dateFrom) {
+    const d = new Date(dateFrom);
+    if (!isNaN(d.getTime())) conditions.push(gte(parRequests.dateOfRequest, d));
+  }
+  if (dateTo) {
+    const d = new Date(dateTo);
+    if (!isNaN(d.getTime())) {
+      d.setHours(23, 59, 59, 999); // inclusive end-of-day
+      conditions.push(lte(parRequests.dateOfRequest, d));
+    }
+  }
+
+  // VF-105: total range (cents).
+  const minN = minTotal != null ? Number(minTotal) : NaN;
+  const maxN = maxTotal != null ? Number(maxTotal) : NaN;
+  if (Number.isFinite(minN)) conditions.push(gte(parRequests.totalEstimatedCents, Math.round(minN)));
+  if (Number.isFinite(maxN)) conditions.push(lte(parRequests.totalEstimatedCents, Math.round(maxN)));
 
   const rows = await db
     .select()
     .from(parRequests)
     .where(and(...conditions))
     .orderBy(desc(parRequests.createdAt));
-
-  // Filter by q (search in requestNo)
-  const filtered = q
-    ? rows.filter((r) =>
-        r.requestNo.toLowerCase().includes(q.toLowerCase())
-      )
-    : rows;
 
   // Get micro-purchase threshold for flag
   const [settings] = await db
@@ -245,7 +615,7 @@ parRoutes.get("/", async (c) => {
     .where(eq(parSettings.tenantId, tenantId));
   const threshold = settings?.threshold ?? 1000000;
 
-  const result = filtered.map((r) => ({
+  const result = rows.map((r) => ({
     ...r,
     above_micro_threshold: r.totalEstimatedCents > threshold,
   }));
@@ -349,6 +719,44 @@ parRoutes.get("/:id", async (c) => {
     }
   }
 
+  // PAR-114-fix: resolve UUIDs → human-readable names for the PDF/print form.
+  // The raw *Id columns are kept for the API; these *_name fields are display labels.
+  const userIdsToResolve = [
+    par.requestedByUserId,
+    payment?.receivedByUserId ?? null,
+    payment?.assignedToUserId ?? null,
+  ].filter((v): v is string => !!v);
+
+  const userRows = userIdsToResolve.length
+    ? await db
+        .select({ id: users.id, name: users.name })
+        .from(users)
+        .where(and(eq(users.tenantId, tenantId), inArray(users.id, userIdsToResolve)))
+    : [];
+  const userName = (id: string | null | undefined) =>
+    (id && userRows.find((u) => u.id === id)?.name) || null;
+
+  const [dept] = par.departmentId
+    ? await db
+        .select({ name: parDepartments.name })
+        .from(parDepartments)
+        .where(and(eq(parDepartments.tenantId, tenantId), eq(parDepartments.id, par.departmentId)))
+    : [];
+
+  const [proj] = par.projectId
+    ? await db
+        .select({ name: parProjects.name })
+        .from(parProjects)
+        .where(and(eq(parProjects.tenantId, tenantId), eq(parProjects.id, par.projectId)))
+    : [];
+
+  const [bc] = par.budgetCodeId
+    ? await db
+        .select({ code: parBudgetCodes.code, name: parBudgetCodes.name })
+        .from(parBudgetCodes)
+        .where(and(eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.id, par.budgetCodeId)))
+    : [];
+
   return c.json({
     ...parData,
     above_micro_threshold: par.totalEstimatedCents > threshold,
@@ -356,6 +764,13 @@ parRoutes.get("/:id", async (c) => {
     approvals,
     attachments,
     payment: payment ?? null,
+    // Resolved display names (UUIDs stay in the *Id fields above)
+    requestedByName: userName(par.requestedByUserId),
+    departmentName: dept?.name ?? null,
+    projectName: proj?.name ?? null,
+    budgetCodeLabel: bc ? [bc.code, bc.name].filter(Boolean).join(" — ") : null,
+    receivedByName: userName(payment?.receivedByUserId),
+    assignedToName: userName(payment?.assignedToUserId),
     /** PAR-109: null = not applicable (draft/no hash); true = body untampered; false = INTEGRITY VIOLATION */
     body_hash_valid: bodyHashValid,
   });
@@ -469,6 +884,7 @@ parRoutes.patch(
     if (body.charge_billing_code !== undefined)
       updateData.chargeBillingCode = body.charge_billing_code;
     if (body.end_use !== undefined) updateData.endUse = body.end_use;
+    if (body.currency !== undefined) updateData.currency = body.currency;
     if (body.attachments_present !== undefined)
       updateData.attachmentsPresent = body.attachments_present;
     if (body.attachments_note !== undefined)
@@ -757,8 +1173,63 @@ parRoutes.post("/:id/submit", async (c) => {
     return c.json({ error: result.message ?? "submit_failed" }, 400);
   }
 
-  return c.json({ ...result.par, approval_steps: result.approvalSteps });
+  // VF-202: non-blocking over-budget signal. If this PAR's budget code is now over its allocation,
+  // tell the client so it can warn (the submit still succeeds — budgets are advisory, not gates).
+  const overBudget = await computeOverBudget(tenantId, par.budgetCodeId);
+
+  // VF-501/502: for `obtain_quotations`, advise the donor 3-bid rule + a chosen quote (non-blocking).
+  let quotesBelowThree = false;
+  let noQuoteSelected = false;
+  if (par.purpose === "obtain_quotations") {
+    const qRows = await db
+      .select({ selected: parQuotes.selected })
+      .from(parQuotes)
+      .where(and(eq(parQuotes.parId, parId), eq(parQuotes.tenantId, tenantId)));
+    quotesBelowThree = qRows.length < 3;
+    // Only flag "no selection" when there ARE quotes but none is chosen.
+    noQuoteSelected = qRows.length > 0 && !qRows.some((q) => q.selected);
+  }
+
+  return c.json({
+    ...result.par,
+    approval_steps: result.approvalSteps,
+    over_budget: overBudget,
+    quotes_below_three: quotesBelowThree,
+    no_quote_selected: noQuoteSelected,
+  });
 });
+
+/**
+ * VF-202: returns { over: true, overByCents } if the budget code is over-allocated (committed +
+ * paid > allocated), or null when there's no code / no allocation set. Advisory only.
+ */
+async function computeOverBudget(
+  tenantId: string,
+  budgetCodeId: string | null
+): Promise<{ over: boolean; overByCents: number; allocatedCents: number; usedCents: number } | null> {
+  if (!budgetCodeId) return null;
+  const [code] = await db
+    .select({ allocatedCents: parBudgetCodes.allocatedCents })
+    .from(parBudgetCodes)
+    .where(and(eq(parBudgetCodes.id, budgetCodeId), eq(parBudgetCodes.tenantId, tenantId)));
+  const allocatedCents = code?.allocatedCents ?? 0;
+  if (allocatedCents <= 0) return null; // no allocation → nothing to exceed
+
+  const [usedRow] = await db
+    .select({ total: sql<number>`coalesce(sum(${parRequests.totalEstimatedCents}), 0)` })
+    .from(parRequests)
+    .where(
+      and(
+        eq(parRequests.tenantId, tenantId),
+        eq(parRequests.budgetCodeId, budgetCodeId),
+        inArray(parRequests.status, [
+          "pending_approval", "approved", "in_finance", "reapproval_required", "changes_requested", "paid",
+        ])
+      )
+    );
+  const usedCents = Number(usedRow?.total ?? 0);
+  return { over: usedCents > allocatedCents, overByCents: usedCents - allocatedCents, allocatedCents, usedCents };
+}
 
 // ─── DELETE /api/par/:id/line-items/:lineId ──────────────────────────────────
 
