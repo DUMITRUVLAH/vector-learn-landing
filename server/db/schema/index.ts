@@ -39,7 +39,26 @@ export * from "./finClientPortalDocuments";
 export * from "./finClientPortalTokens";
 export * from "./itpark";
 // CONT-PLATA
+export * from "./sellerProfiles";
+export * from "./companyClients";
 export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
 // PAR module
 export * from "./par";
+// FinVat
+export * from "./finVatImports";
+// CRM schema kept for FinDesk cross-references (finLedger, finBankLink, finGdpr etc.)
+export * from "./invoices";
+export * from "./payments";
+export * from "./students";
+export * from "./payroll";
+export * from "./consent";
+export * from "./messages";
+export * from "./leads";
+export * from "./families";
+export * from "./teachers";
+export * from "./branches";
+export * from "./courses";
+export * from "./guardians";
+export * from "./templates";
+export * from "./promoCodes";

@@ -17,8 +17,21 @@ import { checkBudget } from "./budgetGuard";
 import { isEnabled } from "./featureFlags";
 import type { AiFeature } from "./featureFlags";
 
-const API_KEY = process.env.AI_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? "";
-const MODEL = process.env.AI_MODEL ?? "claude-3-haiku-20240307";
+// Provider auto-selection by which key is present:
+//   OPENAI_API_KEY set     → OpenAI Chat Completions (default model gpt-4o-mini)
+//   AI/ANTHROPIC key set   → Anthropic Messages (default model claude-3-haiku)
+//   neither                → deterministic stub (app stays functional offline)
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "";
+const ANTHROPIC_KEY = process.env.AI_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? "";
+const PROVIDER: "openai" | "anthropic" | "none" = OPENAI_API_KEY
+  ? "openai"
+  : ANTHROPIC_KEY
+    ? "anthropic"
+    : "none";
+const API_KEY = PROVIDER === "openai" ? OPENAI_API_KEY : ANTHROPIC_KEY;
+const MODEL =
+  process.env.AI_MODEL ??
+  (PROVIDER === "openai" ? "gpt-4o-mini" : "claude-3-haiku-20240307");
 
 /** Approximate cost in micro-USD per token (Haiku: ~0.25/1M input, 1.25/1M output) */
 const COST_PER_INPUT_TOKEN_MICRO = 0.00025; // $0.00025 per token = 0.25 micro-USD
@@ -33,6 +46,12 @@ export interface AiCallOptions {
   entityType?: string;
   entityId?: string;
   maxTokens?: number;
+  /**
+   * Optional image (or PDF page rendered to image) as a data URL
+   * ("data:image/png;base64,..."). When set and PROVIDER is OpenAI, the call uses
+   * vision so the model reads the document directly without pre-extracted text.
+   */
+  imageDataUrl?: string;
 }
 
 export interface AiCallResult {
@@ -81,6 +100,7 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
     entityType,
     entityId,
     maxTokens = 512,
+    imageDataUrl,
   } = opts;
 
   // --- AI-A04: Feature-disabled gate ---
@@ -185,7 +205,7 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
     };
   }
 
-  // --- Real Anthropic API path ---
+  // --- Real LLM API path (OpenAI or Anthropic, selected by PROVIDER) ---
   let responseText = "";
   let promptTokens = 0;
   let completionTokens = 0;
@@ -193,45 +213,85 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
   let note: string | undefined;
 
   try {
-    const messages: Array<{ role: string; content: string }> = [
-      { role: "user", content: userMessage },
-    ];
+    if (PROVIDER === "openai") {
+      // OpenAI Chat Completions. System + user as two messages. When an image is
+      // provided, the user content becomes a [text, image_url] array (vision).
+      const userContent = imageDataUrl
+        ? [
+            { type: "text", text: userMessage },
+            { type: "image_url", image_url: { url: imageDataUrl } },
+          ]
+        : userMessage;
+      const payload = {
+        model: MODEL,
+        max_tokens: maxTokens,
+        messages: [
+          ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
+          { role: "user", content: userContent },
+        ],
+      };
 
-    const payload = {
-      model: MODEL,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages,
-    };
+      const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${API_KEY}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(30_000),
+      });
 
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(30_000), // 30s hard timeout
-    });
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(`OpenAI API error ${resp.status}: ${errBody}`);
+      }
 
-    if (!resp.ok) {
-      const errBody = await resp.text();
-      throw new Error(`Anthropic API error ${resp.status}: ${errBody}`);
+      const data = (await resp.json()) as {
+        choices: Array<{ message: { content: string | null } }>;
+        usage: { prompt_tokens: number; completion_tokens: number };
+      };
+
+      responseText = data.choices?.[0]?.message?.content ?? "";
+      promptTokens = data.usage?.prompt_tokens ?? 0;
+      completionTokens = data.usage?.completion_tokens ?? 0;
+    } else {
+      // Anthropic Messages API.
+      const payload = {
+        model: MODEL,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userMessage }],
+      };
+
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(30_000), // 30s hard timeout
+      });
+
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(`Anthropic API error ${resp.status}: ${errBody}`);
+      }
+
+      const data = (await resp.json()) as {
+        content: Array<{ type: string; text: string }>;
+        usage: { input_tokens: number; output_tokens: number };
+      };
+
+      responseText = data.content
+        .filter((c) => c.type === "text")
+        .map((c) => c.text)
+        .join("");
+
+      promptTokens = data.usage?.input_tokens ?? 0;
+      completionTokens = data.usage?.output_tokens ?? 0;
     }
-
-    const data = (await resp.json()) as {
-      content: Array<{ type: string; text: string }>;
-      usage: { input_tokens: number; output_tokens: number };
-    };
-
-    responseText = data.content
-      .filter((c) => c.type === "text")
-      .map((c) => c.text)
-      .join("");
-
-    promptTokens = data.usage?.input_tokens ?? 0;
-    completionTokens = data.usage?.output_tokens ?? 0;
   } catch (err) {
     status = "error";
     note = err instanceof Error ? err.message : String(err);
