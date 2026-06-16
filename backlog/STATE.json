@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "current_item": "FIX-501",
-  "last_completed": "PAR-118",
+  "current_item": "FIX-502",
+  "last_completed": "FIX-501",
   "iterations": 165,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
@@ -4093,18 +4093,22 @@
       "branch": "feat/DOCMERGE-faza-1-document-merge"
     },
     "FIX-501": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FIX-501-finnav-dead-links.md",
       "milestone": "AUDIT-FIX",
       "phase": "1",
       "depends_on": [],
-      "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll"
+      "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "tests": "4/4 pass"
+      }
     },
     "FIX-502": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FIX-502-payroll-wrong-page-and-route.md",
       "milestone": "AUDIT-FIX",

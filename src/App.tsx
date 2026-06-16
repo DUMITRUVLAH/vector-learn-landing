@@ -41,7 +41,11 @@ import { InventoryReportPage } from "./pages/app/InventoryReportPage";
 import { PaymentAccountsPage } from "./pages/app/PaymentAccountsPage";
 import { PaymentAccountEditorPage } from "./pages/app/PaymentAccountEditorPage";
 import { PaymentAccountViewPage } from "./pages/app/PaymentAccountViewPage";
-import { PayrollPage } from "./pages/app/PayrollPage";
+// FIX-502: Use FinDesk payroll pages (pages/fin/*) not the CRM payroll page (pages/app/PayrollPage).
+// The CRM page calls /api/hr/payroll which is NOT mounted; FinDesk pages call /api/fin/payroll/* which IS mounted.
+import { PayrollFINPage } from "./pages/fin/PayrollPage";
+import { PayrollEmployeesPage } from "./pages/fin/PayrollEmployeesPage";
+import { PayrollRunDetailPage } from "./pages/fin/PayrollRunDetailPage";
 import ReconcilePage from "./pages/fin/ReconcilePage";
 import CashPage from "./pages/fin/CashPage";
 import { PartiesPage } from "./pages/app/fin/PartiesPage";
@@ -105,7 +109,7 @@ function Routes() {
 
   // FinDesk routes under /business/fin/*
   if (path.startsWith("/business/fin/banklink/transactions")) return <BusinessGuardPage><Suspense fallback={null}><BankLinkTransactionsPage /></Suspense></BusinessGuardPage>;
-  if (path.startsWith("/business/fin/payroll/employees")) return <BusinessGuardPage><PayrollPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/payroll/employees")) return <BusinessGuardPage><PayrollEmployeesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/settings/ai-audit")) return <BusinessGuardPage><FinAiAuditPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/settings/security")) return <BusinessGuardPage><FinSecuritySettingsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/inventory/report")) return <BusinessGuardPage><InventoryReportPage /></BusinessGuardPage>;
@@ -131,7 +135,9 @@ function Routes() {
   if (path.startsWith("/business/fin/calendar")) return <BusinessGuardPage><Suspense fallback={null}><FinCalendarPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/banklink")) return <BusinessGuardPage><Suspense fallback={null}><BankLinkPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/parties")) return <BusinessGuardPage><PartiesPage /></BusinessGuardPage>;
-  if (path.startsWith("/business/fin/payroll")) return <BusinessGuardPage><PayrollPage /></BusinessGuardPage>;
+  // FIX-502: /business/fin/payroll/runs/:id must be matched before the list route
+  if (path.match(/^\/business\/fin\/payroll\/runs\/[^/]+/)) return <BusinessGuardPage><PayrollRunDetailPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/payroll")) return <BusinessGuardPage><PayrollFINPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/itpark")) return <BusinessGuardPage><ItparkDetail /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/assets")) return <BusinessGuardPage><AssetsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/ledger")) return <BusinessGuardPage><FinInsightsPage /></BusinessGuardPage>;

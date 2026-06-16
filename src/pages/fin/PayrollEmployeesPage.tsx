@@ -449,7 +449,7 @@ export function PayrollEmployeesPage() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <a
-              href="#/app/fin/payroll"
+              href="#/business/fin/payroll"
               className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
               aria-label="Înapoi la Salarizare"
             >
