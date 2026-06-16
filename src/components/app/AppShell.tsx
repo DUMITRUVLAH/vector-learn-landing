@@ -161,6 +161,13 @@ const BUSINESS_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    section: "Document Merge",
+    items: [
+      // DOCMERGE-001: mail-merge PDF templates
+      { label: "Templates", href: "/business/docmerge", icon: FileText },
+    ],
+  },
+  {
     section: "Setări",
     items: [
       { label: "Securitate", href: "/business/fin/settings/security", icon: Shield },

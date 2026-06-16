@@ -62,3 +62,5 @@ export * from "./courses";
 export * from "./guardians";
 export * from "./templates";
 export * from "./promoCodes";
+// Document Merge module (DOCMERGE-001)
+export * from "./docmergeTemplates";

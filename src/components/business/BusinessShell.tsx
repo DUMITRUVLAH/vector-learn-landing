@@ -85,6 +85,13 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    section: "Document Merge",
+    items: [
+      // DOCMERGE-001: mail-merge PDF
+      { label: "Templates", href: "/business/docmerge", icon: FileText },
+    ],
+  },
+  {
     section: null,
     items: [
       { label: "Setări", href: "/business/fin/settings/security", icon: Settings },

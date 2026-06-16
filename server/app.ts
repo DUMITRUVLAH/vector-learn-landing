@@ -81,6 +81,9 @@ import { parDelegationsRoutes } from "./routes/parDelegations";
 import { parPurchaseOrderRoutes } from "./routes/parPurchaseOrders";
 import { parReceiptsRoutes } from "./routes/parReceipts";
 
+// DOCMERGE module (DOCMERGE-001)
+import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
+
 export const app = new Hono();
 
 app.onError((err, c) => {
@@ -191,6 +194,9 @@ app.route("/api/par", parPurchaseOrderRoutes);
 app.route("/api/par", parReceiptsRoutes);
 app.route("/api/par", parRoutes);
 app.route("/api/par", parAttachmentsRoutes);
+
+// DOCMERGE-001: Document Merge templates
+app.route("/api/docmerge", docmergeTemplatesRoutes);
 
 app.get("/api/health", async (c) => {
   try {

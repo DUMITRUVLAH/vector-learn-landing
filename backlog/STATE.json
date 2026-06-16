@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "DOCMERGE-001",
   "last_completed": "SPLIT-401",
-  "iterations": 168,
+  "iterations": 169,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "AUDIT-FIX",
@@ -4054,8 +4054,8 @@
       "pr": null
     },
     "DOCMERGE-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DOCMERGE-001-template-upload-placeholders.md",
       "milestone": "DOCMERGE",
