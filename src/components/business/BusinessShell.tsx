@@ -24,6 +24,7 @@ import {
   Receipt,
   Banknote,
   Settings,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
@@ -87,8 +88,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     section: "Document Merge",
     items: [
-      // DOCMERGE-001: mail-merge PDF
+      // DOCMERGE-001: mail-merge templates
       { label: "Templates", href: "/business/docmerge", icon: FileText },
+      // DOCMERGE-002: Excel import wizard
+      { label: "Import Excel", href: "/business/docmerge/job", icon: FileSpreadsheet },
     ],
   },
   {

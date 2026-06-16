@@ -1,5 +1,5 @@
 /**
- * DOCMERGE-001: Document Merge Templates API
+ * DOCMERGE-001/002: Document Merge Templates API
  *
  * Mounted at /api/docmerge (app.ts: app.route("/api/docmerge", docmergeTemplatesRoutes))
  *
@@ -9,6 +9,8 @@
  * PUT    /api/docmerge/templates/:id       — update template
  * DELETE /api/docmerge/templates/:id       — delete template
  * POST   /api/docmerge/templates/:id/preview — render with context (or sample context)
+ * POST   /api/docmerge/parse-excel         — upload .xlsx, returns {headers, sample, previewRows, rowCount}
+ * POST   /api/docmerge/automap             — {headers, placeholders} → {mapping: Record<string,string>}
  */
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
@@ -22,6 +24,7 @@ import {
   renderWithContext,
   sampleContext,
 } from "../lib/docmerge/placeholders";
+import { parseWorkbook, autoMap as autoMapExcel } from "../lib/docmerge/excelImport";
 
 export const docmergeTemplatesRoutes = new Hono<{
   Variables: AuthVariables;
@@ -225,6 +228,56 @@ docmergeTemplatesRoutes.post(
     const html = renderWithContext(row.bodyHtml, ctx);
 
     return c.json({ html });
+  }
+);
+
+// ─── POST /api/docmerge/parse-excel ──────────────────────────────────────────
+
+/**
+ * Accepts a multipart form with a single file field "file".
+ * Returns {headers, sample, previewRows, rowCount}.
+ * CRITICAL: exceljs lazy-imported inside parseWorkbook.
+ */
+docmergeTemplatesRoutes.post("/parse-excel", requireAuth, async (c) => {
+  const formData = await c.req.formData();
+  const file = formData.get("file");
+
+  if (!file || typeof file === "string") {
+    return c.json({ error: "Câmpul 'file' lipsește sau nu este un fișier." }, 400);
+  }
+
+  const fileName = (file as File).name ?? "";
+  if (!fileName.toLowerCase().endsWith(".xlsx")) {
+    return c.json({ error: "Doar fișiere .xlsx sunt acceptate." }, 400);
+  }
+
+  const arrayBuffer = await (file as File).arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  try {
+    const result = await parseWorkbook(buffer);
+    return c.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Eroare la parsarea fișierului Excel.";
+    return c.json({ error: message }, 422);
+  }
+});
+
+// ─── POST /api/docmerge/automap ───────────────────────────────────────────────
+
+const automapSchema = z.object({
+  headers: z.array(z.string()),
+  placeholders: z.array(z.string()),
+});
+
+docmergeTemplatesRoutes.post(
+  "/automap",
+  requireAuth,
+  zValidator("json", automapSchema),
+  async (c) => {
+    const { headers, placeholders } = c.req.valid("json");
+    const mapping = autoMapExcel(headers, placeholders);
+    return c.json({ mapping });
   }
 );
 

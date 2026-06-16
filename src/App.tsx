@@ -15,6 +15,7 @@ import { ParReports } from "./pages/par/ParReports";
 
 // DOCMERGE module routes
 import { DocMergeTemplatesPage } from "./pages/business/docmerge/DocMergeTemplatesPage";
+import { DocMergeJobPage } from "./pages/business/docmerge/DocMergeJobPage";
 
 // Business / FinDesk routes
 import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
@@ -163,6 +164,8 @@ function Routes() {
   if (path.startsWith("/business/par")) return <BusinessGuardPage><ParDashboard /></BusinessGuardPage>;
 
   // DOCMERGE-001: Document Merge templates
+  // DOCMERGE-002: Excel Import wizard (more specific → must come before the generic /business/docmerge)
+  if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge")) return <BusinessGuardPage><DocMergeTemplatesPage /></BusinessGuardPage>;
 
   // Payment accounts (cont de plată)

@@ -22,6 +22,7 @@ import {
   Loader2,
   Tag,
   AlertCircle,
+  FileSpreadsheet,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import {
@@ -216,14 +217,23 @@ export function DocMergeTemplatesPage() {
       pageDescription="Creează și gestionează template-uri cu placeholdere {{tag}} pentru generare masivă de PDF-uri."
       actions={
         view === "list" ? (
-          <button
-            type="button"
-            onClick={openNew}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors min-h-[44px]"
-          >
-            <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
-            Template nou
-          </button>
+          <div className="flex items-center gap-2">
+            <a
+              href="#/business/docmerge/job"
+              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors min-h-[44px]"
+            >
+              <FileSpreadsheet className="h-4 w-4 shrink-0" aria-hidden="true" />
+              Generează din Excel
+            </a>
+            <button
+              type="button"
+              onClick={openNew}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors min-h-[44px]"
+            >
+              <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+              Template nou
+            </button>
+          </div>
         ) : undefined
       }
     >

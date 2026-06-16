@@ -76,3 +76,40 @@ export function previewTemplate(
     body: JSON.stringify(body ?? {}),
   });
 }
+
+// ─── DOCMERGE-002: Excel Import ───────────────────────────────────────────────
+
+export interface ParsedExcelResult {
+  headers: string[];
+  sample: Record<string, string>[];
+  previewRows: Record<string, string>[];
+  rowCount: number;
+}
+
+export interface AutoMapResult {
+  mapping: Record<string, string>;
+}
+
+/**
+ * Upload an .xlsx file for parsing. Returns headers + preview rows.
+ * NOTE: uses FormData, not JSON — api() is called differently here.
+ */
+export async function parseExcel(file: File): Promise<ParsedExcelResult> {
+  const form = new FormData();
+  form.append("file", file);
+  return api<ParsedExcelResult>("/api/docmerge/parse-excel", {
+    method: "POST",
+    body: form,
+    // No Content-Type header — browser sets multipart boundary automatically
+  });
+}
+
+export function autoMapColumns(
+  headers: string[],
+  placeholders: string[]
+): Promise<AutoMapResult> {
+  return api<AutoMapResult>("/api/docmerge/automap", {
+    method: "POST",
+    body: JSON.stringify({ headers, placeholders }),
+  });
+}
