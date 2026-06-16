@@ -35,7 +35,7 @@ import {
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 /** Router strict pentru role=parent: toate rutele returnează 403 dacă nu e parent */
-export const parentPortalRoutes = new Hono<{ Variables: AuthVariables }>();
+export const parentPortalRoutes = new Hono<{ Variables: AuthVariables }>(); // mount-exempt: CRM school module, not used in FinDesk
 
 parentPortalRoutes.use("*", requireAuth);
 parentPortalRoutes.use("*", async (c, next) => {
@@ -47,7 +47,7 @@ parentPortalRoutes.use("*", async (c, next) => {
 });
 
 /** Router pentru admin/manager — creare știri */
-export const schoolNewsAdminRoutes = new Hono<{ Variables: AuthVariables }>();
+export const schoolNewsAdminRoutes = new Hono<{ Variables: AuthVariables }>(); // mount-exempt: CRM school module, not used in FinDesk
 schoolNewsAdminRoutes.use("*", requireAuth);
 
 // ─── Helper: găsește toți elevii familiei părintelui logat ────────────────────

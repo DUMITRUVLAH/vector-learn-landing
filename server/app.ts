@@ -41,7 +41,19 @@ import { finAiAuditRoutes } from "./routes/finAiAudit";
 import { finGdprRoutes } from "./routes/finGdpr";
 import { finDataSettingsRoutes } from "./routes/finDataSettings";
 import { finClientPortalRoutes } from "./routes/finClientPortal";
-import { itparkRoutes } from "./routes/itpark";
+import { finOnboardingRoutes } from "./routes/finOnboarding";
+import { finPaymentApprovalRoutes } from "./routes/finPaymentApproval";
+import { finReconcileRoutes } from "./routes/finReconcile";
+import { finRevaluationRoutes } from "./routes/finRevaluation";
+import { itparkAiRoutes } from "./routes/itparkAi";
+import { itparkCaemRoutes } from "./routes/itparkCaem";
+import { itparkCalcRoutes } from "./routes/itparkCalc";
+import { itparkDashboardRoutes } from "./routes/itparkDashboard";
+import { itparkDocsRoutes } from "./routes/itparkDocs";
+import { itparkEngagementsRoutes } from "./routes/itparkEngagements";
+import { itparkImportRoutes } from "./routes/itparkImport";
+import { itparkLinesRoutes } from "./routes/itparkLines";
+import { itparkSettingsRoutes } from "./routes/itparkSettings";
 
 // PAR (Payment Action Request) module
 import { parMeRoutes } from "./routes/parMe";
@@ -121,7 +133,19 @@ app.route("/api/fin/ai-audit", finAiAuditRoutes);
 app.route("/api/fin/gdpr", finGdprRoutes);
 app.route("/api/fin/data-settings", finDataSettingsRoutes);
 app.route("/api/fin/client-portal", finClientPortalRoutes);
-app.route("/api/fin/itpark", itparkRoutes);
+app.route("/api/fin/itpark/ai", itparkAiRoutes);
+app.route("/api/fin/itpark/caem", itparkCaemRoutes);
+app.route("/api/fin/itpark/calc", itparkCalcRoutes);
+app.route("/api/fin/itpark/dashboard", itparkDashboardRoutes);
+app.route("/api/fin/itpark/docs", itparkDocsRoutes);
+app.route("/api/fin/itpark/engagements", itparkEngagementsRoutes);
+app.route("/api/fin/itpark/import", itparkImportRoutes);
+app.route("/api/fin/itpark/lines", itparkLinesRoutes);
+app.route("/api/fin/itpark/settings", itparkSettingsRoutes);
+app.route("/api/fin/onboarding", finOnboardingRoutes);
+app.route("/api/fin/payment-approval", finPaymentApprovalRoutes);
+app.route("/api/fin/reconcile", finReconcileRoutes);
+app.route("/api/fin/revaluation", finRevaluationRoutes);
 
 // PAR module
 app.route("/api/par/me", parMeRoutes);
