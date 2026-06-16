@@ -24,6 +24,13 @@ const vendorSchema = z.object({
   bank: z.string().max(300).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
   active: z.boolean().optional(),
+  // SPLIT-201: link to fin_parties for shared PARTY identity
+  fin_party_id: z.string().uuid().optional().nullable(),
+});
+
+// Schema for PATCH specifically — allows linking fin_party_id
+const vendorLinkSchema = z.object({
+  fin_party_id: z.string().uuid().nullable(),
 });
 
 function validateVendorFields(body: {
@@ -88,9 +95,16 @@ parVendorsRoutes.patch(
     const validation = validateVendorFields(body);
     if (!validation.ok) return c.json({ error: validation.error }, 400);
 
+    // SPLIT-201: map fin_party_id (snake_case from client) → finPartyId (camelCase Drizzle)
+    const { fin_party_id, ...rest } = body;
+    const updateFields: Record<string, unknown> = { ...rest, updatedAt: new Date() };
+    if (fin_party_id !== undefined) {
+      updateFields.finPartyId = fin_party_id;
+    }
+
     const [row] = await db
       .update(parVendors)
-      .set({ ...body, updatedAt: new Date() })
+      .set(updateFields)
       .where(and(eq(parVendors.id, id), eq(parVendors.tenantId, tenantId)))
       .returning();
     if (!row) return c.json({ error: "not_found" }, 404);
