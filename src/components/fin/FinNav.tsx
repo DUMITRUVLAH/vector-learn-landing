@@ -75,7 +75,7 @@ const FIN_NAV: FinNavGroup[] = [
     section: "Cheltuieli",
     items: [
       { id: "expenses", label: "Cheltuieli", href: "/app/fin/expenses", icon: ShoppingCart },
-      { id: "capture", label: "Documente AI", href: "/app/fin/capture", icon: ScanLine },
+      { id: "capture", label: "Invoice Reporting", href: "/app/fin/capture", icon: ScanLine },
     ],
   },
   {

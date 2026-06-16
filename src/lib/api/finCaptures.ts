@@ -21,6 +21,7 @@ export interface CapturedField<T = unknown> {
   value: T;
   confidence: number; // [0..1]
   low_confidence?: boolean;
+  reason?: string;
 }
 
 export interface ExtractedFields {
@@ -33,7 +34,17 @@ export interface ExtractedFields {
   category?: CapturedField<string | null>;
   reference?: CapturedField<string | null>;
   purpose?: CapturedField<string | null>;
+  reportable?: CapturedField<boolean | null>;
 }
+
+/** Invoice Reporting: derived reportable status. */
+export type ReportableStatus = "yes" | "no" | "review";
+
+export const REPORTABLE_LABELS: Record<ReportableStatus, string> = {
+  yes: "Pentru raportare",
+  no: "Neraportabil",
+  review: "De verificat",
+};
 
 /** Team Docs: which team uploaded the document (for month-end grouping). */
 export type FinDocTeam =
@@ -70,6 +81,13 @@ export interface FinCapture {
   extractedFields: ExtractedFields | null;
   rawText: string | null;
   errorMessage: string | null;
+  // Invoice Reporting verdict + review
+  reportable: ReportableStatus;
+  reportableReason: string | null;
+  reportableConfidenceBp: number;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
   confirmedBy: string | null;
   confirmedAt: string | null;
   createdBy: string;
@@ -129,12 +147,25 @@ export async function confirmCapture(
 }
 
 export async function getCaptures(
-  opts: { page?: number; team?: FinDocTeam; month?: string } = {},
+  opts: { page?: number; team?: FinDocTeam; month?: string; reportable?: ReportableStatus } = {},
 ): Promise<CapturesListResult> {
   const qs = new URLSearchParams({ page: String(opts.page ?? 1) });
   if (opts.team) qs.set("team", opts.team);
   if (opts.month) qs.set("month", opts.month);
+  if (opts.reportable) qs.set("reportable", opts.reportable);
   return api<CapturesListResult>(`/api/fin/captures?${qs.toString()}`);
+}
+
+/** Invoice Reporting: reviewer approves (yes) or rejects (no) the reportable verdict. */
+export async function reviewCapture(
+  id: string,
+  decision: "yes" | "no",
+  note?: string,
+): Promise<{ capture: FinCapture }> {
+  return api<{ capture: FinCapture }>(`/api/fin/captures/${id}/review`, {
+    method: "PATCH",
+    body: JSON.stringify({ decision, note }),
+  });
 }
 
 /** Upload a document (JSON mode with OCR text, or pass a File via FormData). */
@@ -156,6 +187,7 @@ export interface CapturesSummary {
   totalDocuments: number;
   totalCents: number;
   pendingReview: number;
+  reportableCounts: { yes: number; no: number; review: number };
   byTeam: Array<{ team: FinDocTeam; count: number; totalCents: number }>;
   byCategory: Array<{ category: string; count: number; totalCents: number }>;
 }

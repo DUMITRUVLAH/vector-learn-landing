@@ -98,7 +98,7 @@ const MODULES: ModuleCard[] = [
   },
   {
     id: "capture",
-    label: "Documente AI",
+    label: "Invoice Reporting",
     description: "OCR automat — extrage vendor/sumă/TVA din documente",
     href: "/app/fin/capture",
     icon: ScanLine,

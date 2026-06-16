@@ -137,7 +137,7 @@ const BUSINESS_NAV_GROUPS: NavGroup[] = [
       { label: "Stocuri", href: "/business/fin/inventory", icon: BookOpen },
       { label: "Buget", href: "/business/fin/budget", icon: BarChart3 },
       { label: "Tablou de bord", href: "/business/fin/insights", icon: TrendingUp },
-      { label: "Documente AI", href: "/business/fin/captures", icon: Zap },
+      { label: "Invoice Reporting", href: "/business/fin/captures", icon: Zap },
       { label: "Reconciliere & TVA import", href: "/business/fin/reconcile", icon: RefreshCw },
       { label: "Bancă", href: "/business/fin/banklink", icon: Landmark },
       { label: "Calendar fiscal", href: "/business/fin/calendar", icon: Calendar },

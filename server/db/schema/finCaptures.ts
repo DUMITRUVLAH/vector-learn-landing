@@ -57,6 +57,8 @@ export interface CapturedField<T = unknown> {
   value: T;
   confidence: number; // [0..1]
   low_confidence?: boolean; // true dacă confidence < 0.7
+  /** Invoice Reporting: short RO explanation for the `reportable` verdict. */
+  reason?: string;
 }
 
 /**
@@ -74,8 +76,22 @@ export interface ExtractedFields {
   reference?: CapturedField<string | null>;
   /** Team Docs: short "what was this for" summary the accountant reads at a glance. */
   purpose?: CapturedField<string | null>;
+  /**
+   * Invoice Reporting: AI verdict whether this item is reportable (VAT/declarations).
+   * value: true | false | null (null = unsure). confidence drives the "review" status.
+   */
+  reportable?: CapturedField<boolean | null>;
   [key: string]: CapturedField<unknown> | undefined; // extensibil
 }
+
+/** Derived reportable status used across the API + UI. */
+export type ReportableStatus = "yes" | "no" | "review";
+
+export const REPORTABLE_STATUS_LABELS: Record<ReportableStatus, string> = {
+  yes: "Pentru raportare",
+  no: "Neraportabil",
+  review: "De verificat",
+};
 
 /**
  * Team Docs: which team uploaded the document, for month-end grouping.
@@ -166,6 +182,29 @@ export const finCaptures = pgTable(
 
     /** Textul OCR brut returnat de AI (pentru debugging și audit). */
     rawText: text("raw_text"),
+
+    // ── Invoice Reporting (INVOICE-REPORTING): AI reportability verdict + human review ──
+    /**
+     * AI's reportability verdict: "yes" | "no" | "review".
+     * "review" = AI unsure (null) or low confidence (<0.7) → needs a human.
+     * A human review (PATCH /review) overwrites this with the reviewer's decision.
+     */
+    reportable: varchar("reportable", { length: 10 }).notNull().default("review"),
+
+    /** AI's one-line RO reason for the verdict (e.g. "Factură cu TVA deductibil"). */
+    reportableReason: text("reportable_reason"),
+
+    /** AI confidence in the reportable verdict, in basis points (8500 = 0.85). */
+    reportableConfidenceBp: integer("reportable_confidence_bp").notNull().default(0),
+
+    /** Reviewer who confirmed/overrode the reportable verdict. */
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+
+    /** When the reviewer decided. */
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+
+    /** Optional reviewer note (e.g. why an item was marked not-reportable). */
+    reviewNote: text("review_note"),
 
     /** Motivul eșecului dacă status = 'failed'. */
     errorMessage: text("error_message"),

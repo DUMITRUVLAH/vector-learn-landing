@@ -29,10 +29,12 @@ import { useRouter } from "@/router/HashRouter";
 import {
   getCapture,
   confirmCapture,
+  reviewCapture,
   formatMDLCents,
   parseMDLToCents,
   CAPTURE_STATUS_LABELS,
   CATEGORY_LABELS,
+  REPORTABLE_LABELS,
   type FinCapture,
   type FinCaptureStatus,
   type ExpenseCategory,
@@ -109,6 +111,24 @@ export default function CapturePage({ captureId }: { captureId: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+
+  const handleReview = useCallback(
+    async (decision: "yes" | "no") => {
+      if (!capture) return;
+      setReviewing(true);
+      try {
+        const res = await reviewCapture(capture.id, decision);
+        setCapture(res.capture);
+        setToast(decision === "yes" ? "Marcat pentru raportare." : "Marcat ca neraportabil.");
+      } catch {
+        setSubmitError("Nu am putut salva decizia de raportare.");
+      } finally {
+        setReviewing(false);
+      }
+    },
+    [capture],
+  );
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track edited fields
@@ -206,7 +226,7 @@ export default function CapturePage({ captureId }: { captureId: string }) {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Document AI">
+      <AppShell pageTitle="Invoice Reporting">
         <div className="flex min-h-[200px] items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-primary" aria-label="Se încarcă" />
         </div>
@@ -216,7 +236,7 @@ export default function CapturePage({ captureId }: { captureId: string }) {
 
   if (error) {
     return (
-      <AppShell pageTitle="Document AI — Eroare">
+      <AppShell pageTitle="Invoice Reporting — Eroare">
         <div className="mx-auto max-w-2xl p-6 text-center">
           <XCircle className="mx-auto mb-3 h-10 w-10 text-destructive" />
           <p className="text-sm text-muted-foreground">{error}</p>
@@ -235,7 +255,7 @@ export default function CapturePage({ captureId }: { captureId: string }) {
   if (!capture) return null;
 
   return (
-    <AppShell pageTitle="Document AI — Confirmare">
+    <AppShell pageTitle="Invoice Reporting — Verificare">
       <div className="mx-auto max-w-3xl space-y-6 p-4 sm:p-6">
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
@@ -270,6 +290,65 @@ export default function CapturePage({ captureId }: { captureId: string }) {
           <div className="flex items-center gap-2 rounded-lg bg-green-100 px-4 py-3 text-green-800 dark:bg-green-900/40 dark:text-green-300">
             <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span className="text-sm font-medium">{toast}</span>
+          </div>
+        )}
+
+        {/* Invoice Reporting: AI verdict + reviewer approve/reject */}
+        {(capture.status === "extracted" || capture.status === "confirmed") && (
+          <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Verdict raportare (AI)
+                </p>
+                <div className="mt-1 flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "rounded px-2 py-0.5 text-sm font-semibold",
+                      capture.reportable === "yes"
+                        ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+                        : capture.reportable === "no"
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+                    )}
+                  >
+                    {REPORTABLE_LABELS[capture.reportable]}
+                  </span>
+                  {capture.reportableConfidenceBp > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      încredere {Math.round(capture.reportableConfidenceBp / 100)}%
+                    </span>
+                  )}
+                </div>
+                {capture.reportableReason && (
+                  <p className="mt-1.5 text-sm text-muted-foreground">{capture.reportableReason}</p>
+                )}
+                {capture.reviewedAt && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Confirmat manual ·{" "}
+                    {new Date(capture.reviewedAt).toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" })}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleReview("yes")}
+                  disabled={reviewing}
+                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                  Pentru raportare
+                </button>
+                <button
+                  onClick={() => handleReview("no")}
+                  disabled={reviewing}
+                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  <XCircle className="h-4 w-4" aria-hidden="true" />
+                  Neraportabil
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

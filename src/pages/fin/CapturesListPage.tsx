@@ -26,11 +26,13 @@ import {
   CAPTURE_STATUS_LABELS,
   TEAM_LABELS,
   CATEGORY_LABELS,
+  REPORTABLE_LABELS,
   type FinCapture,
   type FinCaptureStatus,
   type FinDocTeam,
   type CapturesSummary,
   type ExpenseCategory,
+  type ReportableStatus,
 } from "@/lib/api/finCaptures";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +55,21 @@ function StatusBadge({ status }: { status: FinCaptureStatus }) {
   return (
     <span className={cn("rounded px-2 py-0.5 text-xs font-medium", styles[status])}>
       {CAPTURE_STATUS_LABELS[status]}
+    </span>
+  );
+}
+
+// ─── Invoice Reporting verdict badge ────────────────────────────────────────────
+
+function ReportableBadge({ value }: { value: ReportableStatus }) {
+  const styles: Record<ReportableStatus, string> = {
+    yes: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
+    no: "bg-muted text-muted-foreground",
+    review: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  };
+  return (
+    <span className={cn("rounded px-2 py-0.5 text-xs font-medium", styles[value])}>
+      {REPORTABLE_LABELS[value]}
     </span>
   );
 }
@@ -233,9 +250,9 @@ function SummaryCards({ summary }: { summary: CapturesSummary }) {
     <div className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Documente" value={String(summary.totalDocuments)} />
+        <Stat label="Pentru raportare" value={String(summary.reportableCounts?.yes ?? 0)} variant="good" />
+        <Stat label="De verificat" value={String(summary.reportableCounts?.review ?? 0)} variant="warning" />
         <Stat label="Total lună" value={formatMDLCents(summary.totalCents)} />
-        <Stat label="De verificat" value={String(summary.pendingReview)} variant="warning" />
-        <Stat label="Echipe" value={String(summary.byTeam.length)} />
       </div>
       {summary.byTeam.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -268,7 +285,7 @@ function Stat({
 }: {
   label: string;
   value: string;
-  variant?: "warning";
+  variant?: "warning" | "good";
 }) {
   return (
     <div className="rounded-lg bg-muted/40 px-3 py-2.5">
@@ -276,7 +293,11 @@ function Stat({
       <p
         className={cn(
           "mt-0.5 text-lg font-semibold",
-          variant === "warning" ? "text-amber-600 dark:text-amber-400" : "text-foreground",
+          variant === "warning"
+            ? "text-amber-600 dark:text-amber-400"
+            : variant === "good"
+              ? "text-green-600 dark:text-green-400"
+              : "text-foreground",
         )}
       >
         {value}
@@ -344,15 +365,15 @@ export default function CapturesListPage() {
   }, [load]);
 
   return (
-    <AppShell pageTitle="Documente echipe (AI)">
+    <AppShell pageTitle="Invoice Reporting">
       <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-foreground">Documente echipe</h1>
+            <h1 className="text-xl font-semibold text-foreground">Invoice Reporting</h1>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Orice echipă încarcă facturi (Facebook Ads, Google Ads…). AI le citește,
-              iar contabilul le raportează grupat la final de lună.
+              Încarcă facturi/tranzacții (CSV, PDF, poză). AI le citește și decide dacă fiecare
+              este <strong>pentru raportare</strong>; tu confirmi sau respingi verdictul.
             </p>
           </div>
           <button
@@ -441,6 +462,7 @@ export default function CapturesListPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Echipă</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Scop (AI)</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">Sumă</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Raportare (AI)</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">Acțiune</th>
                 </tr>
@@ -466,6 +488,16 @@ export default function CapturesListPage() {
                     </td>
                     <td className="px-4 py-3 text-right font-medium text-foreground">
                       {formatMDLCents(capture.extractedFields?.amount_cents?.value ?? null)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-0.5">
+                        <ReportableBadge value={capture.reportable} />
+                        {capture.reportableReason && (
+                          <span className="max-w-[200px] truncate text-[11px] text-muted-foreground" title={capture.reportableReason}>
+                            {capture.reportableReason}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={capture.status} />

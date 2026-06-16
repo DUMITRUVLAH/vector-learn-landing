@@ -813,6 +813,13 @@
       "when": 1780910010000,
       "tag": "0115_par_procure_to_pay",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1780910020000,
+      "tag": "0116_invoice_reporting",
+      "breakpoints": true
     }
   ]
 }

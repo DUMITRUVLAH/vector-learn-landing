@@ -71,6 +71,12 @@ const confirmCaptureSchema = z.object({
   }),
 });
 
+// Invoice Reporting: reviewer's reportable decision (yes/no) + optional note.
+const reviewCaptureSchema = z.object({
+  decision: z.enum(["yes", "no"]),
+  note: z.string().max(1000).optional(),
+});
+
 // ─── Serialize helper ─────────────────────────────────────────────────────────
 
 function serializeCapture(c: typeof finCaptures.$inferSelect) {
@@ -87,6 +93,13 @@ function serializeCapture(c: typeof finCaptures.$inferSelect) {
     extractedFields: c.extractedFields,
     rawText: c.rawText,
     errorMessage: c.errorMessage,
+    // Invoice Reporting verdict + review
+    reportable: c.reportable,
+    reportableReason: c.reportableReason,
+    reportableConfidenceBp: c.reportableConfidenceBp,
+    reviewedBy: c.reviewedBy,
+    reviewedAt: c.reviewedAt?.toISOString() ?? null,
+    reviewNote: c.reviewNote,
     confirmedBy: c.confirmedBy,
     confirmedAt: c.confirmedAt?.toISOString() ?? null,
     createdBy: c.createdBy,
@@ -110,6 +123,11 @@ finCapturesRoutes.get("/captures", async (c) => {
   const conditions = [eq(finCaptures.tenantId, user.tenantId)];
   if (team && FIN_DOC_TEAMS.includes(team as never)) {
     conditions.push(eq(finCaptures.team, team));
+  }
+  // Invoice Reporting: filter by reportable status (yes | no | review).
+  const reportable = c.req.query("reportable");
+  if (reportable && ["yes", "no", "review"].includes(reportable)) {
+    conditions.push(eq(finCaptures.reportable, reportable));
   }
   if (month && /^\d{4}-\d{2}$/.test(month)) {
     const start = new Date(`${month}-01T00:00:00.000Z`);
@@ -160,11 +178,15 @@ finCapturesRoutes.get("/captures/summary", async (c) => {
   const byCategory: Record<string, { count: number; totalCents: number }> = {};
   let totalCents = 0;
   let pendingReview = 0;
+  // Invoice Reporting: how many items are reportable / not / awaiting review.
+  const reportableCounts = { yes: 0, no: 0, review: 0 };
 
   for (const r of rows) {
     const amt = amountOf(r);
     totalCents += amt;
     if (r.status !== "confirmed") pendingReview += 1;
+    const rep = (r.reportable ?? "review") as "yes" | "no" | "review";
+    if (rep in reportableCounts) reportableCounts[rep] += 1;
 
     byTeam[r.team] ??= { count: 0, totalCents: 0 };
     byTeam[r.team].count += 1;
@@ -181,10 +203,45 @@ finCapturesRoutes.get("/captures/summary", async (c) => {
     totalDocuments: rows.length,
     totalCents,
     pendingReview,
+    reportableCounts,
     byTeam: Object.entries(byTeam).map(([team, v]) => ({ team, ...v })),
     byCategory: Object.entries(byCategory).map(([category, v]) => ({ category, ...v })),
   });
 });
+
+// ─── PATCH /api/fin/captures/:id/review — reviewer approves/overrides reportable ──
+// Mounted before GET /:id (specific route > param). The reviewer's decision is final
+// and recorded (reviewedBy/At). decision: "yes" | "no"; optional note.
+finCapturesRoutes.patch(
+  "/captures/:id/review",
+  zValidator("json", reviewCaptureSchema),
+  async (c) => {
+    const user = c.get("user");
+    const captureId = c.req.param("id");
+    const { decision, note } = c.req.valid("json");
+
+    const capture = await db.query.finCaptures.findFirst({
+      where: and(eq(finCaptures.id, captureId), eq(finCaptures.tenantId, user.tenantId)),
+    });
+    if (!capture) {
+      return c.json({ error: "not_found", message: "Captura nu există." }, 404);
+    }
+
+    const [updated] = await db
+      .update(finCaptures)
+      .set({
+        reportable: decision,
+        reviewNote: note ?? null,
+        reviewedBy: user.id,
+        reviewedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(finCaptures.id, captureId))
+      .returning();
+
+    return c.json({ capture: serializeCapture(updated) });
+  },
+);
 
 // ─── POST /api/fin/captures — upload + extracție AI ──────────────────────────
 
@@ -306,6 +363,17 @@ finCapturesRoutes.post("/captures", async (c) => {
     errorMessage = err instanceof Error ? err.message : "Eroare necunoscută la extracție AI";
   }
 
+  // Invoice Reporting: derive the reportable verdict columns from the AI field.
+  // value true → "yes", false → "no", null/low-confidence → "review" (needs a human).
+  const repField = extractedFields?.reportable;
+  const repConf = repField?.confidence ?? 0;
+  const reportable =
+    repField?.value === true && repConf >= 0.7
+      ? "yes"
+      : repField?.value === false && repConf >= 0.7
+        ? "no"
+        : "review";
+
   // Actualizează capture cu rezultatul extracției
   const [updated] = await db
     .update(finCaptures)
@@ -313,6 +381,9 @@ finCapturesRoutes.post("/captures", async (c) => {
       status: newStatus,
       extractedFields: extractedFields ?? null,
       errorMessage: errorMessage ?? null,
+      reportable,
+      reportableReason: repField?.reason ?? null,
+      reportableConfidenceBp: Math.round(repConf * 10000),
       updatedAt: new Date(),
     })
     .where(eq(finCaptures.id, capture.id))

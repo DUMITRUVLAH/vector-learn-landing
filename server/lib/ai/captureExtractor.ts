@@ -38,6 +38,11 @@ REGULI ABSOLUTE:
 7. vat_deductible: true dacă există factură cu TVA deductibil clar, false dacă e bon simplu.
 8. purpose: o frază scurtă (max 15 cuvinte) în română care explică PENTRU CE e cheltuiala
    (ex. "Campanie Facebook Ads — promovare curs toamnă", "Licență Google Workspace echipă").
+9. reportable: decide dacă documentul intră în raportarea fiscală (TVA / declarații / contabilitate
+   oficială). value: true dacă este o factură/document fiscal valid cu TVA sau cheltuială deductibilă
+   ce trebuie raportată; false dacă e un bon nedeductibil, document personal sau irelevant fiscal;
+   null dacă nu poți decide. În câmpul "reason" pune o frază scurtă în română care explică decizia
+   (ex. "Factură cu TVA deductibil → intră în declarația TVA", "Bon fără cod fiscal → neraportabil").
 
 Returnează DOAR JSON cu structura:
 {
@@ -49,7 +54,8 @@ Returnează DOAR JSON cu structura:
   "iban": { "value": "..." sau null, "confidence": 0.0 },
   "category": { "value": "..." sau null, "confidence": 0.0 },
   "reference": { "value": "..." sau null, "confidence": 0.0 },
-  "purpose": { "value": "..." sau null, "confidence": 0.0 }
+  "purpose": { "value": "..." sau null, "confidence": 0.0 },
+  "reportable": { "value": true/false sau null, "confidence": 0.0, "reason": "..." }
 }`;
 
 // ─── Stub response ────────────────────────────────────────────────────────────
@@ -65,6 +71,7 @@ export const CAPTURE_EXTRACT_STUB: ExtractedFields = {
   category: { value: "marketing", confidence: 0.9 },
   reference: { value: null, confidence: 0, low_confidence: true },
   purpose: { value: "Cheltuială echipă — verificați descrierea", confidence: 0.6, low_confidence: true },
+  reportable: { value: true, confidence: 0.9, reason: "Factură cu TVA deductibil → intră în declarația TVA" },
 };
 
 // ─── Field processing ─────────────────────────────────────────────────────────
@@ -141,6 +148,21 @@ function processFields(raw: Record<string, unknown>): ExtractedFields {
     }
 
     result[key] = processed;
+  }
+
+  // Invoice Reporting: the reportable verdict carries a `reason` string alongside value+confidence.
+  const rep = raw["reportable"] as { value?: unknown; confidence?: number; reason?: unknown } | undefined;
+  if (rep && typeof rep.confidence === "number") {
+    const conf = Math.min(1, Math.max(0, rep.confidence));
+    const value = rep.value === true ? true : rep.value === false ? false : null;
+    result["reportable"] = {
+      value,
+      confidence: conf,
+      ...(conf < LOW_CONFIDENCE_THRESHOLD ? { low_confidence: true } : {}),
+      ...(typeof rep.reason === "string" && rep.reason ? { reason: rep.reason } : {}),
+    };
+  } else {
+    result["reportable"] = { value: null, confidence: 0, low_confidence: true };
   }
 
   return result as ExtractedFields;
