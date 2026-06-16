@@ -10,8 +10,12 @@
  * pe poze acoperă deja cazul scanat, iar render-ul pe server cere canvas).
  */
 
-// Legacy build = fără DOM/worker; potrivit pentru Node.
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+// pdfjs-dist se importă LAZY în interiorul funcției (vezi mai jos), NU la top-level.
+// Motiv: la încărcarea modulului, pdfjs-dist atinge `DOMMatrix`/`ImageData` (API-uri de
+// browser). În bundle-ul serverless (Vercel) acestea nu există → `ReferenceError: DOMMatrix
+// is not defined` la load, ceea ce crapă ÎNTREAGA funcție (toate rutele 500, inclusiv login).
+// Importul dinamic amână evaluarea până la primul apel real, iar try/catch-ul de mai jos
+// transformă orice eșec în "" (text gol) — apelantul cade pe fallback-ul existent.
 import type { DocumentInitParameters } from "pdfjs-dist/types/src/display/api";
 
 // `disableWorker` rulează pdfjs pe firul principal (necesar în Node, fără worker
@@ -28,6 +32,8 @@ const MAX_PAGES = 20;
  */
 export async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
+    // Legacy build = fără DOM/worker; importat aici (lazy) — vezi nota de sus.
+    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const data = new Uint8Array(buffer);
     const params: NodeDocParams = {
       data,
