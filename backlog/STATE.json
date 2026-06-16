@@ -5,8 +5,19 @@
   "iterations": 164,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
-  "active_milestone": "FIN",
+  "active_milestone": "AUDIT-FIX",
   "items": {
+    "SPLIT-401": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-401-business-shell-unification.md",
+      "milestone": "SPLIT",
+      "phase": "SHELL",
+      "depends_on": [],
+      "branch": "feat/SPLIT-faza-SHELL-business-chrome",
+      "priority": "high"
+    },
     "PAR-001": {
       "status": "done",
       "attempts": 1,
@@ -4080,6 +4091,39 @@
         "DOCMERGE-003"
       ],
       "branch": "feat/DOCMERGE-faza-1-document-merge"
+    },
+    "FIX-501": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FIX-501-finnav-dead-links.md",
+      "milestone": "AUDIT-FIX",
+      "phase": "1",
+      "depends_on": [],
+      "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll"
+    },
+    "FIX-502": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FIX-502-payroll-wrong-page-and-route.md",
+      "milestone": "AUDIT-FIX",
+      "phase": "1",
+      "depends_on": [],
+      "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll"
+    },
+    "FIX-503": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/FIX-503-app-wide-deadlink-audit-guard.md",
+      "milestone": "AUDIT-FIX",
+      "phase": "1",
+      "depends_on": [
+        "FIX-501",
+        "FIX-502"
+      ],
+      "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll"
     }
   }
 }

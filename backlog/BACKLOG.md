@@ -9,6 +9,25 @@
 
 ---
 
+## 🔴 Active milestone: AUDIT-FIX faza-1 — bug-uri raportate de owner (2026-06-17, PRIORITAR)
+
+Audit full al aplicației (logare, sidebar, salarizare). Cauze confirmate din cod:
+- **FinNav** linkează `/app/fin/*` (17 link-uri) dar rutele reale sunt `/business/fin/*` → catch-all
+  `RedirectToBusiness` → **userul e ejectat la fiecare click** („mă scoate din aplicație").
+- **Payroll**: App.tsx montează pagina CRM greșită (`pages/app/PayrollPage` → `/api/hr/payroll` NEmontat)
+  în loc de `pages/fin/PayrollPage` (`/api/fin/payroll/runs`, montat) → „Nu pot încărca datele de
+  salarizare" / „Eroare la calculul salarizării".
+- Risc de clasă: alte nav-link-uri moarte + API-uri client fără mount server.
+O fază = un branch = un PR: `feat/AUDIT-FIX-faza-1-sidebar-payroll` (§0.2).
+
+| Phase | ID | Title | Status | Spec |
+|-------|----|-------|--------|------|
+| 1 | `FIX-501` | FinNav dead-links `/app/fin/*` → `/business/fin/*` (stop eject) | pending | [FIX-501](specs/FIX-501-finnav-dead-links.md) |
+| 1 | `FIX-502` | Payroll: montează pagina FinDesk corectă + API live | pending | [FIX-502](specs/FIX-502-payroll-wrong-page-and-route.md) |
+| 1 | `FIX-503` | Audit full dead-links + guard automat anti-regresie | pending | [FIX-503](specs/FIX-503-app-wide-deadlink-audit-guard.md) |
+
+---
+
 ## Active milestone: PAR — Payment Action Request workflow (NEW APP, added 2026-06-12)
 
 A digital, online, multi-role workflow that replaces the paper **Payment Action Request (PAR) Form**
@@ -43,6 +62,22 @@ Driver: [par/BUILD-SEQUENCE.md](par/BUILD-SEQUENCE.md). Tests: [par/TEST-SCENARI
 | F | `PAR-118` | Full detail page (16 sections, role-aware actions) | done ✅ | [PAR-118](specs/PAR-118-detail-page.md) · [PR #143](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/143) |
 
 **PAR milestone: 21/21 done (Phases A–F complete). Module COMPLETE.**
+
+---
+
+## Active milestone: SPLIT — Business Suite shell unification (UI, owner-reported 2026-06-17)
+
+Owner-reported interface bug: paginile „diferite funcționalități" de sub `/business/*` (ex.
+**Parteneri** `/business/fin/parties`) ies din shell-ul **Business Suite** și se randează în chrome-ul
+vechi **Vector Learn / CRM** (logo Vector Learn, tenant „Demo Lingua School", user CRM „Andreea Mitran").
+Cerința: **totul trebuie să rămână în Business Suite** — chrome unic (logo, header, identitate
+user/organizație din sesiunea Business, sidebar) pe orice rută `/business/*`. Cauza: `AppShell` comută
+sidebar-ul pe Business, dar header-ul rămâne pe `useSession()` (CRM); `BusinessGuardPage` nu învelește
+într-un shell unic.
+
+| Phase | ID | Title | Status | Spec |
+|-------|----|-------|--------|------|
+| SHELL | `SPLIT-401` | Toate paginile `/business/*` rămân în shell-ul Business Suite (chrome unificat: logo, header din sesiunea Business, logout business) | pending | [SPLIT-401](specs/SPLIT-401-business-shell-unification.md) |
 
 ---
 
