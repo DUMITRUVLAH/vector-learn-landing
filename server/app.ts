@@ -97,7 +97,7 @@ app.use(
 app.route("/api/auth", authRoutes);
 app.route("/api/auth/2fa", twoFactorRoutes);
 app.route("/api/auth/sessions", sessionMgmtRoutes);
-app.route("/api/auth/business", businessAuthRoutes);
+app.route("/api/business", businessAuthRoutes);
 
 // CONT-PLATA: payment accounts
 app.route("/api/registry", companyRegistryRoutes);
