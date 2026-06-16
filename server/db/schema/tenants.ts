@@ -8,6 +8,14 @@ export const tenants = pgTable("tenants", {
   slug: varchar("slug", { length: 64 }).notNull().unique(),
   plan: planEnum("plan").notNull().default("starter"),
   /**
+   * SPLIT-003: which product this tenant belongs to.
+   * "learn" → CRM Educational · "business" → Business Suite (FinDesk · PAR · ITPark).
+   * Declared in DB (column app_kind) but was missing from this schema file, so
+   * `tenant.appKind` resolved to `undefined` and business login always 403'd wrong_app.
+   * Stored as varchar (not a pg enum) so sync-schema.ts can self-heal ADD COLUMN it.
+   */
+  appKind: varchar("app_kind", { length: 20 }).notNull().default("learn"),
+  /**
    * INST-001: Institution type — drives which modules show in the cabinet.
    * "gradinita" → kindergarten modules only · "scoala" → school modules only
    * "mixt" → everything (default, so existing tenants keep seeing all modules).
