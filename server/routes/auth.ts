@@ -433,7 +433,7 @@ function appUrl(): string {
 authRoutes.get("/google", async (c) => {
   const config = getGoogleConfig();
   if (!config) {
-    return c.redirect(`${appUrl()}/#/app/login?error=google_not_configured`);
+    return c.redirect(`${appUrl()}/#/business/login?error=google_not_configured`);
   }
 
   const state = generateState();
@@ -461,7 +461,7 @@ authRoutes.get("/google/callback", async (c) => {
   }
 
   const fail = (reason: string) =>
-    c.redirect(`${appUrl()}/#/app/login?error=${reason}`);
+    c.redirect(`${appUrl()}/#/business/login?error=${reason}`);
 
   // The user may have denied consent, or Google may send an error param.
   if (c.req.query("error")) return fail("google_denied");
@@ -551,7 +551,7 @@ authRoutes.get("/google/callback", async (c) => {
   const { token, expiresAt } = await createSession(user.id, { ipAddress, userAgent });
   setSessionCookie(c, token, expiresAt);
 
-  return c.redirect(`${appUrl()}/#/app/dashboard`);
+  return c.redirect(`${appUrl()}/#/business/fin/`);
 });
 
 // AUTH-004: mount 2FA and session-management sub-routes
