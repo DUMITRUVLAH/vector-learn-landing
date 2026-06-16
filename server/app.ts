@@ -12,6 +12,8 @@ import { companyRegistryRoutes } from "./routes/companyRegistry";
 import { sellerProfileRoutes } from "./routes/sellerProfile";
 import { companyClientRoutes } from "./routes/companyClients";
 import { paymentAccountRoutes } from "./routes/paymentAccounts";
+import { branchRoutes } from "./routes/branches";
+import { notificationRoutes } from "./routes/notifications";
 
 // FinDesk routes
 import { finInvoicesRoutes } from "./routes/finInvoices";
@@ -104,6 +106,10 @@ app.route("/api/registry", companyRegistryRoutes);
 app.route("/api/seller-profile", sellerProfileRoutes);
 app.route("/api/company-clients", companyClientRoutes);
 app.route("/api/payment-accounts", paymentAccountRoutes);
+
+// Cross-cutting UI: branch switcher dropdown + notification bell (used on every page)
+app.route("/api/branches", branchRoutes);
+app.route("/api/notifications", notificationRoutes);
 
 // FinDesk
 app.route("/api/fin/invoices", finInvoicesRoutes);
