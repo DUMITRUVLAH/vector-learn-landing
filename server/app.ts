@@ -108,7 +108,9 @@ app.route("/api/payment-accounts", paymentAccountRoutes);
 // FinDesk
 app.route("/api/fin/invoices", finInvoicesRoutes);
 app.route("/api/fin/invoices", finInvoiceDocRoutes);
-app.route("/api/fin/expenses", finExpensesRoutes);
+// finExpensesRoutes defines paths as "/expenses/*" internally, so mount at /api/fin
+// (mounting at /api/fin/expenses doubled the segment → /api/fin/expenses/expenses/summary).
+app.route("/api/fin", finExpensesRoutes);
 app.route("/api/fin/captures", finCapturesRoutes);
 app.route("/api/fin/ledger", finLedgerRoutes);
 app.route("/api/fin/budget", finBudgetRoutes);
@@ -127,7 +129,8 @@ app.route("/api/fin/tax", finTaxRoutes);
 app.route("/api/fin/calendar", finCalendarRoutes);
 app.route("/api/fin/export", finExportRoutes);
 app.route("/api/fin/registry", finRegistryRoutes);
-app.route("/api/fin/einvoices", finEinvoicesRoutes);
+// finEinvoicesRoutes defines "/einvoices/*" and "/sfs-settings" internally → mount at /api/fin.
+app.route("/api/fin", finEinvoicesRoutes);
 app.route("/api/fin/exchange-rates", finExchangeRatesRoutes);
 app.route("/api/fin/ai-audit", finAiAuditRoutes);
 app.route("/api/fin/gdpr", finGdprRoutes);
