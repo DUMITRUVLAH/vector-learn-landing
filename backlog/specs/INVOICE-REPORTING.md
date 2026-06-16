@@ -74,3 +74,16 @@ Human override is final and recorded (`reviewedBy`, `reviewedAt`, `reviewDecisio
 
 build + check-undefined-refs + route-mounts + migration-breakpoints green; migration applied to prod;
 e2e all buttons green; no regression on the other FinDesk pages (e2e-business.mjs 0 broken).
+
+## Addendum (2026-06-17): bank-statement multi-line extraction
+
+The accountant uploads ONE bank statement (e.g. MAIB "EXTRAS DE CONT" PDF/CSV) and the AI
+extracts EVERY transaction as its own reviewable line. Implemented:
+- fin_captures.kind ("document"|"statement") + fin_capture_lines child table (migration 0117).
+- server/lib/ai/statementExtractor.ts (array of transactions; heuristic MAIB parser fallback).
+- Upload auto-detects a statement; GET /captures/:id/lines + PATCH /captures/lines/:lineId/review.
+- UI: "Este extras bancar" upload toggle; statement detail shows the transactions table with
+  per-line reportable badge, DA/NU buttons, and a status filter.
+- Verified on prod with the real MAIB Oct-2025 statement: 11 transactions extracted, counterparties
+  inferred (Meta/Facebook Ads, DigitalOcean, Zoom, Trello…), in/out + original currency correct,
+  per-line review + filter working.
