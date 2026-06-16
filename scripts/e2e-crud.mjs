@@ -85,6 +85,11 @@ async function main() {
     ["assets list", "/api/fin/assets"],
     ["banklink connections", "/api/fin/banklink/connections"],
     ["members me", "/api/fin/members/me"],
+    ["analytics metrics", "/api/analytics/fin/metrics?period=last_6m"],
+    ["analytics aging", "/api/analytics/fin/aging"],
+    ["analytics cashflow", "/api/analytics/fin/cashflow-forecast"],
+    ["analytics saved-views", "/api/analytics/fin/saved-views"],
+    ["analytics narratives", "/api/analytics/fin/narratives"],
     ["registry tax-rates", "/api/fin/registry/tax-rates"],
   ]) {
     const r = await api("GET", path);

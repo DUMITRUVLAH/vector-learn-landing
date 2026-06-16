@@ -14,6 +14,7 @@ import { companyClientRoutes } from "./routes/companyClients";
 import { paymentAccountRoutes } from "./routes/paymentAccounts";
 import { branchRoutes } from "./routes/branches";
 import { notificationRoutes } from "./routes/notifications";
+import { finAnalyticsRoutes } from "./routes/finAnalytics";
 
 // FinDesk routes
 import { finInvoicesRoutes } from "./routes/finInvoices";
@@ -110,6 +111,9 @@ app.route("/api/payment-accounts", paymentAccountRoutes);
 // Cross-cutting UI: branch switcher dropdown + notification bell (used on every page)
 app.route("/api/branches", branchRoutes);
 app.route("/api/notifications", notificationRoutes);
+
+// FinDesk Insights widgets (metrics / aging / cashflow forecast / saved views / narratives)
+app.route("/api/analytics/fin", finAnalyticsRoutes);
 
 // FinDesk
 app.route("/api/fin/invoices", finInvoicesRoutes);
