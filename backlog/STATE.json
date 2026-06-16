@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "DOCMERGE-002",
+  "last_completed": "DOCMERGE-004",
   "iterations": 171,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
@@ -4089,8 +4089,8 @@
       }
     },
     "DOCMERGE-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DOCMERGE-003-batch-pdf-zip.md",
       "milestone": "DOCMERGE",
@@ -4098,11 +4098,19 @@
       "depends_on": [
         "DOCMERGE-002"
       ],
-      "branch": "feat/DOCMERGE-faza-1-document-merge"
+      "branch": "feat/DOCMERGE-faza-1-document-merge",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/185",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "adversarial": "APPROVED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "DOCMERGE-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DOCMERGE-004-wizard-end-to-end.md",
       "milestone": "DOCMERGE",
@@ -4110,7 +4118,14 @@
       "depends_on": [
         "DOCMERGE-003"
       ],
-      "branch": "feat/DOCMERGE-faza-1-document-merge"
+      "branch": "feat/DOCMERGE-faza-1-document-merge",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/185",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "FIX-501": {
       "status": "done",
