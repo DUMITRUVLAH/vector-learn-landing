@@ -62,7 +62,9 @@ writeFileSync(
   // the Web Request. Hono's c.req.json() then waits forever for an already-consumed body, so
   // EVERY POST (login, signup, …) hangs 30s → FUNCTION_INVOCATION_TIMEOUT. GET routes were fine
   // because they have no body. Disabling helpers lets Hono read the raw request stream itself.
-  JSON.stringify({ runtime: "nodejs20.x", handler: "index.mjs", launcherType: "Nodejs", shouldAddHelpers: false, maxDuration: 30 }, null, 2)
+  // maxDuration 60s (not 30): a COLD start that also extracts a multi-page PDF (unpdf first-load
+  // + parse) measured ~22s — too close to a 30s cap. 60s gives headroom so uploads never 504.
+  JSON.stringify({ runtime: "nodejs20.x", handler: "index.mjs", launcherType: "Nodejs", shouldAddHelpers: false, maxDuration: 60 }, null, 2)
 );
 
 // 3. Routing: /api/* → the function; everything else → static (SPA index for unknown paths)
