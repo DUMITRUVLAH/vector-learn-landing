@@ -123,6 +123,7 @@ const BUSINESS_NAV_GROUPS: NavGroup[] = [
     section: "FinDesk — Finanțe",
     items: [
       { label: "Facturi", href: "/business/fin/invoices", icon: Receipt },
+      { label: "Cont de plată", href: "/business/fin/invoices/document", icon: FileText },
       { label: "e-Factura", href: "/business/fin/einvoices", icon: FileText },
       { label: "Încasări", href: "/business/fin/payments", icon: CreditCard },
       { label: "Cheltuieli", href: "/business/fin/expenses", icon: DollarSign },
