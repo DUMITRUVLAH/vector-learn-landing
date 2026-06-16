@@ -138,6 +138,10 @@ export function Footer() {
             <a href="#" className="hover:text-white">Cookies</a>
             <a href="#" className="hover:text-white">DPA / GDPR</a>
             <a href="#" className="hover:text-white">SLA</a>
+            {/* SPLIT-302: discreet Business Suite link — for FinDesk/PAR/ITPark users who land on CRM homepage */}
+            <a href="#/business" className="hover:text-white font-medium" aria-label="Business Suite — FinDesk, PAR, ITPark">
+              Business Suite
+            </a>
           </div>
         </div>
       </div>

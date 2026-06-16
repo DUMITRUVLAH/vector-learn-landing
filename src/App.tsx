@@ -1,18 +1,6 @@
 import { HashRouter, useRouter } from "./router/HashRouter";
-import { Navbar } from "./components/Navbar";
-import { Hero } from "./components/Hero";
-import { TrustBar } from "./components/TrustBar";
-import { Features } from "./components/Features";
-import { Stats } from "./components/Stats";
-import { Integrations } from "./components/Integrations";
-import { Comparison } from "./components/Comparison";
-import { Pricing } from "./components/Pricing";
-import { Testimonials } from "./components/Testimonials";
-import { FAQ } from "./components/FAQ";
-import { CTA } from "./components/CTA";
-import { Footer } from "./components/Footer";
-import { BackendStatusBadge } from "./components/BackendStatusBadge";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { useEffect } from "react";
 
 // PAR routes
 import { ParCreateWizard } from "./pages/par/ParCreateWizard";
@@ -58,8 +46,7 @@ import { FinExportCenter } from "./pages/app/fin/ExportCenter";
 import ItparkDetail from "./pages/app/fin/itpark/ItparkDetail";
 import { FinInsightsPage } from "./pages/finance/FinInsightsPage";
 
-// Lazy-loaded heavy pages
-import { lazy, Suspense, useState, useEffect } from "react";
+import { lazy, Suspense, useState, useEffect as _useEffect } from "react";
 import { getParMe } from "./lib/api/par";
 
 const BankLinkPage = lazy(() => import("./pages/fin/BankLinkPage"));
@@ -73,43 +60,29 @@ const FinMassPage = lazy(() => import("./pages/fin/FinMassPage").then(m => ({ de
 const TaxPage = lazy(() => import("./pages/fin/TaxPage").then(m => ({ default: m.TaxPage })));
 const FinPaymentsPage = lazy(() => import("./pages/fin/PaymentsPage"));
 
-/** PAR-116: Role-aware wrapper */
 function ParAdminPage() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-
-  useEffect(() => {
+  _useEffect(() => {
     getParMe()
       .then((r) => setIsAdmin(r.roles.includes("par_admin")))
       .catch(() => setIsAdmin(false));
   }, []);
-
   if (isAdmin === null) return null;
   return <ParAdmin isAdmin={isAdmin} />;
 }
 
-function HomePage() {
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Navbar />
-      <main>
-        <Hero />
-        <TrustBar />
-        <Features />
-        <Stats />
-        <Integrations />
-        <Comparison />
-        <Testimonials />
-        <Pricing />
-        <FAQ />
-        <CTA />
-      </main>
-      <Footer />
-    </div>
-  );
+function RedirectToBusiness() {
+  useEffect(() => {
+    window.location.hash = "/business";
+  }, []);
+  return null;
 }
 
 function Routes() {
   const { path } = useRouter();
+
+  // Root → redirect to /business
+  if (path === "/" || path === "") return <RedirectToBusiness />;
 
   // PAR routes under /app/par/*
   if (path.startsWith("/app/par/new")) return <ParCreateWizard />;
@@ -170,7 +143,6 @@ function Routes() {
   if (path.startsWith("/business/par")) return <BusinessGuardPage><ParDashboard /></BusinessGuardPage>;
 
   // Payment accounts (cont de plată)
-  if (path.startsWith("/app/conturi-plata/setari")) return <BusinessGuardPage><PaymentAccountEditorPage /></BusinessGuardPage>;
   if (path.startsWith("/app/conturi-plata/nou")) return <BusinessGuardPage><PaymentAccountEditorPage /></BusinessGuardPage>;
   {
     const editMatch = path.match(/^\/app\/conturi-plata\/([^/?]+)\/editeaza/);
@@ -183,7 +155,8 @@ function Routes() {
   // Parties detail
   if (path.match(/^\/business\/fin\/parties\/[^/]+$/)) return <BusinessGuardPage><PartyDetailPage /></BusinessGuardPage>;
 
-  return <HomePage />;
+  // Fallback: orice altceva → /business
+  return <RedirectToBusiness />;
 }
 
 function BoundedRoutes() {
@@ -199,7 +172,6 @@ export default function App() {
   return (
     <HashRouter>
       <BoundedRoutes />
-      {import.meta.env.DEV && <BackendStatusBadge />}
     </HashRouter>
   );
 }
