@@ -16,6 +16,7 @@ import { ParReports } from "./pages/par/ParReports";
 // DOCMERGE module routes
 import { DocMergeTemplatesPage } from "./pages/business/docmerge/DocMergeTemplatesPage";
 import { DocMergeJobPage } from "./pages/business/docmerge/DocMergeJobPage";
+import { DocMergeWizardPage } from "./pages/business/docmerge/DocMergeWizardPage";
 
 // Business / FinDesk routes
 import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
@@ -163,8 +164,8 @@ function Routes() {
   if (path.match(/^\/business\/par\/[^/]+$/)) return <BusinessGuardPage><ParDetailPage /></BusinessGuardPage>;
   if (path.startsWith("/business/par")) return <BusinessGuardPage><ParDashboard /></BusinessGuardPage>;
 
-  // DOCMERGE-001: Document Merge templates
-  // DOCMERGE-002: Excel Import wizard (more specific → must come before the generic /business/docmerge)
+  // DOCMERGE-001/002/003/004: Document Merge — more specific routes first
+  if (path.startsWith("/business/docmerge/wizard")) return <BusinessGuardPage><DocMergeWizardPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge")) return <BusinessGuardPage><DocMergeTemplatesPage /></BusinessGuardPage>;
 

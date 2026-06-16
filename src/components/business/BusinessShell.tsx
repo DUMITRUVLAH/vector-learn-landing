@@ -25,6 +25,7 @@ import {
   Banknote,
   Settings,
   FileSpreadsheet,
+  Wand2,
 } from "lucide-react";
 import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
@@ -88,9 +89,11 @@ const NAV_GROUPS: NavGroup[] = [
   {
     section: "Document Merge",
     items: [
-      // DOCMERGE-001: mail-merge templates
+      // DOCMERGE-004: end-to-end wizard (primary entry point)
+      { label: "Documente în masă", href: "/business/docmerge/wizard", icon: Wand2 },
+      // DOCMERGE-001: manage templates
       { label: "Templates", href: "/business/docmerge", icon: FileText },
-      // DOCMERGE-002: Excel import wizard
+      // DOCMERGE-002: Excel import wizard (legacy / advanced)
       { label: "Import Excel", href: "/business/docmerge/job", icon: FileSpreadsheet },
     ],
   },
@@ -101,6 +104,9 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
 ];
+
+/** Exported for testing purposes only (T-DOCMERGE-004-4). Do not use in production code. */
+export const NAV_GROUPS_EXPORT: NavGroup[] = NAV_GROUPS;
 
 /**
  * Pagini publice: nu necesită sesiune business.
