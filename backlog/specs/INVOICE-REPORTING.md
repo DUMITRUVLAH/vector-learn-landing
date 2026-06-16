@@ -1,7 +1,7 @@
 ---
 id: INVOICE-REPORTING
 title: Invoice Reporting — AI-assisted reportability triage for invoices & transactions
-status: in_progress
+status: done
 owner_request: 2026-06-16
 supersedes: "Documente AI" (fin captures page) — renamed + extended
 ---
