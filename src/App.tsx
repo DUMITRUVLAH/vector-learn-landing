@@ -1,5 +1,6 @@
 import { HashRouter, useRouter } from "./router/HashRouter";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { BranchProvider } from "./contexts/BranchContext";
 import { useEffect } from "react";
 
 // PAR routes
@@ -170,8 +171,10 @@ function BoundedRoutes() {
 
 export default function App() {
   return (
-    <HashRouter>
-      <BoundedRoutes />
-    </HashRouter>
+    <BranchProvider>
+      <HashRouter>
+        <BoundedRoutes />
+      </HashRouter>
+    </BranchProvider>
   );
 }
