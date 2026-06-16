@@ -122,7 +122,8 @@ app.route("/api/fin/ledger", finLedgerRoutes);
 app.route("/api/fin/budget", finBudgetRoutes);
 app.route("/api/fin/cash", finCashAllocationsRoutes);
 app.route("/api/fin/cash", finCashRoutes);
-app.route("/api/fin/bank-link", finBankLinkRoutes);
+// Frontend calls /api/fin/banklink (no hyphen) — mount must match or every bank-link call 404s.
+app.route("/api/fin/banklink", finBankLinkRoutes);
 app.route("/api/fin/mass", finMassRoutes);
 app.route("/api/fin/members", finMembersRoutes);
 app.route("/api/fin/org", finOrgRoutes);

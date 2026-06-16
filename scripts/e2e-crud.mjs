@@ -83,7 +83,8 @@ async function main() {
     ["payroll employees", "/api/fin/payroll/employees"],
     ["tax periods", "/api/fin/tax/periods"],
     ["assets list", "/api/fin/assets"],
-    ["banklink connections", "/api/fin/bank-link/connections"],
+    ["banklink connections", "/api/fin/banklink/connections"],
+    ["members me", "/api/fin/members/me"],
     ["registry tax-rates", "/api/fin/registry/tax-rates"],
   ]) {
     const r = await api("GET", path);
