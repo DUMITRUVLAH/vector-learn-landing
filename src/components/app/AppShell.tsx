@@ -10,7 +10,8 @@ import { isModuleVisible, type ModuleAudience } from "@/lib/institution";
 
 interface AppShellProps {
   children: ReactNode;
-  pageTitle: string;
+  /** Optional — some pages (e.g. ParCreateForm) render their own heading. */
+  pageTitle?: string;
   pageDescription?: string;
   actions?: ReactNode;
 }
@@ -326,9 +327,11 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
           <div className="container mx-auto px-4 py-6 sm:py-8">
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
               <div>
-                <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight">
-                  {pageTitle}
-                </h1>
+                {pageTitle && (
+                  <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight">
+                    {pageTitle}
+                  </h1>
+                )}
                 {pageDescription && (
                   <p className="text-sm text-muted-foreground mt-1">{pageDescription}</p>
                 )}

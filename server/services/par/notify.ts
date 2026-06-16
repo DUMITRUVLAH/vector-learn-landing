@@ -237,6 +237,23 @@ export async function notifyFullyApprovedToFinance(ctx: ParNotifyContext): Promi
 }
 
 /**
+ * VF-101: On final approval → notify the requestor that their PAR cleared all approvals.
+ * Complements notifyFullyApprovedToFinance (which targets finance). Best-effort.
+ */
+export async function notifyApprovedToRequestor(
+  ctx: ParNotifyContext,
+  requestorUserId: string
+): Promise<void> {
+  await notifyUser({
+    tenantId: ctx.tenantId,
+    userId: requestorUserId,
+    parId: ctx.parId,
+    body: `PAR ${ctx.requestNo} a fost aprobată. Link: /app/par/${ctx.parId}`,
+    subject: `[PAR] ${ctx.requestNo} — aprobată`,
+  });
+}
+
+/**
  * On reject → notify the requestor with the rejection comment.
  */
 export async function notifyRejected(

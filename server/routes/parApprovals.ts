@@ -31,9 +31,11 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { buildBodyForHash } from "../lib/par/submit";
 import { verifyParBodyHash } from "../lib/par/integrity";
+import { getActiveDelegators } from "../lib/par/delegations";
 import {
   notifyStepAdvanced,
   notifyFullyApprovedToFinance,
+  notifyApprovedToRequestor,
   notifyRejected,
   notifyChangesRequested,
 } from "../services/par/notify";
@@ -58,6 +60,48 @@ const requestChangesSchema = z.object({
   comment: z.string().min(1, "Comment is required for request-changes").max(5000),
 });
 
+// ─── Helper: can this user act on this PAR's approval? ─────────────────────────
+// VF-002: a user who is EXPLICITLY assigned to a pending step (approverUserId == user.id)
+// can decide it even without the generic `approver` par_role — the explicit assignment in the
+// DOA matrix IS their authority (e.g. a finance/program director assigned to step 2). The
+// generic role still covers role-based (unassigned) steps. Without this, PARs whose DOA matrix
+// pins a step to a non-`approver` user are blocked forever.
+async function canActOnApproval(
+  userId: string,
+  tenantId: string,
+  parId: string,
+  canApprove: boolean
+): Promise<boolean> {
+  if (canApprove) return true;
+  const assigned = await db
+    .select({ id: parApprovals.id })
+    .from(parApprovals)
+    .where(
+      and(
+        eq(parApprovals.parId, parId),
+        eq(parApprovals.tenantId, tenantId),
+        eq(parApprovals.approverUserId, userId),
+        eq(parApprovals.decision, "pending")
+      )
+    );
+  return assigned.length > 0;
+}
+
+/** VF-302: true if a pending step on this PAR is assigned to someone who delegated to `userId`. */
+async function hasDelegatedPendingStep(
+  userId: string,
+  tenantId: string,
+  parId: string,
+  delegators: Set<string>
+): Promise<boolean> {
+  if (delegators.size === 0) return false;
+  const pending = await db
+    .select({ approverUserId: parApprovals.approverUserId })
+    .from(parApprovals)
+    .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId), eq(parApprovals.decision, "pending")));
+  return pending.some((s) => s.approverUserId != null && delegators.has(s.approverUserId));
+}
+
 // ─── Helper: write par_audit ──────────────────────────────────────────────────
 
 async function writeAudit(params: {
@@ -76,6 +120,151 @@ async function writeAudit(params: {
   });
 }
 
+// ─── Core approve logic (shared by /:id/approve and /bulk-approve) ─────────────
+// VF-102: extracted from the route handler so bulk-approve runs the EXACT same logic per id.
+// Returns a structured result instead of an HTTP response, so callers shape their own output.
+type ApproveResult =
+  | { ok: true; body: Record<string, unknown>; status: string }
+  | { ok: false; status: number; error: string; extra?: Record<string, unknown> };
+
+async function approveParStep(
+  userId: string,
+  tenantId: string,
+  parId: string,
+  body: { comment?: string | null; signatureName?: string | null }
+): Promise<ApproveResult> {
+  const roles = await getUserPARRoles(userId, tenantId);
+  const canApprove = roles.includes("approver") || roles.includes("par_admin");
+  // VF-302: principals who delegated their approval authority to this user (active now).
+  const delegators = await getActiveDelegators(userId, tenantId);
+  // VF-002: allow generic approvers OR users explicitly assigned to a pending step.
+  // VF-302: also allow if a delegator (X→userId active) is assigned to a pending step here.
+  if (!(await canActOnApproval(userId, tenantId, parId, canApprove)) && !(await hasDelegatedPendingStep(userId, tenantId, parId, delegators))) {
+    return { ok: false, status: 403, error: "forbidden: approver role required" };
+  }
+
+  const [par] = await db
+    .select()
+    .from(parRequests)
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+  if (!par) return { ok: false, status: 404, error: "not_found" };
+
+  if (par.status !== "pending_approval") {
+    return { ok: false, status: 409, error: `conflict: PAR status is '${par.status}', cannot approve` };
+  }
+
+  const approvalSteps = await db
+    .select()
+    .from(parApprovals)
+    .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)))
+    .orderBy(asc(parApprovals.step));
+
+  // VF-302: a step matches the user if assigned to them, role-routed (unassigned + can approve),
+  // OR assigned to someone who delegated to them.
+  const stepMatches = (s: typeof approvalSteps[number]) =>
+    s.approverUserId === userId ||
+    (s.approverUserId === null && canApprove) ||
+    (s.approverUserId != null && delegators.has(s.approverUserId));
+
+  const lockedStepForUser = approvalSteps.find(
+    (s) => s.step > 0 && s.decision === "pending" && s.locked === true && stepMatches(s)
+  );
+  const activeStep = approvalSteps.find(
+    (s) => s.step > 0 && s.decision === "pending" && s.locked === false && stepMatches(s)
+  );
+
+  if (!activeStep) {
+    if (lockedStepForUser) {
+      return {
+        ok: false, status: 409,
+        error: "conflict: approval step is locked — a prior step must be approved first",
+        extra: { locked_step: lockedStepForUser.step },
+      };
+    }
+    return { ok: false, status: 403, error: "forbidden: no active step assigned to you, or PAR is not awaiting your decision" };
+  }
+
+  // PAR-109: integrity check before recording.
+  const bodyForHash = await buildBodyForHash(parId, tenantId);
+  if (bodyForHash && par.bodyHash) {
+    const integrityCheck = verifyParBodyHash(bodyForHash, par.bodyHash);
+    if (!integrityCheck.valid) {
+      await writeAudit({ tenantId, parId, actorUserId: userId, event: "integrity_mismatch", detail: integrityCheck.detail });
+      return {
+        ok: false, status: 409,
+        error: "integrity_violation: PAR body hash mismatch — body was modified after submit",
+        extra: { detail: integrityCheck.detail },
+      };
+    }
+  }
+
+  // VF-302: if acting on a step assigned to someone else (a delegator), annotate the signature/title.
+  const viaDelegation =
+    activeStep.approverUserId != null && activeStep.approverUserId !== userId && delegators.has(activeStep.approverUserId);
+  const signatureTitle = viaDelegation ? `delegat de ${activeStep.approverUserId}` : undefined;
+
+  await db
+    .update(parApprovals)
+    .set({
+      decision: "approved",
+      decidedAt: new Date(),
+      comment: body.comment ?? null,
+      signatureName: body.signatureName ?? userId,
+      ...(signatureTitle ? { signatureTitle } : {}),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(parApprovals.id, activeStep.id), eq(parApprovals.tenantId, tenantId)));
+
+  await writeAudit({
+    tenantId, parId, actorUserId: userId, event: "approved",
+    detail: `Step ${activeStep.step} (${activeStep.approverRoleLabel}) approved${viaDelegation ? ` — prin delegare de la ${activeStep.approverUserId}` : ""}`,
+  });
+
+  const nextStep = approvalSteps.find(
+    (s) => s.step > activeStep.step && s.decision === "pending" && s.locked === true
+  );
+
+  if (nextStep) {
+    await db
+      .update(parApprovals)
+      .set({ locked: false, updatedAt: new Date() })
+      .where(and(eq(parApprovals.id, nextStep.id), eq(parApprovals.tenantId, tenantId)));
+    await writeAudit({ tenantId, parId, actorUserId: userId, event: "step_unlocked", detail: `Step ${nextStep.step} (${nextStep.approverRoleLabel}) unlocked for approval` });
+    await notifyStepAdvanced(
+      { tenantId, parId, requestNo: par.requestNo },
+      nextStep.approverUserId ?? null,
+      nextStep.approverRoleLabel ?? `Step ${nextStep.step}`
+    );
+    const [refreshed] = await db
+      .select()
+      .from(parRequests)
+      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+    return {
+      ok: true, status: refreshed.status,
+      body: { ...refreshed, chain_status: "advanced", next_step: nextStep.step, next_step_label: nextStep.approverRoleLabel },
+    };
+  }
+
+  // Final approval.
+  const newStatus = par.purpose === "execute_payment" ? "in_finance" : "approved";
+  const [finalPar] = await db
+    .update(parRequests)
+    .set({ status: newStatus, approvedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
+    .returning();
+  await writeAudit({
+    tenantId, parId, actorUserId: userId,
+    event: newStatus === "in_finance" ? "fully_approved_to_finance" : "fully_approved",
+    detail: `All approval steps complete. PAR → ${newStatus}`,
+  });
+  if (newStatus === "in_finance") {
+    await notifyFullyApprovedToFinance({ tenantId, parId, requestNo: par.requestNo });
+  }
+  await notifyApprovedToRequestor({ tenantId, parId, requestNo: par.requestNo }, par.requestedByUserId);
+
+  return { ok: true, status: newStatus, body: { ...finalPar, chain_status: "complete" } };
+}
+
 // ─── GET /api/par/inbox ───────────────────────────────────────────────────────
 // Returns PARs where the current user is the approver of the currently active (unlocked, pending) step.
 
@@ -86,8 +275,11 @@ parApprovalsRoutes.get("/inbox", async (c) => {
   const roles = await getUserPARRoles(user.id, tenantId);
   const isApprover = roles.includes("approver") || roles.includes("par_admin");
 
-  // Non-approvers get an empty inbox rather than a 403 — role-aware UI hides the tab anyway
-  if (!isApprover) {
+  // VF-302: principals who delegated their authority to this user (active now).
+  const delegators = await getActiveDelegators(user.id, tenantId);
+
+  // Non-approvers with no incoming delegations get an empty inbox (role-aware UI hides the tab anyway).
+  if (!isApprover && delegators.size === 0) {
     return c.json({ inbox: [], total: 0 });
   }
 
@@ -119,6 +311,8 @@ parApprovalsRoutes.get("/inbox", async (c) => {
     if (s.approverUserId === user.id) return true;
     // Role-based: no specific user assigned → any approver/par_admin can decide
     if (s.approverUserId === null && isApprover) return true;
+    // VF-302: a step assigned to a delegator (X→me active) is mine to decide.
+    if (s.approverUserId != null && delegators.has(s.approverUserId)) return true;
     return false;
   });
 
@@ -173,176 +367,39 @@ parApprovalsRoutes.post(
     const parId = c.req.param("id");
     const body = c.req.valid("json");
 
-    const roles = await getUserPARRoles(user.id, tenantId);
-    const canApprove = roles.includes("approver") || roles.includes("par_admin");
-    if (!canApprove) return c.json({ error: "forbidden: approver role required" }, 403);
-
-    // Fetch PAR
-    const [par] = await db
-      .select()
-      .from(parRequests)
-      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
-    if (!par) return c.json({ error: "not_found" }, 404);
-
-    if (par.status !== "pending_approval") {
-      return c.json({ error: `conflict: PAR status is '${par.status}', cannot approve` }, 409);
-    }
-
-    // Find the active (unlocked, pending) step for this user
-    const approvalSteps = await db
-      .select()
-      .from(parApprovals)
-      .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)))
-      .orderBy(asc(parApprovals.step));
-
-    // PAR-109: T-PAR-109-1 — check for out-of-order attempt (locked step) → 409
-    const lockedStepForUser = approvalSteps.find(
-      (s) =>
-        s.step > 0 &&
-        s.decision === "pending" &&
-        s.locked === true &&
-        (s.approverUserId === user.id || (s.approverUserId === null && canApprove))
-    );
-
-    const activeStep = approvalSteps.find(
-      (s) =>
-        s.step > 0 &&
-        s.decision === "pending" &&
-        s.locked === false &&
-        (s.approverUserId === user.id || (s.approverUserId === null && canApprove))
-    );
-
-    if (!activeStep) {
-      if (lockedStepForUser) {
-        // User would be the approver but the step is locked (prior step not yet approved)
-        return c.json(
-          {
-            error: "conflict: approval step is locked — a prior step must be approved first",
-            locked_step: lockedStepForUser.step,
-          },
-          409
-        );
-      }
-      return c.json(
-        { error: "forbidden: no active step assigned to you, or PAR is not awaiting your decision" },
-        403
-      );
-    }
-
-    // PAR-109: verify body hash integrity before recording approval
-    const bodyForHash = await buildBodyForHash(parId, tenantId);
-    if (bodyForHash && par.bodyHash) {
-      const integrityCheck = verifyParBodyHash(bodyForHash, par.bodyHash);
-      if (!integrityCheck.valid) {
-        await writeAudit({
-          tenantId,
-          parId,
-          actorUserId: user.id,
-          event: "integrity_mismatch",
-          detail: integrityCheck.detail,
-        });
-        return c.json(
-          {
-            error: "integrity_violation: PAR body hash mismatch — body was modified after submit",
-            detail: integrityCheck.detail,
-          },
-          409
-        );
-      }
-    }
-
-    // Mark this step approved
-    await db
-      .update(parApprovals)
-      .set({
-        decision: "approved",
-        decidedAt: new Date(),
-        comment: body.comment ?? null,
-        signatureName: body.signatureName ?? user.id, // fallback to userId if no name typed
-        updatedAt: new Date(),
-      })
-      .where(
-        and(eq(parApprovals.id, activeStep.id), eq(parApprovals.tenantId, tenantId))
-      );
-
-    await writeAudit({
-      tenantId,
-      parId,
-      actorUserId: user.id,
-      event: "approved",
-      detail: `Step ${activeStep.step} (${activeStep.approverRoleLabel}) approved`,
-    });
-
-    // Find next step (step > activeStep.step, still locked)
-    const nextStep = approvalSteps.find(
-      (s) => s.step > activeStep.step && s.decision === "pending" && s.locked === true
-    );
-
-    if (nextStep) {
-      // Unlock the next step
-      await db
-        .update(parApprovals)
-        .set({ locked: false, updatedAt: new Date() })
-        .where(
-          and(eq(parApprovals.id, nextStep.id), eq(parApprovals.tenantId, tenantId))
-        );
-
-      await writeAudit({
-        tenantId,
-        parId,
-        actorUserId: user.id,
-        event: "step_unlocked",
-        detail: `Step ${nextStep.step} (${nextStep.approverRoleLabel}) unlocked for approval`,
-      });
-
-      // PAR-111: notify the next approver (best-effort)
-      await notifyStepAdvanced(
-        { tenantId, parId, requestNo: par.requestNo },
-        nextStep.approverUserId ?? null,
-        nextStep.approverRoleLabel ?? `Step ${nextStep.step}`
-      );
-
-      const [refreshed] = await db
-        .select()
-        .from(parRequests)
-        .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
-
-      return c.json({
-        ...refreshed,
-        chain_status: "advanced",
-        next_step: nextStep.step,
-        next_step_label: nextStep.approverRoleLabel,
-      });
-    }
-
-    // No next step → final approval
-    const newStatus = par.purpose === "execute_payment" ? "in_finance" : "approved";
-    const [finalPar] = await db
-      .update(parRequests)
-      .set({
-        status: newStatus,
-        approvedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
-      .returning();
-
-    await writeAudit({
-      tenantId,
-      parId,
-      actorUserId: user.id,
-      event: newStatus === "in_finance" ? "fully_approved_to_finance" : "fully_approved",
-      detail: `All approval steps complete. PAR → ${newStatus}`,
-    });
-
-    // PAR-111: notify finance users when fully approved to finance (best-effort)
-    if (newStatus === "in_finance") {
-      await notifyFullyApprovedToFinance({ tenantId, parId, requestNo: par.requestNo });
-    }
-
-    return c.json({ ...finalPar, chain_status: "complete" });
+    const result = await approveParStep(user.id, tenantId, parId, body);
+    if (!result.ok) return c.json({ error: result.error, ...result.extra }, result.status as 400);
+    return c.json(result.body);
   }
 );
+
+// ─── POST /api/par/bulk-approve ───────────────────────────────────────────────
+// VF-102: approve up to 25 PARs in one call. Each id runs the SAME approveParStep logic
+// independently — one failure (self-approval, locked step, wrong status) doesn't affect the rest.
+const bulkApproveSchema = z.object({
+  par_ids: z.array(z.string().uuid()).min(1).max(25),
+  comment: z.string().max(5000).optional().nullable(),
+  signatureName: z.string().max(300).optional().nullable(),
+});
+
+parApprovalsRoutes.post("/bulk-approve", zValidator("json", bulkApproveSchema), async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const { par_ids, comment, signatureName } = c.req.valid("json");
+
+  const results = [];
+  for (const parId of [...new Set(par_ids)]) {
+    const r = await approveParStep(user.id, tenantId, parId, { comment, signatureName });
+    results.push(
+      r.ok
+        ? { id: parId, ok: true, status: r.status }
+        : { id: parId, ok: false, error: r.error }
+    );
+  }
+
+  const approved = results.filter((r) => r.ok).length;
+  return c.json({ results, approved, failed: results.length - approved });
+});
 
 // ─── POST /api/par/:id/reject ─────────────────────────────────────────────────
 
@@ -357,7 +414,10 @@ parApprovalsRoutes.post(
 
     const roles = await getUserPARRoles(user.id, tenantId);
     const canApprove = roles.includes("approver") || roles.includes("par_admin");
-    if (!canApprove) return c.json({ error: "forbidden: approver role required" }, 403);
+    // VF-002: allow generic approvers OR users explicitly assigned to a pending step.
+    if (!(await canActOnApproval(user.id, tenantId, parId, canApprove))) {
+      return c.json({ error: "forbidden: approver role required" }, 403);
+    }
 
     const [par] = await db
       .select()

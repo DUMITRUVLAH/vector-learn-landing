@@ -9,6 +9,7 @@ import {
   uuid,
   varchar,
   integer,
+  numeric,
   boolean,
   text,
   timestamp,
@@ -139,6 +140,8 @@ export const parBudgetCodes = pgTable(
     code: varchar("code", { length: 50 }).notNull(),
     name: varchar("name", { length: 200 }).notNull(),
     active: boolean("active").notNull().default(true),
+    /** Feature 2: total budget allocated to this code (minor units, default 0 = uncapped) */
+    allocatedCents: integer("allocated_cents").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -166,6 +169,15 @@ export const parVendors = pgTable(
     bank: varchar("bank", { length: 300 }),
     notes: text("notes"),
     active: boolean("active").notNull().default(true),
+    /** Vendor compliance — Feature 1 (contafirm.md registry) */
+    /** individual | company */
+    kind: varchar("kind", { length: 20 }).notNull().default("individual"),
+    /** Registry status string from contafirm.md (e.g. "active") */
+    companyStatus: varchar("company_status", { length: 100 }),
+    /** contafirm.md numeric id */
+    registryId: integer("registry_id"),
+    /** Timestamp when the vendor was last verified against the registry */
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -191,6 +203,10 @@ export const parSettings = pgTable(
     pdfHelpUrl: varchar("pdf_help_url", { length: 1000 }),
     /** Prefix for PAR numbers (default "PAR") */
     requestNoPrefix: varchar("request_no_prefix", { length: 20 }).notNull().default("PAR"),
+    /** VF-003: false until the org finishes (or skips) the onboarding wizard. */
+    onboardingComplete: boolean("onboarding_complete").notNull().default(false),
+    /** VF-505: when true, payments are blocked unless the 3-way match (PO + receipt + amount) passes. */
+    enforceThreeWayMatch: boolean("enforce_three_way_match").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -276,6 +292,10 @@ export const parRequests = pgTable(
     currency: varchar("currency", { length: 3 }).notNull().default("MDL"),
     /** Cached sum of line totals — kept in sync by the backend on every line item change */
     totalEstimatedCents: integer("total_estimated_cents").notNull().default(0),
+    /** VF-203: exchange rate (1 unit of `currency` → MDL) captured at submit. Null for MDL. */
+    exchangeRate: numeric("exchange_rate", { precision: 14, scale: 6 }),
+    /** VF-203: total converted to MDL minor units at submit (= totalEstimatedCents when currency=MDL). */
+    totalMdlCents: integer("total_mdl_cents"),
     status: parStatusEnum("status").notNull().default("draft"),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
@@ -444,6 +464,209 @@ export const parAudit = pgTable(
   })
 );
 
+/**
+ * Feature 3: PAR Templates — JSON snapshots of header + line items + payee.
+ * Allows saving a PAR as a reusable template and instantiating new draft PARs from it.
+ */
+export const parTemplates = pgTable(
+  "par_templates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 300 }).notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    /** JSON snapshot of header fields + line items + payee (no status/approval data) */
+    snapshot: text("snapshot").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_templates_tenant_idx").on(t.tenantId),
+    createdByIdx: index("par_templates_created_by_idx").on(t.createdByUserId),
+  })
+);
+
+// VF-004: pending invitations. The raw token is never stored — only its sha256 hash.
+export const parInvites = pgTable(
+  "par_invites",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    email: varchar("email", { length: 255 }).notNull(),
+    parRole: parRoleEnum("par_role").notNull(),
+    /** sha256(token) — the plaintext token lives only in the invite URL. */
+    tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+    invitedByUserId: uuid("invited_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_invites_tenant_idx").on(t.tenantId),
+    tokenHashIdx: index("par_invites_token_hash_idx").on(t.tokenHash),
+    emailIdx: index("par_invites_email_idx").on(t.email),
+  })
+);
+
+// VF-104: comments on a PAR. Append-only (no edit/delete in v1) for audit integrity.
+export const parComments = pgTable(
+  "par_comments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    parId: uuid("par_id")
+      .notNull()
+      .references(() => parRequests.id, { onDelete: "cascade" }),
+    authorUserId: uuid("author_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    parIdx: index("par_comments_par_idx").on(t.parId),
+    tenantIdx: index("par_comments_tenant_idx").on(t.tenantId),
+  })
+);
+
+// VF-501: quotes collected on an `obtain_quotations` PAR (donor 3-bid rule).
+export const parQuotes = pgTable(
+  "par_quotes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    parId: uuid("par_id")
+      .notNull()
+      .references(() => parRequests.id, { onDelete: "cascade" }),
+    /** Registered vendor (optional) or a free-typed name snapshot. */
+    vendorId: uuid("vendor_id").references(() => parVendors.id, { onDelete: "set null" }),
+    vendorName: varchar("vendor_name", { length: 300 }).notNull(),
+    totalCents: integer("total_cents").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("MDL"),
+    validUntil: timestamp("valid_until", { withTimezone: true }),
+    notes: text("notes"),
+    fileUrl: text("file_url"),
+    /** VF-502: the chosen winning quote (one per PAR) + the justification for the choice. */
+    selected: boolean("selected").notNull().default(false),
+    selectionReason: text("selection_reason"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    parIdx: index("par_quotes_par_idx").on(t.parId),
+    tenantIdx: index("par_quotes_tenant_idx").on(t.tenantId),
+  })
+);
+
+// VF-503: purchase order issued from an approved PAR (one PO per PAR).
+export const parPurchaseOrders = pgTable(
+  "par_purchase_orders",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    parId: uuid("par_id")
+      .notNull()
+      .unique()
+      .references(() => parRequests.id, { onDelete: "cascade" }),
+    poNumber: varchar("po_number", { length: 50 }).notNull(),
+    vendorName: varchar("vendor_name", { length: 300 }),
+    vendorIdnp: varchar("vendor_idnp", { length: 13 }),
+    vendorIban: varchar("vendor_iban", { length: 34 }),
+    totalCents: integer("total_cents").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("MDL"),
+    status: varchar("status", { length: 20 }).notNull().default("issued"),
+    issuedByUserId: uuid("issued_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_po_tenant_idx").on(t.tenantId),
+  })
+);
+
+// VF-504: goods/services receipt (confirm what arrived before payment).
+export const parReceipts = pgTable(
+  "par_receipts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    parId: uuid("par_id")
+      .notNull()
+      .references(() => parRequests.id, { onDelete: "cascade" }),
+    receivedByUserId: uuid("received_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    /** true = full receipt; false = partial. */
+    complete: boolean("complete").notNull().default(true),
+    notes: text("notes"),
+    fileUrl: text("file_url"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    parIdx: index("par_receipts_par_idx").on(t.parId),
+    tenantIdx: index("par_receipts_tenant_idx").on(t.tenantId),
+  })
+);
+
+export const parReceiptLines = pgTable(
+  "par_receipt_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    receiptId: uuid("receipt_id")
+      .notNull()
+      .references(() => parReceipts.id, { onDelete: "cascade" }),
+    lineItemId: uuid("line_item_id")
+      .notNull()
+      .references(() => parLineItems.id, { onDelete: "cascade" }),
+    qtyReceived: integer("qty_received").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    receiptIdx: index("par_receipt_lines_receipt_idx").on(t.receiptId),
+    tenantIdx: index("par_receipt_lines_tenant_idx").on(t.tenantId),
+  })
+);
+
+// VF-302: approver delegation. While active, `toUser` can decide steps assigned to `fromUser`.
+export const parDelegations = pgTable(
+  "par_delegations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    fromUserId: uuid("from_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    toUserId: uuid("to_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_delegations_tenant_idx").on(t.tenantId),
+    fromIdx: index("par_delegations_from_idx").on(t.fromUserId),
+    toIdx: index("par_delegations_to_idx").on(t.toUserId),
+  })
+);
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ParRequest = typeof parRequests.$inferSelect;
@@ -465,3 +688,19 @@ export type ParVendor = typeof parVendors.$inferSelect;
 export type ParSettings = typeof parSettings.$inferSelect;
 export type ParMember = typeof parMembers.$inferSelect;
 export type ParAudit = typeof parAudit.$inferSelect;
+export type ParTemplate = typeof parTemplates.$inferSelect;
+export type NewParTemplate = typeof parTemplates.$inferInsert;
+export type ParInvite = typeof parInvites.$inferSelect;
+export type NewParInvite = typeof parInvites.$inferInsert;
+export type ParComment = typeof parComments.$inferSelect;
+export type NewParComment = typeof parComments.$inferInsert;
+export type ParDelegation = typeof parDelegations.$inferSelect;
+export type NewParDelegation = typeof parDelegations.$inferInsert;
+export type ParQuote = typeof parQuotes.$inferSelect;
+export type NewParQuote = typeof parQuotes.$inferInsert;
+export type ParPurchaseOrder = typeof parPurchaseOrders.$inferSelect;
+export type NewParPurchaseOrder = typeof parPurchaseOrders.$inferInsert;
+export type ParReceipt = typeof parReceipts.$inferSelect;
+export type NewParReceipt = typeof parReceipts.$inferInsert;
+export type ParReceiptLine = typeof parReceiptLines.$inferSelect;
+export type NewParReceiptLine = typeof parReceiptLines.$inferInsert;

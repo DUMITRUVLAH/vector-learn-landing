@@ -21,6 +21,8 @@ const settingsSchema = z.object({
   orgLogoUrl: z.string().url().max(1000).optional().nullable(),
   pdfHelpUrl: z.string().url().max(1000).optional().nullable(),
   requestNoPrefix: z.string().min(1).max(20).optional(),
+  onboardingComplete: z.boolean().optional(),
+  enforceThreeWayMatch: z.boolean().optional(),
 });
 
 /** GET /api/par/settings */
@@ -40,6 +42,8 @@ parSettingsRoutes.get("/", async (c) => {
       orgLogoUrl: null,
       pdfHelpUrl: null,
       requestNoPrefix: "PAR",
+      onboardingComplete: false,
+      enforceThreeWayMatch: false,
     });
   }
 

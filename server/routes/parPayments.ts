@@ -23,11 +23,11 @@ import {
   parSettings,
   parApprovals,
 } from "../db/schema/par";
-import { finExpenses } from "../db/schema/finExpenses";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { notifyPaid } from "../services/par/notify";
 import { applyTenRule } from "../lib/par/payment";
+import { evaluateMatch } from "../lib/par/threeWayMatch";
 
 export const parPaymentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parPaymentsRoutes.use("*", requireAuth);
@@ -261,10 +261,21 @@ parPaymentsRoutes.post(
     }
 
     const [settings] = await db
-      .select({ threshold: parSettings.microPurchaseThresholdCents })
+      .select({
+        threshold: parSettings.microPurchaseThresholdCents,
+        enforceMatch: parSettings.enforceThreeWayMatch,
+      })
       .from(parSettings)
       .where(eq(parSettings.tenantId, tenantId));
     const threshold = settings?.threshold ?? 1000000;
+
+    // VF-505: 3-way match (PO + receipt + amount). If enforced and it fails → block with 409.
+    // Otherwise attach a non-blocking warning to the response.
+    const match = await evaluateMatch(parId, tenantId, body.actual_amount_cents);
+    if (settings?.enforceMatch && !match.ok) {
+      return c.json({ error: "three_way_match_failed", issues: match.issues }, 409);
+    }
+    const matchWarning = !match.ok ? match.issues : null;
 
     // 10% rule — integer math, no floats (CORE §3, T-PAR-113-1..3)
     const result = applyTenRule({
@@ -379,50 +390,26 @@ parPaymentsRoutes.post(
         .from(parRequests)
         .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
 
-      // SPLIT-202: PAR → FinDesk bridge — upsert fin_expenses with source='par'
-      // Idempotent: if a fin_expense already exists for this par_request_id, update it.
-      try {
-        const existingExpenses = await db
-          .select({ id: finExpenses.id })
-          .from(finExpenses)
-          .where(eq(finExpenses.parRequestId, parId));
-
-        const expenseData = {
-          tenantId,
-          source: "par" as const,
-          status: "paid" as const,
-          amountCents: body.actual_amount_cents,
-          currency: par.currency ?? "MDL",
-          category: "other" as const,
-          vatDeductible: false,
-          vatAmountCents: 0,
-          expenseDate: paidAt.toISOString().split("T")[0],
-          description: `PAR ${par.requestNo}`,
-          vendorName: par.payeeName ?? null,
-          paidAt,
-          parRequestId: parId,
-          updatedAt: paidAt,
-        };
-
-        if (existingExpenses.length > 0) {
-          // Update the existing expense (idempotency)
-          await db
-            .update(finExpenses)
-            .set(expenseData)
-            .where(eq(finExpenses.id, existingExpenses[0].id));
-        } else {
-          // Create new expense
-          await db.insert(finExpenses).values({
-            ...expenseData,
-            createdBy: user.id,
-          });
-        }
-      } catch {
-        // Best-effort: don't fail the PAR payment if FinDesk upsert fails
-        // (the PAR is already marked paid — log would go here in production)
-      }
-
-      return c.json({ status: "paid", par: updatedPar });
+      return c.json({ status: "paid", par: updatedPar, match_warning: matchWarning });
     }
   }
 );
+
+// ─── VF-505: GET /api/par/:id/match — 3-way match state (for the UI). ──────────
+parPaymentsRoutes.get("/:id/match", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+
+  const [par] = await db
+    .select({ requestedByUserId: parRequests.requestedByUserId })
+    .from(parRequests)
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+  if (!par) return c.json({ error: "not_found" }, 404);
+  const roles = await getUserPARRoles(user.id, tenantId);
+  const canSee = par.requestedByUserId === user.id || roles.some((r) => ["approver", "finance", "par_admin"].includes(r));
+  if (!canSee) return c.json({ error: "not_found" }, 404);
+
+  const match = await evaluateMatch(parId, tenantId);
+  return c.json(match);
+});

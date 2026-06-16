@@ -25,6 +25,7 @@ import {
   ParLineItem,
 } from "../../db/schema/par";
 import { resolveApprovalChain } from "./doa";
+import { toMdlCents } from "../fx";
 import { computeParBodyHash, type ParBodyForHash } from "./integrity";
 import { notifySubmitted } from "../../services/par/notify";
 
@@ -127,10 +128,26 @@ export async function submitPAR(params: {
     return { ok: false, code: "validation_errors", errors: validationErrors };
   }
 
-  // Resolve approval chain from DOA matrix
+  // VF-203: convert to MDL for the DOA threshold (the matrix bands are in MDL).
+  // For MDL PARs this is a no-op (rate 1, totalMdlCents = totalEstimatedCents).
+  let exchangeRate: number | null = null;
+  let totalMdlCents = par.totalEstimatedCents;
+  if (par.currency && par.currency !== "MDL") {
+    try {
+      const conv = await toMdlCents(par.totalEstimatedCents, par.currency);
+      exchangeRate = conv.rate;
+      totalMdlCents = conv.mdlCents;
+    } catch {
+      // FX unavailable → fall back to treating the nominal amount as MDL for routing.
+      // Better to route than to block the submit; the rate stays null (UI shows "—").
+      totalMdlCents = par.totalEstimatedCents;
+    }
+  }
+
+  // Resolve approval chain from DOA matrix — uses the MDL-equivalent amount.
   const chain = await resolveApprovalChain({
     tenantId,
-    totalCents: par.totalEstimatedCents,
+    totalCents: totalMdlCents,
     chargeTo: par.chargeTo ?? undefined,
     departmentId: par.departmentId ?? undefined,
   });
@@ -211,13 +228,15 @@ export async function submitPAR(params: {
     });
   }
 
-  // Update PAR: status → pending_approval, submittedAt, bodyHash
+  // Update PAR: status → pending_approval, submittedAt, bodyHash, + VF-203 FX snapshot
   const [updatedPar] = await db
     .update(parRequests)
     .set({
       status: "pending_approval",
       submittedAt: new Date(),
       bodyHash,
+      exchangeRate: exchangeRate != null ? String(exchangeRate) : null,
+      totalMdlCents,
       updatedAt: new Date(),
     })
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))

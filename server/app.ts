@@ -73,6 +73,13 @@ import { parApprovalsRoutes } from "./routes/parApprovals";
 import { parTimelineRoutes } from "./routes/parTimeline";
 import { parPaymentsRoutes } from "./routes/parPayments";
 import { parReportsRoutes } from "./routes/parReports";
+// PAR procure-to-pay (ported from par-app)
+import { parInvitesRoutes } from "./routes/parInvites";
+import { parTemplatesRoutes } from "./routes/parTemplates";
+import { parAuditRoutes } from "./routes/parAudit";
+import { parDelegationsRoutes } from "./routes/parDelegations";
+import { parPurchaseOrderRoutes } from "./routes/parPurchaseOrders";
+import { parReceiptsRoutes } from "./routes/parReceipts";
 
 export const app = new Hono();
 
@@ -170,12 +177,18 @@ app.route("/api/par/departments", parDepartmentsRoutes);
 app.route("/api/par/projects", parProjectsRoutes);
 app.route("/api/par/vendors", parVendorsRoutes);
 app.route("/api/par/settings", parSettingsRoutes);
+app.route("/api/par/invites", parInvitesRoutes);
+app.route("/api/par/templates", parTemplatesRoutes);
 app.route("/api/par/reports", parReportsRoutes);
+app.route("/api/par/audit", parAuditRoutes);
+app.route("/api/par/delegations", parDelegationsRoutes);
 app.route("/api/par", parPaymentsRoutes);
-app.route("/api/par", parRoutes);
-app.route("/api/par", parAttachmentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 app.route("/api/par", parTimelineRoutes);
+app.route("/api/par", parPurchaseOrderRoutes);
+app.route("/api/par", parReceiptsRoutes);
+app.route("/api/par", parRoutes);
+app.route("/api/par", parAttachmentsRoutes);
 
 app.get("/api/health", async (c) => {
   try {

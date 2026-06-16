@@ -4,12 +4,13 @@ import { BranchProvider } from "./contexts/BranchContext";
 import { useEffect } from "react";
 
 // PAR routes
-import { ParCreateWizard } from "./pages/par/ParCreateWizard";
+import { ParCreateForm } from "./pages/par/ParCreateForm";
+import { ParOnboarding } from "./pages/par/ParOnboarding";
 import { ParDashboard } from "./pages/par/ParDashboard";
 import ParInbox from "./pages/par/ParInbox";
 import ParFinanceQueue from "./pages/par/ParFinanceQueue";
-import ParDetailPage from "./pages/par/ParDetail";
-import ParAdmin from "./pages/par/ParAdmin";
+import { ParDetailPage } from "./pages/par/ParDetail";
+import { ParAdmin } from "./pages/par/ParAdmin";
 import { ParReports } from "./pages/par/ParReports";
 
 // Business / FinDesk routes
@@ -86,7 +87,8 @@ function Routes() {
   if (path === "/" || path === "") return <RedirectToBusiness />;
 
   // PAR routes under /app/par/*
-  if (path.startsWith("/app/par/new")) return <ParCreateWizard />;
+  if (path.startsWith("/app/par/onboarding")) return <ParOnboarding />;
+  if (path.startsWith("/app/par/new")) return <ParCreateForm />;
   if (path.startsWith("/app/par/inbox")) return <ParInbox />;
   if (path.startsWith("/app/par/finance")) return <ParFinanceQueue />;
   if (path.startsWith("/app/par/admin")) return <ParAdminPage />;
@@ -135,7 +137,8 @@ function Routes() {
   if (path.startsWith("/business/fin/")) return <BusinessGuardPage><FinHome /></BusinessGuardPage>;
 
   // PAR routes under /business/par/*
-  if (path.startsWith("/business/par/new")) return <BusinessGuardPage><ParCreateWizard /></BusinessGuardPage>;
+  if (path.startsWith("/business/par/onboarding")) return <BusinessGuardPage><ParOnboarding /></BusinessGuardPage>;
+  if (path.startsWith("/business/par/new")) return <BusinessGuardPage><ParCreateForm /></BusinessGuardPage>;
   if (path.startsWith("/business/par/inbox")) return <BusinessGuardPage><ParInbox /></BusinessGuardPage>;
   if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParFinanceQueue /></BusinessGuardPage>;
   if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParAdminPage /></BusinessGuardPage>;

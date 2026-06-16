@@ -1,0 +1,82 @@
+/**
+ * VF-301: PAR audit log viewer (par_admin only).
+ *   GET /api/par/audit  → paginated audit entries with resolved actor names + filters.
+ *
+ * Read-only. Tenant-scoped. par_audit is written by the other routes; here we only expose it.
+ * Mounted in app.ts: app.route("/api/par/audit", parAuditRoutes)
+ */
+import { Hono } from "hono";
+import { and, eq, gte, lte, desc, sql } from "drizzle-orm";
+import { db } from "../db/client";
+import { parAudit, parRequests } from "../db/schema/par";
+import { users } from "../db/schema/users";
+import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requirePARRole } from "../middleware/requirePARRole";
+
+export const parAuditRoutes = new Hono<{ Variables: AuthVariables }>();
+parAuditRoutes.use("*", requireAuth);
+parAuditRoutes.use("*", requirePARRole("par_admin"));
+
+const PAGE_SIZE = 50;
+
+/** GET /api/par/audit — paginated, filtered audit log. */
+parAuditRoutes.get("/", async (c) => {
+  const tenantId = c.get("user").tenantId;
+
+  const parId = c.req.query("par_id");
+  const actorUserId = c.req.query("actor_user_id");
+  const event = c.req.query("event");
+  const dateFrom = c.req.query("date_from");
+  const dateTo = c.req.query("date_to");
+  const page = Math.max(1, Number(c.req.query("page") ?? "1") || 1);
+
+  const conditions = [eq(parAudit.tenantId, tenantId)];
+  if (parId) conditions.push(eq(parAudit.parId, parId));
+  if (actorUserId) conditions.push(eq(parAudit.actorUserId, actorUserId));
+  if (event) conditions.push(eq(parAudit.event, event));
+  if (dateFrom) {
+    const d = new Date(dateFrom);
+    if (!isNaN(d.getTime())) conditions.push(gte(parAudit.createdAt, d));
+  }
+  if (dateTo) {
+    const d = new Date(dateTo);
+    if (!isNaN(d.getTime())) {
+      d.setHours(23, 59, 59, 999);
+      conditions.push(lte(parAudit.createdAt, d));
+    }
+  }
+  const where = and(...conditions);
+
+  const [countRow] = await db
+    .select({ total: sql<number>`cast(count(*) as int)` })
+    .from(parAudit)
+    .where(where);
+  const total = Number(countRow?.total ?? 0);
+
+  const rows = await db
+    .select({
+      id: parAudit.id,
+      event: parAudit.event,
+      detail: parAudit.detail,
+      createdAt: parAudit.createdAt,
+      actorUserId: parAudit.actorUserId,
+      actorName: users.name,
+      parId: parAudit.parId,
+      requestNo: parRequests.requestNo,
+    })
+    .from(parAudit)
+    .leftJoin(users, eq(users.id, parAudit.actorUserId))
+    .leftJoin(parRequests, eq(parRequests.id, parAudit.parId))
+    .where(where)
+    .orderBy(desc(parAudit.createdAt))
+    .limit(PAGE_SIZE)
+    .offset((page - 1) * PAGE_SIZE);
+
+  return c.json({
+    entries: rows,
+    total,
+    page,
+    pageSize: PAGE_SIZE,
+    totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+  });
+});

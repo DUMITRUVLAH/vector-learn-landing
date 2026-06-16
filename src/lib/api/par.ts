@@ -52,6 +52,9 @@ export interface ParRequest {
   attachmentsNote: string | null;
   currency: string;
   totalEstimatedCents: number;
+  // VF-203: FX snapshot captured at submit (null for MDL / pre-submit).
+  exchangeRate?: string | null;
+  totalMdlCents?: number | null;
   above_micro_threshold?: boolean;
   status: ParStatus;
   submittedAt: string | null;
@@ -90,6 +93,13 @@ export interface ParDetail extends ParRequest {
   approvals: ParApproval[];
   attachments: ParAttachment[];
   payment: ParPayment | null;
+  /** Resolved display names for the PDF/print form (UUIDs stay in the *Id fields). */
+  requestedByName?: string | null;
+  departmentName?: string | null;
+  projectName?: string | null;
+  budgetCodeLabel?: string | null;
+  receivedByName?: string | null;
+  assignedToName?: string | null;
 }
 
 export interface ParApproval {
@@ -155,6 +165,7 @@ export interface UpdateParPayload extends CreateParPayload {
   payee_bank?: string | null;
   attachments_present?: boolean;
   attachments_note?: string | null;
+  currency?: "MDL" | "EUR" | "USD" | "RON";
 }
 
 export async function createPar(payload: CreateParPayload): Promise<ParRequest> {
@@ -162,6 +173,126 @@ export async function createPar(payload: CreateParPayload): Promise<ParRequest> 
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+/** VF-103: duplicate a PAR into a fresh draft owned by the current user. */
+export async function duplicatePar(id: string): Promise<{ par: ParRequest }> {
+  return api<{ par: ParRequest }>(`/api/par/${id}/duplicate`, { method: "POST" });
+}
+
+// VF-104: comments
+export interface ParComment {
+  id: string;
+  body: string;
+  authorUserId: string;
+  authorName: string | null;
+  createdAt: string;
+}
+
+// VF-501: quotes (RFQ)
+export interface ParQuote {
+  id: string;
+  parId: string;
+  vendorId: string | null;
+  vendorName: string;
+  totalCents: number;
+  currency: string;
+  validUntil: string | null;
+  notes: string | null;
+  fileUrl: string | null;
+  selected: boolean;
+  selectionReason: string | null;
+  createdAt: string;
+}
+
+/** VF-502: mark a quote as the winning choice with a justification. */
+export async function selectParQuote(parId: string, quoteId: string, reason: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/${parId}/quotes/${quoteId}/select`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
+// VF-503: purchase order
+export interface ParPurchaseOrder {
+  id: string;
+  parId: string;
+  poNumber: string;
+  vendorName: string | null;
+  vendorIdnp: string | null;
+  vendorIban: string | null;
+  totalCents: number;
+  currency: string;
+  status: string;
+  issuedAt: string;
+}
+
+export async function getPurchaseOrder(parId: string): Promise<ParPurchaseOrder> {
+  return api(`/api/par/${parId}/purchase-order`);
+}
+
+export async function issuePurchaseOrder(parId: string): Promise<ParPurchaseOrder> {
+  return api(`/api/par/${parId}/purchase-order`, { method: "POST" });
+}
+
+// VF-504: goods receipt
+export interface ParReceiptLine { id: string; lineItemId: string; qtyReceived: number }
+export interface ParReceipt {
+  id: string;
+  parId: string;
+  receivedAt: string;
+  complete: boolean;
+  notes: string | null;
+  lines: ParReceiptLine[];
+}
+
+export async function listParReceipts(parId: string): Promise<{ receipts: ParReceipt[] }> {
+  return api(`/api/par/${parId}/receipts`);
+}
+
+export async function addParReceipt(parId: string, payload: {
+  complete: boolean;
+  notes?: string | null;
+  lines: { line_item_id: string; qty_received: number }[];
+}): Promise<ParReceipt> {
+  return api(`/api/par/${parId}/receipts`, { method: "POST", body: JSON.stringify(payload) });
+}
+
+// VF-505: 3-way match
+export interface ThreeWayMatch {
+  poExists: boolean;
+  fullyReceived: boolean;
+  amountMatches: boolean;
+  ok: boolean;
+  issues: string[];
+}
+
+export async function getThreeWayMatch(parId: string): Promise<ThreeWayMatch> {
+  return api(`/api/par/${parId}/match`);
+}
+
+export async function listParQuotes(parId: string): Promise<{ quotes: ParQuote[] }> {
+  return api(`/api/par/${parId}/quotes`);
+}
+
+export async function addParQuote(parId: string, payload: {
+  vendor_id?: string | null;
+  vendor_name?: string | null;
+  total_cents: number;
+  currency?: "MDL" | "EUR" | "USD" | "RON";
+  valid_until?: string | null;
+  notes?: string | null;
+}): Promise<ParQuote> {
+  return api(`/api/par/${parId}/quotes`, { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function deleteParQuote(parId: string, quoteId: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/${parId}/quotes/${quoteId}`, { method: "DELETE" });
+}
+
+export async function listParComments(parId: string): Promise<{ comments: ParComment[] }> {
+  return api(`/api/par/${parId}/comments`);
+}
+
+export async function addParComment(parId: string, body: string): Promise<ParComment> {
+  return api(`/api/par/${parId}/comments`, { method: "POST", body: JSON.stringify({ body }) });
 }
 
 export async function getPar(id: string): Promise<ParDetail> {
@@ -180,6 +311,11 @@ export interface ListParFilters {
   purpose?: ParPurpose;
   project_id?: string;
   q?: string;
+  // VF-105: date range (ISO yyyy-mm-dd) + total range (cents)
+  date_from?: string;
+  date_to?: string;
+  min_total?: number;
+  max_total?: number;
 }
 
 export async function listPar(filters: ListParFilters = {}): Promise<{
@@ -191,13 +327,25 @@ export async function listPar(filters: ListParFilters = {}): Promise<{
   if (filters.purpose) params.set("purpose", filters.purpose);
   if (filters.project_id) params.set("project_id", filters.project_id);
   if (filters.q) params.set("q", filters.q);
+  if (filters.date_from) params.set("date_from", filters.date_from);
+  if (filters.date_to) params.set("date_to", filters.date_to);
+  if (filters.min_total != null) params.set("min_total", String(filters.min_total));
+  if (filters.max_total != null) params.set("max_total", String(filters.max_total));
   const qs = params.toString();
   return api(`/api/par${qs ? `?${qs}` : ""}`);
 }
 
 /** Submit a PAR (transition from draft → pending_approval, PAR-107) */
-export async function submitPar(id: string): Promise<ParRequest> {
-  return api<ParRequest>(`/api/par/${id}/submit`, {
+// VF-202: submit may include an advisory over-budget signal.
+export interface OverBudgetInfo {
+  over: boolean;
+  overByCents: number;
+  allocatedCents: number;
+  usedCents: number;
+}
+
+export async function submitPar(id: string): Promise<ParRequest & { over_budget?: OverBudgetInfo | null }> {
+  return api<ParRequest & { over_budget?: OverBudgetInfo | null }>(`/api/par/${id}/submit`, {
     method: "POST",
     body: JSON.stringify({}),
   });
@@ -230,6 +378,22 @@ export async function approvePar(id: string, payload: ApprovePayload = {}): Prom
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+// VF-102: bulk approve
+export interface BulkApproveResultItem {
+  id: string;
+  ok: boolean;
+  status?: string;
+  error?: string;
+}
+
+export async function bulkApprovePar(payload: {
+  par_ids: string[];
+  comment?: string | null;
+  signatureName?: string | null;
+}): Promise<{ results: BulkApproveResultItem[]; approved: number; failed: number }> {
+  return api("/api/par/bulk-approve", { method: "POST", body: JSON.stringify(payload) });
 }
 
 /** Reject a PAR (terminal) */
@@ -451,6 +615,8 @@ export interface ParSettings {
   orgLogoUrl: string | null;
   pdfHelpUrl: string | null;
   requestNoPrefix: string;
+  onboardingComplete?: boolean;
+  enforceThreeWayMatch?: boolean;
 }
 
 export interface ParMember {
@@ -501,6 +667,43 @@ export async function assignParMember(payload: {
 
 export async function revokeParMember(id: string): Promise<{ ok: boolean }> {
   return api(`/api/par/members/${id}`, { method: "DELETE" });
+}
+
+// VF-004: invitations
+export type ParRole = "requestor" | "approver" | "finance" | "par_admin";
+
+export interface ParInvite {
+  id: string;
+  email: string;
+  parRole: ParRole;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export async function listParInvites(): Promise<{ invites: ParInvite[] }> {
+  return api("/api/par/invites");
+}
+
+export async function createParInvite(payload: { email: string; par_role: ParRole }): Promise<{
+  id: string; email: string; parRole: ParRole; inviteUrl: string; emailed: boolean;
+}> {
+  return api("/api/par/invites", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function revokeParInvite(id: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/invites/${id}`, { method: "DELETE" });
+}
+
+export interface InviteInfo { email: string; parRole: ParRole; orgName: string }
+
+export async function getInviteInfo(token: string): Promise<InviteInfo> {
+  return api(`/api/auth/invite-info?token=${encodeURIComponent(token)}`);
+}
+
+export async function acceptInvite(payload: { token: string; name: string; password: string }): Promise<{
+  user: { id: string; email: string; name: string; role: string };
+}> {
+  return api("/api/auth/accept-invite", { method: "POST", body: JSON.stringify(payload) });
 }
 
 // Reference data CRUD — departments, projects, budget codes, vendors
@@ -580,6 +783,74 @@ export async function getParReportByBudget(filters?: ParReportFilters): Promise<
   return api(`/api/par/reports/by-budget${qs ? `?${qs}` : ""}`);
 }
 
+// VF-302: delegations
+export interface ParDelegation {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  fromName: string | null;
+  toName: string | null;
+  startsAt: string;
+  endsAt: string;
+  active: boolean;
+  createdAt: string;
+}
+
+export async function listParDelegations(): Promise<{ delegations: ParDelegation[] }> {
+  return api("/api/par/delegations");
+}
+
+export async function createParDelegation(payload: {
+  to_user_id: string;
+  starts_at: string;
+  ends_at: string;
+}): Promise<ParDelegation> {
+  return api("/api/par/delegations", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function cancelParDelegation(id: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/delegations/${id}`, { method: "DELETE" });
+}
+
+// VF-301: audit log
+export interface ParAuditEntry {
+  id: string;
+  event: string;
+  detail: string | null;
+  createdAt: string;
+  actorUserId: string | null;
+  actorName: string | null;
+  parId: string;
+  requestNo: string | null;
+}
+
+export interface ParAuditFilters {
+  par_id?: string;
+  actor_user_id?: string;
+  event?: string;
+  date_from?: string;
+  date_to?: string;
+  page?: number;
+}
+
+export async function getParAudit(filters: ParAuditFilters = {}): Promise<{
+  entries: ParAuditEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}> {
+  const params = new URLSearchParams();
+  if (filters.par_id) params.set("par_id", filters.par_id);
+  if (filters.actor_user_id) params.set("actor_user_id", filters.actor_user_id);
+  if (filters.event) params.set("event", filters.event);
+  if (filters.date_from) params.set("date_from", filters.date_from);
+  if (filters.date_to) params.set("date_to", filters.date_to);
+  if (filters.page) params.set("page", String(filters.page));
+  const qs = params.toString();
+  return api(`/api/par/audit${qs ? `?${qs}` : ""}`);
+}
+
 export async function getParReportByDepartment(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
   const params = new URLSearchParams();
   if (filters?.period_from) params.set("from", filters.period_from);
@@ -620,6 +891,15 @@ export function getParReportExportUrl(filters?: ParReportFilters): string {
   return `/api/par/reports/export.csv${qs ? `?${qs}` : ""}`;
 }
 
+/** VF-201: same filters, Excel workbook. */
+export function getParReportExportXlsxUrl(filters?: ParReportFilters): string {
+  const params = new URLSearchParams();
+  if (filters?.period_from) params.set("from", filters.period_from);
+  if (filters?.period_to) params.set("to", filters.period_to);
+  const qs = params.toString();
+  return `/api/par/reports/export.xlsx${qs ? `?${qs}` : ""}`;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Format cents as MDL currency string, e.g. 700000 → "7.000,00 MDL" */
@@ -656,3 +936,153 @@ export const PAR_STATUS_LABELS: Record<ParStatus, string> = {
   paid: "Plătită",
   cancelled: "Anulată",
 };
+
+// ─── Feature 1: Contafirm.md company registry ─────────────────────────────────
+
+export interface RegistryCompany {
+  id: number;
+  idno: string | null;
+  name: string;
+  status: string;
+  legalForm: string | null;
+  registrationDate: string | null;
+  liquidationDate: string | null;
+  cuatmCode: string | null;
+  address: string | null;
+  city: string | null;
+}
+
+export interface RegistryCompanyDetail extends RegistryCompany {
+  activities: { licensed: string[]; unlicensed: string[] };
+  contacts: {
+    websiteUrl: string | null;
+    emails: string[];
+    phones: string[];
+    socialLinks: string[];
+  };
+}
+
+/**
+ * Search active companies by name or IDNO.
+ * Returns only active (non-liquidated) companies.
+ */
+export async function searchRegistryCompanies(
+  q: string,
+  perPage = 10
+): Promise<RegistryCompany[]> {
+  if (q.trim().length < 2) return [];
+  const params = new URLSearchParams({ q: q.trim(), per_page: String(perPage) });
+  const result = await api<{ data: RegistryCompany[] }>(
+    `/api/registry/companies?${params.toString()}`
+  );
+  return result.data ?? [];
+}
+
+/**
+ * Get company detail by IDNO.
+ * Throws if the company is liquidated (server returns 422).
+ */
+export async function getRegistryCompanyByIdno(
+  idno: string
+): Promise<RegistryCompanyDetail> {
+  return api<RegistryCompanyDetail>(`/api/registry/companies/${encodeURIComponent(idno)}`);
+}
+
+// ─── Feature 2: Budget code balance ──────────────────────────────────────────
+
+export interface BudgetCodeBalance {
+  allocatedCents: number;
+  committedCents: number;
+  spentCents: number;
+  availableCents: number;
+}
+
+/** Get balance (allocated / committed / spent / available) for a budget code */
+export async function getBudgetCodeBalance(
+  budgetCodeId: string
+): Promise<BudgetCodeBalance> {
+  return api<BudgetCodeBalance>(`/api/par/budget-codes/${budgetCodeId}/balance`);
+}
+
+// VF-202: bulk budget usage
+export interface BudgetCodeUsage {
+  id: string;
+  code: string;
+  name: string;
+  allocatedCents: number;
+  committedCents: number;
+  paidCents: number;
+  availableCents: number;
+  usedCents: number;
+  usedPct: number | null;
+}
+
+export async function getBudgetCodesUsage(): Promise<{ usage: BudgetCodeUsage[] }> {
+  return api("/api/par/budget-codes/usage");
+}
+
+// ─── Feature 3: PAR Templates ─────────────────────────────────────────────────
+
+export interface ParTemplateSnapshot {
+  requestorTitle: string | null;
+  departmentId: string | null;
+  projectId: string | null;
+  budgetCodeId: string | null;
+  budgetCodeNote: string | null;
+  purpose: string;
+  chargeTo: string;
+  chargeBillingCode: string | null;
+  endUse: string | null;
+  vendorId: string | null;
+  payeeName: string | null;
+  payeeIdnp: string | null;
+  payeeIban: string | null;
+  payeeBank: string | null;
+  lineItems: Array<{
+    position: number;
+    description: string;
+    quantity: number;
+    unit: string | null;
+    unitPriceCents: number;
+    lineTotalCents: number;
+  }>;
+}
+
+export interface ParTemplate {
+  id: string;
+  tenantId: string;
+  name: string;
+  createdByUserId: string | null;
+  snapshot: ParTemplateSnapshot | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function listParTemplates(): Promise<{ templates: ParTemplate[] }> {
+  return api("/api/par/templates");
+}
+
+export async function saveParTemplate(payload: {
+  name: string;
+  parId?: string;
+  snapshot?: Partial<ParTemplateSnapshot> & { lineItems?: ParTemplateSnapshot["lineItems"] };
+}): Promise<ParTemplate> {
+  return api("/api/par/templates", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteParTemplate(id: string): Promise<{ ok: boolean }> {
+  return api(`/api/par/templates/${id}`, { method: "DELETE" });
+}
+
+/** Instantiate a template → creates a new draft PAR and returns it with line items */
+export async function instantiateParTemplate(
+  id: string
+): Promise<{ par: ParRequest; line_items: ParLineItem[] }> {
+  return api(`/api/par/templates/${id}/instantiate`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
