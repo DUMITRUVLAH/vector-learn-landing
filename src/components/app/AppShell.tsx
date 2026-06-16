@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark, Building2 } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark, Building2, Briefcase, RefreshCw } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { BranchSwitcher } from "@/components/app/BranchSwitcher";
@@ -108,6 +108,64 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/**
+ * Business Suite navigation — shown when the current route is under /business/*.
+ * Distinct product (FinDesk + PAR + ITPark), so it must NOT show the CRM/Școală menu.
+ */
+const BUSINESS_NAV_GROUPS: NavGroup[] = [
+  {
+    section: null,
+    items: [
+      { label: "Dashboard", href: "/business/dashboard", icon: LayoutDashboard },
+    ],
+  },
+  {
+    section: "FinDesk — Finanțe",
+    items: [
+      { label: "Facturi", href: "/business/fin/invoices", icon: Receipt },
+      { label: "Cont de plată", href: "/business/fin/invoices/document", icon: FileText },
+      { label: "e-Factura", href: "/business/fin/einvoices", icon: FileText },
+      { label: "Încasări", href: "/business/fin/payments", icon: CreditCard },
+      { label: "Cheltuieli", href: "/business/fin/expenses", icon: DollarSign },
+      { label: "Parteneri", href: "/business/fin/parties", icon: Users },
+      { label: "Acorduri", href: "/business/fin/agreements", icon: FileText },
+      { label: "Registru general", href: "/business/fin/ledger", icon: Landmark },
+      { label: "TVA & declarații", href: "/business/fin/tax", icon: ClipboardList },
+      { label: "Salarii", href: "/business/fin/payroll", icon: DollarSign },
+      { label: "Mijloace fixe", href: "/business/fin/assets", icon: Building2 },
+      { label: "Stocuri", href: "/business/fin/inventory", icon: BookOpen },
+      { label: "Buget", href: "/business/fin/budget", icon: BarChart3 },
+      { label: "Tablou de bord", href: "/business/fin/insights", icon: TrendingUp },
+      { label: "Documente AI", href: "/business/fin/captures", icon: Zap },
+      { label: "Reconciliere & TVA import", href: "/business/fin/reconcile", icon: RefreshCw },
+      { label: "Bancă", href: "/business/fin/banklink", icon: Landmark },
+      { label: "Calendar fiscal", href: "/business/fin/calendar", icon: Calendar },
+      { label: "Operațiuni în masă", href: "/business/fin/mass", icon: ListChecks },
+      { label: "Export", href: "/business/fin/export", icon: FileText },
+    ],
+  },
+  {
+    section: "Aprobări plăți (PAR)",
+    items: [
+      { label: "Cereri de plată", href: "/business/par", icon: ClipboardList },
+      { label: "Aprobări", href: "/business/par/inbox", icon: ShieldCheck },
+    ],
+  },
+  {
+    section: "ITPark",
+    items: [
+      { label: "Rezidenți", href: "/business/itpark", icon: Building2 },
+    ],
+  },
+  {
+    section: "Setări",
+    items: [
+      { label: "Securitate", href: "/business/fin/settings/security", icon: Shield },
+      { label: "Audit AI", href: "/business/fin/settings/ai-audit", icon: Shield },
+    ],
+  },
+];
+
 /** Flat list of every nav item (handy for lookups). */
 const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
@@ -122,14 +180,22 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
   /** CRM-120: Today action counter for nav badge */
   const [todayCount, setTodayCount] = useState<number | null>(null);
 
-  /** INST-001: show only the module groups that match the tenant's institution type. */
-  const visibleGroups = NAV_GROUPS.filter((g) =>
-    isModuleVisible(g.audience ?? "shared", data?.tenant.institutionType)
-  );
+  /**
+   * Context-aware nav: under /business/* this is the Business Suite (FinDesk+PAR+ITPark),
+   * so show the business menu — NOT the CRM/Școală menu. Otherwise the CRM menu (filtered
+   * by institution type, INST-001).
+   */
+  const isBusiness = path.startsWith("/business");
+  const visibleGroups = isBusiness
+    ? BUSINESS_NAV_GROUPS
+    : NAV_GROUPS.filter((g) =>
+        isModuleVisible(g.audience ?? "shared", data?.tenant.institutionType)
+      );
 
   useEffect(() => {
     // Fetch today counter only when authenticated and not already on today page
     if (!data) return;
+    if (path.startsWith("/business")) return; // business suite has no CRM 'today' counter
     // Use stored value first (session-level cache to avoid refetch on every nav)
     try {
       const cached = sessionStorage.getItem("today_count_cache");
@@ -243,6 +309,17 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
               </div>
             ))}
           </nav>
+          {/* SPLIT-301: Business Suite discreet link — FinDesk/PAR/ITPark live in Business Suite, not CRM */}
+          <div className="mt-auto pt-4 border-t border-border/60 mx-1">
+            <a
+              href="#/business"
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Deschide Business Suite (FinDesk, PAR, ITPark)"
+            >
+              <Briefcase className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>Business Suite</span>
+            </a>
+          </div>
         </aside>
 
         <main className="flex-1 min-w-0">

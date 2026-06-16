@@ -49,3 +49,37 @@ export async function api<T = unknown>(
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+/**
+ * Upload helper for multipart/form-data (file uploads). Unlike api(), it does NOT
+ * set Content-Type — the browser sets multipart boundaries itself. Shares the same
+ * credentials + error-coercion behaviour as api().
+ */
+export async function apiUpload<T = unknown>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(path.startsWith("/") ? path : `/api/${path}`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+
+  if (!res.ok) {
+    let code = `http_${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: unknown };
+      const e = body?.error;
+      if (typeof e === "string") code = e;
+      else if (e && typeof e === "object") {
+        const issues = (e as { issues?: { message?: string }[] }).issues;
+        code = Array.isArray(issues) && issues.length
+          ? issues.map((i) => i.message ?? "invalid").join("; ")
+          : ((e as { name?: string }).name ?? `http_${res.status}`);
+      }
+    } catch {
+      // keep fallback
+    }
+    throw new ApiError(res.status, code);
+  }
+
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
