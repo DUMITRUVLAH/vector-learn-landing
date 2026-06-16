@@ -5,6 +5,7 @@ import { NotificationBell } from "@/components/app/NotificationBell";
 import { BranchSwitcher } from "@/components/app/BranchSwitcher";
 import { Link, useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
+import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { cn } from "@/lib/utils";
 import { isModuleVisible, type ModuleAudience } from "@/lib/institution";
 
@@ -194,6 +195,14 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
         isModuleVisible(g.audience ?? "shared", data?.tenant.institutionType)
       );
 
+  /**
+   * SPLIT-401: Business Suite header identity.
+   * When on /business/* routes, show business session data in the header
+   * (org name, user name, business logout) instead of CRM session data.
+   * Hook is always called (Rules of Hooks) — only used when isBusiness=true.
+   */
+  const bizSession = useBusinessSession();
+
   useEffect(() => {
     // Fetch today counter only when authenticated and not already on today page
     if (!data) return;
@@ -225,21 +234,71 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
     navigate("/app/login");
   };
 
+  /** SPLIT-401: Business logout — clears business session, redirects to /business/login. */
+  const handleBusinessLogout = async () => {
+    await bizSession.logout();
+    navigate("/business/login");
+  };
+
+  // SPLIT-401: Derived business identity for the header.
+  const bizData = bizSession.data;
+  const bizUserInitials = bizData?.user?.name
+    ? bizData.user.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()
+    : "BS";
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       <header className="border-b border-border bg-card sticky top-0 z-30">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          {/* SPLIT-401: Show Business Suite branding on /business/* routes */}
+          {isBusiness ? (
+            <Link
+              to="/business/dashboard"
+              className="flex items-center gap-2 font-display font-bold text-base select-none"
+              aria-label="Business Suite — acasă"
+            >
+              <Briefcase className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />
+              <span className="hidden sm:inline text-foreground">Business Suite</span>
+              {bizData?.tenant?.name && (
+                <>
+                  <span className="hidden sm:inline text-xs text-muted-foreground">/</span>
+                  <span className="text-sm font-semibold hidden sm:inline text-foreground">{bizData.tenant.name}</span>
+                </>
+              )}
+            </Link>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Logo />
+              {data && (
+                <>
+                  <span className="hidden sm:inline text-xs text-muted-foreground">/</span>
+                  <span className="text-sm font-semibold hidden sm:inline">{data.tenant.name}</span>
+                </>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-3">
-            <Logo />
-            {data && (
+            {/* SPLIT-401: Business header — show business user, business logout */}
+            {isBusiness && bizData ? (
               <>
-                <span className="hidden sm:inline text-xs text-muted-foreground">/</span>
-                <span className="text-sm font-semibold hidden sm:inline">{data.tenant.name}</span>
+                <div className="text-right hidden sm:block">
+                  <p className="text-xs font-semibold">{bizData.user.name}</p>
+                  <p className="text-[10px] text-muted-foreground capitalize">{bizData.user.role}</p>
+                </div>
+                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-xs font-bold text-primary-foreground" aria-hidden="true">
+                  {bizUserInitials}
+                </div>
+                <NotificationBell />
+                <button
+                  type="button"
+                  onClick={handleBusinessLogout}
+                  aria-label="Deconectare Business Suite"
+                  className="touch-target rounded-md hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
               </>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            {data && (
+            ) : !isBusiness && data ? (
               <>
                 {/* BRANCH-702: Branch switcher */}
                 <BranchSwitcher />
@@ -264,7 +323,7 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
                   <LogOut className="h-4 w-4" />
                 </button>
               </>
-            )}
+            ) : null}
           </div>
         </div>
       </header>
