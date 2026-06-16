@@ -206,6 +206,14 @@ export const finCaptures = pgTable(
     /** Optional reviewer note (e.g. why an item was marked not-reportable). */
     reviewNote: text("review_note"),
 
+    /**
+     * Invoice Reporting: document kind.
+     * "document" = a single invoice/receipt (the original flow, fields on the capture itself).
+     * "statement" = a bank statement holding many transactions → AI extracts child rows
+     *   into fin_capture_lines, each reviewed individually.
+     */
+    kind: varchar("kind", { length: 20 }).notNull().default("document"),
+
     /** Motivul eșecului dacă status = 'failed'. */
     errorMessage: text("error_message"),
 
@@ -233,11 +241,79 @@ export const finCaptures = pgTable(
   ]
 );
 
+// ─── fin_capture_lines (Invoice Reporting: bank-statement transactions) ─────────
+
+/**
+ * One transaction extracted from a bank-statement capture (kind = "statement").
+ * The accountant uploads ONE statement PDF/CSV; AI extracts every transaction as a
+ * line here, each with its own reportable verdict that the accountant filters/approves.
+ */
+export const finCaptureLines = pgTable(
+  "fin_capture_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+
+    /** Parent statement capture. */
+    captureId: uuid("capture_id")
+      .notNull()
+      .references(() => finCaptures.id, { onDelete: "cascade" }),
+
+    /** Transaction date (YYYY-MM-DD). */
+    txDate: varchar("tx_date", { length: 10 }),
+
+    /** Raw transaction description from the statement (e.g. "FACEBK *5KBSL2RWA2"). */
+    description: text("description").notNull(),
+
+    /** Vendor/counterparty the AI inferred from the description (e.g. "Meta / Facebook Ads"). */
+    counterparty: varchar("counterparty", { length: 300 }),
+
+    /** Amount in the account currency, minor units (cents). Always positive. */
+    amountCents: integer("amount_cents").notNull().default(0),
+
+    /** "in" (intrare) or "out" (ieșire). */
+    direction: varchar("direction", { length: 4 }).notNull().default("out"),
+
+    /** Account currency (MDL). */
+    currency: varchar("currency", { length: 3 }).notNull().default("MDL"),
+
+    /** Original transaction amount + currency, if different (e.g. "250.35 EUR"). */
+    origAmount: varchar("orig_amount", { length: 40 }),
+
+    /** Reportable verdict for THIS transaction: "yes" | "no" | "review". */
+    reportable: varchar("reportable", { length: 10 }).notNull().default("review"),
+
+    /** AI's reason for the verdict. */
+    reportableReason: text("reportable_reason"),
+
+    /** AI confidence in basis points. */
+    reportableConfidenceBp: integer("reportable_confidence_bp").notNull().default(0),
+
+    /** Reviewer who confirmed/overrode this line. */
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewNote: text("review_note"),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("fin_capture_lines_capture_idx").on(t.captureId),
+    index("fin_capture_lines_tenant_idx").on(t.tenantId),
+    index("fin_capture_lines_tenant_reportable_idx").on(t.tenantId, t.reportable),
+  ]
+);
+
 // ─── Inference types ──────────────────────────────────────────────────────────
 
 export type FinCapture = typeof finCaptures.$inferSelect;
 export type InsertFinCapture = typeof finCaptures.$inferInsert;
 export type FinCaptureStatus = typeof finCaptureStatusEnum.enumValues[number];
+export type FinCaptureLine = typeof finCaptureLines.$inferSelect;
+export type InsertFinCaptureLine = typeof finCaptureLines.$inferInsert;
 
 // ─── Status labels (Romanian) ─────────────────────────────────────────────────
 

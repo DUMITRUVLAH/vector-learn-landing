@@ -24,11 +24,12 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq, and, desc, gte, lte } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte } from "drizzle-orm";
 import { db } from "../db/client";
-import { finCaptures, type ExtractedFields, FIN_DOC_TEAMS } from "../db/schema/finCaptures";
+import { finCaptures, finCaptureLines, type ExtractedFields, FIN_DOC_TEAMS } from "../db/schema/finCaptures";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { extractCaptureFields } from "../lib/ai/captureExtractor";
+import { extractStatementTransactions } from "../lib/ai/statementExtractor";
 import { extractPdfText } from "../lib/ai/pdfText";
 
 export const finCapturesRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -90,6 +91,7 @@ function serializeCapture(c: typeof finCaptures.$inferSelect) {
     sizeBytes: c.sizeBytes,
     status: c.status,
     team: c.team,
+    kind: c.kind,
     extractedFields: c.extractedFields,
     rawText: c.rawText,
     errorMessage: c.errorMessage,
@@ -243,6 +245,80 @@ finCapturesRoutes.patch(
   },
 );
 
+// ─── Invoice Reporting: bank-statement child lines ──────────────────────────────
+
+function serializeLine(l: typeof finCaptureLines.$inferSelect) {
+  return {
+    id: l.id,
+    captureId: l.captureId,
+    txDate: l.txDate,
+    description: l.description,
+    counterparty: l.counterparty,
+    amountCents: l.amountCents,
+    direction: l.direction,
+    currency: l.currency,
+    origAmount: l.origAmount,
+    reportable: l.reportable,
+    reportableReason: l.reportableReason,
+    reportableConfidenceBp: l.reportableConfidenceBp,
+    reviewedBy: l.reviewedBy,
+    reviewedAt: l.reviewedAt?.toISOString() ?? null,
+    reviewNote: l.reviewNote,
+    createdAt: l.createdAt.toISOString(),
+  };
+}
+
+// GET /api/fin/captures/:id/lines — transactions extracted from a statement.
+// Optional ?reportable=yes|no|review filter. Mounted before GET /:id (specific > param).
+finCapturesRoutes.get("/captures/:id/lines", async (c) => {
+  const user = c.get("user");
+  const captureId = c.req.param("id");
+  const reportable = c.req.query("reportable");
+
+  const conds = [
+    eq(finCaptureLines.captureId, captureId),
+    eq(finCaptureLines.tenantId, user.tenantId),
+  ];
+  if (reportable && ["yes", "no", "review"].includes(reportable)) {
+    conds.push(eq(finCaptureLines.reportable, reportable));
+  }
+  const lines = await db.query.finCaptureLines.findMany({
+    where: and(...conds),
+    orderBy: [asc(finCaptureLines.txDate)],
+  });
+  return c.json({ lines: lines.map(serializeLine), total: lines.length });
+});
+
+// PATCH /api/fin/captures/lines/:lineId/review — approve/reject a single transaction.
+finCapturesRoutes.patch(
+  "/captures/lines/:lineId/review",
+  zValidator("json", reviewCaptureSchema),
+  async (c) => {
+    const user = c.get("user");
+    const lineId = c.req.param("lineId");
+    const { decision, note } = c.req.valid("json");
+
+    const line = await db.query.finCaptureLines.findFirst({
+      where: and(eq(finCaptureLines.id, lineId), eq(finCaptureLines.tenantId, user.tenantId)),
+    });
+    if (!line) return c.json({ error: "not_found", message: "Linia nu există." }, 404);
+
+    const [updated] = await db
+      .update(finCaptureLines)
+      .set({
+        reportable: decision,
+        reviewNote: note ?? null,
+        reviewedBy: user.id,
+        reviewedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(finCaptureLines.id, lineId))
+      .returning();
+
+    return c.json({ line: serializeLine(updated) });
+  },
+);
+
 // ─── POST /api/fin/captures — upload + extracție AI ──────────────────────────
 
 /**
@@ -266,6 +342,7 @@ finCapturesRoutes.post("/captures", async (c) => {
   let sizeBytes = 0;
   let rawText = "";
   let team = "other";
+  let kind = "document"; // "document" (single invoice) | "statement" (bank statement → many lines)
   let imageDataUrl: string | undefined; // set for image uploads → OpenAI vision
 
   const contentType = c.req.header("content-type") ?? "";
@@ -279,6 +356,7 @@ finCapturesRoutes.post("/captures", async (c) => {
       sizeBytes?: number;
       rawText?: string;
       team?: string;
+      kind?: string;
     }>();
     fileKey = body.fileKey ?? "upload/unknown";
     fileName = body.fileName ?? "document.pdf";
@@ -286,6 +364,7 @@ finCapturesRoutes.post("/captures", async (c) => {
     sizeBytes = body.sizeBytes ?? 0;
     rawText = body.rawText ?? "";
     if (body.team && FIN_DOC_TEAMS.includes(body.team as never)) team = body.team;
+    if (body.kind === "statement") kind = "statement";
   } else if (contentType.includes("multipart/form-data")) {
     // Multipart mode (real upload)
     const formData = await c.req.formData();
@@ -293,6 +372,8 @@ finCapturesRoutes.post("/captures", async (c) => {
     rawText = (formData.get("rawText") as string | null) ?? "";
     const teamField = formData.get("team") as string | null;
     if (teamField && FIN_DOC_TEAMS.includes(teamField as never)) team = teamField;
+    const kindField = formData.get("kind") as string | null;
+    if (kindField === "statement") kind = "statement";
 
     if (file && file instanceof File) {
       fileName = file.name;
@@ -328,6 +409,13 @@ finCapturesRoutes.post("/captures", async (c) => {
     return c.json({ error: "unsupported_content_type" }, 415);
   }
 
+  // Auto-detect a bank statement even if the caller didn't set kind: MAIB-style statements
+  // say "EXTRAS DE CONT" or contain many "DD.MM.YYYY DD.MM.YYYY" transaction lines.
+  if (kind !== "statement") {
+    const dateLinePairs = (rawText.match(/\d{2}\.\d{2}\.\d{4}\s+\d{2}\.\d{2}\.\d{4}/g) ?? []).length;
+    if (/extras de cont/i.test(rawText) || dateLinePairs >= 3) kind = "statement";
+  }
+
   // Crează capture cu status processing
   const [capture] = await db
     .insert(finCaptures)
@@ -339,10 +427,54 @@ finCapturesRoutes.post("/captures", async (c) => {
       sizeBytes,
       status: "processing",
       team,
+      kind,
       rawText: rawText || undefined,
       createdBy: user.id,
     })
     .returning();
+
+  // ── Statement: extract EVERY transaction as a child line (Invoice Reporting) ──
+  if (kind === "statement") {
+    let lineStatus: "extracted" | "failed" = "extracted";
+    let stmtError: string | undefined;
+    let inserted = 0;
+    try {
+      const { transactions } = await extractStatementTransactions(
+        rawText || `[Fișier: ${fileName}]`,
+        user.tenantId,
+        user.id,
+        capture.id,
+      );
+      if (transactions.length > 0) {
+        await db.insert(finCaptureLines).values(
+          transactions.map((t) => ({
+            tenantId: user.tenantId,
+            captureId: capture.id,
+            txDate: t.tx_date,
+            description: t.description,
+            counterparty: t.counterparty,
+            amountCents: t.amount_cents,
+            direction: t.direction,
+            currency: t.currency,
+            origAmount: t.orig_amount,
+            reportable: t.reportable,
+            reportableReason: t.reportable_reason,
+            reportableConfidenceBp: Math.round(t.reportable_confidence * 10000),
+          })),
+        );
+        inserted = transactions.length;
+      }
+    } catch (err) {
+      lineStatus = "failed";
+      stmtError = err instanceof Error ? err.message : "Eroare la extracția extrasului";
+    }
+    const [updatedStmt] = await db
+      .update(finCaptures)
+      .set({ status: lineStatus, errorMessage: stmtError ?? null, updatedAt: new Date() })
+      .where(eq(finCaptures.id, capture.id))
+      .returning();
+    return c.json({ capture: serializeCapture(updatedStmt), lineCount: inserted }, 201);
+  }
 
   // Extrage câmpuri cu AI (sync — poate fi async în producție cu queue)
   let extractedFields: ExtractedFields | undefined;

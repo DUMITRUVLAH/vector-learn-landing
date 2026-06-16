@@ -78,6 +78,7 @@ export interface FinCapture {
   sizeBytes: number;
   status: FinCaptureStatus;
   team: FinDocTeam;
+  kind: "document" | "statement";
   extractedFields: ExtractedFields | null;
   rawText: string | null;
   errorMessage: string | null;
@@ -163,6 +164,47 @@ export async function reviewCapture(
   note?: string,
 ): Promise<{ capture: FinCapture }> {
   return api<{ capture: FinCapture }>(`/api/fin/captures/${id}/review`, {
+    method: "PATCH",
+    body: JSON.stringify({ decision, note }),
+  });
+}
+
+/** A single transaction extracted from a bank-statement capture. */
+export interface CaptureLine {
+  id: string;
+  captureId: string;
+  txDate: string | null;
+  description: string;
+  counterparty: string | null;
+  amountCents: number;
+  direction: "in" | "out";
+  currency: string;
+  origAmount: string | null;
+  reportable: ReportableStatus;
+  reportableReason: string | null;
+  reportableConfidenceBp: number;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+}
+
+/** List the transactions extracted from a statement capture (optional reportable filter). */
+export async function getCaptureLines(
+  captureId: string,
+  reportable?: ReportableStatus,
+): Promise<{ lines: CaptureLine[]; total: number }> {
+  const qs = reportable ? `?reportable=${reportable}` : "";
+  return api<{ lines: CaptureLine[]; total: number }>(`/api/fin/captures/${captureId}/lines${qs}`);
+}
+
+/** Approve (yes) or reject (no) a single statement transaction line. */
+export async function reviewCaptureLine(
+  lineId: string,
+  decision: "yes" | "no",
+  note?: string,
+): Promise<{ line: CaptureLine }> {
+  return api<{ line: CaptureLine }>(`/api/fin/captures/lines/${lineId}/review`, {
     method: "PATCH",
     body: JSON.stringify({ decision, note }),
   });

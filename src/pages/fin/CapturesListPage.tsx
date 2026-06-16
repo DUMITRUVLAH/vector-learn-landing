@@ -88,6 +88,7 @@ function UploadPanel({
   const [rawText, setRawText] = useState("");
   const [showText, setShowText] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [isStatement, setIsStatement] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -105,6 +106,7 @@ function UploadPanel({
     try {
       const form = new FormData();
       form.set("team", team);
+      if (isStatement) form.set("kind", "statement");
       if (file) form.set("file", file, file.name);
       if (rawText.trim()) form.set("rawText", rawText.trim());
       await apiUpload("/api/fin/captures", form);
@@ -150,6 +152,17 @@ function UploadPanel({
             ))}
           </select>
         </div>
+
+        {/* Bank statement toggle: extract every transaction as a reviewable line */}
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={isStatement}
+            onChange={(e) => setIsStatement(e.target.checked)}
+            className="h-4 w-4 rounded border-input"
+          />
+          Este extras bancar (AI extrage toate tranzacțiile separat)
+        </label>
 
         {/* Drag-drop / file picker */}
         <div>
@@ -508,7 +521,7 @@ export default function CapturesListPage() {
                           onClick={() => navigate(`/business/fin/captures/${capture.id}`)}
                           className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                         >
-                          Confirmă
+                          {capture.kind === "statement" ? "Vezi tranzacții" : "Confirmă"}
                         </button>
                       )}
                       {capture.status === "confirmed" && (

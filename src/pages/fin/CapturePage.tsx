@@ -30,6 +30,8 @@ import {
   getCapture,
   confirmCapture,
   reviewCapture,
+  getCaptureLines,
+  reviewCaptureLine,
   formatMDLCents,
   parseMDLToCents,
   CAPTURE_STATUS_LABELS,
@@ -39,6 +41,8 @@ import {
   type FinCaptureStatus,
   type ExpenseCategory,
   type ExtractedFields,
+  type CaptureLine,
+  type ReportableStatus,
 } from "@/lib/api/finCaptures";
 import { cn } from "@/lib/utils";
 
@@ -100,6 +104,144 @@ function initForm(capture: FinCapture): FormState {
     reference: getFieldValue<string>(f, "reference") ?? "",
     description: "",
   };
+}
+
+// ─── Statement transaction lines (Invoice Reporting) ────────────────────────────
+
+function StatementLines({ captureId }: { captureId: string }) {
+  const [lines, setLines] = useState<CaptureLine[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<ReportableStatus | "all">("all");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await getCaptureLines(captureId, filter === "all" ? undefined : filter);
+      setLines(res.lines);
+    } finally {
+      setLoading(false);
+    }
+  }, [captureId, filter]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const decide = async (lineId: string, decision: "yes" | "no") => {
+    setBusyId(lineId);
+    try {
+      const res = await reviewCaptureLine(lineId, decision);
+      setLines((prev) => prev.map((l) => (l.id === lineId ? res.line : l)));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const counts = {
+    all: lines.length,
+    yes: lines.filter((l) => l.reportable === "yes").length,
+    review: lines.filter((l) => l.reportable === "review").length,
+    no: lines.filter((l) => l.reportable === "no").length,
+  };
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-foreground">
+          Tranzacții din extras ({counts.all})
+        </h2>
+        <div className="flex flex-wrap gap-1.5">
+          {(["all", "review", "yes", "no"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                filter === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70",
+              )}
+            >
+              {f === "all" ? "Toate" : f === "review" ? "De verificat" : f === "yes" ? "Pentru raportare" : "Neraportabil"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" aria-label="Se încarcă" />
+        </div>
+      ) : lines.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">Nicio tranzacție.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="px-2 py-2">Data</th>
+                <th className="px-2 py-2">Descriere</th>
+                <th className="px-2 py-2 text-right">Sumă</th>
+                <th className="px-2 py-2">Raportare</th>
+                <th className="px-2 py-2 text-right">Acțiune</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {lines.map((l) => (
+                <tr key={l.id} className="hover:bg-muted/40">
+                  <td className="whitespace-nowrap px-2 py-2 text-muted-foreground">{l.txDate ?? "—"}</td>
+                  <td className="px-2 py-2">
+                    <div className="font-medium text-foreground">{l.counterparty ?? l.description}</div>
+                    <div className="max-w-[260px] truncate text-xs text-muted-foreground">
+                      {l.description}
+                      {l.origAmount ? ` · ${l.origAmount}` : ""}
+                    </div>
+                  </td>
+                  <td className={cn("whitespace-nowrap px-2 py-2 text-right font-medium", l.direction === "in" ? "text-green-600 dark:text-green-400" : "text-foreground")}>
+                    {l.direction === "in" ? "+" : "−"}
+                    {formatMDLCents(l.amountCents)}
+                  </td>
+                  <td className="px-2 py-2">
+                    <span
+                      className={cn(
+                        "rounded px-2 py-0.5 text-xs font-medium",
+                        l.reportable === "yes"
+                          ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+                          : l.reportable === "no"
+                            ? "bg-muted text-muted-foreground"
+                            : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+                      )}
+                    >
+                      {REPORTABLE_LABELS[l.reportable]}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    <div className="inline-flex gap-1">
+                      <button
+                        onClick={() => decide(l.id, "yes")}
+                        disabled={busyId === l.id}
+                        title="Pentru raportare"
+                        className="rounded-md bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                      >
+                        DA
+                      </button>
+                      <button
+                        onClick={() => decide(l.id, "no")}
+                        disabled={busyId === l.id}
+                        title="Neraportabil"
+                        className="rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                      >
+                        NU
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function CapturePage({ captureId }: { captureId: string }) {
@@ -293,8 +435,11 @@ export default function CapturePage({ captureId }: { captureId: string }) {
           </div>
         )}
 
-        {/* Invoice Reporting: AI verdict + reviewer approve/reject */}
-        {(capture.status === "extracted" || capture.status === "confirmed") && (
+        {/* Statement: the extracted transaction lines (one per bank-statement row) */}
+        {capture.kind === "statement" && <StatementLines captureId={capture.id} />}
+
+        {/* Invoice Reporting: AI verdict + reviewer approve/reject (single-document only) */}
+        {capture.kind !== "statement" && (capture.status === "extracted" || capture.status === "confirmed") && (
           <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -414,7 +559,7 @@ export default function CapturePage({ captureId }: { captureId: string }) {
         )}
 
         {/* Extracted state — main form */}
-        {capture.status === "extracted" && form && (
+        {capture.kind !== "statement" && capture.status === "extracted" && form && (
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-amber-500" aria-hidden="true" />
