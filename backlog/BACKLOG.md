@@ -345,3 +345,18 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | POLISH-001 | high | Global quick search + command palette (Cmd+K) | pending | [spec](specs/POLISH-001-nav-quick-search.md) |
 | POLISH-002 | high | Dashboard widget customization | pending | [spec](specs/POLISH-002-dashboard-widgets.md) |
 | POLISH-003 | normal | Empty states cu CTA pentru paginile cheie | pending | [spec](specs/POLISH-003-empty-states.md) |
+
+## Milestone: DOCMERGE faza-1 — Document Merge / Mass-PDF (NEW, added 2026-06-17 on owner request)
+
+> Flux „mail-merge de documente": user încarcă un template cu placeholdere `{{tag}}` → sistemul
+> detectează tag-urile → user încarcă un Excel → se generează N PDF-uri auto-completate (un PDF per
+> rând), livrate ca ZIP. Refolosește: `extractVariables`/`renderTemplate` (CRM templates),
+> Playwright HTML→PDF (finInvoiceDoc), `exceljs` lazy (par/excelExport), `JSZip` (certificateZip).
+> O fază = un branch = un PR: `feat/DOCMERGE-faza-1-document-merge` (§0.2).
+
+| ID | Priority | Title | Status | Spec |
+|----|----------|-------|--------|------|
+| DOCMERGE-001 | high | Upload template HTML/DOCX + detecție placeholdere `{{tag}}` | pending | [spec](specs/DOCMERGE-001-template-upload-placeholders.md) |
+| DOCMERGE-002 | high | Upload Excel, parsare rânduri, mapare coloane → placeholdere | pending | [spec](specs/DOCMERGE-002-excel-import-mapping.md) |
+| DOCMERGE-003 | high | Generare batch N PDF-uri din template+Excel, livrare ZIP | pending | [spec](specs/DOCMERGE-003-batch-pdf-zip.md) |
+| DOCMERGE-004 | normal | Wizard end-to-end + intrare în meniul business | pending | [spec](specs/DOCMERGE-004-wizard-end-to-end.md) |

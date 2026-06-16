@@ -4034,6 +4034,52 @@
       "branch": "feat/FIN-approval",
       "verdicts": {},
       "pr": null
+    },
+    "DOCMERGE-001": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/DOCMERGE-001-template-upload-placeholders.md",
+      "milestone": "DOCMERGE",
+      "phase": "1",
+      "depends_on": [],
+      "branch": "feat/DOCMERGE-faza-1-document-merge"
+    },
+    "DOCMERGE-002": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/DOCMERGE-002-excel-import-mapping.md",
+      "milestone": "DOCMERGE",
+      "phase": "1",
+      "depends_on": [
+        "DOCMERGE-001"
+      ],
+      "branch": "feat/DOCMERGE-faza-1-document-merge"
+    },
+    "DOCMERGE-003": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/DOCMERGE-003-batch-pdf-zip.md",
+      "milestone": "DOCMERGE",
+      "phase": "1",
+      "depends_on": [
+        "DOCMERGE-002"
+      ],
+      "branch": "feat/DOCMERGE-faza-1-document-merge"
+    },
+    "DOCMERGE-004": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/DOCMERGE-004-wizard-end-to-end.md",
+      "milestone": "DOCMERGE",
+      "phase": "1",
+      "depends_on": [
+        "DOCMERGE-003"
+      ],
+      "branch": "feat/DOCMERGE-faza-1-document-merge"
     }
   }
 }
