@@ -33,8 +33,18 @@ await build({
   format: "esm",
   target: "node20",
   outfile: `${FN}/index.mjs`,
-  // PGlite is local-only (lazy require in server/db/client.ts); keep it out of the bundle.
-  external: ["@electric-sql/pglite", "drizzle-orm/pglite"],
+  external: [
+    // PGlite is local-only (lazy require in server/db/client.ts); keep it out of the bundle.
+    "@electric-sql/pglite",
+    "drizzle-orm/pglite",
+    // Playwright is used only for local PDF rendering (server/routes/finInvoiceDoc.ts).
+    // On Vercel, Chromium isn't installed, so chromium.launch() throws and the route falls
+    // back to print-ready HTML. The package pulls in chromium-bidi, which esbuild cannot
+    // resolve at bundle time; mark both external so the serverless build succeeds. They are
+    // never required at runtime on the fallback path (the import throws before resolution).
+    "playwright",
+    "chromium-bidi",
+  ],
   // Provide a CJS require for any externalized require() calls in the ESM output.
   banner: {
     js: "import{createRequire as ___cr}from'node:module';const require=___cr(import.meta.url);",

@@ -162,18 +162,17 @@ finInvoiceDocRoutes.get("/:id/document.pdf", async (c) => {
 });
 
 /**
- * Rasterize an HTML string to an A4 PDF.
+ * Rasterize an HTML string to an A4 PDF using Playwright's bundled Chromium.
  *
- * Two launch strategies, picked at runtime so the same code works everywhere:
- *  - Serverless (Vercel/AWS Lambda): @sparticuz/chromium provides a Lambda-compatible
- *    Chromium binary, driven by the lighter `playwright-core`.
- *  - Local / long-running server: Playwright's own bundled Chromium.
- * Everything is imported lazily so the route module still loads if a package is absent.
+ * Works on a local / long-running server where Chromium is installed. On serverless
+ * (Vercel) Chromium isn't present, so launch() throws and the caller falls back to the
+ * print-ready HTML — see the catch block in the /:id/document.pdf handler. Imported
+ * lazily, and `playwright` is marked external in scripts/build-vercel.mjs so the
+ * serverless bundle never tries to resolve its chromium-bidi dependency.
  */
 async function renderHtmlToPdf(html: string): Promise<Uint8Array> {
-  const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
-
-  const { browser } = await launchBrowser(isServerless);
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ args: ["--no-sandbox"] });
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle" });
@@ -186,28 +185,4 @@ async function renderHtmlToPdf(html: string): Promise<Uint8Array> {
   } finally {
     await browser.close();
   }
-}
-
-interface LaunchedBrowser {
-  browser: import("playwright-core").Browser;
-}
-
-async function launchBrowser(isServerless: boolean): Promise<LaunchedBrowser> {
-  if (isServerless) {
-    const [{ default: chromiumPkg }, { chromium }] = await Promise.all([
-      import("@sparticuz/chromium"),
-      import("playwright-core"),
-    ]);
-    const browser = await chromium.launch({
-      args: chromiumPkg.args,
-      executablePath: await chromiumPkg.executablePath(),
-      headless: true,
-    });
-    return { browser };
-  }
-
-  // Local / non-serverless: use the full Playwright with its bundled Chromium.
-  const { chromium } = await import("playwright");
-  const browser = await chromium.launch({ args: ["--no-sandbox"] });
-  return { browser } as unknown as LaunchedBrowser;
 }
