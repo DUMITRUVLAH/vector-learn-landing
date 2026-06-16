@@ -1,5 +1,5 @@
 /**
- * CAPTURE-003: /app/fin/captures/:id
+ * CAPTURE-003: /business/fin/captures/:id
  *
  * Pagina de confirmare a câmpurilor extrase de AI dintr-un bon/factură.
  * FIN-CORE regula #5: AI propune, omul confirmă — 1-click devine cheltuială.
@@ -213,7 +213,7 @@ export default function CapturePage({ captureId }: { captureId: string }) {
       setCapture(result.capture);
       setToast("Cheltuiala a fost creată");
       setTimeout(() => {
-        navigate("/app/fin/expenses");
+        navigate("/business/fin/expenses");
       }, 1500);
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Eroare la confirmare");
@@ -241,7 +241,7 @@ export default function CapturePage({ captureId }: { captureId: string }) {
           <XCircle className="mx-auto mb-3 h-10 w-10 text-destructive" />
           <p className="text-sm text-muted-foreground">{error}</p>
           <button
-            onClick={() => navigate("/app/fin/captures")}
+            onClick={() => navigate("/business/fin/captures")}
             className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -261,7 +261,7 @@ export default function CapturePage({ captureId }: { captureId: string }) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <button
-              onClick={() => navigate("/app/fin/captures")}
+              onClick={() => navigate("/business/fin/captures")}
               className="mb-2 flex min-h-[44px] items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
               aria-label="Înapoi la lista de capturi"
             >
@@ -377,7 +377,7 @@ export default function CapturePage({ captureId }: { captureId: string }) {
               <p className="mt-1 text-xs text-muted-foreground">{capture.errorMessage}</p>
             )}
             <button
-              onClick={() => navigate("/app/fin/captures")}
+              onClick={() => navigate("/business/fin/captures")}
               className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm"
             >
               <RotateCcw className="h-4 w-4" />
@@ -397,7 +397,7 @@ export default function CapturePage({ captureId }: { captureId: string }) {
                 </p>
                 {capture.expenseId && (
                   <button
-                    onClick={() => navigate("/app/fin/expenses")}
+                    onClick={() => navigate("/business/fin/expenses")}
                     className="mt-1 text-xs text-primary underline"
                   >
                     Vezi cheltuiala creată
@@ -631,7 +631,7 @@ export default function CapturePage({ captureId }: { captureId: string }) {
             <div className="flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => navigate("/app/fin/captures")}
+                onClick={() => navigate("/business/fin/captures")}
                 className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground hover:bg-muted"
               >
                 Anulează

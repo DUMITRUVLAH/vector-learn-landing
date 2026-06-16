@@ -26,6 +26,8 @@ import { FinAiAuditPage } from "./pages/fin/FinAiAuditPage";
 import { FinSecuritySettingsPage } from "./pages/fin/FinSecuritySettingsPage";
 
 // FinDesk app pages
+import CapturesListPage from "./pages/fin/CapturesListPage";
+import CapturePage from "./pages/fin/CapturePage";
 import { FinInvoicesPage } from "./pages/app/FinInvoicesPage";
 import { FinInvoiceDocPage } from "./pages/app/FinInvoiceDocPage";
 import { FinExpensesPage } from "./pages/app/FinExpensesPage";
@@ -118,7 +120,12 @@ function Routes() {
   if (path.startsWith("/business/fin/invoices/document")) return <BusinessGuardPage><FinInvoiceDocPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/invoices")) return <BusinessGuardPage><FinInvoicesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/expenses")) return <BusinessGuardPage><FinExpensesPage /></BusinessGuardPage>;
-  if (path.startsWith("/business/fin/captures")) return <BusinessGuardPage><FinRegistryPage /></BusinessGuardPage>;
+  {
+    // Invoice Reporting (captures): detail /business/fin/captures/:id before the list.
+    const capMatch = path.match(/^\/business\/fin\/captures\/([^/?]+)/);
+    if (capMatch) return <BusinessGuardPage><CapturePage captureId={capMatch[1]} /></BusinessGuardPage>;
+  }
+  if (path.startsWith("/business/fin/captures")) return <BusinessGuardPage><CapturesListPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/reconcile")) return <BusinessGuardPage><ReconcilePage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/payments")) return <BusinessGuardPage><Suspense fallback={null}><FinPaymentsPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/calendar")) return <BusinessGuardPage><Suspense fallback={null}><FinCalendarPage /></Suspense></BusinessGuardPage>;

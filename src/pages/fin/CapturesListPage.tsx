@@ -1,5 +1,5 @@
 /**
- * CAPTURE-003 + Team Docs: /app/fin/captures (și /business/fin/captures)
+ * CAPTURE-003 + Team Docs: /business/fin/captures (și /business/fin/captures)
  *
  * Inbox comun de documente: orice echipă (marketing, IT, ops…) încarcă facturi
  * (Facebook Ads, Google Ads etc.), AI extrage câmpurile (sumă, furnizor, categorie,
@@ -505,7 +505,7 @@ export default function CapturesListPage() {
                     <td className="px-4 py-3 text-right">
                       {capture.status === "extracted" && (
                         <button
-                          onClick={() => navigate(`/app/fin/captures/${capture.id}`)}
+                          onClick={() => navigate(`/business/fin/captures/${capture.id}`)}
                           className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                         >
                           Confirmă
@@ -513,7 +513,7 @@ export default function CapturesListPage() {
                       )}
                       {capture.status === "confirmed" && (
                         <button
-                          onClick={() => navigate(`/app/fin/captures/${capture.id}`)}
+                          onClick={() => navigate(`/business/fin/captures/${capture.id}`)}
                           className="inline-flex min-h-[36px] items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
                         >
                           Detalii
@@ -524,7 +524,7 @@ export default function CapturesListPage() {
                       )}
                       {capture.status === "failed" && (
                         <button
-                          onClick={() => navigate(`/app/fin/captures/${capture.id}`)}
+                          onClick={() => navigate(`/business/fin/captures/${capture.id}`)}
                           className="inline-flex min-h-[36px] items-center rounded-lg border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/5"
                         >
                           Eroare
