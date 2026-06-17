@@ -5,7 +5,7 @@ import { z } from "zod";
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { randomBytes, createHash } from "node:crypto";
 import { db } from "../db/client";
-import { tenants, users, sessions, passwordResetTokens, twoFactorSettings } from "../db/schema";
+import { tenants, users, sessions, passwordResetTokens, twoFactorSettings, finMembers } from "../db/schema";
 import { hashPassword, verifyPassword } from "../auth/password";
 import { createSession, revokeSession, SESSION_COOKIE } from "../auth/session";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -532,6 +532,25 @@ authRoutes.get("/google/callback", async (c) => {
         .set({ appKind: "business", updatedAt: new Date() })
         .where(eq(tenants.id, tenant.id));
     }
+
+    // Existing tenant admins that were never added as a FinDesk member also hit
+    // "Acces restricționat" on /business/fin/ (GET /api/fin/members/me → 403).
+    // If this user is the tenant admin and has no fin_members row yet, seed them
+    // as owner so the workspace they administer is reachable. Non-admins are left
+    // alone — they only see FinDesk once an owner adds them.
+    if (user.role === "admin") {
+      const existingMember = await db.query.finMembers.findFirst({
+        where: and(
+          eq(finMembers.tenantId, user.tenantId),
+          eq(finMembers.userId, user.id)
+        ),
+      });
+      if (!existingMember) {
+        await db
+          .insert(finMembers)
+          .values({ tenantId: user.tenantId, userId: user.id, role: "owner" });
+      }
+    }
   }
 
   // 3) Brand-new user → create a fresh tenant + admin account (owner's choice).
@@ -565,6 +584,13 @@ authRoutes.get("/google/callback", async (c) => {
       })
       .returning();
     user = created;
+
+    // The new user owns this fresh workspace, so make them the FinDesk owner too.
+    // Without a fin_members row, GET /api/fin/members/me 403s and FinLayout shows
+    // "Acces restricționat" — which looks exactly like the Google sign-up not working.
+    await db
+      .insert(finMembers)
+      .values({ tenantId: tenant.id, userId: created.id, role: "owner" });
   }
 
   // Google verifies the email itself, so we skip the app's 2FA gate here and
