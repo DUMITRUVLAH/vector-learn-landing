@@ -15,7 +15,7 @@
  */
 import { useCallback, useRef, useState } from "react";
 import { Upload, CheckCircle2, XCircle, Loader2, FileText, X } from "lucide-react";
-import { uploadInvoiceFile, type FinDocTeam } from "@/lib/api/finCaptures";
+import { uploadInvoiceBatch, type FinDocTeam } from "@/lib/api/finCaptures";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -24,16 +24,17 @@ export const MAX_INVOICE_FILES = 50;
 /** Max single-file size. Vercel's serverless request-body limit is ~4.5MB; bigger files get a
  *  silent 413 from the platform (showed as "Eroare"), so we reject them up front with a message. */
 const MAX_FILE_BYTES = 4_000_000;
-/** How many uploads run in parallel — keeps the batch fast. Retry-with-backoff (below) absorbs
- *  the occasional Vercel firewall/rate-limit hit so we don't need to serialise everything. */
-const UPLOAD_CONCURRENCY = 4;
-/** Per-file retry attempts for throttling/transient gateway errors. */
-const MAX_ATTEMPTS = 3;
-
-/** Retry only throttle/transient-gateway statuses (Vercel firewall 403, rate-limit 429, gateway
- *  5xx). NOT 500 — an app-level 500 is deterministic, so retrying it only slows the batch. */
-function isRetryable(e: unknown): boolean {
-  return e instanceof ApiError && [403, 408, 429, 502, 503, 504].includes(e.status);
+/** Files are uploaded in BATCHES (several per request) so 50 invoices become a handful of
+ *  requests, staying under Vercel's per-IP firewall rate-limit that 403'd rapid single uploads.
+ *  A batch is bounded by file count (server processing time) and total bytes (≤4.5MB body limit). */
+const MAX_BATCH_FILES = 4;
+const MAX_BATCH_BYTES = 3_500_000;
+/** Retry a whole batch only on edge rate-limit (403/429) — the firewall rejects it BEFORE the
+ *  server processes anything, so re-sending is safe (no duplicate captures). We deliberately do
+ *  NOT retry 5xx/timeout: those may have partially processed, and a retry would duplicate. */
+const MAX_BATCH_ATTEMPTS = 4;
+function isRateLimited(e: unknown): boolean {
+  return e instanceof ApiError && (e.status === 403 || e.status === 429);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -125,40 +126,60 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
   const setItemStatus = (id: string, status: ItemStatus, error?: string) =>
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status, error } : it)));
 
+  // Group queued items into batches bounded by count and total bytes.
+  const buildBatches = (queue: UploadItem[]): UploadItem[][] => {
+    const batches: UploadItem[][] = [];
+    let cur: UploadItem[] = [];
+    let curBytes = 0;
+    for (const it of queue) {
+      if (cur.length > 0 && (cur.length >= MAX_BATCH_FILES || curBytes + it.file.size > MAX_BATCH_BYTES)) {
+        batches.push(cur);
+        cur = [];
+        curBytes = 0;
+      }
+      cur.push(it);
+      curBytes += it.file.size;
+    }
+    if (cur.length) batches.push(cur);
+    return batches;
+  };
+
   const uploadAll = async () => {
     const queue = items.filter((it) => it.status === "queued" || it.status === "error");
     if (queue.length === 0 || busy) return;
     setBusy(true);
     setLimitMsg(null);
 
-    // Parallel worker pool (fast) + per-file retry-with-backoff. Backoff absorbs the occasional
-    // Vercel firewall/rate-limit (403/429) so a burst still gets every file in without serialising.
+    // Upload in BATCHES (several files per request, sequential). Few requests → stays under the
+    // Vercel firewall rate-limit that 403'd rapid single uploads. A batch is retried only on a
+    // 403/429 (edge rejected it before processing → safe); per-file outcomes come from the result.
     let successCount = 0;
-    let cursor = 0;
-    const uploadOne = async (item: UploadItem) => {
-      for (let attempt = 1; ; attempt++) {
-        setItemStatus(item.id, "uploading");
+    for (const batch of buildBatches(queue)) {
+      batch.forEach((it) => setItemStatus(it.id, "uploading"));
+      let done = false;
+      for (let attempt = 1; attempt <= MAX_BATCH_ATTEMPTS && !done; attempt++) {
         try {
-          await uploadInvoiceFile(item.file, team);
-          setItemStatus(item.id, "done");
-          successCount += 1;
-          return;
+          const { results } = await uploadInvoiceBatch(batch.map((it) => it.file), team);
+          batch.forEach((it, i) => {
+            const r = results[i];
+            if (r && r.ok) {
+              setItemStatus(it.id, "done");
+              successCount += 1;
+            } else {
+              setItemStatus(it.id, "error", r && !r.ok ? r.error : "Eroare");
+            }
+          });
+          done = true;
         } catch (e) {
-          if (isRetryable(e) && attempt < MAX_ATTEMPTS) {
-            const isRate = e instanceof ApiError && (e.status === 403 || e.status === 429);
-            const base = isRate ? 1500 : 700;
-            await sleep(base * 2 ** (attempt - 1) + Math.random() * 300);
+          if (isRateLimited(e) && attempt < MAX_BATCH_ATTEMPTS) {
+            await sleep(1500 * 2 ** (attempt - 1) + Math.random() * 400);
             continue;
           }
-          setItemStatus(item.id, "error", e instanceof ApiError ? `http_${e.status}` : "Eroare");
-          return;
+          batch.forEach((it) => setItemStatus(it.id, "error", e instanceof ApiError ? `http_${e.status}` : "Eroare"));
+          done = true;
         }
       }
-    };
-    const worker = async () => {
-      while (cursor < queue.length) await uploadOne(queue[cursor++]);
-    };
-    await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, queue.length) }, worker));
+    }
 
     setBusy(false);
     if (successCount > 0) onUploaded(successCount);
