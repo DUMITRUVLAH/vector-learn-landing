@@ -108,10 +108,11 @@ function StatusBadge({ status }: { status: "draft" | "confirmed" | "paid" }) {
   );
 }
 
-/** Extrage ID-ul din URL-ul hash: #/app/fin/payroll/runs/:id */
+/** Extrage ID-ul din URL-ul hash: #/business/fin/payroll/runs/:id */
 function extractRunIdFromHash(): string | null {
   const hash = window.location.hash.replace(/^#/, "");
-  const match = /\/app\/fin\/payroll\/runs\/([^/]+)/.exec(hash);
+  // FIX-502: route is /business/fin/payroll/runs/:id (was /app/fin/...)
+  const match = /\/business\/fin\/payroll\/runs\/([^/]+)/.exec(hash);
   return match ? match[1] : null;
 }
 
@@ -261,7 +262,7 @@ export function PayrollRunDetailPage() {
         <div className="mx-auto max-w-5xl px-4 py-16 text-center">
           <p className="text-muted-foreground">ID rulaj lipsă din URL.</p>
           <a
-            href="#/app/fin/payroll"
+            href="#/business/fin/payroll"
             className="mt-4 inline-block text-sm text-primary hover:underline"
           >
             Înapoi la Salarizare
@@ -278,7 +279,7 @@ export function PayrollRunDetailPage() {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <a
-              href="#/app/fin/payroll"
+              href="#/business/fin/payroll"
               className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
               aria-label="Înapoi la Salarizare"
             >
@@ -432,7 +433,7 @@ export function PayrollRunDetailPage() {
               Nicio linie calculată. Rulați calculul din pagina de Salarizare.
             </p>
             <a
-              href="#/app/fin/payroll"
+              href="#/business/fin/payroll"
               className="mt-3 inline-block text-sm text-primary hover:underline"
             >
               Înapoi la Salarizare

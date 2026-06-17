@@ -196,7 +196,7 @@ export function PayrollFINPage() {
           </div>
           <div className="flex items-center gap-2">
             <a
-              href="#/app/fin/payroll/employees"
+              href="#/business/fin/payroll/employees"
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium",
                 "bg-background text-foreground hover:bg-muted transition-colors"
@@ -323,7 +323,7 @@ export function PayrollFINPage() {
               Niciun rulaj de salarizare. Creați primul rulaj.
             </p>
             <a
-              href="#/app/fin/payroll/employees"
+              href="#/business/fin/payroll/employees"
               className="mt-3 inline-flex items-center gap-1 text-sm text-primary hover:underline"
             >
               Adăugați angajați mai întâi
@@ -423,7 +423,7 @@ export function PayrollFINPage() {
                           </span>
                         )}
                         <a
-                          href={`#/app/fin/payroll/runs/${run.id}`}
+                          href={`#/business/fin/payroll/runs/${run.id}`}
                           aria-label={`Deschide detaliu rulaj ${run.periodMonth}`}
                           className={cn(
                             "inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium",

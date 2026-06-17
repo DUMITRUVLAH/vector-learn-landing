@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "PAR-118",
-  "iterations": 164,
+  "last_completed": "FIX-503",
+  "iterations": 167,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "AUDIT-FIX",
@@ -4093,28 +4093,36 @@
       "branch": "feat/DOCMERGE-faza-1-document-merge"
     },
     "FIX-501": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FIX-501-finnav-dead-links.md",
       "milestone": "AUDIT-FIX",
       "phase": "1",
       "depends_on": [],
-      "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll"
+      "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "tests": "4/4 pass"
+      }
     },
     "FIX-502": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FIX-502-payroll-wrong-page-and-route.md",
       "milestone": "AUDIT-FIX",
       "phase": "1",
       "depends_on": [],
-      "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll"
+      "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "tests": "6/6 pass"
+      }
     },
     "FIX-503": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/FIX-503-app-wide-deadlink-audit-guard.md",
       "milestone": "AUDIT-FIX",
@@ -4123,7 +4131,13 @@
         "FIX-501",
         "FIX-502"
       ],
-      "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll"
+      "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "tests": "4/4 pass",
+        "manager": "BUY",
+        "student": "OK"
+      }
     }
   }
 }

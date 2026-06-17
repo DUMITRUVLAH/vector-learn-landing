@@ -22,9 +22,9 @@ O fază = un branch = un PR: `feat/AUDIT-FIX-faza-1-sidebar-payroll` (§0.2).
 
 | Phase | ID | Title | Status | Spec |
 |-------|----|-------|--------|------|
-| 1 | `FIX-501` | FinNav dead-links `/app/fin/*` → `/business/fin/*` (stop eject) | pending | [FIX-501](specs/FIX-501-finnav-dead-links.md) |
-| 1 | `FIX-502` | Payroll: montează pagina FinDesk corectă + API live | pending | [FIX-502](specs/FIX-502-payroll-wrong-page-and-route.md) |
-| 1 | `FIX-503` | Audit full dead-links + guard automat anti-regresie | pending | [FIX-503](specs/FIX-503-app-wide-deadlink-audit-guard.md) |
+| 1 | `FIX-501` | FinNav dead-links `/app/fin/*` → `/business/fin/*` (stop eject) | done ✅ | [FIX-501](specs/FIX-501-finnav-dead-links.md) · [PR #183](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/183) |
+| 1 | `FIX-502` | Payroll: montează pagina FinDesk corectă + API live | done ✅ | [FIX-502](specs/FIX-502-payroll-wrong-page-and-route.md) · [PR #183](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/183) |
+| 1 | `FIX-503` | Audit full dead-links + guard automat anti-regresie | done ✅ | [FIX-503](specs/FIX-503-app-wide-deadlink-audit-guard.md) · [PR #183](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/183) |
 
 ---
 
