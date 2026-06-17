@@ -22,8 +22,9 @@ import { cn } from "@/lib/utils";
 export const MAX_INVOICE_FILES = 50;
 /** Max single-file size accepted server-side (8MB — matches the upload route). */
 const MAX_FILE_BYTES = 8_000_000;
-/** How many uploads to run in parallel. */
-const UPLOAD_CONCURRENCY = 4;
+/** How many uploads to run in parallel. Kept low: each upload runs server-side AI
+ *  extraction, and too many at once can exceed Vercel's function timeout (→ 504). */
+const UPLOAD_CONCURRENCY = 2;
 
 const ACCEPT = "image/*,application/pdf,.csv,.txt,text/csv";
 
