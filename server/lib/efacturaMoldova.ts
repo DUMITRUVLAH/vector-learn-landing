@@ -81,6 +81,16 @@ export function escapeXml(s: string): string {
     .replace(/'/g, "&apos;");
 }
 
+/** Inversul lui escapeXml — decodează entitățile XML dintr-un conținut text. */
+export function unescapeXml(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
 /** Extrage conținutul text al primului tag `<name>...</name>` (namespace-agnostic). */
 export function xmlText(xml: string, name: string): string | null {
   const re = new RegExp(`<(?:[\\w]+:)?${name}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:[\\w]+:)?${name}>`);
@@ -180,22 +190,50 @@ ${rows}
 
 // ─── SOAP envelope + transport ───────────────────────────────────────────────
 
+// WS-Security namespaces — the exact OASIS URIs WCF emits for a
+// basicHttpBinding + TransportWithMessageCredential UserNameToken (ghid pag. 5).
 const WSSE_NS =
   "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd";
+const WSU_NS =
+  "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd";
+const PASSWORD_TEXT_TYPE =
+  "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText";
 
+/** ISO-8601 UTC with milliseconds + trailing Z, as WCF emits in wsu:Timestamp. */
+function wsuTime(d: Date): string {
+  return d.toISOString().replace(/(\.\d{3})\d*Z$/, "$1Z");
+}
+
+/**
+ * Builds the SOAP 1.1 envelope WCF produces for TransportWithMessageCredential.
+ *
+ * Earlier code sent a bare `<o:UsernameToken>` with no `wsu` namespace, no
+ * `Password Type`, and no `wsu:Timestamp` — the SFS WCF endpoint rejects that
+ * with AuthenticationFailedException. This emits the full token WCF expects:
+ *   - wsse:Security mustUnderstand="1"
+ *   - wsu:Timestamp (Created/Expires, 5 min window)
+ *   - wsse:UsernameToken with wsu:Id, Password Type="...#PasswordText"
+ */
 export function buildSoapEnvelope(
   method: string,
   innerXml: string,
   username: string,
-  password: string
+  password: string,
+  now: Date = new Date()
 ): string {
+  const created = wsuTime(now);
+  const expires = wsuTime(new Date(now.getTime() + 5 * 60_000));
   return `<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:u="${WSU_NS}">
   <s:Header>
     <o:Security s:mustUnderstand="1" xmlns:o="${WSSE_NS}">
-      <o:UsernameToken>
+      <u:Timestamp u:Id="_0">
+        <u:Created>${created}</u:Created>
+        <u:Expires>${expires}</u:Expires>
+      </u:Timestamp>
+      <o:UsernameToken u:Id="uuid-token-1">
         <o:Username>${escapeXml(username)}</o:Username>
-        <o:Password>${escapeXml(password)}</o:Password>
+        <o:Password Type="${PASSWORD_TEXT_TYPE}">${escapeXml(password)}</o:Password>
       </o:UsernameToken>
     </o:Security>
   </s:Header>
@@ -311,10 +349,128 @@ export function createMockTransport(): SoapTransport {
           </Taxpayer></Result>
         </GetTaxpayersInfoResult></GetTaxpayersInfoResponse>`;
       }
+      case "SearchInvoices": {
+        // Reconciliere: după PostInvoices, căutăm factura după APIeInvoiceId și
+        // aflăm seria/numărul atribuite de SFS. Mock: derivăm determinist din id.
+        const apiId = xmlText(envelope, "APIeInvoiceId") ?? "";
+        const { seria, number } = deriveSfsIdentifier(hashToNumber(apiId));
+        return `<SearchInvoicesResponse><SearchInvoicesResult>
+          <RequestId>${requestId}</RequestId>
+          <TimeStamp>${now}</TimeStamp>
+          <Status>2</Status>
+          <Results><Invoice>
+            <Seria>${seria}</Seria><Number>${number}</Number>
+            <Status>2</Status><InvoiceStatus>7</InvoiceStatus>
+            <TimeStamp>${now}</TimeStamp>
+          </Invoice></Results>
+        </SearchInvoicesResult></SearchInvoicesResponse>`;
+      }
+      case "GetInvoicesContentForPrint": {
+        const seria = xmlText(envelope, "Seria") ?? "EFMD";
+        const number = xmlText(envelope, "Number") ?? "000000001";
+        // "PDF" base64-encoded as a minimal placeholder document.
+        const content = Buffer.from(`MOCK-PDF ${seria} ${number}`).toString("base64");
+        return `<GetInvoicesContentForPrintResponse><GetInvoicesContentForPrintResult>
+          <RequestId>${requestId}</RequestId>
+          <TimeStamp>${now}</TimeStamp>
+          <Status>2</Status>
+          <Results><InvoicePrintResult>
+            <Seria>${seria}</Seria><Number>${number}</Number>
+            <Status>2</Status><Format>PDF</Format>
+            <Content>${content}</Content><TimeStamp>${now}</TimeStamp>
+          </InvoicePrintResult></Results>
+        </GetInvoicesContentForPrintResult></GetInvoicesContentForPrintResponse>`;
+      }
+      case "GetInvoicesQRcodes": {
+        const seria = xmlText(envelope, "Seria") ?? "EFMD";
+        const number = xmlText(envelope, "Number") ?? "000000001";
+        const qrPng = Buffer.from(`MOCK-QR ${seria} ${number}`).toString("base64");
+        const qrText = `${seria} ${number} Furn-0000000000000 Cump-0000000000000 ` +
+          `Suma totala-0.00lei https://efacturatest.sfs.md:443/EFactura.aspx?id=mock`;
+        return `<GetInvoicesQRcodesResponse><GetInvoicesQRcodesResult>
+          <RequestId>${requestId}</RequestId>
+          <TimeStamp>${now}</TimeStamp>
+          <Status>2</Status>
+          <Result><InvoiceQRCode>
+            <Seria>${seria}</Seria><Number>${number}</Number>
+            <QRCode>${qrPng}</QRCode><QRCodeText>${escapeXml(qrText)}</QRCodeText>
+            <TimeStamp>${now}</TimeStamp>
+          </InvoiceQRCode></Result>
+        </GetInvoicesQRcodesResult></GetInvoicesQRcodesResponse>`;
+      }
+      case "GetInvoicesForSigning": {
+        return `<GetInvoicesForSigningResponse><GetInvoicesForSigningResult>
+          <RequestId>${requestId}</RequestId>
+          <TimeStamp>${now}</TimeStamp>
+          <Status>2</Status>
+          <Results></Results>
+        </GetInvoicesForSigningResult></GetInvoicesForSigningResponse>`;
+      }
+      case "PostInvoicesWithAttachment": {
+        // Identic ca PostInvoices, dar acceptă și FileName + FileContent (Base64).
+        const docCount = (envelope.match(/&lt;Document&gt;|<Document>/g) ?? []).length || 1;
+        return `<PostInvoicesWithAttachmentResponse><PostInvoicesWithAttachmentResult>
+          <RequestId>${requestId}</RequestId>
+          <TotalInvoices>${docCount}</TotalInvoices>
+          <TotalInvoicesPosted>${docCount}</TotalInvoicesPosted>
+          <TimeStamp>${now}</TimeStamp>
+          <Status>2</Status>
+        </PostInvoicesWithAttachmentResult></PostInvoicesWithAttachmentResponse>`;
+      }
+      case "GetAcceptedInvoices":
+      case "GetRejectedInvoices": {
+        // Liste pe rol de actor — mock întoarce o singură factură demonstrativă.
+        const invoiceStatus = method === "GetRejectedInvoices" ? 2 : 3;
+        return `<${method}Response><${method}Result>
+          <RequestId>${requestId}</RequestId>
+          <TimeStamp>${now}</TimeStamp>
+          <Status>2</Status>
+          <Results><Invoice>
+            <Seria>EFMD</Seria><Number>000000001</Number>
+            <Status>2</Status><InvoiceStatus>${invoiceStatus}</InvoiceStatus>
+            <TimeStamp>${now}</TimeStamp>
+          </Invoice></Results>
+        </${method}Result></${method}Response>`;
+      }
+      case "GetInvoicesBySeriaNumber": {
+        const seria = xmlText(envelope, "Seria") ?? "EFMD";
+        const number = xmlText(envelope, "Number") ?? "000000001";
+        const innerInvoiceXml = escapeXml(`<Documents><Document><AdditionalInformation><id>mock</id></AdditionalInformation></Document></Documents>`);
+        return `<GetInvoicesBySeriaNumberResponse><GetInvoicesBySeriaNumberResult>
+          <RequestId>${requestId}</RequestId>
+          <TimeStamp>${now}</TimeStamp>
+          <Status>2</Status>
+          <Results><XmlInvoice>
+            <Seria>${seria}</Seria><Number>${number}</Number>
+            <Status>2</Status><InvoiceStatus>7</InvoiceStatus>
+            <XML>${innerInvoiceXml}</XML><TimeStamp>${now}</TimeStamp>
+          </XmlInvoice></Results>
+        </GetInvoicesBySeriaNumberResult></GetInvoicesBySeriaNumberResponse>`;
+      }
+      case "GetLogs": {
+        const respJson = escapeXml('{"Results":[{"Status":2,"Seria":"EFMD","Number":"000000001"}],"Status":2}');
+        return `<GetLogsResponse><GetLogsResult>
+          <RequestId>${requestId}</RequestId>
+          <TimeStamp>${now}</TimeStamp>
+          <Status>2</Status>
+          <Results><RequestLog>
+            <Username>mock</Username><Method>PostInvoices</Method>
+            <StartDateTime>${now}</StartDateTime><EndDateTime>${now}</EndDateTime>
+            <Status>2</Status><Response>${respJson}</Response>
+          </RequestLog></Results>
+        </GetLogsResult></GetLogsResponse>`;
+      }
       default:
         throw new EfacturaMdError(method, "metodă nesimulată în mock transport");
     }
   };
+}
+
+/** Determinist, stabil hash → întreg pozitiv (pentru numere de factură mock). */
+function hashToNumber(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 1_000_000_000;
+  return h || 1;
 }
 
 // ─── Client ──────────────────────────────────────────────────────────────────
@@ -349,6 +505,28 @@ export interface TaxpayerInfo {
   taxpayerType: number;
   isEfacturaActor: boolean;
   existsInTaxRegistry: boolean;
+}
+
+/** O factură din răspunsurile de listare (GetAccepted/Rejected, SearchInvoices). */
+export interface InvoiceListItem {
+  seria: string;
+  number: string;
+  invoiceStatus: number;
+  invoiceStatusLabel: string;
+  message: string | null;
+  /** Conținutul XML al facturii (doar la GetInvoicesBySeriaNumber). */
+  xml?: string;
+}
+
+/** Un rând de jurnal din GetLogs (§5.7). */
+export interface RequestLogItem {
+  username: string;
+  method: string;
+  startDateTime: string | null;
+  endDateTime: string | null;
+  status: number;
+  error: string | null;
+  response: string | null;
 }
 
 export class EfacturaMdClient {
@@ -457,11 +635,17 @@ export class EfacturaMdClient {
     };
   }
 
-  /** §5.9 GetTaxpayersInfo — validare IDNO cumpărător înainte de emitere. */
+  /**
+   * §5.9 GetTaxpayersInfo — validare IDNO cumpărător înainte de emitere.
+   *
+   * Per ghid pag. 22, membrul de request este `String` (array of fiscal codes),
+   * nu `FiscalCodes`. Earlier code sent `<FiscalCodes><string>…` which the WCF
+   * data contract ignored, returning an empty result for every IDNO.
+   */
   async getTaxpayerInfo(idno: string, requestId: string): Promise<TaxpayerInfo | null> {
     const inner =
       `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<FiscalCodes><string>${escapeXml(idno)}</string></FiscalCodes>`;
+      `<String><string>${escapeXml(idno)}</string></String>`;
     const xml = await this.call("GetTaxpayersInfo", inner);
     const block = xmlBlocks(xml, "Taxpayer")[0];
     if (!block) return null;
@@ -474,12 +658,197 @@ export class EfacturaMdClient {
       existsInTaxRegistry: xmlText(block, "ExistInTaxRegistry") === "true",
     };
   }
+
+  /**
+   * §5.15 SearchInvoices — caută factura după identificatorul intern
+   * (APIeInvoiceId din AdditionalInformation). Folosit la reconciliere: după
+   * PostInvoices, SFS atribuie seria/numărul, pe care le aflăm cu această metodă.
+   */
+  async searchByApiInvoiceId(
+    apiInvoiceId: string,
+    requestId: string
+  ): Promise<InvoiceStatusResult | null> {
+    const inner =
+      `<RequestId>${escapeXml(requestId)}</RequestId>` +
+      `<ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</ActorRole>` +
+      `<Parameters><APIeInvoiceId>${escapeXml(apiInvoiceId)}</APIeInvoiceId>` +
+      `<InvoiceType>0</InvoiceType></Parameters>`;
+    const xml = await this.call("SearchInvoices", inner);
+    const block = xmlBlocks(xml, "Invoice")[0];
+    if (!block) return null;
+    const invoiceStatus = Number(xmlText(block, "InvoiceStatus") ?? 0);
+    return {
+      seria: xmlText(block, "Seria") ?? "",
+      number: xmlText(block, "Number") ?? "",
+      invoiceStatus,
+      invoiceStatusLabel: EFACTURA_MD_STATUS[invoiceStatus] ?? `necunoscut (${invoiceStatus})`,
+      message: xmlText(block, "Message"),
+    };
+  }
+
+  /**
+   * §5.4 GetInvoicesContentForPrint — PDF-ul facturii (Base64) pentru tipărire.
+   * Returnează conținutul decodat ca Buffer.
+   */
+  async getInvoicePdf(
+    seria: string,
+    number: string,
+    requestId: string,
+    orientation: "Portrait" | "Landscape" = "Portrait"
+  ): Promise<{ seria: string; number: string; pdf: Buffer } | null> {
+    const inner =
+      `<RequestId>${escapeXml(requestId)}</RequestId>` +
+      `<SeriaAndNumbers><InvoiceIndentificator>` +
+      `<Seria>${escapeXml(seria)}</Seria><Number>${escapeXml(number)}</Number>` +
+      `</InvoiceIndentificator></SeriaAndNumbers>` +
+      `<ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</ActorRole>` +
+      `<Orientation>${escapeXml(orientation)}</Orientation>`;
+    const xml = await this.call("GetInvoicesContentForPrint", inner);
+    const block = xmlBlocks(xml, "InvoicePrintResult")[0];
+    if (!block) return null;
+    const content = xmlText(block, "Content");
+    if (!content) return null;
+    return {
+      seria: xmlText(block, "Seria") ?? seria,
+      number: xmlText(block, "Number") ?? number,
+      pdf: Buffer.from(content, "base64"),
+    };
+  }
+
+  /**
+   * §5.6 GetInvoicesQRcodes — imaginea PNG (Base64) + textul QR pentru o factură.
+   */
+  async getInvoiceQrCode(
+    seria: string,
+    number: string,
+    requestId: string
+  ): Promise<{ seria: string; number: string; pngBase64: string; text: string } | null> {
+    const inner =
+      `<RequestId>${escapeXml(requestId)}</RequestId>` +
+      `<SeriaAndNumbers><InvoiceIndentificator>` +
+      `<Seria>${escapeXml(seria)}</Seria><Number>${escapeXml(number)}</Number>` +
+      `</InvoiceIndentificator></SeriaAndNumbers>`;
+    const xml = await this.call("GetInvoicesQRcodes", inner);
+    const block = xmlBlocks(xml, "InvoiceQRCode")[0];
+    if (!block) return null;
+    return {
+      seria: xmlText(block, "Seria") ?? seria,
+      number: xmlText(block, "Number") ?? number,
+      pngBase64: xmlText(block, "QRCode") ?? "",
+      text: xmlText(block, "QRCodeText") ?? "",
+    };
+  }
+
+  /**
+   * §5.13 PostInvoicesWithAttachment — trimite factura + un PDF atașat (Base64,
+   * max 10 MB). Aceeași structură ca PostInvoices, plus FileName + FileContent.
+   */
+  async postInvoicesWithAttachment(
+    invoicesXml: string,
+    fileName: string,
+    fileContentBase64: string,
+    requestId: string
+  ): Promise<PostInvoicesResult> {
+    const inner =
+      `<RequestId>${escapeXml(requestId)}</RequestId>` +
+      `<InvoicesXml>${escapeXml(invoicesXml)}</InvoicesXml>` +
+      `<ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</ActorRole>` +
+      `<FileName>${escapeXml(fileName)}</FileName>` +
+      `<FileContent>${escapeXml(fileContentBase64)}</FileContent>` +
+      `<InvoicesXmlStatus>0</InvoicesXmlStatus>`;
+    const xml = await this.call("PostInvoicesWithAttachment", inner);
+    return {
+      requestId: xmlText(xml, "RequestId") ?? requestId,
+      totalInvoices: Number(xmlText(xml, "TotalInvoices") ?? 0),
+      totalInvoicesPosted: Number(xmlText(xml, "TotalInvoicesPosted") ?? 0),
+      status: Number(xmlText(xml, "Status") ?? 0),
+      errorMessage: xmlText(xml, "ErrorMessage"),
+    };
+  }
+
+  /** Parsează o listă de blocuri `<Invoice>` într-un șir de InvoiceListItem. */
+  private parseInvoiceList(xml: string, blockName = "Invoice"): InvoiceListItem[] {
+    return xmlBlocks(xml, blockName).map((block) => {
+      const invoiceStatus = Number(xmlText(block, "InvoiceStatus") ?? 0);
+      // Conținutul facturii vine escapat în elementul <XML> — îl decodăm ca să
+      // fie XML utilizabil (de-escapat) pentru aplicație.
+      const rawXml = xmlText(block, "XML");
+      return {
+        seria: xmlText(block, "Seria") ?? "",
+        number: xmlText(block, "Number") ?? "",
+        invoiceStatus,
+        invoiceStatusLabel: EFACTURA_MD_STATUS[invoiceStatus] ?? `necunoscut (${invoiceStatus})`,
+        message: xmlText(block, "Message"),
+        xml: rawXml ? unescapeXml(rawXml) : undefined,
+      };
+    });
+  }
+
+  /** §5.2 GetAcceptedInvoices — facturile emise de furnizor și acceptate. */
+  async getAcceptedInvoices(requestId: string): Promise<InvoiceListItem[]> {
+    const inner =
+      `<RequestId>${escapeXml(requestId)}</RequestId>` +
+      `<ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</ActorRole>`;
+    const xml = await this.call("GetAcceptedInvoices", inner);
+    return this.parseInvoiceList(xml);
+  }
+
+  /** §5.8 GetRejectedInvoices — facturile respinse de cumpărător. */
+  async getRejectedInvoices(requestId: string): Promise<InvoiceListItem[]> {
+    const inner =
+      `<RequestId>${escapeXml(requestId)}</RequestId>` +
+      `<ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</ActorRole>`;
+    const xml = await this.call("GetRejectedInvoices", inner);
+    return this.parseInvoiceList(xml);
+  }
+
+  /**
+   * §5.3 GetInvoicesBySeriaNumber — facturile (cu conținut XML) după serie+număr.
+   */
+  async getInvoicesBySeriaNumber(
+    identifiers: Array<{ seria: string; number: string }>,
+    requestId: string
+  ): Promise<InvoiceListItem[]> {
+    const items = identifiers
+      .map(
+        (i) =>
+          `<InvoiceIndentificator><Seria>${escapeXml(i.seria)}</Seria>` +
+          `<Number>${escapeXml(i.number)}</Number></InvoiceIndentificator>`
+      )
+      .join("");
+    const inner =
+      `<RequestId>${escapeXml(requestId)}</RequestId>` +
+      `<SeriaAndNumbers>${items}</SeriaAndNumbers>`;
+    const xml = await this.call("GetInvoicesBySeriaNumber", inner);
+    return this.parseInvoiceList(xml, "XmlInvoice");
+  }
+
+  /** §5.7 GetLogs — jurnalul apelurilor API într-un interval de timp. */
+  async getLogs(from: Date, to: Date, requestId: string): Promise<RequestLogItem[]> {
+    const inner =
+      `<RequestId>${escapeXml(requestId)}</RequestId>` +
+      `<From>${from.toISOString()}</From>` +
+      `<To>${to.toISOString()}</To>`;
+    const xml = await this.call("GetLogs", inner);
+    return xmlBlocks(xml, "RequestLog").map((block) => ({
+      username: xmlText(block, "Username") ?? "",
+      method: xmlText(block, "Method") ?? "",
+      startDateTime: xmlText(block, "StartDateTime"),
+      endDateTime: xmlText(block, "EndDateTime"),
+      status: Number(xmlText(block, "Status") ?? 0),
+      error: xmlText(block, "Error"),
+      response: xmlText(block, "Response"),
+    }));
+  }
 }
 
 /**
- * Seria/numărul atribuite local înainte de transmitere (SFS confirmă sau
- * atribuie seria reală la semnare; în mock mode rămân cele locale).
- * Seria: "EFMD"; numărul: 9 cifre derivate din numărul intern al facturii.
+ * Identificator de factură folosit DOAR în mock mode.
+ *
+ * În fluxul real semiautomatizat, SFS atribuie Seria + Number la postare; le
+ * aflăm ulterior cu `searchByApiInvoiceId` (§5.15). Pe mediul mock nu există
+ * server care să atribuie, așa că derivăm determinist o serie/număr stabile.
+ * Seria: "EFMD"; numărul: 9 cifre.
  */
 export function deriveSfsIdentifier(invoiceNumber: number): { seria: string; number: string } {
   return { seria: "EFMD", number: String(invoiceNumber).padStart(9, "0") };
