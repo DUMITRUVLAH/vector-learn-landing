@@ -700,14 +700,15 @@ export class EfacturaMdClient {
     apiInvoiceId: string,
     requestId: string
   ): Promise<InvoiceStatusResult | null> {
-    // SearchRequest: RequestId, ActorRole, Parameters. SearchParameters câmpuri
-    // în ordine ALFABETICĂ (WCF DataContract): APIeInvoiceId înainte de InvoiceType.
+    // SearchRequest: RequestId, ActorRole, Parameters (SearchParameters).
+    // Doar APIeInvoiceId — filtrul InvoiceType=0 excludea facturile Draft pe SFS-ul
+    // real, întorcând 0 rezultate. NOTĂ: cât timp factura e Draft (InvoiceStatus=0,
+    // nesemnată în portal), SFS NU atribuie Seria/Number — vor fi goale aici.
     const inner =
       `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
       `<d:ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</d:ActorRole>` +
       `<d:Parameters>` +
       `<d:APIeInvoiceId>${escapeXml(apiInvoiceId)}</d:APIeInvoiceId>` +
-      `<d:InvoiceType>0</d:InvoiceType>` +
       `</d:Parameters>`;
     const xml = await this.call("SearchInvoices", inner);
     const block = xmlBlocks(xml, "Invoice")[0];
