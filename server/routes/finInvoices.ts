@@ -33,6 +33,7 @@ import {
   finInvoiceReminders,
 } from "../db/schema/finInvoices";
 import { finParties } from "../db/schema/finParties";
+import { tenants } from "../db/schema/tenants";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 export const finInvoicesRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -430,9 +431,33 @@ finInvoicesRoutes.get("/:id/pdf", async (c) => {
   };
   const title = titleMap[resolvedLang] ?? "FACTURĂ FISCALĂ";
 
+  // Issuer (tenant) and recipient (party) details — without these the Emitent/Destinatar blocks
+  // on the PDF were blank. Load both so the document shows who bills whom.
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+  let party: typeof finParties.$inferSelect | undefined;
+  if (invoice.partyId) {
+    const [p] = await db
+      .select()
+      .from(finParties)
+      .where(and(eq(finParties.id, invoice.partyId), eq(finParties.tenantId, tenantId)))
+      .limit(1);
+    party = p;
+  }
+  const issuer = {
+    name: tenant?.name ?? null,
+    iban: tenant?.iban ?? null,
+    bic: tenant?.bic ?? null,
+  };
+  const recipient = {
+    name: party?.name ?? null,
+    idno: party?.idno ?? null,
+    vatCode: party?.vatCode ?? null,
+    address: party?.address ?? null,
+  };
+
   // Return the html + metadata; client renders via finInvoicePdf.buildFinInvoiceHtml
   // or can print this html directly via window.print()
-  const html = buildInvoiceHtmlServer(invoice, lines, resolvedLang, title);
+  const html = buildInvoiceHtmlServer(invoice, lines, resolvedLang, title, issuer, recipient);
 
   return c.json({ data: { html, invoiceNumber: invoice.invoiceNumber, lang: resolvedLang } });
 });
@@ -458,7 +483,9 @@ function buildInvoiceHtmlServer(
     lineTotalCents: number;
   }>,
   lang: "ro" | "ru" | "en",
-  title: string
+  title: string,
+  issuer: { name: string | null; iban: string | null; bic: string | null } = { name: null, iban: null, bic: null },
+  recipient: { name: string | null; idno: string | null; vatCode: string | null; address: string | null } = { name: null, idno: null, vatCode: null, address: null }
 ): string {
   function esc(s: string | null | undefined): string {
     if (!s) return "";
@@ -530,11 +557,18 @@ ${invoice.notes ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;paddi
 <tr>
 <td style="width:50%;padding:12px 16px;border-right:1px solid #e2e8f0;vertical-align:top;">
 <div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Emitent / Issuer</div>
+<div style="font-size:12px;font-weight:700;color:#0f172a;">${esc(issuer.name) || "—"}</div>
+${issuer.iban ? `<div style="font-size:10px;color:#64748b;margin-top:2px;">IBAN: ${esc(issuer.iban)}</div>` : ""}
+${issuer.bic ? `<div style="font-size:10px;color:#64748b;">BIC/SWIFT: ${esc(issuer.bic)}</div>` : ""}
 <div style="border-bottom:1px solid #e2e8f0;margin:32px 0 4px;"></div>
 <div style="font-size:10px;color:#64748b;">${sigLabel[lang]}</div>
 </td>
 <td style="width:50%;padding:12px 16px;vertical-align:top;">
 <div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Beneficiar / Recipient</div>
+<div style="font-size:12px;font-weight:700;color:#0f172a;">${esc(recipient.name) || "—"}</div>
+${recipient.idno ? `<div style="font-size:10px;color:#64748b;margin-top:2px;">IDNO: ${esc(recipient.idno)}</div>` : ""}
+${recipient.vatCode ? `<div style="font-size:10px;color:#64748b;">Cod TVA: ${esc(recipient.vatCode)}</div>` : ""}
+${recipient.address ? `<div style="font-size:10px;color:#64748b;">${esc(recipient.address)}</div>` : ""}
 <div style="border-bottom:1px solid #e2e8f0;margin:32px 0 4px;"></div>
 <div style="font-size:10px;color:#64748b;">${sigLabel[lang]}</div>
 </td>
