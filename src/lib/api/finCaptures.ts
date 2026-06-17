@@ -317,6 +317,14 @@ export async function uploadInvoiceFile(
   return apiUpload<{ capture: FinCapture }>("/api/fin/captures", form);
 }
 
+/**
+ * Delete a capture. A statement also deletes its transaction lines; an invoice unlinks any
+ * statement lines that pointed to it. Used to clean up duplicate uploads.
+ */
+export async function deleteCapture(id: string): Promise<{ ok: true; id: string; kind: string }> {
+  return api<{ ok: true; id: string; kind: string }>(`/api/fin/captures/${id}`, { method: "DELETE" });
+}
+
 export interface CapturesSummary {
   month: string;
   totalDocuments: number;

@@ -1,6 +1,16 @@
 /**
- * Pure money-string parsing — no AI/db imports, safe to use from the pure matcher.
+ * Pure helpers — no AI/db imports, safe to use from the pure matcher and route handlers.
  */
+
+/**
+ * Strip characters a Postgres `text` column rejects (NUL 0x00) or that are noise (C0 control
+ * chars), keeping \n and \t. PDF text layers frequently contain 0x00 → storing it raises
+ * "invalid byte sequence for encoding UTF8: 0x00", which 500'd the capture upload.
+ */
+export function sanitizePgText(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\u0000/g, "").replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F]/g, " ");
+}
 
 /**
  * Parse a money string into a number, handling BOTH formats robustly:

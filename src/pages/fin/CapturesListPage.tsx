@@ -16,6 +16,7 @@ import {
   Sparkles,
   X,
   Link2,
+  Trash2,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useRouter } from "@/router/HashRouter";
@@ -24,6 +25,7 @@ import {
   getCaptures,
   getCapturesSummary,
   matchCaptures,
+  deleteCapture,
   formatMDLCents,
   CAPTURE_STATUS_LABELS,
   TEAM_LABELS,
@@ -382,6 +384,27 @@ export default function CapturesListPage() {
 
   const [matching, setMatching] = useState(false);
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const removeCapture = async (capture: FinCapture) => {
+    const isStatement = capture.kind === "statement";
+    const msg = isStatement
+      ? `Ștergi extrasul „${capture.fileName}" și toate tranzacțiile lui?`
+      : `Ștergi documentul „${capture.fileName}"?`;
+    if (!window.confirm(msg)) return;
+    setDeletingId(capture.id);
+    setError(null);
+    try {
+      await deleteCapture(capture.id);
+      setCaptures((prev) => prev.filter((c) => c.id !== capture.id));
+      setMatchResult(null); // counts are now stale
+      getCapturesSummary(month).then(setSummary).catch(() => {});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Eroare la ștergere");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const runMatch = async () => {
     setMatching(true);
@@ -601,34 +624,49 @@ export default function CapturesListPage() {
                     <td className="px-4 py-3">
                       <StatusBadge status={capture.status} />
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      {capture.status === "extracted" && (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {capture.status === "extracted" && (
+                          <button
+                            onClick={() => navigate(`/business/fin/captures/${capture.id}`)}
+                            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                          >
+                            {capture.kind === "statement" ? "Vezi tranzacții" : "Confirmă"}
+                          </button>
+                        )}
+                        {capture.status === "confirmed" && (
+                          <button
+                            onClick={() => navigate(`/business/fin/captures/${capture.id}`)}
+                            className="inline-flex min-h-[36px] items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                          >
+                            Detalii
+                          </button>
+                        )}
+                        {(capture.status === "pending" || capture.status === "processing") && (
+                          <span className="text-xs text-muted-foreground">Se procesează...</span>
+                        )}
+                        {capture.status === "failed" && (
+                          <button
+                            onClick={() => navigate(`/business/fin/captures/${capture.id}`)}
+                            className="inline-flex min-h-[36px] items-center rounded-lg border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/5"
+                          >
+                            Eroare
+                          </button>
+                        )}
                         <button
-                          onClick={() => navigate(`/business/fin/captures/${capture.id}`)}
-                          className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                          onClick={() => removeCapture(capture)}
+                          disabled={deletingId === capture.id}
+                          aria-label={`Șterge ${capture.fileName}`}
+                          title="Șterge"
+                          className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
                         >
-                          {capture.kind === "statement" ? "Vezi tranzacții" : "Confirmă"}
+                          {deletingId === capture.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          )}
                         </button>
-                      )}
-                      {capture.status === "confirmed" && (
-                        <button
-                          onClick={() => navigate(`/business/fin/captures/${capture.id}`)}
-                          className="inline-flex min-h-[36px] items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-                        >
-                          Detalii
-                        </button>
-                      )}
-                      {(capture.status === "pending" || capture.status === "processing") && (
-                        <span className="text-xs text-muted-foreground">Se procesează...</span>
-                      )}
-                      {capture.status === "failed" && (
-                        <button
-                          onClick={() => navigate(`/business/fin/captures/${capture.id}`)}
-                          className="inline-flex min-h-[36px] items-center rounded-lg border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/5"
-                        >
-                          Eroare
-                        </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}
