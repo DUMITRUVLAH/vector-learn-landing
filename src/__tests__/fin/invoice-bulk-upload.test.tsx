@@ -67,10 +67,12 @@ describe("InvoiceBulkUpload", () => {
     expect(screen.getByText(/ignorate/i)).toBeInTheDocument();
   });
 
-  it("rejects a file larger than 8MB", () => {
+  it("rejects a file larger than 4MB (Vercel body limit) but accepts one under it", () => {
     render(<InvoiceBulkUpload onUploaded={vi.fn()} />);
-    selectFiles([pdf("huge.pdf", 9_000_000)]);
-    expect(screen.queryByLabelText("Facturi selectate")).not.toBeInTheDocument();
+    selectFiles([pdf("ok.pdf", 3_000_000), pdf("huge.pdf", 5_000_000)]);
+    const list = screen.getByLabelText("Facturi selectate");
+    expect(within(list).getByText("ok.pdf")).toBeInTheDocument();
+    expect(within(list).queryByText("huge.pdf")).not.toBeInTheDocument();
     expect(screen.getByText(/ignorate/i)).toBeInTheDocument();
   });
 

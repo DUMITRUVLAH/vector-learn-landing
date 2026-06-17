@@ -236,12 +236,16 @@ export interface MatchResult {
 }
 
 /**
- * Run invoice ↔ transaction matching across statement lines. Optional month (YYYY-MM)
- * scopes both the transactions and the invoice pool to that month.
+ * Run invoice ↔ transaction matching across statement lines. Pass `captureId` to scope the
+ * match to ONE statement's transactions (Invoice Reporting page), or `month` (YYYY-MM) to
+ * scope to a month. With neither, it matches every outgoing line for the tenant.
  */
-export async function matchCaptures(month?: string): Promise<MatchResult> {
-  const qs = month ? `?month=${month}` : "";
-  return api<MatchResult>(`/api/fin/captures/match${qs}`, { method: "POST" });
+export async function matchCaptures(opts: { captureId?: string; month?: string } = {}): Promise<MatchResult> {
+  const qs = new URLSearchParams();
+  if (opts.captureId) qs.set("captureId", opts.captureId);
+  if (opts.month) qs.set("month", opts.month);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return api<MatchResult>(`/api/fin/captures/match${suffix}`, { method: "POST" });
 }
 
 /**

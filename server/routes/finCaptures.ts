@@ -371,6 +371,10 @@ finCapturesRoutes.post("/captures/match", async (c) => {
   const user = c.get("user");
   const month = c.req.query("month");
   const monthOk = month && /^\d{4}-\d{2}$/.test(month) ? month : null;
+  // Optional: scope the match to ONE statement's transactions. The Invoice Reporting page
+  // passes its own statement id so the result (and the "X of N" toast) reflects the 38 lines
+  // the user is looking at, not every outgoing line the tenant ever uploaded.
+  const statementId = c.req.query("captureId") ?? null;
 
   let start: Date | null = null;
   let end: Date | null = null;
@@ -391,16 +395,18 @@ finCapturesRoutes.post("/captures/match", async (c) => {
   }
   const invoices = await db.query.finCaptures.findMany({ where: and(...invoiceConds) });
 
-  // Transaction lines (outgoing only) for the tenant, optionally scoped to the month's statements.
+  // Transaction lines (outgoing only) for the tenant, optionally scoped to one statement or month.
   const lineConds = [
     eq(finCaptureLines.tenantId, user.tenantId),
     eq(finCaptureLines.direction, "out"),
   ];
+  // Scope to a single statement when captureId is given (the Invoice Reporting page does this).
+  if (statementId) lineConds.push(eq(finCaptureLines.captureId, statementId));
   const lines = await db.query.finCaptureLines.findMany({ where: and(...lineConds) });
 
   // Optionally scope lines to the month by looking at their parent statement's createdAt.
   let scopedLines = lines;
-  if (start && end) {
+  if (!statementId && start && end) {
     const monthCaptureIds = new Set(
       (await db.query.finCaptures.findMany({
         where: and(
@@ -596,18 +602,26 @@ finCapturesRoutes.post("/captures", async (c) => {
 
       // Images (JPG/PNG/WebP) → data URL for OpenAI vision (model reads the doc directly).
       // Cap at ~8MB to stay within request limits.
-      if (mimeType.startsWith("image/") && sizeBytes <= 8_000_000) {
-        const buf = Buffer.from(await file.arrayBuffer());
-        imageDataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
-      } else if (isPdf && !rawText.trim() && sizeBytes <= 8_000_000) {
-        // PDF digital (din Word/export) → extragem stratul de text pe server, ca
-        // utilizatorul să NU mai lipească manual. PDF scanat → text gol, cade pe
-        // fallback. Vision pe poze acoperă cazul scanat.
-        const buf = Buffer.from(await file.arrayBuffer());
-        rawText = await extractPdfText(buf);
-      } else if (isCsvLike && !rawText.trim() && sizeBytes <= 8_000_000) {
-        // CSV / extras de cont / text → citim conținutul ca text și-l dăm AI-ului.
-        rawText = await file.text();
+      // NOTE: text extraction is wrapped in try/catch — an encrypted/malformed PDF (or odd
+      // encoding) used to throw OUTSIDE the AI try/catch below and 500 the whole upload, which
+      // surfaced as "Eroare" in the bulk dropzone. Now it degrades to empty text: the capture is
+      // still saved (the accountant can fill fields / match manually), no hard error.
+      try {
+        if (mimeType.startsWith("image/") && sizeBytes <= 8_000_000) {
+          const buf = Buffer.from(await file.arrayBuffer());
+          imageDataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
+        } else if (isPdf && !rawText.trim() && sizeBytes <= 8_000_000) {
+          // PDF digital (din Word/export) → extragem stratul de text pe server, ca
+          // utilizatorul să NU mai lipească manual. PDF scanat → text gol, cade pe
+          // fallback. Vision pe poze acoperă cazul scanat.
+          const buf = Buffer.from(await file.arrayBuffer());
+          rawText = await extractPdfText(buf);
+        } else if (isCsvLike && !rawText.trim() && sizeBytes <= 8_000_000) {
+          // CSV / extras de cont / text → citim conținutul ca text și-l dăm AI-ului.
+          rawText = await file.text();
+        }
+      } catch {
+        rawText = rawText || ""; // unreadable file → proceed with no text, don't crash the upload
       }
     } else {
       return c.json({ error: "file_required" }, 400);

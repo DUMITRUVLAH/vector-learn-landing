@@ -20,8 +20,9 @@ import { cn } from "@/lib/utils";
 
 /** Max files accepted per batch (owner requirement). */
 export const MAX_INVOICE_FILES = 50;
-/** Max single-file size accepted server-side (8MB — matches the upload route). */
-const MAX_FILE_BYTES = 8_000_000;
+/** Max single-file size. Vercel's serverless request-body limit is ~4.5MB; bigger files get a
+ *  silent 413 from the platform (showed as "Eroare"), so we reject them up front with a message. */
+const MAX_FILE_BYTES = 4_000_000;
 /** How many uploads to run in parallel. Kept low: each upload runs server-side AI
  *  extraction, and too many at once can exceed Vercel's function timeout (→ 504). */
 const UPLOAD_CONCURRENCY = 2;
@@ -90,7 +91,7 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
           accepted.push({ id: nextId(), file, status: "queued" });
         }
         const msgs: string[] = [];
-        if (rejected > 0) msgs.push(`${rejected} fișier(e) ignorate (tip neacceptat sau >8MB).`);
+        if (rejected > 0) msgs.push(`${rejected} fișier(e) ignorate (tip neacceptat sau >4MB).`);
         if (overflow) msgs.push(`Maxim ${MAX_INVOICE_FILES} facturi pe lot — restul nu au fost adăugate.`);
         if (msgs.length) setLimitMsg(msgs.join(" "));
         return [...prev, ...accepted];
@@ -190,7 +191,7 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
         <span className="text-sm text-foreground">
           Trage facturile aici sau click pentru a alege (până la {MAX_INVOICE_FILES})
         </span>
-        <span className="text-xs text-muted-foreground">Poză, PDF sau CSV · max 8MB / fișier</span>
+        <span className="text-xs text-muted-foreground">Poză, PDF sau CSV · max 4MB / fișier</span>
         <input
           ref={inputRef}
           type="file"

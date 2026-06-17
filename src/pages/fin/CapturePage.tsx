@@ -194,20 +194,23 @@ function StatementLines({ captureId }: { captureId: string }) {
     }
   };
 
-  // After a batch of invoices is uploaded, auto-match them to the transactions and
-  // reload so the freshly-uploaded invoices snap onto their matching lines.
+  // After a batch of invoices is uploaded, auto-match them to THIS statement's transactions
+  // and reload so the freshly-uploaded invoices snap onto their matching lines. Scoped to the
+  // current statement (captureId) so the toast reflects the transactions the user is looking at.
   const handleInvoicesUploaded = async (successCount: number) => {
     setMatching(true);
     setUploadToast(null);
     try {
-      const res = await matchCaptures();
+      const res = await matchCaptures({ captureId });
       await load();
+      const invWord = successCount === 1 ? "factură încărcată" : "facturi încărcate";
       setUploadToast(
-        `${successCount} factur${successCount === 1 ? "ă încărcată" : "i încărcate"} · ${res.matchedCount} tranzacții cu factură, ${res.missingCount} fără.`,
+        `${successCount} ${invWord} · ${res.matchedCount} din ${res.totalLines} tranzacții au factură.`,
       );
     } catch {
       await load();
-      setUploadToast(`${successCount} factur${successCount === 1 ? "ă încărcată" : "i încărcate"}, dar potrivirea automată a eșuat.`);
+      const invWord = successCount === 1 ? "factură încărcată" : "facturi încărcate";
+      setUploadToast(`${successCount} ${invWord}, dar potrivirea automată a eșuat.`);
     } finally {
       setMatching(false);
     }

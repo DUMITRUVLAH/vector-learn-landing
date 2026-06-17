@@ -10,6 +10,7 @@
  * raw text heuristically (regex) so the demo works without an AI key on a real statement.
  */
 import { callAi, type AiCallOptions } from "./client";
+import { parseAmount } from "../fin/money";
 
 export interface StatementTxn {
   tx_date: string | null; // YYYY-MM-DD
@@ -46,31 +47,9 @@ Returnează DOAR JSON:
     "reportable":"review","reportable_reason":"...","reportable_confidence":0.6 }
 ] }`;
 
-/**
- * Parse a money string into a number, handling BOTH formats robustly:
- *   - European "3.128,50" (dot=thousands, comma=decimal) → 3128.50
- *   - Plain/US "3128.50" or "3,128.50" (dot=decimal) → 3128.50
- * The decimal separator is whichever of "." / "," appears LAST; the other is thousands.
- * (The old logic blindly stripped every "." → "3128.50" became 312850, a ×100 bug that
- *  showed Meta payments of ~3.128 L as -312.832,00 L.)
- */
-export function parseAmount(raw: string): number {
-  const s = raw.trim();
-  if (!s) return NaN;
-  const lastDot = s.lastIndexOf(".");
-  const lastComma = s.lastIndexOf(",");
-  let normalized: string;
-  if (lastDot === -1 && lastComma === -1) {
-    normalized = s;
-  } else if (lastComma > lastDot) {
-    // comma is the decimal separator → drop dots (thousands), comma → dot
-    normalized = s.replace(/\./g, "").replace(",", ".");
-  } else {
-    // dot is the decimal separator → drop commas (thousands)
-    normalized = s.replace(/,/g, "");
-  }
-  return parseFloat(normalized);
-}
+// parseAmount lives in ../fin/money (pure, no AI/db) so the matcher can share it; re-export
+// here for existing call sites that import it from statementExtractor.
+export { parseAmount } from "../fin/money";
 
 /** Heuristic fallback parser for MAIB-style statements (used in stub/mock mode). */
 export function parseStatementHeuristic(rawText: string): StatementTxn[] {

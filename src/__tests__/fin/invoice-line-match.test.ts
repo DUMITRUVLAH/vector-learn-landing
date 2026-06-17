@@ -87,4 +87,43 @@ describe("matchInvoiceToLines", () => {
     // Only date proximity (0.1) — below the 0.5 threshold → no match.
     expect(matchInvoiceToLines(inv, lines)).toBeNull();
   });
+
+  // ─── Regression: currency-agnostic dual-amount matching ──────────────────────
+  // invoiceForMatch() hardcodes currency to "MDL" (we don't capture invoice currency) and the
+  // AI may read the foreign figure OR an MDL figure off the document. The matcher must still
+  // map the invoice. The OLD code only checked the foreign amount and penalised the "MDL"
+  // currency, so a Meta/DigitalOcean invoice scored 0.35 and almost nothing matched.
+
+  it("matches a foreign-currency line even when the invoice currency is the hardcoded 'MDL'", () => {
+    const inv: InvoiceForMatch = {
+      vendorName: null, // amount alone must carry it
+      amountMajor: 15.99, // the EUR figure the AI read off the invoice
+      currency: "MDL", // what invoiceForMatch always sets
+      date: null,
+    };
+    const res = matchInvoiceToLines(inv, lines);
+    expect(res?.lineId).toBe("L1"); // "15.99 EUR" line — was null before the fix
+    expect(res?.confidence).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it("matches an MDL-only transaction (no origAmount) by the account amount", () => {
+    const inv: InvoiceForMatch = {
+      vendorName: null,
+      amountMajor: 1200, // 1200.00 MDL invoice
+      currency: "MDL",
+      date: null,
+    };
+    const res = matchInvoiceToLines(inv, lines);
+    expect(res?.lineId).toBe("L3"); // amountCents 120000 = 1200 MDL — never matched before the fix
+  });
+
+  it("still returns null for an amount that matches neither the foreign nor the MDL side", () => {
+    const inv: InvoiceForMatch = {
+      vendorName: null,
+      amountMajor: 7777.77,
+      currency: "MDL",
+      date: null,
+    };
+    expect(matchInvoiceToLines(inv, lines)).toBeNull();
+  });
 });
