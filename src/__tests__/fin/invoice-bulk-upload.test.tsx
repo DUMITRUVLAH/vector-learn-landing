@@ -16,19 +16,31 @@ import {
   InvoiceBulkUpload,
   MAX_INVOICE_FILES,
 } from "@/components/fin/InvoiceBulkUpload";
-import { uploadInvoiceBatch, type BatchItemResult } from "@/lib/api/finCaptures";
+import {
+  signCaptureUploads,
+  putToSignedUrl,
+  finalizeCaptures,
+  type BatchItemResult,
+} from "@/lib/api/finCaptures";
 import { ApiError } from "@/lib/api";
 
 vi.mock("@/lib/api/finCaptures", async (orig) => {
   const actual = await orig<typeof import("@/lib/api/finCaptures")>();
-  return { ...actual, uploadInvoiceBatch: vi.fn() };
+  return {
+    ...actual,
+    signCaptureUploads: vi.fn(),
+    putToSignedUrl: vi.fn(),
+    finalizeCaptures: vi.fn(),
+  };
 });
 
-const mockUpload = vi.mocked(uploadInvoiceBatch);
+const mockSign = vi.mocked(signCaptureUploads);
+const mockPut = vi.mocked(putToSignedUrl);
+const mockFinalize = vi.mocked(finalizeCaptures);
 
-/** Default mock: every file in the batch succeeds. */
-function allOk(files: File[]): { results: BatchItemResult[]; count: number; okCount: number } {
-  const results: BatchItemResult[] = files.map((f, i) => ({ ok: true, capture: { id: `c${i}`, fileName: f.name } as never, lineCount: 0 }));
+/** Default finalize mock: every uploaded object succeeds. */
+function finalizeOk(items: Array<{ fileName: string }>): { results: BatchItemResult[]; count: number; okCount: number } {
+  const results: BatchItemResult[] = items.map((it, i) => ({ ok: true, capture: { id: `c${i}`, fileName: it.fileName } as never, lineCount: 0 }));
   return { results, count: results.length, okCount: results.length };
 }
 
@@ -51,8 +63,15 @@ function selectFiles(files: File[]) {
 
 describe("InvoiceBulkUpload", () => {
   beforeEach(() => {
-    mockUpload.mockReset();
-    mockUpload.mockImplementation(async (files: File[]) => allOk(files));
+    mockSign.mockReset();
+    mockPut.mockReset();
+    mockFinalize.mockReset();
+    // sign → one signed URL per file; PUT → ok; finalize → all ok.
+    mockSign.mockImplementation(async (files) =>
+      files.map((f, i) => ({ fileName: f.fileName, path: `t1/${i}-${f.fileName}`, signedUrl: `https://supa/${i}` })),
+    );
+    mockPut.mockResolvedValue(undefined);
+    mockFinalize.mockImplementation(async (items) => finalizeOk(items));
   });
 
   it("renders the dropzone with a multiple file input", () => {
@@ -74,16 +93,16 @@ describe("InvoiceBulkUpload", () => {
     expect(screen.getByText(/ignorate/i)).toBeInTheDocument();
   });
 
-  it("rejects a file larger than 4MB (Vercel body limit) but accepts one under it", () => {
+  it("rejects a file larger than the cap but accepts one under it", () => {
     render(<InvoiceBulkUpload onUploaded={vi.fn()} />);
-    selectFiles([pdf("ok.pdf", 3_000_000), pdf("huge.pdf", 5_000_000)]);
+    selectFiles([pdf("ok.pdf", 3_000_000), pdf("huge.pdf", 13_000_000)]);
     const list = screen.getByLabelText("Facturi selectate");
     expect(within(list).getByText("ok.pdf")).toBeInTheDocument();
     expect(within(list).queryByText("huge.pdf")).not.toBeInTheDocument();
     expect(screen.getByText(/ignorate/i)).toBeInTheDocument();
   });
 
-  it("uploads queued files in one batch and calls onUploaded with the success count", async () => {
+  it("signs once, PUTs each file to storage, finalizes, and reports the success count", async () => {
     const onUploaded = vi.fn();
     render(<InvoiceBulkUpload onUploaded={onUploaded} />);
     selectFiles([pdf("a.pdf"), pdf("b.pdf")]);
@@ -91,46 +110,47 @@ describe("InvoiceBulkUpload", () => {
     fireEvent.click(screen.getByRole("button", { name: /Încarcă/i }));
 
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(2));
-    // 2 files fit in one batch → a single request with both files + team tag.
-    expect(mockUpload).toHaveBeenCalledTimes(1);
-    expect(mockUpload).toHaveBeenCalledWith([expect.any(File), expect.any(File)], "other");
+    // One sign request for all files; one PUT per file (direct to storage).
+    expect(mockSign).toHaveBeenCalledTimes(1);
+    expect(mockSign.mock.calls[0][0]).toHaveLength(2);
+    expect(mockPut).toHaveBeenCalledTimes(2);
+    // Both fit one finalize batch.
+    expect(mockFinalize).toHaveBeenCalledTimes(1);
   });
 
-  it("splits into multiple batches past the per-batch file cap", async () => {
+  it("finalizes in small batches past FINALIZE_BATCH", async () => {
     const onUploaded = vi.fn();
     render(<InvoiceBulkUpload onUploaded={onUploaded} />);
-    // 6 files, MAX_BATCH_FILES=4 → 2 batches (4 + 2).
+    // 6 files, FINALIZE_BATCH=4 → 2 finalize requests (4 + 2). Sign is still one request.
     selectFiles(Array.from({ length: 6 }, (_, i) => pdf(`f${i}.pdf`)));
 
     fireEvent.click(screen.getByRole("button", { name: /Încarcă/i }));
 
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(6));
-    expect(mockUpload).toHaveBeenCalledTimes(2);
-    expect(mockUpload.mock.calls[0][0]).toHaveLength(4);
-    expect(mockUpload.mock.calls[1][0]).toHaveLength(2);
+    expect(mockSign).toHaveBeenCalledTimes(1);
+    expect(mockPut).toHaveBeenCalledTimes(6);
+    expect(mockFinalize).toHaveBeenCalledTimes(2);
+    expect(mockFinalize.mock.calls[0][0]).toHaveLength(4);
+    expect(mockFinalize.mock.calls[1][0]).toHaveLength(2);
   });
 
-  it("reports the success count even when one file in the batch fails", async () => {
-    mockUpload.mockImplementation(async (files: File[]) => ({
-      results: [
-        { ok: true, capture: { id: "c1", fileName: files[0].name } as never, lineCount: 0 },
-        { ok: false, fileName: files[1].name, error: "upload_failed" },
-      ],
-      count: 2,
-      okCount: 1,
-    }));
+  it("a storage PUT failure marks only that file, others succeed", async () => {
+    mockPut.mockImplementation(async (url: string) => {
+      if (url.endsWith("/1")) throw new ApiError(500, "storage_500");
+    });
     const onUploaded = vi.fn();
     render(<InvoiceBulkUpload onUploaded={onUploaded} />);
     selectFiles([pdf("ok.pdf"), pdf("fail.pdf")]);
 
     fireEvent.click(screen.getByRole("button", { name: /Încarcă/i }));
 
+    // Only the file that PUT successfully reaches finalize → success count 1.
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(1));
+    expect(mockFinalize.mock.calls[0][0]).toHaveLength(1);
   });
 
   it("stops without retrying on a 403 rate-limit and shows the guidance banner", async () => {
-    // 6 files → 2 batches (4 + 2). First batch 403s → must STOP (not retry, not send batch 2).
-    mockUpload.mockRejectedValueOnce(new ApiError(403, "http_403"));
+    mockSign.mockRejectedValueOnce(new ApiError(403, "http_403"));
     const onUploaded = vi.fn();
     render(<InvoiceBulkUpload onUploaded={onUploaded} />);
     selectFiles(Array.from({ length: 6 }, (_, i) => pdf(`f${i}.pdf`)));
@@ -138,9 +158,9 @@ describe("InvoiceBulkUpload", () => {
     fireEvent.click(screen.getByRole("button", { name: /Încarcă/i }));
 
     await waitFor(() => expect(screen.getByText(/limitată temporar/i)).toBeInTheDocument());
-    // Only the first batch was attempted — no retry, no second batch.
-    expect(mockUpload).toHaveBeenCalledTimes(1);
-    // Nothing succeeded → onUploaded not called; files remain for a later retry.
+    // Sign 403'd → no PUTs, no finalize, no retry.
+    expect(mockPut).not.toHaveBeenCalled();
+    expect(mockFinalize).not.toHaveBeenCalled();
     expect(onUploaded).not.toHaveBeenCalled();
   });
 

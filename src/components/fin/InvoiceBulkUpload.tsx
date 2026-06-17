@@ -5,30 +5,35 @@
  * accountant uploads the missing invoices right next to the transactions they
  * must match, instead of going to a separate Captures page one file at a time.
  *
- * Each file is uploaded via POST /api/fin/captures (kind="document"); the AI
- * extracts its fields and it joins the invoice pool. Uploads run with bounded
- * concurrency so 50 large files don't open 50 simultaneous requests. When the
- * batch finishes, the parent is told (onUploaded) so it can auto-match + reload.
+ * Upload flow (direct-to-storage, robust for big/real receipts):
+ *   1. sign-uploads → one tiny JSON request returns a signed Supabase URL per file.
+ *   2. Each file's binary is PUT DIRECTLY to Supabase Storage (not through our
+ *      Vercel function) → no ~4.5MB body limit, no edge 4xx on large PDFs.
+ *   3. finalize (small batches) → server downloads each object, extracts fields,
+ *      creates the capture. The parent is told (onUploaded) to auto-match + reload.
  *
  * A11y: WCAG AA — keyboard-activable dropzone, aria-labels, ≥44px targets,
  * live region for progress. Design: Vector 365 tokens only, light + dark mode.
  */
 import { useCallback, useRef, useState } from "react";
 import { Upload, CheckCircle2, XCircle, Loader2, FileText, X } from "lucide-react";
-import { uploadInvoiceBatch, type FinDocTeam } from "@/lib/api/finCaptures";
+import {
+  signCaptureUploads,
+  putToSignedUrl,
+  finalizeCaptures,
+  type FinDocTeam,
+} from "@/lib/api/finCaptures";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /** Max files accepted per batch (owner requirement). */
 export const MAX_INVOICE_FILES = 50;
-/** Max single-file size. Vercel's serverless request-body limit is ~4.5MB; bigger files get a
- *  silent 413 from the platform (showed as "Eroare"), so we reject them up front with a message. */
-const MAX_FILE_BYTES = 4_000_000;
-/** Files are uploaded in BATCHES (several per request) so 50 invoices become a handful of
- *  requests, staying under Vercel's per-IP firewall rate-limit that 403'd rapid single uploads.
- *  A batch is bounded by file count (server processing time) and total bytes (≤4.5MB body limit). */
-const MAX_BATCH_FILES = 4;
-const MAX_BATCH_BYTES = 3_500_000;
+/** Max single-file size. The binary goes straight to Supabase Storage (not our function), so the
+ *  Vercel ~4.5MB body limit no longer applies; we still cap generously to keep AI extraction sane. */
+const MAX_FILE_BYTES = 12_000_000;
+/** How many uploaded objects to finalize (download + AI-extract server-side) per request. Small
+ *  so each finalize request stays well under the function timeout. */
+const FINALIZE_BATCH = 4;
 /** Edge rate-limit (Vercel firewall): 403/429. We must NOT retry these — retrying sends more
  *  requests and deepens the per-IP block. We stop and tell the user to wait / switch network. */
 function isRateLimited(e: unknown): boolean {
@@ -100,7 +105,7 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
           accepted.push({ id: nextId(), file, status: "queued" });
         }
         const msgs: string[] = [];
-        if (rejected > 0) msgs.push(`${rejected} fișier(e) ignorate (tip neacceptat sau >4MB).`);
+        if (rejected > 0) msgs.push(`${rejected} fișier(e) ignorate (tip neacceptat sau >12MB).`);
         if (overflow) msgs.push(`Maxim ${MAX_INVOICE_FILES} facturi pe lot — restul nu au fost adăugate.`);
         if (msgs.length) setLimitMsg(msgs.join(" "));
         return [...prev, ...accepted];
@@ -123,22 +128,11 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
   const setItemStatus = (id: string, status: ItemStatus, error?: string) =>
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status, error } : it)));
 
-  // Group queued items into batches bounded by count and total bytes.
-  const buildBatches = (queue: UploadItem[]): UploadItem[][] => {
-    const batches: UploadItem[][] = [];
-    let cur: UploadItem[] = [];
-    let curBytes = 0;
-    for (const it of queue) {
-      if (cur.length > 0 && (cur.length >= MAX_BATCH_FILES || curBytes + it.file.size > MAX_BATCH_BYTES)) {
-        batches.push(cur);
-        cur = [];
-        curBytes = 0;
-      }
-      cur.push(it);
-      curBytes += it.file.size;
-    }
-    if (cur.length) batches.push(cur);
-    return batches;
+  // Chunk a list into groups of `size`.
+  const chunk = <T,>(arr: T[], size: number): T[][] => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
   };
 
   const uploadAll = async () => {
@@ -148,35 +142,66 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
     setLimitMsg(null);
     setRateLimited(false);
 
-    // Upload in BATCHES (several files per request) → few requests, well under Vercel's per-IP
-    // rate-limit. IMPORTANT: do NOT retry on 403/429 — when the edge is rate-limiting the IP,
-    // retrying only sends MORE requests and deepens/extends the block (this is what hammered the
-    // connection before). Instead, stop immediately and tell the user to wait / switch network.
     let successCount = 0;
-    const batches = buildBatches(queue);
     let hitRateLimit = false;
-    for (const batch of batches) {
-      if (hitRateLimit) break;
-      batch.forEach((it) => setItemStatus(it.id, "uploading"));
-      try {
-        const { results } = await uploadInvoiceBatch(batch.map((it) => it.file), team);
-        batch.forEach((it, i) => {
-          const r = results[i];
-          if (r && r.ok) {
-            setItemStatus(it.id, "done");
-            successCount += 1;
-          } else {
-            setItemStatus(it.id, "error", r && !r.ok ? r.error : "Eroare");
+    try {
+      queue.forEach((it) => setItemStatus(it.id, "uploading"));
+
+      // 1) One tiny JSON request → a signed Supabase URL per file.
+      const signed = await signCaptureUploads(queue.map((it) => ({ fileName: it.file.name })));
+
+      // 2) Upload each binary DIRECTLY to Supabase Storage (NOT through our function → no body
+      //    limit, no edge 4xx on large files). A storage failure marks just that file.
+      const uploaded: Array<{ item: UploadItem; path: string }> = [];
+      await Promise.all(
+        queue.map(async (it, i) => {
+          const s = signed[i];
+          try {
+            await putToSignedUrl(s.signedUrl, it.file);
+            uploaded.push({ item: it, path: s.path });
+          } catch (e) {
+            setItemStatus(it.id, "error", e instanceof ApiError ? `storage_${e.status}` : "Eroare");
           }
-        });
-      } catch (e) {
-        if (isRateLimited(e)) {
-          // Edge rate-limit: stop now, leave the rest "queued" so the user can resume later.
-          hitRateLimit = true;
-          batch.forEach((it) => setItemStatus(it.id, "queued"));
-          break;
+        }),
+      );
+
+      // 3) Finalize in small batches: the server downloads each object and extracts its fields.
+      for (const group of chunk(uploaded, FINALIZE_BATCH)) {
+        if (hitRateLimit) break;
+        try {
+          const { results } = await finalizeCaptures(
+            group.map((g) => ({ path: g.path, fileName: g.item.file.name, mimeType: g.item.file.type })),
+            team,
+          );
+          group.forEach((g, i) => {
+            const r = results[i];
+            if (r && r.ok) {
+              setItemStatus(g.item.id, "done");
+              successCount += 1;
+            } else {
+              setItemStatus(g.item.id, "error", r && !r.ok ? r.error : "Eroare");
+            }
+          });
+        } catch (e) {
+          if (isRateLimited(e)) {
+            hitRateLimit = true;
+            group.forEach((g) => setItemStatus(g.item.id, "queued"));
+            break;
+          }
+          group.forEach((g) => setItemStatus(g.item.id, "error", e instanceof ApiError ? `http_${e.status}` : "Eroare"));
         }
-        batch.forEach((it) => setItemStatus(it.id, "error", e instanceof ApiError ? `http_${e.status}` : "Eroare"));
+      }
+    } catch (e) {
+      // sign-uploads itself failed (e.g. rate-limited or storage off) → flag, keep files queued.
+      if (isRateLimited(e)) {
+        hitRateLimit = true;
+        queue.forEach((it) => setItemStatus(it.id, "queued"));
+      } else {
+        queue.forEach((it) =>
+          it.status === "uploading"
+            ? setItemStatus(it.id, "error", e instanceof ApiError ? `http_${e.status}` : "Eroare")
+            : null,
+        );
       }
     }
 
@@ -233,7 +258,7 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
         <span className="text-sm text-foreground">
           Trage facturile aici sau click pentru a alege (până la {MAX_INVOICE_FILES})
         </span>
-        <span className="text-xs text-muted-foreground">Poză, PDF sau CSV · max 4MB / fișier</span>
+        <span className="text-xs text-muted-foreground">Poză, PDF sau CSV · max 12MB / fișier</span>
         <input
           ref={inputRef}
           type="file"
