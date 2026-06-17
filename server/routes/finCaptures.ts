@@ -37,6 +37,11 @@ import {
 } from "../lib/fin/invoiceLineMatch";
 import { extractPdfText } from "../lib/ai/pdfText";
 import { sanitizePgText } from "../lib/fin/money";
+import {
+  signCaptureUploads,
+  downloadCapture,
+  isStorageConfigured,
+} from "../lib/storage/captureStorage";
 
 export const finCapturesRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -566,6 +571,28 @@ async function deriveFileInput(file: File, tenantId: string, pastedRawText: stri
   return { fileName, mimeType, sizeBytes, fileKey, rawText, imageDataUrl };
 }
 
+/** Same as deriveFileInput but from raw bytes (the direct-to-storage finalize path: the browser
+ *  uploaded the binary to Supabase Storage, the server downloaded it here). Never throws. */
+async function deriveBufferInput(buf: Buffer, fileName: string, mimeType: string, fileKey: string) {
+  const sizeBytes = buf.length;
+  let rawText = "";
+  let imageDataUrl: string | undefined;
+  const isPdf = mimeType === "application/pdf" || /\.pdf$/i.test(fileName);
+  const isCsvLike = /csv|text\/plain/i.test(mimeType) || /\.(csv|mt940|sta|txt)$/i.test(fileName);
+  try {
+    if (mimeType.startsWith("image/") && sizeBytes <= 8_000_000) {
+      imageDataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
+    } else if (isPdf && sizeBytes <= 12_000_000) {
+      rawText = await extractPdfText(buf);
+    } else if (isCsvLike && sizeBytes <= 12_000_000) {
+      rawText = buf.toString("utf8");
+    }
+  } catch {
+    rawText = "";
+  }
+  return { fileName, mimeType, sizeBytes, fileKey, rawText, imageDataUrl };
+}
+
 /** Create a capture row and run extraction (statement → transaction lines, document → AI fields).
  *  Returns the serialized capture (+ lineCount for statements). Shared source of truth. */
 async function buildCapture(
@@ -771,6 +798,68 @@ finCapturesRoutes.post("/captures/batch", async (c) => {
       results.push({ ok: true, capture, lineCount });
     } catch (err) {
       results.push({ ok: false, fileName: file.name, error: err instanceof Error ? err.message : "upload_failed" });
+    }
+  }
+  const okCount = results.filter((r) => r.ok).length;
+  return c.json({ results, count: results.length, okCount }, 201);
+});
+
+// ─── Direct-to-storage upload (the robust path for big/real receipts) ────────
+// The binary goes browser → Supabase Storage (NOT through this function), dodging Vercel's
+// ~4.5MB body limit and edge protections that 4xx'd large multipart uploads. Only tiny JSON
+// requests hit us: (1) sign-uploads → signed URLs, (2) finalize → download+extract+create.
+
+const signUploadsSchema = z.object({
+  files: z.array(z.object({ fileName: z.string().min(1).max(300) })).min(1).max(50),
+});
+
+finCapturesRoutes.post("/captures/sign-uploads", zValidator("json", signUploadsSchema), async (c) => {
+  const user = c.get("user");
+  if (!isStorageConfigured()) return c.json({ error: "storage_not_configured" }, 503);
+  const { files } = c.req.valid("json");
+  try {
+    const uploads = await signCaptureUploads(user.tenantId, files);
+    return c.json({ uploads });
+  } catch (e) {
+    return c.json({ error: "sign_failed", message: e instanceof Error ? e.message : "sign_failed" }, 500);
+  }
+});
+
+const finalizeSchema = z.object({
+  team: z.string().optional(),
+  kind: z.enum(["document", "statement"]).optional(),
+  forceKind: z.boolean().optional(),
+  items: z
+    .array(z.object({ path: z.string().min(1), fileName: z.string().min(1), mimeType: z.string().optional() }))
+    .min(1)
+    .max(10), // small batches: each item downloads + AI-extracts server-side
+});
+
+finCapturesRoutes.post("/captures/finalize", zValidator("json", finalizeSchema), async (c) => {
+  const user = c.get("user");
+  if (!isStorageConfigured()) return c.json({ error: "storage_not_configured" }, 503);
+  const { items, team: teamRaw, kind: kindRaw, forceKind } = c.req.valid("json");
+  const team = teamRaw && FIN_DOC_TEAMS.includes(teamRaw as never) ? teamRaw : "other";
+  const kind = kindRaw === "statement" ? "statement" : "document";
+
+  const results: Array<
+    | { ok: true; capture: ReturnType<typeof serializeCapture>; lineCount: number }
+    | { ok: false; fileName: string; error: string }
+  > = [];
+  for (const item of items) {
+    // Tenant safety: the path must live under the tenant's folder (signed URLs are issued that way).
+    if (!item.path.startsWith(`${user.tenantId}/`)) {
+      results.push({ ok: false, fileName: item.fileName, error: "forbidden_path" });
+      continue;
+    }
+    try {
+      const buf = await downloadCapture(item.path);
+      const mimeType = item.mimeType || (/\.pdf$/i.test(item.fileName) ? "application/pdf" : "application/octet-stream");
+      const derived = await deriveBufferInput(buf, item.fileName, mimeType, item.path);
+      const { capture, lineCount } = await buildCapture(user, { ...derived, kind, forceKind: forceKind ?? false, team });
+      results.push({ ok: true, capture, lineCount });
+    } catch (e) {
+      results.push({ ok: false, fileName: item.fileName, error: e instanceof Error ? e.message : "finalize_failed" });
     }
   }
   const okCount = results.filter((r) => r.ok).length;

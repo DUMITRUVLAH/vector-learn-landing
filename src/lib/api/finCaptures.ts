@@ -6,7 +6,7 @@
  *   POST /api/fin/captures/:id/confirm — confirmă + creează cheltuiala
  *   GET  /api/fin/captures             — lista capturi (paginată)
  */
-import { api, apiUpload } from "../api";
+import { api, apiUpload, ApiError } from "../api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -321,6 +321,48 @@ export async function uploadInvoiceFile(
 export type BatchItemResult =
   | { ok: true; capture: FinCapture; lineCount: number }
   | { ok: false; fileName: string; error: string };
+
+// ─── Direct-to-storage upload (robust path for big/real receipts) ────────────
+// The file binary goes straight from the browser to Supabase Storage (NOT through the Vercel
+// function), so large/real receipts no longer hit the ~4.5MB body limit or edge protections.
+
+interface SignedUpload {
+  fileName: string;
+  path: string;
+  signedUrl: string;
+}
+
+/** Ask the server for signed upload URLs (one per file). Tiny JSON request. */
+export async function signCaptureUploads(
+  files: Array<{ fileName: string }>,
+): Promise<SignedUpload[]> {
+  const res = await api<{ uploads: SignedUpload[] }>("/api/fin/captures/sign-uploads", {
+    method: "POST",
+    body: JSON.stringify({ files }),
+  });
+  return res.uploads;
+}
+
+/** PUT the file body straight to Supabase Storage's signed URL (bypasses our function). */
+export async function putToSignedUrl(signedUrl: string, file: File): Promise<void> {
+  const r = await fetch(signedUrl, {
+    method: "PUT",
+    headers: { "content-type": file.type || "application/octet-stream", "x-upsert": "true" },
+    body: file,
+  });
+  if (!r.ok) throw new ApiError(r.status, `storage_put_${r.status}`);
+}
+
+/** Finalize a batch of already-uploaded objects: server downloads + extracts + creates captures. */
+export async function finalizeCaptures(
+  items: Array<{ path: string; fileName: string; mimeType?: string }>,
+  team: FinDocTeam = "other",
+): Promise<BatchUploadResult> {
+  return api<BatchUploadResult>("/api/fin/captures/finalize", {
+    method: "POST",
+    body: JSON.stringify({ items, team, kind: "document", forceKind: true }),
+  });
+}
 
 export interface BatchUploadResult {
   results: BatchItemResult[];

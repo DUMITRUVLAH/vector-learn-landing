@@ -28,7 +28,7 @@ dotenv.config({ path: ".env.local", override: false });
 /** First env var whose name ends with `suffix` and has a value.
  *  Handles the Vercel↔Supabase integration which prefixes vars by store name,
  *  e.g. `learningvectortop_POSTGRES_URL_NON_POOLING`. */
-function bySuffix(suffix: string): string | undefined {
+export function bySuffix(suffix: string): string | undefined {
   const exact = process.env[suffix];
   if (exact) return exact;
   const key = Object.keys(process.env).find(
