@@ -423,7 +423,9 @@ export default function CapturesListPage() {
     setLoading(true);
     setError(null);
     Promise.all([
-      getCaptures({ team: teamFilter || undefined, month }),
+      // hideMatched: keep the main list to statements + still-unmatched documents; invoices/
+      // receipts already attributed to a statement appear under that statement, not here.
+      getCaptures({ team: teamFilter || undefined, month, hideMatched: true }),
       getCapturesSummary(month),
     ])
       .then(([list, sum]) => {

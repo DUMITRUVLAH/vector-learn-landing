@@ -172,6 +172,8 @@ export async function getCaptures(
     month?: string;
     reportable?: ReportableStatus;
     documentClass?: DocumentClassStatus;
+    /** Hide invoice/receipt documents already attributed to a statement (main list only). */
+    hideMatched?: boolean;
   } = {},
 ): Promise<CapturesListResult> {
   const qs = new URLSearchParams({ page: String(opts.page ?? 1) });
@@ -179,6 +181,7 @@ export async function getCaptures(
   if (opts.month) qs.set("month", opts.month);
   if (opts.reportable) qs.set("reportable", opts.reportable);
   if (opts.documentClass) qs.set("documentClass", opts.documentClass);
+  if (opts.hideMatched) qs.set("hideMatched", "1");
   return api<CapturesListResult>(`/api/fin/captures?${qs.toString()}`);
 }
 
