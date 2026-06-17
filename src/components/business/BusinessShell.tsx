@@ -26,6 +26,13 @@ import {
   Settings,
   FileSpreadsheet,
   Wand2,
+  Zap,
+  RefreshCw,
+  Calendar,
+  ListChecks,
+  TrendingUp,
+  ShieldCheck,
+  Shield,
 } from "lucide-react";
 import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
@@ -58,22 +65,39 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    section: "FinDesk",
+    // SPLIT-402: this is the SINGLE Business Suite menu (was split across BusinessShell +
+    // AppShell.BUSINESS_NAV_GROUPS). It's the full superset so no module is lost when AppShell
+    // delegates here. Keep grouped + curated.
+    section: "FinDesk — Finanțe",
     items: [
       { label: "Acasă FinDesk", href: "/business/fin/", icon: Home },
       { label: "Facturi", href: "/business/fin/invoices", icon: Receipt },
+      { label: "Cont de plată", href: "/business/fin/invoices/document", icon: FileText },
+      { label: "e-Factura", href: "/business/fin/einvoices", icon: FileText },
+      { label: "Încasări", href: "/business/fin/payments", icon: CreditCard },
       { label: "Cheltuieli", href: "/business/fin/expenses", icon: DollarSign },
-      { label: "Plăți", href: "/business/fin/payments", icon: CreditCard },
-      { label: "Conturi bancare", href: "/business/fin/banklink", icon: Banknote },
       { label: "Parteneri", href: "/business/fin/parties", icon: Users },
-      { label: "Rapoarte", href: "/business/fin/export", icon: BarChart3 },
+      { label: "Acorduri", href: "/business/fin/agreements", icon: FileText },
+      { label: "Registru general", href: "/business/fin/ledger", icon: Landmark },
+      { label: "TVA & declarații", href: "/business/fin/tax", icon: ClipboardList },
+      { label: "Salarii", href: "/business/fin/payroll", icon: DollarSign },
+      { label: "Mijloace fixe", href: "/business/fin/assets", icon: Building2 },
+      { label: "Stocuri", href: "/business/fin/inventory", icon: BookOpen },
+      { label: "Buget", href: "/business/fin/budget", icon: BarChart3 },
+      { label: "Tablou de bord", href: "/business/fin/ledger", icon: TrendingUp },
+      { label: "Invoice Reporting", href: "/business/fin/captures", icon: Zap },
+      { label: "Reconciliere & TVA import", href: "/business/fin/reconcile", icon: RefreshCw },
+      { label: "Conturi bancare", href: "/business/fin/banklink", icon: Banknote },
+      { label: "Calendar fiscal", href: "/business/fin/calendar", icon: Calendar },
+      { label: "Operațiuni în masă", href: "/business/fin/mass", icon: ListChecks },
+      { label: "Export & rapoarte", href: "/business/fin/export", icon: BarChart3 },
     ],
   },
   {
     section: "PAR — Cereri de plată",
     items: [
       { label: "Cereri", href: "/business/par", icon: ClipboardList },
-      { label: "Inbox aprobare", href: "/business/par/inbox", icon: BookOpen },
+      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck },
       { label: "Rapoarte PAR", href: "/business/par/reports", icon: FileText },
     ],
   },
@@ -82,8 +106,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       // FIX-503: ItparkDetail is mounted at /business/fin/itpark (not /business/itpark)
       { label: "Rezidenți", href: "/business/fin/itpark", icon: Building2 },
-      // /business/itpark/dashboard has no dedicated route; redirect to the ITPark page
-      { label: "Dashboard ITPark", href: "/business/fin/itpark", icon: Landmark },
     ],
   },
   {
@@ -98,9 +120,10 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    section: null,
+    section: "Setări",
     items: [
-      { label: "Setări", href: "/business/fin/settings/security", icon: Settings },
+      { label: "Securitate", href: "/business/fin/settings/security", icon: Shield },
+      { label: "Audit AI", href: "/business/fin/settings/ai-audit", icon: Settings },
     ],
   },
 ];

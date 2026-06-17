@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark, Building2, Briefcase, RefreshCw, FileSpreadsheet } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { BranchSwitcher } from "@/components/app/BranchSwitcher";
 import { Link, useRouter } from "@/router/HashRouter";
@@ -254,6 +255,19 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
   const bizUserInitials = bizData?.user?.name
     ? bizData.user.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()
     : "BS";
+
+  // SPLIT-402: ONE shell for Business Suite. Many /business/* pages historically imported
+  // AppShell, which rendered a second, divergent sidebar (and leaked the tenant name in the
+  // header). The canonical Business chrome is BusinessShell, so we delegate to it here — every
+  // /business/* page now gets the identical sidebar/header with zero per-page changes. The CRM
+  // branch below is legacy (/app/* routes only). All hooks above run unconditionally first.
+  if (isBusiness) {
+    return (
+      <BusinessShell pageTitle={pageTitle ?? ""} pageDescription={pageDescription} actions={actions}>
+        {children}
+      </BusinessShell>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
