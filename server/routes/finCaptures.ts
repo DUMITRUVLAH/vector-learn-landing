@@ -99,6 +99,10 @@ function serializeCapture(c: typeof finCaptures.$inferSelect) {
     reportable: c.reportable,
     reportableReason: c.reportableReason,
     reportableConfidenceBp: c.reportableConfidenceBp,
+    // Document Classification verdict
+    documentClass: c.documentClass,
+    documentClassReason: c.documentClassReason,
+    documentClassConfidenceBp: c.documentClassConfidenceBp,
     reviewedBy: c.reviewedBy,
     reviewedAt: c.reviewedAt?.toISOString() ?? null,
     reviewNote: c.reviewNote,
@@ -130,6 +134,11 @@ finCapturesRoutes.get("/captures", async (c) => {
   const reportable = c.req.query("reportable");
   if (reportable && ["yes", "no", "review"].includes(reportable)) {
     conditions.push(eq(finCaptures.reportable, reportable));
+  }
+  // Document Classification: filter by document class (invoice | receipt | not_invoice | review).
+  const documentClass = c.req.query("documentClass");
+  if (documentClass && ["invoice", "receipt", "not_invoice", "review"].includes(documentClass)) {
+    conditions.push(eq(finCaptures.documentClass, documentClass));
   }
   if (month && /^\d{4}-\d{2}$/.test(month)) {
     const start = new Date(`${month}-01T00:00:00.000Z`);
@@ -506,6 +515,14 @@ finCapturesRoutes.post("/captures", async (c) => {
         ? "no"
         : "review";
 
+  // Document Classification: derive the document-class verdict column.
+  // A confident class ("invoice"/"receipt"/"not_invoice") is kept; null or low confidence
+  // → "review" so the team/accountant looks at it. "Flag, don't block" — never rejects the upload.
+  const dcField = extractedFields?.document_class;
+  const dcConf = dcField?.confidence ?? 0;
+  const documentClass =
+    dcField?.value && dcConf >= 0.7 ? dcField.value : "review";
+
   // Actualizează capture cu rezultatul extracției
   const [updated] = await db
     .update(finCaptures)
@@ -516,6 +533,9 @@ finCapturesRoutes.post("/captures", async (c) => {
       reportable,
       reportableReason: repField?.reason ?? null,
       reportableConfidenceBp: Math.round(repConf * 10000),
+      documentClass,
+      documentClassReason: dcField?.reason ?? null,
+      documentClassConfidenceBp: Math.round(dcConf * 10000),
       updatedAt: new Date(),
     })
     .where(eq(finCaptures.id, capture.id))

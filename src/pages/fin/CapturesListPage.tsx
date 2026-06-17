@@ -27,12 +27,14 @@ import {
   TEAM_LABELS,
   CATEGORY_LABELS,
   REPORTABLE_LABELS,
+  DOCUMENT_CLASS_LABELS,
   type FinCapture,
   type FinCaptureStatus,
   type FinDocTeam,
   type CapturesSummary,
   type ExpenseCategory,
   type ReportableStatus,
+  type DocumentClassStatus,
 } from "@/lib/api/finCaptures";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +72,23 @@ function ReportableBadge({ value }: { value: ReportableStatus }) {
   return (
     <span className={cn("rounded px-2 py-0.5 text-xs font-medium", styles[value])}>
       {REPORTABLE_LABELS[value]}
+    </span>
+  );
+}
+
+// ─── Document-class verdict badge ───────────────────────────────────────────────
+// "not_invoice" is styled as a warning so a wrongly-uploaded file jumps out at a glance.
+
+function DocumentClassBadge({ value }: { value: DocumentClassStatus }) {
+  const styles: Record<DocumentClassStatus, string> = {
+    invoice: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
+    receipt: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
+    not_invoice: "bg-destructive/10 text-destructive",
+    review: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  };
+  return (
+    <span className={cn("rounded px-2 py-0.5 text-xs font-medium", styles[value])}>
+      {DOCUMENT_CLASS_LABELS[value]}
     </span>
   );
 }
@@ -475,6 +494,7 @@ export default function CapturesListPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Echipă</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Scop (AI)</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">Sumă</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Tip document (AI)</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Raportare (AI)</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-muted-foreground">Acțiune</th>
@@ -501,6 +521,16 @@ export default function CapturesListPage() {
                     </td>
                     <td className="px-4 py-3 text-right font-medium text-foreground">
                       {formatMDLCents(capture.extractedFields?.amount_cents?.value ?? null)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-0.5">
+                        <DocumentClassBadge value={capture.documentClass} />
+                        {capture.documentClassReason && (
+                          <span className="max-w-[200px] truncate text-[11px] text-muted-foreground" title={capture.documentClassReason}>
+                            {capture.documentClassReason}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-0.5">

@@ -37,6 +37,7 @@ import {
   CAPTURE_STATUS_LABELS,
   CATEGORY_LABELS,
   REPORTABLE_LABELS,
+  DOCUMENT_CLASS_LABELS,
   type FinCapture,
   type FinCaptureStatus,
   type ExpenseCategory,
@@ -437,6 +438,54 @@ export default function CapturePage({ captureId }: { captureId: string }) {
 
         {/* Statement: the extracted transaction lines (one per bank-statement row) */}
         {capture.kind === "statement" && <StatementLines captureId={capture.id} />}
+
+        {/* Document Classification: AI verdict on WHAT the upload is (single-document only).
+            "not_invoice" is surfaced as a warning so the accountant spots a wrongly-uploaded
+            file before working through the (untrustworthy) extracted fields. Flag, don't block. */}
+        {capture.kind !== "statement" && (capture.status === "extracted" || capture.status === "confirmed") && (
+          <div
+            className={cn(
+              "rounded-xl border p-4 sm:p-5",
+              capture.documentClass === "not_invoice"
+                ? "border-destructive/40 bg-destructive/5"
+                : "border-border bg-card",
+            )}
+          >
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Tip document (AI)
+            </p>
+            <div className="mt-1 flex items-center gap-2">
+              <span
+                className={cn(
+                  "rounded px-2 py-0.5 text-sm font-semibold",
+                  capture.documentClass === "invoice"
+                    ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+                    : capture.documentClass === "receipt"
+                      ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+                      : capture.documentClass === "not_invoice"
+                        ? "bg-destructive/10 text-destructive"
+                        : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+                )}
+              >
+                {DOCUMENT_CLASS_LABELS[capture.documentClass]}
+              </span>
+              {capture.documentClassConfidenceBp > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  încredere {Math.round(capture.documentClassConfidenceBp / 100)}%
+                </span>
+              )}
+            </div>
+            {capture.documentClassReason && (
+              <p className="mt-1.5 text-sm text-muted-foreground">{capture.documentClassReason}</p>
+            )}
+            {capture.documentClass === "not_invoice" && (
+              <p className="mt-2 text-sm font-medium text-destructive">
+                AI crede că acest fișier nu este o factură sau un bon. Verifică înainte de a-l confirma
+                ca o cheltuială.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Invoice Reporting: AI verdict + reviewer approve/reject (single-document only) */}
         {capture.kind !== "statement" && (capture.status === "extracted" || capture.status === "confirmed") && (

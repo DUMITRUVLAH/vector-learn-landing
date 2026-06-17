@@ -35,6 +35,7 @@ export interface ExtractedFields {
   reference?: CapturedField<string | null>;
   purpose?: CapturedField<string | null>;
   reportable?: CapturedField<boolean | null>;
+  document_class?: CapturedField<DocumentClass | null>;
 }
 
 /** Invoice Reporting: derived reportable status. */
@@ -43,6 +44,19 @@ export type ReportableStatus = "yes" | "no" | "review";
 export const REPORTABLE_LABELS: Record<ReportableStatus, string> = {
   yes: "Pentru raportare",
   no: "Neraportabil",
+  review: "De verificat",
+};
+
+/** Document Classification: what kind of document the AI thinks was uploaded. */
+export type DocumentClass = "invoice" | "receipt" | "not_invoice";
+
+/** Derived document-class status (AI verdict, "review" when unsure/low-confidence). */
+export type DocumentClassStatus = DocumentClass | "review";
+
+export const DOCUMENT_CLASS_LABELS: Record<DocumentClassStatus, string> = {
+  invoice: "Factură",
+  receipt: "Bon / chitanță",
+  not_invoice: "Nu pare factură",
   review: "De verificat",
 };
 
@@ -86,6 +100,10 @@ export interface FinCapture {
   reportable: ReportableStatus;
   reportableReason: string | null;
   reportableConfidenceBp: number;
+  // Document Classification verdict
+  documentClass: DocumentClassStatus;
+  documentClassReason: string | null;
+  documentClassConfidenceBp: number;
   reviewedBy: string | null;
   reviewedAt: string | null;
   reviewNote: string | null;
@@ -148,12 +166,19 @@ export async function confirmCapture(
 }
 
 export async function getCaptures(
-  opts: { page?: number; team?: FinDocTeam; month?: string; reportable?: ReportableStatus } = {},
+  opts: {
+    page?: number;
+    team?: FinDocTeam;
+    month?: string;
+    reportable?: ReportableStatus;
+    documentClass?: DocumentClassStatus;
+  } = {},
 ): Promise<CapturesListResult> {
   const qs = new URLSearchParams({ page: String(opts.page ?? 1) });
   if (opts.team) qs.set("team", opts.team);
   if (opts.month) qs.set("month", opts.month);
   if (opts.reportable) qs.set("reportable", opts.reportable);
+  if (opts.documentClass) qs.set("documentClass", opts.documentClass);
   return api<CapturesListResult>(`/api/fin/captures?${qs.toString()}`);
 }
 
