@@ -8,12 +8,15 @@
  * - Client-side validation: at least one line, vatPct required (FIN-CORE Rule #1)
  */
 import { useState } from "react";
-import { X, Plus, Trash2, Loader2 } from "lucide-react";
+import { X, Plus, Trash2, Loader2, Search, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   createFinInvoice,
   type CreateFinInvoiceLineInput,
 } from "@/lib/api/finInvoices";
+import { getRegistryCompany } from "@/lib/api/paymentAccounts";
+import { createParty, listParties } from "@/lib/api/finParties";
+import { ApiError } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,9 +41,54 @@ export function FinInvoiceCreateModal({ onClose, onCreated }: Props) {
   const [currency, setCurrency] = useState<"MDL" | "EUR" | "USD">("MDL");
   const [dueDate, setDueDate] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
-  const [partyName, setPartyName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // ─── Beneficiary company: IDNO lookup → autofill + reuse/create fin_party ────
+  const [idno, setIdno] = useState<string>("");
+  const [partyName, setPartyName] = useState<string>("");
+  const [partyId, setPartyId] = useState<string | null>(null);
+  const [partyAddress, setPartyAddress] = useState<string>("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
+  async function lookupByIdno() {
+    const code = idno.trim();
+    if (!code) return;
+    setLookupLoading(true);
+    setLookupError(null);
+    setPartyId(null);
+    try {
+      // 1) Pull the company from the public registry (same API the PAR/Cont-plată flow uses).
+      const { data } = await getRegistryCompany(code);
+      setPartyName(data.name);
+      setPartyAddress([data.address, data.city].filter(Boolean).join(", "));
+      // 2) Reuse an existing fin_party with this IDNO, else create one — the invoice (and its
+      //    "Cont de plată" PDF) links to a fin_party, which carries idno/address.
+      const existing = await listParties({ search: code });
+      const match = existing.data.find((p) => p.idno === code);
+      if (match) {
+        setPartyId(match.id);
+      } else {
+        const created = await createParty({
+          kind: "client",
+          name: data.name,
+          country: "MD",
+          idno: code,
+          address: [data.address, data.city].filter(Boolean).join(", ") || null,
+        });
+        setPartyId(created.data.id);
+      }
+    } catch (e) {
+      setLookupError(
+        e instanceof ApiError && e.status === 404
+          ? "Firma nu a fost găsită în registru pentru acest IDNO."
+          : "Nu am putut căuta firma. Verifică IDNO-ul și încearcă din nou.",
+      );
+    } finally {
+      setLookupLoading(false);
+    }
+  }
 
   // ─── Line management ─────────────────────────────────────────────────
 
@@ -121,6 +169,7 @@ export function FinInvoiceCreateModal({ onClose, onCreated }: Props) {
       }));
 
       await createFinInvoice({
+        partyId: partyId ?? undefined,
         lines: linesPayload,
         currency,
         dueDate: dueDate || null,
@@ -160,22 +209,57 @@ export function FinInvoiceCreateModal({ onClose, onCreated }: Props) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Party (text input — future: autocomplete from fin_parties) */}
+          {/* Beneficiary — look up the company by IDNO from the registry (autofills name+address) */}
           <div>
-            <label
-              htmlFor="fin-party-name"
-              className="block text-sm font-medium text-foreground mb-1"
-            >
-              Partener (beneficiar)
+            <label htmlFor="fin-party-idno" className="block text-sm font-medium text-foreground mb-1">
+              Partener (beneficiar) — caută după IDNO
             </label>
+            <div className="flex gap-2">
+              <input
+                id="fin-party-idno"
+                type="text"
+                inputMode="numeric"
+                value={idno}
+                onChange={(e) => {
+                  setIdno(e.target.value);
+                  setPartyId(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    lookupByIdno();
+                  }
+                }}
+                placeholder="IDNO firmă (ex. 1003600000000)"
+                className="flex-1 px-3 py-2 rounded-md border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                type="button"
+                onClick={lookupByIdno}
+                disabled={lookupLoading || !idno.trim()}
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+              >
+                {lookupLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Caută
+              </button>
+            </div>
+            {/* Editable name (autofilled by lookup, but can be typed manually too) */}
             <input
-              id="fin-party-name"
               type="text"
               value={partyName}
               onChange={(e) => setPartyName(e.target.value)}
-              placeholder="Numele companiei..."
-              className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder="Numele companiei (se completează automat din IDNO)"
+              className="mt-2 w-full px-3 py-2 rounded-md border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
+            {partyId && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Firmă găsită{partyAddress ? ` · ${partyAddress}` : ""} — va apărea pe Contul de plată.
+              </p>
+            )}
+            {lookupError && (
+              <p className="mt-1 text-xs text-destructive" role="alert">{lookupError}</p>
+            )}
           </div>
 
           {/* Currency + Due Date */}
