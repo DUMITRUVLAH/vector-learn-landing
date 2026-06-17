@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { CaptureFieldRow } from "@/components/fin/CaptureFieldRow";
+import { InvoiceBulkUpload } from "@/components/fin/InvoiceBulkUpload";
 import { useRouter } from "@/router/HashRouter";
 import {
   getCapture,
@@ -34,6 +35,7 @@ import {
   getCaptureLines,
   reviewCaptureLine,
   matchLineManual,
+  matchCaptures,
   formatMDLCents,
   parseMDLToCents,
   CAPTURE_STATUS_LABELS,
@@ -141,6 +143,8 @@ function StatementLines({ captureId }: { captureId: string }) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<ReportableStatus | "all">("all");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [matching, setMatching] = useState(false);
+  const [uploadToast, setUploadToast] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -190,6 +194,25 @@ function StatementLines({ captureId }: { captureId: string }) {
     }
   };
 
+  // After a batch of invoices is uploaded, auto-match them to the transactions and
+  // reload so the freshly-uploaded invoices snap onto their matching lines.
+  const handleInvoicesUploaded = async (successCount: number) => {
+    setMatching(true);
+    setUploadToast(null);
+    try {
+      const res = await matchCaptures();
+      await load();
+      setUploadToast(
+        `${successCount} factur${successCount === 1 ? "ă încărcată" : "i încărcate"} · ${res.matchedCount} tranzacții cu factură, ${res.missingCount} fără.`,
+      );
+    } catch {
+      await load();
+      setUploadToast(`${successCount} factur${successCount === 1 ? "ă încărcată" : "i încărcate"}, dar potrivirea automată a eșuat.`);
+    } finally {
+      setMatching(false);
+    }
+  };
+
   const counts = {
     all: lines.length,
     yes: lines.filter((l) => l.reportable === "yes").length,
@@ -198,7 +221,25 @@ function StatementLines({ captureId }: { captureId: string }) {
   };
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
+    <div className="space-y-4">
+      {/* Bulk invoice upload: add the missing invoices right here, then auto-match. */}
+      <InvoiceBulkUpload onUploaded={handleInvoicesUploaded} />
+
+      {uploadToast && (
+        <div className="flex items-center gap-2 rounded-lg bg-green-100 px-4 py-3 text-green-800 dark:bg-green-900/40 dark:text-green-300">
+          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="text-sm font-medium">{uploadToast}</span>
+        </div>
+      )}
+
+      {matching && (
+        <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-3 text-muted-foreground">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+          <span className="text-sm font-medium">Se potrivesc facturile cu tranzacțiile…</span>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-foreground">
           Tranzacții din extras ({counts.all})
@@ -317,6 +358,7 @@ function StatementLines({ captureId }: { captureId: string }) {
           </table>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -6,7 +6,7 @@
  *   POST /api/fin/captures/:id/confirm — confirmă + creează cheltuiala
  *   GET  /api/fin/captures             — lista capturi (paginată)
  */
-import { api } from "../api";
+import { api, apiUpload } from "../api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -291,6 +291,21 @@ export async function uploadCapture(payload: {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+/**
+ * Upload a single invoice/receipt file (kind="document") via multipart, so the AI
+ * extracts its fields and it joins the pool matched against statement transactions.
+ * Used by the bulk invoice dropzone on the Invoice Reporting page.
+ */
+export async function uploadInvoiceFile(
+  file: File,
+  team: FinDocTeam = "other",
+): Promise<{ capture: FinCapture }> {
+  const form = new FormData();
+  form.set("team", team);
+  form.set("file", file, file.name);
+  return apiUpload<{ capture: FinCapture }>("/api/fin/captures", form);
 }
 
 export interface CapturesSummary {
