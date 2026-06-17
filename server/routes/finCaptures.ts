@@ -31,7 +31,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { extractCaptureFields } from "../lib/ai/captureExtractor";
 import { extractStatementTransactions } from "../lib/ai/statementExtractor";
 import {
-  matchInvoiceToLines,
+  assignInvoicesToLines,
   type LineCandidate,
   type InvoiceForMatch,
 } from "../lib/fin/invoiceLineMatch";
@@ -352,14 +352,19 @@ finCapturesRoutes.patch(
 function invoiceForMatch(cap: typeof finCaptures.$inferSelect): InvoiceForMatch {
   const f = cap.extractedFields;
   const amountCents = (f?.amount_cents?.value as number | null) ?? null;
-  // The matcher compares against the line's original-currency amount; statements keep the
-  // foreign-currency amount in `orig_amount` ("15.99 EUR") and the account amount in cents.
-  // Invoices store amount in cents (MDL) — convert to major units for the comparison.
+  const reference = (f?.reference?.value as string | null) ?? "";
+  // Haystack for reference/transaction-id matching: the filename (e.g. a MAIB confirmation named
+  // "…Transaction #2472…"), the extracted reference, and the document text all carry the card
+  // ref / transaction id that also appears in the statement line. Bounded to keep it cheap.
+  const haystack = `${cap.fileName} ${reference} ${(cap.rawText ?? "").slice(0, 4000)}`;
   return {
     vendorName: (f?.vendor_name?.value as string | null) ?? null,
+    // Amount is matched currency-agnostically (against the line's foreign OR MDL amount), so we
+    // pass the major-unit figure the AI read off the document regardless of its currency.
     amountMajor: amountCents != null ? amountCents / 100 : null,
     currency: "MDL",
     date: (f?.expense_date?.value as string | null) ?? null,
+    haystack,
   };
 }
 
@@ -420,7 +425,13 @@ finCapturesRoutes.post("/captures/match", async (c) => {
     scopedLines = lines.filter((l) => monthCaptureIds.has(l.captureId));
   }
 
-  const candidates: LineCandidate[] = scopedLines.map((l) => ({
+  // Manually-linked lines (score 10000) are honored as-is and excluded from auto-assignment; the
+  // invoice they hold is also removed from the pool so it can't be reused on another line.
+  const manualInvoiceIds = new Set(
+    scopedLines.filter((l) => l.matchScoreBp === 10000 && l.matchedCaptureId).map((l) => l.matchedCaptureId as string),
+  );
+  const autoLines = scopedLines.filter((l) => !(l.matchScoreBp === 10000 && l.matchedCaptureId));
+  const candidates: LineCandidate[] = autoLines.map((l) => ({
     id: l.id,
     origAmount: l.origAmount,
     amountCents: l.amountCents,
@@ -429,34 +440,24 @@ finCapturesRoutes.post("/captures/match", async (c) => {
     txDate: l.txDate,
   }));
 
-  // For each invoice, find its best line; the highest-confidence claim wins each line (1 invoice ↔ 1 line).
-  const bestByLine = new Map<string, { captureId: string; confidence: number }>();
-  for (const inv of invoices) {
-    const hit = matchInvoiceToLines(invoiceForMatch(inv), candidates);
-    if (!hit) continue;
-    const prev = bestByLine.get(hit.lineId);
-    if (!prev || hit.confidence > prev.confidence) {
-      bestByLine.set(hit.lineId, { captureId: inv.id, confidence: hit.confidence });
-    }
-  }
+  // Global best-first 1:1 assignment: each invoice lands on its closest free transaction, and a
+  // line taken by a stronger pair pushes the loser to its next-best line → maximises mapping.
+  const assignment = assignInvoicesToLines(
+    invoices.filter((inv) => !manualInvoiceIds.has(inv.id)).map((inv) => ({ invoice: inv, fields: invoiceForMatch(inv) })),
+    candidates,
+  );
 
-  // Persist the verdict on every scoped line. Skip lines a human already linked manually
-  // (matchScoreBp === 10000) so we don't clobber an override.
-  let matched = 0;
+  let matched = scopedLines.length - autoLines.length; // manual links already count as matched
   let missing = 0;
-  for (const l of scopedLines) {
-    if (l.matchScoreBp === 10000 && l.matchedCaptureId) {
-      matched += 1;
-      continue;
-    }
-    const hit = bestByLine.get(l.id);
+  for (const l of autoLines) {
+    const hit = assignment.get(l.id);
     if (hit) {
       matched += 1;
       await db
         .update(finCaptureLines)
         .set({
           matchStatus: "matched",
-          matchedCaptureId: hit.captureId,
+          matchedCaptureId: hit.invoiceId,
           matchScoreBp: Math.round(hit.confidence * 10000),
           updatedAt: new Date(),
         })
