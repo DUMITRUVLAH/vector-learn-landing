@@ -199,4 +199,10 @@ describe("EFMD — EfacturaMdClient (mock transport)", () => {
     expect(r[0].method).toBe("PostInvoices");
     expect(r[0].response).toContain("Results");
   });
+
+  it("testConnection returns ok over a working transport", async () => {
+    const r = await client.testConnection("req-14");
+    expect(r.ok).toBe(true);
+    expect(r.message).toMatch(/OK/i);
+  });
 });

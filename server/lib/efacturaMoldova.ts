@@ -2,7 +2,7 @@
  * EFMD: SIA „e-Factura" Moldova (SFS) — integrare semiautomatizată.
  *
  * Implementează clientul SOAP (BasicHttpBinding + WS-Security UsernameToken)
- * pentru API-ul SFS de la https://api.fisc.md/Service.svc, conform
+ * pentru API-ul SFS de la https://efactura-api.sfs.md/Service.svc, conform
  * „Ghid de integrare semi-automatizat SIA e-Factura" (Chișinău 2025).
  *
  * Flux semiautomatizat: facturile se TRIMIT prin API (PostInvoices, nesemnate),
@@ -61,7 +61,7 @@ export function getEfacturaMdConfig(): EfacturaMdConfig {
   const password = process.env.EFACTURA_MD_PASSWORD ?? "";
   const forceMock = process.env.EFACTURA_MD_MOCK === "1";
   return {
-    endpoint: process.env.EFACTURA_MD_ENDPOINT ?? "https://api-test.fisc.md/Service.svc",
+    endpoint: process.env.EFACTURA_MD_ENDPOINT ?? "https://efactura-api.sfs.md/Service.svc",
     username,
     password,
     supplierIdno: process.env.EFACTURA_MD_SUPPLIER_IDNO ?? "1002600001257",
@@ -460,6 +460,9 @@ export function createMockTransport(): SoapTransport {
           </RequestLog></Results>
         </GetLogsResult></GetLogsResponse>`;
       }
+      case "Test": {
+        return `<TestResponse><TestResult>OK</TestResult></TestResponse>`;
+      }
       default:
         throw new EfacturaMdError(method, "metodă nesimulată în mock transport");
     }
@@ -839,6 +842,25 @@ export class EfacturaMdClient {
       error: xmlText(block, "Error"),
       response: xmlText(block, "Response"),
     }));
+  }
+
+  /**
+   * Test de conectivitate + autentificare. Folosește GetTaxpayersInfo cu IDNO-ul
+   * furnizorului — un apel autentificat care validează că: (1) endpoint-ul e
+   * accesibil, (2) credențialele sunt corecte, (3) schema XML e acceptată.
+   * Întoarce { ok, message } în loc să arunce, ca UI-ul să afișeze diagnostic clar.
+   */
+  async testConnection(requestId: string): Promise<{ ok: boolean; message: string }> {
+    try {
+      const tp = await this.getTaxpayerInfo(this.config.supplierIdno, requestId);
+      if (tp) {
+        return { ok: true, message: `Conexiune OK — contribuabil găsit: ${tp.name || tp.idno}` };
+      }
+      return { ok: true, message: "Conexiune OK (răspuns valid de la SFS)." };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, message: msg };
+    }
   }
 }
 

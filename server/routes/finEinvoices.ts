@@ -71,10 +71,12 @@ async function loadSfsConfig(
   const hasCredentials = !!(s.usernameEncrypted && s.passwordEncrypted);
 
   const config: EfacturaMdConfig = {
-    endpoint:
-      s.environment === "prod"
-        ? "https://api.fisc.md/Service.svc"
-        : "https://api-test.fisc.md/Service.svc",
+    // URL-ul REAL al serviciului SOAP SFS, confirmat din WSDL live
+    // (https://efactura-api.sfs.md/Service.svc?wsdl, namespace tempuri.org,
+    // SOAPAction http://tempuri.org/IService/<Method>). Ghidul listează
+    // `api-test.fisc.md`, dar acel domeniu nu există în DNS — nu îl folosi.
+    // Test și prod folosesc același host (SFS nu expune un sandbox separat aici).
+    endpoint: "https://efactura-api.sfs.md/Service.svc",
     username: hasCredentials ? decrypt(s.usernameEncrypted!) : "",
     password: hasCredentials ? decrypt(s.passwordEncrypted!) : "",
     supplierIdno: s.idno,
@@ -218,6 +220,39 @@ finEinvoicesRoutes.put(
     });
   }
 );
+
+// ─── POST /api/fin/sfs-test ──────────────────────────────────────────────────
+// Testează conexiunea + autentificarea la SFS (apel real GetTaxpayersInfo).
+// Marchează lastTestedAt la succes. Răspunde mereu 200 cu { ok, message }
+// ca UI-ul să arate diagnostic, nu un 500 generic.
+
+finEinvoicesRoutes.post("/sfs-test", async (c) => {
+  const user = c.get("user");
+
+  const sfsData = await loadSfsConfig(user.tenantId);
+  if (!sfsData) {
+    return c.json({ ok: false, message: "Configurare SFS lipsă. Salvează întâi setările." });
+  }
+
+  const transport = sfsData.config.mock ? createMockTransport() : undefined;
+  const client = new EfacturaMdClient(sfsData.config, transport);
+
+  const result = await client.testConnection(randomUUID());
+
+  if (result.ok && !sfsData.config.mock) {
+    await db
+      .update(finSfsSettings)
+      .set({ lastTestedAt: new Date() })
+      .where(eq(finSfsSettings.tenantId, user.tenantId));
+  }
+
+  return c.json({
+    ok: result.ok,
+    message: result.message,
+    mock: sfsData.config.mock,
+    endpoint: sfsData.config.endpoint,
+  });
+});
 
 // ─── GET /api/fin/einvoices/:invoiceId ────────────────────────────────────────
 
