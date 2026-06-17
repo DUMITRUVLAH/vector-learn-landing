@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "SPLIT-401",
-  "iterations": 168,
+  "last_completed": "DOCMERGE-004",
+  "iterations": 171,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "AUDIT-FIX",
@@ -4054,18 +4054,24 @@
       "pr": null
     },
     "DOCMERGE-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DOCMERGE-001-template-upload-placeholders.md",
       "milestone": "DOCMERGE",
       "phase": "1",
       "depends_on": [],
-      "branch": "feat/DOCMERGE-faza-1-document-merge"
+      "branch": "feat/DOCMERGE-faza-1-document-merge",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "DOCMERGE-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DOCMERGE-002-excel-import-mapping.md",
       "milestone": "DOCMERGE",
@@ -4073,11 +4079,18 @@
       "depends_on": [
         "DOCMERGE-001"
       ],
-      "branch": "feat/DOCMERGE-faza-1-document-merge"
+      "branch": "feat/DOCMERGE-faza-1-document-merge",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/185",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "DOCMERGE-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DOCMERGE-003-batch-pdf-zip.md",
       "milestone": "DOCMERGE",
@@ -4085,11 +4098,19 @@
       "depends_on": [
         "DOCMERGE-002"
       ],
-      "branch": "feat/DOCMERGE-faza-1-document-merge"
+      "branch": "feat/DOCMERGE-faza-1-document-merge",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/185",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "adversarial": "APPROVED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "DOCMERGE-004": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/DOCMERGE-004-wizard-end-to-end.md",
       "milestone": "DOCMERGE",
@@ -4097,7 +4118,14 @@
       "depends_on": [
         "DOCMERGE-003"
       ],
-      "branch": "feat/DOCMERGE-faza-1-document-merge"
+      "branch": "feat/DOCMERGE-faza-1-document-merge",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/185",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "FIX-501": {
       "status": "done",
@@ -4108,10 +4136,7 @@
       "phase": "1",
       "depends_on": [],
       "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll",
-      "verdicts": {
-        "reviewer": "APPROVED",
-        "tests": "4/4 pass"
-      }
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/183"
     },
     "FIX-502": {
       "status": "done",
@@ -4122,10 +4147,7 @@
       "phase": "1",
       "depends_on": [],
       "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll",
-      "verdicts": {
-        "reviewer": "APPROVED",
-        "tests": "6/6 pass"
-      }
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/183"
     },
     "FIX-503": {
       "status": "done",
@@ -4139,12 +4161,7 @@
         "FIX-502"
       ],
       "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll",
-      "verdicts": {
-        "reviewer": "APPROVED",
-        "tests": "4/4 pass",
-        "manager": "BUY",
-        "student": "OK"
-      }
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/183"
     }
   }
 }

@@ -391,7 +391,9 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 
 | ID | Priority | Title | Status | Spec |
 |----|----------|-------|--------|------|
-| DOCMERGE-001 | high | Upload template HTML/DOCX + detecție placeholdere `{{tag}}` | pending | [spec](specs/DOCMERGE-001-template-upload-placeholders.md) |
-| DOCMERGE-002 | high | Upload Excel, parsare rânduri, mapare coloane → placeholdere | pending | [spec](specs/DOCMERGE-002-excel-import-mapping.md) |
-| DOCMERGE-003 | high | Generare batch N PDF-uri din template+Excel, livrare ZIP | pending | [spec](specs/DOCMERGE-003-batch-pdf-zip.md) |
-| DOCMERGE-004 | normal | Wizard end-to-end + intrare în meniul business | pending | [spec](specs/DOCMERGE-004-wizard-end-to-end.md) |
+| DOCMERGE-001 | high | Upload template HTML/DOCX + detecție placeholdere `{{tag}}` | done | [spec](specs/DOCMERGE-001-template-upload-placeholders.md) |
+| DOCMERGE-002 | high | Upload Excel, parsare rânduri, mapare coloane → placeholdere | done | [spec](specs/DOCMERGE-002-excel-import-mapping.md) |
+| DOCMERGE-003 | high | Generare batch N PDF-uri din template+Excel, livrare ZIP | done | [spec](specs/DOCMERGE-003-batch-pdf-zip.md) |
+| DOCMERGE-004 | normal | Wizard end-to-end + intrare în meniul business | done | [spec](specs/DOCMERGE-004-wizard-end-to-end.md) |
+
+**DOCMERGE faza-1: 4/4 done. PR [#185](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/185)**

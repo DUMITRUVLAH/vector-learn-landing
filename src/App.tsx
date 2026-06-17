@@ -13,6 +13,11 @@ import { ParDetailPage } from "./pages/par/ParDetail";
 import { ParAdmin } from "./pages/par/ParAdmin";
 import { ParReports } from "./pages/par/ParReports";
 
+// DOCMERGE module routes
+import { DocMergeTemplatesPage } from "./pages/business/docmerge/DocMergeTemplatesPage";
+import { DocMergeJobPage } from "./pages/business/docmerge/DocMergeJobPage";
+import { DocMergeWizardPage } from "./pages/business/docmerge/DocMergeWizardPage";
+
 // Business / FinDesk routes
 import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
 import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
@@ -158,6 +163,11 @@ function Routes() {
   if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParReports /></BusinessGuardPage>;
   if (path.match(/^\/business\/par\/[^/]+$/)) return <BusinessGuardPage><ParDetailPage /></BusinessGuardPage>;
   if (path.startsWith("/business/par")) return <BusinessGuardPage><ParDashboard /></BusinessGuardPage>;
+
+  // DOCMERGE-001/002/003/004: Document Merge — more specific routes first
+  if (path.startsWith("/business/docmerge/wizard")) return <BusinessGuardPage><DocMergeWizardPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/docmerge")) return <BusinessGuardPage><DocMergeTemplatesPage /></BusinessGuardPage>;
 
   // Payment accounts (cont de plată)
   if (path.startsWith("/app/conturi-plata/nou")) return <BusinessGuardPage><PaymentAccountEditorPage /></BusinessGuardPage>;
