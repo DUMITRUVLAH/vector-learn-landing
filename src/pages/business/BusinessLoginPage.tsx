@@ -18,13 +18,22 @@ export function BusinessLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Show error from Google OAuth callback (?error=...)
+  // Show error from Google OAuth callback (?error=...). The codes are emitted by
+  // GET /api/auth/google/callback in server/routes/auth.ts — keep them in sync.
   useEffect(() => {
     const params = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
     const err = params.get("error");
-    if (err === "google_not_configured") setError("Google login nu e configurat pe acest server.");
-    else if (err === "google_denied") setError("Acces refuzat de Google.");
-    else if (err) setError(`Eroare Google: ${err}`);
+    if (!err) return;
+    const messages: Record<string, string> = {
+      google_not_configured: "Conectarea cu Google nu este configurată pe acest server.",
+      google_denied: "Ați anulat sau ați refuzat conectarea cu Google.",
+      google_state_mismatch:
+        "Sesiunea de conectare Google a expirat sau a fost întreruptă. Încercați din nou.",
+      google_failed: "Conectarea cu Google a eșuat. Încercați din nou peste câteva momente.",
+      google_email_unverified:
+        "Adresa de email Google nu este verificată. Verificați-o în contul Google și reîncercați.",
+    };
+    setError(messages[err] ?? `Eroare la conectarea cu Google (${err}).`);
   }, []);
 
   const submit = async (e: React.FormEvent) => {
