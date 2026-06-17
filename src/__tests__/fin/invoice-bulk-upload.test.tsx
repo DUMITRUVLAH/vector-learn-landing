@@ -17,6 +17,7 @@ import {
   MAX_INVOICE_FILES,
 } from "@/components/fin/InvoiceBulkUpload";
 import { uploadInvoiceBatch, type BatchItemResult } from "@/lib/api/finCaptures";
+import { ApiError } from "@/lib/api";
 
 vi.mock("@/lib/api/finCaptures", async (orig) => {
   const actual = await orig<typeof import("@/lib/api/finCaptures")>();
@@ -125,6 +126,22 @@ describe("InvoiceBulkUpload", () => {
     fireEvent.click(screen.getByRole("button", { name: /Încarcă/i }));
 
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(1));
+  });
+
+  it("stops without retrying on a 403 rate-limit and shows the guidance banner", async () => {
+    // 6 files → 2 batches (4 + 2). First batch 403s → must STOP (not retry, not send batch 2).
+    mockUpload.mockRejectedValueOnce(new ApiError(403, "http_403"));
+    const onUploaded = vi.fn();
+    render(<InvoiceBulkUpload onUploaded={onUploaded} />);
+    selectFiles(Array.from({ length: 6 }, (_, i) => pdf(`f${i}.pdf`)));
+
+    fireEvent.click(screen.getByRole("button", { name: /Încarcă/i }));
+
+    await waitFor(() => expect(screen.getByText(/limitată temporar/i)).toBeInTheDocument());
+    // Only the first batch was attempted — no retry, no second batch.
+    expect(mockUpload).toHaveBeenCalledTimes(1);
+    // Nothing succeeded → onUploaded not called; files remain for a later retry.
+    expect(onUploaded).not.toHaveBeenCalled();
   });
 
   it("caps the batch at MAX_INVOICE_FILES", () => {

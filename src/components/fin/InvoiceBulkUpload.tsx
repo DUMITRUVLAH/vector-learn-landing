@@ -29,15 +29,11 @@ const MAX_FILE_BYTES = 4_000_000;
  *  A batch is bounded by file count (server processing time) and total bytes (≤4.5MB body limit). */
 const MAX_BATCH_FILES = 4;
 const MAX_BATCH_BYTES = 3_500_000;
-/** Retry a whole batch only on edge rate-limit (403/429) — the firewall rejects it BEFORE the
- *  server processes anything, so re-sending is safe (no duplicate captures). We deliberately do
- *  NOT retry 5xx/timeout: those may have partially processed, and a retry would duplicate. */
-const MAX_BATCH_ATTEMPTS = 4;
+/** Edge rate-limit (Vercel firewall): 403/429. We must NOT retry these — retrying sends more
+ *  requests and deepens the per-IP block. We stop and tell the user to wait / switch network. */
 function isRateLimited(e: unknown): boolean {
   return e instanceof ApiError && (e.status === 403 || e.status === 429);
 }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const ACCEPT = "image/*,application/pdf,.csv,.txt,text/csv";
 
@@ -75,6 +71,7 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [limitMsg, setLimitMsg] = useState<string | null>(null);
+  const [rateLimited, setRateLimited] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const addFiles = useCallback(
@@ -149,39 +146,42 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
     if (queue.length === 0 || busy) return;
     setBusy(true);
     setLimitMsg(null);
+    setRateLimited(false);
 
-    // Upload in BATCHES (several files per request, sequential). Few requests → stays under the
-    // Vercel firewall rate-limit that 403'd rapid single uploads. A batch is retried only on a
-    // 403/429 (edge rejected it before processing → safe); per-file outcomes come from the result.
+    // Upload in BATCHES (several files per request) → few requests, well under Vercel's per-IP
+    // rate-limit. IMPORTANT: do NOT retry on 403/429 — when the edge is rate-limiting the IP,
+    // retrying only sends MORE requests and deepens/extends the block (this is what hammered the
+    // connection before). Instead, stop immediately and tell the user to wait / switch network.
     let successCount = 0;
-    for (const batch of buildBatches(queue)) {
+    const batches = buildBatches(queue);
+    let hitRateLimit = false;
+    for (const batch of batches) {
+      if (hitRateLimit) break;
       batch.forEach((it) => setItemStatus(it.id, "uploading"));
-      let done = false;
-      for (let attempt = 1; attempt <= MAX_BATCH_ATTEMPTS && !done; attempt++) {
-        try {
-          const { results } = await uploadInvoiceBatch(batch.map((it) => it.file), team);
-          batch.forEach((it, i) => {
-            const r = results[i];
-            if (r && r.ok) {
-              setItemStatus(it.id, "done");
-              successCount += 1;
-            } else {
-              setItemStatus(it.id, "error", r && !r.ok ? r.error : "Eroare");
-            }
-          });
-          done = true;
-        } catch (e) {
-          if (isRateLimited(e) && attempt < MAX_BATCH_ATTEMPTS) {
-            await sleep(1500 * 2 ** (attempt - 1) + Math.random() * 400);
-            continue;
+      try {
+        const { results } = await uploadInvoiceBatch(batch.map((it) => it.file), team);
+        batch.forEach((it, i) => {
+          const r = results[i];
+          if (r && r.ok) {
+            setItemStatus(it.id, "done");
+            successCount += 1;
+          } else {
+            setItemStatus(it.id, "error", r && !r.ok ? r.error : "Eroare");
           }
-          batch.forEach((it) => setItemStatus(it.id, "error", e instanceof ApiError ? `http_${e.status}` : "Eroare"));
-          done = true;
+        });
+      } catch (e) {
+        if (isRateLimited(e)) {
+          // Edge rate-limit: stop now, leave the rest "queued" so the user can resume later.
+          hitRateLimit = true;
+          batch.forEach((it) => setItemStatus(it.id, "queued"));
+          break;
         }
+        batch.forEach((it) => setItemStatus(it.id, "error", e instanceof ApiError ? `http_${e.status}` : "Eroare"));
       }
     }
 
     setBusy(false);
+    setRateLimited(hitRateLimit);
     if (successCount > 0) onUploaded(successCount);
   };
 
@@ -253,6 +253,17 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
         <p className="mt-2 text-xs text-amber-600 dark:text-amber-400" role="alert">
           {limitMsg}
         </p>
+      )}
+
+      {rateLimited && (
+        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300" role="alert">
+          <p className="font-medium">Conexiunea a fost limitată temporar de server.</p>
+          <p className="mt-1 text-xs">
+            Prea multe încărcări într-un timp scurt. Așteaptă 2–3 minute (sau schimbă rețeaua —
+            de ex. hotspot de pe telefon) și apasă din nou „Încarcă”. Fișierele rămase sunt
+            păstrate în listă.
+          </p>
+        </div>
       )}
 
       {/* Selected files */}
