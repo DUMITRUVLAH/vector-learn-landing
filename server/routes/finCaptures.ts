@@ -36,6 +36,7 @@ import {
   type InvoiceForMatch,
 } from "../lib/fin/invoiceLineMatch";
 import { extractPdfText } from "../lib/ai/pdfText";
+import { sanitizePgText } from "../lib/fin/money";
 
 export const finCapturesRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -537,6 +538,7 @@ finCapturesRoutes.patch(
  * Content-Type: multipart/form-data (sau JSON cu rawText pentru testing)
  * Accept: application/json
  */
+
 finCapturesRoutes.post("/captures", async (c) => {
   const user = c.get("user");
 
@@ -630,6 +632,12 @@ finCapturesRoutes.post("/captures", async (c) => {
   } else {
     return c.json({ error: "unsupported_content_type" }, 415);
   }
+
+  // Sanitize extracted/pasted text before it ever reaches Postgres. PDF text layers often carry
+  // a NUL (0x00) and other C0 control chars; a `text` column rejects 0x00 with
+  // "invalid byte sequence for encoding UTF8: 0x00" → the insert 500s and the upload shows
+  // "Eroare". Strip NUL, keep \n/\t. This is why some invoices/confirmations failed to upload.
+  rawText = sanitizePgText(rawText);
 
   // Auto-detect a bank statement even if the caller didn't set kind: MAIB-style statements
   // say "EXTRAS DE CONT" or contain many "DD.MM.YYYY DD.MM.YYYY" transaction lines.
@@ -867,4 +875,36 @@ finCapturesRoutes.get("/captures/:id", async (c) => {
   }
 
   return c.json({ capture: serializeCapture(capture) });
+});
+
+// ─── DELETE /api/fin/captures/:id — șterge o captură (curățare duplicate) ─────
+// Statement → also deletes its transaction lines. Invoice (document) → unlinks any statement
+// lines that pointed to it (so no dangling match). Tenant-scoped.
+finCapturesRoutes.delete("/captures/:id", async (c) => {
+  const user = c.get("user");
+  const captureId = c.req.param("id");
+
+  const capture = await db.query.finCaptures.findFirst({
+    where: and(eq(finCaptures.id, captureId), eq(finCaptures.tenantId, user.tenantId)),
+  });
+  if (!capture) return c.json({ error: "not_found", message: "Captura nu există." }, 404);
+
+  if (capture.kind === "statement") {
+    // Remove the statement's transaction rows.
+    await db
+      .delete(finCaptureLines)
+      .where(and(eq(finCaptureLines.tenantId, user.tenantId), eq(finCaptureLines.captureId, captureId)));
+  } else {
+    // Invoice: any line linked to it goes back to "missing" so we don't leave a dangling ref.
+    await db
+      .update(finCaptureLines)
+      .set({ matchStatus: "missing", matchedCaptureId: null, matchScoreBp: 0, updatedAt: new Date() })
+      .where(and(eq(finCaptureLines.tenantId, user.tenantId), eq(finCaptureLines.matchedCaptureId, captureId)));
+  }
+
+  await db
+    .delete(finCaptures)
+    .where(and(eq(finCaptures.id, captureId), eq(finCaptures.tenantId, user.tenantId)));
+
+  return c.json({ ok: true, id: captureId, kind: capture.kind });
 });

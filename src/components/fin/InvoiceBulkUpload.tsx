@@ -24,13 +24,16 @@ export const MAX_INVOICE_FILES = 50;
 /** Max single-file size. Vercel's serverless request-body limit is ~4.5MB; bigger files get a
  *  silent 413 from the platform (showed as "Eroare"), so we reject them up front with a message. */
 const MAX_FILE_BYTES = 4_000_000;
-/** Per-file retry attempts. Bursts of uploads trip Vercel's firewall/rate-limit → http_403 (the
- *  "Eroare" the owner saw); retrying with backoff lets the rate window reset and the file through. */
-const MAX_ATTEMPTS = 5;
+/** How many uploads run in parallel — keeps the batch fast. Retry-with-backoff (below) absorbs
+ *  the occasional Vercel firewall/rate-limit hit so we don't need to serialise everything. */
+const UPLOAD_CONCURRENCY = 4;
+/** Per-file retry attempts for throttling/transient gateway errors. */
+const MAX_ATTEMPTS = 3;
 
-/** Statuses worth retrying: Vercel firewall/rate-limit (403/429) and transient server errors. */
+/** Retry only throttle/transient-gateway statuses (Vercel firewall 403, rate-limit 429, gateway
+ *  5xx). NOT 500 — an app-level 500 is deterministic, so retrying it only slows the batch. */
 function isRetryable(e: unknown): boolean {
-  return e instanceof ApiError && [403, 408, 429, 500, 502, 503, 504].includes(e.status);
+  return e instanceof ApiError && [403, 408, 429, 502, 503, 504].includes(e.status);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -128,34 +131,34 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
     setBusy(true);
     setLimitMsg(null);
 
-    // Sequential (one request at a time) + retry-with-backoff. Bursts trip Vercel's firewall
-    // (http_403); pacing the requests and backing off on 403/429/5xx is what gets every file in.
+    // Parallel worker pool (fast) + per-file retry-with-backoff. Backoff absorbs the occasional
+    // Vercel firewall/rate-limit (403/429) so a burst still gets every file in without serialising.
     let successCount = 0;
-    for (const item of queue) {
-      let attempt = 0;
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        attempt += 1;
+    let cursor = 0;
+    const uploadOne = async (item: UploadItem) => {
+      for (let attempt = 1; ; attempt++) {
         setItemStatus(item.id, "uploading");
         try {
           await uploadInvoiceFile(item.file, team);
           setItemStatus(item.id, "done");
           successCount += 1;
-          break;
+          return;
         } catch (e) {
           if (isRetryable(e) && attempt < MAX_ATTEMPTS) {
-            // Back off longer on rate-limit/firewall (403/429) than on transient 5xx.
             const isRate = e instanceof ApiError && (e.status === 403 || e.status === 429);
             const base = isRate ? 1500 : 700;
             await sleep(base * 2 ** (attempt - 1) + Math.random() * 300);
             continue;
           }
-          const code = e instanceof ApiError ? `http_${e.status}` : "Eroare";
-          setItemStatus(item.id, "error", code);
-          break;
+          setItemStatus(item.id, "error", e instanceof ApiError ? `http_${e.status}` : "Eroare");
+          return;
         }
       }
-    }
+    };
+    const worker = async () => {
+      while (cursor < queue.length) await uploadOne(queue[cursor++]);
+    };
+    await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, queue.length) }, worker));
 
     setBusy(false);
     if (successCount > 0) onUploaded(successCount);
