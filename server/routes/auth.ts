@@ -516,6 +516,24 @@ authRoutes.get("/google/callback", async (c) => {
     }
   }
 
+  // This is the Business Suite repo, so anyone who reaches here via Google must
+  // end up on a "business" tenant — otherwise BusinessGuardPage (/api/business/auth/me)
+  // rejects the brand-new session as wrong_app and bounces them back to /business/login,
+  // which looks exactly like "Google sign-in doesn't work". Brand-new sign-ups (case 3
+  // below) already create a business tenant; here we promote the tenant of an existing
+  // account that was linked above but still carries the schema default appKind "learn".
+  if (user) {
+    const tenant = await db.query.tenants.findFirst({
+      where: eq(tenants.id, user.tenantId),
+    });
+    if (tenant && tenant.appKind !== "business") {
+      await db
+        .update(tenants)
+        .set({ appKind: "business", updatedAt: new Date() })
+        .where(eq(tenants.id, tenant.id));
+    }
+  }
+
   // 3) Brand-new user → create a fresh tenant + admin account (owner's choice).
   if (!user) {
     const baseName = profile.name || profile.email.split("@")[0];
