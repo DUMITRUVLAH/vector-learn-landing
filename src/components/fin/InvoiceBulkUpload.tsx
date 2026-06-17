@@ -16,6 +16,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Upload, CheckCircle2, XCircle, Loader2, FileText, X } from "lucide-react";
 import { uploadInvoiceFile, type FinDocTeam } from "@/lib/api/finCaptures";
+import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /** Max files accepted per batch (owner requirement). */
@@ -23,9 +24,16 @@ export const MAX_INVOICE_FILES = 50;
 /** Max single-file size. Vercel's serverless request-body limit is ~4.5MB; bigger files get a
  *  silent 413 from the platform (showed as "Eroare"), so we reject them up front with a message. */
 const MAX_FILE_BYTES = 4_000_000;
-/** How many uploads to run in parallel. Kept low: each upload runs server-side AI
- *  extraction, and too many at once can exceed Vercel's function timeout (→ 504). */
-const UPLOAD_CONCURRENCY = 2;
+/** Per-file retry attempts. Bursts of uploads trip Vercel's firewall/rate-limit → http_403 (the
+ *  "Eroare" the owner saw); retrying with backoff lets the rate window reset and the file through. */
+const MAX_ATTEMPTS = 5;
+
+/** Statuses worth retrying: Vercel firewall/rate-limit (403/429) and transient server errors. */
+function isRetryable(e: unknown): boolean {
+  return e instanceof ApiError && [403, 408, 429, 500, 502, 503, 504].includes(e.status);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const ACCEPT = "image/*,application/pdf,.csv,.txt,text/csv";
 
@@ -120,24 +128,34 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
     setBusy(true);
     setLimitMsg(null);
 
+    // Sequential (one request at a time) + retry-with-backoff. Bursts trip Vercel's firewall
+    // (http_403); pacing the requests and backing off on 403/429/5xx is what gets every file in.
     let successCount = 0;
-    let cursor = 0;
-    const worker = async () => {
-      while (cursor < queue.length) {
-        const item = queue[cursor++];
+    for (const item of queue) {
+      let attempt = 0;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        attempt += 1;
         setItemStatus(item.id, "uploading");
         try {
           await uploadInvoiceFile(item.file, team);
           setItemStatus(item.id, "done");
           successCount += 1;
+          break;
         } catch (e) {
-          setItemStatus(item.id, "error", e instanceof Error ? e.message : "Eroare la încărcare");
+          if (isRetryable(e) && attempt < MAX_ATTEMPTS) {
+            // Back off longer on rate-limit/firewall (403/429) than on transient 5xx.
+            const isRate = e instanceof ApiError && (e.status === 403 || e.status === 429);
+            const base = isRate ? 1500 : 700;
+            await sleep(base * 2 ** (attempt - 1) + Math.random() * 300);
+            continue;
+          }
+          const code = e instanceof ApiError ? `http_${e.status}` : "Eroare";
+          setItemStatus(item.id, "error", code);
+          break;
         }
       }
-    };
-    await Promise.all(
-      Array.from({ length: Math.min(UPLOAD_CONCURRENCY, queue.length) }, worker),
-    );
+    }
 
     setBusy(false);
     if (successCount > 0) onUploaded(successCount);
