@@ -30,6 +30,11 @@ import { finCaptures, finCaptureLines, type ExtractedFields, FIN_DOC_TEAMS } fro
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { extractCaptureFields } from "../lib/ai/captureExtractor";
 import { extractStatementTransactions } from "../lib/ai/statementExtractor";
+import {
+  matchInvoiceToLines,
+  type LineCandidate,
+  type InvoiceForMatch,
+} from "../lib/fin/invoiceLineMatch";
 import { extractPdfText } from "../lib/ai/pdfText";
 
 export const finCapturesRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -76,6 +81,12 @@ const confirmCaptureSchema = z.object({
 const reviewCaptureSchema = z.object({
   decision: z.enum(["yes", "no"]),
   note: z.string().max(1000).optional(),
+});
+
+// Invoice ↔ transaction matching: manually link a line to an invoice, or clear the link.
+// `captureId: null` marks the line "missing" (no invoice in the system).
+const matchLineSchema = z.object({
+  captureId: z.string().uuid().nullable(),
 });
 
 // ─── Serialize helper ─────────────────────────────────────────────────────────
@@ -270,6 +281,10 @@ function serializeLine(l: typeof finCaptureLines.$inferSelect) {
     reportable: l.reportable,
     reportableReason: l.reportableReason,
     reportableConfidenceBp: l.reportableConfidenceBp,
+    // Invoice ↔ transaction matching
+    matchStatus: l.matchStatus,
+    matchedCaptureId: l.matchedCaptureId,
+    matchScoreBp: l.matchScoreBp,
     reviewedBy: l.reviewedBy,
     reviewedAt: l.reviewedAt?.toISOString() ?? null,
     reviewNote: l.reviewNote,
@@ -319,6 +334,180 @@ finCapturesRoutes.patch(
         reviewNote: note ?? null,
         reviewedBy: user.id,
         reviewedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(finCaptureLines.id, lineId))
+      .returning();
+
+    return c.json({ line: serializeLine(updated) });
+  },
+);
+
+// ─── Invoice ↔ transaction matching ─────────────────────────────────────────────
+// The accountant uploads bank-statement(s) AND the invoices/payment-confirmations into the
+// same Invoice Reporting inbox. "Match" answers, per outgoing transaction, "is there an
+// invoice for this in the system?" so they don't reconcile each one by hand.
+
+/** Build the InvoiceForMatch shape from a single-document capture's extracted fields. */
+function invoiceForMatch(cap: typeof finCaptures.$inferSelect): InvoiceForMatch {
+  const f = cap.extractedFields;
+  const amountCents = (f?.amount_cents?.value as number | null) ?? null;
+  // The matcher compares against the line's original-currency amount; statements keep the
+  // foreign-currency amount in `orig_amount` ("15.99 EUR") and the account amount in cents.
+  // Invoices store amount in cents (MDL) — convert to major units for the comparison.
+  return {
+    vendorName: (f?.vendor_name?.value as string | null) ?? null,
+    amountMajor: amountCents != null ? amountCents / 100 : null,
+    currency: "MDL",
+    date: (f?.expense_date?.value as string | null) ?? null,
+  };
+}
+
+// POST /api/fin/captures/match — run matching across all statement transaction lines.
+// Optional ?month=YYYY-MM scopes both the lines and the invoice pool to that month.
+// Only OUTGOING ("out") lines need an invoice; incoming/transfers are left as "review".
+// Mounted before GET /:id (specific route > param).
+finCapturesRoutes.post("/captures/match", async (c) => {
+  const user = c.get("user");
+  const month = c.req.query("month");
+  const monthOk = month && /^\d{4}-\d{2}$/.test(month) ? month : null;
+
+  let start: Date | null = null;
+  let end: Date | null = null;
+  if (monthOk) {
+    start = new Date(`${monthOk}-01T00:00:00.000Z`);
+    end = new Date(start);
+    end.setUTCMonth(end.getUTCMonth() + 1);
+  }
+
+  // Candidate invoices: confirmed/extracted single-document captures (not statements) for the tenant.
+  const invoiceConds = [
+    eq(finCaptures.tenantId, user.tenantId),
+    eq(finCaptures.kind, "document"),
+  ];
+  if (start && end) {
+    invoiceConds.push(gte(finCaptures.createdAt, start));
+    invoiceConds.push(lte(finCaptures.createdAt, end));
+  }
+  const invoices = await db.query.finCaptures.findMany({ where: and(...invoiceConds) });
+
+  // Transaction lines (outgoing only) for the tenant, optionally scoped to the month's statements.
+  const lineConds = [
+    eq(finCaptureLines.tenantId, user.tenantId),
+    eq(finCaptureLines.direction, "out"),
+  ];
+  const lines = await db.query.finCaptureLines.findMany({ where: and(...lineConds) });
+
+  // Optionally scope lines to the month by looking at their parent statement's createdAt.
+  let scopedLines = lines;
+  if (start && end) {
+    const monthCaptureIds = new Set(
+      (await db.query.finCaptures.findMany({
+        where: and(
+          eq(finCaptures.tenantId, user.tenantId),
+          eq(finCaptures.kind, "statement"),
+          gte(finCaptures.createdAt, start),
+          lte(finCaptures.createdAt, end),
+        ),
+      })).map((s) => s.id),
+    );
+    scopedLines = lines.filter((l) => monthCaptureIds.has(l.captureId));
+  }
+
+  const candidates: LineCandidate[] = scopedLines.map((l) => ({
+    id: l.id,
+    origAmount: l.origAmount,
+    amountCents: l.amountCents,
+    counterparty: l.counterparty,
+    description: l.description,
+    txDate: l.txDate,
+  }));
+
+  // For each invoice, find its best line; the highest-confidence claim wins each line (1 invoice ↔ 1 line).
+  const bestByLine = new Map<string, { captureId: string; confidence: number }>();
+  for (const inv of invoices) {
+    const hit = matchInvoiceToLines(invoiceForMatch(inv), candidates);
+    if (!hit) continue;
+    const prev = bestByLine.get(hit.lineId);
+    if (!prev || hit.confidence > prev.confidence) {
+      bestByLine.set(hit.lineId, { captureId: inv.id, confidence: hit.confidence });
+    }
+  }
+
+  // Persist the verdict on every scoped line. Skip lines a human already linked manually
+  // (matchScoreBp === 10000) so we don't clobber an override.
+  let matched = 0;
+  let missing = 0;
+  for (const l of scopedLines) {
+    if (l.matchScoreBp === 10000 && l.matchedCaptureId) {
+      matched += 1;
+      continue;
+    }
+    const hit = bestByLine.get(l.id);
+    if (hit) {
+      matched += 1;
+      await db
+        .update(finCaptureLines)
+        .set({
+          matchStatus: "matched",
+          matchedCaptureId: hit.captureId,
+          matchScoreBp: Math.round(hit.confidence * 10000),
+          updatedAt: new Date(),
+        })
+        .where(eq(finCaptureLines.id, l.id));
+    } else {
+      missing += 1;
+      await db
+        .update(finCaptureLines)
+        .set({
+          matchStatus: "missing",
+          matchedCaptureId: null,
+          matchScoreBp: 0,
+          updatedAt: new Date(),
+        })
+        .where(eq(finCaptureLines.id, l.id));
+    }
+  }
+
+  return c.json({
+    month: monthOk,
+    totalLines: scopedLines.length,
+    matchedCount: matched,
+    missingCount: missing,
+    invoicePool: invoices.length,
+  });
+});
+
+// PATCH /api/fin/captures/lines/:lineId/match — manually link a line to an invoice (override),
+// or pass captureId: null to mark it "missing" (no invoice). A manual link gets score 10000 so
+// a later auto-match run won't overwrite it. Mounted before GET /:id.
+finCapturesRoutes.patch(
+  "/captures/lines/:lineId/match",
+  zValidator("json", matchLineSchema),
+  async (c) => {
+    const user = c.get("user");
+    const lineId = c.req.param("lineId");
+    const { captureId } = c.req.valid("json");
+
+    const line = await db.query.finCaptureLines.findFirst({
+      where: and(eq(finCaptureLines.id, lineId), eq(finCaptureLines.tenantId, user.tenantId)),
+    });
+    if (!line) return c.json({ error: "not_found", message: "Linia nu există." }, 404);
+
+    // If linking, verify the target invoice belongs to the same tenant (no cross-tenant link).
+    if (captureId) {
+      const inv = await db.query.finCaptures.findFirst({
+        where: and(eq(finCaptures.id, captureId), eq(finCaptures.tenantId, user.tenantId)),
+      });
+      if (!inv) return c.json({ error: "invoice_not_found", message: "Factura nu există." }, 404);
+    }
+
+    const [updated] = await db
+      .update(finCaptureLines)
+      .set({
+        matchStatus: captureId ? "matched" : "missing",
+        matchedCaptureId: captureId,
+        matchScoreBp: captureId ? 10000 : 0,
         updatedAt: new Date(),
       })
       .where(eq(finCaptureLines.id, lineId))

@@ -28,16 +28,19 @@ import { CaptureFieldRow } from "@/components/fin/CaptureFieldRow";
 import { useRouter } from "@/router/HashRouter";
 import {
   getCapture,
+  getCaptures,
   confirmCapture,
   reviewCapture,
   getCaptureLines,
   reviewCaptureLine,
+  matchLineManual,
   formatMDLCents,
   parseMDLToCents,
   CAPTURE_STATUS_LABELS,
   CATEGORY_LABELS,
   REPORTABLE_LABELS,
   DOCUMENT_CLASS_LABELS,
+  MATCH_LABELS,
   type FinCapture,
   type FinCaptureStatus,
   type ExpenseCategory,
@@ -109,8 +112,32 @@ function initForm(capture: FinCapture): FormState {
 
 // ─── Statement transaction lines (Invoice Reporting) ────────────────────────────
 
+/** A single-document capture usable as an invoice to link against a transaction line. */
+interface InvoiceOption {
+  id: string;
+  label: string;
+}
+
+function MatchBadge({ status }: { status: CaptureLine["matchStatus"] }) {
+  return (
+    <span
+      className={cn(
+        "rounded px-2 py-0.5 text-xs font-medium",
+        status === "matched"
+          ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+          : status === "missing"
+            ? "bg-destructive/10 text-destructive"
+            : "bg-muted text-muted-foreground",
+      )}
+    >
+      {MATCH_LABELS[status]}
+    </span>
+  );
+}
+
 function StatementLines({ captureId }: { captureId: string }) {
   const [lines, setLines] = useState<CaptureLine[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<ReportableStatus | "all">("all");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -118,8 +145,22 @@ function StatementLines({ captureId }: { captureId: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await getCaptureLines(captureId, filter === "all" ? undefined : filter);
-      setLines(res.lines);
+      const [linesRes, invRes] = await Promise.all([
+        getCaptureLines(captureId, filter === "all" ? undefined : filter),
+        getCaptures({ documentClass: undefined }),
+      ]);
+      setLines(linesRes.lines);
+      // Only single-document uploads (invoices/receipts) can be linked to a transaction.
+      setInvoices(
+        invRes.captures
+          .filter((cpt) => cpt.kind === "document")
+          .map((cpt) => ({
+            id: cpt.id,
+            label: `${cpt.extractedFields?.vendor_name?.value ?? cpt.fileName} · ${formatMDLCents(
+              cpt.extractedFields?.amount_cents?.value ?? null,
+            )}`,
+          })),
+      );
     } finally {
       setLoading(false);
     }
@@ -133,6 +174,16 @@ function StatementLines({ captureId }: { captureId: string }) {
     setBusyId(lineId);
     try {
       const res = await reviewCaptureLine(lineId, decision);
+      setLines((prev) => prev.map((l) => (l.id === lineId ? res.line : l)));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const linkInvoice = async (lineId: string, captureIdOrEmpty: string) => {
+    setBusyId(lineId);
+    try {
+      const res = await matchLineManual(lineId, captureIdOrEmpty || null);
       setLines((prev) => prev.map((l) => (l.id === lineId ? res.line : l)));
     } finally {
       setBusyId(null);
@@ -182,6 +233,7 @@ function StatementLines({ captureId }: { captureId: string }) {
                 <th className="px-2 py-2">Data</th>
                 <th className="px-2 py-2">Descriere</th>
                 <th className="px-2 py-2 text-right">Sumă</th>
+                <th className="px-2 py-2">Factură</th>
                 <th className="px-2 py-2">Raportare</th>
                 <th className="px-2 py-2 text-right">Acțiune</th>
               </tr>
@@ -200,6 +252,30 @@ function StatementLines({ captureId }: { captureId: string }) {
                   <td className={cn("whitespace-nowrap px-2 py-2 text-right font-medium", l.direction === "in" ? "text-green-600 dark:text-green-400" : "text-foreground")}>
                     {l.direction === "in" ? "+" : "−"}
                     {formatMDLCents(l.amountCents)}
+                  </td>
+                  <td className="px-2 py-2">
+                    {l.direction === "in" ? (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <MatchBadge status={l.matchStatus} />
+                        {/* Manual link / override: pick an invoice or clear (mark missing). */}
+                        <select
+                          value={l.matchedCaptureId ?? ""}
+                          disabled={busyId === l.id}
+                          onChange={(e) => linkInvoice(l.id, e.target.value)}
+                          aria-label="Leagă manual o factură"
+                          className="max-w-[180px] rounded border border-input bg-background px-1.5 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                        >
+                          <option value="">Fără factură</option>
+                          {invoices.map((inv) => (
+                            <option key={inv.id} value={inv.id}>
+                              {inv.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </td>
                   <td className="px-2 py-2">
                     <span

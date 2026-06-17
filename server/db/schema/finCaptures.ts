@@ -341,6 +341,18 @@ export const finCaptureLines = pgTable(
     /** AI confidence in basis points. */
     reportableConfidenceBp: integer("reportable_confidence_bp").notNull().default(0),
 
+    // ─── Invoice ↔ transaction matching (Invoice Reporting) ──────────────────
+    /** Has an invoice for this transaction been found? "matched" | "missing" | "review" (not run). */
+    matchStatus: varchar("match_status", { length: 10 }).notNull().default("review"),
+
+    /** The single-document capture (invoice/receipt) this line was matched to, if any. */
+    matchedCaptureId: uuid("matched_capture_id").references(() => finCaptures.id, {
+      onDelete: "set null",
+    }),
+
+    /** Matcher confidence in basis points (0..10000). 10000 = manual link. */
+    matchScoreBp: integer("match_score_bp").notNull().default(0),
+
     /** Reviewer who confirmed/overrode this line. */
     reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
@@ -353,6 +365,7 @@ export const finCaptureLines = pgTable(
     index("fin_capture_lines_capture_idx").on(t.captureId),
     index("fin_capture_lines_tenant_idx").on(t.tenantId),
     index("fin_capture_lines_tenant_reportable_idx").on(t.tenantId, t.reportable),
+    index("fin_capture_lines_tenant_match_idx").on(t.tenantId, t.matchStatus),
   ]
 );
 

@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Sparkles,
   X,
+  Link2,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useRouter } from "@/router/HashRouter";
@@ -22,6 +23,7 @@ import { apiUpload } from "@/lib/api";
 import {
   getCaptures,
   getCapturesSummary,
+  matchCaptures,
   formatMDLCents,
   CAPTURE_STATUS_LABELS,
   TEAM_LABELS,
@@ -35,6 +37,7 @@ import {
   type ExpenseCategory,
   type ReportableStatus,
   type DocumentClassStatus,
+  type MatchResult,
 } from "@/lib/api/finCaptures";
 import { cn } from "@/lib/utils";
 
@@ -377,6 +380,22 @@ export default function CapturesListPage() {
   const [teamFilter, setTeamFilter] = useState<FinDocTeam | "">("");
   const [month, setMonth] = useState(currentMonth());
 
+  const [matching, setMatching] = useState(false);
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+
+  const runMatch = async () => {
+    setMatching(true);
+    setMatchResult(null);
+    setError(null);
+    try {
+      setMatchResult(await matchCaptures(month));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Eroare la potrivire");
+    } finally {
+      setMatching(false);
+    }
+  };
+
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -408,17 +427,54 @@ export default function CapturesListPage() {
               este <strong>pentru raportare</strong>; tu confirmi sau respingi verdictul.
             </p>
           </div>
-          <button
-            onClick={() => setShowUpload((v) => !v)}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-          >
-            <Upload className="h-4 w-4" aria-hidden="true" />
-            Document nou
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={runMatch}
+              disabled={matching}
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              {matching ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Link2 className="h-4 w-4" aria-hidden="true" />
+              )}
+              {matching ? "Se potrivește…" : "Potrivește facturi ↔ tranzacții"}
+            </button>
+            <button
+              onClick={() => setShowUpload((v) => !v)}
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              <Upload className="h-4 w-4" aria-hidden="true" />
+              Document nou
+            </button>
+          </div>
         </div>
 
         {showUpload && (
           <UploadPanel onClose={() => setShowUpload(false)} onUploaded={load} />
+        )}
+
+        {/* Match result summary (after pressing "Potrivește") */}
+        {matchResult && (
+          <div className="rounded-xl border border-border bg-card p-4 sm:p-5" role="status">
+            <div className="mb-2 flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-primary" aria-hidden="true" />
+              <h2 className="text-sm font-semibold text-foreground">
+                Potrivire factură ↔ tranzacții{matchResult.month ? ` · ${matchResult.month}` : ""}
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Stat label="Tranzacții" value={String(matchResult.totalLines)} />
+              <Stat label="Au factură" value={String(matchResult.matchedCount)} variant="good" />
+              <Stat label="Fără factură" value={String(matchResult.missingCount)} variant="warning" />
+            </div>
+            {matchResult.totalLines === 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Nicio tranzacție de plată găsită. Încarcă un extras bancar (bifează „Este extras bancar")
+                ca să ai ce potrivi cu facturile.
+              </p>
+            )}
+          </div>
         )}
 
         {/* Month-end summary */}
