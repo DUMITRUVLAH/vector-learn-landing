@@ -25,6 +25,7 @@ import {
   Banknote,
   Clock,
   RefreshCw,
+  Zap,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { cn } from "@/lib/utils";
@@ -32,14 +33,14 @@ import {
   listFinInvoices,
   updateFinInvoice,
   getFinInvoiceAging,
-  getFinInvoicePdfHtml,
+  fetchFinInvoiceDocBlob,
   formatFinMoney,
   type FinInvoice,
   type FinInvoiceStatus,
   type FinAgingResult,
 } from "@/lib/api/finInvoices";
+import { submitEinvoice } from "@/lib/api/finEinvoices";
 import { FinInvoiceCreateModal } from "@/components/fin/FinInvoiceCreateModal";
-import { downloadFinInvoicePdfFromHtml } from "@/lib/finInvoicePdf";
 import { useEffect } from "react";
 
 // ─── Status badge config ──────────────────────────────────────────────────────
@@ -108,6 +109,8 @@ export function FinInvoicesPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [sendingSfsId, setSendingSfsId] = useState<string | null>(null);
+  const [sfsFeedback, setSfsFeedback] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
 
   // ─── Data fetching ──────────────────────────────────────────────────
 
@@ -178,19 +181,46 @@ export function FinInvoicesPage() {
     }
   }
 
+  async function handleSendToSfs(invoice: FinInvoice) {
+    setSendingSfsId(invoice.id);
+    setSfsFeedback(null);
+    try {
+      const res = await submitEinvoice(invoice.id);
+      setSfsFeedback({
+        id: invoice.id,
+        ok: true,
+        msg: `Trimisă la SFS (status: ${res.data.sfsStatus}). Vezi în „e-Factura SFS”.`,
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setSfsFeedback({ id: invoice.id, ok: false, msg: `Eroare SFS: ${detail}` });
+    } finally {
+      setSendingSfsId(null);
+    }
+  }
+
   async function handleDownloadPdf(invoice: FinInvoice) {
     setDownloadingId(invoice.id);
     try {
-      // The server HTML already carries the line items + Emitent/Destinatar details
-      // the list view does not hold locally. Render THAT to PDF — rebuilding it
-      // client-side from the list row passed empty lines + no party name and produced
-      // a blank Descriere/Emitent/Destinatar PDF.
-      const res = await getFinInvoicePdfHtml(invoice.id, "ro");
-      await downloadFinInvoicePdfFromHtml(res.data.html, invoice.invoiceNumber);
+      // ONE invoice PDF, ONE generator. Reuse the Cont de plată document route
+      // (server-side Playwright, loads issuer + recipient + lines) — it is the only
+      // path that renders Emitent/Destinatar/Descriere correctly. The old client-side
+      // rebuild shipped blank blocks; no reason to maintain two PDFs.
+      const blob = await fetchFinInvoiceDocBlob(invoice.id, "pdf", "ro");
+      const isPdf = blob.type.includes("pdf");
+      const safe = invoice.invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, "_");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${safe}.${isPdf ? "pdf" : "html"}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     } catch {
-      // fallback: open printable HTML in new tab
+      // last-resort fallback: open the print-ready HTML in a new tab
       try {
-        window.open(`/api/fin/invoices/${invoice.id}/pdf?lang=ro`, "_blank");
+        window.open(`/api/fin/invoices/${invoice.id}/document.html?lang=ro`, "_blank");
       } catch {
         // ignore
       }
@@ -303,6 +333,34 @@ export function FinInvoicesPage() {
           />
         </div>
 
+        {/* SFS send feedback */}
+        {sfsFeedback && (
+          <div
+            role="status"
+            className={cn(
+              "flex items-start gap-2 rounded-lg border px-4 py-3 text-sm",
+              sfsFeedback.ok
+                ? "border-primary/30 bg-primary/5 text-foreground"
+                : "border-destructive/30 bg-destructive/5 text-destructive"
+            )}
+          >
+            {sfsFeedback.ok ? (
+              <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-primary" aria-hidden="true" />
+            ) : (
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
+            )}
+            <span>{sfsFeedback.msg}</span>
+            <button
+              type="button"
+              onClick={() => setSfsFeedback(null)}
+              aria-label="Închide mesajul"
+              className="ml-auto text-muted-foreground hover:text-foreground"
+            >
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        )}
+
         {/* Table */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           {loadingInvoices ? (
@@ -414,6 +472,23 @@ export function FinInvoicesPage() {
                                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                                 ) : (
                                   <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                                )}
+                              </button>
+                            )}
+                            {/* Trimite la SFS (e-Factura) — doar facturi emise */}
+                            {["issued", "paid", "overdue"].includes(inv.status) && (
+                              <button
+                                type="button"
+                                disabled={sendingSfsId === inv.id}
+                                onClick={() => void handleSendToSfs(inv)}
+                                aria-label={`Trimite factura ${inv.invoiceNumber} la SFS e-Factura`}
+                                title="Trimite la SFS (e-Factura)"
+                                className="p-2 rounded-md text-primary hover:bg-primary/10 transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
+                              >
+                                {sendingSfsId === inv.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                                ) : (
+                                  <Zap className="h-4 w-4" aria-hidden="true" />
                                 )}
                               </button>
                             )}
