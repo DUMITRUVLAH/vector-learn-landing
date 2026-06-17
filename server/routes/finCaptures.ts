@@ -541,6 +541,10 @@ finCapturesRoutes.post("/captures", async (c) => {
   let rawText = "";
   let team = "other";
   let kind = "document"; // "document" (single invoice) | "statement" (bank statement → many lines)
+  // When true, the caller stated the kind explicitly (e.g. the bulk-invoice dropzone uploads
+  // invoices as kind="document"); skip the "looks like a statement" auto-detection below so a
+  // real invoice whose text happens to contain date-pairs isn't mis-promoted to a statement.
+  let forceKind = false;
   let imageDataUrl: string | undefined; // set for image uploads → OpenAI vision
 
   const contentType = c.req.header("content-type") ?? "";
@@ -555,6 +559,7 @@ finCapturesRoutes.post("/captures", async (c) => {
       rawText?: string;
       team?: string;
       kind?: string;
+      forceKind?: boolean;
     }>();
     fileKey = body.fileKey ?? "upload/unknown";
     fileName = body.fileName ?? "document.pdf";
@@ -563,6 +568,8 @@ finCapturesRoutes.post("/captures", async (c) => {
     rawText = body.rawText ?? "";
     if (body.team && FIN_DOC_TEAMS.includes(body.team as never)) team = body.team;
     if (body.kind === "statement") kind = "statement";
+    if (body.kind === "document") kind = "document";
+    if (body.forceKind === true) forceKind = true;
   } else if (contentType.includes("multipart/form-data")) {
     // Multipart mode (real upload)
     const formData = await c.req.formData();
@@ -572,6 +579,8 @@ finCapturesRoutes.post("/captures", async (c) => {
     if (teamField && FIN_DOC_TEAMS.includes(teamField as never)) team = teamField;
     const kindField = formData.get("kind") as string | null;
     if (kindField === "statement") kind = "statement";
+    if (kindField === "document") kind = "document";
+    if (formData.get("forceKind") === "1") forceKind = true;
 
     if (file && file instanceof File) {
       fileName = file.name;
@@ -609,7 +618,8 @@ finCapturesRoutes.post("/captures", async (c) => {
 
   // Auto-detect a bank statement even if the caller didn't set kind: MAIB-style statements
   // say "EXTRAS DE CONT" or contain many "DD.MM.YYYY DD.MM.YYYY" transaction lines.
-  if (kind !== "statement") {
+  // Skipped when the caller forced the kind (bulk-invoice upload says "this IS an invoice").
+  if (kind !== "statement" && !forceKind) {
     const dateLinePairs = (rawText.match(/\d{2}\.\d{2}\.\d{4}\s+\d{2}\.\d{2}\.\d{4}/g) ?? []).length;
     if (/extras de cont/i.test(rawText) || dateLinePairs >= 3) kind = "statement";
   }

@@ -305,6 +305,11 @@ export async function uploadInvoiceFile(
   const form = new FormData();
   form.set("team", team);
   form.set("file", file, file.name);
+  // Force kind="document": these ARE invoices. Without this, a real invoice whose text
+  // happens to contain date-pairs would be auto-detected as a bank statement, never enter
+  // the invoice pool, and (on a scanned PDF / AI timeout) fail with "Eroare".
+  form.set("kind", "document");
+  form.set("forceKind", "1");
   return apiUpload<{ capture: FinCapture }>("/api/fin/captures", form);
 }
 
