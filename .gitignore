@@ -35,3 +35,4 @@ yarn-error.log*
 
 # Material de referință local (proiecte portate, nu fac parte din app)
 reference/
+.tmp-diag/
