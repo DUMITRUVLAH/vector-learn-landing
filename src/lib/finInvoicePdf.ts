@@ -158,7 +158,7 @@ export function money(cents: number, currency = "MDL"): string {
   const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const dec = frac ? "," + String(frac).padStart(2, "0") : "";
   const sym = currency === "MDL" ? "L" : currency;
-  return `${neg ? "-" : ""}${sym} ${grouped}${dec}`;
+  return `${neg ? "-" : ""}${sym} ${grouped}${dec}`;
 }
 
 /** Format a date string as DD.MM.YYYY */
@@ -328,6 +328,22 @@ export function buildFinInvoiceHtml(
 // ─── PDF download (browser-only) ───────────────────────────────────────────────
 
 /**
+ * Rasterize an arbitrary invoice HTML string to a PDF and save it.
+ * Browser-only (uses DOM + Canvas).
+ *
+ * Use this when the HTML is already built server-side (it carries the line items
+ * + Emitent/Destinatar details the list view does not have locally). Passing
+ * empty lines / missing party names to {@link buildFinInvoiceHtml} produced the
+ * blank Descriere/Emitent/Destinatar PDF — render the server HTML instead.
+ */
+export async function downloadFinInvoicePdfFromHtml(
+  html: string,
+  invoiceNumber: string
+): Promise<void> {
+  await rasterizeHtmlToPdf(html, `${invoiceNumber}.pdf`);
+}
+
+/**
  * Renders the invoice HTML with html2canvas, then saves as PDF via jsPDF.
  * Must only be called in a browser context (uses DOM + Canvas).
  *
@@ -341,7 +357,11 @@ export async function downloadFinInvoicePdf(
   options: FinInvoicePdfOptions = {}
 ): Promise<void> {
   const html = buildFinInvoiceHtml(invoice, lines, options);
+  await rasterizeHtmlToPdf(html, `${invoice.invoiceNumber}.pdf`);
+}
 
+/** Shared html2canvas + jsPDF rasterizer. */
+async function rasterizeHtmlToPdf(html: string, filename: string): Promise<void> {
   // Mount a hidden container
   const container = document.createElement("div");
   container.style.cssText =
@@ -376,7 +396,6 @@ export async function downloadFinInvoicePdf(
       pdf.addImage(imgData, "PNG", 0, 0, imgWidth, pageHeight);
     }
 
-    const filename = `${invoice.invoiceNumber}.pdf`;
     pdf.save(filename);
   } finally {
     document.body.removeChild(container);

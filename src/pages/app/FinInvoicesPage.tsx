@@ -39,7 +39,7 @@ import {
   type FinAgingResult,
 } from "@/lib/api/finInvoices";
 import { FinInvoiceCreateModal } from "@/components/fin/FinInvoiceCreateModal";
-import { downloadFinInvoicePdf } from "@/lib/finInvoicePdf";
+import { downloadFinInvoicePdfFromHtml } from "@/lib/finInvoicePdf";
 import { useEffect } from "react";
 
 // ─── Status badge config ──────────────────────────────────────────────────────
@@ -181,24 +181,12 @@ export function FinInvoicesPage() {
   async function handleDownloadPdf(invoice: FinInvoice) {
     setDownloadingId(invoice.id);
     try {
+      // The server HTML already carries the line items + Emitent/Destinatar details
+      // the list view does not hold locally. Render THAT to PDF — rebuilding it
+      // client-side from the list row passed empty lines + no party name and produced
+      // a blank Descriere/Emitent/Destinatar PDF.
       const res = await getFinInvoicePdfHtml(invoice.id, "ro");
-      // Use the client-side PDF generator
-      await downloadFinInvoicePdf(
-        {
-          invoiceNumber: invoice.invoiceNumber,
-          series: invoice.series,
-          number: invoice.number,
-          currency: invoice.currency,
-          issuedAt: invoice.issuedAt,
-          dueDate: invoice.dueDate,
-          totalCents: invoice.totalCents,
-          vatTotalCents: invoice.vatTotalCents,
-          notes: invoice.notes,
-        },
-        [], // lines not loaded in list view — use HTML from server
-        { lang: "ro" }
-      );
-      void res; // suppress unused warning — server HTML used as fallback
+      await downloadFinInvoicePdfFromHtml(res.data.html, invoice.invoiceNumber);
     } catch {
       // fallback: open printable HTML in new tab
       try {
