@@ -841,6 +841,13 @@
       "when": 1780920000001,
       "tag": "0119_capture_document_class",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1780920000002,
+      "tag": "0120_capture_line_invoice_match",
+      "breakpoints": true
     }
   ]
 }

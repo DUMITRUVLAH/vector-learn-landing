@@ -194,6 +194,15 @@ export async function reviewCapture(
   });
 }
 
+/** Invoice ↔ transaction match status for a statement line. */
+export type MatchStatus = "matched" | "missing" | "review";
+
+export const MATCH_LABELS: Record<MatchStatus, string> = {
+  matched: "Are factură",
+  missing: "Lipsește factura",
+  review: "Neverificat",
+};
+
 /** A single transaction extracted from a bank-statement capture. */
 export interface CaptureLine {
   id: string;
@@ -208,10 +217,45 @@ export interface CaptureLine {
   reportable: ReportableStatus;
   reportableReason: string | null;
   reportableConfidenceBp: number;
+  // Invoice ↔ transaction matching
+  matchStatus: MatchStatus;
+  matchedCaptureId: string | null;
+  matchScoreBp: number;
   reviewedBy: string | null;
   reviewedAt: string | null;
   reviewNote: string | null;
   createdAt: string;
+}
+
+export interface MatchResult {
+  month: string | null;
+  totalLines: number;
+  matchedCount: number;
+  missingCount: number;
+  invoicePool: number;
+}
+
+/**
+ * Run invoice ↔ transaction matching across statement lines. Optional month (YYYY-MM)
+ * scopes both the transactions and the invoice pool to that month.
+ */
+export async function matchCaptures(month?: string): Promise<MatchResult> {
+  const qs = month ? `?month=${month}` : "";
+  return api<MatchResult>(`/api/fin/captures/match${qs}`, { method: "POST" });
+}
+
+/**
+ * Manually link a statement line to an invoice (override), or pass `null` to mark it
+ * as missing (no invoice in the system). A manual link is never overwritten by auto-match.
+ */
+export async function matchLineManual(
+  lineId: string,
+  captureId: string | null,
+): Promise<{ line: CaptureLine }> {
+  return api<{ line: CaptureLine }>(`/api/fin/captures/lines/${lineId}/match`, {
+    method: "PATCH",
+    body: JSON.stringify({ captureId }),
+  });
 }
 
 /** List the transactions extracted from a statement capture (optional reportable filter). */
