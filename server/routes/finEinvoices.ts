@@ -26,6 +26,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "../db/client";
 import { finSfsSettings, finEinvoices } from "../db/schema/finEinvoices";
+import { finInvoices, finInvoiceLines } from "../db/schema/finInvoices";
+import { finParties } from "../db/schema/finParties";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { encrypt, decrypt } from "../lib/crypto";
 import {
@@ -289,17 +291,52 @@ finEinvoicesRoutes.post("/einvoices/:invoiceId/submit", async (c) => {
   const transport = config.mock ? createMockTransport() : undefined;
   const client = new EfacturaMdClient(config, transport);
 
-  // Build minimal SFS invoice XML
-  // In a full implementation, line items come from fin_invoice_lines (BILL-002).
-  // For EINV-002 scope: use a placeholder line until the FK is enforced post-merge.
-  const placeholderLine: SfsInvoiceLine = {
-    code: "SVC001",
-    name: "Servicii educationale",
+  // ── Load the real invoice + buyer + line items ──────────────────────────────
+  const [invoice] = await db
+    .select()
+    .from(finInvoices)
+    .where(and(eq(finInvoices.id, invoiceId), eq(finInvoices.tenantId, user.tenantId)))
+    .limit(1);
+
+  if (!invoice) {
+    return c.json({ error: "invoice_not_found" }, 404);
+  }
+
+  // Buyer IDNO + bank from fin_parties (the invoice recipient).
+  let buyerIdno = "";
+  let buyerBankAccount: string | undefined;
+  if (invoice.partyId) {
+    const [party] = await db
+      .select()
+      .from(finParties)
+      .where(and(eq(finParties.id, invoice.partyId), eq(finParties.tenantId, user.tenantId)))
+      .limit(1);
+    buyerIdno = party?.idno ?? "";
+    buyerBankAccount = party?.iban ?? undefined;
+  }
+
+  if (!buyerIdno) {
+    return c.json({ error: "buyer_idno_missing", detail: "Factura nu are un cumpărător cu IDNO." }, 422);
+  }
+
+  const lineRows = await db
+    .select()
+    .from(finInvoiceLines)
+    .where(eq(finInvoiceLines.invoiceId, invoiceId));
+
+  if (lineRows.length === 0) {
+    return c.json({ error: "invoice_has_no_lines" }, 422);
+  }
+
+  const lines: SfsInvoiceLine[] = lineRows.map((l, i) => ({
+    code: l.serviceId ?? String(i + 1),
+    name: l.description,
     unitOfMeasure: "buc",
-    quantity: 1,
-    unitPriceWithoutVat: 1000,
-    vatRate: 20,
-  };
+    quantity: l.quantity,
+    // cents → currency units, fără TVA (unitPriceCents e prețul unitar fără TVA).
+    unitPriceWithoutVat: l.unitPriceCents / 100,
+    vatRate: l.vatPct,
+  }));
 
   const requestId = randomUUID();
   const now = new Date();
@@ -309,10 +346,13 @@ finEinvoicesRoutes.post("/einvoices/:invoiceId/submit", async (c) => {
     xml = generateSfsInvoiceXml({
       supplierIdno: config.supplierIdno,
       supplierBankAccount: config.supplierBankAccount,
-      buyerIdno: "0000000000000", // placeholder — real value from fin_parties.idno
-      deliveryDate: now,
+      buyerIdno,
+      buyerBankAccount,
+      deliveryDate: invoice.issuedAt ?? now,
+      // APIeInvoiceId — îl folosim la reconciliere (SearchInvoices §5.15) ca să
+      // aflăm Seria/Number atribuite de SFS după postare.
       internalId: invoiceId,
-      lines: [placeholderLine],
+      lines,
     });
   } catch (err) {
     return c.json(
@@ -324,10 +364,23 @@ finEinvoicesRoutes.post("/einvoices/:invoiceId/submit", async (c) => {
   try {
     const result = await client.postInvoices(xml, requestId);
 
-    const sfsSerialNumber = result.errorMessage
-      ? null
-      : `EFMD-${invoiceId.slice(0, 8).toUpperCase()}`;
-    const sfsInvoiceId = result.requestId ?? null;
+    // În fluxul semiautomatizat SFS atribuie Seria + Number la postare. Le aflăm
+    // imediat după, căutând după APIeInvoiceId (= invoiceId). Dacă încă nu e
+    // indexată, rămân null și se completează la următorul /sync.
+    let sfsSerialNumber: string | null = null;
+    let sfsNumber: string | null = null;
+    if (!result.errorMessage) {
+      try {
+        const found = await client.searchByApiInvoiceId(invoiceId, randomUUID());
+        if (found) {
+          sfsSerialNumber = found.seria || null;
+          sfsNumber = found.number || null;
+        }
+      } catch {
+        // Reconcilierea poate întârzia; nu blocăm trimiterea pentru asta.
+      }
+    }
+    const sfsInvoiceId = sfsNumber;
 
     // Upsert fin_einvoices row
     if (existing.length > 0) {
@@ -418,14 +471,28 @@ finEinvoicesRoutes.post("/einvoices/:invoiceId/sync", async (c) => {
   const transport = sfsData.config.mock ? createMockTransport() : undefined;
   const client = new EfacturaMdClient(sfsData.config, transport);
 
-  const seria = record.sfsSerialNumber ?? "EFMD";
-  const number = record.sfsInvoiceId ?? "000000001";
-  const requestId = randomUUID();
-
   const now = new Date();
 
+  // Seria/Number sunt cele atribuite de SFS la postare. Dacă lipsesc (reconciliere
+  // încă neefectuată), le aflăm acum după APIeInvoiceId înainte de a verifica statutul.
+  let seria = record.sfsSerialNumber ?? "";
+  let number = record.sfsInvoiceId ?? "";
+
   try {
-    const statusResult = await client.checkInvoiceStatus(seria, number, requestId);
+    if (!seria || !number) {
+      const found = await client.searchByApiInvoiceId(invoiceId, randomUUID());
+      if (found?.seria && found?.number) {
+        seria = found.seria;
+        number = found.number;
+      }
+    }
+
+    if (!seria || !number) {
+      // Încă nu e indexată la SFS — nimic de sincronizat, dar nu e o eroare.
+      return c.json({ data: { id: record.id, sfsStatus: record.sfsStatus, pending: true } });
+    }
+
+    const statusResult = await client.checkInvoiceStatus(seria, number, randomUUID());
 
     let newStatus: typeof record.sfsStatus = record.sfsStatus;
     if (statusResult) {
@@ -439,13 +506,115 @@ finEinvoicesRoutes.post("/einvoices/:invoiceId/sync", async (c) => {
 
     await db
       .update(finEinvoices)
-      .set({ sfsStatus: newStatus, lastSyncAt: now, updatedAt: now })
+      .set({
+        sfsStatus: newStatus,
+        // Persistăm Seria/Number dacă tocmai le-am aflat prin SearchInvoices.
+        sfsSerialNumber: seria,
+        sfsInvoiceId: number,
+        lastSyncAt: now,
+        updatedAt: now,
+      })
       .where(eq(finEinvoices.id, record.id));
 
-    return c.json({ data: { id: record.id, sfsStatus: newStatus, lastSyncAt: now.toISOString() } });
+    return c.json({
+      data: {
+        id: record.id,
+        sfsStatus: newStatus,
+        sfsSerialNumber: seria,
+        sfsInvoiceId: number,
+        lastSyncAt: now.toISOString(),
+      },
+    });
   } catch (err) {
     const msg = err instanceof EfacturaMdError ? err.message : String(err);
     return c.json({ error: "sync_failed", detail: msg }, 422);
+  }
+});
+
+// ─── GET /api/fin/einvoices/:invoiceId/pdf ───────────────────────────────────
+// §5.4 GetInvoicesContentForPrint — descarcă PDF-ul oficial al facturii de la SFS.
+
+finEinvoicesRoutes.get("/einvoices/:invoiceId/pdf", async (c) => {
+  const user = c.get("user");
+  const invoiceId = c.req.param("invoiceId");
+
+  const [record] = await db
+    .select()
+    .from(finEinvoices)
+    .where(and(eq(finEinvoices.finInvoiceId, invoiceId), eq(finEinvoices.tenantId, user.tenantId)))
+    .limit(1);
+
+  if (!record) return c.json({ error: "not_found" }, 404);
+  if (!record.sfsSerialNumber || !record.sfsInvoiceId) {
+    return c.json({ error: "not_reconciled", detail: "Rulează /sync întâi." }, 409);
+  }
+
+  const sfsData = await loadSfsConfig(user.tenantId);
+  if (!sfsData) return c.json({ error: "sfs_not_configured" }, 400);
+
+  const transport = sfsData.config.mock ? createMockTransport() : undefined;
+  const client = new EfacturaMdClient(sfsData.config, transport);
+
+  try {
+    const result = await client.getInvoicePdf(
+      record.sfsSerialNumber,
+      record.sfsInvoiceId,
+      randomUUID()
+    );
+    if (!result) return c.json({ error: "pdf_not_available" }, 404);
+
+    c.header("Content-Type", "application/pdf");
+    c.header("Content-Disposition", `inline; filename="${record.sfsSerialNumber}-${record.sfsInvoiceId}.pdf"`);
+    return c.body(result.pdf);
+  } catch (err) {
+    const msg = err instanceof EfacturaMdError ? err.message : String(err);
+    return c.json({ error: "pdf_failed", detail: msg }, 422);
+  }
+});
+
+// ─── GET /api/fin/einvoices/:invoiceId/qr ────────────────────────────────────
+// §5.6 GetInvoicesQRcodes — codul QR (PNG base64 + text) al facturii.
+
+finEinvoicesRoutes.get("/einvoices/:invoiceId/qr", async (c) => {
+  const user = c.get("user");
+  const invoiceId = c.req.param("invoiceId");
+
+  const [record] = await db
+    .select()
+    .from(finEinvoices)
+    .where(and(eq(finEinvoices.finInvoiceId, invoiceId), eq(finEinvoices.tenantId, user.tenantId)))
+    .limit(1);
+
+  if (!record) return c.json({ error: "not_found" }, 404);
+  if (!record.sfsSerialNumber || !record.sfsInvoiceId) {
+    return c.json({ error: "not_reconciled", detail: "Rulează /sync întâi." }, 409);
+  }
+
+  const sfsData = await loadSfsConfig(user.tenantId);
+  if (!sfsData) return c.json({ error: "sfs_not_configured" }, 400);
+
+  const transport = sfsData.config.mock ? createMockTransport() : undefined;
+  const client = new EfacturaMdClient(sfsData.config, transport);
+
+  try {
+    const result = await client.getInvoiceQrCode(
+      record.sfsSerialNumber,
+      record.sfsInvoiceId,
+      randomUUID()
+    );
+    if (!result) return c.json({ error: "qr_not_available" }, 404);
+
+    return c.json({
+      data: {
+        seria: result.seria,
+        number: result.number,
+        pngBase64: result.pngBase64,
+        text: result.text,
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof EfacturaMdError ? err.message : String(err);
+    return c.json({ error: "qr_failed", detail: msg }, 422);
   }
 });
 
@@ -487,8 +656,16 @@ finEinvoicesRoutes.post("/einvoices/:invoiceId/cancel", async (c) => {
   const transport = sfsData.config.mock ? createMockTransport() : undefined;
   const client = new EfacturaMdClient(sfsData.config, transport);
 
-  const seria = record.sfsSerialNumber ?? "EFMD";
-  const number = record.sfsInvoiceId ?? "000000001";
+  const seria = record.sfsSerialNumber;
+  const number = record.sfsInvoiceId;
+
+  // Fără Seria/Number reale (atribuite de SFS) nu putem anula la SFS.
+  if (!seria || !number) {
+    return c.json(
+      { error: "not_reconciled", detail: "Seria/numărul SFS lipsesc. Rulează /sync întâi." },
+      409
+    );
+  }
 
   try {
     await client.cancelInvoice(seria, number, "Anulat de utilizator", randomUUID());
