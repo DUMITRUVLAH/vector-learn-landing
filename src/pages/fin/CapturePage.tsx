@@ -194,23 +194,31 @@ function StatementLines({ captureId }: { captureId: string }) {
     }
   };
 
-  // After a batch of invoices is uploaded, auto-match them to THIS statement's transactions
-  // and reload so the freshly-uploaded invoices snap onto their matching lines. Scoped to the
-  // current statement (captureId) so the toast reflects the transactions the user is looking at.
-  const handleInvoicesUploaded = async (successCount: number) => {
+  // After a batch of invoices is uploaded, auto-match them to THIS statement's transactions and
+  // reload. Returns the capture ids that actually matched a transaction, so the uploader can show
+  // each file green ("potrivit") vs yellow ("fără tranzacție"). Scoped to the current statement.
+  const handleInvoicesUploaded = async (uploadedCaptureIds: string[]): Promise<string[]> => {
     setMatching(true);
     setUploadToast(null);
+    const n = uploadedCaptureIds.length;
+    const invWord = n === 1 ? "factură încărcată" : "facturi încărcate";
     try {
       const res = await matchCaptures({ captureId });
       await load();
-      const invWord = successCount === 1 ? "factură încărcată" : "facturi încărcate";
-      setUploadToast(
-        `${successCount} ${invWord} · ${res.matchedCount} din ${res.totalLines} tranzacții au factură.`,
+      // Which of the just-uploaded invoices got attached to a transaction in this statement?
+      const linesRes = await getCaptureLines(captureId);
+      const matchedSet = new Set(
+        linesRes.lines.map((l) => l.matchedCaptureId).filter((id): id is string => !!id),
       );
+      const matched = uploadedCaptureIds.filter((id) => matchedSet.has(id));
+      setUploadToast(
+        `${n} ${invWord} · ${res.matchedCount} din ${res.totalLines} tranzacții au factură.`,
+      );
+      return matched;
     } catch {
       await load();
-      const invWord = successCount === 1 ? "factură încărcată" : "facturi încărcate";
-      setUploadToast(`${successCount} ${invWord}, dar potrivirea automată a eșuat.`);
+      setUploadToast(`${n} ${invWord}, dar potrivirea automată a eșuat.`);
+      return [];
     } finally {
       setMatching(false);
     }

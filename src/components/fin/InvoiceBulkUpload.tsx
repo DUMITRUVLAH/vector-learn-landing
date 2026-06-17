@@ -16,7 +16,7 @@
  * live region for progress. Design: Vector 365 tokens only, light + dark mode.
  */
 import { useCallback, useRef, useState } from "react";
-import { Upload, CheckCircle2, XCircle, Loader2, FileText, X } from "lucide-react";
+import { Upload, CheckCircle2, XCircle, Loader2, FileText, X, AlertTriangle } from "lucide-react";
 import {
   signCaptureUploads,
   putToSignedUrl,
@@ -42,13 +42,17 @@ function isRateLimited(e: unknown): boolean {
 
 const ACCEPT = "image/*,application/pdf,.csv,.txt,text/csv";
 
-type ItemStatus = "queued" | "uploading" | "done" | "error";
+// done   = uploaded + matched to a transaction (green ✓)
+// nomatch = uploaded fine but NO matching transaction found (yellow "fără tranzacție")
+// error  = couldn't process the document (red)
+type ItemStatus = "queued" | "uploading" | "done" | "nomatch" | "error";
 
 interface UploadItem {
   id: string;
   file: File;
   status: ItemStatus;
   error?: string;
+  captureId?: string;
 }
 
 let idCounter = 0;
@@ -67,8 +71,12 @@ function isAcceptable(file: File): boolean {
 interface InvoiceBulkUploadProps {
   /** Team tag stored on every uploaded invoice (defaults to "other"). */
   team?: FinDocTeam;
-  /** Called once after a batch finishes, with how many succeeded (≥1 ⇒ re-match). */
-  onUploaded: (successCount: number) => void;
+  /**
+   * Called after a batch finishes, with the capture ids that uploaded OK. The parent runs the
+   * auto-match and returns the subset that actually matched a transaction — so we can mark each
+   * file green ("potrivit") vs yellow ("fără tranzacție").
+   */
+  onUploaded: (uploadedCaptureIds: string[]) => Promise<string[]>;
 }
 
 export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUploadProps) {
@@ -121,7 +129,8 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
 
   const clearDone = () => {
     if (busy) return;
-    setItems((prev) => prev.filter((it) => it.status !== "done"));
+    // "Processed" = matched (done) or uploaded-without-match (nomatch); both can be cleared.
+    setItems((prev) => prev.filter((it) => it.status !== "done" && it.status !== "nomatch"));
     setLimitMsg(null);
   };
 
@@ -142,7 +151,7 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
     setLimitMsg(null);
     setRateLimited(false);
 
-    let successCount = 0;
+    const uploadedIds: string[] = [];
     let hitRateLimit = false;
     try {
       queue.forEach((it) => setItemStatus(it.id, "uploading"));
@@ -166,6 +175,8 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
       );
 
       // 3) Finalize in small batches: the server downloads each object and extracts its fields.
+      //    A file that processes OK is marked "done" for now; after matching we reclassify it
+      //    green ("potrivit") or yellow ("fără tranzacție").
       for (const group of chunk(uploaded, FINALIZE_BATCH)) {
         if (hitRateLimit) break;
         try {
@@ -176,10 +187,12 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
           group.forEach((g, i) => {
             const r = results[i];
             if (r && r.ok) {
-              setItemStatus(g.item.id, "done");
-              successCount += 1;
+              const capId = r.capture.id;
+              setItems((prev) => prev.map((it) => (it.id === g.item.id ? { ...it, status: "done", captureId: capId } : it)));
+              uploadedIds.push(capId);
             } else {
-              setItemStatus(g.item.id, "error", r && !r.ok ? r.error : "Eroare");
+              // Real processing failure → red, with a human reason.
+              setItemStatus(g.item.id, "error", r && !r.ok ? "Nu s-a putut citi documentul" : "Eroare");
             }
           });
         } catch (e) {
@@ -207,11 +220,29 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
 
     setBusy(false);
     setRateLimited(hitRateLimit);
-    if (successCount > 0) onUploaded(successCount);
+
+    // 4) Auto-match, then color each uploaded file: matched a transaction → green; otherwise yellow
+    //    "fără tranzacție" (uploaded fine, just no matching payment in this statement).
+    if (uploadedIds.length > 0) {
+      let matched: string[] = [];
+      try {
+        matched = await onUploaded(uploadedIds);
+      } catch {
+        matched = [];
+      }
+      const matchedSet = new Set(matched);
+      setItems((prev) =>
+        prev.map((it) =>
+          it.captureId && uploadedIds.includes(it.captureId)
+            ? { ...it, status: matchedSet.has(it.captureId) ? "done" : "nomatch" }
+            : it,
+        ),
+      );
+    }
   };
 
   const pending = items.filter((it) => it.status === "queued" || it.status === "error").length;
-  const doneCount = items.filter((it) => it.status === "done").length;
+  const doneCount = items.filter((it) => it.status === "done" || it.status === "nomatch").length;
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
@@ -307,12 +338,21 @@ export function InvoiceBulkUpload({ team = "other", onUploaded }: InvoiceBulkUpl
                 <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" aria-label="Se încarcă" />
               )}
               {it.status === "done" && (
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" aria-label="Încărcat" />
+                <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400" title="Potrivit cu o tranzacție">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  Potrivit
+                </span>
+              )}
+              {it.status === "nomatch" && (
+                <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400" title="Încărcat, dar nu am găsit o tranzacție potrivită în acest extras">
+                  <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  Fără tranzacție
+                </span>
               )}
               {it.status === "error" && (
-                <span className="flex items-center gap-1 text-xs text-destructive" title={it.error}>
+                <span className="flex items-center gap-1 text-xs text-destructive" title={it.error ?? "Nu s-a putut procesa"}>
                   <XCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  Eroare
+                  Nu s-a procesat
                 </span>
               )}
               {(it.status === "queued" || it.status === "error") && !busy && (

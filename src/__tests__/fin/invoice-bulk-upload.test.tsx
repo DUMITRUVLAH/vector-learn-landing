@@ -38,11 +38,13 @@ const mockSign = vi.mocked(signCaptureUploads);
 const mockPut = vi.mocked(putToSignedUrl);
 const mockFinalize = vi.mocked(finalizeCaptures);
 
-/** Default finalize mock: every uploaded object succeeds. */
+/** Default finalize mock: every uploaded object succeeds. Capture id = fileName (unique). */
 function finalizeOk(items: Array<{ fileName: string }>): { results: BatchItemResult[]; count: number; okCount: number } {
-  const results: BatchItemResult[] = items.map((it, i) => ({ ok: true, capture: { id: `c${i}`, fileName: it.fileName } as never, lineCount: 0 }));
+  const results: BatchItemResult[] = items.map((it) => ({ ok: true, capture: { id: it.fileName, fileName: it.fileName } as never, lineCount: 0 }));
   return { results, count: results.length, okCount: results.length };
 }
+/** onUploaded mock: by default report that every uploaded invoice matched a transaction. */
+const onUploadedAllMatched = () => vi.fn(async (ids: string[]) => ids);
 
 function pdf(name: string, bytes = 1000): File {
   const f = new File(["x"], name, { type: "application/pdf" });
@@ -102,31 +104,31 @@ describe("InvoiceBulkUpload", () => {
     expect(screen.getByText(/ignorate/i)).toBeInTheDocument();
   });
 
-  it("signs once, PUTs each file to storage, finalizes, and reports the success count", async () => {
-    const onUploaded = vi.fn();
+  it("signs once, PUTs each file to storage, finalizes, and reports uploaded ids", async () => {
+    const onUploaded = onUploadedAllMatched();
     render(<InvoiceBulkUpload onUploaded={onUploaded} />);
     selectFiles([pdf("a.pdf"), pdf("b.pdf")]);
 
     fireEvent.click(screen.getByRole("button", { name: /Încarcă/i }));
 
-    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(2));
-    // One sign request for all files; one PUT per file (direct to storage).
+    // onUploaded gets the uploaded capture ids (id = fileName in the mock).
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(["a.pdf", "b.pdf"]));
     expect(mockSign).toHaveBeenCalledTimes(1);
     expect(mockSign.mock.calls[0][0]).toHaveLength(2);
     expect(mockPut).toHaveBeenCalledTimes(2);
-    // Both fit one finalize batch.
     expect(mockFinalize).toHaveBeenCalledTimes(1);
   });
 
   it("finalizes in small batches past FINALIZE_BATCH", async () => {
-    const onUploaded = vi.fn();
+    const onUploaded = onUploadedAllMatched();
     render(<InvoiceBulkUpload onUploaded={onUploaded} />);
     // 6 files, FINALIZE_BATCH=4 → 2 finalize requests (4 + 2). Sign is still one request.
     selectFiles(Array.from({ length: 6 }, (_, i) => pdf(`f${i}.pdf`)));
 
     fireEvent.click(screen.getByRole("button", { name: /Încarcă/i }));
 
-    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(6));
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledTimes(1));
+    expect(onUploaded.mock.calls[0][0]).toHaveLength(6);
     expect(mockSign).toHaveBeenCalledTimes(1);
     expect(mockPut).toHaveBeenCalledTimes(6);
     expect(mockFinalize).toHaveBeenCalledTimes(2);
@@ -134,18 +136,31 @@ describe("InvoiceBulkUpload", () => {
     expect(mockFinalize.mock.calls[1][0]).toHaveLength(2);
   });
 
+  it("marks a matched invoice green ('Potrivit') and an unmatched one yellow ('Fără tranzacție')", async () => {
+    // onUploaded reports only a.pdf matched a transaction.
+    const onUploaded = vi.fn(async () => ["a.pdf"]);
+    render(<InvoiceBulkUpload onUploaded={onUploaded} />);
+    selectFiles([pdf("a.pdf"), pdf("b.pdf")]);
+
+    fireEvent.click(screen.getByRole("button", { name: /Încarcă/i }));
+
+    await waitFor(() => expect(screen.getByText("Potrivit")).toBeInTheDocument());
+    expect(screen.getByText("Fără tranzacție")).toBeInTheDocument();
+  });
+
   it("a storage PUT failure marks only that file, others succeed", async () => {
     mockPut.mockImplementation(async (url: string) => {
       if (url.endsWith("/1")) throw new ApiError(500, "storage_500");
     });
-    const onUploaded = vi.fn();
+    const onUploaded = onUploadedAllMatched();
     render(<InvoiceBulkUpload onUploaded={onUploaded} />);
     selectFiles([pdf("ok.pdf"), pdf("fail.pdf")]);
 
     fireEvent.click(screen.getByRole("button", { name: /Încarcă/i }));
 
-    // Only the file that PUT successfully reaches finalize → success count 1.
-    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(1));
+    // Only the file that PUT successfully reaches finalize → onUploaded gets 1 id.
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledTimes(1));
+    expect(onUploaded.mock.calls[0][0]).toHaveLength(1);
     expect(mockFinalize.mock.calls[0][0]).toHaveLength(1);
   });
 
