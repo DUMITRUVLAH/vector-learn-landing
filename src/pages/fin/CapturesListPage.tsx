@@ -388,7 +388,7 @@ export default function CapturesListPage() {
     setMatchResult(null);
     setError(null);
     try {
-      setMatchResult(await matchCaptures(month));
+      setMatchResult(await matchCaptures({ month }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Eroare la potrivire");
     } finally {
