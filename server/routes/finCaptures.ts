@@ -691,7 +691,10 @@ async function buildCapture(
       capture.id,
       input.imageDataUrl,
     );
-    extractedFields = result.extractedFields;
+    // Strip any NUL (0x00) the AI echoed into string values — a `jsonb` column rejects 0x00 with
+    // "invalid byte sequence for encoding UTF8", which would throw on the update below and surface
+    // as "Eroare" even though the document processed fine. (rawText is already sanitized above.)
+    extractedFields = JSON.parse(JSON.stringify(result.extractedFields).replace(/\\u0000/g, "")) as ExtractedFields;
   } catch (err) {
     newStatus = "failed";
     errorMessage = err instanceof Error ? err.message : "Eroare necunoscută la extracție AI";
