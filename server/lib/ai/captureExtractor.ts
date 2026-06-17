@@ -215,6 +215,17 @@ export interface CaptureExtractionResult {
  * @param userId — utilizatorul care a făcut upload
  * @param captureId — ID-ul capturii (pentru entity referință în audit)
  */
+/**
+ * Cap the OCR text sent to the model. The fields we extract (vendor, total, date, reference,
+ * IBAN, category, document class) live in the document HEADER. Long receipts — e.g. a Meta ads
+ * invoice with dozens of campaign line items — used to send the WHOLE text, making the AI call
+ * take 30–60s+ and time out the serverless function (the "se analizează foarte greu" + the
+ * failed uploads on big receipts). The first ~6000 chars always contain the header fields, so
+ * truncating keeps extraction accurate AND fast. The FULL rawText is still stored on the capture
+ * (used by the invoice↔transaction matcher's reference haystack).
+ */
+const MAX_AI_TEXT_CHARS = 6000;
+
 export async function extractCaptureFields(
   rawText: string,
   tenantId: string,
@@ -222,13 +233,15 @@ export async function extractCaptureFields(
   captureId: string,
   imageDataUrl?: string,
 ): Promise<CaptureExtractionResult> {
+  const aiText =
+    rawText.length > MAX_AI_TEXT_CHARS ? `${rawText.slice(0, MAX_AI_TEXT_CHARS)}\n[…text trunchiat]` : rawText;
   const callOptions: AiCallOptions = {
     action: "capture_extract",
     systemPrompt: SYSTEM_PROMPT,
     // With an image, instruct the model to read the document; otherwise use the OCR text.
     userMessage: imageDataUrl
       ? "Extrage câmpurile financiare din factura/bonul din imaginea atașată."
-      : `Extrage câmpurile financiare din textul OCR următor:\n\n${rawText}`,
+      : `Extrage câmpurile financiare din textul OCR următor:\n\n${aiText}`,
     tenantId,
     userId,
     entityType: "fin_capture",
