@@ -159,4 +159,44 @@ describe("EFMD — EfacturaMdClient (mock transport)", () => {
     expect(r?.pngBase64.length).toBeGreaterThan(0);
     expect(r?.text).toContain("EFMD");
   });
+
+  it("postInvoicesWithAttachment (§5.13) posts invoice + PDF", async () => {
+    const xml = generateSfsInvoiceXml({
+      supplierIdno: "1002600001257",
+      supplierBankAccount: "22241410046",
+      buyerIdno: "1002600003354",
+      deliveryDate: new Date(),
+      internalId: "inv-att-1",
+      lines: [{ code: "1", name: "x", unitOfMeasure: "buc", quantity: 1, unitPriceWithoutVat: 10, vatRate: 20 }],
+    });
+    const pdfB64 = Buffer.from("PDFDATA").toString("base64");
+    const res = await client.postInvoicesWithAttachment(xml, "factura.pdf", pdfB64, "req-9");
+    expect(res.totalInvoicesPosted).toBe(1);
+    expect(res.errorMessage).toBeNull();
+  });
+
+  it("getAcceptedInvoices (§5.2) returns accepted invoices", async () => {
+    const r = await client.getAcceptedInvoices("req-10");
+    expect(r.length).toBeGreaterThan(0);
+    expect(r[0].invoiceStatus).toBe(3); // Acceptat de Cumpărător
+  });
+
+  it("getRejectedInvoices (§5.8) returns rejected invoices", async () => {
+    const r = await client.getRejectedInvoices("req-11");
+    expect(r.length).toBeGreaterThan(0);
+    expect(r[0].invoiceStatus).toBe(2); // Refuzat de Cumpărător
+  });
+
+  it("getInvoicesBySeriaNumber (§5.3) returns invoices with XML content", async () => {
+    const r = await client.getInvoicesBySeriaNumber([{ seria: "EFMD", number: "000000001" }], "req-12");
+    expect(r.length).toBeGreaterThan(0);
+    expect(r[0].xml).toContain("<Documents>");
+  });
+
+  it("getLogs (§5.7) returns request log entries", async () => {
+    const r = await client.getLogs(new Date(Date.now() - 86400000), new Date(), "req-13");
+    expect(r.length).toBeGreaterThan(0);
+    expect(r[0].method).toBe("PostInvoices");
+    expect(r[0].response).toContain("Results");
+  });
 });
