@@ -354,6 +354,22 @@ finEinvoicesRoutes.post("/einvoices/:invoiceId/submit", async (c) => {
     return c.json({ error: "buyer_idno_missing", detail: "Factura nu are un cumpărător cu IDNO." }, 422);
   }
 
+  // SFS cere OBLIGATORIU contul bancar al cumpărătorului (Buyer/BankAccount).
+  // Fără el, PostInvoices eșuează cu "Object reference not set to an instance of
+  // an object" (NullReferenceException pe server). Verificat live. Blocăm cu mesaj
+  // clar în loc să lăsăm SFS să dea eroarea criptică.
+  if (!buyerBankAccount) {
+    return c.json(
+      {
+        error: "buyer_iban_missing",
+        detail:
+          "Cumpărătorul nu are cont bancar (IBAN) completat. SFS îl cere obligatoriu. " +
+          "Adaugă IBAN-ul partenerului în fișa lui, apoi retrimite.",
+      },
+      422
+    );
+  }
+
   const lineRows = await db
     .select()
     .from(finInvoiceLines)
@@ -508,44 +524,49 @@ finEinvoicesRoutes.post("/einvoices/:invoiceId/sync", async (c) => {
 
   const now = new Date();
 
-  // Seria/Number sunt cele atribuite de SFS la postare. Dacă lipsesc (reconciliere
-  // încă neefectuată), le aflăm acum după APIeInvoiceId înainte de a verifica statutul.
-  let seria = record.sfsSerialNumber ?? "";
-  let number = record.sfsInvoiceId ?? "";
+  // Mapează codul de status SFS (InvoiceStatus) la enum-ul nostru.
+  // 0=Draft (trimisă, nesemnată) → rămâne "sent" la noi.
+  function mapStatus(inv: number, fallback: typeof record.sfsStatus): typeof record.sfsStatus {
+    if (inv === 3 || inv === 8) return "accepted"; // acceptat/semnat de cumpărător
+    if (inv === 2) return "rejected";
+    if (inv === 5) return "cancelled";
+    if (inv === 0 || inv === 1 || inv === 7) return "sent"; // draft/semnat furnizor/trimis
+    return fallback;
+  }
 
   try {
-    if (!seria || !number) {
-      const found = await client.searchByApiInvoiceId(invoiceId, randomUUID());
-      if (found?.seria && found?.number) {
-        seria = found.seria;
-        number = found.number;
-      }
-    }
-
-    if (!seria || !number) {
-      // Încă nu e indexată la SFS — nimic de sincronizat, dar nu e o eroare.
-      return c.json({ data: { id: record.id, sfsStatus: record.sfsStatus, pending: true } });
-    }
-
-    const statusResult = await client.checkInvoiceStatus(seria, number, randomUUID());
-
+    let seria = record.sfsSerialNumber ?? "";
+    let number = record.sfsInvoiceId ?? "";
     let newStatus: typeof record.sfsStatus = record.sfsStatus;
-    if (statusResult) {
-      const inv = statusResult.invoiceStatus;
-      // Map SFS invoice status codes to our enum
-      if (inv === 3 || inv === 8) newStatus = "accepted"; // accepted by buyer
-      else if (inv === 2) newStatus = "rejected";
-      else if (inv === 5) newStatus = "cancelled";
-      else if (inv === 1 || inv === 7) newStatus = "sent"; // signed/sent
+
+    // Sursa de adevăr la reconciliere: SearchInvoices după APIeInvoiceId.
+    // Întoarce statutul real chiar și pentru Draft (când Seria/Number sunt încă goale,
+    // pentru că SFS le atribuie abia la semnarea manuală în portal).
+    const found = await client.searchByApiInvoiceId(invoiceId, randomUUID());
+
+    if (found) {
+      newStatus = mapStatus(found.invoiceStatus, record.sfsStatus);
+      if (found.seria) seria = found.seria;
+      if (found.number) number = found.number;
+    }
+
+    // Dacă SFS a atribuit deja serie/număr (factura semnată în portal), putem cere
+    // și statutul detaliat prin CheckInvoicesStatus pentru confirmare.
+    if (seria && number) {
+      try {
+        const statusResult = await client.checkInvoiceStatus(seria, number, randomUUID());
+        if (statusResult) newStatus = mapStatus(statusResult.invoiceStatus, newStatus);
+      } catch {
+        // non-fatal — păstrăm statutul din SearchInvoices
+      }
     }
 
     await db
       .update(finEinvoices)
       .set({
         sfsStatus: newStatus,
-        // Persistăm Seria/Number dacă tocmai le-am aflat prin SearchInvoices.
-        sfsSerialNumber: seria,
-        sfsInvoiceId: number,
+        sfsSerialNumber: seria || null,
+        sfsInvoiceId: number || null,
         lastSyncAt: now,
         updatedAt: now,
       })
@@ -581,7 +602,7 @@ finEinvoicesRoutes.get("/einvoices/:invoiceId/pdf", async (c) => {
 
   if (!record) return c.json({ error: "not_found" }, 404);
   if (!record.sfsSerialNumber || !record.sfsInvoiceId) {
-    return c.json({ error: "not_reconciled", detail: "Rulează /sync întâi." }, 409);
+    return c.json({ error: "not_reconciled", detail: "Factura nu are încă serie/număr SFS. Semneaz-o în portalul e-Factura, apoi rulează Sincronizează." }, 409);
   }
 
   const sfsData = await loadSfsConfig(user.tenantId);
@@ -622,7 +643,7 @@ finEinvoicesRoutes.get("/einvoices/:invoiceId/qr", async (c) => {
 
   if (!record) return c.json({ error: "not_found" }, 404);
   if (!record.sfsSerialNumber || !record.sfsInvoiceId) {
-    return c.json({ error: "not_reconciled", detail: "Rulează /sync întâi." }, 409);
+    return c.json({ error: "not_reconciled", detail: "Factura nu are încă serie/număr SFS. Semneaz-o în portalul e-Factura, apoi rulează Sincronizează." }, 409);
   }
 
   const sfsData = await loadSfsConfig(user.tenantId);
