@@ -13,7 +13,7 @@ import { useRouter } from "@/router/HashRouter";
 
 export function BusinessLoginPage() {
   const { navigate } = useRouter();
-  const [email, setEmail] = useState("admin@demo.vectorlearn.io");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,11 +69,6 @@ export function BusinessLoginPage() {
     <AuthLayout
       title="Business Suite"
       subtitle="FinDesk · PAR · ITPark — conectați-vă în cont"
-      footer={
-        <span className="text-xs text-muted-foreground">
-          Demo: admin@demo.vectorlearn.io / demo123456
-        </span>
-      }
     >
       <form onSubmit={submit} className="space-y-4">
         <div>

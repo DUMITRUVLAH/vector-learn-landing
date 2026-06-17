@@ -57,6 +57,24 @@ function daysBetween(a: string, b: string): number {
   return Number.isFinite(diff) ? diff : Infinity;
 }
 
+/**
+ * Does an amount (e.g. 28.8) appear verbatim in the invoice text? Matches "28.80" or "28.8" with
+ * either "." or "," as decimal separator, and requires it NOT be embedded in a longer number
+ * (so 28.80 doesn't match inside "128.805" or a transaction id). The fallback that rescues
+ * matching when the AI's structured amount field came back empty.
+ */
+function amountAppearsInText(text: string, amount: number): boolean {
+  const whole = String(Math.round(amount * 100) / 100);
+  const twoDp = amount.toFixed(2);
+  const variants = new Set([whole, twoDp]);
+  for (const v of variants) {
+    const esc = v.replace(/\./g, "[.,]");
+    const re = new RegExp(`(?<![\\d.,])${esc}(?![\\d])`);
+    if (re.test(text)) return true;
+  }
+  return false;
+}
+
 /** Pure score for one (invoice, line) pair. Higher = more confident it's the same payment. */
 export function scoreInvoiceLine(inv: InvoiceForMatch, l: LineCandidate): number {
   let score = 0;
@@ -77,23 +95,25 @@ export function scoreInvoiceLine(inv: InvoiceForMatch, l: LineCandidate): number
     }
   }
 
-  // 2) Amount — currency-agnostic: the AI may read the foreign total ("250.35 EUR") OR an MDL
-  //    total off the document, so we accept a close match against EITHER the line's foreign
-  //    amount OR its MDL account amount.
-  if (inv.amountMajor != null) {
+  // 2) Amount — currency-agnostic, with a TEXT fallback. The AI's structured amount is unreliable
+  //    (e.g. a DigitalOcean/Meta receipt where it returns null), so we match the line's amount
+  //    against EITHER the invoice's structured total (inv.amountMajor) OR the amount as it appears
+  //    in the invoice TEXT (haystack). The line's foreign amount ("28.80 USD") and its MDL account
+  //    amount are both candidates. This is what lets a receipt whose AI fields came back empty
+  //    still map — the figure is right there in the document text.
+  {
+    const lineForeign = l.origAmount ? parseAmount((l.origAmount.match(/([\d.,]+)\s*[A-Z]{3}/) ?? [])[1] ?? "") : NaN;
+    const lineMdl = l.amountCents / 100;
+    const candidates = [lineForeign, lineMdl].filter((n) => Number.isFinite(n) && n > 0);
+
     let amountHit = false;
-    if (l.origAmount) {
-      const m = l.origAmount.match(/([\d.,]+)\s*([A-Z]{3})/);
-      if (m) {
-        const foreignAmt = parseAmount(m[1]);
-        if (Number.isFinite(foreignAmt) && Math.abs(foreignAmt - inv.amountMajor) <= Math.max(0.02, foreignAmt * 0.01)) {
-          amountHit = true;
-        }
-      }
+    // a) structured invoice total close to a line amount
+    if (inv.amountMajor != null) {
+      amountHit = candidates.some((amt) => Math.abs(amt - inv.amountMajor!) <= Math.max(0.02, amt * 0.01));
     }
-    if (!amountHit) {
-      const mdlAmt = l.amountCents / 100;
-      if (Math.abs(mdlAmt - inv.amountMajor) <= Math.max(1, mdlAmt * 0.01)) amountHit = true;
+    // b) text fallback: the line amount appears verbatim in the invoice text (haystack)
+    if (!amountHit && inv.haystack) {
+      amountHit = candidates.some((amt) => amountAppearsInText(inv.haystack!, amt));
     }
     if (amountHit) score += 0.5;
   }
