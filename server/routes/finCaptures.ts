@@ -24,7 +24,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq, and, asc, desc, gte, lte } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte, isNotNull } from "drizzle-orm";
 import { db } from "../db/client";
 import { finCaptures, finCaptureLines, type ExtractedFields, FIN_DOC_TEAMS } from "../db/schema/finCaptures";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -165,14 +165,29 @@ finCapturesRoutes.get("/captures", async (c) => {
     conditions.push(lte(finCaptures.createdAt, end));
   }
 
-  const rows = await db.query.finCaptures.findMany({
+  let rows = await db.query.finCaptures.findMany({
     where: and(...conditions),
     orderBy: [desc(finCaptures.createdAt)],
     limit,
     offset,
   });
 
-  return c.json({ captures: rows.map(serializeCapture), total: rows.length });
+  // ?hideMatched=1 — keep the main Invoice Reporting list clean: drop invoice/receipt documents
+  // already attributed to a statement transaction (they're visible under the statement). Statements
+  // and still-unmatched documents stay. (The invoice-link dropdown does NOT pass this — it needs all.)
+  if (c.req.query("hideMatched") === "1") {
+    const matchedRows = await db.query.finCaptureLines.findMany({
+      where: and(eq(finCaptureLines.tenantId, user.tenantId), isNotNull(finCaptureLines.matchedCaptureId)),
+      columns: { matchedCaptureId: true },
+    });
+    const matched = new Set(matchedRows.map((m) => m.matchedCaptureId));
+    rows = rows.filter((r) => r.kind === "statement" || !matched.has(r.id));
+  }
+
+  // The list view doesn't render rawText (the full extracted PDF text, up to a few KB/row) — strip
+  // it so the payload stays small and the page loads fast. The detail endpoint still returns it.
+  const captures = rows.map((r) => ({ ...serializeCapture(r), rawText: null }));
+  return c.json({ captures, total: captures.length });
 });
 
 // ─── GET /api/fin/captures/summary — raport sfârșit de lună (Team Docs) ───────
