@@ -25,6 +25,17 @@
         "student": "PASS"
       }
     },
+    "SPLIT-402": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SPLIT-402-business-shell-convergence.md",
+      "milestone": "SPLIT",
+      "phase": "SHELL",
+      "depends_on": [],
+      "branch": "feat/SPLIT-faza-SHELL2-one-shell",
+      "priority": "high"
+    },
     "PAR-001": {
       "status": "done",
       "attempts": 1,

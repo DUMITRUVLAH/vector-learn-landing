@@ -77,7 +77,12 @@ sidebar-ul pe Business, dar header-ul rămâne pe `useSession()` (CRM); `Busines
 
 | Phase | ID | Title | Status | Spec |
 |-------|----|-------|--------|------|
-| SHELL | `SPLIT-401` | Toate paginile `/business/*` rămân în shell-ul Business Suite (chrome unificat: logo, header din sesiunea Business, logout business) | pending | [SPLIT-401](specs/SPLIT-401-business-shell-unification.md) |
+| SHELL | `SPLIT-401` | Toate paginile `/business/*` rămân în shell-ul Business Suite (chrome unificat: logo, header din sesiunea Business, logout business) | done ✅ | [SPLIT-401](specs/SPLIT-401-business-shell-unification.md) · [PR #184](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/184) |
+| SHELL | `SPLIT-402` | **Bug-ul persistă** — un SINGUR shell pe `/business/*`: toate paginile FinDesk (~32) trec de pe `AppShell` pe `BusinessShell` (sidebar identic peste tot) + scoate „Demo Lingua School" din header | pending | [SPLIT-402](specs/SPLIT-402-business-shell-convergence.md) |
+
+> ⚠️ SPLIT-401 a corectat doar `FinLayout` + header-ul din `AppShell`. Bug-ul persistă: `/business/fin/banklink`
+> (și ~32 pagini FinDesk) folosesc încă `AppShell` cu alt sidebar (`BUSINESS_NAV_GROUPS`) decât Dashboard-ul
+> (`BusinessShell.NAV_GROUPS`) și arată „Demo Lingua School" în header. SPLIT-402 converge totul pe `BusinessShell`.
 
 ---
 
