@@ -17,7 +17,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Link, useRouter } from "@/router/HashRouter";
-import { useSession } from "@/hooks/useSession";
+import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { getFinMe, type FinRole, type FinOrgProfile } from "@/lib/api/fin";
 import { FinNav } from "@/components/fin/FinNav";
 import { cn } from "@/lib/utils";
@@ -35,7 +35,8 @@ interface FinLayoutProps {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function FinLayout({ children, pageTitle, pageDescription, actions }: FinLayoutProps) {
-  const { data: session, logout } = useSession();
+  // SPLIT-401: Use business session (not CRM session) for identity in /business/fin/* pages.
+  const bizSession = useBusinessSession();
   const { navigate } = useRouter();
 
   const [role, setRole] = useState<FinRole | null>(null);
@@ -64,9 +65,10 @@ export function FinLayout({ children, pageTitle, pageDescription, actions }: Fin
       .finally(() => setLoading(false));
   }, []);
 
+  // SPLIT-401: Business logout → redirect to /business/login (not /app/login).
   const handleLogout = async () => {
-    await logout();
-    navigate("/app/login");
+    await bizSession.logout();
+    navigate("/business/login");
   };
 
   // ─── Loading state ──────────────────────────────────────────────────────────
@@ -106,9 +108,10 @@ export function FinLayout({ children, pageTitle, pageDescription, actions }: Fin
 
   if (!role) return null;
 
-  const companyName = profile?.legalName ?? session?.tenant?.name ?? "FinDesk";
-  const userInitials = session?.user?.name
-    ? session.user.name
+  // SPLIT-401: Company name from business session (FinOrgProfile legalName or business tenant name).
+  const companyName = profile?.legalName ?? bizSession?.data?.tenant?.name ?? "FinDesk";
+  const userInitials = bizSession?.data?.user?.name
+    ? bizSession.data.user.name
         .split(" ")
         .map((n) => n[0])
         .slice(0, 2)
@@ -135,9 +138,9 @@ export function FinLayout({ children, pageTitle, pageDescription, actions }: Fin
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
 
-          {/* Logo + company name */}
+          {/* Logo + company name — SPLIT-401: link to /business/fin/ (not /app/fin) */}
           <Link
-            to="/app/fin"
+            to="/business/fin/"
             className="flex items-center gap-2 font-semibold text-sm"
             aria-label="FinDesk — pagina principală"
           >
@@ -148,11 +151,11 @@ export function FinLayout({ children, pageTitle, pageDescription, actions }: Fin
 
           <div className="flex-1" />
 
-          {/* User info + logout */}
-          {session && (
+          {/* User info + logout — SPLIT-401: use business session identity */}
+          {bizSession.data && (
             <div className="flex items-center gap-3">
               <span className="hidden sm:flex flex-col items-end">
-                <span className="text-xs font-semibold leading-none">{session.user.name}</span>
+                <span className="text-xs font-semibold leading-none">{bizSession.data.user.name}</span>
                 <span className="text-[10px] text-muted-foreground capitalize leading-tight mt-0.5">
                   {role}
                 </span>
@@ -166,7 +169,7 @@ export function FinLayout({ children, pageTitle, pageDescription, actions }: Fin
               <button
                 type="button"
                 onClick={handleLogout}
-                aria-label="Deconectare"
+                aria-label="Deconectare Business Suite"
                 className="flex items-center justify-center rounded-md p-2 min-h-[44px] min-w-[44px] hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               >
                 <LogOut className="h-4 w-4" />

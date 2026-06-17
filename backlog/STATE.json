@@ -1,22 +1,29 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "FIX-503",
-  "iterations": 167,
+  "last_completed": "SPLIT-401",
+  "iterations": 168,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
   "active_milestone": "AUDIT-FIX",
   "items": {
     "SPLIT-401": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPLIT-401-business-shell-unification.md",
       "milestone": "SPLIT",
       "phase": "SHELL",
       "depends_on": [],
       "branch": "feat/SPLIT-faza-SHELL-business-chrome",
-      "priority": "high"
+      "priority": "high",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/184",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "PAR-001": {
       "status": "done",
