@@ -111,6 +111,32 @@ describe("scoreInvoiceLine — the flexible signals", () => {
     expect(scoreInvoiceLine(inv, local)).toBeGreaterThanOrEqual(0.5);
   });
 
+  it("matches a receipt even when the AI returned null amount/date (amount-in-text fallback)", () => {
+    // Real DigitalOcean case: AI extraction returned null amount + null date, only the vendor.
+    // The amount ("-$28.80") is in the document text → must still map to the 28.80 USD line.
+    const inv: InvoiceForMatch = {
+      vendorName: "DigitalOcean LLC",
+      amountMajor: null,
+      currency: "MDL",
+      date: null,
+      haystack: "142233508.pdf DigitalOcean Payment Receipt ID: 142233508 Payment (visa 2084): -$28.80",
+    };
+    const res = matchInvoiceToLines(inv, lines);
+    expect(res?.lineId).toBe("tx_do");
+    expect(res?.confidence).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it("does not false-match an amount embedded inside a longer number", () => {
+    const inv: InvoiceForMatch = {
+      vendorName: "Nobody",
+      amountMajor: null,
+      currency: "MDL",
+      date: null,
+      haystack: "ref 9928.805 txid 1112880577", // contains 28.80/28.8 only as substrings
+    };
+    expect(matchInvoiceToLines(inv, lines)).toBeNull();
+  });
+
   it("does not attribute an unrelated document", () => {
     const inv: InvoiceForMatch = { vendorName: "Totally Unrelated", amountMajor: 9999.99, currency: "MDL", date: "2020-01-01", haystack: "random.pdf" };
     expect(matchInvoiceToLines(inv, lines)).toBeNull();
