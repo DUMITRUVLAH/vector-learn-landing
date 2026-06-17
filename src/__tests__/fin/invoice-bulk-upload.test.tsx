@@ -5,7 +5,7 @@
  * they auto-match against the transactions. Tests cover:
  *   1. Renders the dropzone with the file input.
  *   2. Rejects unacceptable files (wrong type / too big), keeps acceptable ones.
- *   3. Uploads each queued file via uploadInvoiceFile and fires onUploaded(n).
+ *   3. Uploads queued files via uploadInvoiceBatch (batched) and fires onUploaded(n).
  *   4. Enforces the 50-file cap.
  */
 import React from "react";
@@ -16,14 +16,20 @@ import {
   InvoiceBulkUpload,
   MAX_INVOICE_FILES,
 } from "@/components/fin/InvoiceBulkUpload";
-import { uploadInvoiceFile } from "@/lib/api/finCaptures";
+import { uploadInvoiceBatch, type BatchItemResult } from "@/lib/api/finCaptures";
 
 vi.mock("@/lib/api/finCaptures", async (orig) => {
   const actual = await orig<typeof import("@/lib/api/finCaptures")>();
-  return { ...actual, uploadInvoiceFile: vi.fn() };
+  return { ...actual, uploadInvoiceBatch: vi.fn() };
 });
 
-const mockUpload = vi.mocked(uploadInvoiceFile);
+const mockUpload = vi.mocked(uploadInvoiceBatch);
+
+/** Default mock: every file in the batch succeeds. */
+function allOk(files: File[]): { results: BatchItemResult[]; count: number; okCount: number } {
+  const results: BatchItemResult[] = files.map((f, i) => ({ ok: true, capture: { id: `c${i}`, fileName: f.name } as never, lineCount: 0 }));
+  return { results, count: results.length, okCount: results.length };
+}
 
 function pdf(name: string, bytes = 1000): File {
   const f = new File(["x"], name, { type: "application/pdf" });
@@ -45,7 +51,7 @@ function selectFiles(files: File[]) {
 describe("InvoiceBulkUpload", () => {
   beforeEach(() => {
     mockUpload.mockReset();
-    mockUpload.mockResolvedValue({ capture: { id: "c1" } as never });
+    mockUpload.mockImplementation(async (files: File[]) => allOk(files));
   });
 
   it("renders the dropzone with a multiple file input", () => {
@@ -76,7 +82,7 @@ describe("InvoiceBulkUpload", () => {
     expect(screen.getByText(/ignorate/i)).toBeInTheDocument();
   });
 
-  it("uploads queued files and calls onUploaded with the success count", async () => {
+  it("uploads queued files in one batch and calls onUploaded with the success count", async () => {
     const onUploaded = vi.fn();
     render(<InvoiceBulkUpload onUploaded={onUploaded} />);
     selectFiles([pdf("a.pdf"), pdf("b.pdf")]);
@@ -84,15 +90,34 @@ describe("InvoiceBulkUpload", () => {
     fireEvent.click(screen.getByRole("button", { name: /Încarcă/i }));
 
     await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(2));
-    expect(mockUpload).toHaveBeenCalledTimes(2);
-    // Default team tag is "other".
-    expect(mockUpload).toHaveBeenCalledWith(expect.any(File), "other");
+    // 2 files fit in one batch → a single request with both files + team tag.
+    expect(mockUpload).toHaveBeenCalledTimes(1);
+    expect(mockUpload).toHaveBeenCalledWith([expect.any(File), expect.any(File)], "other");
   });
 
-  it("reports the success count even when some uploads fail", async () => {
-    mockUpload
-      .mockResolvedValueOnce({ capture: { id: "c1" } as never })
-      .mockRejectedValueOnce(new Error("boom"));
+  it("splits into multiple batches past the per-batch file cap", async () => {
+    const onUploaded = vi.fn();
+    render(<InvoiceBulkUpload onUploaded={onUploaded} />);
+    // 6 files, MAX_BATCH_FILES=4 → 2 batches (4 + 2).
+    selectFiles(Array.from({ length: 6 }, (_, i) => pdf(`f${i}.pdf`)));
+
+    fireEvent.click(screen.getByRole("button", { name: /Încarcă/i }));
+
+    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith(6));
+    expect(mockUpload).toHaveBeenCalledTimes(2);
+    expect(mockUpload.mock.calls[0][0]).toHaveLength(4);
+    expect(mockUpload.mock.calls[1][0]).toHaveLength(2);
+  });
+
+  it("reports the success count even when one file in the batch fails", async () => {
+    mockUpload.mockImplementation(async (files: File[]) => ({
+      results: [
+        { ok: true, capture: { id: "c1", fileName: files[0].name } as never, lineCount: 0 },
+        { ok: false, fileName: files[1].name, error: "upload_failed" },
+      ],
+      count: 2,
+      okCount: 1,
+    }));
     const onUploaded = vi.fn();
     render(<InvoiceBulkUpload onUploaded={onUploaded} />);
     selectFiles([pdf("ok.pdf"), pdf("fail.pdf")]);

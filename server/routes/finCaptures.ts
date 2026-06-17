@@ -525,153 +525,84 @@ finCapturesRoutes.patch(
   },
 );
 
-// ─── POST /api/fin/captures — upload + extracție AI ──────────────────────────
+// ─── Upload helpers (shared by single POST /captures + batch POST /captures/batch) ──
 
-/**
- * Upload fișier bon/factură + declanșează extracția AI.
- *
- * Procesare:
- * 1. Crează rând fin_captures cu status 'processing'
- * 2. Extrage câmpuri cu AI (sau stub dacă AI_API_KEY lipsește)
- * 3. Actualizează rândul cu extracted_fields + status 'extracted'
- *
- * Content-Type: multipart/form-data (sau JSON cu rawText pentru testing)
- * Accept: application/json
- */
+interface CaptureInput {
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  fileKey: string;
+  rawText: string;
+  imageDataUrl?: string;
+  kind: string;
+  forceKind: boolean;
+  team: string;
+}
 
-finCapturesRoutes.post("/captures", async (c) => {
-  const user = c.get("user");
-
-  // Parsare input: suportă multipart/form-data sau JSON (test-friendly)
-  let fileKey = "upload/unknown";
-  let fileName = "document.pdf";
-  let mimeType = "application/pdf";
-  let sizeBytes = 0;
-  let rawText = "";
-  let team = "other";
-  let kind = "document"; // "document" (single invoice) | "statement" (bank statement → many lines)
-  // When true, the caller stated the kind explicitly (e.g. the bulk-invoice dropzone uploads
-  // invoices as kind="document"); skip the "looks like a statement" auto-detection below so a
-  // real invoice whose text happens to contain date-pairs isn't mis-promoted to a statement.
-  let forceKind = false;
-  let imageDataUrl: string | undefined; // set for image uploads → OpenAI vision
-
-  const contentType = c.req.header("content-type") ?? "";
-
-  if (contentType.includes("application/json")) {
-    // JSON mode (testing / API clients)
-    const body = await c.req.json<{
-      fileKey?: string;
-      fileName?: string;
-      mimeType?: string;
-      sizeBytes?: number;
-      rawText?: string;
-      team?: string;
-      kind?: string;
-      forceKind?: boolean;
-    }>();
-    fileKey = body.fileKey ?? "upload/unknown";
-    fileName = body.fileName ?? "document.pdf";
-    mimeType = body.mimeType ?? "application/pdf";
-    sizeBytes = body.sizeBytes ?? 0;
-    rawText = body.rawText ?? "";
-    if (body.team && FIN_DOC_TEAMS.includes(body.team as never)) team = body.team;
-    if (body.kind === "statement") kind = "statement";
-    if (body.kind === "document") kind = "document";
-    if (body.forceKind === true) forceKind = true;
-  } else if (contentType.includes("multipart/form-data")) {
-    // Multipart mode (real upload)
-    const formData = await c.req.formData();
-    const file = formData.get("file");
-    rawText = (formData.get("rawText") as string | null) ?? "";
-    const teamField = formData.get("team") as string | null;
-    if (teamField && FIN_DOC_TEAMS.includes(teamField as never)) team = teamField;
-    const kindField = formData.get("kind") as string | null;
-    if (kindField === "statement") kind = "statement";
-    if (kindField === "document") kind = "document";
-    if (formData.get("forceKind") === "1") forceKind = true;
-
-    if (file && file instanceof File) {
-      fileName = file.name;
-      mimeType = file.type || "application/octet-stream";
-      sizeBytes = file.size;
-      // În production, fișierul e trimis la Vercel Blob/S3 și se obține fileKey
-      // Aici stocăm un placeholder (storage real implementat separat)
-      fileKey = `captures/${user.tenantId}/${Date.now()}-${fileName}`;
-
-      const isPdf = mimeType === "application/pdf" || /\.pdf$/i.test(fileName);
-      const isCsvLike =
-        /csv|text\/plain/i.test(mimeType) || /\.(csv|mt940|sta|txt)$/i.test(fileName);
-
-      // Images (JPG/PNG/WebP) → data URL for OpenAI vision (model reads the doc directly).
-      // Cap at ~8MB to stay within request limits.
-      // NOTE: text extraction is wrapped in try/catch — an encrypted/malformed PDF (or odd
-      // encoding) used to throw OUTSIDE the AI try/catch below and 500 the whole upload, which
-      // surfaced as "Eroare" in the bulk dropzone. Now it degrades to empty text: the capture is
-      // still saved (the accountant can fill fields / match manually), no hard error.
-      try {
-        if (mimeType.startsWith("image/") && sizeBytes <= 8_000_000) {
-          const buf = Buffer.from(await file.arrayBuffer());
-          imageDataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
-        } else if (isPdf && !rawText.trim() && sizeBytes <= 8_000_000) {
-          // PDF digital (din Word/export) → extragem stratul de text pe server, ca
-          // utilizatorul să NU mai lipească manual. PDF scanat → text gol, cade pe
-          // fallback. Vision pe poze acoperă cazul scanat.
-          const buf = Buffer.from(await file.arrayBuffer());
-          rawText = await extractPdfText(buf);
-        } else if (isCsvLike && !rawText.trim() && sizeBytes <= 8_000_000) {
-          // CSV / extras de cont / text → citim conținutul ca text și-l dăm AI-ului.
-          rawText = await file.text();
-        }
-      } catch {
-        rawText = rawText || ""; // unreadable file → proceed with no text, don't crash the upload
-      }
-    } else {
-      return c.json({ error: "file_required" }, 400);
+/** Derive a capture's content from one uploaded File: filename/mime/size/key + extracted text
+ *  (PDF text layer, image data-URL for vision, or CSV text). Never throws on a malformed file. */
+async function deriveFileInput(file: File, tenantId: string, pastedRawText: string) {
+  const fileName = file.name;
+  const mimeType = file.type || "application/octet-stream";
+  const sizeBytes = file.size;
+  const fileKey = `captures/${tenantId}/${Date.now()}-${fileName}`;
+  let rawText = pastedRawText;
+  let imageDataUrl: string | undefined;
+  const isPdf = mimeType === "application/pdf" || /\.pdf$/i.test(fileName);
+  const isCsvLike = /csv|text\/plain/i.test(mimeType) || /\.(csv|mt940|sta|txt)$/i.test(fileName);
+  try {
+    if (mimeType.startsWith("image/") && sizeBytes <= 8_000_000) {
+      const buf = Buffer.from(await file.arrayBuffer());
+      imageDataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
+    } else if (isPdf && !rawText.trim() && sizeBytes <= 8_000_000) {
+      const buf = Buffer.from(await file.arrayBuffer());
+      rawText = await extractPdfText(buf);
+    } else if (isCsvLike && !rawText.trim() && sizeBytes <= 8_000_000) {
+      rawText = await file.text();
     }
-  } else {
-    return c.json({ error: "unsupported_content_type" }, 415);
+  } catch {
+    rawText = rawText || ""; // unreadable file → no text, don't crash the upload
   }
+  return { fileName, mimeType, sizeBytes, fileKey, rawText, imageDataUrl };
+}
 
-  // Sanitize extracted/pasted text before it ever reaches Postgres. PDF text layers often carry
-  // a NUL (0x00) and other C0 control chars; a `text` column rejects 0x00 with
-  // "invalid byte sequence for encoding UTF8: 0x00" → the insert 500s and the upload shows
-  // "Eroare". Strip NUL, keep \n/\t. This is why some invoices/confirmations failed to upload.
-  rawText = sanitizePgText(rawText);
-
-  // Auto-detect a bank statement even if the caller didn't set kind: MAIB-style statements
-  // say "EXTRAS DE CONT" or contain many "DD.MM.YYYY DD.MM.YYYY" transaction lines.
-  // Skipped when the caller forced the kind (bulk-invoice upload says "this IS an invoice").
-  if (kind !== "statement" && !forceKind) {
+/** Create a capture row and run extraction (statement → transaction lines, document → AI fields).
+ *  Returns the serialized capture (+ lineCount for statements). Shared source of truth. */
+async function buildCapture(
+  user: { id: string; tenantId: string },
+  input: CaptureInput,
+): Promise<{ capture: ReturnType<typeof serializeCapture>; lineCount: number }> {
+  let kind = input.kind;
+  const rawText = sanitizePgText(input.rawText);
+  // Auto-detect a statement unless the caller forced the kind (bulk-invoice upload says "invoice").
+  if (kind !== "statement" && !input.forceKind) {
     const dateLinePairs = (rawText.match(/\d{2}\.\d{2}\.\d{4}\s+\d{2}\.\d{2}\.\d{4}/g) ?? []).length;
     if (/extras de cont/i.test(rawText) || dateLinePairs >= 3) kind = "statement";
   }
 
-  // Crează capture cu status processing
   const [capture] = await db
     .insert(finCaptures)
     .values({
       tenantId: user.tenantId,
-      fileKey,
-      fileName,
-      mimeType,
-      sizeBytes,
+      fileKey: input.fileKey,
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
       status: "processing",
-      team,
+      team: input.team,
       kind,
       rawText: rawText || undefined,
       createdBy: user.id,
     })
     .returning();
 
-  // ── Statement: extract EVERY transaction as a child line (Invoice Reporting) ──
   if (kind === "statement") {
     let lineStatus: "extracted" | "failed" = "extracted";
     let stmtError: string | undefined;
     let inserted = 0;
     try {
       const { transactions } = await extractStatementTransactions(
-        rawText || `[Fișier: ${fileName}]`,
+        rawText || `[Fișier: ${input.fileName}]`,
         user.tenantId,
         user.id,
         capture.id,
@@ -704,21 +635,19 @@ finCapturesRoutes.post("/captures", async (c) => {
       .set({ status: lineStatus, errorMessage: stmtError ?? null, updatedAt: new Date() })
       .where(eq(finCaptures.id, capture.id))
       .returning();
-    return c.json({ capture: serializeCapture(updatedStmt), lineCount: inserted }, 201);
+    return { capture: serializeCapture(updatedStmt), lineCount: inserted };
   }
 
-  // Extrage câmpuri cu AI (sync — poate fi async în producție cu queue)
   let extractedFields: ExtractedFields | undefined;
   let newStatus: "extracted" | "failed" = "extracted";
   let errorMessage: string | undefined;
-
   try {
     const result = await extractCaptureFields(
-      rawText || `[Fișier: ${fileName}]`,
+      rawText || `[Fișier: ${input.fileName}]`,
       user.tenantId,
       user.id,
       capture.id,
-      imageDataUrl,
+      input.imageDataUrl,
     );
     extractedFields = result.extractedFields;
   } catch (err) {
@@ -726,8 +655,6 @@ finCapturesRoutes.post("/captures", async (c) => {
     errorMessage = err instanceof Error ? err.message : "Eroare necunoscută la extracție AI";
   }
 
-  // Invoice Reporting: derive the reportable verdict columns from the AI field.
-  // value true → "yes", false → "no", null/low-confidence → "review" (needs a human).
   const repField = extractedFields?.reportable;
   const repConf = repField?.confidence ?? 0;
   const reportable =
@@ -736,16 +663,10 @@ finCapturesRoutes.post("/captures", async (c) => {
       : repField?.value === false && repConf >= 0.7
         ? "no"
         : "review";
-
-  // Document Classification: derive the document-class verdict column.
-  // A confident class ("invoice"/"receipt"/"not_invoice") is kept; null or low confidence
-  // → "review" so the team/accountant looks at it. "Flag, don't block" — never rejects the upload.
   const dcField = extractedFields?.document_class;
   const dcConf = dcField?.confidence ?? 0;
-  const documentClass =
-    dcField?.value && dcConf >= 0.7 ? dcField.value : "review";
+  const documentClass = dcField?.value && dcConf >= 0.7 ? dcField.value : "review";
 
-  // Actualizează capture cu rezultatul extracției
   const [updated] = await db
     .update(finCaptures)
     .set({
@@ -762,8 +683,98 @@ finCapturesRoutes.post("/captures", async (c) => {
     })
     .where(eq(finCaptures.id, capture.id))
     .returning();
+  return { capture: serializeCapture(updated), lineCount: 0 };
+}
 
-  return c.json({ capture: serializeCapture(updated) }, 201);
+// ─── POST /api/fin/captures — upload + extracție AI ──────────────────────────
+
+/**
+ * Upload fișier bon/factură + declanșează extracția AI.
+ *
+ * Procesare:
+ * 1. Crează rând fin_captures cu status 'processing'
+ * 2. Extrage câmpuri cu AI (sau stub dacă AI_API_KEY lipsește)
+ * 3. Actualizează rândul cu extracted_fields + status 'extracted'
+ *
+ * Content-Type: multipart/form-data (sau JSON cu rawText pentru testing)
+ * Accept: application/json
+ */
+
+finCapturesRoutes.post("/captures", async (c) => {
+  const user = c.get("user");
+  const contentType = c.req.header("content-type") ?? "";
+
+  // JSON mode (tests / API clients): no file, content comes as fields.
+  if (contentType.includes("application/json")) {
+    const body = await c.req.json<{
+      fileKey?: string; fileName?: string; mimeType?: string; sizeBytes?: number;
+      rawText?: string; team?: string; kind?: string; forceKind?: boolean;
+    }>();
+    const team = body.team && FIN_DOC_TEAMS.includes(body.team as never) ? body.team : "other";
+    const { capture, lineCount } = await buildCapture(user, {
+      fileKey: body.fileKey ?? "upload/unknown",
+      fileName: body.fileName ?? "document.pdf",
+      mimeType: body.mimeType ?? "application/pdf",
+      sizeBytes: body.sizeBytes ?? 0,
+      rawText: body.rawText ?? "",
+      kind: body.kind === "statement" ? "statement" : "document",
+      forceKind: body.forceKind === true,
+      team,
+    });
+    return c.json({ capture, lineCount }, 201);
+  }
+
+  if (!contentType.includes("multipart/form-data")) {
+    return c.json({ error: "unsupported_content_type" }, 415);
+  }
+
+  const formData = await c.req.formData();
+  const file = formData.get("file");
+  if (!(file instanceof File)) return c.json({ error: "file_required" }, 400);
+  const pasted = (formData.get("rawText") as string | null) ?? "";
+  const teamField = formData.get("team") as string | null;
+  const team = teamField && FIN_DOC_TEAMS.includes(teamField as never) ? teamField : "other";
+  const kindField = formData.get("kind") as string | null;
+  const kind = kindField === "statement" ? "statement" : "document";
+  const forceKind = formData.get("forceKind") === "1";
+
+  const derived = await deriveFileInput(file, user.tenantId, pasted);
+  const { capture, lineCount } = await buildCapture(user, { ...derived, kind, forceKind, team });
+  return c.json({ capture, lineCount }, 201);
+});
+
+// ─── POST /api/fin/captures/batch — upload MAI MULTE fișiere într-o cerere ───
+// The bulk-invoice dropzone sends files in batches so 50 uploads become a few requests,
+// staying under Vercel's per-IP firewall rate-limit (which 403'd individual rapid uploads).
+finCapturesRoutes.post("/captures/batch", async (c) => {
+  const user = c.get("user");
+  const contentType = c.req.header("content-type") ?? "";
+  if (!contentType.includes("multipart/form-data")) {
+    return c.json({ error: "unsupported_content_type" }, 415);
+  }
+  const formData = await c.req.formData();
+  const files = formData.getAll("file").filter((f): f is File => f instanceof File);
+  if (files.length === 0) return c.json({ error: "file_required" }, 400);
+
+  const teamField = formData.get("team") as string | null;
+  const team = teamField && FIN_DOC_TEAMS.includes(teamField as never) ? teamField : "other";
+  const kindField = formData.get("kind") as string | null;
+  const kind = kindField === "statement" ? "statement" : "document";
+  const forceKind = formData.get("forceKind") === "1";
+
+  // Process sequentially within the one request (bounded by the caller's batch size).
+  const results: Array<{ ok: true; capture: ReturnType<typeof serializeCapture>; lineCount: number } | { ok: false; fileName: string; error: string }> = [];
+  for (const file of files) {
+    try {
+      const derived = await deriveFileInput(file, user.tenantId, "");
+      const { capture, lineCount } = await buildCapture(user, { ...derived, kind, forceKind, team });
+      results.push({ ok: true, capture, lineCount });
+    } catch (err) {
+      results.push({ ok: false, fileName: file.name, error: err instanceof Error ? err.message : "upload_failed" });
+    }
+  }
+  const okCount = results.filter((r) => r.ok).length;
+  return c.json({ results, count: results.length, okCount }, 201);
 });
 
 // ─── POST /api/fin/captures/:id/confirm — confirmă + creează cheltuiala ──────

@@ -317,6 +317,34 @@ export async function uploadInvoiceFile(
   return apiUpload<{ capture: FinCapture }>("/api/fin/captures", form);
 }
 
+/** One file's result inside a batch upload. */
+export type BatchItemResult =
+  | { ok: true; capture: FinCapture; lineCount: number }
+  | { ok: false; fileName: string; error: string };
+
+export interface BatchUploadResult {
+  results: BatchItemResult[];
+  count: number;
+  okCount: number;
+}
+
+/**
+ * Upload SEVERAL invoices in a single request. The bulk dropzone groups files into batches so
+ * 50 uploads become a handful of requests — far below Vercel's per-IP firewall rate-limit, which
+ * was 403-ing individual rapid uploads. Results come back in the same order as `files`.
+ */
+export async function uploadInvoiceBatch(
+  files: File[],
+  team: FinDocTeam = "other",
+): Promise<BatchUploadResult> {
+  const form = new FormData();
+  form.set("team", team);
+  form.set("kind", "document");
+  form.set("forceKind", "1");
+  for (const f of files) form.append("file", f, f.name);
+  return apiUpload<BatchUploadResult>("/api/fin/captures/batch", form);
+}
+
 /**
  * Delete a capture. A statement also deletes its transaction lines; an invoice unlinks any
  * statement lines that pointed to it. Used to clean up duplicate uploads.
