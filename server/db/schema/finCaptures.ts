@@ -81,8 +81,42 @@ export interface ExtractedFields {
    * value: true | false | null (null = unsure). confidence drives the "review" status.
    */
   reportable?: CapturedField<boolean | null>;
+  /**
+   * Document Classification: AI verdict on WHAT KIND of document this is, BEFORE the
+   * financial fields are trusted. Answers "is this even an invoice/receipt?" — so a
+   * contract, a random photo, or a menu uploaded by mistake is flagged instead of
+   * silently processed as an expense. value ∈ DocumentClass; `reason` is a short RO
+   * explanation. This is distinct from `reportable` (which is "should it be reported
+   * to the tax authority", a question that only makes sense once it IS an invoice).
+   */
+  document_class?: CapturedField<DocumentClass | null>;
   [key: string]: CapturedField<unknown> | undefined; // extensibil
 }
+
+/**
+ * Document Classification: the kind of document the AI thinks was uploaded.
+ * - "invoice"     → a tax invoice (factură fiscală, with vendor + VAT).
+ * - "receipt"     → a simple receipt/bon (no fiscal code or simplified).
+ * - "not_invoice" → not a financial document at all (contract, photo, screenshot…).
+ * - null          → AI could not decide.
+ */
+export type DocumentClass = "invoice" | "receipt" | "not_invoice";
+
+export const DOCUMENT_CLASS_LABELS: Record<DocumentClass, string> = {
+  invoice: "Factură",
+  receipt: "Bon / chitanță",
+  not_invoice: "Nu pare factură",
+};
+
+/** Derived classification status used across the API + UI (mirrors ReportableStatus). */
+export type DocumentClassStatus = DocumentClass | "review";
+
+export const DOCUMENT_CLASS_STATUS_LABELS: Record<DocumentClassStatus, string> = {
+  invoice: "Factură",
+  receipt: "Bon / chitanță",
+  not_invoice: "Nu pare factură",
+  review: "De verificat",
+};
 
 /** Derived reportable status used across the API + UI. */
 export type ReportableStatus = "yes" | "no" | "review";
@@ -196,6 +230,21 @@ export const finCaptures = pgTable(
 
     /** AI confidence in the reportable verdict, in basis points (8500 = 0.85). */
     reportableConfidenceBp: integer("reportable_confidence_bp").notNull().default(0),
+
+    // ── Document Classification (CAPTURE-DOCCLASS): is this even an invoice? ──
+    /**
+     * AI's document-class verdict: "invoice" | "receipt" | "not_invoice" | "review".
+     * "review" = AI unsure (null) or low confidence (<0.7) → a human should look.
+     * Lets the team/accountant spot a wrongly-uploaded file (contract, photo) at a
+     * glance instead of it being silently treated as an expense. See DocumentClass.
+     */
+    documentClass: varchar("document_class", { length: 12 }).notNull().default("review"),
+
+    /** AI's one-line RO reason for the document-class verdict. */
+    documentClassReason: text("document_class_reason"),
+
+    /** AI confidence in the document-class verdict, in basis points (9000 = 0.90). */
+    documentClassConfidenceBp: integer("document_class_confidence_bp").notNull().default(0),
 
     /** Reviewer who confirmed/overrode the reportable verdict. */
     reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),

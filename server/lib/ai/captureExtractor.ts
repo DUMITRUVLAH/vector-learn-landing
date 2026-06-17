@@ -14,7 +14,7 @@
  */
 
 import { callAi, type AiCallOptions } from "./client";
-import type { ExtractedFields, CapturedField } from "../../db/schema/finCaptures";
+import type { ExtractedFields, CapturedField, DocumentClass } from "../../db/schema/finCaptures";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -43,6 +43,13 @@ REGULI ABSOLUTE:
    ce trebuie raportată; false dacă e un bon nedeductibil, document personal sau irelevant fiscal;
    null dacă nu poți decide. În câmpul "reason" pune o frază scurtă în română care explică decizia
    (ex. "Factură cu TVA deductibil → intră în declarația TVA", "Bon fără cod fiscal → neraportabil").
+10. document_class: decide CE TIP de document este, ÎNAINTE de a avea încredere în câmpurile de mai sus.
+    value: "invoice" dacă este o factură fiscală (furnizor + sumă + de regulă TVA / cod fiscal);
+    "receipt" dacă este un bon / chitanță simplă; "not_invoice" dacă NU este un document financiar
+    (ex. contract, poză aleatorie, captură de ecran, meniu, alt document urcat din greșeală);
+    null dacă nu poți decide. NU forța "invoice" dacă documentul nu seamănă a factură/bon — e mai bine
+    "not_invoice" decât să tratezi greșit un document care nu e factură. În "reason" pune o frază scurtă
+    în română (ex. "Factură cu furnizor și TVA", "Pare un contract, nu o factură").
 
 Returnează DOAR JSON cu structura:
 {
@@ -55,7 +62,8 @@ Returnează DOAR JSON cu structura:
   "category": { "value": "..." sau null, "confidence": 0.0 },
   "reference": { "value": "..." sau null, "confidence": 0.0 },
   "purpose": { "value": "..." sau null, "confidence": 0.0 },
-  "reportable": { "value": true/false sau null, "confidence": 0.0, "reason": "..." }
+  "reportable": { "value": true/false sau null, "confidence": 0.0, "reason": "..." },
+  "document_class": { "value": "invoice"/"receipt"/"not_invoice" sau null, "confidence": 0.0, "reason": "..." }
 }`;
 
 // ─── Stub response ────────────────────────────────────────────────────────────
@@ -72,6 +80,7 @@ export const CAPTURE_EXTRACT_STUB: ExtractedFields = {
   reference: { value: null, confidence: 0, low_confidence: true },
   purpose: { value: "Cheltuială echipă — verificați descrierea", confidence: 0.6, low_confidence: true },
   reportable: { value: true, confidence: 0.9, reason: "Factură cu TVA deductibil → intră în declarația TVA" },
+  document_class: { value: "invoice", confidence: 0.9, reason: "Factură cu furnizor și TVA" },
 };
 
 // ─── Field processing ─────────────────────────────────────────────────────────
@@ -163,6 +172,27 @@ function processFields(raw: Record<string, unknown>): ExtractedFields {
     };
   } else {
     result["reportable"] = { value: null, confidence: 0, low_confidence: true };
+  }
+
+  // Document Classification: validate the AI's verdict against the allowed set; anything
+  // unexpected (or missing) collapses to value: null so the route derives a "review" status.
+  const VALID_CLASSES: readonly DocumentClass[] = ["invoice", "receipt", "not_invoice"];
+  const dc = raw["document_class"] as
+    | { value?: unknown; confidence?: number; reason?: unknown }
+    | undefined;
+  if (dc && typeof dc.confidence === "number") {
+    const conf = Math.min(1, Math.max(0, dc.confidence));
+    const value = VALID_CLASSES.includes(dc.value as DocumentClass)
+      ? (dc.value as DocumentClass)
+      : null;
+    result["document_class"] = {
+      value,
+      confidence: value === null ? 0 : conf,
+      ...(value === null || conf < LOW_CONFIDENCE_THRESHOLD ? { low_confidence: true } : {}),
+      ...(typeof dc.reason === "string" && dc.reason ? { reason: dc.reason } : {}),
+    };
+  } else {
+    result["document_class"] = { value: null, confidence: 0, low_confidence: true };
   }
 
   return result as ExtractedFields;
