@@ -132,6 +132,12 @@ export interface SfsInvoiceInput {
   lines: SfsInvoiceLine[];
   /** Identificatorul intern (AdditionalInformation/id) — îl folosim la reconciliere. */
   internalId: string;
+  /**
+   * Motivul creării facturii (CreationMotiv). OBLIGATORIU de SFS-ul real, deși
+   * niciun ghid nu-l documentează — fără el PostInvoices respinge cu
+   * "CreationMotiv is null". 1 = emitere normală (default). Trebuie în SupplierInfo.
+   */
+  creationMotiv?: number;
 }
 
 export interface SfsLineTotals {
@@ -173,9 +179,13 @@ export function generateSfsInvoiceXml(input: SfsInvoiceInput): string {
     ? `<BankAccount Account="${escapeXml(input.buyerBankAccount)}" />`
     : "";
 
+  // CreationMotiv: element în SupplierInfo, OBLIGATORIU (verificat cu SFS real).
+  const creationMotiv = input.creationMotiv ?? 1;
+
   return `<Documents>
   <Document>
     <SupplierInfo>
+      <CreationMotiv>${creationMotiv}</CreationMotiv>
       <DeliveryDate>${deliveryIso}</DeliveryDate>
       <Supplier IDNO="${escapeXml(input.supplierIdno)}"><BankAccount Account="${escapeXml(input.supplierBankAccount)}" /></Supplier>
       <Buyer IDNO="${escapeXml(input.buyerIdno)}">${buyerBank}</Buyer>
@@ -198,6 +208,13 @@ const WSU_NS =
   "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd";
 const PASSWORD_TEXT_TYPE =
   "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText";
+
+// DataContract namespace — confirmat din WSDL/XSD live (xsd2). TOATE câmpurile
+// din interiorul lui <request> trebuie să fie în acest namespace
+// (elementFormDefault="qualified"), altfel WCF nu deserializează → HTTP 500.
+const DC_NS = "http://schemas.datacontract.org/2004/07/AX.EFactura.Model.ApiModel";
+// Namespace pentru ArrayOfstring (ex. FiscalCodes la GetTaxpayersInfo).
+const ARR_NS = "http://schemas.microsoft.com/2003/10/Serialization/Arrays";
 
 /** ISO-8601 UTC with milliseconds + trailing Z, as WCF emits in wsu:Timestamp. */
 function wsuTime(d: Date): string {
@@ -239,7 +256,7 @@ export function buildSoapEnvelope(
   </s:Header>
   <s:Body>
     <${method} xmlns="http://tempuri.org/">
-      <request>${innerXml}</request>
+      <request xmlns:d="${DC_NS}" xmlns:a="${ARR_NS}">${innerXml}</request>
     </${method}>
   </s:Body>
 </s:Envelope>`;
@@ -576,11 +593,14 @@ export class EfacturaMdClient {
 
   /** §5.12 PostInvoices — trimite XML-ul facturilor (nesemnat) către SFS. */
   async postInvoices(invoicesXml: string, requestId: string): Promise<PostInvoicesResult> {
+    // DataContract: PostInvocesRequest extends ActorBaseRequest extends BaseRequest.
+    // Ordine: RequestId, ActorRole, (Attachment nillable — omis), InvoicesXml,
+    // InvoicesXmlStatus (int, NU string). Toate în namespace `d:`.
     const inner =
-      `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<InvoicesXml>${escapeXml(invoicesXml)}</InvoicesXml>` +
-      `<ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</ActorRole>` +
-      `<InvoicesXmlStatus>0</InvoicesXmlStatus>`;
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</d:ActorRole>` +
+      `<d:InvoicesXml>${escapeXml(invoicesXml)}</d:InvoicesXml>` +
+      `<d:InvoicesXmlStatus>0</d:InvoicesXmlStatus>`;
     const xml = await this.call("PostInvoices", inner);
     return {
       requestId: xmlText(xml, "RequestId") ?? requestId,
@@ -597,10 +617,14 @@ export class EfacturaMdClient {
     number: string,
     requestId: string
   ): Promise<InvoiceStatusResult | null> {
+    // InvoicesRequest: RequestId + SeriaAndNumbers (ArrayOfInvoiceIndentificator).
+    // InvoiceIndentificator: Number, Seria (ordine din XSD). Toate în `d:`.
     const inner =
-      `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<Seria>${escapeXml(seria)}</Seria>` +
-      `<Number>${escapeXml(number)}</Number>`;
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:SeriaAndNumbers><d:InvoiceIndentificator>` +
+      `<d:Number>${escapeXml(number)}</d:Number>` +
+      `<d:Seria>${escapeXml(seria)}</d:Seria>` +
+      `</d:InvoiceIndentificator></d:SeriaAndNumbers>`;
     const xml = await this.call("CheckInvoicesStatus", inner);
     const block = xmlBlocks(xml, "Invoice")[0];
     if (!block) return null;
@@ -621,13 +645,16 @@ export class EfacturaMdClient {
     comment: string,
     requestId: string
   ): Promise<CancelInvoiceResult> {
+    // CanceledRequest extends DecisionRequest: RequestId + InvoicesComments
+    // (ArrayOfInvoiceComment). InvoiceComment extends InvoiceIndentificator:
+    // Number, Seria, apoi Comment. Toate în `d:`.
     const inner =
-      `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<InvoiceComment>` +
-      `<Seria>${escapeXml(seria)}</Seria>` +
-      `<Number>${escapeXml(number)}</Number>` +
-      `<Comment>${escapeXml(comment)}</Comment>` +
-      `</InvoiceComment>`;
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:InvoicesComments><d:InvoiceComment>` +
+      `<d:Number>${escapeXml(number)}</d:Number>` +
+      `<d:Seria>${escapeXml(seria)}</d:Seria>` +
+      `<d:Comment>${escapeXml(comment)}</d:Comment>` +
+      `</d:InvoiceComment></d:InvoicesComments>`;
     const xml = await this.call("PostCanceledInvoices", inner);
     const block = xmlBlocks(xml, "InvoiceResult")[0] ?? xml;
     return {
@@ -646,9 +673,11 @@ export class EfacturaMdClient {
    * data contract ignored, returning an empty result for every IDNO.
    */
   async getTaxpayerInfo(idno: string, requestId: string): Promise<TaxpayerInfo | null> {
+    // DataContract: câmpuri în namespace `d:`; FiscalCodes e ArrayOfstring (a:string).
+    // Ordine: RequestId (BaseRequest) → FiscalCodes (TaxpayersRequest).
     const inner =
-      `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<String><string>${escapeXml(idno)}</string></String>`;
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:FiscalCodes><a:string>${escapeXml(idno)}</a:string></d:FiscalCodes>`;
     const xml = await this.call("GetTaxpayersInfo", inner);
     const block = xmlBlocks(xml, "Taxpayer")[0];
     if (!block) return null;
@@ -671,11 +700,15 @@ export class EfacturaMdClient {
     apiInvoiceId: string,
     requestId: string
   ): Promise<InvoiceStatusResult | null> {
+    // SearchRequest: RequestId, ActorRole, Parameters. SearchParameters câmpuri
+    // în ordine ALFABETICĂ (WCF DataContract): APIeInvoiceId înainte de InvoiceType.
     const inner =
-      `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</ActorRole>` +
-      `<Parameters><APIeInvoiceId>${escapeXml(apiInvoiceId)}</APIeInvoiceId>` +
-      `<InvoiceType>0</InvoiceType></Parameters>`;
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</d:ActorRole>` +
+      `<d:Parameters>` +
+      `<d:APIeInvoiceId>${escapeXml(apiInvoiceId)}</d:APIeInvoiceId>` +
+      `<d:InvoiceType>0</d:InvoiceType>` +
+      `</d:Parameters>`;
     const xml = await this.call("SearchInvoices", inner);
     const block = xmlBlocks(xml, "Invoice")[0];
     if (!block) return null;
@@ -697,15 +730,18 @@ export class EfacturaMdClient {
     seria: string,
     number: string,
     requestId: string,
-    orientation: "Portrait" | "Landscape" = "Portrait"
+    orientation: 0 | 1 = 0 // 0 = Portrait, 1 = Landscape (xs:int)
   ): Promise<{ seria: string; number: string; pdf: Buffer } | null> {
+    // InvoicesContentRequest extends InvoicesRequest: RequestId, SeriaAndNumbers,
+    // apoi ActorRole, Orientation (ambele int). Toate în `d:`.
     const inner =
-      `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<SeriaAndNumbers><InvoiceIndentificator>` +
-      `<Seria>${escapeXml(seria)}</Seria><Number>${escapeXml(number)}</Number>` +
-      `</InvoiceIndentificator></SeriaAndNumbers>` +
-      `<ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</ActorRole>` +
-      `<Orientation>${escapeXml(orientation)}</Orientation>`;
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:SeriaAndNumbers><d:InvoiceIndentificator>` +
+      `<d:Number>${escapeXml(number)}</d:Number>` +
+      `<d:Seria>${escapeXml(seria)}</d:Seria>` +
+      `</d:InvoiceIndentificator></d:SeriaAndNumbers>` +
+      `<d:ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</d:ActorRole>` +
+      `<d:Orientation>${orientation}</d:Orientation>`;
     const xml = await this.call("GetInvoicesContentForPrint", inner);
     const block = xmlBlocks(xml, "InvoicePrintResult")[0];
     if (!block) return null;
@@ -727,10 +763,11 @@ export class EfacturaMdClient {
     requestId: string
   ): Promise<{ seria: string; number: string; pngBase64: string; text: string } | null> {
     const inner =
-      `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<SeriaAndNumbers><InvoiceIndentificator>` +
-      `<Seria>${escapeXml(seria)}</Seria><Number>${escapeXml(number)}</Number>` +
-      `</InvoiceIndentificator></SeriaAndNumbers>`;
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:SeriaAndNumbers><d:InvoiceIndentificator>` +
+      `<d:Number>${escapeXml(number)}</d:Number>` +
+      `<d:Seria>${escapeXml(seria)}</d:Seria>` +
+      `</d:InvoiceIndentificator></d:SeriaAndNumbers>`;
     const xml = await this.call("GetInvoicesQRcodes", inner);
     const block = xmlBlocks(xml, "InvoiceQRCode")[0];
     if (!block) return null;
@@ -752,13 +789,17 @@ export class EfacturaMdClient {
     fileContentBase64: string,
     requestId: string
   ): Promise<PostInvoicesResult> {
+    // PostInvocesRequest: RequestId, ActorRole, Attachment{FileContent,FileName},
+    // InvoicesXml, InvoicesXmlStatus(int). Attachment câmpuri alfabetic. Toate `d:`.
     const inner =
-      `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<InvoicesXml>${escapeXml(invoicesXml)}</InvoicesXml>` +
-      `<ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</ActorRole>` +
-      `<FileName>${escapeXml(fileName)}</FileName>` +
-      `<FileContent>${escapeXml(fileContentBase64)}</FileContent>` +
-      `<InvoicesXmlStatus>0</InvoicesXmlStatus>`;
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</d:ActorRole>` +
+      `<d:Attachment>` +
+      `<d:FileContent>${escapeXml(fileContentBase64)}</d:FileContent>` +
+      `<d:FileName>${escapeXml(fileName)}</d:FileName>` +
+      `</d:Attachment>` +
+      `<d:InvoicesXml>${escapeXml(invoicesXml)}</d:InvoicesXml>` +
+      `<d:InvoicesXmlStatus>0</d:InvoicesXmlStatus>`;
     const xml = await this.call("PostInvoicesWithAttachment", inner);
     return {
       requestId: xmlText(xml, "RequestId") ?? requestId,
@@ -789,9 +830,10 @@ export class EfacturaMdClient {
 
   /** §5.2 GetAcceptedInvoices — facturile emise de furnizor și acceptate. */
   async getAcceptedInvoices(requestId: string): Promise<InvoiceListItem[]> {
+    // ActorBaseRequest: RequestId, ActorRole. Toate în `d:`.
     const inner =
-      `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</ActorRole>`;
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</d:ActorRole>`;
     const xml = await this.call("GetAcceptedInvoices", inner);
     return this.parseInvoiceList(xml);
   }
@@ -799,8 +841,8 @@ export class EfacturaMdClient {
   /** §5.8 GetRejectedInvoices — facturile respinse de cumpărător. */
   async getRejectedInvoices(requestId: string): Promise<InvoiceListItem[]> {
     const inner =
-      `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</ActorRole>`;
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</d:ActorRole>`;
     const xml = await this.call("GetRejectedInvoices", inner);
     return this.parseInvoiceList(xml);
   }
@@ -815,23 +857,24 @@ export class EfacturaMdClient {
     const items = identifiers
       .map(
         (i) =>
-          `<InvoiceIndentificator><Seria>${escapeXml(i.seria)}</Seria>` +
-          `<Number>${escapeXml(i.number)}</Number></InvoiceIndentificator>`
+          `<d:InvoiceIndentificator><d:Number>${escapeXml(i.number)}</d:Number>` +
+          `<d:Seria>${escapeXml(i.seria)}</d:Seria></d:InvoiceIndentificator>`
       )
       .join("");
     const inner =
-      `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<SeriaAndNumbers>${items}</SeriaAndNumbers>`;
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:SeriaAndNumbers>${items}</d:SeriaAndNumbers>`;
     const xml = await this.call("GetInvoicesBySeriaNumber", inner);
     return this.parseInvoiceList(xml, "XmlInvoice");
   }
 
   /** §5.7 GetLogs — jurnalul apelurilor API într-un interval de timp. */
   async getLogs(from: Date, to: Date, requestId: string): Promise<RequestLogItem[]> {
+    // LogsRequest: RequestId, From, To (dateTime). Toate în `d:`.
     const inner =
-      `<RequestId>${escapeXml(requestId)}</RequestId>` +
-      `<From>${from.toISOString()}</From>` +
-      `<To>${to.toISOString()}</To>`;
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:From>${from.toISOString()}</d:From>` +
+      `<d:To>${to.toISOString()}</d:To>`;
     const xml = await this.call("GetLogs", inner);
     return xmlBlocks(xml, "RequestLog").map((block) => ({
       username: xmlText(block, "Username") ?? "",
