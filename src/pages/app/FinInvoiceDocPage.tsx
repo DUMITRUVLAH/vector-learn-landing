@@ -49,7 +49,14 @@ export function FinInvoiceDocPage() {
       .then((res) => {
         if (!alive) return;
         setInvoices(res.data);
-        if (res.data.length > 0) setSelectedId(res.data[0].id);
+        // PAR-FIN-001: honor a ?id=<invoiceId> deep-link (e.g. coming from PAR →
+        // "Generează factură"); otherwise default to the most recent invoice.
+        const hash = window.location.hash; // "#/business/fin/invoices/document?id=..."
+        const qIndex = hash.indexOf("?");
+        const wantedId = qIndex >= 0 ? new URLSearchParams(hash.slice(qIndex + 1)).get("id") : null;
+        const match = wantedId && res.data.some((i) => i.id === wantedId) ? wantedId : null;
+        if (match) setSelectedId(match);
+        else if (res.data.length > 0) setSelectedId(res.data[0].id);
       })
       .catch(() => alive && setError("Nu am putut încărca facturile."))
       .finally(() => alive && setLoadingList(false));
