@@ -588,6 +588,23 @@ export async function getParMe(): Promise<{ roles: string[]; userId: string; ten
   return api("/api/par/me");
 }
 
+// ─── PAR-FIN-001: bridge PAR → FinDesk draft invoice ─────────────────────────
+
+export interface ParToInvoiceResult {
+  invoiceId: string;
+  invoiceNumber: string;
+  partyId: string;
+}
+
+/**
+ * Generate a FinDesk draft invoice from an approved PAR. The beneficiary becomes
+ * a supplier party and the total + end_use become a single invoice line. Returns
+ * the new invoice id so the UI can deep-link to it (where e-Factura submit lives).
+ */
+export async function parToInvoice(parId: string): Promise<ParToInvoiceResult> {
+  return api(`/api/par/${parId}/to-invoice`, { method: "POST", body: JSON.stringify({}) });
+}
+
 // ─── PAR-116: Admin — DOA, Settings, Members, Reference data ─────────────────
 
 export interface ParDoaRow {

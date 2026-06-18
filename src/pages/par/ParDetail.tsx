@@ -34,6 +34,7 @@ import {
   UserCheck,
   History,
   Paperclip,
+  Receipt,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
@@ -55,6 +56,7 @@ import {
   duplicatePar,
   getPurchaseOrder,
   issuePurchaseOrder,
+  parToInvoice,
   getParMe,
   formatMDL,
   type ParDetail as ParDetailType,
@@ -198,6 +200,39 @@ function PoButton({ par, orgName }: { par: ParDetailType; orgName: string }) {
       aria-label="Emite comandă de achiziție" title={err ?? "Emite comandă (PO)"}>
       {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <FileText className="h-4 w-4" aria-hidden />}
       Emite PO
+    </button>
+  );
+}
+
+// ─── PAR-FIN-001: PAR → FinDesk invoice (→ e-Factura) ───────────────────────────
+
+function ToInvoiceButton({ par, onNavigate }: { par: ParDetailType; onNavigate: (p: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Only meaningful once approved and with a payee — same rule as the PO button.
+  const eligible = ["approved", "in_finance", "paid"].includes(par.status) && (!!par.payeeName || !!par.vendorId);
+  if (!eligible) return null;
+
+  const generate = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const { invoiceId } = await parToInvoice(par.id);
+      // Deep-link to the FinDesk invoice document, where the e-Factura submit lives.
+      onNavigate(`/business/fin/invoices/document?id=${invoiceId}`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Nu am putut genera factura.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button type="button" onClick={generate} disabled={busy}
+      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted transition-colors min-h-[44px] disabled:opacity-60"
+      aria-label="Generează factură FinDesk (pentru e-Factura)" title={err ?? "Generează factură FinDesk → e-Factura"}>
+      {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Receipt className="h-4 w-4" aria-hidden />}
+      Generează factură
     </button>
   );
 }
@@ -699,6 +734,7 @@ export function ParDetailPage() {
           <div className="flex items-center gap-2 flex-shrink-0">
             <DuplicateButton parId={par.id} onNavigate={router.navigate} />
             <PoButton par={par} orgName={orgName} />
+            <ToInvoiceButton par={par} onNavigate={router.navigate} />
             <PdfDownloadButton par={par} onAttached={load} />
           </div>
         </div>
