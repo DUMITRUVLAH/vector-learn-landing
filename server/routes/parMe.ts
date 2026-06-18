@@ -10,6 +10,6 @@ parMeRoutes.use("*", requireAuth);
 
 parMeRoutes.get("/", async (c) => {
   const user = c.get("user");
-  const roles = await getUserPARRoles(user.id, user.tenantId);
+  const roles = await getUserPARRoles(user.id, user.tenantId, user.role);
   return c.json({ roles, userId: user.id, tenantId: user.tenantId });
 });

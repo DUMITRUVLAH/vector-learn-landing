@@ -890,8 +890,11 @@ parRoutes.patch(
     if (body.attachments_note !== undefined)
       updateData.attachmentsNote = body.attachments_note;
 
-    // Inline payee fields (no vendor_id path)
-    if (!body.vendor_id && body.vendor_id !== null) {
+    // Inline payee fields (no vendor selected). The form always sends
+    // vendor_id: null when entering payee manually, so the inline block must
+    // run whenever no real vendor id is provided (null OR undefined). The
+    // vendor snapshot below overrides these if a vendor_id was actually set.
+    if (!body.vendor_id) {
       if (body.payee_name !== undefined) updateData.payeeName = body.payee_name;
       if (body.payee_idnp !== undefined) updateData.payeeIdnp = body.payee_idnp;
       if (body.payee_iban !== undefined) updateData.payeeIban = body.payee_iban;
