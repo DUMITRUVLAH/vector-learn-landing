@@ -15,7 +15,7 @@ import {
   type CreateFinInvoiceLineInput,
 } from "@/lib/api/finInvoices";
 import { searchRegistry, type RegistryCompany } from "@/lib/api/paymentAccounts";
-import { createParty, listParties } from "@/lib/api/finParties";
+import { createParty, listParties, getParty, updateParty } from "@/lib/api/finParties";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,12 +58,16 @@ export function FinInvoiceCreateModal({ onClose, onCreated }: Props) {
   const [partyName, setPartyName] = useState<string>("");
   const [partyId, setPartyId] = useState<string | null>(null);
   const [partyAddress, setPartyAddress] = useState<string>("");
+  // IBAN-ul cumpărătorului — OBLIGATORIU pentru e-Factura SFS (Buyer/BankAccount).
+  // Registrul de stat nu-l conține, deci se introduce manual și se salvează pe partener.
+  const [partyIban, setPartyIban] = useState<string>("");
   const [lookupError, setLookupError] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function onQueryChange(value: string) {
     setQuery(value);
     setPartyId(null);
+    setPartyIban("");
     setLookupError(null);
     if (searchTimer.current) clearTimeout(searchTimer.current);
     const q = value.trim();
@@ -101,6 +105,13 @@ export function FinInvoiceCreateModal({ onClose, onCreated }: Props) {
       const match = existing.data.find((p) => p.idno === code);
       if (match) {
         setPartyId(match.id);
+        // Pre-completează IBAN-ul dacă partenerul îl are deja salvat.
+        try {
+          const full = await getParty(match.id);
+          if (full.data.iban) setPartyIban(full.data.iban);
+        } catch {
+          // non-critical — utilizatorul îl poate introduce manual
+        }
       } else {
         const created = await createParty({
           kind: "client",
@@ -188,6 +199,16 @@ export function FinInvoiceCreateModal({ onClose, onCreated }: Props) {
 
     setLoading(true);
     try {
+      // Salvează IBAN-ul pe partener dacă a fost introdus/modificat — e necesar
+      // pentru trimiterea la e-Factura SFS (Buyer/BankAccount obligatoriu).
+      if (partyId && partyIban.trim()) {
+        try {
+          await updateParty(partyId, { iban: partyIban.trim() });
+        } catch {
+          // non-fatal — factura se creează oricum; IBAN-ul se poate adăuga din fișa partenerului
+        }
+      }
+
       const linesPayload: CreateFinInvoiceLineInput[] = lines.map((l) => ({
         description: l.description,
         quantity: l.quantity,
@@ -287,6 +308,27 @@ export function FinInvoiceCreateModal({ onClose, onCreated }: Props) {
               </p>
             )}
             {lookupError && <p className="mt-1 text-xs text-destructive" role="alert">{lookupError}</p>}
+
+            {/* IBAN cumpărător — apare după selectarea partenerului. Obligatoriu pentru e-Factura SFS. */}
+            {partyId && (
+              <div className="mt-3">
+                <label htmlFor="fin-buyer-iban" className="block text-sm font-medium text-foreground mb-1">
+                  IBAN cumpărător <span className="text-muted-foreground font-normal">(necesar pentru e-Factura SFS)</span>
+                </label>
+                <input
+                  id="fin-buyer-iban"
+                  type="text"
+                  value={partyIban}
+                  onChange={(e) => setPartyIban(e.target.value.toUpperCase().replace(/\s+/g, ""))}
+                  placeholder="MD24AG000225100013104168"
+                  className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-describedby="fin-buyer-iban-hint"
+                />
+                <p id="fin-buyer-iban-hint" className="mt-1 text-xs text-muted-foreground">
+                  Contul bancar al cumpărătorului. SFS îl cere obligatoriu la trimitere. Se salvează în fișa partenerului.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Currency + Due Date */}
