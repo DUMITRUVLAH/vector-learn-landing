@@ -60,6 +60,7 @@ import { itparkSettingsRoutes } from "./routes/itparkSettings";
 
 // PAR (Payment Action Request) module
 import { parMeRoutes } from "./routes/parMe";
+import { parExtractRoutes } from "./routes/parExtract";
 import { parMembersRoutes } from "./routes/parMembers";
 import { parDoaRoutes } from "./routes/parDoa";
 import { parBudgetCodesRoutes } from "./routes/parBudgetCodes";
@@ -175,6 +176,7 @@ app.route("/api/fin/revaluation", finRevaluationRoutes);
 
 // PAR module
 app.route("/api/par/me", parMeRoutes);
+app.route("/api/par/extract", parExtractRoutes);
 app.route("/api/par/members", parMembersRoutes);
 app.route("/api/par/doa", parDoaRoutes);
 app.route("/api/par/budget-codes", parBudgetCodesRoutes);

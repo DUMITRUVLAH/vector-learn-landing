@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   FileText, Loader2, Plus, Trash2, Upload, X, AlertCircle, CheckCircle2, Paperclip, Save,
-  Search, Building2, BookmarkPlus, BookOpen,
+  Search, Building2, BookmarkPlus, BookOpen, Sparkles,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -24,6 +24,7 @@ import {
   listDepartments, listProjects, listBudgetCodes, listVendors, createVendor,
   searchRegistryCompanies, getBudgetCodeBalance,
   listParTemplates, saveParTemplate, instantiateParTemplate,
+  extractParFromDocument,
   formatMDL,
   type ParRequest, type ParLineItem, type ParAttachment,
   type ParDepartment, type ParProject, type ParBudgetCode, type ParVendor,
@@ -159,6 +160,9 @@ export function ParCreateForm() {
   const [attachmentsNote, setAttachmentsNote] = useState("");
   const [uploadKind, setUploadKind] = useState<ParAttachmentKind>("contract");
   const [uploadingFile, setUploadingFile] = useState(false);
+  // PAR-AUTO-001: AI auto-complete from an uploaded document
+  const [extracting, setExtracting] = useState(false);
+  const [extractMsg, setExtractMsg] = useState<{ kind: "ok" | "warn" | "err"; text: string } | null>(null);
 
   // New line-item draft row
   const [nlDesc, setNlDesc] = useState("");
@@ -348,6 +352,63 @@ export function ParCreateForm() {
     const id = e.target.value; setVendorId(id);
     const v = vendors.find((x) => x.id === id);
     if (v) { setPayeeName(v.name); setPayeeIdnp(v.idnp ?? ""); setPayeeIban(v.iban ?? ""); setPayeeBank(v.bank ?? ""); setSaveVendor(false); }
+  };
+
+  /**
+   * PAR-AUTO-001: extract payee + amount + purpose from an uploaded document
+   * (contract / act de predare-primire / factură) and pre-fill the form.
+   * Only fills EMPTY fields so it never overwrites what the user already typed.
+   * Low-confidence values are filled but flagged so the user verifies them.
+   */
+  const onAutoFillFromDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    setExtracting(true);
+    setExtractMsg(null);
+    try {
+      const r = await extractParFromDocument(file);
+      const f = r.fields;
+      const filled: string[] = [];
+      const lowConf: string[] = [];
+      const apply = (
+        cur: string,
+        field: { value: string | null; lowConfidence: boolean },
+        set: (v: string) => void,
+        label: string
+      ) => {
+        if (!cur.trim() && field.value) {
+          set(field.value);
+          filled.push(label);
+          if (field.lowConfidence) lowConf.push(label);
+        }
+      };
+      apply(payeeName, f.payeeName, (v) => { setPayeeName(v); setVendorId(""); }, "beneficiar");
+      apply(payeeIban, f.payeeIban, (v) => setPayeeIban(v.toUpperCase()), "IBAN");
+      apply(endUse, f.purpose, setEndUse, "destinație");
+      // Pre-fill a line-item draft with the extracted amount + a description.
+      if (!nlPrice.trim() && f.amount.value) {
+        setNlPrice(String(f.amount.value));
+        if (!nlDesc.trim()) setNlDesc(f.purpose.value || f.payeeName.value || "Conform document");
+        filled.push("sumă");
+        if (f.amount.lowConfidence) lowConf.push("sumă");
+      }
+
+      if (filled.length === 0) {
+        setExtractMsg({ kind: "warn", text: "Nu am găsit câmpuri de completat în document (sau erau deja completate)." });
+      } else if (lowConf.length > 0) {
+        setExtractMsg({
+          kind: "warn",
+          text: `Am completat: ${filled.join(", ")}. Verifică ${lowConf.join(", ")} — încredere scăzută.`,
+        });
+      } else {
+        setExtractMsg({ kind: "ok", text: `Am completat din document: ${filled.join(", ")}. Verifică înainte de trimitere.` });
+      }
+    } catch (err) {
+      setExtractMsg({ kind: "err", text: err instanceof Error ? err.message : "Nu am putut citi documentul." });
+    } finally {
+      setExtracting(false);
+    }
   };
 
   /** Client pre-validation → friendly field errors. Returns true if OK. */
@@ -622,6 +683,43 @@ export function ParCreateForm() {
         {/* 12 Payee */}
         <Section n="12" title="Beneficiar plată (Payee)">
           {fieldErrors.payee && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="h-3 w-3" aria-hidden />{fieldErrors.payee}</p>}
+
+          {/* PAR-AUTO-001: AI auto-complete from an uploaded document */}
+          <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <label
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer min-h-[44px]",
+                  extracting && "opacity-60 pointer-events-none"
+                )}
+              >
+                {extracting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Sparkles className="h-4 w-4" aria-hidden />}
+                {extracting ? "Se citește documentul…" : "Completează din document"}
+                <input
+                  type="file"
+                  accept="image/*,application/pdf,.txt,.csv"
+                  className="sr-only"
+                  onChange={onAutoFillFromDocument}
+                  disabled={extracting}
+                  aria-label="Încarcă un document pentru auto-completare (contract, act de predare-primire sau factură)"
+                />
+              </label>
+              <p className="text-xs text-muted-foreground flex-1 min-w-[200px]">
+                Încarcă un contract, act de predare-primire sau factură — extragem automat beneficiarul, IBAN-ul și suma.
+              </p>
+            </div>
+            {extractMsg && (
+              <p className={cn(
+                "text-xs flex items-center gap-1",
+                extractMsg.kind === "ok" && "text-green-700 dark:text-green-400",
+                extractMsg.kind === "warn" && "text-amber-700 dark:text-amber-400",
+                extractMsg.kind === "err" && "text-destructive"
+              )}>
+                {extractMsg.kind === "ok" ? <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden /> : <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />}
+                {extractMsg.text}
+              </p>
+            )}
+          </div>
 
           {/* Feature 1: Registry search */}
           <Field label="Caută companie (contafirm.md)" htmlFor="reg-q" hint="Introdu cel puțin 2 caractere — caută după nume sau IDNO">
