@@ -7,7 +7,7 @@
  *
  * Wrapped in BusinessShell (created in SPLIT-101).
  */
-import { Briefcase, Landmark, ClipboardList, Building2, RefreshCw, TrendingUp, TrendingDown, Clock } from "lucide-react";
+import { Landmark, ClipboardList, Building2, RefreshCw, TrendingUp, TrendingDown, Clock, ArrowRight } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { Link } from "@/router/HashRouter";
 import { useBusinessDashboard } from "@/hooks/useBusinessDashboard";
@@ -116,10 +116,41 @@ function StatRow({ label, value, trend, valueClass }: StatRowProps) {
 
 // ─── Quick-access links ────────────────────────────────────────────────────────
 
-const QUICK_LINKS = [
-  { label: "FinDesk", href: "/business/fin/", icon: Landmark },
-  { label: "PAR — Cereri", href: "/business/par", icon: ClipboardList },
-  { label: "ITPark", href: "/business/itpark", icon: Building2 },
+interface ModuleTile {
+  label: string;
+  description: string;
+  href: string;
+  icon: typeof Landmark;
+  /** Tailwind classes for the tile's tinted background + icon color (light/dark). */
+  tint: string;
+  iconClass: string;
+}
+
+const MODULE_TILES: ModuleTile[] = [
+  {
+    label: "FinDesk",
+    description: "Facturi, cheltuieli, plăți, TVA și e-Factura.",
+    href: "/business/fin/",
+    icon: Landmark,
+    tint: "bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-950/60",
+    iconClass: "text-blue-600 dark:text-blue-400",
+  },
+  {
+    label: "PAR — Cereri de plată",
+    description: "Creare, aprobări multi-nivel, finanțe și rapoarte.",
+    href: "/business/par",
+    icon: ClipboardList,
+    tint: "bg-violet-50 dark:bg-violet-950/40 hover:bg-violet-100 dark:hover:bg-violet-950/60",
+    iconClass: "text-violet-600 dark:text-violet-400",
+  },
+  {
+    label: "ITPark — Rezidenți",
+    description: "Contracte MITP, declarații și raportare anuală.",
+    href: "/business/fin/itpark",
+    icon: Building2,
+    tint: "bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/60",
+    iconClass: "text-emerald-600 dark:text-emerald-400",
+  },
 ];
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -252,26 +283,33 @@ export function BusinessDashboardPage() {
         </KpiCard>
       </div>
 
-      {/* Quick-access section */}
-      <section aria-label="Acces rapid module">
+      {/* Module picker — choose a module to work in */}
+      <section aria-label="Module">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-          Acces rapid
+          Alege un modul
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {QUICK_LINKS.map((link) => {
-            const Icon = link.icon;
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {MODULE_TILES.map((tile) => {
+            const Icon = tile.icon;
             return (
               <Link
-                key={link.href}
-                to={link.href}
-                className="group flex items-center gap-3 rounded-lg border border-border bg-card p-4 hover:bg-muted/50 hover:border-primary/40 transition-colors min-h-[44px]"
-                aria-label={`Deschide ${link.label}`}
+                key={tile.href}
+                to={tile.href}
+                className={cn(
+                  "group flex flex-col gap-3 rounded-2xl border border-border p-5 transition-colors min-h-[44px]",
+                  tile.tint
+                )}
+                aria-label={`Deschide ${tile.label}`}
               >
-                <div className="inline-flex items-center justify-center rounded-lg bg-primary/10 p-2 shrink-0">
-                  <Icon className="h-4 w-4 text-primary" aria-hidden="true" />
+                <Icon className={cn("h-6 w-6", tile.iconClass)} aria-hidden="true" />
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">{tile.label}</h3>
+                  <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                    {tile.description}
+                  </p>
                 </div>
-                <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-                  {link.label}
+                <span className="mt-auto inline-flex items-center gap-1 text-sm font-medium text-foreground group-hover:gap-2 transition-all">
+                  Deschide <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </span>
               </Link>
             );
