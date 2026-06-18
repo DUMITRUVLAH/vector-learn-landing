@@ -309,26 +309,26 @@ export function FinInvoiceCreateModal({ onClose, onCreated }: Props) {
             )}
             {lookupError && <p className="mt-1 text-xs text-destructive" role="alert">{lookupError}</p>}
 
-            {/* IBAN cumpărător — apare după selectarea partenerului. Obligatoriu pentru e-Factura SFS. */}
-            {partyId && (
-              <div className="mt-3">
-                <label htmlFor="fin-buyer-iban" className="block text-sm font-medium text-foreground mb-1">
-                  IBAN cumpărător <span className="text-muted-foreground font-normal">(necesar pentru e-Factura SFS)</span>
-                </label>
-                <input
-                  id="fin-buyer-iban"
-                  type="text"
-                  value={partyIban}
-                  onChange={(e) => setPartyIban(e.target.value.toUpperCase().replace(/\s+/g, ""))}
-                  placeholder="MD24AG000225100013104168"
-                  className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  aria-describedby="fin-buyer-iban-hint"
-                />
-                <p id="fin-buyer-iban-hint" className="mt-1 text-xs text-muted-foreground">
-                  Contul bancar al cumpărătorului. SFS îl cere obligatoriu la trimitere. Se salvează în fișa partenerului.
-                </p>
-              </div>
-            )}
+            {/* IBAN cumpărător — mereu vizibil. Obligatoriu pentru e-Factura SFS.
+                Dezactivat până e selectat un partener (IBAN-ul se salvează pe partener). */}
+            <div className="mt-3">
+              <label htmlFor="fin-buyer-iban" className="block text-sm font-medium text-foreground mb-1">
+                IBAN cumpărător <span className="text-muted-foreground font-normal">(necesar pentru e-Factura SFS)</span>
+              </label>
+              <input
+                id="fin-buyer-iban"
+                type="text"
+                value={partyIban}
+                onChange={(e) => setPartyIban(e.target.value.toUpperCase().replace(/\s+/g, ""))}
+                placeholder={partyId ? "MD24AG000225100013104168" : "Selectează întâi un partener mai sus"}
+                disabled={!partyId}
+                className="w-full px-3 py-2 rounded-md border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 disabled:cursor-not-allowed"
+                aria-describedby="fin-buyer-iban-hint"
+              />
+              <p id="fin-buyer-iban-hint" className="mt-1 text-xs text-muted-foreground">
+                Contul bancar al cumpărătorului. SFS îl cere obligatoriu la trimitere. Se salvează în fișa partenerului.
+              </p>
+            </div>
           </div>
 
           {/* Currency + Due Date */}
