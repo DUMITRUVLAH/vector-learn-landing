@@ -11,7 +11,8 @@ function esc(v: unknown): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;"); // defense-in-depth: cover single-quoted attribute contexts too
 }
 
 export interface ActContext {

@@ -46,6 +46,12 @@ describe("PAR-FIN-003: renderActHtml", () => {
     expect(html).not.toContain("Consultanță <b>grup</b>");
   });
 
+  it("escapes the single quote too (defense-in-depth, security audit #2)", () => {
+    const html = renderActHtml({ ...ctx, payeeName: "O'Brien SRL" });
+    expect(html).toContain("O&#39;Brien SRL");
+    expect(html).not.toContain("O'Brien SRL");
+  });
+
   it("falls back to a single end-use row when there are no line items", () => {
     const html = renderActHtml({ ...ctx, lines: [] });
     expect(html).toContain("Servicii consultanță");
