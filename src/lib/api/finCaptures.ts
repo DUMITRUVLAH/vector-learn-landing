@@ -265,6 +265,22 @@ export async function matchLineManual(
   });
 }
 
+/** BANK-INV-001: turn an INCOMING statement line into a FinDesk draft invoice (→ e-Factura). */
+export interface LineToInvoiceResult {
+  invoiceId: string;
+  invoiceNumber: string;
+  partyId: string;
+  /** True if the buyer's IDNO was found (else you fill it before e-Factura). */
+  idnoFound: boolean;
+}
+
+export async function lineToInvoice(lineId: string): Promise<LineToInvoiceResult> {
+  return api<LineToInvoiceResult>(`/api/fin/captures/lines/${lineId}/to-invoice`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 /** List the transactions extracted from a statement capture (optional reportable filter). */
 export async function getCaptureLines(
   captureId: string,
