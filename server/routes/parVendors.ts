@@ -13,6 +13,7 @@ import { parVendors } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { isValidMoldovaIBAN, isValidIDNP } from "../lib/par/validators";
+import { syncSupplierParty } from "../lib/par/syncParty";
 
 export const parVendorsRoutes = new Hono<{ Variables: AuthVariables }>();
 parVendorsRoutes.use("*", requireAuth);
@@ -72,6 +73,16 @@ parVendorsRoutes.post(
         notes: body.notes ?? null,
       })
       .returning();
+
+    // PAR-FIN-002: unify the partner registry — mirror this beneficiary into
+    // FinDesk parties (supplier) so it's the same company across modules.
+    // Non-blocking: a sync failure must not fail the vendor create.
+    try {
+      await syncSupplierParty({ tenantId, name: body.name, idnp: body.idnp, iban: body.iban });
+    } catch (e) {
+      console.error("[parVendors] syncSupplierParty failed (non-blocking):", e instanceof Error ? e.message : e);
+    }
+
     return c.json(row, 201);
   }
 );
