@@ -14,12 +14,26 @@
  * Invoice Reporting; this route maps their output onto the PAR payee/amount fields.
  */
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
+import { db } from "../db/client";
+import { finDataSettings, FIN_DATA_SETTINGS_DEFAULTS } from "../db/schema/finDataSettings";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { extractCaptureFields } from "../lib/ai/captureExtractor";
 import { extractPdfText } from "../lib/ai/pdfText";
+import { redactPii } from "../lib/ai/redactPii";
 
 export const parExtractRoutes = new Hono<{ Variables: AuthVariables }>();
 parExtractRoutes.use("*", requireAuth);
+
+/** Read the tenant's AI-privacy setting (defaults: pseudonymize on, opt-in off). */
+async function getPseudonymize(tenantId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ pseudonymize: finDataSettings.pseudonymizeAiPrompts })
+    .from(finDataSettings)
+    .where(eq(finDataSettings.tenantId, tenantId))
+    .limit(1);
+  return row?.pseudonymize ?? FIN_DATA_SETTINGS_DEFAULTS.pseudonymizeAiPrompts;
+}
 
 const MAX_FILE_BYTES = 8_000_000;
 
@@ -81,12 +95,47 @@ parExtractRoutes.post("/", async (c) => {
     return c.json({ error: "file_too_large", detail: "Fișierul depășește 8 MB." }, 400);
   }
 
-  const { rawText, imageDataUrl } = await deriveFile(file);
+  const derived = await deriveFile(file);
+  let { rawText, imageDataUrl } = derived;
   if (!rawText.trim() && !imageDataUrl) {
     return c.json(
       { error: "unreadable", detail: "Nu am putut citi documentul (format nesuportat sau gol)." },
       422
     );
+  }
+
+  // PAR-SEC-001 / security-audit #1: respect the tenant's AI-privacy setting.
+  // When pseudonymization is ON (default), redact IBAN/IDNP patterns from the
+  // OCR text before it leaves the server. Images can't be redacted (the model
+  // reads the pixels directly), so we DROP the image and fall back to redacted
+  // text — and if there's no usable text, we refuse rather than leak PII.
+  let pseudonymized = false;
+  let piiRedactedNote: string | null = null;
+  const pseudonymize = await getPseudonymize(user.tenantId);
+  if (pseudonymize) {
+    if (rawText.trim()) {
+      const { text, redactedCount } = redactPii(rawText);
+      rawText = text;
+      pseudonymized = true;
+      if (redactedCount > 0) {
+        piiRedactedNote =
+          "IBAN/IDNP au fost mascate înainte de trimiterea la AI (setare de confidențialitate). Completează-le manual.";
+      }
+    }
+    if (imageDataUrl) {
+      // Drop the image so PII pixels don't bypass redaction.
+      imageDataUrl = undefined;
+      if (!rawText.trim()) {
+        return c.json(
+          {
+            error: "image_pseudonymize_conflict",
+            detail:
+              "Documentul e o imagine, iar pseudonimizarea AI e activă — nu pot extrage fără a trimite imaginea. Încarcă un PDF cu text, sau dezactivează pseudonimizarea în Setări → Date.",
+          },
+          422
+        );
+      }
+    }
   }
 
   // Reuse the FinDesk extractor. captureId is informational for the audit log only.
@@ -103,6 +152,8 @@ parExtractRoutes.post("/", async (c) => {
 
   return c.json({
     isStub,
+    pseudonymized,
+    piiRedactedNote,
     documentClass: ef.document_class?.value ?? null,
     documentClassReason: (ef.document_class as { reason?: string } | undefined)?.reason ?? null,
     fields: {

@@ -598,6 +598,10 @@ export interface ParExtractField<T> {
 
 export interface ParExtractResult {
   isStub: boolean;
+  /** True when IBAN/IDNP were redacted before the text was sent to the AI. */
+  pseudonymized?: boolean;
+  /** A user-facing note when PII was masked (so they fill those fields manually). */
+  piiRedactedNote?: string | null;
   documentClass: "invoice" | "receipt" | "not_invoice" | null;
   documentClassReason: string | null;
   fields: {

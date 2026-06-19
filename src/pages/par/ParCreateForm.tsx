@@ -394,15 +394,19 @@ export function ParCreateForm() {
         if (f.amount.lowConfidence) lowConf.push("sumă");
       }
 
+      // Privacy note: when the tenant pseudonymizes AI prompts, IBAN/IDNP are
+      // masked before reaching the AI, so they won't be auto-filled.
+      const privacy = r.piiRedactedNote ? ` ${r.piiRedactedNote}` : "";
+
       if (filled.length === 0) {
-        setExtractMsg({ kind: "warn", text: "Nu am găsit câmpuri de completat în document (sau erau deja completate)." });
+        setExtractMsg({ kind: "warn", text: `Nu am găsit câmpuri de completat în document (sau erau deja completate).${privacy}` });
       } else if (lowConf.length > 0) {
         setExtractMsg({
           kind: "warn",
-          text: `Am completat: ${filled.join(", ")}. Verifică ${lowConf.join(", ")} — încredere scăzută.`,
+          text: `Am completat: ${filled.join(", ")}. Verifică ${lowConf.join(", ")} — încredere scăzută.${privacy}`,
         });
       } else {
-        setExtractMsg({ kind: "ok", text: `Am completat din document: ${filled.join(", ")}. Verifică înainte de trimitere.` });
+        setExtractMsg({ kind: r.piiRedactedNote ? "warn" : "ok", text: `Am completat din document: ${filled.join(", ")}. Verifică înainte de trimitere.${privacy}` });
       }
     } catch (err) {
       setExtractMsg({ kind: "err", text: err instanceof Error ? err.message : "Nu am putut citi documentul." });
