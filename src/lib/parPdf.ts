@@ -2,7 +2,9 @@
  * PAR-114: client-side PDF generator for a "Payment Action Request (PAR) Form".
  *
  * Reproduces the standard 16-section paper form used by donor-funded NGOs (e.g. ATIC/Digital
- * Safeguard, Republic of Moldova) as an A4 PDF.
+ * Safeguard, Republic of Moldova) as an A4 PDF — pixel-faithful to the official Excel form:
+ * a black-and-white document with thin borders, superscript section numbers, underline fields,
+ * and a single pale-rose centered title band. NOT a "web card" design.
  *
  * Technique mirrors `src/lib/paymentAccountPdf.ts` exactly:
  *   buildParHtml(par): string   — pure string function, testable without a browser
@@ -21,13 +23,17 @@ import html2canvas from "html2canvas";
 import type { ParDetail, ParApproval, ParLineItem } from "./api/par";
 
 // ─── Palette (PDF-only — inline hex, html2canvas-safe, not design-system tokens) ──────────────
+// The official form is a black-and-white office document. The ONLY colour is a pale rose title
+// band and a red "MDL" accent in the money column headers (matching the source Excel).
 
-const PINK_TITLE = "#e85d7c";      // pink title band (PAR form header)
-const INK = "#0f172a";
-const MUTED = "#64748b";
-const LINE = "#e2e8f0";
-const LIGHT_BG = "#fafafa";
-const BOX_BG = "#f8f9fa";
+const TITLE_BG = "#fbe9ec";        // very pale rose — title band background (not a pink fill)
+const RED = "#c0392b";             // red "MDL" accent in price column headers (source Excel)
+const LINK = "#1155cc";            // blue underlined "here" instruction link
+const INK = "#000000";             // document ink — pure black, like a printed form
+const FIELD = "#1a1a1a";           // filled-in field values
+const BORDER = "#000000";          // thin black table/box borders
+const RULE = "#000000";            // underline rule for fill-in fields
+const FAINT = "#555555";           // helper sub-notes
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────────────────────
 
@@ -40,23 +46,38 @@ export function esc(s: string | null | undefined): string {
 }
 
 /**
+ * Format minor-unit cents as MDL with comma decimals and space thousands, e.g. "7 000,00".
+ * Returns a bare number string (no symbol) — the form puts "MDL" in its own column/label.
+ * Always shows two decimals to match the official Excel ("7,000.00" → "7 000,00").
+ */
+function amount(cents: number): string {
+  const neg = cents < 0;
+  const v = Math.abs(Math.round(cents));
+  const whole = Math.floor(v / 100);
+  const frac = v % 100;
+  const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return `${neg ? "-" : ""}${grouped},${String(frac).padStart(2, "0")}`;
+}
+
+/**
  * Format minor-unit cents as "L 7 000" — locale-independent thousands grouping,
  * decimal only when non-zero. Same algorithm as paymentAccountPdf.money().
+ * Kept exported for the test-suite / other callers; the form body uses amount() + an "MDL" label.
  */
 export function money(cents: number, currency = "MDL"): string {
   const neg = cents < 0;
   const v = Math.abs(Math.round(cents));
   const whole = Math.floor(v / 100);
   const frac = v % 100;
-  const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const dec = frac ? "," + String(frac).padStart(2, "0") : "";
   const sym = currency === "MDL" ? "L" : currency;
-  return `${neg ? "-" : ""}${sym} ${grouped}${dec}`;
+  return `${neg ? "-" : ""}${sym} ${grouped}${dec}`;
 }
 
 /** Format a date string / ISO timestamp as dd-Mon-YY (e.g. "10-Jun-26"). */
 function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return esc(iso);
   const day = String(d.getDate()).padStart(2, "0");
@@ -65,48 +86,56 @@ function fmtDate(iso: string | null | undefined): string {
   return `${day}-${mon}-${yr}`;
 }
 
-/** Render a labeled header cell (used in sections 1–7 grid). */
-function cell(label: string, value: string, width = "auto"): string {
-  return `
-    <td style="border:1px solid ${LINE};padding:6px 8px;vertical-align:top;width:${width};">
-      <div style="font-size:9px;color:${MUTED};font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">${esc(label)}</div>
-      <div style="font-size:12px;color:${INK};margin-top:2px;min-height:16px;">${value || "&nbsp;"}</div>
-    </td>`;
+/** A superscript section number (¹ ² … 16) rendered like the office form's numbering. */
+function num(n: number): string {
+  return `<span style="font-size:8px;vertical-align:super;font-weight:700;color:${INK};">${n}</span>`;
 }
 
-/** Render a checkbox option. Marked with X if selected. */
-function checkbox(label: string, selected: boolean): string {
+/**
+ * A labeled fill-in field used in the header grid (sections 1–7): bold label on the left,
+ * the value sitting on an underline rule (mimics the typed-over-a-line look of the form).
+ */
+function field(n: number, label: string, value: string): string {
   return `
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-      <div style="width:16px;height:16px;border:1.5px solid ${selected ? INK : "#94a3b8"};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:${INK};background:${selected ? "#f1f5f9" : "#fff"};">
-        ${selected ? "X" : "&nbsp;"}
-      </div>
-      <span style="font-size:12px;color:${selected ? INK : MUTED};font-weight:${selected ? "700" : "400"};">${esc(label)}</span>
+    <div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;">
+      <span style="font-size:10.5px;font-weight:700;color:${INK};white-space:nowrap;">${num(n)} ${esc(label)}:</span>
+      <span style="flex:1;border-bottom:1px solid ${RULE};font-size:11px;color:${FIELD};min-height:15px;padding:0 4px 1px;">${value || "&nbsp;"}</span>
     </div>`;
 }
 
-/** Render a signature box (sections 14–15). */
-function sigBox(title: string, approval: ParApproval | null): string {
-  const name = approval?.signatureName ?? (approval?.approverUserId ? "—" : "");
-  const role = approval?.signatureTitle ?? approval?.approverRoleLabel ?? "";
-  const date = fmtDate(approval?.decidedAt);
-  const approved = approval?.decision === "approved";
+/** Render a checkbox option. Marked with X if selected — small bordered square, like the form. */
+function checkbox(label: string, selected: boolean): string {
   return `
-    <td style="border:1px solid ${LINE};padding:10px 12px;vertical-align:top;width:33%;">
-      <div style="font-size:9px;color:${MUTED};font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">${esc(title)}</div>
-      ${approved ? `<div style="font-size:10px;font-weight:800;color:${PINK_TITLE};margin-bottom:4px;">APPROVE</div>` : ""}
-      <div style="border-bottom:1px solid ${LINE};padding-bottom:4px;margin-bottom:4px;">
-        <div style="font-size:9px;color:${MUTED};">Signature / Name:</div>
-        <div style="font-size:11px;font-weight:600;color:${INK};min-height:14px;">${esc(name)}</div>
+    <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:5px;">
+      <span style="display:inline-block;width:13px;height:13px;border:1px solid ${INK};text-align:center;line-height:12px;font-size:10px;font-weight:800;color:${INK};flex:none;">${selected ? "X" : "&nbsp;"}</span>
+      <span style="font-size:10.5px;color:${INK};font-weight:${selected ? "700" : "400"};line-height:1.3;">${esc(label)}</span>
+    </div>`;
+}
+
+/**
+ * Render one signature column (sections 14–15). Name / Title / Date / Signature stacked, each on
+ * an underline rule. An approved decision shows the "APPROVE" / "APPROVED" stamp word.
+ */
+function sigColumn(title: string, approval: ParApproval | null, opts: { stamp?: boolean } = {}): string {
+  const name = approval?.signatureName ?? "";
+  const role = approval?.signatureTitle ?? approval?.approverRoleLabel ?? "";
+  const date = approval?.decision === "approved" ? fmtDate(approval?.decidedAt) : "";
+  const approved = approval?.decision === "approved";
+  const sigRule = (lbl: string, val: string) => `
+    <div style="margin-bottom:7px;">
+      <div style="display:flex;align-items:baseline;gap:6px;">
+        <span style="font-size:9.5px;color:${INK};white-space:nowrap;">${lbl}:</span>
+        <span style="flex:1;border-bottom:1px solid ${RULE};font-size:11px;color:${FIELD};min-height:14px;padding:0 3px 1px;">${val || "&nbsp;"}</span>
       </div>
-      <div style="border-bottom:1px solid ${LINE};padding-bottom:4px;margin-bottom:4px;">
-        <div style="font-size:9px;color:${MUTED};">Title:</div>
-        <div style="font-size:11px;color:${INK};min-height:14px;">${esc(role)}</div>
-      </div>
-      <div>
-        <div style="font-size:9px;color:${MUTED};">Date:</div>
-        <div style="font-size:11px;color:${INK};min-height:14px;">${approved ? esc(date) : "&nbsp;"}</div>
-      </div>
+    </div>`;
+  return `
+    <td style="border:1px solid ${BORDER};padding:8px 10px;vertical-align:top;">
+      <div style="font-size:10px;font-weight:700;color:${INK};margin-bottom:8px;">${title}</div>
+      ${opts.stamp && approved ? `<div style="font-size:11px;font-weight:800;color:${INK};letter-spacing:0.04em;margin-bottom:6px;">APPROVE</div>` : ""}
+      ${sigRule("Name", esc(name))}
+      ${sigRule("Title", esc(role))}
+      ${sigRule("Date", esc(date))}
+      ${sigRule("Signature", "&nbsp;")}
     </td>`;
 }
 
@@ -124,229 +153,204 @@ export function buildParHtml(par: ParDetail): string {
   const items: ParLineItem[] = par.line_items ?? [];
   const approvals: ParApproval[] = par.approvals ?? [];
 
+  // Prefer server-resolved display names; fall back to the raw *Id only when no name resolved.
+  const requestedBy = req.requestedByName || req.requestedByUserId || "";
+  const department = req.departmentName || req.departmentId || "";
+  const project = req.projectName || req.projectId || "";
+  const budgetCode =
+    req.budgetCodeLabel ||
+    [req.budgetCodeId, req.budgetCodeNote].filter(Boolean).join(" — ") ||
+    "";
+
   // Requestor approval = step 0 (the submit signature, section 14)
   const sig14 = approvals.find((a) => a.step === 0) ?? null;
   // Non-requestor approvals (sections 15+), sorted by step
   const approverSigs = approvals.filter((a) => a.step > 0).sort((a, b) => a.step - b.step);
-
-  // Section 8 — Purpose
-  const purposeLabels: Record<string, string> = {
-    execute_payment: "Execute payment",
-    obtain_quotations: "Obtain quotations (in preparation for procurement)",
-    provide_estimate: "Provide estimate (cost only, no competition)",
-  };
-
-  // Section 9 — Charge To
-  const chargeLabels: Record<string, string> = {
-    operations: "Operations",
-    program: "Program",
-    other: "Other",
-  };
+  const approver1 = approverSigs[0] ?? null;
+  const approver2 = approverSigs[1] ?? null;
 
   // Section 10 — Line items
   const itemRows = items
     .map((it, idx) => `
       <tr>
-        <td style="border:1px solid ${LINE};padding:6px 8px;text-align:center;color:${MUTED};font-size:11px;">${idx + 1}</td>
-        <td style="border:1px solid ${LINE};padding:6px 8px;color:${INK};font-size:11px;">${esc(it.description)}</td>
-        <td style="border:1px solid ${LINE};padding:6px 8px;text-align:right;color:${INK};font-size:11px;">${esc(String(it.quantity))}</td>
-        <td style="border:1px solid ${LINE};padding:6px 8px;color:${MUTED};font-size:11px;">${esc(it.unit ?? "")}</td>
-        <td style="border:1px solid ${LINE};padding:6px 8px;text-align:right;color:${INK};font-size:11px;white-space:nowrap;">${money(it.unitPriceCents, req.currency)}</td>
-        <td style="border:1px solid ${LINE};padding:6px 8px;text-align:right;color:${INK};font-weight:700;font-size:11px;white-space:nowrap;">${money(it.lineTotalCents, req.currency)}</td>
+        <td style="border:1px solid ${BORDER};padding:5px 6px;text-align:center;color:${INK};font-size:10.5px;">${idx + 1}</td>
+        <td style="border:1px solid ${BORDER};padding:5px 8px;color:${INK};font-size:10.5px;line-height:1.35;">${esc(it.description)}</td>
+        <td style="border:1px solid ${BORDER};padding:5px 6px;text-align:center;color:${INK};font-size:10.5px;">${esc(String(it.quantity))}</td>
+        <td style="border:1px solid ${BORDER};padding:5px 6px;text-align:center;color:${INK};font-size:10.5px;">${esc(it.unit ?? "")}</td>
+        <td style="border:1px solid ${BORDER};padding:5px 8px;text-align:right;color:${INK};font-size:10.5px;white-space:nowrap;">${amount(it.unitPriceCents)}</td>
+        <td style="border:1px solid ${BORDER};padding:5px 8px;text-align:right;color:${INK};font-size:10.5px;white-space:nowrap;">${amount(it.lineTotalCents)}</td>
       </tr>`)
     .join("");
 
-  // Total row
+  // Total
   const total = req.totalEstimatedCents ?? items.reduce((s, i) => s + i.lineTotalCents, 0);
-
-  // Sections 14–15 signature layout: requestor + up to 2 approvers
-  const approver1 = approverSigs[0] ?? null;
-  const approver2 = approverSigs[1] ?? null;
 
   // Section 16 — payment data
   const pmt = par.payment;
+  const receivedBy = req.receivedByName || pmt?.receivedByUserId || "";
+  const assignedTo = req.assignedToName || pmt?.assignedToUserId || "";
 
   return `
-<div style="width:794px;box-sizing:border-box;background:#ffffff;font-family:Onest,Inter,Arial,sans-serif;color:${INK};padding:0;">
+<div style="width:794px;box-sizing:border-box;background:#ffffff;font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;color:${INK};padding:28px 30px;">
 
-  <!-- TITLE BAND -->
-  <div style="background:${PINK_TITLE};padding:12px 24px;display:flex;justify-content:space-between;align-items:center;">
-    <div style="font-size:17px;font-weight:800;color:#ffffff;letter-spacing:0.01em;">Payment Action Request (PAR) Form</div>
-    <div style="font-size:10px;color:rgba(255,255,255,0.85);">PAR No: ${esc(req.requestNo)}</div>
+  <!-- TITLE BAND — pale rose, centered, dark text (matches the office form, not a pink fill) -->
+  <div style="background:${TITLE_BG};border:1px solid #f1c9d1;padding:8px 0;text-align:center;">
+    <div style="font-size:16px;font-weight:800;color:${INK};letter-spacing:0.01em;">Payment Action Request (PAR) Form</div>
+  </div>
+  <div style="text-align:center;padding:4px 0 10px;">
+    <span style="font-size:9.5px;color:${FAINT};">Instructions for completing this form may be found </span><span style="font-size:9.5px;color:${LINK};text-decoration:underline;">here</span><span style="font-size:9.5px;color:${FAINT};">.</span>
   </div>
 
-  <!-- Help link line -->
-  <div style="background:#fff5f7;border-bottom:1px solid #f9c0ce;padding:5px 24px;">
-    <span style="font-size:10px;color:${MUTED};">Instructions for completing this form may be found </span>
-    <span style="font-size:10px;color:${PINK_TITLE};font-weight:600;">here</span>
-    <span style="font-size:10px;color:${MUTED};"> (in the PAR Admin settings).</span>
+  <!-- SECTIONS 1–7: HEADER GRID (two columns, fill-in rules, superscript numbers) -->
+  <table style="width:100%;border-collapse:collapse;border:1px solid ${BORDER};margin-bottom:0;">
+    <tbody>
+      <tr>
+        <td style="border:1px solid ${BORDER};padding:5px 10px;vertical-align:top;width:50%;">
+          ${field(1, "Date of Request", fmtDate(req.dateOfRequest))}
+          ${field(2, "Requested By", esc(requestedBy))}
+          ${field(3, "Title of Requestor/Code", esc(req.requestorTitle))}
+          ${field(4, "Department", esc(department))}
+        </td>
+        <td style="border:1px solid ${BORDER};padding:5px 10px;vertical-align:top;width:50%;">
+          ${field(5, "Date Items/Services Needed", fmtDate(req.dateNeeded))}
+          ${field(6, "Requested For/Deliver To", esc(project))}
+          <div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;">
+            <span style="font-size:10.5px;font-weight:700;color:${INK};white-space:nowrap;">${num(7)} Budget code:</span>
+            <span style="flex:1;border-bottom:1px solid ${RULE};font-size:11px;color:${FIELD};min-height:15px;padding:0 4px 1px;">${esc(budgetCode) || "&nbsp;"}</span>
+          </div>
+          <div style="font-size:8.5px;color:${FAINT};font-style:italic;padding-left:18px;">(accordin to monthly budget planning)</div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTIONS 8–9: CLASSIFICATION (two columns, checkboxes) -->
+  <table style="width:100%;border-collapse:collapse;border:1px solid ${BORDER};border-top:0;margin-bottom:0;">
+    <tbody>
+      <tr>
+        <td style="border:1px solid ${BORDER};padding:8px 10px;vertical-align:top;width:50%;">
+          <div style="font-size:10.5px;font-weight:700;color:${INK};margin-bottom:8px;">${num(8)} Purpose of PAR (check one):</div>
+          ${checkbox("Execute payment", req.purpose === "execute_payment")}
+          ${checkbox("Obtain quotations (in preparation for procurement)", req.purpose === "obtain_quotations")}
+          ${checkbox("Provide estimate cost only (do not conduct cost competition)", req.purpose === "provide_estimate")}
+        </td>
+        <td style="border:1px solid ${BORDER};padding:8px 10px;vertical-align:top;width:50%;">
+          <div style="font-size:10.5px;font-weight:700;color:${INK};margin-bottom:8px;">${num(9)} Charge To (check one and enter billing code, if applicable):</div>
+          ${checkbox("Operations:", req.chargeTo === "operations")}
+          ${checkbox("Program:", req.chargeTo === "program")}
+          ${checkbox("Other:", req.chargeTo === "other")}
+          ${req.chargeBillingCode ? `<div style="margin-top:4px;font-size:10px;color:${INK};padding-left:21px;">Billing code: <strong>${esc(req.chargeBillingCode)}</strong></div>` : ""}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- SECTION 10: LINE ITEMS TABLE (plain black-bordered, white header, red MDL accent) -->
+  <table style="width:100%;border-collapse:collapse;border:1px solid ${BORDER};border-top:0;margin-bottom:0;">
+    <tbody>
+      <tr>
+        <td colspan="6" style="border:1px solid ${BORDER};padding:5px 10px;font-size:10.5px;font-weight:700;color:${INK};">${num(10)} Items/Services Requested:</td>
+      </tr>
+      <tr>
+        <th style="border:1px solid ${BORDER};padding:6px 6px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:6%;">Item&nbsp;#</th>
+        <th style="border:1px solid ${BORDER};padding:6px 8px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:42%;">Description/Specifications of Items or Service</th>
+        <th style="border:1px solid ${BORDER};padding:6px 6px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:9%;">Quantity</th>
+        <th style="border:1px solid ${BORDER};padding:6px 6px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:9%;">Units</th>
+        <th style="border:1px solid ${BORDER};padding:6px 6px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:17%;">Est. Unit Price<br/><span style="color:${RED};font-weight:800;">MDL</span></th>
+        <th style="border:1px solid ${BORDER};padding:6px 6px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:17%;">Est. Total Price<br/><span style="color:${RED};font-weight:800;">MDL</span></th>
+      </tr>
+      ${itemRows || `<tr><td colspan="6" style="border:1px solid ${BORDER};padding:8px;text-align:center;color:${FAINT};font-size:10.5px;">No items</td></tr>`}
+      <tr>
+        <td colspan="5" style="border:1px solid ${BORDER};padding:6px 10px;font-size:10.5px;font-weight:700;color:${INK};text-align:right;">TOTAL ESTIMATED COST*: &nbsp;MDL</td>
+        <td style="border:1px solid ${BORDER};padding:6px 8px;text-align:right;font-size:11px;font-weight:800;color:${INK};white-space:nowrap;">${amount(total)}</td>
+      </tr>
+    </tbody>
+  </table>
+  <div style="font-size:8px;color:${FAINT};font-style:italic;line-height:1.35;padding:3px 2px 0;">
+    * For transactions above micro-purchase threshold, if final price for purchase exceeds total estimated cost by more than 10%, purchase shall not proceed without approval from approver below.
   </div>
 
-  <div style="padding:16px 24px 24px 24px;">
+  <!-- SECTION 11: END USE -->
+  <table style="width:100%;border-collapse:collapse;border:1px solid ${BORDER};margin-top:6px;margin-bottom:0;">
+    <tbody>
+      <tr><td style="border:1px solid ${BORDER};padding:5px 10px;font-size:10.5px;font-weight:700;color:${INK};">${num(11)} Purpose and Description of End Use of Requested Items/Services:</td></tr>
+      <tr><td style="border:1px solid ${BORDER};padding:8px 10px;font-size:10.5px;color:${INK};min-height:42px;line-height:1.45;">${esc(req.endUse) || "&nbsp;"}</td></tr>
+    </tbody>
+  </table>
 
-    <!-- SECTIONS 1–7: HEADER GRID -->
-    <table style="width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px;">
-      <tbody>
-        <tr>
-          ${cell("1. Date of Request", fmtDate(req.dateOfRequest), "16%")}
-          ${cell("2. Requested By", esc(req.requestedByUserId), "21%")}
-          ${cell("3. Title / Code", esc(req.requestorTitle), "21%")}
-          ${cell("4. Department", esc(req.departmentId), "21%")}
-          ${cell("5. Date Needed", fmtDate(req.dateNeeded), "21%")}
-        </tr>
-        <tr>
-          ${cell("6. Requested For / Deliver To", esc(req.projectId), "40%")}
-          ${cell("7. Budget Code", [esc(req.budgetCodeId), esc(req.budgetCodeNote)].filter(Boolean).join(" — ") || "&nbsp;", "60%")}
-        </tr>
-      </tbody>
-    </table>
+  <!-- SECTION 12: SPECIAL INSTRUCTIONS / PAYEE (inline labeled lines, not a colored table) -->
+  <table style="width:100%;border-collapse:collapse;border:1px solid ${BORDER};border-top:0;margin-bottom:0;">
+    <tbody>
+      <tr><td style="border:1px solid ${BORDER};padding:5px 10px;font-size:10.5px;font-weight:700;color:${INK};">${num(12)} Special Instructions or Additional Information:</td></tr>
+      <tr><td style="border:1px solid ${BORDER};padding:8px 10px;font-size:10.5px;color:${INK};line-height:1.6;">
+        <div><span style="display:inline-block;width:90px;">Name, Surname:</span> <strong>${esc(req.payeeName)}</strong></div>
+        <div><span style="display:inline-block;width:90px;">IDNP:</span> <span style="font-family:monospace;">${esc(req.payeeIdnp)}</span></div>
+        <div><span style="display:inline-block;width:90px;">IBAN:</span> <span style="font-family:monospace;">${esc(req.payeeIban)}</span></div>
+        <div><span style="display:inline-block;width:90px;">Bank:</span> ${esc(req.payeeBank)}</div>
+      </td></tr>
+    </tbody>
+  </table>
 
-    <!-- SECTIONS 8–9: CLASSIFICATION -->
-    <div style="display:flex;gap:12px;margin-bottom:12px;">
+  <!-- SECTION 13: ATTACHMENTS -->
+  <table style="width:100%;border-collapse:collapse;border:1px solid ${BORDER};border-top:0;margin-bottom:0;">
+    <tbody>
+      <tr><td style="border:1px solid ${BORDER};padding:5px 10px;font-size:10.5px;font-weight:700;color:${INK};">${num(13)} Attachments to PAR, such as specifications, scope of work, or other documentation (check one):</td></tr>
+      <tr><td style="border:1px solid ${BORDER};padding:8px 10px;">
+        ${checkbox("Yes, the following attachments are included (describe):", req.attachmentsPresent === true)}
+        ${req.attachmentsNote ? `<div style="font-size:10px;color:${INK};margin:-2px 0 6px 21px;line-height:1.4;">${esc(req.attachmentsNote)}</div>` : ""}
+        ${checkbox("No attachments are included.", req.attachmentsPresent === false)}
+      </td></tr>
+    </tbody>
+  </table>
 
-      <!-- Section 8: Purpose -->
-      <div style="flex:1;border:1px solid ${LINE};padding:10px 12px;border-radius:4px;background:${BOX_BG};">
-        <div style="font-size:9px;color:${MUTED};font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">8. Purpose of PAR</div>
-        ${checkbox("Execute payment", req.purpose === "execute_payment")}
-        ${checkbox("Obtain quotations (in preparation for procurement)", req.purpose === "obtain_quotations")}
-        ${checkbox("Provide estimate (cost only, no competition)", req.purpose === "provide_estimate")}
-      </div>
+  <!-- SECTIONS 14–15: SIGNATURES (requestor | approver, with Exec Director APPROVE stacked below) -->
+  <table style="width:100%;border-collapse:collapse;border:1px solid ${BORDER};border-top:0;margin-bottom:0;">
+    <tbody>
+      <tr>
+        ${sigColumn(`${num(14)} Requestor Signature:`, sig14)}
+        <td style="border:1px solid ${BORDER};padding:0;vertical-align:top;width:50%;">
+          <table style="width:100%;border-collapse:collapse;height:100%;">
+            <tbody>
+              <tr>${sigColumn(`${num(15)} Approver Signature (DOA Holder, Supervisor, or Tech Lead):`, approver1).replace(/^\s*<td style="[^"]*"/, '<td style="padding:8px 10px;vertical-align:top;border-bottom:1px solid ' + BORDER + '"')}</tr>
+              ${approver2
+                ? `<tr>${sigColumn("&nbsp;", approver2, { stamp: true }).replace(/^\s*<td style="[^"]*"/, '<td style="padding:8px 10px;vertical-align:top"')}</tr>`
+                : `<tr><td style="padding:8px 10px;vertical-align:top;"><div style="font-size:9.5px;color:${FAINT};">&nbsp;</div></td></tr>`}
+            </tbody>
+          </table>
+        </td>
+      </tr>
+    </tbody>
+  </table>
 
-      <!-- Section 9: Charge To -->
-      <div style="flex:1;border:1px solid ${LINE};padding:10px 12px;border-radius:4px;background:${BOX_BG};">
-        <div style="font-size:9px;color:${MUTED};font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">9. Charge To</div>
-        ${checkbox("Operations", req.chargeTo === "operations")}
-        ${checkbox("Program", req.chargeTo === "program")}
-        ${checkbox("Other", req.chargeTo === "other")}
-        ${req.chargeBillingCode ? `<div style="margin-top:4px;font-size:11px;color:${INK};">Billing code: <strong>${esc(req.chargeBillingCode)}</strong></div>` : ""}
-      </div>
-
-    </div>
-
-    <!-- SECTION 10: LINE ITEMS TABLE -->
-    <div style="margin-bottom:12px;">
-      <div style="font-size:9px;color:${MUTED};font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">10. Items / Services Requested</div>
-      <table style="width:100%;border-collapse:collapse;font-size:11px;">
-        <thead>
-          <tr style="background:${PINK_TITLE};color:#ffffff;">
-            <th style="border:1px solid ${PINK_TITLE};padding:6px 8px;text-align:center;font-weight:700;width:5%;">Item&nbsp;#</th>
-            <th style="border:1px solid ${PINK_TITLE};padding:6px 8px;text-align:left;font-weight:700;width:38%;">Description / Specifications</th>
-            <th style="border:1px solid ${PINK_TITLE};padding:6px 8px;text-align:right;font-weight:700;width:9%;">Qty</th>
-            <th style="border:1px solid ${PINK_TITLE};padding:6px 8px;text-align:left;font-weight:700;width:9%;">Units</th>
-            <th style="border:1px solid ${PINK_TITLE};padding:6px 8px;text-align:right;font-weight:700;width:17%;">Est. Unit Price (MDL)</th>
-            <th style="border:1px solid ${PINK_TITLE};padding:6px 8px;text-align:right;font-weight:700;width:22%;">Est. Total Price (MDL)</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemRows || `<tr><td colspan="6" style="border:1px solid ${LINE};padding:10px;text-align:center;color:${MUTED};font-size:11px;">No items</td></tr>`}
-        </tbody>
-        <tfoot>
-          <tr style="background:${LIGHT_BG};">
-            <td colspan="5" style="border:1px solid ${LINE};padding:8px 12px;font-size:12px;font-weight:700;color:${INK};text-align:right;">TOTAL ESTIMATED COST: ${esc(req.currency || "MDL")}</td>
-            <td style="border:1px solid ${LINE};padding:8px 12px;text-align:right;font-size:14px;font-weight:800;color:${PINK_TITLE};white-space:nowrap;">${money(total, req.currency || "MDL")}</td>
-          </tr>
-        </tfoot>
-      </table>
-      <div style="font-size:9px;color:${MUTED};margin-top:4px;line-height:1.4;">
-        * For transactions above micro-purchase threshold, if final price for purchase exceeds total estimated cost by more than 10%, purchase shall not proceed without approval from approver below.
-      </div>
-    </div>
-
-    <!-- SECTION 11: END USE -->
-    <div style="margin-bottom:12px;border:1px solid ${LINE};padding:10px 12px;border-radius:4px;">
-      <div style="font-size:9px;color:${MUTED};font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">11. Purpose and Description of End Use</div>
-      <div style="font-size:11px;color:${INK};min-height:40px;line-height:1.5;">${esc(req.endUse) || '<span style="color:#94a3b8;">—</span>'}</div>
-    </div>
-
-    <!-- SECTION 12: PAYEE BLOCK -->
-    <div style="margin-bottom:12px;">
-      <div style="font-size:9px;color:${MUTED};font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">12. Special Instructions / Payee (Vendor)</div>
-      <table style="width:100%;border-collapse:collapse;font-size:11px;">
-        <thead>
-          <tr style="background:${LIGHT_BG};">
-            <th style="border:1px solid ${LINE};padding:6px 10px;text-align:left;font-weight:700;color:${MUTED};width:28%;">Name, Surname</th>
-            <th style="border:1px solid ${LINE};padding:6px 10px;text-align:left;font-weight:700;color:${MUTED};width:22%;">IDNP</th>
-            <th style="border:1px solid ${LINE};padding:6px 10px;text-align:left;font-weight:700;color:${MUTED};width:30%;">IBAN</th>
-            <th style="border:1px solid ${LINE};padding:6px 10px;text-align:left;font-weight:700;color:${MUTED};width:20%;">Bank</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};font-weight:600;">${esc(req.payeeName)}</td>
-            <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};font-family:monospace;">${esc(req.payeeIdnp)}</td>
-            <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};font-family:monospace;font-size:10px;">${esc(req.payeeIban)}</td>
-            <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};">${esc(req.payeeBank)}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- SECTION 13: ATTACHMENTS -->
-    <div style="margin-bottom:12px;border:1px solid ${LINE};padding:10px 12px;border-radius:4px;">
-      <div style="font-size:9px;color:${MUTED};font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">13. Attachments</div>
-      <div style="display:flex;gap:24px;align-items:flex-start;">
-        ${checkbox("Yes (describe):", req.attachmentsPresent === true)}
-        ${checkbox("No attachments", req.attachmentsPresent === false)}
-      </div>
-      ${req.attachmentsNote ? `<div style="font-size:11px;color:${INK};margin-top:6px;padding-left:22px;">${esc(req.attachmentsNote)}</div>` : ""}
-    </div>
-
-    <!-- SECTIONS 14–15: SIGNATURES -->
-    <div style="margin-bottom:12px;">
-      <div style="font-size:9px;color:${MUTED};font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">14–15. Signatures</div>
-      <table style="width:100%;border-collapse:collapse;">
-        <tbody>
-          <tr>
-            ${sigBox("14. Requestor Signature", sig14)}
-            ${sigBox("15. Approver (DOA Holder / Supervisor)" + (approver1?.approverRoleLabel ? ` — ${approver1.approverRoleLabel}` : ""), approver1)}
-            ${approver2
-              ? sigBox("15. Additional Approver" + (approver2.approverRoleLabel ? ` — ${approver2.approverRoleLabel}` : ""), approver2)
-              : `<td style="border:1px solid ${LINE};padding:10px 12px;vertical-align:top;width:33%;">
-                  <div style="font-size:9px;color:${MUTED};font-weight:700;text-transform:uppercase;margin-bottom:8px;">15. Additional Approver</div>
-                  <div style="font-size:10px;color:#94a3b8;">N/A</div>
-                </td>`
-            }
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- SECTION 16: PAYMENT INTERNAL USE -->
-    <div style="border:1.5px solid ${PINK_TITLE};border-radius:4px;overflow:hidden;">
-      <div style="background:${PINK_TITLE};padding:6px 12px;">
-        <div style="font-size:9px;font-weight:800;color:#ffffff;text-transform:uppercase;letter-spacing:0.06em;">16. Payment — Internal Use Only</div>
-      </div>
-      <div style="padding:10px 12px;">
-        <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px;">
-          <thead>
-            <tr style="background:${LIGHT_BG};">
-              <th style="border:1px solid ${LINE};padding:6px 10px;text-align:left;font-weight:700;color:${MUTED};width:20%;">PAR BL</th>
-              <th style="border:1px solid ${LINE};padding:6px 10px;text-align:left;font-weight:700;color:${MUTED};width:20%;">Date Received</th>
-              <th style="border:1px solid ${LINE};padding:6px 10px;text-align:left;font-weight:700;color:${MUTED};width:30%;">Received By</th>
-              <th style="border:1px solid ${LINE};padding:6px 10px;text-align:left;font-weight:700;color:${MUTED};width:30%;">Assigned To</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};">${esc(pmt?.parBl)}</td>
-              <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};">${fmtDate(pmt?.receivedAt)}</td>
-              <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};">${esc(pmt?.receivedByUserId)}</td>
-              <td style="border:1px solid ${LINE};padding:6px 10px;color:${INK};">${esc(pmt?.assignedToUserId)}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div style="font-size:10px;color:${MUTED};">
-          IBAN: <strong style="color:${INK};font-family:monospace;">${esc(req.payeeIban) || "—"}</strong>
+  <!-- SECTION 16: PAYMENT INTERNAL USE ONLY (plain office table — no colour) -->
+  <table style="width:100%;border-collapse:collapse;border:1px solid ${BORDER};border-top:0;margin-bottom:0;">
+    <tbody>
+      <tr><td colspan="2" style="border:1px solid ${BORDER};padding:5px 10px;font-size:10.5px;font-weight:700;color:${INK};">${num(16)} Payment Internal Use Only:</td></tr>
+      <tr>
+        <td style="border:1px solid ${BORDER};padding:8px 10px;vertical-align:top;width:50%;">
+          <div style="font-size:10px;color:${INK};margin-bottom:8px;"><strong>PAR BL:</strong> <span style="border-bottom:1px solid ${RULE};padding:0 30px 1px 4px;">${esc(pmt?.parBl)}</span><div style="font-size:8px;color:${FAINT};font-style:italic;padding-left:4px;">(Add PAR budget line)</div></div>
+          <div style="font-size:10px;color:${INK};"><strong>Date Received:</strong> <span style="border-bottom:1px solid ${RULE};padding:0 30px 1px 4px;">${fmtDate(pmt?.receivedAt)}</span></div>
+        </td>
+        <td style="border:1px solid ${BORDER};padding:8px 10px;vertical-align:top;width:50%;">
+          <div style="font-size:10px;color:${INK};margin-bottom:8px;"><strong>Received By:</strong> <span style="border-bottom:1px solid ${RULE};padding:0 30px 1px 4px;">${esc(receivedBy)}</span></div>
+          <div style="font-size:10px;color:${INK};"><strong>Assigned To:</strong> <span style="border-bottom:1px solid ${RULE};padding:0 30px 1px 4px;">${esc(assignedTo)}</span></div>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="border:1px solid ${BORDER};padding:6px 10px;font-size:10px;color:${INK};">
+          IBAN: <strong style="font-family:monospace;">${esc(req.payeeIban) || "—"}</strong>
           &nbsp;&nbsp;|&nbsp;&nbsp;
-          Bank: <strong style="color:${INK};">${esc(req.payeeBank) || "—"}</strong>
-          ${pmt?.paymentDate ? `&nbsp;&nbsp;|&nbsp;&nbsp;Payment date: <strong style="color:${INK};">${fmtDate(pmt.paymentDate)}</strong>` : ""}
-          ${pmt?.paymentRef ? `&nbsp;&nbsp;|&nbsp;&nbsp;Ref: <strong style="color:${INK};">${esc(pmt.paymentRef)}</strong>` : ""}
-          ${pmt?.actualAmountCents != null ? `&nbsp;&nbsp;|&nbsp;&nbsp;Actual amount: <strong style="color:${INK};">${money(pmt.actualAmountCents, req.currency)}</strong>` : ""}
-        </div>
-      </div>
-    </div>
+          Bank: <strong>${esc(req.payeeBank) || "—"}</strong>
+          ${pmt?.paymentDate ? `&nbsp;&nbsp;|&nbsp;&nbsp;Payment date: <strong>${fmtDate(pmt.paymentDate)}</strong>` : ""}
+          ${pmt?.paymentRef ? `&nbsp;&nbsp;|&nbsp;&nbsp;Ref: <strong>${esc(pmt.paymentRef)}</strong>` : ""}
+          ${pmt?.actualAmountCents != null ? `&nbsp;&nbsp;|&nbsp;&nbsp;Actual amount: <strong>${amount(pmt.actualAmountCents)} ${esc(req.currency || "MDL")}</strong>` : ""}
+        </td>
+      </tr>
+    </tbody>
+  </table>
 
-  </div><!-- /padding -->
+  <div style="font-size:9px;color:${FAINT};text-align:right;padding-top:6px;">PAR No: ${esc(req.requestNo)}</div>
+
 </div>`;
 }
 

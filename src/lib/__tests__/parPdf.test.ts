@@ -188,10 +188,12 @@ describe("buildParHtml() — T-PAR-114-1 [blocant]", () => {
     html = buildParHtml(par);
   });
 
-  it("contains pink title band with form name", () => {
+  it("contains pale-rose title band with form name (official office-form look)", () => {
     const html = buildParHtml(par);
     expect(html).toContain("Payment Action Request (PAR) Form");
-    expect(html).toContain("#e85d7c"); // PINK_TITLE color
+    expect(html).toContain("#fbe9ec"); // TITLE_BG pale-rose band
+    // The old web-card pink fill must be gone — this is a black-and-white document.
+    expect(html).not.toContain("#e85d7c");
   });
 
   it("contains PAR request number", () => {
@@ -204,15 +206,15 @@ describe("buildParHtml() — T-PAR-114-1 [blocant]", () => {
     expect(html).toContain("Instructions for completing this form may be found");
   });
 
-  it("contains all 7 header section labels (1–7)", () => {
+  it("contains all 7 header section labels (1–7, official wording)", () => {
     const html = buildParHtml(par);
-    expect(html).toContain("1. Date of Request");
-    expect(html).toContain("2. Requested By");
-    expect(html).toContain("3. Title / Code");
-    expect(html).toContain("4. Department");
-    expect(html).toContain("5. Date Needed");
-    expect(html).toContain("6. Requested For / Deliver To");
-    expect(html).toContain("7. Budget Code");
+    expect(html).toContain("Date of Request");
+    expect(html).toContain("Requested By");
+    expect(html).toContain("Title of Requestor/Code");
+    expect(html).toContain("Department");
+    expect(html).toContain("Date Items/Services Needed");
+    expect(html).toContain("Requested For/Deliver To");
+    expect(html).toContain("Budget code:");
   });
 
   it("contains header field values", () => {
@@ -240,20 +242,22 @@ describe("buildParHtml() — T-PAR-114-1 [blocant]", () => {
 
   it("contains section 8 Purpose label", () => {
     const html = buildParHtml(par);
-    expect(html).toContain("8. Purpose of PAR");
+    expect(html).toContain("Purpose of PAR (check one):");
   });
 
   it("contains section 9 Charge To label", () => {
     const html = buildParHtml(par);
-    expect(html).toContain("9. Charge To");
+    expect(html).toContain("Charge To (check one and enter billing code, if applicable):");
   });
 
-  it("contains section 10 line item table headers", () => {
+  it("contains section 10 line item table headers (official wording)", () => {
     const html = buildParHtml(par);
-    expect(html).toContain("10. Items / Services Requested");
-    expect(html).toContain("Description / Specifications");
-    expect(html).toContain("Est. Unit Price (MDL)");
-    expect(html).toContain("Est. Total Price (MDL)");
+    expect(html).toContain("Items/Services Requested:");
+    expect(html).toContain("Description/Specifications of Items or Service");
+    expect(html).toContain("Est. Unit Price");
+    expect(html).toContain("Est. Total Price");
+    expect(html).toContain("Quantity");
+    expect(html).toContain("Units");
   });
 
   it("contains TOTAL ESTIMATED COST", () => {
@@ -269,13 +273,13 @@ describe("buildParHtml() — T-PAR-114-1 [blocant]", () => {
 
   it("contains section 11 end-use", () => {
     const html = buildParHtml(par);
-    expect(html).toContain("11. Purpose and Description of End Use");
+    expect(html).toContain("Purpose and Description of End Use of Requested Items/Services:");
     expect(html).toContain("psychological consulting services");
   });
 
-  it("contains section 12 payee block", () => {
+  it("contains section 12 payee block (inline labeled lines)", () => {
     const html = buildParHtml(par);
-    expect(html).toContain("12. Special Instructions / Payee");
+    expect(html).toContain("Special Instructions or Additional Information:");
     expect(html).toContain("IDNP");
     expect(html).toContain("IBAN");
     expect(html).toContain("Daria Roitman");
@@ -286,23 +290,23 @@ describe("buildParHtml() — T-PAR-114-1 [blocant]", () => {
 
   it("contains section 13 attachments", () => {
     const html = buildParHtml(par);
-    expect(html).toContain("13. Attachments");
+    expect(html).toContain("Attachments to PAR");
     expect(html).toContain("act of receipt from June 09, 2026");
   });
 
   it("contains sections 14–15 signature boxes", () => {
     const html = buildParHtml(par);
-    expect(html).toContain("14. Requestor Signature");
-    expect(html).toContain("15. Approver");
+    expect(html).toContain("Requestor Signature:");
+    expect(html).toContain("Approver Signature (DOA Holder, Supervisor, or Tech Lead):");
     expect(html).toContain("Sirbu Cristina"); // sec 14 name
     expect(html).toContain("Ana Chirita");    // sec 15 step 1
     expect(html).toContain("Irina Oriol");    // sec 15 step 2
-    expect(html).toContain("APPROVE");        // approved decision label
+    expect(html).toContain("APPROVE");        // approved decision stamp
   });
 
   it("contains section 16 payment internal use", () => {
     const html = buildParHtml(par);
-    expect(html).toContain("16. Payment");
+    expect(html).toContain("Payment Internal Use Only:");
     expect(html).toContain("PAR BL");
     expect(html).toContain("Date Received");
     expect(html).toContain("Received By");
@@ -314,25 +318,25 @@ describe("buildParHtml() — T-PAR-114-1 [blocant]", () => {
 // ─── T-PAR-114-2 [blocant]: MDL money format ──────────────────────────────────
 
 describe("buildParHtml() — T-PAR-114-2 [blocant] money format", () => {
-  it("includes 'L' (MDL symbol) and '7' and '000' for 700000 cents", () => {
+  it("renders the total as '7 000,00' (space thousands, comma decimals — official Excel)", () => {
     const par = makePar({ totalEstimatedCents: 700000 });
     const html = buildParHtml(par);
-    // money(700000) = "L 7 000" — check components are present
-    expect(html).toMatch(/L[\s  ]7[\s  ]000/);
+    // amount(700000) = "7 000,00" — space thousands, two decimals (matches the source form)
+    expect(html).toMatch(/7[\s  ]000,00/);
   });
 
-  it("formats line item total — L prefix with 7 000 components", () => {
+  it("renders the line item total in the same space/comma format", () => {
     const par = makePar();
     const html = buildParHtml(par);
-    // Line item total is 700000 cents
-    expect(html).toMatch(/L[\s  ]7[\s  ]000/);
+    // Line item total is 700000 cents → "7 000,00"
+    expect(html).toMatch(/7[\s  ]000,00/);
   });
 
-  it("uses MDL symbol in TOTAL ESTIMATED COST row", () => {
+  it("labels the total row with TOTAL ESTIMATED COST and an MDL column header", () => {
     const par = makePar();
     const html = buildParHtml(par);
-    // Should contain TOTAL ESTIMATED COST label
     expect(html).toContain("TOTAL ESTIMATED COST");
+    expect(html).toContain("MDL"); // money lives under an MDL column, like the office form
   });
 });
 
