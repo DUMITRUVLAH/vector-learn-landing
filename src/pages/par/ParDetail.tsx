@@ -62,9 +62,32 @@ import {
   PAR_STATUS_LABELS,
 } from "@/lib/api/par";
 import { downloadParPdf } from "@/lib/parPdf";
+import { ApiError, type ApiFieldError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // ─── Label helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * VF-fix: the /submit endpoint rejects an incomplete draft with HTTP 400
+ * { error: "validation_failed", errors: [{field, message}] }. The backend
+ * messages are English + technical ("End use description is required for
+ * execute_payment"), so before this fix the user only saw the raw code
+ * "validation_failed" with no hint of WHAT to fill. Map each known field to a
+ * concrete, actionable Romanian instruction; fall back to the server message
+ * for anything new so a future check is never silently swallowed.
+ */
+const SUBMIT_FIELD_HINTS: Record<string, string> = {
+  line_items: "Adaugă cel puțin un articol (rând) în secțiunea „Articole / Servicii”.",
+  total: "Suma totală estimată trebuie să fie mai mare decât 0 — verifică prețurile articolelor.",
+  end_use:
+    "Completează „Scopul și descrierea utilizării finale” (secțiunea 11) — e obligatorie pentru execuția plății.",
+  payee:
+    "Adaugă beneficiarul plății (secțiunea 12): alege un furnizor înregistrat SAU completează Nume + IBAN.",
+};
+
+function friendlySubmitError(field: string, serverMessage: string): string {
+  return SUBMIT_FIELD_HINTS[field] ?? serverMessage;
+}
 
 const PURPOSE_LABEL: Record<string, string> = {
   execute_payment: "Execute payment",
@@ -306,12 +329,15 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [showChangesForm, setShowChangesForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // VF-fix: per-field reasons why a draft can't be submitted (from /submit's `errors`).
+  const [fieldErrors, setFieldErrors] = useState<ApiFieldError[]>([]);
   // VF-202: advisory over-budget notice after submit (non-blocking).
   const [budgetWarning, setBudgetWarning] = useState<string | null>(null);
 
   const doSubmit = async () => {
     setBusy("submit");
     setError(null);
+    setFieldErrors([]);
     setBudgetWarning(null);
     try {
       const res = await submitPar(par.id);
@@ -322,7 +348,14 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
       }
       onRefresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Eroare");
+      // A failed submit is almost always an incomplete draft. Surface the exact
+      // missing fields instead of the opaque "validation_failed" code.
+      if (e instanceof ApiError && e.code === "validation_failed" && e.details.length > 0) {
+        setFieldErrors(e.details);
+        setError("Cererea nu poate fi trimisă încă — completează câmpurile de mai jos:");
+      } else {
+        setError(e instanceof Error ? e.message : "Eroare");
+      }
     } finally {
       setBusy(null);
     }
@@ -344,6 +377,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
   const do_ = async (label: string, action: () => Promise<unknown>) => {
     setBusy(label);
     setError(null);
+    setFieldErrors([]);
     try {
       await action();
       onRefresh();
@@ -513,9 +547,18 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
       <h2 className="text-sm font-semibold text-foreground">Acțiuni disponibile</h2>
 
       {error && (
-        <div role="alert" className="flex items-center gap-2 p-2 rounded bg-destructive/10 text-destructive text-xs">
-          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
-          <span>{error}</span>
+        <div role="alert" className="flex items-start gap-2 p-2.5 rounded bg-destructive/10 text-destructive text-xs">
+          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden />
+          <div className="space-y-1">
+            <span>{error}</span>
+            {fieldErrors.length > 0 && (
+              <ul className="list-disc pl-4 space-y-0.5">
+                {fieldErrors.map((fe) => (
+                  <li key={fe.field}>{friendlySubmitError(fe.field, fe.message)}</li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 
