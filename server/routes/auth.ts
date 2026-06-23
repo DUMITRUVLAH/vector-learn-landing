@@ -330,7 +330,8 @@ authRoutes.post("/forgot-password", zValidator("json", forgotPasswordSchema), as
   }
 
   // Always respond 200 — never reveal whether the email exists.
-  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+  // Lowercase to match how emails are stored (consistent with login/signup).
+  const user = await db.query.users.findFirst({ where: eq(users.email, email.toLowerCase()) });
   if (!user) return c.json({ ok: true });
 
   // Delete any previous unused tokens for this user.

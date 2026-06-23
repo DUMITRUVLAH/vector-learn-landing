@@ -17,3 +17,17 @@ WHERE a."tenant_id" = b."tenant_id"
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "par_members_tenant_user_role_uniq"
   ON "par_members" ("tenant_id", "user_id", "role");
+--> statement-breakpoint
+-- Email is now normalized to lowercase at signup + looked up lowercased at login and in
+-- PAR invite matching. Backfill any legacy mixed-case rows so those users can still log in
+-- and so invite matching (invites are stored lowercase) is reliable. Guarded against the
+-- per-(tenant,email) unique index: only lowercase a row when no lowercase twin already exists.
+UPDATE "users" u
+SET "email" = lower(u."email")
+WHERE u."email" <> lower(u."email")
+  AND NOT EXISTS (
+    SELECT 1 FROM "users" v
+    WHERE v."tenant_id" = u."tenant_id"
+      AND v."email" = lower(u."email")
+      AND v."id" <> u."id"
+  );

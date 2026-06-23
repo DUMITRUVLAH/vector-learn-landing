@@ -504,7 +504,7 @@ export function ParCreateForm() {
                 ) : null
               )}
               {isAdmin && (
-                <a href="#/app/par/admin" className="text-xs text-primary hover:underline w-fit">
+                <a href={`#${parHref(path, "admin")}`} className="text-xs text-primary hover:underline w-fit">
                   Gestionează codurile / departamentele / proiectele în Admin →
                 </a>
               )}
