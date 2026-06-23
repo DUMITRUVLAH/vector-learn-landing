@@ -19,6 +19,7 @@ import { tenants, users } from "../db/schema";
 import { verifyPassword } from "../auth/password";
 import { createSession, revokeSession, getSessionUser, SESSION_COOKIE } from "../auth/session";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { linkPendingInvitesForEmail } from "../lib/par/acceptInvite";
 
 const loginSchema = z.object({
   email: z.string().email().max(255),
@@ -48,7 +49,7 @@ businessAuthRoutes.post("/auth/login", zValidator("json", loginSchema), async (c
   const body = c.req.valid("json");
 
   const user = await db.query.users.findFirst({
-    where: eq(users.email, body.email),
+    where: eq(users.email, body.email.toLowerCase()),
   });
 
   if (!user || !user.passwordHash) {
@@ -76,6 +77,16 @@ businessAuthRoutes.post("/auth/login", zValidator("json", loginSchema), async (c
   // SET-801: disabled accounts
   if (user.isActive === false) {
     return c.json({ error: "account_disabled" }, 401);
+  }
+
+  // VF-fix: this is the route invitees with an existing account actually use
+  // (BusinessLoginPage → /api/business/auth/login). Link any pending PAR invite for
+  // this email→tenant so an invited approver gets their par_members role on sign-in.
+  // The tenant is already verified appKind=business above. Failure must not block login.
+  try {
+    await linkPendingInvitesForEmail({ userId: user.id, email: user.email, tenantId: user.tenantId });
+  } catch (err) {
+    console.error("[PAR-invite] auto-link on business login failed:", err);
   }
 
   const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? null;

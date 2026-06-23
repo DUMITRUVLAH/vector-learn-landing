@@ -85,7 +85,9 @@ export function ParInviteAccept() {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === "account_exists") {
-          setSubmitError("Există deja un cont cu acest email. Autentifică-te — rolul se conectează automat.");
+          setSubmitError("Există deja un cont cu acest email. Autentifică-te — rolul se conectează automat la login.");
+        } else if (err.code === "email_in_other_org") {
+          setSubmitError("Acest email este deja folosit în altă organizație. Cere administratorului să te invite cu un alt email.");
         } else if (err.code === "invalid_or_expired") {
           setSubmitError("Invitația a expirat între timp. Cere un link nou.");
         } else {
@@ -127,7 +129,26 @@ export function ParInviteAccept() {
     );
   }
 
-  // Account already exists for this email — direct them to log in (login links the invite).
+  // Email already belongs to a different org — it can't be reused here.
+  if (info.emailInOtherOrg) {
+    return (
+      <AuthLayout
+        title={`Invitație în ${info.orgName}`}
+        subtitle={`Rol PAR: ${ROLE_LABELS[info.parRole]}`}
+      >
+        <div role="alert" className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2.5 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" aria-hidden />
+          <span>
+            Adresa <strong>{info.email}</strong> este deja folosită în altă organizație. Cere
+            administratorului să te invite cu un alt email.
+          </span>
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  // Account already exists for this email in THIS org — direct them to log in
+  // (business login auto-links the pending invite → grants the PAR role).
   if (info.accountExists) {
     return (
       <AuthLayout

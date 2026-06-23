@@ -64,8 +64,11 @@ export const authRoutes = new Hono<{ Variables: AuthVariables }>();
 
 authRoutes.post("/signup", zValidator("json", signupSchema), async (c) => {
   const body = c.req.valid("json");
+  // Normalize email to lowercase so the global one-email-one-account assumption
+  // (login lookups, PAR invite matching) holds regardless of how the user typed it.
+  const email = body.email.toLowerCase();
   const existingEmail = await db.query.users.findFirst({
-    where: eq(users.email, body.email),
+    where: eq(users.email, email),
   });
   if (existingEmail) {
     return c.json({ error: "email_taken" }, 409);
@@ -89,7 +92,7 @@ authRoutes.post("/signup", zValidator("json", signupSchema), async (c) => {
     .insert(users)
     .values({
       tenantId: tenant.id,
-      email: body.email,
+      email,
       passwordHash,
       name: body.name,
       role: "admin",
@@ -108,7 +111,7 @@ authRoutes.post("/signup", zValidator("json", signupSchema), async (c) => {
 authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
   const body = c.req.valid("json");
   const user = await db.query.users.findFirst({
-    where: eq(users.email, body.email),
+    where: eq(users.email, body.email.toLowerCase()),
   });
   if (!user) {
     return c.json({ error: "invalid_credentials" }, 401);
@@ -186,17 +189,19 @@ authRoutes.get("/invite-info", async (c) => {
 
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, invite.tenantId) });
 
-  // If a user with this email already exists, the invitee should LOG IN (their
-  // role is linked on login too) rather than set a brand-new password.
+  // Global lookup (a user belongs to exactly one tenant). If the account is in THIS
+  // tenant → tell the page to send them to log in (login auto-links the invite). If
+  // it's in ANOTHER org → the email can't be reused, so accept-invite would 409.
   const existingUser = await db.query.users.findFirst({
-    where: and(eq(users.tenantId, invite.tenantId), eq(users.email, invite.email)),
+    where: eq(users.email, invite.email),
   });
 
   return c.json({
     email: invite.email,
     parRole: invite.parRole,
     orgName: tenant?.name ?? "organizație",
-    accountExists: !!existingUser,
+    accountExists: !!existingUser && existingUser.tenantId === invite.tenantId,
+    emailInOtherOrg: !!existingUser && existingUser.tenantId !== invite.tenantId,
   });
 });
 
@@ -216,14 +221,25 @@ authRoutes.post("/accept-invite", zValidator("json", acceptInviteSchema), async 
   const invite = await findPendingInviteByToken(token);
   if (!invite) return c.json({ error: "invalid_or_expired" }, 400);
 
-  // If the email already has an account, don't create a duplicate or reset its
-  // password from an invite link (that would be an account-takeover vector).
-  // Tell the client to log in instead — login auto-links the pending invite.
+  // Look up an existing account GLOBALLY by email (not scoped to the invite tenant):
+  // login resolves users by email alone and a user belongs to exactly one tenant, so
+  // creating a second same-email row in another tenant would split logins. invite.email
+  // is already lowercased at creation.
   const existingUser = await db.query.users.findFirst({
-    where: and(eq(users.tenantId, invite.tenantId), eq(users.email, invite.email)),
+    where: eq(users.email, invite.email),
   });
   if (existingUser) {
-    return c.json({ error: "account_exists", detail: "Există deja un cont cu acest email. Autentifică-te." }, 409);
+    // Account already exists. If it's in THIS tenant, they just need to log in
+    // (login auto-links the pending invite → grants the PAR role). If it's in a
+    // DIFFERENT tenant, we can't add cross-tenant membership — surface that clearly
+    // rather than silently creating a duplicate account.
+    if (existingUser.tenantId === invite.tenantId) {
+      return c.json({ error: "account_exists", detail: "Există deja un cont cu acest email. Autentifică-te." }, 409);
+    }
+    return c.json(
+      { error: "email_in_other_org", detail: "Acest email este deja folosit în altă organizație. Folosește un alt email." },
+      409
+    );
   }
 
   // The invitee's REAL authority is the PAR role in par_members (granted below).

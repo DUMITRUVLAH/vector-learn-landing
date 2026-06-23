@@ -48,21 +48,19 @@ export async function grantInviteRole(
   invite: ParInvite,
   userId: string
 ): Promise<ParInviteRole> {
-  // 1) par_members row for (tenant, user, role) — create only if absent.
-  const existing = await db.query.parMembers.findFirst({
-    where: and(
-      eq(parMembers.tenantId, invite.tenantId),
-      eq(parMembers.userId, userId),
-      eq(parMembers.role, invite.parRole)
-    ),
-  });
-  if (!existing) {
-    await db.insert(parMembers).values({
+  // 1) par_members row for (tenant, user, role). Atomically idempotent via the
+  //    par_members_tenant_user_role_uniq unique index (migration 0121) — concurrent
+  //    grants (login auto-link racing an accept) can't create duplicate rows.
+  await db
+    .insert(parMembers)
+    .values({
       tenantId: invite.tenantId,
       userId,
       role: invite.parRole,
+    })
+    .onConflictDoNothing({
+      target: [parMembers.tenantId, parMembers.userId, parMembers.role],
     });
-  }
 
   // 2) Mark the invite accepted (only if still pending — avoids clobbering).
   await db
