@@ -33,12 +33,12 @@ import {
   TrendingUp,
   ShieldCheck,
   Shield,
-  ArrowLeft,
 } from "lucide-react";
 import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { NotificationBell } from "@/components/app/NotificationBell";
+import { ParShell } from "@/components/par/ParShell";
 
 interface BusinessShellProps {
   children: ReactNode;
@@ -130,34 +130,11 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 /**
- * PAR-only navigation — shown when the current route is under /business/par/*.
- * Entering the PAR module gives a focused sidebar with ONLY PAR features, plus a
- * "back to all modules" link. Mirrors the structure of the standalone PAR app.
+ * The PAR module now has its own dedicated shell (ParShell) with its own sidebar.
+ * BusinessShell delegates to it for /business/par/* routes — see the early return
+ * in the component body. The Business Suite menu (NAV_GROUPS) still lists PAR so
+ * users can jump into the module from the suite.
  */
-const PAR_NAV_GROUPS: NavGroup[] = [
-  {
-    section: null,
-    items: [
-      { label: "Cereri de plată", href: "/business/par", icon: ClipboardList },
-      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck },
-      { label: "Coadă finanțe", href: "/business/par/finance", icon: Banknote },
-    ],
-  },
-  {
-    section: "Analiză",
-    items: [
-      { label: "Rapoarte & statistici", href: "/business/par/reports", icon: BarChart3 },
-    ],
-  },
-  {
-    section: "Administrare",
-    items: [
-      // ParAdmin: tabs for Settings, Members (echipă), Reference data
-      // (linii bugetare, departamente, proiecte, furnizori) + DOA matrix.
-      { label: "Administrare PAR", href: "/business/par/admin", icon: Settings },
-    ],
-  },
-];
 
 /** Exported for testing purposes only (T-DOCMERGE-004-4). Do not use in production code. */
 export const NAV_GROUPS_EXPORT: NavGroup[] = NAV_GROUPS;
@@ -179,11 +156,11 @@ export function BusinessShell({
   const { path, navigate } = useRouter();
   const session = useBusinessSession();
 
-  // SPLIT-501: inside the PAR module, show a focused PAR-only sidebar instead of
-  // the full Business Suite menu. Every /business/par/* page (which renders via
-  // AppShell → BusinessShell) gets it automatically.
+  // PAR is its OWN section with its OWN shell (header + sidebar + mobile nav).
+  // BusinessShell delegates the whole render to ParShell for any /business/par/*
+  // route, so PAR no longer shares the Business Suite chrome. (Replaces the
+  // SPLIT-501 in-place nav swap.) Hooks above must run before this early return.
   const isParModule = path.startsWith("/business/par");
-  const navGroups = isParModule ? PAR_NAV_GROUPS : NAV_GROUPS;
 
   // Guard: redirecționează la /business/login dacă sesiunea lipsește.
   useEffect(() => {
@@ -200,6 +177,15 @@ export function BusinessShell({
     await session.logout();
     navigate("/business/login");
   };
+
+  // PAR has its own dedicated shell — hand off the entire render.
+  if (isParModule) {
+    return (
+      <ParShell pageTitle={pageTitle} pageDescription={pageDescription} actions={actions}>
+        {children}
+      </ParShell>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -233,17 +219,7 @@ export function BusinessShell({
           aria-label="Navigare Business Suite"
         >
           <nav className="flex flex-col gap-1 p-3 flex-1">
-            {isParModule && (
-              <Link
-                to="/business/dashboard"
-                className="flex items-center gap-2 rounded-md px-3 py-2 mb-2 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors min-h-[44px]"
-                aria-label="Înapoi la toate modulele"
-              >
-                <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>Toate modulele</span>
-              </Link>
-            )}
-            {navGroups.map((group, gi) => (
+            {NAV_GROUPS.map((group, gi) => (
               <div key={gi} className={gi > 0 ? "mt-3" : undefined}>
                 {group.section && (
                   <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -306,20 +282,12 @@ export function BusinessShell({
         aria-label="Navigare mobilă Business Suite"
       >
         <div className="grid grid-cols-4">
-          {(isParModule
-            ? [
-                { label: "Cereri", href: "/business/par", icon: ClipboardList },
-                { label: "Aprobări", href: "/business/par/inbox", icon: ShieldCheck },
-                { label: "Rapoarte", href: "/business/par/reports", icon: BarChart3 },
-                { label: "Admin", href: "/business/par/admin", icon: Settings },
-              ]
-            : [
-                { label: "Dashboard", href: "/business/dashboard", icon: LayoutDashboard },
-                { label: "FinDesk", href: "/business/fin/", icon: Landmark },
-                { label: "PAR", href: "/business/par", icon: ClipboardList },
-                { label: "ITPark", href: "/business/itpark", icon: Building2 },
-              ]
-          ).map((item) => {
+          {[
+            { label: "Dashboard", href: "/business/dashboard", icon: LayoutDashboard },
+            { label: "FinDesk", href: "/business/fin/", icon: Landmark },
+            { label: "PAR", href: "/business/par", icon: ClipboardList },
+            { label: "ITPark", href: "/business/fin/itpark", icon: Building2 },
+          ].map((item) => {
             const Icon = item.icon;
             const active =
               item.href === "/business/par"
