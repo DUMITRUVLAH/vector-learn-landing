@@ -178,6 +178,59 @@ export async function fetchFinInvoiceDocBlob(
   return res.blob();
 }
 
+/** One line of an ad-hoc "Cont de plată" (no saved invoice). */
+export interface AdHocDocLineInput {
+  description: string;
+  quantity: number;
+  unitPriceCents: number;
+  vatPct: number;
+  unit?: string | null;
+}
+
+/** Full payload for generating an ad-hoc "Cont de plată" document (client + services + price). */
+export interface AdHocDocInput {
+  invoiceNumber?: string;
+  currency?: "MDL" | "EUR" | "USD";
+  issuedAt?: string | null;
+  dueDate?: string | null;
+  notes?: string | null;
+  to: { name: string; idno?: string | null; address?: string | null };
+  lines: AdHocDocLineInput[];
+}
+
+/**
+ * Generate a standalone "Cont de plată" document from form data — NOT from a saved invoice.
+ * This is the owner's intended flow: enter client + services + price, get a PDF to send.
+ * Nothing is persisted. The server computes all totals; the issuer comes from the tenant.
+ *
+ * `format` "pdf" returns a real PDF (Playwright) or — where Chromium is unavailable — a
+ * print-ready HTML fallback (inspect `blob.type`). "html" always returns HTML (live preview).
+ * Throws with the server's validation message (e.g. missing client / no lines) on 400.
+ */
+export async function postFinInvoiceDocBlob(
+  input: AdHocDocInput,
+  format: "pdf" | "html" = "pdf",
+  lang: "ro" | "ru" | "en" = "ro"
+): Promise<Blob> {
+  const res = await fetch(`/api/fin/invoices/document.${format}?lang=${lang}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    let msg = `Document generation failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body?.error) msg = body.error;
+    } catch {
+      // keep the status-based fallback
+    }
+    throw new Error(msg);
+  }
+  return res.blob();
+}
+
 /** Utility: format cents as "L 1 200" or "€ 10,50" */
 export function formatFinMoney(cents: number, currency = "MDL"): string {
   const v = Math.abs(Math.round(cents));
