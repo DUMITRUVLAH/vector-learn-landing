@@ -63,6 +63,7 @@ import {
 } from "@/lib/api/par";
 import { downloadParPdf } from "@/lib/parPdf";
 import { ApiError, type ApiFieldError } from "@/lib/api";
+import { parBase, parIdFromPath } from "@/lib/parNav";
 import { cn } from "@/lib/utils";
 
 // ─── Label helpers ─────────────────────────────────────────────────────────────
@@ -147,7 +148,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 
 // ─── VF-103: Duplicate button ──────────────────────────────────────────────────
 
-function DuplicateButton({ parId, onNavigate }: { parId: string; onNavigate: (path: string) => void }) {
+function DuplicateButton({ parId, base, onNavigate }: { parId: string; base: string; onNavigate: (path: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(false);
   const handle = async () => {
@@ -155,7 +156,7 @@ function DuplicateButton({ parId, onNavigate }: { parId: string; onNavigate: (pa
     setErr(false);
     try {
       const { par } = await duplicatePar(parId);
-      onNavigate(`/app/par/${par.id}`);
+      onNavigate(`${base}/${par.id}`);
     } catch {
       setErr(true);
       setBusy(false);
@@ -320,10 +321,12 @@ interface ActionPanelProps {
   par: ParDetailType;
   currentUserId: string;
   currentRoles: string[];
+  /** Active PAR root (/business/par or /app/par) so navigation stays in the section. */
+  base: string;
   onRefresh: () => void;
 }
 
-function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPanelProps) {
+function ActionPanel({ par, currentUserId, currentRoles, base, onRefresh }: ActionPanelProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [comment, setComment] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
@@ -529,7 +532,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
           key="paid"
           type="button"
           disabled={!!busy}
-          onClick={() => navigate(`#/app/par/finance`)}
+          onClick={() => navigate(`${base}/finance`)}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 min-h-[44px]"
           aria-label="Marchează plata în coada de finanțe"
         >
@@ -652,7 +655,9 @@ export function ParDetailPage() {
   const { path } = router;
   const { data: session } = useSession();
   const orgName = session?.tenant.name ?? "Organizație";
-  const id = path.replace(/^\/app\/par\//, "").split("/")[0];
+  const id = parIdFromPath(path);
+  // Keep in-PAR navigation inside the active root (/business/par/* vs /app/par/*).
+  const base = parBase(path);
 
   const [par, setPar] = useState<ParDetailType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -701,7 +706,7 @@ export function ParDetailPage() {
             <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
             <span>{error ?? "Cererea nu a fost găsită."}</span>
           </div>
-          <button type="button" onClick={() => router.navigate("/app/par")} className="mt-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button type="button" onClick={() => router.navigate(base)} className="mt-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Înapoi la lista PAR
           </button>
@@ -721,7 +726,7 @@ export function ParDetailPage() {
           <div>
             <button
               type="button"
-              onClick={() => router.navigate("/app/par")}
+              onClick={() => router.navigate(base)}
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
               aria-label="Înapoi la lista PAR"
             >
@@ -740,7 +745,7 @@ export function ParDetailPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <DuplicateButton parId={par.id} onNavigate={router.navigate} />
+            <DuplicateButton parId={par.id} base={base} onNavigate={router.navigate} />
             <PoButton par={par} orgName={orgName} />
             <PdfDownloadButton par={par} onAttached={load} />
           </div>
@@ -752,6 +757,7 @@ export function ParDetailPage() {
             par={par}
             currentUserId={currentUserId}
             currentRoles={currentRoles}
+            base={base}
             onRefresh={load}
           />
         )}

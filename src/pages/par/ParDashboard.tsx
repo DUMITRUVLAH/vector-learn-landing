@@ -14,6 +14,7 @@ import { useState, useEffect } from "react";
 import { Plus, Search, Filter, Loader2, FileText, AlertCircle, Inbox, Landmark, ArrowRight, SlidersHorizontal, X } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useRouter } from "@/router/HashRouter";
+import { parHref } from "@/lib/parNav";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import {
   listPar,
@@ -85,8 +86,10 @@ function saveFilters(f: SavedFilters): void {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ParDashboard() {
-  const { navigate } = useRouter();
+  const { navigate, path } = useRouter();
   const { t } = useT();
+  // Stay in whichever PAR root the user is in (/business/par/* vs /app/par/*).
+  const go = (sub = "") => navigate(parHref(path, sub));
 
   const [requests, setRequests] = useState<(ParRequest & { above_micro_threshold: boolean })[]>([]);
   const [loading, setLoading] = useState(true);
@@ -201,7 +204,7 @@ export function ParDashboard() {
           </div>
           <button
             type="button"
-            onClick={() => navigate("/app/par/new")}
+            onClick={() => go("new")}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px]"
             aria-label="Cerere PAR nouă"
           >
@@ -216,7 +219,7 @@ export function ParDashboard() {
             {inboxCount > 0 && (
               <button
                 type="button"
-                onClick={() => navigate("/app/par/inbox")}
+                onClick={() => go("inbox")}
                 className="w-full flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-left hover:bg-primary/10 transition-colors min-h-[44px]"
               >
                 <span className="flex items-center gap-3">
@@ -233,7 +236,7 @@ export function ParDashboard() {
             {isFinance && awaitingPayment.length > 0 && (
               <button
                 type="button"
-                onClick={() => navigate("/app/par/finance")}
+                onClick={() => go("finance")}
                 className="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3 text-left hover:bg-muted transition-colors min-h-[44px]"
               >
                 <span className="flex items-center gap-3">
@@ -419,7 +422,7 @@ export function ParDashboard() {
               title="Cererile mele"
               count={myRequests.length}
               requests={myRequests}
-              onRowClick={(id) => navigate(`/app/par/${id}`)}
+              onRowClick={(id) => go(id)}
               emptyMessage="Nu ai cereri de plată încă."
             />
 
@@ -429,7 +432,7 @@ export function ParDashboard() {
                 title="În proces de aprobare"
                 count={pendingApproval.length}
                 requests={pendingApproval}
-                onRowClick={(id) => navigate(`/app/par/${id}`)}
+                onRowClick={(id) => go(id)}
                 emptyMessage=""
                 highlight
               />
@@ -441,7 +444,7 @@ export function ParDashboard() {
                 title="La finanțe — în așteptarea plății"
                 count={awaitingPayment.length}
                 requests={awaitingPayment}
-                onRowClick={(id) => navigate(`/app/par/${id}`)}
+                onRowClick={(id) => go(id)}
                 emptyMessage=""
                 highlight
               />

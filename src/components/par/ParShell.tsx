@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
-import { useBusinessSession } from "@/hooks/useBusinessSession";
+import { api } from "@/lib/api";
 import { NotificationBell } from "@/components/app/NotificationBell";
 
 interface ParShellProps {
@@ -82,10 +82,17 @@ function isActive(path: string, item: ParNavItem): boolean {
 
 export function ParShell({ children, pageTitle, pageDescription, actions }: ParShellProps) {
   const { path, navigate } = useRouter();
-  const session = useBusinessSession();
 
+  // The /business/par/* route is already auth-guarded by BusinessGuardPage (and the
+  // wrapping BusinessShell), so ParShell does NOT mount another useBusinessSession()
+  // — that would fire a redundant GET /api/business/auth/me on every PAR page. It only
+  // needs to end the session on logout.
   const handleLogout = async () => {
-    await session.logout();
+    try {
+      await api("/api/business/auth/logout", { method: "POST" });
+    } catch {
+      // ignore — navigate away regardless
+    }
     navigate("/business/login");
   };
 
