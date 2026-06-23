@@ -12,6 +12,7 @@ import ParFinanceQueue from "./pages/par/ParFinanceQueue";
 import { ParDetailPage } from "./pages/par/ParDetail";
 import { ParAdmin } from "./pages/par/ParAdmin";
 import { ParReports } from "./pages/par/ParReports";
+import { ParInviteAccept } from "./pages/par/ParInviteAccept";
 
 // DOCMERGE module routes
 import { DocMergeTemplatesPage } from "./pages/business/docmerge/DocMergeTemplatesPage";
@@ -96,6 +97,11 @@ function Routes() {
 
   // Root → redirect to /business
   if (path === "/" || path === "") return <RedirectToBusiness />;
+
+  // PAR invite acceptance — PUBLIC (the invitee has no session yet). The invite
+  // link is /#/app/invite?token=…; /business/par/invite is an equivalent alias.
+  if (path.startsWith("/app/invite") || path.startsWith("/business/par/invite"))
+    return <ParInviteAccept />;
 
   // PAR routes under /app/par/*
   if (path.startsWith("/app/par/onboarding")) return <ParOnboarding />;

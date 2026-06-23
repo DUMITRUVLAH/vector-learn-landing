@@ -20,6 +20,11 @@ import {
   exchangeCode,
   fetchUserInfo,
 } from "../auth/google";
+import {
+  findPendingInviteByToken,
+  grantInviteRole,
+  linkPendingInvitesForEmail,
+} from "../lib/par/acceptInvite";
 
 const signupSchema = z.object({
   tenantName: z.string().min(2).max(200),
@@ -121,6 +126,16 @@ authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, user.tenantId) });
   if (!tenant) return c.json({ error: "tenant_not_found" }, 500);
 
+  // VF-fix: a person can be invited to PAR by email and then sign in by any path.
+  // Link any pending invite for this email→tenant now so they get their par_members
+  // role even if they never clicked the invite link. Idempotent; failure must not
+  // block login (the role can also be granted via the accept-invite endpoint).
+  try {
+    await linkPendingInvitesForEmail({ userId: user.id, email: user.email, tenantId: user.tenantId });
+  } catch (err) {
+    console.error("[PAR-invite] auto-link on login failed:", err);
+  }
+
   // AUTH-004: check if 2FA is enabled for this user
   const tfRow = await db.query.twoFactorSettings.findFirst({
     where: eq(twoFactorSettings.userId, user.id),
@@ -150,6 +165,93 @@ authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
   return c.json({
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
     tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan, institutionType: tenant.institutionType },
+  });
+});
+
+// ─── PAR invite acceptance ──────────────────────────────────────────────────
+// The bridge that connects a `par_invites` row (by email) to a real user account
+// + a `par_members` row (by user_id), so invited approvers/finance can actually act.
+// These endpoints are PUBLIC (no requireAuth) — the invitee has no session yet —
+// but are gated by the secret invite token.
+
+// GET /api/auth/invite-info?token=… — preview an invite (email, role, org) so the
+// accept page can greet the user and pre-fill their email. Never reveals whether a
+// token is valid beyond "invalid_or_expired" to avoid leaking org membership.
+authRoutes.get("/invite-info", async (c) => {
+  const token = c.req.query("token");
+  if (!token) return c.json({ error: "invalid_or_expired" }, 400);
+
+  const invite = await findPendingInviteByToken(token);
+  if (!invite) return c.json({ error: "invalid_or_expired" }, 400);
+
+  const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, invite.tenantId) });
+
+  // If a user with this email already exists, the invitee should LOG IN (their
+  // role is linked on login too) rather than set a brand-new password.
+  const existingUser = await db.query.users.findFirst({
+    where: and(eq(users.tenantId, invite.tenantId), eq(users.email, invite.email)),
+  });
+
+  return c.json({
+    email: invite.email,
+    parRole: invite.parRole,
+    orgName: tenant?.name ?? "organizație",
+    accountExists: !!existingUser,
+  });
+});
+
+const acceptInviteSchema = z.object({
+  token: z.string().min(1).max(128),
+  name: z.string().min(2).max(200),
+  password: z.string().min(8).max(200),
+});
+
+// POST /api/auth/accept-invite — accept an invite: create (or reuse) the user in the
+// inviting tenant, grant the invited PAR role, and mint a session so the invitee is
+// logged straight in. The tenant is promoted to "business" so the Business Suite
+// session works (see grantInviteRole).
+authRoutes.post("/accept-invite", zValidator("json", acceptInviteSchema), async (c) => {
+  const { token, name, password } = c.req.valid("json");
+
+  const invite = await findPendingInviteByToken(token);
+  if (!invite) return c.json({ error: "invalid_or_expired" }, 400);
+
+  // If the email already has an account, don't create a duplicate or reset its
+  // password from an invite link (that would be an account-takeover vector).
+  // Tell the client to log in instead — login auto-links the pending invite.
+  const existingUser = await db.query.users.findFirst({
+    where: and(eq(users.tenantId, invite.tenantId), eq(users.email, invite.email)),
+  });
+  if (existingUser) {
+    return c.json({ error: "account_exists", detail: "Există deja un cont cu acest email. Autentifică-te." }, 409);
+  }
+
+  // The invitee's REAL authority is the PAR role in par_members (granted below).
+  // Their tenant-level users.role must be a NON-privileged value: "admin"/"manager"
+  // are treated as IMPLICIT par_admin (see requirePARRole), so giving an invited
+  // "approver" one of those would silently make them a full PAR admin. "receptionist"
+  // is the neutral staff role with no implicit PAR powers.
+  const passwordHash = await hashPassword(password);
+  const [user] = await db
+    .insert(users)
+    .values({
+      tenantId: invite.tenantId,
+      email: invite.email,
+      passwordHash,
+      name,
+      role: "receptionist",
+    })
+    .returning();
+
+  await grantInviteRole(invite, user.id);
+
+  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? undefined;
+  const userAgent = c.req.header("user-agent") ?? undefined;
+  const { token: sessionToken, expiresAt } = await createSession(user.id, { ipAddress, userAgent });
+  setSessionCookie(c, sessionToken, expiresAt);
+
+  return c.json({
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
   });
 });
 
@@ -591,6 +693,14 @@ authRoutes.get("/google/callback", async (c) => {
     await db
       .insert(finMembers)
       .values({ tenantId: tenant.id, userId: created.id, role: "owner" });
+  }
+
+  // VF-fix: link any pending PAR invite for this email→tenant (same as password login)
+  // so an invited person who signs in with Google also gets their par_members role.
+  try {
+    await linkPendingInvitesForEmail({ userId: user.id, email: user.email, tenantId: user.tenantId });
+  } catch (err) {
+    console.error("[PAR-invite] auto-link on Google login failed:", err);
   }
 
   // Google verifies the email itself, so we skip the app's 2FA gate here and
