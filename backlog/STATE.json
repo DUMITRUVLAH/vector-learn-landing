@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "DOCMERGE-004",
-  "iterations": 171,
+  "current_item": "VM1-10",
+  "last_completed": "VM1-04",
+  "iterations": 173,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "VIOLETA (Violeta first-meeting PAR backlog VM1-xx). Source+decisions: Violeta-first-meeting.md. Shipped: VM1-05/06 (PR#204), VM1-08 (PR#205), VM1-09 (pre-existing). Pending: VM1-01 access, VM1-02 import-config, VM1-03 currency-reports, VM1-04 events, VM1-10 folders (dep VM1-04), VM1-13 ai-mapping. One phase = one branch = one PR.",
   "active_milestone": "VIOLETA",
@@ -2238,7 +2238,7 @@
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
       "severity": "high",
-      "title": "Daily report / child diary — meals, naps, diapers, activities, photos",
+      "title": "Daily report / child diary \u2014 meals, naps, diapers, activities, photos",
       "depends_on": [
         "KINDER-001"
       ],
@@ -2278,7 +2278,7 @@
       "milestone": "KINDER",
       "phase": "1",
       "severity": "high",
-      "title": "Medical — allergies, immunization records, medication log",
+      "title": "Medical \u2014 allergies, immunization records, medication log",
       "depends_on": [],
       "branch": "feat/KINDER-faza-1-checkin-diary-ratio",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/108",
@@ -4215,29 +4215,43 @@
       "milestone": "VIOLETA",
       "phase": "QUICKWINS",
       "depends_on": [],
-      "note": "already built (VF-102 bulk approve in ParInbox) — no work needed"
+      "note": "already built (VF-102 bulk approve in ParInbox) \u2014 no work needed"
     },
     "VM1-01": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-01-access-control.md",
       "milestone": "VIOLETA",
       "phase": "ACCESS",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-access-rol",
-      "priority": "high"
+      "priority": "high",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/206",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "VM1-02": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-02-import-config-excel.md",
       "milestone": "VIOLETA",
       "phase": "IMPORT",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-import-config",
-      "priority": "medium"
+      "priority": "medium",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/207",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "VM1-13": {
       "status": "pending",
@@ -4251,30 +4265,43 @@
       "priority": "medium"
     },
     "VM1-03": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-03-currency-reports.md",
       "milestone": "VIOLETA",
       "phase": "CURRENCY",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-valute-rapoarte",
-      "priority": "medium"
+      "priority": "medium",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/209",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "VM1-04": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-04-events.md",
       "milestone": "VIOLETA",
       "phase": "EVENTS",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-evenimente-foldere",
-      "priority": "medium"
+      "priority": "medium",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "VM1-10": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-10-folders-project-status.md",
       "milestone": "VIOLETA",
