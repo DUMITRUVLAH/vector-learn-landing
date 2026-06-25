@@ -327,21 +327,33 @@ export function ParCreateForm() {
 
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!parId || !e.target.files?.length) return;
-    const file = e.target.files[0];
+    // VM1-06: accept multiple files in one go (max 10 attachments per PAR).
+    const MAX_ATTACHMENTS = 10;
     const ALLOWED = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
-    if (!ALLOWED.includes(file.type)) return setError("Tip de fișier neacceptat (PDF, PNG, JPEG).");
-    if (file.size > 10 * 1024 * 1024) return setError("Fișierul depășește 10 MB.");
+    const picked = Array.from(e.target.files);
+    e.target.value = "";
+    let slots = MAX_ATTACHMENTS - attachments.length;
+    if (slots <= 0) return setError(`Maxim ${MAX_ATTACHMENTS} fișiere per cerere.`);
+    if (picked.length > slots) {
+      setError(`Maxim ${MAX_ATTACHMENTS} fișiere per cerere — se încarcă primele ${slots}.`);
+    }
     setUploadingFile(true);
     try {
-      const dataUrl = await fileToDataUrl(file);
-      const att = await uploadAttachment(parId, {
-        file_name: file.name, file_url: dataUrl, mime: file.type, kind: uploadKind, size_bytes: file.size,
-      });
-      setAttachments((p) => [...p, att]);
-      setAttachmentsPresent(true);
+      for (const file of picked) {
+        if (slots <= 0) break;
+        if (!ALLOWED.includes(file.type)) { setError(`${file.name}: tip neacceptat (PDF, PNG, JPEG).`); continue; }
+        if (file.size > 10 * 1024 * 1024) { setError(`${file.name}: depășește 10 MB.`); continue; }
+        const dataUrl = await fileToDataUrl(file);
+        const att = await uploadAttachment(parId, {
+          file_name: file.name, file_url: dataUrl, mime: file.type, kind: uploadKind, size_bytes: file.size,
+        });
+        setAttachments((p) => [...p, att]);
+        setAttachmentsPresent(true);
+        slots--;
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Eroare la upload");
-    } finally { setUploadingFile(false); e.target.value = ""; }
+    } finally { setUploadingFile(false); }
   };
 
   const onVendorSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -710,12 +722,15 @@ export function ParCreateForm() {
                 {(Object.entries(ATTACHMENT_KIND_LABELS) as [ParAttachmentKind, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </Field>
-            <label className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium cursor-pointer hover:bg-secondary/80 transition-colors min-h-[44px]">
+            <label className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium cursor-pointer hover:bg-secondary/80 transition-colors min-h-[44px]",
+              (uploadingFile || !parId || attachments.length >= 10) && "opacity-50 cursor-not-allowed"
+            )}>
               {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
-              <span>Încarcă fișier</span>
-              <input type="file" className="sr-only" accept=".pdf,.png,.jpg,.jpeg" onChange={onUpload} disabled={uploadingFile || !parId} aria-label="Alege fișierul" />
+              <span>Încarcă fișiere</span>
+              <input type="file" multiple className="sr-only" accept=".pdf,.png,.jpg,.jpeg" onChange={onUpload} disabled={uploadingFile || !parId || attachments.length >= 10} aria-label="Alege fișierele" />
             </label>
-            <span className="text-xs text-muted-foreground">PDF, PNG, JPEG — max 10 MB</span>
+            <span className="text-xs text-muted-foreground">PDF, PNG, JPEG — max 10 MB · {attachments.length}/10 fișiere</span>
           </div>
           {attachments.length > 0 && (
             <ul className="space-y-2" aria-label="Fișiere atașate">

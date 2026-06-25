@@ -38,6 +38,8 @@ const ALLOWED_MIME_TYPES = [
 // Max file size: 10 MB → ~13.4M base64 chars
 const MAX_FILE_URL_LEN = 15_000_000;
 const MAX_FILE_NAME_LEN = 500;
+// VM1-06: max number of attachments per PAR (contract, act, oferte, factură …)
+const MAX_ATTACHMENTS_PER_PAR = 10;
 
 const parAttachmentKindValues = [
   "act_of_receipt",
@@ -125,6 +127,22 @@ parAttachmentsRoutes.post(
     }
     if (!EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number])) {
       return c.json({ error: `forbidden: PAR status '${par.status}' is not editable` }, 403);
+    }
+
+    // VM1-06: enforce the max-attachments limit on the server (UI guards too, but the
+    // server is the source of truth — a 10th upload is fine, the 11th is rejected).
+    const existing = await db
+      .select({ id: parAttachments.id })
+      .from(parAttachments)
+      .where(and(eq(parAttachments.parId, parId), eq(parAttachments.tenantId, tenantId)));
+    if (existing.length >= MAX_ATTACHMENTS_PER_PAR) {
+      return c.json(
+        {
+          error: "too_many_attachments",
+          detail: `Maxim ${MAX_ATTACHMENTS_PER_PAR} fișiere per cerere.`,
+        },
+        409
+      );
     }
 
     // Validate MIME type from data URL prefix or mime field
