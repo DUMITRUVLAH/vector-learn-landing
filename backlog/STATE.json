@@ -4240,15 +4240,21 @@
       "priority": "medium"
     },
     "VM1-13": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-13-ai-mapping.md",
       "milestone": "VIOLETA",
       "phase": "AI",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-ai-mapping",
-      "priority": "medium"
+      "priority": "medium",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "VM1-03": {
       "status": "pending",

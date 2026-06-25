@@ -60,6 +60,8 @@ import { itparkSettingsRoutes } from "./routes/itparkSettings";
 
 // PAR (Payment Action Request) module
 import { parMeRoutes } from "./routes/parMe";
+// VM1-13: AI prefill for PAR form fields
+import { parAiPrefillRoutes } from "./routes/parAiPrefill";
 import { parMembersRoutes } from "./routes/parMembers";
 import { parDoaRoutes } from "./routes/parDoa";
 import { parBudgetCodesRoutes } from "./routes/parBudgetCodes";
@@ -175,6 +177,7 @@ app.route("/api/fin/revaluation", finRevaluationRoutes);
 
 // PAR module
 app.route("/api/par/me", parMeRoutes);
+app.route("/api/par/ai-prefill", parAiPrefillRoutes);
 app.route("/api/par/members", parMembersRoutes);
 app.route("/api/par/doa", parDoaRoutes);
 app.route("/api/par/budget-codes", parBudgetCodesRoutes);
