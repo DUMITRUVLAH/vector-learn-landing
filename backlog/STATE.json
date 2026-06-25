@@ -4,7 +4,7 @@
   "last_completed": "DOCMERGE-004",
   "iterations": 171,
   "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "VIOLETA (Violeta first-meeting PAR backlog VM1-xx). Source+decisions: Violeta-first-meeting.md. Shipped: VM1-05/06 (PR#204), VM1-08 (PR#205), VM1-09 (pre-existing). Pending: VM1-01 access, VM1-02 import-config, VM1-03 currency-reports, VM1-04 events, VM1-10 folders (dep VM1-04), VM1-13 ai-mapping. One phase = one branch = one PR.",
+  "milestone_status": "VIOLETA COMPLETE — all VM1-xx delivered (PRs #204-#210 open, awaiting owner review/merge). Loop stopped. Do NOT auto-rebuild VM1 (they have open PRs). Other milestones (SPLIT-402, POLISH-001/002/003) are a separate direction — only build on explicit owner request.",
   "active_milestone": "VIOLETA",
   "items": {
     "SPLIT-401": {
@@ -4218,7 +4218,7 @@
       "note": "already built (VF-102 bulk approve in ParInbox) — no work needed"
     },
     "VM1-01": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/VM1-01-access-control.md",
@@ -4226,10 +4226,11 @@
       "phase": "ACCESS",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-access-rol",
-      "priority": "high"
+      "priority": "high",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/206"
     },
     "VM1-02": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/VM1-02-import-config-excel.md",
@@ -4237,10 +4238,11 @@
       "phase": "IMPORT",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-import-config",
-      "priority": "medium"
+      "priority": "medium",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/207"
     },
     "VM1-13": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/VM1-13-ai-mapping.md",
@@ -4248,10 +4250,11 @@
       "phase": "AI",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-ai-mapping",
-      "priority": "medium"
+      "priority": "medium",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/208"
     },
     "VM1-03": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/VM1-03-currency-reports.md",
@@ -4259,10 +4262,11 @@
       "phase": "CURRENCY",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-valute-rapoarte",
-      "priority": "medium"
+      "priority": "medium",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/209"
     },
     "VM1-04": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/VM1-04-events.md",
@@ -4270,10 +4274,11 @@
       "phase": "EVENTS",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-evenimente-foldere",
-      "priority": "medium"
+      "priority": "medium",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/210"
     },
     "VM1-10": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/VM1-10-folders-project-status.md",
@@ -4283,7 +4288,8 @@
         "VM1-04"
       ],
       "branch": "feat/VIOLETA-faza-evenimente-foldere",
-      "priority": "medium"
+      "priority": "medium",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/210"
     }
   }
 }
