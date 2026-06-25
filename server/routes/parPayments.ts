@@ -22,12 +22,14 @@ import {
   parAudit,
   parSettings,
   parApprovals,
+  parVendors,
 } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { notifyPaid } from "../services/par/notify";
 import { applyTenRule } from "../lib/par/payment";
 import { evaluateMatch } from "../lib/par/threeWayMatch";
+import { findVendorByIban, shouldAutoSaveVendor } from "../lib/par/vendorAutoSave";
 
 export const parPaymentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parPaymentsRoutes.use("*", requireAuth);
@@ -48,6 +50,76 @@ async function writeAudit(params: {
     event: params.event,
     detail: params.detail ?? null,
   });
+}
+
+/**
+ * VM1-05 — auto-save the payee into the reusable vendor registry once a PAR is paid.
+ * Violeta: "odată ce va fi plată pentru un anumit prestator, dacă a fost adăugat IBAN
+ * și alte chestii, să se autosalveze".
+ *
+ * Only runs for an inline payee (no vendorId yet) that has an IBAN — the IBAN is the
+ * thing worth remembering for next time. Dedup by IBAN within the tenant (no duplicates);
+ * if a vendor already exists, link it and backfill any missing details. Best-effort:
+ * never throws — the payment has already been recorded by the time this runs.
+ * The dedup/normalization logic lives in ../lib/par/vendorAutoSave (unit-tested).
+ */
+async function autoLinkVendorOnPayment(par: typeof parRequests.$inferSelect, actorUserId: string) {
+  try {
+    if (!shouldAutoSaveVendor(par)) return;
+    const iban = par.payeeIban!.trim();
+    const tenantId = par.tenantId;
+
+    // Dedup against existing vendors in this tenant (small list → compare in JS,
+    // robust to IBAN formatting differences).
+    const existing = await db
+      .select()
+      .from(parVendors)
+      .where(eq(parVendors.tenantId, tenantId));
+    const match = findVendorByIban(existing, iban);
+
+    let vendorId: string;
+    if (match) {
+      vendorId = match.id;
+      // Backfill details the registry was missing, without overwriting existing values.
+      const patch: Partial<typeof parVendors.$inferInsert> = {};
+      if (!match.idnp && par.payeeIdnp) patch.idnp = par.payeeIdnp;
+      if (!match.bank && par.payeeBank) patch.bank = par.payeeBank;
+      if (Object.keys(patch).length > 0) {
+        await db.update(parVendors).set({ ...patch, updatedAt: new Date() }).where(eq(parVendors.id, vendorId));
+      }
+    } else {
+      const [created] = await db
+        .insert(parVendors)
+        .values({
+          tenantId,
+          name: par.payeeName?.trim() || "(beneficiar fără nume)",
+          idnp: par.payeeIdnp ?? null,
+          iban,
+          bank: par.payeeBank ?? null,
+          active: true,
+        })
+        .returning({ id: parVendors.id });
+      vendorId = created.id;
+    }
+
+    // Link the PAR to the registry vendor so it shows the saved payee next time.
+    await db
+      .update(parRequests)
+      .set({ vendorId, updatedAt: new Date() })
+      .where(and(eq(parRequests.id, par.id), eq(parRequests.tenantId, tenantId)));
+
+    await writeAudit({
+      tenantId,
+      parId: par.id,
+      actorUserId,
+      event: "vendor_autosaved",
+      detail: match
+        ? `Plătitor legat de registrul de prestatori (existent): ${vendorId}`
+        : `Plătitor salvat automat în registrul de prestatori: ${vendorId}`,
+    });
+  } catch {
+    // best-effort — never block a recorded payment on the registry bookkeeping
+  }
 }
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
@@ -384,6 +456,9 @@ parPaymentsRoutes.post(
         { tenantId, parId, requestNo: par.requestNo },
         par.requestedByUserId
       );
+
+      // VM1-05: remember this payee (IBAN etc.) in the vendor registry for reuse.
+      await autoLinkVendorOnPayment(par, user.id);
 
       const [updatedPar] = await db
         .select()
