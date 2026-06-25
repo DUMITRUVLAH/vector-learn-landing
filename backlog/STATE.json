@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "VM1-10",
-  "last_completed": "VM1-04",
-  "iterations": 173,
+  "current_item": null,
+  "last_completed": "VM1-10",
+  "iterations": 174,
   "last_run_at": "2026-06-12T00:00:00Z",
   "milestone_status": "VIOLETA (Violeta first-meeting PAR backlog VM1-xx). Source+decisions: Violeta-first-meeting.md. Shipped: VM1-05/06 (PR#204), VM1-08 (PR#205), VM1-09 (pre-existing). Pending: VM1-01 access, VM1-02 import-config, VM1-03 currency-reports, VM1-04 events, VM1-10 folders (dep VM1-04), VM1-13 ai-mapping. One phase = one branch = one PR.",
   "active_milestone": "VIOLETA",
@@ -4297,10 +4297,11 @@
         "integration": "CONNECTED",
         "manager": "BUY",
         "student": "OK"
-      }
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/210"
     },
     "VM1-10": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-10-folders-project-status.md",
@@ -4310,7 +4311,14 @@
         "VM1-04"
       ],
       "branch": "feat/VIOLETA-faza-evenimente-foldere",
-      "priority": "medium"
+      "priority": "medium",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      },
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/210"
     }
   }
 }
