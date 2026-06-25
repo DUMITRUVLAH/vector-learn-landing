@@ -499,26 +499,37 @@ per câmp (sub 0.7 → `low_confidence`, omul verifică). **Exact ce vrea Violet
 
 ---
 
-## Întrebări deschise / decizii pentru Violeta
+## Decizii — ședința 1 (confirmate de owner, 2026-06-25)
 
-1. **VM1-02 (Import Excel):** importăm **prestatori + linii de PAR** ca scope inițial (recomandarea
-   noastră), sau ai în minte alt tip de date (proiecte/coduri buget, sau PAR-uri întregi în masă)?
-2. **VM1-03 (curs valutar):** cursul îl introduce omul manual, sau îl preluăm **automat de la BNM** la
-   data submit-ului? (recomandăm automat cu fallback manual)
-3. **VM1-04 (evenimente):** evenimentele țin **de un proiect** (Proiect → Eveniment), sau sunt o listă
-   independentă la nivel de organizație?
-4. **VM1-05 (auto-salvare prestator):** salvăm furnizorul **la prima plată** (cum ai zis), sau mai
-   devreme, la **aprobare/submit**?
-5. **VM1-08 (email):** cât din IBAN/IDNP punem **în clar în email** (canal mai puțin sigur) vs. „doar
-   ultimele cifre, vezi în aplicație"?
-6. **VM1-12 (dosar combinat):** atașamentele **docx/xlsx** le **convertim în PDF** în dosar (mai
-   costisitor) sau le lăsăm ca anexe separate cu o pagină-separator? Și: ordinul de plată e mereu
-   adăugat de contabil **manual**, sau vrei și un **șablon generat** de ordin de plată?
-7. **Acces general:** o persoană **fără niciun rol PAR** ar trebui să nu vadă deloc modulul, sau să-l
-   vadă **read-only**?
+Toate întrebările deschise au fost decise. Acestea sunt acum **obligatorii** la build:
+
+1. **VM1-02 (Import Excel):** importăm **DOAR datele de configurare** — proiecte, departamente,
+   coduri de buget (la onboarding). *Nu* importăm prestatori sau linii de PAR în această fază.
+2. **VM1-03 (valută):** plata se face **în valuta exactă a PAR-ului** — organizația are **conturi
+   separate per valută**, deci **nu se forțează conversie la plată**. Valute suportate: **MDL, EUR,
+   USD** (RON exclus). Pentru **rapoarte/totaluri** se convertește într-o **valută de bază = MDL**
+   (deci avem nevoie de un curs doar pentru raportare — sursă implicită BNM, înghețat la submit).
+3. **VM1-04 (evenimente):** evenimentele sunt **legate de proiect** (ierarhie Proiect → Eveniment;
+   dropdown filtrat după proiectul selectat).
+4. **VM1-05 (auto-salvare prestator):** **la plată** (deja livrat în PR #204).
+5. **VM1-08 (email):** **IBAN-ul NU apare în email.** Email-ul conține: **suma, cui (plătitorul),
+   motivul, proiectul și bugetul** + link direct la cerere. Datele bancare se văd doar în aplicație.
+6. **VM1-10/11 (foldere):** ierarhia principală este **Proiect → status** (De aprobat / Aprobate /
+   Plătite per proiect).
+7. **VM1-12 (dosar combinat):** atașamentele **docx/xlsx** rămân **anexe separate cu o pagină-
+   separator** în dosar (fără conversie Office acum). **Ordinul de plată** se **încarcă manual** de
+   contabil (fără șablon generat în prima fază).
+8. **VM1-13 (mapare AI):** AI-ul pre-completează **plătitor + sumă + IBAN + scop** din document;
+   liniile (descriere/cantitate/preț) rămân pentru pasul 2.
+9. **VM1-01 (acces):** o persoană **fără niciun rol PAR nu vede deloc modulul** (ascuns complet).
+
+### Consecințe asupra scope-ului
+- **VM1-02** se restrânge la import config (mai mic decât estimarea inițială A+C).
+- **VM1-03** se simplifică la plată (fără conversie), dar adaugă conversia BNM→MDL **doar pe rapoarte**.
+- **VM1-08** devine mai simplu și mai sigur (zero date bancare în email).
 
 ---
 
-*Document de lucru — prima ședință cu Violeta. Următorul pas: confirmarea deciziilor de mai sus, apoi
-transformarea fiecărui VM1-xx într-un spec formal în `backlog/specs/` și intrarea în pipeline-ul de
-autopilot (build → review → test → PR), o fază = un PR.*
+*Document de lucru — prima ședință cu Violeta. Deciziile de mai sus sunt confirmate. Următorul pas:
+transformarea fiecărui VM1-xx în spec formal în `backlog/specs/` și build pe autopilot
+(build → review → test → PR), o fază = un PR.*
