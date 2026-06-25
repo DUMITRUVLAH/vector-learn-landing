@@ -83,7 +83,8 @@ describe("PAR-111 notifySubmitted (T-PAR-111-1)", () => {
     expect(insertArg.kind).toBe("par");
     expect(insertArg.payload.par_id).toBe("par-001");
     expect(insertArg.payload.body).toContain("PAR-2026-0001");
-    expect(insertArg.payload.body).toContain("awaits your approval");
+    // VM1-08: approver copy is now Romanian ("așteaptă aprobarea ta").
+    expect(insertArg.payload.body).toContain("așteaptă aprobarea");
   });
 
   it("body contains link to /app/par/:id", async () => {
