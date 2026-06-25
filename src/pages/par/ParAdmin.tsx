@@ -33,6 +33,8 @@ import {
   Copy,
   FileClock,
   ChevronLeft,
+  Upload,
+  Download,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { cn } from "@/lib/utils";
@@ -76,6 +78,9 @@ import {
   deleteVendor,
   searchRegistryCompanies,
   formatMDL,
+  importParConfigExcel,
+  downloadParConfigTemplate,
+  type ParConfigImportResult,
   type ParDoaRow,
   type ParMember,
   type ParSettings,
@@ -1318,6 +1323,12 @@ function ParReferenceData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // VM1-02: Excel import state
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<ParConfigImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
+
   const load = async () => {
     setLoading(true);
     try {
@@ -1339,6 +1350,27 @@ function ParReferenceData() {
   };
 
   useEffect(() => { load(); }, []); // eslint-disable-line
+
+  // VM1-02: handle Excel file selection → upload → preview result
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset so the same file can be re-selected
+    e.target.value = "";
+    setImportError(null);
+    setImportResult(null);
+    setImportLoading(true);
+    try {
+      const result = await importParConfigExcel(file);
+      setImportResult(result);
+      // Reload reference data after successful import
+      await load();
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Eroare la import.");
+    } finally {
+      setImportLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -1362,6 +1394,78 @@ function ParReferenceData() {
         <div role="alert" className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
           <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* VM1-02: Import Excel section */}
+      <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-border">
+        <span className="text-sm text-muted-foreground">Import în masă:</span>
+        <button
+          type="button"
+          onClick={() => importFileRef.current?.click()}
+          disabled={importLoading}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors min-h-[36px] disabled:opacity-50"
+          aria-label="Import din Excel"
+        >
+          {importLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <Upload className="h-4 w-4" aria-hidden />
+          )}
+          {importLoading ? "Se importă..." : "Import din Excel"}
+        </button>
+        <button
+          type="button"
+          onClick={downloadParConfigTemplate}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium border border-border hover:bg-muted transition-colors min-h-[36px]"
+          aria-label="Descarcă template Excel"
+        >
+          <Download className="h-4 w-4" aria-hidden />
+          Template
+        </button>
+        {/* Hidden file input */}
+        <input
+          ref={importFileRef}
+          type="file"
+          accept=".xlsx"
+          className="sr-only"
+          aria-label="Alege fișier Excel"
+          onChange={handleImportFile}
+        />
+      </div>
+
+      {/* Import error */}
+      {importError && (
+        <div role="alert" className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
+          <span>{importError}</span>
+        </div>
+      )}
+
+      {/* Import result summary */}
+      {importResult && (
+        <div className="rounded-lg border border-border bg-card p-3 space-y-2 text-sm">
+          <p className="font-medium text-foreground">Rezultat import:</p>
+          {(["projects", "departments", "budgetCodes"] as const).map((key) => {
+            const cat = importResult[key];
+            const label = key === "projects" ? "Proiecte" : key === "departments" ? "Departamente" : "Coduri buget";
+            return (
+              <div key={key} className="space-y-1">
+                <p className="text-muted-foreground">
+                  <span className="font-medium text-foreground">{label}:</span>{" "}
+                  {cat.created} create, {cat.updated} actualizate
+                  {cat.errors.length > 0 && (
+                    <span className="text-destructive ml-2">({cat.errors.length} erori)</span>
+                  )}
+                </p>
+                {cat.errors.map((e, i) => (
+                  <p key={i} className="ml-4 text-destructive text-xs">
+                    Rând {e.row}, coloana „{e.column}": {e.message}
+                  </p>
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
