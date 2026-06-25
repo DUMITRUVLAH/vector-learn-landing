@@ -4218,26 +4218,30 @@
       "note": "already built (VF-102 bulk approve in ParInbox) — no work needed"
     },
     "VM1-01": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-01-access-control.md",
       "milestone": "VIOLETA",
       "phase": "ACCESS",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-access-rol",
-      "priority": "high"
+      "priority": "high",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/206",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "VM1-02": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-02-import-config-excel.md",
       "milestone": "VIOLETA",
       "phase": "IMPORT",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-import-config",
-      "priority": "medium"
+      "priority": "medium",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/207",
+      "verdicts": { "reviewer": "APPROVED", "integration": "CONNECTED", "manager": "BUY", "student": "OK" }
     },
     "VM1-13": {
       "status": "pending",
@@ -4251,8 +4255,8 @@
       "priority": "medium"
     },
     "VM1-03": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-03-currency-reports.md",
       "milestone": "VIOLETA",

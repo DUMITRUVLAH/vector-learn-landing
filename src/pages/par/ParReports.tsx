@@ -31,9 +31,11 @@ import {
   getParReportCycleTime,
   getParReportExportUrl,
   getParReportExportXlsxUrl,
+  getParReportCurrencyBreakdown,
   type ParSpendByItem,
   type ParAgingItem,
   type ParCycleTimeItem,
+  type ParCurrencyBreakdownItem,
 } from "@/lib/api/par";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -214,6 +216,9 @@ export function ParReports() {
   const [byCharge, setByCharge] = useState<ParSpendByItem[]>([]);
   const [aging, setAging] = useState<ParAgingItem[]>([]);
   const [cycleTime, setCycleTime] = useState<ParCycleTimeItem | null>(null);
+  // VM1-03: per-currency breakdown
+  const [currencyBreakdown, setCurrencyBreakdown] = useState<ParCurrencyBreakdownItem[]>([]);
+  const [totalMdlCents, setTotalMdlCents] = useState(0);
   const [loadingCharts, setLoadingCharts] = useState(false);
   const [loadingAging, setLoadingAging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -224,16 +229,19 @@ export function ParReports() {
     setLoadingCharts(true);
     setError(null);
     try {
-      const [b, d, p, ch] = await Promise.all([
+      const [b, d, p, ch, cb] = await Promise.all([
         getParReportByBudget(filters),
         getParReportByDepartment(filters),
         getParReportByProject(filters),
         getParReportByChargeTo(filters),
+        getParReportCurrencyBreakdown(filters),
       ]);
       setByBudget(b.items ?? []);
       setByDept(d.items ?? []);
       setByProject(p.items ?? []);
       setByCharge(ch.items ?? []);
+      setCurrencyBreakdown(cb.byCurrency ?? []);
+      setTotalMdlCents(cb.totalMdlCents ?? 0);
     } catch {
       setError("Eroare la încărcarea rapoartelor");
     } finally {
@@ -266,8 +274,9 @@ export function ParReports() {
     loadCharts();
   };
 
-  const totalSpend = byBudget.reduce((s, it) => s + it.totalCents, 0);
-  const totalCount = byBudget.reduce((s, it) => s + it.count, 0);
+  // VM1-03: use totalMdlCents (MDL aggregate from currency-breakdown) as the canonical total.
+  const totalSpend = totalMdlCents;
+  const totalCount = currencyBreakdown.reduce((s, it) => s + it.count, 0);
 
   const exportUrl = getParReportExportUrl(filters);
   const exportXlsxUrl = getParReportExportXlsxUrl(filters);
@@ -407,6 +416,51 @@ export function ParReports() {
             <SpendChart title="Cheltuieli pe Charge To" items={byCharge} loading={loadingCharts} />
           )}
         </div>
+
+        {/* VM1-03: Currency breakdown — per-currency native totals */}
+        {currencyBreakdown.length > 0 && (
+          <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+            <h2 className="text-sm font-semibold text-foreground">Defalcare pe valute</h2>
+            <p className="text-xs text-muted-foreground">
+              Totalul MDL agregat include cereri în valute mixte, convertite la cursul BNM înghețat la trimitere.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="text-left text-muted-foreground border-b border-border">
+                    <th className="pb-2 pr-4 font-medium">Valuta</th>
+                    <th className="pb-2 pr-4 font-medium text-right">Total nativ</th>
+                    <th className="pb-2 pr-4 font-medium text-right">Echiv. MDL</th>
+                    <th className="pb-2 font-medium text-right">Cereri</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currencyBreakdown.map((row) => (
+                    <tr key={row.currency} className="border-b border-border/50">
+                      <td className="py-2 pr-4 font-medium text-foreground">{row.currency}</td>
+                      <td className="py-2 pr-4 text-right text-foreground">
+                        {(row.nativeTotalCents / 100).toLocaleString("ro-MD", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })} {row.currency}
+                      </td>
+                      <td className="py-2 pr-4 text-right text-foreground">{formatMDL(row.mdlTotalCents)}</td>
+                      <td className="py-2 text-right text-muted-foreground">{row.count}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-border font-semibold">
+                    <td className="pt-2 pr-4 text-foreground">Total MDL</td>
+                    <td className="pt-2 pr-4 text-right text-muted-foreground">—</td>
+                    <td className="pt-2 pr-4 text-right text-foreground">{formatMDL(totalMdlCents)}</td>
+                    <td className="pt-2 text-right text-muted-foreground">
+                      {currencyBreakdown.reduce((s, r) => s + r.count, 0)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Aging table */}
         <AgingTable items={aging} loading={loadingAging} />

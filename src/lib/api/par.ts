@@ -165,7 +165,8 @@ export interface UpdateParPayload extends CreateParPayload {
   payee_bank?: string | null;
   attachments_present?: boolean;
   attachments_note?: string | null;
-  currency?: "MDL" | "EUR" | "USD" | "RON";
+  // VM1-03: RON removed from supported currencies.
+  currency?: "MDL" | "EUR" | "USD";
 }
 
 export async function createPar(payload: CreateParPayload): Promise<ParRequest> {
@@ -276,7 +277,8 @@ export async function addParQuote(parId: string, payload: {
   vendor_id?: string | null;
   vendor_name?: string | null;
   total_cents: number;
-  currency?: "MDL" | "EUR" | "USD" | "RON";
+  // VM1-03: RON removed.
+  currency?: "MDL" | "EUR" | "USD";
   valid_until?: string | null;
   notes?: string | null;
 }): Promise<ParQuote> {
@@ -877,6 +879,24 @@ export async function getParReportByChargeTo(filters?: ParReportFilters): Promis
 
 export async function getParReportAging(): Promise<{ items: ParAgingItem[] }> {
   return api("/api/par/reports/aging");
+}
+
+// VM1-03: currency breakdown — per-currency native totals + MDL aggregate
+export interface ParCurrencyBreakdownItem {
+  currency: string;
+  nativeTotalCents: number;
+  mdlTotalCents: number;
+  count: number;
+}
+
+export async function getParReportCurrencyBreakdown(
+  filters?: ParReportFilters
+): Promise<{ byCurrency: ParCurrencyBreakdownItem[]; totalMdlCents: number }> {
+  const params = new URLSearchParams();
+  if (filters?.period_from) params.set("from", filters.period_from);
+  if (filters?.period_to) params.set("to", filters.period_to);
+  const qs = params.toString();
+  return api(`/api/par/reports/currency-breakdown${qs ? `?${qs}` : ""}`);
 }
 
 export async function getParReportCycleTime(): Promise<ParCycleTimeItem> {
