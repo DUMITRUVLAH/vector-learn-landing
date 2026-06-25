@@ -35,6 +35,7 @@ import {
   type ParAgingItem,
   type ParCycleTimeItem,
 } from "@/lib/api/par";
+import { api } from "@/lib/api";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -206,11 +207,12 @@ function AgingTable({ items, loading }: AgingTableProps) {
 export function ParReports() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [tab, setTab] = useState<"budget" | "department" | "project" | "charge">("budget");
+  const [tab, setTab] = useState<"budget" | "department" | "project" | "event" | "charge">("budget");
 
   const [byBudget, setByBudget] = useState<ParSpendByItem[]>([]);
   const [byDept, setByDept] = useState<ParSpendByItem[]>([]);
   const [byProject, setByProject] = useState<ParSpendByItem[]>([]);
+  const [byEvent, setByEvent] = useState<ParSpendByItem[]>([]); // VM1-04
   const [byCharge, setByCharge] = useState<ParSpendByItem[]>([]);
   const [aging, setAging] = useState<ParAgingItem[]>([]);
   const [cycleTime, setCycleTime] = useState<ParCycleTimeItem | null>(null);
@@ -224,15 +226,21 @@ export function ParReports() {
     setLoadingCharts(true);
     setError(null);
     try {
-      const [b, d, p, ch] = await Promise.all([
+      const qs = [
+        filters.period_from ? `from=${encodeURIComponent(filters.period_from)}` : "",
+        filters.period_to ? `to=${encodeURIComponent(filters.period_to)}` : "",
+      ].filter(Boolean).join("&");
+      const [b, d, p, evts, ch] = await Promise.all([
         getParReportByBudget(filters),
         getParReportByDepartment(filters),
         getParReportByProject(filters),
+        api<{ items: ParSpendByItem[] }>(`/api/par/reports/by-event${qs ? `?${qs}` : ""}`),
         getParReportByChargeTo(filters),
       ]);
       setByBudget(b.items ?? []);
       setByDept(d.items ?? []);
       setByProject(p.items ?? []);
+      setByEvent(evts.items ?? []); // VM1-04
       setByCharge(ch.items ?? []);
     } catch {
       setError("Eroare la încărcarea rapoartelor");
@@ -374,6 +382,7 @@ export function ParReports() {
               { id: "budget" as const, label: "Cod bugetar" },
               { id: "department" as const, label: "Departament" },
               { id: "project" as const, label: "Proiect" },
+              { id: "event" as const, label: "Eveniment" },
               { id: "charge" as const, label: "Charge To" },
             ].map((t) => (
               <button
@@ -402,6 +411,9 @@ export function ParReports() {
           )}
           {tab === "project" && (
             <SpendChart title="Cheltuieli pe proiect/program" items={byProject} loading={loadingCharts} />
+          )}
+          {tab === "event" && (
+            <SpendChart title="Cheltuieli pe eveniment" items={byEvent} loading={loadingCharts} />
           )}
           {tab === "charge" && (
             <SpendChart title="Cheltuieli pe Charge To" items={byCharge} loading={loadingCharts} />

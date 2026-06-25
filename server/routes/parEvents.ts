@@ -1,0 +1,114 @@
+/**
+ * VM1-04: PAR Events — sub-entities of projects (Proiect → Eveniment → Cerere).
+ *
+ * GET    /api/par/events                — list events (tenant-scoped, optional ?project_id=)
+ * POST   /api/par/events                — create event (par_admin only)
+ * PUT    /api/par/events/:id            — update event (par_admin only)
+ * DELETE /api/par/events/:id            — deactivate event (par_admin only, soft-delete via active=false)
+ *
+ * CORE: backlog/par/PAR-CORE.md
+ */
+import { Hono } from "hono";
+import { z } from "zod";
+import { and, eq, asc } from "drizzle-orm";
+import { db } from "../db/client";
+import { parEvents } from "../db/schema/par";
+import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requirePARRole } from "../middleware/requirePARRole";
+
+export const parEventsRoutes = new Hono<{ Variables: AuthVariables }>();
+
+parEventsRoutes.use("*", requireAuth);
+
+// ─── Schemas ─────────────────────────────────────────────────────────────────
+
+const createSchema = z.object({
+  name: z.string().min(1).max(200),
+  project_id: z.string().uuid().optional().nullable(),
+  starts_at: z.string().datetime({ offset: true }).optional().nullable(),
+  ends_at: z.string().datetime({ offset: true }).optional().nullable(),
+});
+
+const updateSchema = createSchema.partial().extend({
+  active: z.boolean().optional(),
+});
+
+// ─── GET /api/par/events ─────────────────────────────────────────────────────
+
+/** List events for tenant. Optional ?project_id= filter. All roles can read. */
+parEventsRoutes.get("/", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const projectId = c.req.query("project_id");
+
+  const conditions = [eq(parEvents.tenantId, tenantId), eq(parEvents.active, true)];
+  if (projectId) conditions.push(eq(parEvents.projectId, projectId));
+
+  const rows = await db
+    .select()
+    .from(parEvents)
+    .where(and(...conditions))
+    .orderBy(asc(parEvents.name));
+
+  const data = Array.isArray(rows) ? rows : (rows as { rows?: typeof rows }).rows ?? [];
+  return c.json({ events: data });
+});
+
+// ─── POST /api/par/events ─────────────────────────────────────────────────────
+
+parEventsRoutes.post("/", requirePARRole("par_admin"), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const body = createSchema.parse(await c.req.json());
+
+  const [created] = await db
+    .insert(parEvents)
+    .values({
+      tenantId,
+      name: body.name,
+      projectId: body.project_id ?? null,
+      startsAt: body.starts_at ? new Date(body.starts_at) : null,
+      endsAt: body.ends_at ? new Date(body.ends_at) : null,
+    })
+    .returning();
+
+  return c.json(created, 201);
+});
+
+// ─── PUT /api/par/events/:id ──────────────────────────────────────────────────
+
+parEventsRoutes.put("/:id", requirePARRole("par_admin"), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const id = c.req.param("id");
+  const body = updateSchema.parse(await c.req.json());
+
+  const updateData: Partial<typeof parEvents.$inferInsert> = { updatedAt: new Date() };
+  if (body.name !== undefined) updateData.name = body.name;
+  if (body.project_id !== undefined) updateData.projectId = body.project_id;
+  if (body.starts_at !== undefined) updateData.startsAt = body.starts_at ? new Date(body.starts_at) : null;
+  if (body.ends_at !== undefined) updateData.endsAt = body.ends_at ? new Date(body.ends_at) : null;
+  if (body.active !== undefined) updateData.active = body.active;
+
+  const [updated] = await db
+    .update(parEvents)
+    .set(updateData)
+    .where(and(eq(parEvents.id, id), eq(parEvents.tenantId, tenantId)))
+    .returning();
+
+  if (!updated) return c.json({ error: "Not found" }, 404);
+  return c.json(updated);
+});
+
+// ─── DELETE /api/par/events/:id — soft-delete via active=false ───────────────
+
+parEventsRoutes.delete("/:id", requirePARRole("par_admin"), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const id = c.req.param("id");
+
+  const [updated] = await db
+    .update(parEvents)
+    .set({ active: false, updatedAt: new Date() })
+    .where(and(eq(parEvents.id, id), eq(parEvents.tenantId, tenantId)))
+    .returning();
+
+  if (!updated) return c.json({ error: "Not found" }, 404);
+  return c.json({ ok: true });
+});

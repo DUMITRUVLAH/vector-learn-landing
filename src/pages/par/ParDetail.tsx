@@ -58,6 +58,7 @@ import {
   getParMe,
   formatMDL,
   type ParDetail as ParDetailType,
+  type ParRequest,
   type ParLineItem,
   PAR_STATUS_LABELS,
 } from "@/lib/api/par";
@@ -722,6 +723,10 @@ export function ParDetailPage() {
             <Field label="4. Departament" value={par.departmentId} />
             <Field label="5. Data necesară" value={fmtDate(par.dateNeeded)} />
             <Field label="6. Pentru / Livrare la" value={par.projectId} />
+            {/* VM1-04: show event if set */}
+            {(par as ParRequest & { eventId?: string | null }).eventId && (
+              <Field label="6b. Eveniment" value={(par as ParRequest & { eventId?: string | null }).eventId} />
+            )}
             <Field
               label="7. Cod bugetar"
               value={[par.budgetCodeId, par.budgetCodeNote].filter(Boolean).join(" — ")}

@@ -56,6 +56,8 @@ export interface ParRequest {
   exchangeRate?: string | null;
   totalMdlCents?: number | null;
   above_micro_threshold?: boolean;
+  // VM1-04: optional event (sub-entity of project)
+  eventId?: string | null;
   status: ParStatus;
   submittedAt: string | null;
   approvedAt: string | null;
@@ -139,6 +141,18 @@ export interface ParPayment {
 export interface ParDepartment { id: string; name: string; active: boolean; }
 export interface ParProject { id: string; name: string; donor: string | null; active: boolean; }
 export interface ParBudgetCode { id: string; code: string; name: string; active: boolean; }
+/** VM1-04: Event — sub-entity of a project */
+export interface ParEvent {
+  id: string;
+  tenantId: string;
+  projectId: string | null;
+  name: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface ParVendor { id: string; name: string; idnp: string | null; iban: string | null; bank: string | null; active: boolean; }
 
 // ─── PAR CRUD ─────────────────────────────────────────────────────────────────
@@ -149,6 +163,8 @@ export interface CreateParPayload {
   department_id?: string | null;
   date_needed?: string | null;
   project_id?: string | null;
+  /** VM1-04: optional event (sub-entity of project) */
+  event_id?: string | null;
   budget_code_id?: string | null;
   budget_code_note?: string | null;
   purpose?: ParPurpose;
@@ -580,6 +596,37 @@ export async function listBudgetCodes(): Promise<{ items: ParBudgetCode[] }> {
 export async function listVendors(): Promise<{ items: ParVendor[] }> {
   return api<{ items?: ParVendor[]; vendors?: ParVendor[] }>("/api/par/vendors")
     .then((r) => ({ items: (r as { items?: ParVendor[]; vendors?: ParVendor[] }).items ?? (r as { items?: ParVendor[]; vendors?: ParVendor[] }).vendors ?? [] }));
+}
+
+// ─── VM1-04: Events (sub-entity of project) ──────────────────────────────────
+
+/** List active events. Optional projectId filter to only show events for that project. */
+export async function listEvents(projectId?: string | null): Promise<{ events: ParEvent[] }> {
+  const qs = projectId ? `?project_id=${projectId}` : "";
+  return api<{ events: ParEvent[] }>(`/api/par/events${qs}`);
+}
+
+export async function createEvent(data: {
+  name: string;
+  project_id?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+}): Promise<ParEvent> {
+  return api<ParEvent>("/api/par/events", { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function updateEvent(id: string, data: Partial<{
+  name: string;
+  project_id: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  active: boolean;
+}>): Promise<ParEvent> {
+  return api<ParEvent>(`/api/par/events/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function deleteEvent(id: string): Promise<{ ok: boolean }> {
+  return api<{ ok: boolean }>(`/api/par/events/${id}`, { method: "DELETE" });
 }
 
 // ─── PAR me — current user's PAR roles ───────────────────────────────────────

@@ -20,10 +20,12 @@ import {
   getParInbox,
   getParMe,
   getBudgetCodesUsage,
+  listEvents,
   formatMDL,
   type ParRequest,
   type ParStatus,
   type ParPurpose,
+  type ParEvent,
   type BudgetCodeUsage,
   PAR_STATUS_LABELS,
 } from "@/lib/api/par";
@@ -103,6 +105,9 @@ export function ParDashboard() {
   const [minTotal, setMinTotal] = useState(saved.minTotal ?? "");
   const [maxTotal, setMaxTotal] = useState(saved.maxTotal ?? "");
   const [showMoreFilters, setShowMoreFilters] = useState(false);
+  // VM1-04: event filter (client-side only — applied after fetch)
+  const [events, setEvents] = useState<ParEvent[]>([]);
+  const [eventFilter, setEventFilter] = useState("");
 
   // Persist all filters on change.
   useEffect(() => {
@@ -112,8 +117,9 @@ export function ParDashboard() {
   const resetFilters = () => {
     setStatusFilter(""); setPurposeFilter(""); setSearchQ("");
     setDateFrom(""); setDateTo(""); setMinTotal(""); setMaxTotal("");
+    setEventFilter(""); // VM1-04
   };
-  const hasActiveFilters = !!(statusFilter || purposeFilter || searchQ || dateFrom || dateTo || minTotal || maxTotal);
+  const hasActiveFilters = !!(statusFilter || purposeFilter || searchQ || dateFrom || dateTo || minTotal || maxTotal || eventFilter);
 
   // "Te așteaptă" — real counts for the action banner (role-aware, loaded once)
   const [inboxCount, setInboxCount] = useState(0);
@@ -123,6 +129,8 @@ export function ParDashboard() {
   const [budgetAlerts, setBudgetAlerts] = useState<BudgetCodeUsage[]>([]);
 
   useEffect(() => {
+    // VM1-04: load events for filter dropdown
+    listEvents().then((r) => setEvents(r.events)).catch(() => setEvents([]));
     // Non-approvers get an empty inbox (no 403), so this is safe for everyone.
     getParInbox()
       .then((r) => setInboxCount(r.total))
@@ -173,10 +181,13 @@ export function ParDashboard() {
     load();
   }, [statusFilter, purposeFilter, searchQ, dateFrom, dateTo, minTotal, maxTotal]);
 
-  // Derived sections
-  const myRequests = requests;
-  const pendingApproval = requests.filter((r) => r.status === "pending_approval");
-  const awaitingPayment = requests.filter((r) => r.status === "in_finance");
+  // Derived sections — VM1-04: apply event filter client-side
+  const filteredByEvent = eventFilter
+    ? requests.filter((r) => (r as ParRequest & { eventId?: string | null }).eventId === eventFilter)
+    : requests;
+  const myRequests = filteredByEvent;
+  const pendingApproval = filteredByEvent.filter((r) => r.status === "pending_approval");
+  const awaitingPayment = filteredByEvent.filter((r) => r.status === "in_finance");
 
   // Summary totals
   const totalActive = requests
@@ -330,6 +341,21 @@ export function ParDashboard() {
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
+
+          {/* VM1-04: Event filter (shows only when events exist) */}
+          {events.length > 0 && (
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px]"
+              value={eventFilter}
+              onChange={(e) => setEventFilter(e.target.value)}
+              aria-label="Filtrează după eveniment"
+            >
+              <option value="">Toate evenimentele</option>
+              {events.map((ev) => (
+                <option key={ev.id} value={ev.id}>{ev.name}</option>
+              ))}
+            </select>
+          )}
 
           {/* VF-105: more filters toggle */}
           <button
