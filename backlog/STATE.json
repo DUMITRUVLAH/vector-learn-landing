@@ -4218,7 +4218,7 @@
       "note": "already built (VF-102 bulk approve in ParInbox) — no work needed"
     },
     "VM1-01": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-01-access-control.md",
@@ -4226,7 +4226,13 @@
       "phase": "ACCESS",
       "depends_on": [],
       "branch": "feat/VIOLETA-faza-access-rol",
-      "priority": "high"
+      "priority": "high",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "PASS"
+      }
     },
     "VM1-02": {
       "status": "pending",
