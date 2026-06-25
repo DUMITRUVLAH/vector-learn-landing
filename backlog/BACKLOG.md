@@ -402,3 +402,26 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | DOCMERGE-004 | normal | Wizard end-to-end + intrare în meniul business | done | [spec](specs/DOCMERGE-004-wizard-end-to-end.md) |
 
 **DOCMERGE faza-1: 4/4 done. PR [#185](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/185)**
+
+---
+
+## 🟢 Milestone: VIOLETA — backlog PAR din prima ședință cu Violeta (2026-06-25)
+
+> Sursa + deciziile owner-ului: [`Violeta-first-meeting.md`](../Violeta-first-meeting.md) (VM1-xx).
+> Quick-win-urile au fost livrate deja; mai jos item-urile rămase, fiecare fază = un branch = un PR (§0.2).
+> Decizii cheie: import = doar config; plată în valuta exactă (MDL/EUR/USD), rapoarte convertite în MDL;
+> evenimente legate de proiect; fără IBAN în email; foldere Proiect → status; AI pre-completează
+> payee+sumă+IBAN+scop; fără rol PAR → modulul ascuns.
+
+| ID | Priority | Title | Status | Spec |
+|----|----------|-------|--------|------|
+| VM1-05 | high | Auto-salvare plătitor în registru la plată | done | [doc](../Violeta-first-meeting.md) · [PR #204](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/204) |
+| VM1-06 | high | Max 10 atașamente + upload multiplu | done | [doc](../Violeta-first-meeting.md) · [PR #204](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/204) |
+| VM1-08 | high | Email aprobare cu detalii plată (fără IBAN) | done | [doc](../Violeta-first-meeting.md) · [PR #205](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/205) |
+| VM1-09 | — | Aprobare în masă (deja exista, VF-102) | done | [doc](../Violeta-first-meeting.md) |
+| VM1-01 | high | Access-control — modulul ascuns fără rol PAR | pending | [spec](specs/VM1-01-access-control.md) |
+| VM1-02 | medium | Import config din Excel (proiecte/dept/buget) | pending | [spec](specs/VM1-02-import-config-excel.md) |
+| VM1-13 | medium | AI pre-completează din document (payee/sumă/IBAN/scop) | pending | [spec](specs/VM1-13-ai-mapping.md) |
+| VM1-03 | medium | Valute MDL/EUR/USD — rapoarte convertite în MDL (BNM) | pending | [spec](specs/VM1-03-currency-reports.md) |
+| VM1-04 | medium | Evenimente legate de proiect (`parEvents` + `eventId`) | pending | [spec](specs/VM1-04-events.md) |
+| VM1-10 | medium | Foldere PAR — Proiect → status (dep. VM1-04) | pending | [spec](specs/VM1-10-folders-project-status.md) |

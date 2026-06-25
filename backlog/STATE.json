@@ -4,8 +4,8 @@
   "last_completed": "DOCMERGE-004",
   "iterations": 171,
   "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "PAR (Payment Action Request workflow) module added 2026-06-12 on owner request. 21 items A-F (schema/roles/DOA -> create -> approve -> finance -> PDF -> admin/reports). CORE: backlog/par/PAR-CORE.md. Driver: backlog/par/BUILD-SEQUENCE.md. Build PAR before POLISH-00x.",
-  "active_milestone": "AUDIT-FIX",
+  "milestone_status": "VIOLETA (Violeta first-meeting PAR backlog VM1-xx). Source+decisions: Violeta-first-meeting.md. Shipped: VM1-05/06 (PR#204), VM1-08 (PR#205), VM1-09 (pre-existing). Pending: VM1-01 access, VM1-02 import-config, VM1-03 currency-reports, VM1-04 events, VM1-10 folders (dep VM1-04), VM1-13 ai-mapping. One phase = one branch = one PR.",
+  "active_milestone": "VIOLETA",
   "items": {
     "SPLIT-401": {
       "status": "done",
@@ -4173,6 +4173,117 @@
       ],
       "branch": "feat/AUDIT-FIX-faza-1-sidebar-payroll",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/183"
+    },
+    "VM1-05": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "Violeta-first-meeting.md",
+      "milestone": "VIOLETA",
+      "phase": "QUICKWINS",
+      "depends_on": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/204",
+      "note": "auto-save payee on payment"
+    },
+    "VM1-06": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "Violeta-first-meeting.md",
+      "milestone": "VIOLETA",
+      "phase": "QUICKWINS",
+      "depends_on": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/204",
+      "note": "max-10 attachments + multi-upload"
+    },
+    "VM1-08": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "Violeta-first-meeting.md",
+      "milestone": "VIOLETA",
+      "phase": "QUICKWINS",
+      "depends_on": [],
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/205",
+      "note": "approver email with payment details, no IBAN"
+    },
+    "VM1-09": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "Violeta-first-meeting.md",
+      "milestone": "VIOLETA",
+      "phase": "QUICKWINS",
+      "depends_on": [],
+      "note": "already built (VF-102 bulk approve in ParInbox) — no work needed"
+    },
+    "VM1-01": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/VM1-01-access-control.md",
+      "milestone": "VIOLETA",
+      "phase": "ACCESS",
+      "depends_on": [],
+      "branch": "feat/VIOLETA-faza-access-rol",
+      "priority": "high"
+    },
+    "VM1-02": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/VM1-02-import-config-excel.md",
+      "milestone": "VIOLETA",
+      "phase": "IMPORT",
+      "depends_on": [],
+      "branch": "feat/VIOLETA-faza-import-config",
+      "priority": "medium"
+    },
+    "VM1-13": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/VM1-13-ai-mapping.md",
+      "milestone": "VIOLETA",
+      "phase": "AI",
+      "depends_on": [],
+      "branch": "feat/VIOLETA-faza-ai-mapping",
+      "priority": "medium"
+    },
+    "VM1-03": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/VM1-03-currency-reports.md",
+      "milestone": "VIOLETA",
+      "phase": "CURRENCY",
+      "depends_on": [],
+      "branch": "feat/VIOLETA-faza-valute-rapoarte",
+      "priority": "medium"
+    },
+    "VM1-04": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/VM1-04-events.md",
+      "milestone": "VIOLETA",
+      "phase": "EVENTS",
+      "depends_on": [],
+      "branch": "feat/VIOLETA-faza-evenimente-foldere",
+      "priority": "medium"
+    },
+    "VM1-10": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/VM1-10-folders-project-status.md",
+      "milestone": "VIOLETA",
+      "phase": "EVENTS",
+      "depends_on": [
+        "VM1-04"
+      ],
+      "branch": "feat/VIOLETA-faza-evenimente-foldere",
+      "priority": "medium"
     }
   }
 }
