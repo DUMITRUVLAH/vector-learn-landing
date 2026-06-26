@@ -38,6 +38,7 @@ import {
 import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
+import { useParRoles } from "@/hooks/useParRoles";
 import { NotificationBell } from "@/components/app/NotificationBell";
 
 interface BusinessShellProps {
@@ -179,11 +180,27 @@ export function BusinessShell({
   const { path, navigate } = useRouter();
   const session = useBusinessSession();
 
+  // VM1-01: fetch PAR roles to gate the PAR navigation section.
+  // While loading, hasPar = false so the section stays hidden (no flicker).
+  // On error / 401 → useParRoles returns roles=[], so hasPar = false (fail-closed).
+  const { roles: parRoles, status: parRolesStatus } = useParRoles();
+  const hasPar = parRolesStatus === "resolved" && parRoles.length >= 1;
+
   // SPLIT-501: inside the PAR module, show a focused PAR-only sidebar instead of
   // the full Business Suite menu. Every /business/par/* page (which renders via
   // AppShell → BusinessShell) gets it automatically.
   const isParModule = path.startsWith("/business/par");
-  const navGroups = isParModule ? PAR_NAV_GROUPS : NAV_GROUPS;
+  // VM1-01: PAR module sidebar is only shown if user has PAR roles.
+  // If user navigates to /business/par/* without a role, server returns 403 — no need
+  // to hide PAR_NAV_GROUPS here, but we do hide the main NAV_GROUPS PAR section.
+  const navGroups = isParModule
+    ? PAR_NAV_GROUPS
+    : NAV_GROUPS.filter((g) => {
+        // Hide "PAR — Cereri de plată" section when user has no PAR role.
+        // All other sections (FinDesk, ITPark, DocMerge, Setări, etc.) always visible.
+        if (g.section === "PAR — Cereri de plată") return hasPar;
+        return true;
+      });
 
   // Guard: redirecționează la /business/login dacă sesiunea lipsește.
   useEffect(() => {
@@ -305,8 +322,8 @@ export function BusinessShell({
         className="md:hidden border-t border-border bg-card sticky bottom-0 z-20"
         aria-label="Navigare mobilă Business Suite"
       >
-        <div className="grid grid-cols-4">
-          {(isParModule
+        {(() => {
+          const mobileItems = isParModule
             ? [
                 { label: "Cereri", href: "/business/par", icon: ClipboardList },
                 { label: "Aprobări", href: "/business/par/inbox", icon: ShieldCheck },
@@ -316,10 +333,14 @@ export function BusinessShell({
             : [
                 { label: "Dashboard", href: "/business/dashboard", icon: LayoutDashboard },
                 { label: "FinDesk", href: "/business/fin/", icon: Landmark },
-                { label: "PAR", href: "/business/par", icon: ClipboardList },
+                // VM1-01: only show PAR tab if user has at least one PAR role
+                ...(hasPar ? [{ label: "PAR", href: "/business/par", icon: ClipboardList }] : []),
                 { label: "ITPark", href: "/business/itpark", icon: Building2 },
-              ]
-          ).map((item) => {
+              ];
+          const cols = mobileItems.length as 3 | 4;
+          return (
+          <div className={cols === 3 ? "grid grid-cols-3" : "grid grid-cols-4"}>
+          {mobileItems.map((item) => {
             const Icon = item.icon;
             const active =
               item.href === "/business/par"
@@ -340,7 +361,9 @@ export function BusinessShell({
               </Link>
             );
           })}
-        </div>
+          </div>
+          );
+        })()}
       </nav>
     </div>
   );

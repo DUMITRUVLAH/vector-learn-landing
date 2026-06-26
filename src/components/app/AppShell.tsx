@@ -149,6 +149,9 @@ const BUSINESS_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // VM1-01: PAR section — AppShell delegates to BusinessShell for /business/* routes
+    // (early return at line ~264), so this group is unreachable. BusinessShell owns
+    // the gate (useParRoles). Kept here for structural completeness only.
     section: "Aprobări plăți (PAR)",
     items: [
       { label: "Cereri de plată", href: "/business/par", icon: ClipboardList },
