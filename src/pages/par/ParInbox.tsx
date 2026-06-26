@@ -12,6 +12,7 @@ import { CheckCircle, XCircle, MessageSquare, Loader2, Inbox, AlertCircle, Refre
 import { AppShell } from "@/components/app/AppShell";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { useRouter } from "@/router/HashRouter";
+import { parHref } from "@/lib/parNav";
 import {
   getParInbox,
   approvePar,
@@ -256,7 +257,7 @@ interface InboxCardProps {
 }
 
 function InboxCard({ item, onAction, selected, onToggleSelect, bulkResult }: InboxCardProps) {
-  const { navigate } = useRouter();
+  const { navigate, path } = useRouter();
   const submittedDate = item.submittedAt
     ? new Date(item.submittedAt).toLocaleDateString("ro-MD", {
         day: "2-digit",
@@ -284,7 +285,7 @@ function InboxCard({ item, onAction, selected, onToggleSelect, bulkResult }: Inb
           )}
           <div>
             <button
-              onClick={() => navigate(`/app/par/${item.id}`)}
+              onClick={() => navigate(parHref(path, item.id))}
               className="font-semibold text-foreground hover:text-primary text-sm focus:outline-none focus:underline"
             >
               {item.requestNo}
@@ -430,7 +431,7 @@ function BulkApproveModal({ ids, defaultSignatureName, onClose, onDone }: BulkAp
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ParInbox() {
-  const { navigate } = useRouter();
+  const { navigate, path } = useRouter();
   const { t } = useT();
   const [items, setItems] = useState<ParInboxItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -521,7 +522,7 @@ export default function ParInbox() {
               <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} aria-hidden="true" />
             </button>
             <button
-              onClick={() => navigate("/app/par")}
+              onClick={() => navigate(parHref(path))}
               className="px-3 py-2 text-sm rounded-md border border-input hover:bg-muted text-foreground touch-target"
             >
               Toate cererile

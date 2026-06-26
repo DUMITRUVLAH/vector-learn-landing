@@ -40,6 +40,15 @@ parInvitesRoutes.post("/", requirePARRole("par_admin"), zValidator("json", invit
   const { email, par_role } = c.req.valid("json");
   const normalizedEmail = email.toLowerCase();
 
+  // VF-fix: PAR is a Business Suite module. Only allow invites from a business
+  // tenant. This prevents a learn/CRM tenant admin (who is an *implicit* par_admin)
+  // from minting PAR invites whose acceptance would silently flip the entire org's
+  // appKind to "business" and pull every CRM user into the Business Suite.
+  const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
+  if (!tenant || tenant.appKind !== "business") {
+    return c.json({ error: "wrong_app", detail: "Invitațiile PAR sunt disponibile doar în Business Suite." }, 403);
+  }
+
   // If a user with this email is already a member of this tenant, no invite needed.
   const existingUser = await db.query.users.findFirst({
     where: and(eq(users.tenantId, tenantId), eq(users.email, normalizedEmail)),
@@ -73,8 +82,7 @@ parInvitesRoutes.post("/", requirePARRole("par_admin"), zValidator("json", invit
     .returning();
 
   const url = inviteUrl(token);
-  const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
-  const emailed = await sendInviteEmail({ to: normalizedEmail, orgName: tenant?.name ?? "organizație", url });
+  const emailed = await sendInviteEmail({ to: normalizedEmail, orgName: tenant.name, url });
 
   return c.json({ id: invite.id, email: invite.email, parRole: invite.parRole, inviteUrl: url, emailed }, 201);
 });

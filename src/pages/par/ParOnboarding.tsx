@@ -12,6 +12,7 @@ import {
   Building2, Layers, Users, Loader2, ArrowRight, ArrowLeft, Check, X, Plus, SkipForward,
 } from "lucide-react";
 import { useRouter } from "@/router/HashRouter";
+import { parHref } from "@/lib/parNav";
 import { Logo } from "@/components/Logo";
 import {
   getParSettings, updateParSettings,
@@ -23,7 +24,7 @@ type Step = 1 | 2 | 3;
 const TOTAL_STEPS = 3;
 
 export function ParOnboarding() {
-  const { navigate } = useRouter();
+  const { navigate, path } = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +78,7 @@ export function ParOnboarding() {
 
       // 3) Mark complete last, so a mid-way failure leaves the wizard re-runnable.
       await updateParSettings({ onboardingComplete: true });
-      navigate("/app/par");
+      navigate(parHref(path));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Nu am putut salva. Încearcă din nou.");
       setFinishing(false);
@@ -91,7 +92,7 @@ export function ParOnboarding() {
     } catch {
       /* even if it fails, don't trap the user */
     }
-    navigate("/app/par");
+    navigate(parHref(path));
   };
 
   return (

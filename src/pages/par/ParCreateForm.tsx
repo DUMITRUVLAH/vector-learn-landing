@@ -15,6 +15,7 @@ import {
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
+import { parHref } from "@/lib/parNav";
 import { QuotesSection } from "@/components/par/QuotesSection";
 import { ApiError } from "@/lib/api";
 import {
@@ -99,7 +100,7 @@ function Section({ id, n, title, children }: { id?: string; n: string; title: st
 
 export function ParCreateForm() {
   const { data: session } = useSession();
-  const { navigate } = useRouter();
+  const { navigate, path } = useRouter();
 
   const [parId, setParId] = useState<string | null>(null);
   const [par, setPar] = useState<ParRequest | null>(null);
@@ -269,7 +270,7 @@ export function ParCreateForm() {
     try {
       setBusy(true);
       const { par: newPar } = await instantiateParTemplate(tmpl.id);
-      navigate(`/app/par/${newPar.id}`);
+      navigate(parHref(path, newPar.id));
     } catch {
       setError("Eroare la pornirea din șablon");
     } finally {
@@ -391,7 +392,7 @@ export function ParCreateForm() {
         catch { /* non-blocking — don't fail submit if vendor save fails */ }
       }
       const submitted = await submitPar(parId);
-      navigate(`/app/par/${submitted.id}`);
+      navigate(parHref(path, submitted.id));
     } catch (e) {
       if (e instanceof ApiError && e.details.length) {
         const mapped: Record<string, string> = {};
@@ -503,7 +504,7 @@ export function ParCreateForm() {
                 ) : null
               )}
               {isAdmin && (
-                <a href="#/app/par/admin" className="text-xs text-primary hover:underline w-fit">
+                <a href={`#${parHref(path, "admin")}`} className="text-xs text-primary hover:underline w-fit">
                   Gestionează codurile / departamentele / proiectele în Admin →
                 </a>
               )}

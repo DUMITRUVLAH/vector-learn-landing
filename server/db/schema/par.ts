@@ -14,6 +14,7 @@ import {
   text,
   timestamp,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { users } from "./users";
@@ -89,6 +90,9 @@ export const parMembers = pgTable(
   (t) => ({
     tenantIdx: index("par_members_tenant_idx").on(t.tenantId),
     userIdx: index("par_members_user_idx").on(t.userId),
+    // One row per (tenant, user, role) — makes role grants atomically idempotent
+    // (see grantInviteRole's onConflictDoNothing). Migration 0121.
+    tenantUserRoleUniq: uniqueIndex("par_members_tenant_user_role_uniq").on(t.tenantId, t.userId, t.role),
   })
 );
 

@@ -62,9 +62,33 @@ import {
   PAR_STATUS_LABELS,
 } from "@/lib/api/par";
 import { downloadParPdf } from "@/lib/parPdf";
+import { ApiError, type ApiFieldError } from "@/lib/api";
+import { parBase, parIdFromPath } from "@/lib/parNav";
 import { cn } from "@/lib/utils";
 
 // ─── Label helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * VF-fix: the /submit endpoint rejects an incomplete draft with HTTP 400
+ * { error: "validation_failed", errors: [{field, message}] }. The backend
+ * messages are English + technical ("End use description is required for
+ * execute_payment"), so before this fix the user only saw the raw code
+ * "validation_failed" with no hint of WHAT to fill. Map each known field to a
+ * concrete, actionable Romanian instruction; fall back to the server message
+ * for anything new so a future check is never silently swallowed.
+ */
+const SUBMIT_FIELD_HINTS: Record<string, string> = {
+  line_items: "Adaugă cel puțin un articol (rând) în secțiunea „Articole / Servicii”.",
+  total: "Suma totală estimată trebuie să fie mai mare decât 0 — verifică prețurile articolelor.",
+  end_use:
+    "Completează „Scopul și descrierea utilizării finale” (secțiunea 11) — e obligatorie pentru execuția plății.",
+  payee:
+    "Adaugă beneficiarul plății (secțiunea 12): alege un furnizor înregistrat SAU completează Nume + IBAN.",
+};
+
+function friendlySubmitError(field: string, serverMessage: string): string {
+  return SUBMIT_FIELD_HINTS[field] ?? serverMessage;
+}
 
 const PURPOSE_LABEL: Record<string, string> = {
   execute_payment: "Execute payment",
@@ -124,7 +148,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 
 // ─── VF-103: Duplicate button ──────────────────────────────────────────────────
 
-function DuplicateButton({ parId, onNavigate }: { parId: string; onNavigate: (path: string) => void }) {
+function DuplicateButton({ parId, base, onNavigate }: { parId: string; base: string; onNavigate: (path: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(false);
   const handle = async () => {
@@ -132,7 +156,7 @@ function DuplicateButton({ parId, onNavigate }: { parId: string; onNavigate: (pa
     setErr(false);
     try {
       const { par } = await duplicatePar(parId);
-      onNavigate(`/app/par/${par.id}`);
+      onNavigate(`${base}/${par.id}`);
     } catch {
       setErr(true);
       setBusy(false);
@@ -297,21 +321,26 @@ interface ActionPanelProps {
   par: ParDetailType;
   currentUserId: string;
   currentRoles: string[];
+  /** Active PAR root (/business/par or /app/par) so navigation stays in the section. */
+  base: string;
   onRefresh: () => void;
 }
 
-function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPanelProps) {
+function ActionPanel({ par, currentUserId, currentRoles, base, onRefresh }: ActionPanelProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [comment, setComment] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [showChangesForm, setShowChangesForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // VF-fix: per-field reasons why a draft can't be submitted (from /submit's `errors`).
+  const [fieldErrors, setFieldErrors] = useState<ApiFieldError[]>([]);
   // VF-202: advisory over-budget notice after submit (non-blocking).
   const [budgetWarning, setBudgetWarning] = useState<string | null>(null);
 
   const doSubmit = async () => {
     setBusy("submit");
     setError(null);
+    setFieldErrors([]);
     setBudgetWarning(null);
     try {
       const res = await submitPar(par.id);
@@ -322,7 +351,14 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
       }
       onRefresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Eroare");
+      // A failed submit is almost always an incomplete draft. Surface the exact
+      // missing fields instead of the opaque "validation_failed" code.
+      if (e instanceof ApiError && e.code === "validation_failed" && e.details.length > 0) {
+        setFieldErrors(e.details);
+        setError("Cererea nu poate fi trimisă încă — completează câmpurile de mai jos:");
+      } else {
+        setError(e instanceof Error ? e.message : "Eroare");
+      }
     } finally {
       setBusy(null);
     }
@@ -344,6 +380,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
   const do_ = async (label: string, action: () => Promise<unknown>) => {
     setBusy(label);
     setError(null);
+    setFieldErrors([]);
     try {
       await action();
       onRefresh();
@@ -495,7 +532,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
           key="paid"
           type="button"
           disabled={!!busy}
-          onClick={() => navigate(`#/app/par/finance`)}
+          onClick={() => navigate(`${base}/finance`)}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 min-h-[44px]"
           aria-label="Marchează plata în coada de finanțe"
         >
@@ -513,9 +550,18 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
       <h2 className="text-sm font-semibold text-foreground">Acțiuni disponibile</h2>
 
       {error && (
-        <div role="alert" className="flex items-center gap-2 p-2 rounded bg-destructive/10 text-destructive text-xs">
-          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
-          <span>{error}</span>
+        <div role="alert" className="flex items-start gap-2 p-2.5 rounded bg-destructive/10 text-destructive text-xs">
+          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden />
+          <div className="space-y-1">
+            <span>{error}</span>
+            {fieldErrors.length > 0 && (
+              <ul className="list-disc pl-4 space-y-0.5">
+                {fieldErrors.map((fe) => (
+                  <li key={fe.field}>{friendlySubmitError(fe.field, fe.message)}</li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 
@@ -609,7 +655,9 @@ export function ParDetailPage() {
   const { path } = router;
   const { data: session } = useSession();
   const orgName = session?.tenant.name ?? "Organizație";
-  const id = path.replace(/^\/app\/par\//, "").split("/")[0];
+  const id = parIdFromPath(path);
+  // Keep in-PAR navigation inside the active root (/business/par/* vs /app/par/*).
+  const base = parBase(path);
 
   const [par, setPar] = useState<ParDetailType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -658,7 +706,7 @@ export function ParDetailPage() {
             <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
             <span>{error ?? "Cererea nu a fost găsită."}</span>
           </div>
-          <button type="button" onClick={() => router.navigate("/app/par")} className="mt-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button type="button" onClick={() => router.navigate(base)} className="mt-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Înapoi la lista PAR
           </button>
@@ -678,7 +726,7 @@ export function ParDetailPage() {
           <div>
             <button
               type="button"
-              onClick={() => router.navigate("/app/par")}
+              onClick={() => router.navigate(base)}
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
               aria-label="Înapoi la lista PAR"
             >
@@ -697,7 +745,7 @@ export function ParDetailPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <DuplicateButton parId={par.id} onNavigate={router.navigate} />
+            <DuplicateButton parId={par.id} base={base} onNavigate={router.navigate} />
             <PoButton par={par} orgName={orgName} />
             <PdfDownloadButton par={par} onAttached={load} />
           </div>
@@ -709,6 +757,7 @@ export function ParDetailPage() {
             par={par}
             currentUserId={currentUserId}
             currentRoles={currentRoles}
+            base={base}
             onRefresh={load}
           />
         )}

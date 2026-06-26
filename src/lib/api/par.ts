@@ -694,7 +694,16 @@ export async function revokeParInvite(id: string): Promise<{ ok: boolean }> {
   return api(`/api/par/invites/${id}`, { method: "DELETE" });
 }
 
-export interface InviteInfo { email: string; parRole: ParRole; orgName: string }
+export interface InviteInfo {
+  email: string;
+  parRole: ParRole;
+  orgName: string;
+  /** True when an account already exists for this email IN THIS org — the invitee
+   *  should log in (login auto-links the pending invite) rather than set a new password. */
+  accountExists: boolean;
+  /** True when the email already belongs to a DIFFERENT org — it can't be reused here. */
+  emailInOtherOrg?: boolean;
+}
 
 export async function getInviteInfo(token: string): Promise<InviteInfo> {
   return api(`/api/auth/invite-info?token=${encodeURIComponent(token)}`);

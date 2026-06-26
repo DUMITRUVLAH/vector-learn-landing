@@ -20,6 +20,11 @@ import {
   exchangeCode,
   fetchUserInfo,
 } from "../auth/google";
+import {
+  findPendingInviteByToken,
+  grantInviteRole,
+  linkPendingInvitesForEmail,
+} from "../lib/par/acceptInvite";
 
 const signupSchema = z.object({
   tenantName: z.string().min(2).max(200),
@@ -59,8 +64,11 @@ export const authRoutes = new Hono<{ Variables: AuthVariables }>();
 
 authRoutes.post("/signup", zValidator("json", signupSchema), async (c) => {
   const body = c.req.valid("json");
+  // Normalize email to lowercase so the global one-email-one-account assumption
+  // (login lookups, PAR invite matching) holds regardless of how the user typed it.
+  const email = body.email.toLowerCase();
   const existingEmail = await db.query.users.findFirst({
-    where: eq(users.email, body.email),
+    where: eq(users.email, email),
   });
   if (existingEmail) {
     return c.json({ error: "email_taken" }, 409);
@@ -84,7 +92,7 @@ authRoutes.post("/signup", zValidator("json", signupSchema), async (c) => {
     .insert(users)
     .values({
       tenantId: tenant.id,
-      email: body.email,
+      email,
       passwordHash,
       name: body.name,
       role: "admin",
@@ -103,7 +111,7 @@ authRoutes.post("/signup", zValidator("json", signupSchema), async (c) => {
 authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
   const body = c.req.valid("json");
   const user = await db.query.users.findFirst({
-    where: eq(users.email, body.email),
+    where: eq(users.email, body.email.toLowerCase()),
   });
   if (!user) {
     return c.json({ error: "invalid_credentials" }, 401);
@@ -120,6 +128,16 @@ authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
 
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, user.tenantId) });
   if (!tenant) return c.json({ error: "tenant_not_found" }, 500);
+
+  // VF-fix: a person can be invited to PAR by email and then sign in by any path.
+  // Link any pending invite for this email→tenant now so they get their par_members
+  // role even if they never clicked the invite link. Idempotent; failure must not
+  // block login (the role can also be granted via the accept-invite endpoint).
+  try {
+    await linkPendingInvitesForEmail({ userId: user.id, email: user.email, tenantId: user.tenantId });
+  } catch (err) {
+    console.error("[PAR-invite] auto-link on login failed:", err);
+  }
 
   // AUTH-004: check if 2FA is enabled for this user
   const tfRow = await db.query.twoFactorSettings.findFirst({
@@ -150,6 +168,106 @@ authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
   return c.json({
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
     tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan, institutionType: tenant.institutionType },
+  });
+});
+
+// ─── PAR invite acceptance ──────────────────────────────────────────────────
+// The bridge that connects a `par_invites` row (by email) to a real user account
+// + a `par_members` row (by user_id), so invited approvers/finance can actually act.
+// These endpoints are PUBLIC (no requireAuth) — the invitee has no session yet —
+// but are gated by the secret invite token.
+
+// GET /api/auth/invite-info?token=… — preview an invite (email, role, org) so the
+// accept page can greet the user and pre-fill their email. Never reveals whether a
+// token is valid beyond "invalid_or_expired" to avoid leaking org membership.
+authRoutes.get("/invite-info", async (c) => {
+  const token = c.req.query("token");
+  if (!token) return c.json({ error: "invalid_or_expired" }, 400);
+
+  const invite = await findPendingInviteByToken(token);
+  if (!invite) return c.json({ error: "invalid_or_expired" }, 400);
+
+  const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, invite.tenantId) });
+
+  // Global lookup (a user belongs to exactly one tenant). If the account is in THIS
+  // tenant → tell the page to send them to log in (login auto-links the invite). If
+  // it's in ANOTHER org → the email can't be reused, so accept-invite would 409.
+  const existingUser = await db.query.users.findFirst({
+    where: eq(users.email, invite.email),
+  });
+
+  return c.json({
+    email: invite.email,
+    parRole: invite.parRole,
+    orgName: tenant?.name ?? "organizație",
+    accountExists: !!existingUser && existingUser.tenantId === invite.tenantId,
+    emailInOtherOrg: !!existingUser && existingUser.tenantId !== invite.tenantId,
+  });
+});
+
+const acceptInviteSchema = z.object({
+  token: z.string().min(1).max(128),
+  name: z.string().min(2).max(200),
+  password: z.string().min(8).max(200),
+});
+
+// POST /api/auth/accept-invite — accept an invite: create (or reuse) the user in the
+// inviting tenant, grant the invited PAR role, and mint a session so the invitee is
+// logged straight in. The tenant is promoted to "business" so the Business Suite
+// session works (see grantInviteRole).
+authRoutes.post("/accept-invite", zValidator("json", acceptInviteSchema), async (c) => {
+  const { token, name, password } = c.req.valid("json");
+
+  const invite = await findPendingInviteByToken(token);
+  if (!invite) return c.json({ error: "invalid_or_expired" }, 400);
+
+  // Look up an existing account GLOBALLY by email (not scoped to the invite tenant):
+  // login resolves users by email alone and a user belongs to exactly one tenant, so
+  // creating a second same-email row in another tenant would split logins. invite.email
+  // is already lowercased at creation.
+  const existingUser = await db.query.users.findFirst({
+    where: eq(users.email, invite.email),
+  });
+  if (existingUser) {
+    // Account already exists. If it's in THIS tenant, they just need to log in
+    // (login auto-links the pending invite → grants the PAR role). If it's in a
+    // DIFFERENT tenant, we can't add cross-tenant membership — surface that clearly
+    // rather than silently creating a duplicate account.
+    if (existingUser.tenantId === invite.tenantId) {
+      return c.json({ error: "account_exists", detail: "Există deja un cont cu acest email. Autentifică-te." }, 409);
+    }
+    return c.json(
+      { error: "email_in_other_org", detail: "Acest email este deja folosit în altă organizație. Folosește un alt email." },
+      409
+    );
+  }
+
+  // The invitee's REAL authority is the PAR role in par_members (granted below).
+  // Their tenant-level users.role must be a NON-privileged value: "admin"/"manager"
+  // are treated as IMPLICIT par_admin (see requirePARRole), so giving an invited
+  // "approver" one of those would silently make them a full PAR admin. "receptionist"
+  // is the neutral staff role with no implicit PAR powers.
+  const passwordHash = await hashPassword(password);
+  const [user] = await db
+    .insert(users)
+    .values({
+      tenantId: invite.tenantId,
+      email: invite.email,
+      passwordHash,
+      name,
+      role: "receptionist",
+    })
+    .returning();
+
+  await grantInviteRole(invite, user.id);
+
+  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? undefined;
+  const userAgent = c.req.header("user-agent") ?? undefined;
+  const { token: sessionToken, expiresAt } = await createSession(user.id, { ipAddress, userAgent });
+  setSessionCookie(c, sessionToken, expiresAt);
+
+  return c.json({
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
   });
 });
 
@@ -212,7 +330,8 @@ authRoutes.post("/forgot-password", zValidator("json", forgotPasswordSchema), as
   }
 
   // Always respond 200 — never reveal whether the email exists.
-  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+  // Lowercase to match how emails are stored (consistent with login/signup).
+  const user = await db.query.users.findFirst({ where: eq(users.email, email.toLowerCase()) });
   if (!user) return c.json({ ok: true });
 
   // Delete any previous unused tokens for this user.
@@ -591,6 +710,14 @@ authRoutes.get("/google/callback", async (c) => {
     await db
       .insert(finMembers)
       .values({ tenantId: tenant.id, userId: created.id, role: "owner" });
+  }
+
+  // VF-fix: link any pending PAR invite for this email→tenant (same as password login)
+  // so an invited person who signs in with Google also gets their par_members role.
+  try {
+    await linkPendingInvitesForEmail({ userId: user.id, email: user.email, tenantId: user.tenantId });
+  } catch (err) {
+    console.error("[PAR-invite] auto-link on Google login failed:", err);
   }
 
   // Google verifies the email itself, so we skip the app's 2FA gate here and
