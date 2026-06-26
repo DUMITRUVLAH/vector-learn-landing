@@ -12,6 +12,7 @@ import ParFinanceQueue from "./pages/par/ParFinanceQueue";
 import { ParDetailPage } from "./pages/par/ParDetail";
 import { ParAdmin } from "./pages/par/ParAdmin";
 import { ParReports } from "./pages/par/ParReports";
+import { ParFolders } from "./pages/par/ParFolders";
 
 // DOCMERGE module routes
 import { DocMergeTemplatesPage } from "./pages/business/docmerge/DocMergeTemplatesPage";
@@ -160,6 +161,7 @@ function Routes() {
   if (path.startsWith("/business/par/inbox")) return <BusinessGuardPage><ParInbox /></BusinessGuardPage>;
   if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParFinanceQueue /></BusinessGuardPage>;
   if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParAdminPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/par/folders")) return <BusinessGuardPage><ParFolders /></BusinessGuardPage>;
   if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParReports /></BusinessGuardPage>;
   if (path.match(/^\/business\/par\/[^/]+$/)) return <BusinessGuardPage><ParDetailPage /></BusinessGuardPage>;
   if (path.startsWith("/business/par")) return <BusinessGuardPage><ParDashboard /></BusinessGuardPage>;

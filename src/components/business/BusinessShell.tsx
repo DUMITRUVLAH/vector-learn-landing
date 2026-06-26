@@ -34,6 +34,7 @@ import {
   ShieldCheck,
   Shield,
   ArrowLeft,
+  FolderOpen,
 } from "lucide-react";
 import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
@@ -147,6 +148,7 @@ const PAR_NAV_GROUPS: NavGroup[] = [
   {
     section: "Analiză",
     items: [
+      { label: "Foldere proiecte", href: "/business/par/folders", icon: FolderOpen }, // VM1-10
       { label: "Rapoarte & statistici", href: "/business/par/reports", icon: BarChart3 },
     ],
   },

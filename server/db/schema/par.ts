@@ -150,6 +150,30 @@ export const parBudgetCodes = pgTable(
   })
 );
 
+/** VM1-04: Events — sub-entity of a project (Proiect → Eveniment → PAR).
+ * Defined before parRequests so eventId FK is resolvable without a forward ref. */
+export const parEvents = pgTable(
+  "par_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    /** Optional parent project. Null = event not tied to a specific project. */
+    projectId: uuid("project_id").references(() => parProjects.id, { onDelete: "set null" }),
+    name: varchar("name", { length: 200 }).notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_events_tenant_idx").on(t.tenantId),
+    projectIdx: index("par_events_project_idx").on(t.projectId),
+  })
+);
+
 /**
  * Vendor / Payee registry (section 12 — GDPR-sensitive: IDNP + IBAN).
  * Reusable across PARs so a requestor picks an existing payee instead of re-typing.
@@ -270,6 +294,8 @@ export const parRequests = pgTable(
     dateNeeded: timestamp("date_needed", { withTimezone: true }),
     /** Section 6 — project / program */
     projectId: uuid("project_id").references(() => parProjects.id, { onDelete: "set null" }),
+    /** VM1-04: optional event (sub-entity of project). Nullable FK → par_events. */
+    eventId: uuid("event_id").references(() => parEvents.id, { onDelete: "set null" }),
     /** Section 7 */
     budgetCodeId: uuid("budget_code_id").references(() => parBudgetCodes.id, { onDelete: "set null" }),
     budgetCodeNote: text("budget_code_note"),
@@ -704,3 +730,5 @@ export type ParReceipt = typeof parReceipts.$inferSelect;
 export type NewParReceipt = typeof parReceipts.$inferInsert;
 export type ParReceiptLine = typeof parReceiptLines.$inferSelect;
 export type NewParReceiptLine = typeof parReceiptLines.$inferInsert;
+export type ParEvent = typeof parEvents.$inferSelect;
+export type NewParEvent = typeof parEvents.$inferInsert;

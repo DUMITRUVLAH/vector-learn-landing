@@ -23,6 +23,7 @@ import {
   parBudgetCodes,
   parDepartments,
   parProjects,
+  parEvents, // VM1-04
   parLineItems,
 } from "../db/schema/par";
 import { users } from "../db/schema/users";
@@ -136,6 +137,36 @@ parReportsRoutes.get("/by-project", async (c) => {
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
     id: r.id as string | null,
     label: ((r.label as string | null) ?? r.id ?? "unknown") as string,
+    totalCents: Number(r.totalCents ?? 0),
+    count: Number(r.count ?? 0),
+  }));
+
+  return c.json({ items });
+});
+
+/** GET /api/par/reports/by-event — VM1-04: spend per event */
+parReportsRoutes.get("/by-event", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const { from, to } = periodSchema.parse(c.req.query());
+
+  const rows = await db
+    .select({
+      id: parRequests.eventId,
+      label: parEvents.name,
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+      count: sql<number>`cast(count(*) as integer)`,
+    })
+    .from(parRequests)
+    .leftJoin(parEvents, and(
+      eq(parEvents.id, parRequests.eventId!),
+      eq(parEvents.tenantId, tenantId)
+    ))
+    .where(and(buildPeriodWhere(tenantId, from, to), isNotNull(parRequests.eventId)))
+    .groupBy(parRequests.eventId, parEvents.name);
+
+  const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
+    id: r.id as string | null,
+    label: ((r.label as string | null) ?? "Eveniment necunoscut") as string,
     totalCents: Number(r.totalCents ?? 0),
     count: Number(r.count ?? 0),
   }));

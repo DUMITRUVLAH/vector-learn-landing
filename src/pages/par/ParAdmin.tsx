@@ -64,6 +64,7 @@ import {
   getBudgetCodesUsage,
   type BudgetCodeUsage,
   listVendors,
+  listEvents,
   createDepartment,
   updateDepartment,
   deleteDepartment,
@@ -76,6 +77,9 @@ import {
   createVendor,
   updateVendor,
   deleteVendor,
+  createEvent,
+  updateEvent,
+  deleteEvent,
   searchRegistryCompanies,
   formatMDL,
   importParConfigExcel,
@@ -88,6 +92,7 @@ import {
   type ParProject,
   type ParBudgetCode,
   type ParVendor,
+  type ParEvent,
   type RegistryCompany,
 } from "@/lib/api/par";
 import { useRouter } from "@/router/HashRouter";
@@ -1312,12 +1317,13 @@ function ParMembersTab() {
 
 // ─── Sub-tab: Reference Data ──────────────────────────────────────────────────
 
-type RefSection = "budgetCodes" | "departments" | "projects" | "vendors";
+type RefSection = "budgetCodes" | "departments" | "projects" | "events" | "vendors";
 
 function ParReferenceData() {
   const [section, setSection] = useState<RefSection>("budgetCodes");
   const [departments, setDepartments] = useState<ParDepartment[]>([]);
   const [projects, setProjects] = useState<ParProject[]>([]);
+  const [events, setEvents] = useState<ParEvent[]>([]); // VM1-04
   const [budgetCodes, setBudgetCodes] = useState<ParBudgetCode[]>([]);
   const [vendors, setVendors] = useState<ParVendor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1332,14 +1338,16 @@ function ParReferenceData() {
   const load = async () => {
     setLoading(true);
     try {
-      const [depts, projs, codes, vends] = await Promise.all([
+      const [depts, projs, evts, codes, vends] = await Promise.all([
         listDepartments(),
         listProjects(),
+        listEvents(), // VM1-04
         listBudgetCodes(),
         listVendors(),
       ]);
       setDepartments(depts.items ?? []);
       setProjects(projs.items ?? []);
+      setEvents(evts.events ?? []); // VM1-04
       setBudgetCodes(codes.items ?? []);
       setVendors(vends.items ?? []);
     } catch {
@@ -1385,6 +1393,7 @@ function ParReferenceData() {
     budgetCodes: "Coduri bugetare",
     departments: "Departamente",
     projects: "Proiecte/Programe",
+    events: "Evenimente", // VM1-04
     vendors: "Furnizori/Plătitori",
   };
 
@@ -1538,6 +1547,23 @@ function ParReferenceData() {
             { id: "name", label: "Denumire", placeholder: "ex. Digital Safeguard" },
             { id: "donor", label: "Donor (opțional)", placeholder: "ex. USAID" },
           ]}
+        />
+      )}
+
+      {/* VM1-04: Events */}
+      {section === "events" && (
+        <SimpleRefTable
+          title="Evenimente"
+          items={events}
+          columns={[{ label: "Denumire", key: "name" as const }]}
+          onAdd={(payload) =>
+            createEvent({ name: payload.name as string }).then(load)
+          }
+          onEdit={(id, payload) =>
+            updateEvent(id, { name: payload.name as string }).then(load)
+          }
+          onDelete={(id) => deleteEvent(id).then(load)}
+          addFields={[{ id: "name", label: "Denumire eveniment", placeholder: "ex. Conferința Anuală 2026" }]}
         />
       )}
 

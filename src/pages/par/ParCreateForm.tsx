@@ -21,13 +21,13 @@ import {
   createPar, updatePar, submitPar,
   addLineItem, deleteLineItem,
   uploadAttachment, deleteAttachment,
-  listDepartments, listProjects, listBudgetCodes, listVendors, createVendor,
+  listDepartments, listProjects, listEvents, listBudgetCodes, listVendors, createVendor,
   searchRegistryCompanies, getBudgetCodeBalance,
   listParTemplates, saveParTemplate, instantiateParTemplate,
   prefillParFromDocument,
   formatMDL,
   type ParRequest, type ParLineItem, type ParAttachment,
-  type ParDepartment, type ParProject, type ParBudgetCode, type ParVendor,
+  type ParDepartment, type ParProject, type ParEvent, type ParBudgetCode, type ParVendor,
   type ParPurpose, type ParChargeTo, type ParAttachmentKind,
   type RegistryCompany, type BudgetCodeBalance, type ParTemplate,
   type ParPrefillResult,
@@ -112,6 +112,7 @@ export function ParCreateForm() {
 
   const [departments, setDepartments] = useState<ParDepartment[]>([]);
   const [projects, setProjects] = useState<ParProject[]>([]);
+  const [events, setEvents] = useState<ParEvent[]>([]);
   const [budgetCodes, setBudgetCodes] = useState<ParBudgetCode[]>([]);
   const [vendors, setVendors] = useState<ParVendor[]>([]);
 
@@ -139,6 +140,7 @@ export function ParCreateForm() {
   const [departmentId, setDepartmentId] = useState("");
   const [dateNeeded, setDateNeeded] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [eventId, setEventId] = useState(""); // VM1-04
   const [budgetCodeId, setBudgetCodeId] = useState("");
   const [budgetCodeNote, setBudgetCodeNote] = useState("");
   // Classification. chargeTo stays a fixed default; VF-501 makes purpose selectable so the
@@ -186,13 +188,15 @@ export function ParCreateForm() {
     let alive = true;
     (async () => {
       try {
-        const [depts, projs, codes, vends, tmplRes] = await Promise.all([
-          listDepartments(), listProjects(), listBudgetCodes(), listVendors(),
+        const [depts, projs, evts, codes, vends, tmplRes] = await Promise.all([
+          listDepartments(), listProjects(), listEvents(),
+          listBudgetCodes(), listVendors(),
           listParTemplates().catch(() => ({ templates: [] })),
         ]);
         if (!alive) return;
         setDepartments(depts.items.filter((d) => d.active));
         setProjects(projs.items.filter((p) => p.active));
+        setEvents(evts.events.filter((e) => e.active));
         setBudgetCodes(codes.items.filter((c) => c.active));
         setVendors(vends.items.filter((v) => v.active));
         setTemplates(tmplRes.templates ?? []);
@@ -220,6 +224,7 @@ export function ParCreateForm() {
       department_id: departmentId || null,
       date_needed: dateNeeded ? new Date(dateNeeded).toISOString() : null,
       project_id: projectId || null,
+      event_id: eventId || null, // VM1-04
       budget_code_id: budgetCodeId || null,
       budget_code_note: budgetCodeNote || null,
       purpose, charge_to: chargeTo, charge_billing_code: null,
@@ -230,7 +235,7 @@ export function ParCreateForm() {
       attachments_present: attachmentsPresent, attachments_note: attachmentsNote || null,
       currency,
     });
-  }, [dateOfRequest, requestorTitle, departmentId, dateNeeded, projectId, budgetCodeId,
+  }, [dateOfRequest, requestorTitle, departmentId, dateNeeded, projectId, eventId, budgetCodeId,
       budgetCodeNote, purpose, chargeTo, endUse, vendorId, payeeName,
       payeeIdnp, payeeIban, payeeBank, attachmentsPresent, attachmentsNote, currency]);
 
@@ -525,11 +530,31 @@ export function ParCreateForm() {
               <input id="dn" type="date" className={inputCls} value={dateNeeded} min={dateOfRequest} onChange={(e) => setDateNeeded(e.target.value)} />
             </Field>
             <Field label="Proiect / Program" htmlFor="proj">
-              <select id="proj" className={inputCls} value={projectId} onChange={(e) => setProjectId(e.target.value)} aria-label="Proiect">
+              <select id="proj" className={inputCls} value={projectId}
+                onChange={(e) => { setProjectId(e.target.value); setEventId(""); }}
+                aria-label="Proiect">
                 <option value="">— Selectează —</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
+            {/* VM1-04: Event — filtered by selected project */}
+            {(() => {
+              const filteredEvents = projectId
+                ? events.filter((ev) => ev.projectId === projectId)
+                : events;
+              return filteredEvents.length > 0 ? (
+                <Field label="Eveniment" htmlFor="evtId">
+                  <select id="evtId" className={inputCls} value={eventId}
+                    onChange={(e) => setEventId(e.target.value)}
+                    aria-label="Eveniment">
+                    <option value="">— Selectează —</option>
+                    {filteredEvents.map((ev) => (
+                      <option key={ev.id} value={ev.id}>{ev.name}</option>
+                    ))}
+                  </select>
+                </Field>
+              ) : null;
+            })()}
             <Field label="Cod bugetar" htmlFor="bc">
               <select id="bc" className={inputCls} value={budgetCodeId} onChange={(e) => setBudgetCodeId(e.target.value)} aria-label="Cod bugetar">
                 <option value="">— Selectează —</option>

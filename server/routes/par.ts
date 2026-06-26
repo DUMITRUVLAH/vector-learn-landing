@@ -59,6 +59,8 @@ const createParSchema = z.object({
   department_id: z.string().uuid().optional().nullable(),
   date_needed: z.string().datetime().optional().nullable(),
   project_id: z.string().uuid().optional().nullable(),
+  // VM1-04: optional event (sub-entity of project)
+  event_id: z.string().uuid().optional().nullable(),
   budget_code_id: z.string().uuid().optional().nullable(),
   budget_code_note: z.string().max(500).optional().nullable(),
   purpose: z.enum(parPurposeValues).optional(),
@@ -72,6 +74,8 @@ const updateParSchema = z.object({
   department_id: z.string().uuid().optional().nullable(),
   date_needed: z.string().datetime().optional().nullable(),
   project_id: z.string().uuid().optional().nullable(),
+  // VM1-04: optional event (sub-entity of project)
+  event_id: z.string().uuid().optional().nullable(),
   budget_code_id: z.string().uuid().optional().nullable(),
   budget_code_note: z.string().max(500).optional().nullable(),
   purpose: z.enum(parPurposeValues).optional(),
@@ -177,6 +181,7 @@ parRoutes.post(
         departmentId: body.department_id ?? null,
         dateNeeded: body.date_needed ? new Date(body.date_needed) : null,
         projectId: body.project_id ?? null,
+        eventId: body.event_id ?? null,
         budgetCodeId: body.budget_code_id ?? null,
         budgetCodeNote: body.budget_code_note ?? null,
         purpose: body.purpose ?? "execute_payment",
@@ -540,6 +545,7 @@ parRoutes.get("/", async (c) => {
   const status = c.req.query("status");
   const purpose = c.req.query("purpose");
   const projectId = c.req.query("project_id");
+  const eventId = c.req.query("event_id"); // VM1-04
   const q = c.req.query("q");
   // VF-105: date range (on dateOfRequest) + total range (cents)
   const dateFrom = c.req.query("date_from");
@@ -566,6 +572,9 @@ parRoutes.get("/", async (c) => {
   }
   if (projectId) {
     conditions.push(eq(parRequests.projectId, projectId));
+  }
+  if (eventId) { // VM1-04
+    conditions.push(eq(parRequests.eventId, eventId));
   }
 
   // VF-105: full-text-ish search across requestNo, payeeName, endUse, and line-item descriptions.
@@ -876,6 +885,7 @@ parRoutes.patch(
     if (body.date_needed !== undefined)
       updateData.dateNeeded = body.date_needed ? new Date(body.date_needed) : null;
     if (body.project_id !== undefined) updateData.projectId = body.project_id;
+    if (body.event_id !== undefined) updateData.eventId = body.event_id;
     if (body.budget_code_id !== undefined)
       updateData.budgetCodeId = body.budget_code_id;
     if (body.budget_code_note !== undefined)
