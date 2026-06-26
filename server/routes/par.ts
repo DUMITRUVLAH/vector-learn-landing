@@ -87,8 +87,8 @@ const updateParSchema = z.object({
   // Section 13
   attachments_present: z.boolean().optional(),
   attachments_note: z.string().max(2000).optional().nullable(),
-  // VF-203: currency (MDL default). Only editable while draft.
-  currency: z.enum(["MDL", "EUR", "USD", "RON"]).optional(),
+  // VM1-03: currency MDL/EUR/USD only (RON removed).
+  currency: z.enum(["MDL", "EUR", "USD"]).optional(),
 });
 
 const lineItemSchema = z.object({
@@ -357,7 +357,8 @@ const quoteSchema = z.object({
   vendor_id: z.string().uuid().optional().nullable(),
   vendor_name: z.string().max(300).optional().nullable(),
   total_cents: z.number().int().positive(),
-  currency: z.enum(["MDL", "EUR", "USD", "RON"]).optional(),
+  // VM1-03: currency MDL/EUR/USD only.
+  currency: z.enum(["MDL", "EUR", "USD"]).optional(),
   valid_until: z.string().datetime({ offset: true }).or(z.string().date()).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
   file_url: z.string().max(2000).optional().nullable(),

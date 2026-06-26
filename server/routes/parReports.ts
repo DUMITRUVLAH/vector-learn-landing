@@ -48,7 +48,10 @@ function buildPeriodWhere(tenantId: string, from?: string, to?: string) {
   return and(...conditions);
 }
 
-/** GET /api/par/reports/by-budget */
+/** GET /api/par/reports/by-budget
+ * VM1-03: sums totalMdlCents (frozen at submit) instead of totalEstimatedCents (native currency).
+ * Requests without totalMdlCents (legacy drafts) fall back to totalEstimatedCents.
+ */
 parReportsRoutes.get("/by-budget", async (c) => {
   const tenantId = c.get("user").tenantId;
   const { from, to } = periodSchema.parse(c.req.query());
@@ -58,7 +61,8 @@ parReportsRoutes.get("/by-budget", async (c) => {
       id: parRequests.budgetCodeId,
       label: parBudgetCodes.code,
       name: parBudgetCodes.name,
-      totalCents: sql<number>`cast(sum(${parRequests.totalEstimatedCents}) as integer)`,
+      // VM1-03: use MDL-equivalent for mixed-currency aggregation
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
@@ -79,7 +83,7 @@ parReportsRoutes.get("/by-budget", async (c) => {
   return c.json({ items });
 });
 
-/** GET /api/par/reports/by-department */
+/** GET /api/par/reports/by-department — VM1-03: MDL totals */
 parReportsRoutes.get("/by-department", async (c) => {
   const tenantId = c.get("user").tenantId;
   const { from, to } = periodSchema.parse(c.req.query());
@@ -88,7 +92,7 @@ parReportsRoutes.get("/by-department", async (c) => {
     .select({
       id: parRequests.departmentId,
       label: parDepartments.name,
-      totalCents: sql<number>`cast(sum(${parRequests.totalEstimatedCents}) as integer)`,
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
@@ -109,7 +113,7 @@ parReportsRoutes.get("/by-department", async (c) => {
   return c.json({ items });
 });
 
-/** GET /api/par/reports/by-project */
+/** GET /api/par/reports/by-project — VM1-03: MDL totals */
 parReportsRoutes.get("/by-project", async (c) => {
   const tenantId = c.get("user").tenantId;
   const { from, to } = periodSchema.parse(c.req.query());
@@ -118,7 +122,7 @@ parReportsRoutes.get("/by-project", async (c) => {
     .select({
       id: parRequests.projectId,
       label: parProjects.name,
-      totalCents: sql<number>`cast(sum(${parRequests.totalEstimatedCents}) as integer)`,
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
@@ -139,7 +143,7 @@ parReportsRoutes.get("/by-project", async (c) => {
   return c.json({ items });
 });
 
-/** GET /api/par/reports/by-charge-to */
+/** GET /api/par/reports/by-charge-to — VM1-03: MDL totals */
 parReportsRoutes.get("/by-charge-to", async (c) => {
   const tenantId = c.get("user").tenantId;
   const { from, to } = periodSchema.parse(c.req.query());
@@ -147,7 +151,7 @@ parReportsRoutes.get("/by-charge-to", async (c) => {
   const rows = await db
     .select({
       id: parRequests.chargeTo,
-      totalCents: sql<number>`cast(sum(${parRequests.totalEstimatedCents}) as integer)`,
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
@@ -164,7 +168,35 @@ parReportsRoutes.get("/by-charge-to", async (c) => {
   return c.json({ items });
 });
 
-/** GET /api/par/reports/aging — count/sum per status + avg age */
+/** GET /api/par/reports/currency-breakdown — VM1-03: per-currency native totals + aggregated MDL total */
+parReportsRoutes.get("/currency-breakdown", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const { from, to } = periodSchema.parse(c.req.query());
+
+  const rows = await db
+    .select({
+      currency: parRequests.currency,
+      nativeTotalCents: sql<number>`cast(sum(${parRequests.totalEstimatedCents}) as integer)`,
+      mdlTotalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+      count: sql<number>`cast(count(*) as integer)`,
+    })
+    .from(parRequests)
+    .where(buildPeriodWhere(tenantId, from, to))
+    .groupBy(parRequests.currency);
+
+  const data = Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? [];
+  const byCurrency = (data as Record<string, unknown>[]).map((r) => ({
+    currency: (r.currency ?? "MDL") as string,
+    nativeTotalCents: Number(r.nativeTotalCents ?? 0),
+    mdlTotalCents: Number(r.mdlTotalCents ?? 0),
+    count: Number(r.count ?? 0),
+  }));
+  const totalMdlCents = byCurrency.reduce((s, r) => s + r.mdlTotalCents, 0);
+
+  return c.json({ byCurrency, totalMdlCents });
+});
+
+/** GET /api/par/reports/aging — count/sum per status + avg age — VM1-03: MDL totals */
 parReportsRoutes.get("/aging", async (c) => {
   const tenantId = c.get("user").tenantId;
 
@@ -172,7 +204,7 @@ parReportsRoutes.get("/aging", async (c) => {
     .select({
       status: parRequests.status,
       count: sql<number>`cast(count(*) as integer)`,
-      totalCents: sql<number>`cast(sum(${parRequests.totalEstimatedCents}) as integer)`,
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
       avgAgingDays: sql<number>`
         cast(avg(
           extract(epoch from (now() - ${parRequests.createdAt})) / 86400

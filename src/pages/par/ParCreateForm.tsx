@@ -146,7 +146,7 @@ export function ParCreateForm() {
   const [purpose, setPurpose] = useState<ParPurpose>("execute_payment");
   const chargeTo: ParChargeTo = "program";
   // VF-203: currency (MDL default). Editable while draft.
-  const [currency, setCurrency] = useState<"MDL" | "EUR" | "USD" | "RON">("MDL");
+  const [currency, setCurrency] = useState<"MDL" | "EUR" | "USD">("MDL");
   // End-use (11)
   const [endUse, setEndUse] = useState("");
   // Payee (12)
@@ -638,7 +638,6 @@ export function ParCreateForm() {
                 <option value="MDL">MDL</option>
                 <option value="EUR">EUR</option>
                 <option value="USD">USD</option>
-                <option value="RON">RON</option>
               </select>
             </div>
             <span className={cn("text-base font-semibold", aboveThreshold ? "text-orange-700 dark:text-orange-300" : "text-foreground")}>{fmtMoney(totalCents, currency)}</span>
