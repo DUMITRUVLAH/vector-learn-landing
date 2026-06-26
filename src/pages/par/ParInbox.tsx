@@ -1,5 +1,5 @@
 /**
- * PAR-108 — /app/par/inbox
+ * PAR-108 — /business/par/inbox
  *
  * Approver inbox: lista de PAR-uri unde userul curent e aprobatorul pasului activ.
  * Acțiuni: Aprobă / Respinge / Solicită modificări (modal cu comentariu + semnătură).
@@ -284,7 +284,7 @@ function InboxCard({ item, onAction, selected, onToggleSelect, bulkResult }: Inb
           )}
           <div>
             <button
-              onClick={() => navigate(`/app/par/${item.id}`)}
+              onClick={() => navigate(`/business/par/${item.id}`)}
               className="font-semibold text-foreground hover:text-primary text-sm focus:outline-none focus:underline"
             >
               {item.requestNo}
@@ -521,7 +521,7 @@ export default function ParInbox() {
               <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} aria-hidden="true" />
             </button>
             <button
-              onClick={() => navigate("/app/par")}
+              onClick={() => navigate("/business/par")}
               className="px-3 py-2 text-sm rounded-md border border-input hover:bg-muted text-foreground touch-target"
             >
               Toate cererile

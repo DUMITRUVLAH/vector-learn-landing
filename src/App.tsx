@@ -92,21 +92,29 @@ function RedirectToBusiness() {
   return null;
 }
 
+/**
+ * SHELL-501: redirect a legacy /app/* business path to its /business/* canonical.
+ * Business modules (PAR, Cont de plată) used to live under /app/*, where AppShell renders
+ * the CRM sidebar (with the grădiniță/kinder section). Canonicalizing them under /business/*
+ * means they always render BusinessShell — no CRM-shell leak, no double-sidebar flash.
+ */
+function RedirectHash({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.hash = to;
+  }, [to]);
+  return null;
+}
+
 function Routes() {
   const { path } = useRouter();
 
   // Root → redirect to /business
   if (path === "/" || path === "") return <RedirectToBusiness />;
 
-  // PAR routes under /app/par/*
-  if (path.startsWith("/app/par/onboarding")) return <ParOnboarding />;
-  if (path.startsWith("/app/par/new")) return <ParCreateForm />;
-  if (path.startsWith("/app/par/inbox")) return <ParInbox />;
-  if (path.startsWith("/app/par/finance")) return <ParFinanceQueue />;
-  if (path.startsWith("/app/par/admin")) return <ParAdminPage />;
-  if (path.startsWith("/app/par/reports")) return <ParReports />;
-  if (path.match(/^\/app\/par\/[^/]+$/)) return <ParDetailPage />;
-  if (path.startsWith("/app/par")) return <ParDashboard />;
+  // SHELL-501: PAR is a business module — its canonical home is /business/par/* (BusinessShell).
+  // Redirect any legacy /app/par/* link to /business/par/* so it never renders the CRM shell
+  // (which would show the grădiniță sidebar) and never causes the double-sidebar flash.
+  if (path.startsWith("/app/par")) return <RedirectHash to={path.replace("/app/par", "/business/par")} />;
 
   // Business landing + login
   if (path === "/business" || path === "/business/") return <BusinessLandingPage />;
@@ -171,15 +179,17 @@ function Routes() {
   if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge")) return <BusinessGuardPage><DocMergeTemplatesPage /></BusinessGuardPage>;
 
-  // Payment accounts (cont de plată)
-  if (path.startsWith("/app/conturi-plata/nou")) return <BusinessGuardPage><PaymentAccountEditorPage /></BusinessGuardPage>;
+  // Payment accounts (cont de plată) — business module, canonical under /business/conturi-plata.
+  // SHELL-501: redirect legacy /app/conturi-plata/* so it renders BusinessShell, not the CRM shell.
+  if (path.startsWith("/app/conturi-plata")) return <RedirectHash to={path.replace("/app/conturi-plata", "/business/conturi-plata")} />;
+  if (path.startsWith("/business/conturi-plata/nou")) return <BusinessGuardPage><PaymentAccountEditorPage /></BusinessGuardPage>;
   {
-    const editMatch = path.match(/^\/app\/conturi-plata\/([^/?]+)\/editeaza/);
+    const editMatch = path.match(/^\/business\/conturi-plata\/([^/?]+)\/editeaza/);
     if (editMatch) return <BusinessGuardPage><PaymentAccountEditorPage accountId={editMatch[1]} /></BusinessGuardPage>;
-    const viewMatch = path.match(/^\/app\/conturi-plata\/([^/?]+)/);
+    const viewMatch = path.match(/^\/business\/conturi-plata\/([^/?]+)/);
     if (viewMatch) return <BusinessGuardPage><PaymentAccountViewPage accountId={viewMatch[1]} /></BusinessGuardPage>;
   }
-  if (path.startsWith("/app/conturi-plata")) return <BusinessGuardPage><PaymentAccountsPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/conturi-plata")) return <BusinessGuardPage><PaymentAccountsPage /></BusinessGuardPage>;
 
   // Parties detail
   if (path.match(/^\/business\/fin\/parties\/[^/]+$/)) return <BusinessGuardPage><PartyDetailPage /></BusinessGuardPage>;

@@ -874,7 +874,7 @@ export function FinExpensesPage() {
                             {/* SPLIT-202: PAR source badge with link */}
                             {exp.source === "par" && exp.parRequestId && (
                               <a
-                                href={`#/app/par/${exp.parRequestId}`}
+                                href={`#/business/par/${exp.parRequestId}`}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
                                 aria-label="Vezi PAR sursă"
                               >

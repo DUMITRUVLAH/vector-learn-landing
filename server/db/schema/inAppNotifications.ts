@@ -20,7 +20,7 @@ export interface InAppNotificationPayload {
   lead_id?: string;
   interaction_id?: string;
   actor_name?: string;
-  /** PAR-111: PAR ID for filtering/deep-link to /app/par/:id */
+  /** PAR-111: PAR ID for filtering/deep-link to /business/par/:id */
   par_id?: string;
 }
 

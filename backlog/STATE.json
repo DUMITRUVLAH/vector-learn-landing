@@ -4290,6 +4290,18 @@
       "branch": "feat/VIOLETA-faza-evenimente-foldere",
       "priority": "medium",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/210"
+    },
+    "SHELL-501": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SHELL-501-business-canonical-shell.md",
+      "milestone": "SHELL",
+      "phase": "SHELL3",
+      "depends_on": [],
+      "branch": "fix/SHELL-business-canonical-par",
+      "priority": "high",
+      "note": "business modules (PAR + conturi-plata) were under /app/* → CRM shell w/ gradinite + double-sidebar; canonicalized to /business/* + redirects + deep-link fixes"
     }
   }
 }

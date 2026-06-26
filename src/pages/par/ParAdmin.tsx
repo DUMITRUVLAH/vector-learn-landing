@@ -1,5 +1,5 @@
 /**
- * PAR-116 — /app/par/admin
+ * PAR-116 — /business/par/admin
  *
  * Administration panel for par_admin only. Four tabs:
  *   1. DOA Matrix — add/edit/delete rows (amount bands → approval steps)
@@ -2150,7 +2150,7 @@ export function ParAdmin({ isAdmin }: ParAdminProps) {
           </div>
           <button
             type="button"
-            onClick={() => navigate("/app/par")}
+            onClick={() => navigate("/business/par")}
             className="mt-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ChevronRight className="h-4 w-4 rotate-180" aria-hidden />

@@ -1,5 +1,5 @@
 /**
- * VF-003 — /app/par/onboarding
+ * VF-003 — /business/par/onboarding
  *
  * 3-step wizard that takes a brand-new organization from an empty PAR setup to a working one
  * in under 2 minutes. Every step is skippable; sensible defaults are pre-filled. On finalize
@@ -77,7 +77,7 @@ export function ParOnboarding() {
 
       // 3) Mark complete last, so a mid-way failure leaves the wizard re-runnable.
       await updateParSettings({ onboardingComplete: true });
-      navigate("/app/par");
+      navigate("/business/par");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Nu am putut salva. Încearcă din nou.");
       setFinishing(false);
@@ -91,7 +91,7 @@ export function ParOnboarding() {
     } catch {
       /* even if it fails, don't trap the user */
     }
-    navigate("/app/par");
+    navigate("/business/par");
   };
 
   return (

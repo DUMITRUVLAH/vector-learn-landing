@@ -90,7 +90,7 @@ export function PaymentApprovalBadge({
           </p>
           <button
             type="button"
-            onClick={() => navigate("/app/par/new")}
+            onClick={() => navigate("/business/par/new")}
             className={cn(
               "inline-flex items-center gap-1 text-xs font-medium text-primary",
               "underline-offset-2 hover:underline focus-visible:outline-none",
@@ -185,7 +185,7 @@ export function PaymentApprovalBadge({
         <span className="ml-1 opacity-70">— {parStatus.request_no}</span>
         <button
           type="button"
-          onClick={() => navigate(`/app/par/${parStatus.id}`)}
+          onClick={() => navigate(`/business/par/${parStatus.id}`)}
           className={cn(
             "ml-2 inline-flex items-center gap-0.5 text-xs",
             "underline-offset-2 hover:underline focus-visible:outline-none",

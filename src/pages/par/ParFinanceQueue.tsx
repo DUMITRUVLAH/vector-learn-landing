@@ -1,5 +1,5 @@
 /**
- * PAR-112 — /app/par/finance
+ * PAR-112 — /business/par/finance
  *
  * Finance queue: lista de PAR-uri aprobate (execute_payment) + cele in_finance / reapproval_required.
  * Acțiuni:
