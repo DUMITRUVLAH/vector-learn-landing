@@ -646,11 +646,13 @@ const parStatusValues = [
 ] as const;
 
 // ─── GET /api/par/:id — detail ───────────────────────────────────────────────
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 parRoutes.get("/:id", async (c) => {
   const user = c.get("user");
   const tenantId = user.tenantId;
   const parId = c.req.param("id");
+  if (!UUID_RE.test(parId)) return c.json({ error: "not_found" }, 404);
 
   const par = await getPAR(parId, tenantId);
   if (!par) return c.json({ error: "not_found" }, 404);
