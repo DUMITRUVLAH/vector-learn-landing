@@ -16,6 +16,8 @@ export interface StatementTxn {
   tx_date: string | null; // YYYY-MM-DD
   description: string;
   counterparty: string | null;
+  /** Counterparty fiscal code (IDNO/cod fiscal) if present in the description; else null. */
+  counterparty_idno: string | null;
   amount_cents: number; // positive, account currency (MDL) minor units
   direction: "in" | "out";
   currency: string; // account currency (MDL)
@@ -39,11 +41,14 @@ REGULI:
 6. reportable: marchează "review" pentru TOATE (contabilul decide); reason scurt în română
    (ex: "Plată furnizor — necesită factură", "Transfer intern — fără document").
 7. tx_date format YYYY-MM-DD.
+8. counterparty_idno: codul fiscal (IDNO) al plătitorului/beneficiarului DOAR dacă apare clar în
+   descriere (ex: "IDNO 1009600012345", "c/f 1003600054321"). Un IDNO are 13 cifre. Dacă nu apare,
+   pune null — NU inventa.
 
 Returnează DOAR JSON:
 { "transactions": [
-  { "tx_date":"2025-10-01","description":"...","counterparty":"...","amount_cents":48857,
-    "direction":"out","currency":"MDL","orig_amount":"28.80 USD",
+  { "tx_date":"2025-10-01","description":"...","counterparty":"...","counterparty_idno":"1009600012345",
+    "amount_cents":48857,"direction":"out","currency":"MDL","orig_amount":"28.80 USD",
     "reportable":"review","reportable_reason":"...","reportable_confidence":0.6 }
 ] }`;
 
@@ -70,6 +75,7 @@ export function parseStatementHeuristic(rawText: string): StatementTxn[] {
       tx_date: `${y}-${mo}-${d}`,
       description: desc,
       counterparty: guessCounterparty(desc),
+      counterparty_idno: extractIdno(descRaw),
       amount_cents: Math.round((Number.isFinite(acct) ? acct : 0) * 100),
       direction: isIn ? "in" : "out",
       currency: "MDL",
@@ -90,6 +96,18 @@ export {
   type LineCandidate,
   type InvoiceForMatch,
 } from "../fin/invoiceLineMatch";
+
+/**
+ * Pull a counterparty fiscal code (IDNO) from a transaction description.
+ * Prefers a value tagged with IDNO/c/f/cod fiscal; falls back to any standalone
+ * 13-digit run. Returns null when none is present — never guesses.
+ */
+function extractIdno(desc: string): string | null {
+  const tagged = desc.match(/(?:IDNO|c\/f|cod\s*fiscal)\D{0,5}(\d{13})/i);
+  if (tagged) return tagged[1];
+  const bare = desc.match(/(?<!\d)\d{13}(?!\d)/);
+  return bare ? bare[0] : null;
+}
 
 function guessCounterparty(desc: string): string | null {
   const d = desc.toUpperCase();
@@ -175,10 +193,15 @@ function normalizeTxns(raw: unknown[]): StatementTxn[] {
     const dir = t.direction === "in" ? "in" : "out";
     const rep = t.reportable === "yes" ? "yes" : t.reportable === "no" ? "no" : "review";
     const conf = typeof t.reportable_confidence === "number" ? Math.min(1, Math.max(0, t.reportable_confidence)) : 0.5;
+    // IDNO: trust an explicit 13-digit value from the AI, else fall back to a
+    // pattern scan of the description. Never invent one.
+    const aiIdno = typeof t.counterparty_idno === "string" ? t.counterparty_idno.trim() : "";
+    const idno = /^\d{13}$/.test(aiIdno) ? aiIdno : extractIdno(desc);
     out.push({
       tx_date: typeof t.tx_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t.tx_date) ? t.tx_date : null,
       description: desc,
       counterparty: typeof t.counterparty === "string" ? t.counterparty : null,
+      counterparty_idno: idno,
       amount_cents: cents,
       direction: dir,
       currency: typeof t.currency === "string" ? t.currency : "MDL",

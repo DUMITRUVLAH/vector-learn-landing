@@ -21,6 +21,7 @@ import { finInvoicesRoutes } from "./routes/finInvoices";
 import { finInvoiceDocRoutes } from "./routes/finInvoiceDoc";
 import { finExpensesRoutes } from "./routes/finExpenses";
 import { finCapturesRoutes } from "./routes/finCaptures";
+import { finLineToInvoiceRoutes } from "./routes/finLineToInvoice";
 import { finLedgerRoutes } from "./routes/finLedger";
 import { finBudgetRoutes } from "./routes/finBudget";
 import { finCashRoutes } from "./routes/finCash";
@@ -131,6 +132,9 @@ app.route("/api/fin/invoices", finInvoiceDocRoutes);
 // finExpensesRoutes defines paths as "/expenses/*" internally, so mount at /api/fin
 // (mounting at /api/fin/expenses doubled the segment → /api/fin/expenses/expenses/summary).
 app.route("/api/fin", finExpensesRoutes);
+// BANK-INV-001: bank-statement line → invoice. Mount BEFORE finCapturesRoutes so the
+// specific /captures/lines/:lineId/to-invoice route isn't shadowed by the /captures/* catch-all.
+app.route("/api/fin", finLineToInvoiceRoutes);
 // finCapturesRoutes defines "/captures/*" internally → mount at /api/fin
 // (mounting at /api/fin/captures doubled the segment → /api/fin/captures/captures/summary 404'd).
 app.route("/api/fin", finCapturesRoutes);

@@ -35,6 +35,7 @@ import {
   getCaptureLines,
   reviewCaptureLine,
   matchLineManual,
+  lineToInvoice,
   matchCaptures,
   formatMDLCents,
   parseMDLToCents,
@@ -138,6 +139,7 @@ function MatchBadge({ status }: { status: CaptureLine["matchStatus"] }) {
 }
 
 function StatementLines({ captureId }: { captureId: string }) {
+  const { navigate } = useRouter();
   const [lines, setLines] = useState<CaptureLine[]>([]);
   const [invoices, setInvoices] = useState<InvoiceOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,6 +147,21 @@ function StatementLines({ captureId }: { captureId: string }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [matching, setMatching] = useState(false);
   const [uploadToast, setUploadToast] = useState<string | null>(null);
+
+  // BANK-INV-001: turn an incoming payment into a draft invoice (→ e-Factura).
+  const makeInvoice = async (lineId: string) => {
+    setBusyId(lineId);
+    try {
+      const r = await lineToInvoice(lineId);
+      const note = r.idnoFound ? "" : " (completează IDNO-ul cumpărătorului înainte de e-Factura)";
+      setUploadToast(`Factură draft ${r.invoiceNumber} creată${note}.`);
+      navigate(`/business/fin/invoices/document?id=${r.invoiceId}`);
+    } catch (e) {
+      setUploadToast(e instanceof Error ? e.message : "Nu am putut genera factura.");
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -307,7 +324,15 @@ function StatementLines({ captureId }: { captureId: string }) {
                   </td>
                   <td className="px-2 py-2">
                     {l.direction === "in" ? (
-                      <span className="text-xs text-muted-foreground">—</span>
+                      <button
+                        type="button"
+                        onClick={() => makeInvoice(l.id)}
+                        disabled={busyId === l.id}
+                        title="Generează o factură (→ e-Factura) din această încasare"
+                        className="rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                      >
+                        Generează factură
+                      </button>
                     ) : (
                       <div className="flex flex-col gap-1">
                         <MatchBadge status={l.matchStatus} />
