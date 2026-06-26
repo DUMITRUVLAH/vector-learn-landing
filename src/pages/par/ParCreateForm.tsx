@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   FileText, Loader2, Plus, Trash2, Upload, X, AlertCircle, CheckCircle2, Paperclip, Save,
-  Search, Building2, BookmarkPlus, BookOpen,
+  Search, Building2, BookmarkPlus, BookOpen, Sparkles, Info,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -24,11 +24,13 @@ import {
   listDepartments, listProjects, listBudgetCodes, listVendors, createVendor,
   searchRegistryCompanies, getBudgetCodeBalance,
   listParTemplates, saveParTemplate, instantiateParTemplate,
+  prefillParFromDocument,
   formatMDL,
   type ParRequest, type ParLineItem, type ParAttachment,
   type ParDepartment, type ParProject, type ParBudgetCode, type ParVendor,
   type ParPurpose, type ParChargeTo, type ParAttachmentKind,
   type RegistryCompany, type BudgetCodeBalance, type ParTemplate,
+  type ParPrefillResult,
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
 
@@ -168,6 +170,12 @@ export function ParCreateForm() {
   const [lineError, setLineError] = useState<string | null>(null);
   const [addingLine, setAddingLine] = useState(false);
 
+  // VM1-13: AI prefill state
+  const [aiPrefilling, setAiPrefilling] = useState(false);
+  const [aiPrefillResult, setAiPrefillResult] = useState<ParPrefillResult | null>(null);
+  const [aiPrefillError, setAiPrefillError] = useState<string | null>(null);
+  const aiPrefillFileRef = useRef<HTMLInputElement>(null);
+
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -259,6 +267,38 @@ export function ParCreateForm() {
     setRegistryQuery("");
     setRegistryResults([]);
     setVendorId("");
+  };
+
+  // VM1-13: AI Prefill — upload document, extract fields, propose to user
+  const handleAiPrefillFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setAiPrefillError(null);
+    setAiPrefillResult(null);
+    setAiPrefilling(true);
+    try {
+      const result = await prefillParFromDocument(file);
+      setAiPrefillResult(result);
+      // Auto-apply extracted fields only when value is non-null.
+      // User can still override them (all fields remain editable).
+      if (result.payeeName.value) setPayeeName(String(result.payeeName.value));
+      if (result.payeeIban.value) setPayeeIban(String(result.payeeIban.value).toUpperCase());
+      if (result.endUse.value) setEndUse(String(result.endUse.value));
+      if (result.totalCents.value !== null && typeof result.totalCents.value === "number") {
+        // If there's no line item yet, prefill a synthetic one isn't in scope (PAR lines = phase 2).
+        // Just note the total in a state so the user sees it.
+      }
+      if (result.currency.value && ["MDL", "EUR", "USD", "RON"].includes(String(result.currency.value))) {
+        setCurrency(result.currency.value as "MDL" | "EUR" | "USD" | "RON");
+      }
+      // Clear vendor selection so the new manual name takes precedence
+      setVendorId("");
+    } catch (err) {
+      setAiPrefillError(err instanceof Error ? err.message : "Eroare la analiza documentului.");
+    } finally {
+      setAiPrefilling(false);
+    }
   };
 
   // Feature 3: instantiate a template into the current draft
@@ -634,6 +674,86 @@ export function ParCreateForm() {
         {/* 12 Payee */}
         <Section n="12" title="Beneficiar plată (Payee)">
           {fieldErrors.payee && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="h-3 w-3" aria-hidden />{fieldErrors.payee}</p>}
+
+          {/* VM1-13: AI Prefill — upload document to auto-fill payee/IBAN/scope */}
+          <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-border mb-2">
+            <button
+              type="button"
+              onClick={() => aiPrefillFileRef.current?.click()}
+              disabled={aiPrefilling || !parId}
+              className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors min-h-[44px] disabled:opacity-50"
+              aria-label="Completează automat din document"
+              title={!parId ? "Salvează cererea mai întâi" : "Încarcă un document pentru a extrage câmpurile automat"}
+            >
+              {aiPrefilling ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Sparkles className="h-4 w-4" aria-hidden />
+              )}
+              {aiPrefilling ? "Se analizează..." : "Completează automat din document"}
+            </button>
+            <span className="text-xs text-muted-foreground">
+              AI extrage beneficiarul, IBAN-ul și scopul dintr-o factură/contract. Tu confirmi.
+            </span>
+            <input
+              ref={aiPrefillFileRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.xlsx,.csv"
+              className="sr-only"
+              aria-label="Alege document pentru analiză AI"
+              onChange={handleAiPrefillFile}
+            />
+          </div>
+
+          {/* AI prefill error */}
+          {aiPrefillError && (
+            <div role="alert" className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm mb-2">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
+              <span>{aiPrefillError}</span>
+            </div>
+          )}
+
+          {/* AI prefill result panel */}
+          {aiPrefillResult && (
+            <div className="rounded-lg border border-border bg-muted/30 p-3 mb-3 space-y-1.5 text-sm">
+              <div className="flex items-center gap-1.5 font-medium text-foreground">
+                <Sparkles className="h-4 w-4 text-primary" aria-hidden />
+                Câmpuri propuse de AI {aiPrefillResult.isStub && <span className="text-xs text-muted-foreground font-normal">(demo)</span>}
+              </div>
+
+              {/* Non-financial document guard */}
+              {aiPrefillResult.documentClass.not_financial && (
+                <div className="flex items-start gap-2 p-2 rounded-md bg-warning/10 text-warning-foreground text-xs">
+                  <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden />
+                  <span>
+                    Documentul nu pare a fi o factură sau bon financiar
+                    {aiPrefillResult.documentClass.reason && ` — ${aiPrefillResult.documentClass.reason}`}.
+                    Câmpurile precompletate pot fi incorecte.
+                  </span>
+                </div>
+              )}
+
+              {/* Per-field confidence indicators */}
+              {[
+                { label: "Beneficiar", field: aiPrefillResult.payeeName },
+                { label: "IBAN", field: aiPrefillResult.payeeIban },
+                { label: "Scop", field: aiPrefillResult.endUse },
+              ].map(({ label, field }) => (
+                field.value !== null && (
+                  <div key={label} className="flex items-baseline gap-2 text-xs">
+                    <span className="text-muted-foreground w-16 flex-shrink-0">{label}:</span>
+                    <span className="text-foreground truncate max-w-xs">{String(field.value)}</span>
+                    {field.low_confidence && (
+                      <span className="text-warning text-[10px] flex-shrink-0 ml-auto">⚠ de verificat</span>
+                    )}
+                  </div>
+                )
+              ))}
+              <p className="text-xs text-muted-foreground pt-1">
+                Câmpurile de mai jos au fost completate. Verifică și corectează înainte de trimitere.
+              </p>
+            </div>
+          )}
 
           {/* Feature 1: Registry search */}
           <Field label="Caută companie (contafirm.md)" htmlFor="reg-q" hint="Introdu cel puțin 2 caractere — caută după nume sau IDNO">

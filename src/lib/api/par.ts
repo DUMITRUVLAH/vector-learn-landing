@@ -1125,3 +1125,45 @@ export function downloadParConfigTemplate(): void {
   a.download = "par-config-template.xlsx";
   a.click();
 }
+
+// ─── VM1-13: AI Prefill — extract PAR fields from an uploaded document ────────
+
+export interface ParPrefillField {
+  value: string | number | null;
+  confidence: number;
+  low_confidence?: boolean;
+}
+
+export interface ParPrefillResult {
+  payeeName: ParPrefillField;
+  totalCents: ParPrefillField;
+  currency: ParPrefillField;
+  payeeIban: ParPrefillField;
+  endUse: ParPrefillField;
+  documentClass: {
+    value: string | null;
+    confidence: number;
+    reason?: string;
+    not_financial?: boolean;
+  };
+  isStub: boolean;
+}
+
+/**
+ * Upload a document and get AI-extracted PAR form fields.
+ * Returns payeeName, totalCents, currency, payeeIban, endUse + documentClass guard.
+ */
+export async function prefillParFromDocument(file: File): Promise<ParPrefillResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch("/api/par/ai-prefill", {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
