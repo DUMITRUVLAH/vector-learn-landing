@@ -4318,15 +4318,16 @@
       "note": "requestor sees only Cereri de plata; inbox/finance/admin/reports nav hidden per role (backend already 403s)"
     },
     "SHELL-503": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SHELL-503-invite-google-role-redemption.md",
       "milestone": "SHELL",
       "phase": "SHELL3",
       "depends_on": [],
       "priority": "high",
-      "note": "E2E HIGH bug: invite accept-invite/invite-info routes missing; google callback ignores par_invites; no invite page. Invited Gmail user does NOT get role. Auth-sensitive — needs adversarial review."
+      "note": "invite+Google role redemption (single-tenant). accept-invite/invite-info routes + Google callback invite-aware + InvitePage. Adversarial+security review found CRITICAL account-takeover (session w/o password) + TOCTOU + cross-tenant lookup — all FIXED (password verify, atomic txn UPDATE..WHERE accepted_at IS NULL, tenant-scoped lowercased lookup, deleted-tenant 404). 45 tests incl real-route integration (wrong-pwd→401 no session).",
+      "branch": "feat/SHELL-503-invite-google-redemption"
     }
   }
 }

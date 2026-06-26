@@ -21,7 +21,7 @@ export function appUrl(): string {
 }
 
 export function inviteUrl(token: string): string {
-  return `${appUrl()}/#/app/invite?token=${token}`;
+  return `${appUrl()}/#/business/invite?token=${token}`;
 }
 
 /**

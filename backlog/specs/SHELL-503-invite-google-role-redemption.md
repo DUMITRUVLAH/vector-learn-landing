@@ -3,7 +3,7 @@ id: SHELL-503
 title: "Invite PAR + sign-in cu Google nu dă rolul invitatului (flux de redemption lipsă)"
 milestone: SHELL
 phase: "SHELL3"
-status: pending
+status: done
 attempts: 0
 depends_on: []
 spec: backlog/specs/SHELL-503-invite-google-role-redemption.md

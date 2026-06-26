@@ -24,6 +24,8 @@ import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
 import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
 import { BusinessDashboardPage } from "./pages/business/BusinessDashboardPage";
 import { BusinessGuardPage } from "./components/business/BusinessGuardPage";
+// SHELL-503: PAR invite acceptance (public — no auth guard)
+import { InvitePage } from "./pages/business/InvitePage";
 
 // FinDesk pages under /business/fin/*
 import { FinHome } from "./pages/fin/FinHome";
@@ -115,6 +117,18 @@ function Routes() {
   // Redirect any legacy /app/par/* link to /business/par/* so it never renders the CRM shell
   // (which would show the grădiniță sidebar) and never causes the double-sidebar flash.
   if (path.startsWith("/app/par")) return <RedirectHash to={path.replace("/app/par", "/business/par")} />;
+
+  // SHELL-503: legacy invite URL redirect — /app/invite → /business/invite (preserves query string).
+  // The query string is in the hash, so reconstruct it with whatever follows "?".
+  if (path.startsWith("/app/invite")) {
+    const qIdx = window.location.hash.indexOf("?");
+    const qs = qIdx !== -1 ? window.location.hash.slice(qIdx) : "";
+    return <RedirectHash to={`/business/invite${qs}`} />;
+  }
+
+  // SHELL-503: PAR invite acceptance page — PUBLIC (no BusinessGuard).
+  // Must be before BusinessGuard so unauthenticated invitees can land here.
+  if (path.startsWith("/business/invite")) return <InvitePage />;
 
   // Business landing + login
   if (path === "/business" || path === "/business/") return <BusinessLandingPage />;
