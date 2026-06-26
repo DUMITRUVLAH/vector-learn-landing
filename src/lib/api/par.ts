@@ -2,7 +2,7 @@
  * PAR-105: Client-side API helpers for the PAR (Payment Action Request) module
  * Covers: create/get/patch/submit, line items, attachments, config lookups
  */
-import { api } from "../api";
+import { api, ApiError } from "../api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -586,6 +586,60 @@ export async function listVendors(): Promise<{ items: ParVendor[] }> {
 
 export async function getParMe(): Promise<{ roles: string[]; userId: string; tenantId: string }> {
   return api("/api/par/me");
+}
+
+// ─── PAR-AUTO-001: AI auto-complete from an uploaded document ─────────────────
+
+export interface ParExtractField<T> {
+  value: T;
+  confidence: number;
+  lowConfidence: boolean;
+}
+
+export interface ParExtractResult {
+  isStub: boolean;
+  /** True when IBAN/IDNP were redacted before the text was sent to the AI. */
+  pseudonymized?: boolean;
+  /** A user-facing note when PII was masked (so they fill those fields manually). */
+  piiRedactedNote?: string | null;
+  documentClass: "invoice" | "receipt" | "not_invoice" | null;
+  documentClassReason: string | null;
+  fields: {
+    payeeName: ParExtractField<string | null>;
+    payeeIban: ParExtractField<string | null>;
+    amount: ParExtractField<number | null>;
+    amountCents: ParExtractField<number | null>;
+    date: ParExtractField<string | null>;
+    purpose: ParExtractField<string | null>;
+    reference: ParExtractField<string | null>;
+  };
+}
+
+/**
+ * Upload a document (contract / act de predare-primire / factură) and get back
+ * PAR-mapped fields to pre-fill the form. Uses multipart, so it bypasses the
+ * JSON `api()` helper (the browser must set the multipart boundary itself).
+ */
+export async function extractParFromDocument(file: File): Promise<ParExtractResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/par/extract", {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  if (!res.ok) {
+    let code = `http_${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: unknown; detail?: unknown };
+      if (typeof body?.detail === "string") code = body.detail;
+      else if (typeof body?.error === "string") code = body.error;
+    } catch {
+      /* keep fallback */
+    }
+    throw new ApiError(res.status, code);
+  }
+  return res.json() as Promise<ParExtractResult>;
 }
 
 // ─── PAR-116: Admin — DOA, Settings, Members, Reference data ─────────────────
