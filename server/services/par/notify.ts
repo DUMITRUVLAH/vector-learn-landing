@@ -24,7 +24,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { inAppNotifications } from "../../db/schema/inAppNotifications";
 import { users } from "../../db/schema/users";
-import { parMembers } from "../../db/schema/par";
+import { parMembers, parRequests, parProjects, parBudgetCodes, parVendors } from "../../db/schema/par";
 import { MessagingService } from "../messaging/index";
 
 const messagingService = new MessagingService(db);
@@ -46,6 +46,127 @@ async function getUser(userId: string, tenantId: string): Promise<{ name: string
     .from(users)
     .where(and(eq(users.id, userId), eq(users.tenantId, tenantId)));
   return u ?? null;
+}
+
+/** Format minor units in a currency, e.g. "1.250,00 EUR". */
+function formatParAmount(cents: number | null | undefined, currency: string | null | undefined): string {
+  const v = (cents ?? 0) / 100;
+  return `${v.toLocaleString("ro-MD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency ?? "MDL"}`;
+}
+
+const PURPOSE_LABELS: Record<string, string> = {
+  execute_payment: "Execută plata",
+  obtain_quotations: "Obține oferte",
+  provide_estimate: "Oferă o estimare",
+};
+
+/**
+ * VM1-08 — payment details shown to the approver in the email (NO IBAN / bank data;
+ * those stay in-app per the owner's decision). Includes amount, payee, reason, project,
+ * budget. Best-effort: returns a multi-line block, or null if the PAR can't be loaded.
+ */
+async function loadParSummary(tenantId: string, parId: string): Promise<string | null> {
+  try {
+    const [p] = await db
+      .select({
+        totalEstimatedCents: parRequests.totalEstimatedCents,
+        currency: parRequests.currency,
+        endUse: parRequests.endUse,
+        purpose: parRequests.purpose,
+        payeeName: parRequests.payeeName,
+        vendorId: parRequests.vendorId,
+        projectId: parRequests.projectId,
+        budgetCodeId: parRequests.budgetCodeId,
+      })
+      .from(parRequests)
+      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+    if (!p) return null;
+
+    let payeeName = p.payeeName?.trim() || "";
+    if (!payeeName && p.vendorId) {
+      const [v] = await db
+        .select({ name: parVendors.name })
+        .from(parVendors)
+        .where(and(eq(parVendors.id, p.vendorId), eq(parVendors.tenantId, tenantId)));
+      payeeName = v?.name ?? "";
+    }
+
+    let projectName = "";
+    if (p.projectId) {
+      const [pr] = await db
+        .select({ name: parProjects.name })
+        .from(parProjects)
+        .where(and(eq(parProjects.id, p.projectId), eq(parProjects.tenantId, tenantId)));
+      projectName = pr?.name ?? "";
+    }
+
+    let budgetLabel = "";
+    if (p.budgetCodeId) {
+      const [bc] = await db
+        .select({ code: parBudgetCodes.code, name: parBudgetCodes.name })
+        .from(parBudgetCodes)
+        .where(and(eq(parBudgetCodes.id, p.budgetCodeId), eq(parBudgetCodes.tenantId, tenantId)));
+      if (bc) budgetLabel = [bc.code, bc.name].filter(Boolean).join(" — ");
+    }
+
+    const reason = p.endUse?.trim() || PURPOSE_LABELS[p.purpose] || "";
+
+    const lines = ["Detalii plată:", `• Sumă: ${formatParAmount(p.totalEstimatedCents, p.currency)}`];
+    if (payeeName) lines.push(`• Către: ${payeeName}`);
+    if (reason) lines.push(`• Motiv: ${reason}`);
+    if (projectName) lines.push(`• Proiect: ${projectName}`);
+    if (budgetLabel) lines.push(`• Buget: ${budgetLabel}`);
+    return lines.join("\n");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * VM1-08 — full approver email body: one-line intro + payment details + deep link.
+ * Used for the "someone submitted a PAR → approver" email (and the next-step email).
+ */
+async function buildApproverEmailBody(ctx: ParNotifyContext, stepLabel?: string): Promise<string> {
+  const summary = await loadParSummary(ctx.tenantId, ctx.parId);
+  const intro = `Cererea ${ctx.requestNo} așteaptă aprobarea ta${stepLabel ? ` (pas: ${stepLabel})` : ""}.`;
+  const link = `Deschide cererea: /app/par/${ctx.parId}`;
+  return [intro, "", summary, summary ? "" : null, link].filter((l) => l !== null).join("\n");
+}
+
+/**
+ * VM1-08 — notify every approver of a step (in-app always; email with full payment
+ * details). Works for a specific assignee or role-based routing (all approvers/par_admin).
+ */
+async function notifyApprovers(params: {
+  ctx: ParNotifyContext;
+  specificUserId: string | null;
+  inAppBody: string;
+  subject: string;
+  stepLabel?: string;
+}): Promise<void> {
+  const { ctx, specificUserId, inAppBody, subject, stepLabel } = params;
+  const emailBody = await buildApproverEmailBody(ctx, stepLabel);
+
+  let recipients: string[];
+  if (specificUserId) {
+    recipients = [specificUserId];
+  } else {
+    const rows = await db
+      .select({ userId: parMembers.userId })
+      .from(parMembers)
+      .where(
+        and(eq(parMembers.tenantId, ctx.tenantId), inArray(parMembers.role, ["approver", "par_admin"]))
+      );
+    recipients = [...new Set(rows.map((r) => r.userId))];
+  }
+
+  for (const userId of recipients) {
+    await sendInApp({ tenantId: ctx.tenantId, recipientUserId: userId, body: inAppBody, parId: ctx.parId });
+    const u = await getUser(userId, ctx.tenantId);
+    if (u?.email) {
+      await sendEmail({ tenantId: ctx.tenantId, toAddress: u.email, subject, body: emailBody });
+    }
+  }
 }
 
 /** Send one in-app notification. Silently absorbs errors. */
@@ -141,38 +262,14 @@ async function getFinanceUsers(tenantId: string): Promise<string[]> {
  * @param approverUserId — specific user assigned to step 1 (null = role-based, skip email but still send in-app to all approvers)
  */
 export async function notifySubmitted(ctx: ParNotifyContext, approverUserId: string | null): Promise<void> {
-  const body = `PAR ${ctx.requestNo} awaits your approval. Link: /app/par/${ctx.parId}`;
-  const subject = `[PAR] ${ctx.requestNo} — approval required`;
-
-  if (approverUserId) {
-    await notifyUser({
-      tenantId: ctx.tenantId,
-      userId: approverUserId,
-      parId: ctx.parId,
-      body,
-      subject,
-    });
-  } else {
-    // Role-based routing: notify all approvers in the tenant
-    const approvers = await db
-      .select({ userId: parMembers.userId })
-      .from(parMembers)
-      .where(
-        and(
-          eq(parMembers.tenantId, ctx.tenantId),
-          inArray(parMembers.role, ["approver", "par_admin"])
-        )
-      );
-
-    for (const { userId } of approvers) {
-      await sendInApp({
-        tenantId: ctx.tenantId,
-        recipientUserId: userId,
-        body,
-        parId: ctx.parId,
-      });
-    }
-  }
+  // VM1-08: approver email carries the payment details (amount/payee/reason/project/budget);
+  // role-based routing now emails every eligible approver too (was in-app only).
+  await notifyApprovers({
+    ctx,
+    specificUserId: approverUserId,
+    inAppBody: `PAR ${ctx.requestNo} așteaptă aprobarea ta. Link: /app/par/${ctx.parId}`,
+    subject: `[PAR] ${ctx.requestNo} — aprobare necesară`,
+  });
 }
 
 /**
@@ -183,38 +280,14 @@ export async function notifyStepAdvanced(
   nextApproverUserId: string | null,
   nextStepLabel: string
 ): Promise<void> {
-  const body = `PAR ${ctx.requestNo} (step: ${nextStepLabel}) awaits your approval. Link: /app/par/${ctx.parId}`;
-  const subject = `[PAR] ${ctx.requestNo} — ${nextStepLabel} approval required`;
-
-  if (nextApproverUserId) {
-    await notifyUser({
-      tenantId: ctx.tenantId,
-      userId: nextApproverUserId,
-      parId: ctx.parId,
-      body,
-      subject,
-    });
-  } else {
-    // Role-based routing
-    const approvers = await db
-      .select({ userId: parMembers.userId })
-      .from(parMembers)
-      .where(
-        and(
-          eq(parMembers.tenantId, ctx.tenantId),
-          inArray(parMembers.role, ["approver", "par_admin"])
-        )
-      );
-
-    for (const { userId } of approvers) {
-      await sendInApp({
-        tenantId: ctx.tenantId,
-        recipientUserId: userId,
-        body,
-        parId: ctx.parId,
-      });
-    }
-  }
+  // VM1-08: same enriched email for the next approver in the chain.
+  await notifyApprovers({
+    ctx,
+    specificUserId: nextApproverUserId,
+    inAppBody: `PAR ${ctx.requestNo} (pas: ${nextStepLabel}) așteaptă aprobarea ta. Link: /app/par/${ctx.parId}`,
+    subject: `[PAR] ${ctx.requestNo} — aprobare necesară (${nextStepLabel})`,
+    stepLabel: nextStepLabel,
+  });
 }
 
 /**
