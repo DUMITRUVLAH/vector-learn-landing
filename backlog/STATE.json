@@ -4302,6 +4302,31 @@
       "branch": "fix/SHELL-business-canonical-par",
       "priority": "high",
       "note": "business modules (PAR + conturi-plata) were under /app/* → CRM shell w/ gradinite + double-sidebar; canonicalized to /business/* + redirects + deep-link fixes"
+    },
+    "SHELL-502": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/SHELL-502-par-nav-role-gating.md",
+      "milestone": "SHELL",
+      "phase": "SHELL3",
+      "depends_on": [
+        "SHELL-501"
+      ],
+      "branch": "fix/SHELL-502-par-nav-role-gating",
+      "priority": "high",
+      "note": "requestor sees only Cereri de plata; inbox/finance/admin/reports nav hidden per role (backend already 403s)"
+    },
+    "SHELL-503": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/SHELL-503-invite-google-role-redemption.md",
+      "milestone": "SHELL",
+      "phase": "SHELL3",
+      "depends_on": [],
+      "priority": "high",
+      "note": "E2E HIGH bug: invite accept-invite/invite-info routes missing; google callback ignores par_invites; no invite page. Invited Gmail user does NOT get role. Auth-sensitive — needs adversarial review."
     }
   }
 }
