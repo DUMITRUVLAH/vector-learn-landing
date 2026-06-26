@@ -471,10 +471,12 @@ parPaymentsRoutes.post(
 );
 
 // ─── VF-505: GET /api/par/:id/match — 3-way match state (for the UI). ──────────
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 parPaymentsRoutes.get("/:id/match", async (c) => {
   const user = c.get("user");
   const tenantId = user.tenantId;
   const parId = c.req.param("id");
+  if (!UUID_RE.test(parId)) return c.json({ error: "not_found" }, 404);
 
   const [par] = await db
     .select({ requestedByUserId: parRequests.requestedByUserId })
