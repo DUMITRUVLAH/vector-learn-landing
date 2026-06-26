@@ -81,6 +81,9 @@ import { parDelegationsRoutes } from "./routes/parDelegations";
 import { parPurchaseOrderRoutes } from "./routes/parPurchaseOrders";
 import { parReceiptsRoutes } from "./routes/parReceipts";
 
+// VM1-02: PAR config import (projects/departments/budget codes from Excel)
+import { parConfigImportRoutes } from "./routes/parConfigImport";
+
 // DOCMERGE module (DOCMERGE-001)
 import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
 
@@ -175,6 +178,7 @@ app.route("/api/fin/revaluation", finRevaluationRoutes);
 
 // PAR module
 app.route("/api/par/me", parMeRoutes);
+app.route("/api/par/config-import", parConfigImportRoutes);
 app.route("/api/par/members", parMembersRoutes);
 app.route("/api/par/doa", parDoaRoutes);
 app.route("/api/par/budget-codes", parBudgetCodesRoutes);

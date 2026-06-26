@@ -1086,3 +1086,42 @@ export async function instantiateParTemplate(
     body: JSON.stringify({}),
   });
 }
+
+// ─── VM1-02: Config import (projects/departments/budget codes from Excel) ──────
+
+export interface ParConfigImportRowError {
+  row: number;
+  column: string;
+  message: string;
+}
+
+export interface ParConfigImportResult {
+  projects: { created: number; updated: number; errors: ParConfigImportRowError[] };
+  departments: { created: number; updated: number; errors: ParConfigImportRowError[] };
+  budgetCodes: { created: number; updated: number; errors: ParConfigImportRowError[] };
+}
+
+/** Upload Excel config file and return import result. */
+export async function importParConfigExcel(file: File): Promise<ParConfigImportResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  // Use raw fetch (not api()) because we need multipart, not JSON
+  const res = await fetch("/api/par/config-import", {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Download the .xlsx config template. */
+export function downloadParConfigTemplate(): void {
+  const a = document.createElement("a");
+  a.href = "/api/par/config-import/template";
+  a.download = "par-config-template.xlsx";
+  a.click();
+}
