@@ -49,10 +49,19 @@ interface BusinessShellProps {
   actions?: ReactNode;
 }
 
+/** PAR role labels used to gate per-feature nav visibility (SHELL-502). */
+type ParNavRole = "requestor" | "approver" | "finance" | "par_admin";
+
 interface NavItem {
   label: string;
   href: string;
   icon: typeof LayoutDashboard;
+  /**
+   * SHELL-502: PAR roles allowed to SEE this nav item. Undefined = any PAR member.
+   * A requestor (project manager) must not even see approval/finance/admin links —
+   * the backend already 403s the data, this hides the links so the UI matches the rights.
+   */
+  roles?: ParNavRole[];
 }
 
 interface NavGroup {
@@ -100,8 +109,8 @@ const NAV_GROUPS: NavGroup[] = [
     section: "PAR — Cereri de plată",
     items: [
       { label: "Cereri", href: "/business/par", icon: ClipboardList },
-      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck },
-      { label: "Rapoarte PAR", href: "/business/par/reports", icon: FileText },
+      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, roles: ["approver", "par_admin"] },
+      { label: "Rapoarte PAR", href: "/business/par/reports", icon: FileText, roles: ["approver", "finance", "par_admin"] },
     ],
   },
   {
@@ -136,20 +145,26 @@ const NAV_GROUPS: NavGroup[] = [
  * Entering the PAR module gives a focused sidebar with ONLY PAR features, plus a
  * "back to all modules" link. Mirrors the structure of the standalone PAR app.
  */
+// SHELL-502: per-item PAR roles mirror the backend guards (requirePARRole):
+//   - "Cereri de plată" (list, scoped to own): any PAR member (incl. requestor)
+//   - Inbox/approve: approver | par_admin
+//   - Finance queue: finance | par_admin
+//   - Folders/Reports (analysis): approver | finance | par_admin (reports route 403s requestor)
+//   - Administrare (members/DOA/settings/import): par_admin
 const PAR_NAV_GROUPS: NavGroup[] = [
   {
     section: null,
     items: [
       { label: "Cereri de plată", href: "/business/par", icon: ClipboardList },
-      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck },
-      { label: "Coadă finanțe", href: "/business/par/finance", icon: Banknote },
+      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, roles: ["approver", "par_admin"] },
+      { label: "Coadă finanțe", href: "/business/par/finance", icon: Banknote, roles: ["finance", "par_admin"] },
     ],
   },
   {
     section: "Analiză",
     items: [
-      { label: "Foldere proiecte", href: "/business/par/folders", icon: FolderOpen }, // VM1-10
-      { label: "Rapoarte & statistici", href: "/business/par/reports", icon: BarChart3 },
+      { label: "Foldere proiecte", href: "/business/par/folders", icon: FolderOpen, roles: ["approver", "finance", "par_admin"] }, // VM1-10
+      { label: "Rapoarte & statistici", href: "/business/par/reports", icon: BarChart3, roles: ["approver", "finance", "par_admin"] },
     ],
   },
   {
@@ -157,7 +172,7 @@ const PAR_NAV_GROUPS: NavGroup[] = [
     items: [
       // ParAdmin: tabs for Settings, Members (echipă), Reference data
       // (linii bugetare, departamente, proiecte, furnizori) + DOA matrix.
-      { label: "Administrare PAR", href: "/business/par/admin", icon: Settings },
+      { label: "Administrare PAR", href: "/business/par/admin", icon: Settings, roles: ["par_admin"] },
     ],
   },
 ];
@@ -195,7 +210,7 @@ export function BusinessShell({
   // VM1-01: PAR module sidebar is only shown if user has PAR roles.
   // If user navigates to /business/par/* without a role, server returns 403 — no need
   // to hide PAR_NAV_GROUPS here, but we do hide the main NAV_GROUPS PAR section.
-  const navGroups = isParModule
+  const baseGroups = isParModule
     ? PAR_NAV_GROUPS
     : NAV_GROUPS.filter((g) => {
         // Hide "PAR — Cereri de plată" section when user has no PAR role.
@@ -203,6 +218,12 @@ export function BusinessShell({
         if (g.section === "PAR — Cereri de plată") return hasPar;
         return true;
       });
+  // SHELL-502: per-item PAR role filter so a requestor (project manager) sees ONLY their part
+  // (Cereri de plată) — not approve/finance/admin/reports. Items without `roles` are unrestricted
+  // (FinDesk/ITPark/etc.). Drop groups left empty. Backend already 403s; this aligns the UI.
+  const navGroups = baseGroups
+    .map((g) => ({ ...g, items: g.items.filter((it) => !it.roles || it.roles.some((r) => parRoles.includes(r))) }))
+    .filter((g) => g.items.length > 0);
 
   // Guard: redirecționează la /business/login dacă sesiunea lipsește.
   useEffect(() => {
@@ -325,12 +346,16 @@ export function BusinessShell({
         aria-label="Navigare mobilă Business Suite"
       >
         {(() => {
+          // SHELL-502: mobile PAR tabs also gated by role (requestor sees only "Cereri").
+          const canApprove = parRoles.some((r) => ["approver", "par_admin"].includes(r));
+          const canAnalyse = parRoles.some((r) => ["approver", "finance", "par_admin"].includes(r));
+          const isParAdmin = parRoles.includes("par_admin");
           const mobileItems = isParModule
             ? [
                 { label: "Cereri", href: "/business/par", icon: ClipboardList },
-                { label: "Aprobări", href: "/business/par/inbox", icon: ShieldCheck },
-                { label: "Rapoarte", href: "/business/par/reports", icon: BarChart3 },
-                { label: "Admin", href: "/business/par/admin", icon: Settings },
+                ...(canApprove ? [{ label: "Aprobări", href: "/business/par/inbox", icon: ShieldCheck }] : []),
+                ...(canAnalyse ? [{ label: "Rapoarte", href: "/business/par/reports", icon: BarChart3 }] : []),
+                ...(isParAdmin ? [{ label: "Admin", href: "/business/par/admin", icon: Settings }] : []),
               ]
             : [
                 { label: "Dashboard", href: "/business/dashboard", icon: LayoutDashboard },
@@ -339,9 +364,13 @@ export function BusinessShell({
                 ...(hasPar ? [{ label: "PAR", href: "/business/par", icon: ClipboardList }] : []),
                 { label: "ITPark", href: "/business/itpark", icon: Building2 },
               ];
-          const cols = mobileItems.length as 3 | 4;
+          const colsClass =
+            mobileItems.length >= 4 ? "grid-cols-4"
+            : mobileItems.length === 3 ? "grid-cols-3"
+            : mobileItems.length === 2 ? "grid-cols-2"
+            : "grid-cols-1";
           return (
-          <div className={cols === 3 ? "grid grid-cols-3" : "grid grid-cols-4"}>
+          <div className={cn("grid", colsClass)}>
           {mobileItems.map((item) => {
             const Icon = item.icon;
             const active =
