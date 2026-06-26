@@ -2,7 +2,7 @@
  * PAR-105: Client-side API helpers for the PAR (Payment Action Request) module
  * Covers: create/get/patch/submit, line items, attachments, config lookups
  */
-import { api } from "../api";
+import { api, ApiError } from "../api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -586,6 +586,40 @@ export async function listVendors(): Promise<{ items: ParVendor[] }> {
 
 export async function getParMe(): Promise<{ roles: string[]; userId: string; tenantId: string }> {
   return api("/api/par/me");
+}
+
+// ─── PAR-FIN-003: handover act (act de predare-primire) ──────────────────────
+
+/**
+ * Download the "Act de predare-primire" for a PAR. Server returns a PDF, or
+ * print-ready HTML when Chromium is unavailable (X-PDF-Fallback header).
+ * Triggers a browser download; returns true if a real PDF was produced.
+ */
+export async function downloadParActDoc(parId: string, requestNo: string): Promise<{ isPdf: boolean }> {
+  const res = await fetch(`/api/par/${parId}/act-doc?format=pdf`, { credentials: "include" });
+  if (!res.ok) {
+    let code = `http_${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: unknown; detail?: unknown };
+      if (typeof body?.detail === "string") code = body.detail;
+      else if (typeof body?.error === "string") code = body.error;
+    } catch {
+      /* keep fallback */
+    }
+    throw new ApiError(res.status, code);
+  }
+  const blob = await res.blob();
+  const isPdf = blob.type.includes("pdf");
+  const safe = requestNo.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `act-predare-primire-${safe}.${isPdf ? "pdf" : "html"}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return { isPdf };
 }
 
 // ─── PAR-116: Admin — DOA, Settings, Members, Reference data ─────────────────

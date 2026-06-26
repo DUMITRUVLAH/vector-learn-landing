@@ -55,6 +55,7 @@ import {
   duplicatePar,
   getPurchaseOrder,
   issuePurchaseOrder,
+  downloadParActDoc,
   getParMe,
   formatMDL,
   type ParDetail as ParDetailType,
@@ -198,6 +199,38 @@ function PoButton({ par, orgName }: { par: ParDetailType; orgName: string }) {
       aria-label="Emite comandă de achiziție" title={err ?? "Emite comandă (PO)"}>
       {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <FileText className="h-4 w-4" aria-hidden />}
       Emite PO
+    </button>
+  );
+}
+
+// ─── PAR-FIN-003: Act de predare-primire (handover act) ─────────────────────────
+
+function ActDocButton({ par }: { par: ParDetailType }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Meaningful once approved and with a payee — same rule as PO / invoice.
+  const eligible = ["approved", "in_finance", "paid"].includes(par.status) && (!!par.payeeName || !!par.vendorId);
+  if (!eligible) return null;
+
+  const download = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const { isPdf } = await downloadParActDoc(par.id, par.requestNo);
+      if (!isPdf) setErr("PDF indisponibil — am descărcat HTML-ul (Print → Save as PDF).");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Nu am putut genera actul.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button type="button" onClick={download} disabled={busy}
+      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted transition-colors min-h-[44px] disabled:opacity-60"
+      aria-label="Generează act de predare-primire" title={err ?? "Act de predare-primire (PDF)"}>
+      {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <FileText className="h-4 w-4" aria-hidden />}
+      Act predare-primire
     </button>
   );
 }
@@ -699,6 +732,7 @@ export function ParDetailPage() {
           <div className="flex items-center gap-2 flex-shrink-0">
             <DuplicateButton parId={par.id} onNavigate={router.navigate} />
             <PoButton par={par} orgName={orgName} />
+            <ActDocButton par={par} />
             <PdfDownloadButton par={par} onAttached={load} />
           </div>
         </div>

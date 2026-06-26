@@ -60,6 +60,7 @@ import { itparkSettingsRoutes } from "./routes/itparkSettings";
 
 // PAR (Payment Action Request) module
 import { parMeRoutes } from "./routes/parMe";
+import { parActDocRoutes } from "./routes/parActDoc";
 import { parMembersRoutes } from "./routes/parMembers";
 import { parDoaRoutes } from "./routes/parDoa";
 import { parBudgetCodesRoutes } from "./routes/parBudgetCodes";
@@ -192,6 +193,8 @@ app.route("/api/par", parApprovalsRoutes);
 app.route("/api/par", parTimelineRoutes);
 app.route("/api/par", parPurchaseOrderRoutes);
 app.route("/api/par", parReceiptsRoutes);
+// PAR-FIN-003: handover act (act de predare-primire) — before the catch-all parRoutes.
+app.route("/api/par", parActDocRoutes);
 app.route("/api/par", parRoutes);
 app.route("/api/par", parAttachmentsRoutes);
 
