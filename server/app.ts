@@ -87,8 +87,16 @@ import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
 export const app = new Hono();
 
 app.onError((err, c) => {
-  console.error("[ERR]", err.message);
-  return c.json({ error: err.message }, 500);
+  // Always log the full error server-side for debugging.
+  console.error("[ERR]", err.stack ?? err.message);
+  // Security (audit #3): don't leak internal error details (DB constraint names,
+  // file paths, stack hints) to the client on an uncaught 500. Return a generic
+  // message in production; keep the real message in dev/test for debugging.
+  const isProd = process.env.NODE_ENV === "production" || !!process.env.VERCEL;
+  return c.json(
+    { error: isProd ? "internal_error" : err.message },
+    500
+  );
 });
 
 app.use("*", logger());
