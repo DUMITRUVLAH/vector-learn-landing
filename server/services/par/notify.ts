@@ -129,7 +129,7 @@ async function loadParSummary(tenantId: string, parId: string): Promise<string |
 async function buildApproverEmailBody(ctx: ParNotifyContext, stepLabel?: string): Promise<string> {
   const summary = await loadParSummary(ctx.tenantId, ctx.parId);
   const intro = `Cererea ${ctx.requestNo} așteaptă aprobarea ta${stepLabel ? ` (pas: ${stepLabel})` : ""}.`;
-  const link = `Deschide cererea: /app/par/${ctx.parId}`;
+  const link = `Deschide cererea: /business/par/${ctx.parId}`;
   return [intro, "", summary, summary ? "" : null, link].filter((l) => l !== null).join("\n");
 }
 
@@ -233,7 +233,7 @@ async function notifyUser(params: {
       tenantId: params.tenantId,
       toAddress: userRecord.email,
       subject: params.subject,
-      body: `${params.body}\n\nView PAR: /app/par/${params.parId}`,
+      body: `${params.body}\n\nView PAR: /business/par/${params.parId}`,
     });
   }
 }
@@ -267,7 +267,7 @@ export async function notifySubmitted(ctx: ParNotifyContext, approverUserId: str
   await notifyApprovers({
     ctx,
     specificUserId: approverUserId,
-    inAppBody: `PAR ${ctx.requestNo} așteaptă aprobarea ta. Link: /app/par/${ctx.parId}`,
+    inAppBody: `PAR ${ctx.requestNo} așteaptă aprobarea ta. Link: /business/par/${ctx.parId}`,
     subject: `[PAR] ${ctx.requestNo} — aprobare necesară`,
   });
 }
@@ -284,7 +284,7 @@ export async function notifyStepAdvanced(
   await notifyApprovers({
     ctx,
     specificUserId: nextApproverUserId,
-    inAppBody: `PAR ${ctx.requestNo} (pas: ${nextStepLabel}) așteaptă aprobarea ta. Link: /app/par/${ctx.parId}`,
+    inAppBody: `PAR ${ctx.requestNo} (pas: ${nextStepLabel}) așteaptă aprobarea ta. Link: /business/par/${ctx.parId}`,
     subject: `[PAR] ${ctx.requestNo} — aprobare necesară (${nextStepLabel})`,
     stepLabel: nextStepLabel,
   });
@@ -295,7 +295,7 @@ export async function notifyStepAdvanced(
  */
 export async function notifyFullyApprovedToFinance(ctx: ParNotifyContext): Promise<void> {
   const financeUsers = await getFinanceUsers(ctx.tenantId);
-  const body = `PAR ${ctx.requestNo} is fully approved and ready for payment execution. Link: /app/par/${ctx.parId}`;
+  const body = `PAR ${ctx.requestNo} is fully approved and ready for payment execution. Link: /business/par/${ctx.parId}`;
   const subject = `[PAR] ${ctx.requestNo} — ready for payment`;
 
   for (const userId of financeUsers) {
@@ -321,7 +321,7 @@ export async function notifyApprovedToRequestor(
     tenantId: ctx.tenantId,
     userId: requestorUserId,
     parId: ctx.parId,
-    body: `PAR ${ctx.requestNo} a fost aprobată. Link: /app/par/${ctx.parId}`,
+    body: `PAR ${ctx.requestNo} a fost aprobată. Link: /business/par/${ctx.parId}`,
     subject: `[PAR] ${ctx.requestNo} — aprobată`,
   });
 }
@@ -334,7 +334,7 @@ export async function notifyRejected(
   requestorUserId: string,
   comment: string
 ): Promise<void> {
-  const body = `PAR ${ctx.requestNo} was rejected. Reason: ${comment.slice(0, 500)}. Link: /app/par/${ctx.parId}`;
+  const body = `PAR ${ctx.requestNo} was rejected. Reason: ${comment.slice(0, 500)}. Link: /business/par/${ctx.parId}`;
   const subject = `[PAR] ${ctx.requestNo} — rejected`;
 
   await notifyUser({
@@ -354,7 +354,7 @@ export async function notifyChangesRequested(
   requestorUserId: string,
   comment: string
 ): Promise<void> {
-  const body = `PAR ${ctx.requestNo} requires changes: ${comment.slice(0, 500)}. Link: /app/par/${ctx.parId}`;
+  const body = `PAR ${ctx.requestNo} requires changes: ${comment.slice(0, 500)}. Link: /business/par/${ctx.parId}`;
   const subject = `[PAR] ${ctx.requestNo} — changes requested`;
 
   await notifyUser({
@@ -373,7 +373,7 @@ export async function notifyPaid(
   ctx: ParNotifyContext,
   requestorUserId: string
 ): Promise<void> {
-  const body = `PAR ${ctx.requestNo} has been paid. Link: /app/par/${ctx.parId}`;
+  const body = `PAR ${ctx.requestNo} has been paid. Link: /business/par/${ctx.parId}`;
   const subject = `[PAR] ${ctx.requestNo} — payment executed`;
 
   await notifyUser({

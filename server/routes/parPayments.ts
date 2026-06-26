@@ -421,7 +421,7 @@ parPaymentsRoutes.post(
             recipientUserId: finalApproverUserId,
             kind: "par",
             payload: {
-              body: `PAR ${par.requestNo} requires re-approval: actual payment exceeds estimate by >10%. Link: /app/par/${parId}`,
+              body: `PAR ${par.requestNo} requires re-approval: actual payment exceeds estimate by >10%. Link: /business/par/${parId}`,
               par_id: parId,
             },
           });

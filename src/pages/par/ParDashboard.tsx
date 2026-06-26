@@ -1,5 +1,5 @@
 /**
- * PAR-106 — /app/par
+ * PAR-106 — /business/par
  *
  * Dashboard + lista cererilor PAR:
  *   - Secțiunea „Cererile mele" (toți)
@@ -212,7 +212,7 @@ export function ParDashboard() {
           </div>
           <button
             type="button"
-            onClick={() => navigate("/app/par/new")}
+            onClick={() => navigate("/business/par/new")}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px]"
             aria-label="Cerere PAR nouă"
           >
@@ -227,7 +227,7 @@ export function ParDashboard() {
             {inboxCount > 0 && (
               <button
                 type="button"
-                onClick={() => navigate("/app/par/inbox")}
+                onClick={() => navigate("/business/par/inbox")}
                 className="w-full flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-left hover:bg-primary/10 transition-colors min-h-[44px]"
               >
                 <span className="flex items-center gap-3">
@@ -244,7 +244,7 @@ export function ParDashboard() {
             {isFinance && awaitingPayment.length > 0 && (
               <button
                 type="button"
-                onClick={() => navigate("/app/par/finance")}
+                onClick={() => navigate("/business/par/finance")}
                 className="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3 text-left hover:bg-muted transition-colors min-h-[44px]"
               >
                 <span className="flex items-center gap-3">
@@ -445,7 +445,7 @@ export function ParDashboard() {
               title="Cererile mele"
               count={myRequests.length}
               requests={myRequests}
-              onRowClick={(id) => navigate(`/app/par/${id}`)}
+              onRowClick={(id) => navigate(`/business/par/${id}`)}
               emptyMessage="Nu ai cereri de plată încă."
             />
 
@@ -455,7 +455,7 @@ export function ParDashboard() {
                 title="În proces de aprobare"
                 count={pendingApproval.length}
                 requests={pendingApproval}
-                onRowClick={(id) => navigate(`/app/par/${id}`)}
+                onRowClick={(id) => navigate(`/business/par/${id}`)}
                 emptyMessage=""
                 highlight
               />
@@ -467,7 +467,7 @@ export function ParDashboard() {
                 title="La finanțe — în așteptarea plății"
                 count={awaitingPayment.length}
                 requests={awaitingPayment}
-                onRowClick={(id) => navigate(`/app/par/${id}`)}
+                onRowClick={(id) => navigate(`/business/par/${id}`)}
                 emptyMessage=""
                 highlight
               />

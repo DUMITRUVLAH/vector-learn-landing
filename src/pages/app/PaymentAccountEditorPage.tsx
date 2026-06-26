@@ -62,7 +62,7 @@ export function PaymentAccountEditorPage({ accountId }: PaymentAccountEditorPage
         if (!active) return;
         if (data.status !== "draft") {
           // Issued docs are immutable → send the user to the view.
-          navigate(`/app/conturi-plata/${accountId}`);
+          navigate(`/business/conturi-plata/${accountId}`);
           return;
         }
         setBuyerName(data.buyerName);
@@ -155,7 +155,7 @@ export function PaymentAccountEditorPage({ accountId }: PaymentAccountEditorPage
         : await createPaymentAccount(payload);
       // After save, go to the document view (which offers the "Emite" action),
       // or to the editor's saved state. `thenIssue` jumps straight to view+issue.
-      navigate(`/app/conturi-plata/${data.id}${thenIssue ? "?issue=1" : ""}`);
+      navigate(`/business/conturi-plata/${data.id}${thenIssue ? "?issue=1" : ""}`);
     } catch {
       setError("Salvarea a eșuat. Verifică datele și încearcă din nou.");
       setSaving(false);
@@ -178,7 +178,7 @@ export function PaymentAccountEditorPage({ accountId }: PaymentAccountEditorPage
       pageDescription="Caută plătitorul în registru și completează liniile"
       actions={
         <button
-          onClick={() => navigate("/app/conturi-plata")}
+          onClick={() => navigate("/business/conturi-plata")}
           className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
         >
           <ArrowLeft className="size-4" /> Înapoi

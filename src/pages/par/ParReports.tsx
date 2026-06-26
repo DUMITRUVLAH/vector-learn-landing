@@ -1,5 +1,5 @@
 /**
- * PAR-117 — /app/par/reports
+ * PAR-117 — /business/par/reports
  *
  * Management reporting dashboard: spend aggregations + aging + cycle time + CSV export.
  * Uses recharts for bar charts (same chart lib used throughout the repo).

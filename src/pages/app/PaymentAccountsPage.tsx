@@ -75,13 +75,13 @@ export function PaymentAccountsPage() {
       actions={
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate("/app/conturi-plata/setari")}
+            onClick={() => navigate("/business/conturi-plata/setari")}
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
           >
             <Building2 className="size-4" /> Profil emitent
           </button>
           <button
-            onClick={() => navigate("/app/conturi-plata/nou")}
+            onClick={() => navigate("/business/conturi-plata/nou")}
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="size-4" /> Cont nou
@@ -124,7 +124,7 @@ export function PaymentAccountsPage() {
             Caută o companie după denumire sau IDNO, completează liniile și emite documentul.
           </p>
           <button
-            onClick={() => navigate("/app/conturi-plata/nou")}
+            onClick={() => navigate("/business/conturi-plata/nou")}
             className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="size-4" /> Creează primul cont
@@ -172,7 +172,7 @@ export function PaymentAccountsPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <button
-                        onClick={() => navigate(`/app/conturi-plata/${a.id}`)}
+                        onClick={() => navigate(`/business/conturi-plata/${a.id}`)}
                         aria-label="Vezi contul de plată"
                         className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                       >

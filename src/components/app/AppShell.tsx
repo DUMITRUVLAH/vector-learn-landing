@@ -75,7 +75,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Plăți", href: "/app/payments", icon: CreditCard },
       { label: "Facturi", href: "/app/invoices", icon: Receipt },
-      { label: "Cont de plată", href: "/app/conturi-plata", icon: Landmark }, // CONT-PLATA
+      { label: "Cont de plată", href: "/business/conturi-plata", icon: Landmark }, // CONT-PLATA
       { label: "Contracte", href: "/app/contracts", icon: FileText },
       { label: "Salarizare", href: "/app/hr/payroll", icon: DollarSign },
     ],

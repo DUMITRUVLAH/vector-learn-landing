@@ -1,5 +1,5 @@
 /**
- * /app/par/new — Cerere nouă de plată (PAR), TOT pe un singur ecran.
+ * /business/par/new — Cerere nouă de plată (PAR), TOT pe un singur ecran.
  *
  * Înlocuiește vechiul wizard în 7 pași. Toate secțiunile (1–13) sunt pe o pagină;
  * o bară lipită jos arată totalul + „Trimite pentru aprobare". Validarea e clară:
@@ -314,7 +314,7 @@ export function ParCreateForm() {
     try {
       setBusy(true);
       const { par: newPar } = await instantiateParTemplate(tmpl.id);
-      navigate(`/app/par/${newPar.id}`);
+      navigate(`/business/par/${newPar.id}`);
     } catch {
       setError("Eroare la pornirea din șablon");
     } finally {
@@ -448,7 +448,7 @@ export function ParCreateForm() {
         catch { /* non-blocking — don't fail submit if vendor save fails */ }
       }
       const submitted = await submitPar(parId);
-      navigate(`/app/par/${submitted.id}`);
+      navigate(`/business/par/${submitted.id}`);
     } catch (e) {
       if (e instanceof ApiError && e.details.length) {
         const mapped: Record<string, string> = {};
@@ -580,7 +580,7 @@ export function ParCreateForm() {
                 ) : null
               )}
               {isAdmin && (
-                <a href="#/app/par/admin" className="text-xs text-primary hover:underline w-fit">
+                <a href="#/business/par/admin" className="text-xs text-primary hover:underline w-fit">
                   Gestionează codurile / departamentele / proiectele în Admin →
                 </a>
               )}

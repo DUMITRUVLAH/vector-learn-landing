@@ -120,7 +120,7 @@ export function PaymentAccountViewPage({ accountId }: PaymentAccountViewPageProp
       actions={
         <div className="flex flex-wrap items-center gap-2 print:hidden">
           <button
-            onClick={() => navigate("/app/conturi-plata")}
+            onClick={() => navigate("/business/conturi-plata")}
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
           >
             <ArrowLeft className="size-4" /> Înapoi
@@ -128,7 +128,7 @@ export function PaymentAccountViewPage({ accountId }: PaymentAccountViewPageProp
           {isDraft && (
             <>
               <button
-                onClick={() => navigate(`/app/conturi-plata/${account.id}/editeaza`)}
+                onClick={() => navigate(`/business/conturi-plata/${account.id}/editeaza`)}
                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
               >
                 <Pencil className="size-4" /> Editează

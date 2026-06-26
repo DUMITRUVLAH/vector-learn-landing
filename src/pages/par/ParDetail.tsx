@@ -1,5 +1,5 @@
 /**
- * PAR-118 — /app/par/:id (extends PAR-115)
+ * PAR-118 — /business/par/:id (extends PAR-115)
  *
  * Full-parity PAR detail page:
  *   • All 16 sections read-only, grouped like the form (PAR-115 already had these)
@@ -133,7 +133,7 @@ function DuplicateButton({ parId, onNavigate }: { parId: string; onNavigate: (pa
     setErr(false);
     try {
       const { par } = await duplicatePar(parId);
-      onNavigate(`/app/par/${par.id}`);
+      onNavigate(`/business/par/${par.id}`);
     } catch {
       setErr(true);
       setBusy(false);
@@ -496,7 +496,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
           key="paid"
           type="button"
           disabled={!!busy}
-          onClick={() => navigate(`#/app/par/finance`)}
+          onClick={() => navigate(`#/business/par/finance`)}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 min-h-[44px]"
           aria-label="Marchează plata în coada de finanțe"
         >
@@ -659,7 +659,7 @@ export function ParDetailPage() {
             <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
             <span>{error ?? "Cererea nu a fost găsită."}</span>
           </div>
-          <button type="button" onClick={() => router.navigate("/app/par")} className="mt-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button type="button" onClick={() => router.navigate("/business/par")} className="mt-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Înapoi la lista PAR
           </button>
@@ -679,7 +679,7 @@ export function ParDetailPage() {
           <div>
             <button
               type="button"
-              onClick={() => router.navigate("/app/par")}
+              onClick={() => router.navigate("/business/par")}
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
               aria-label="Înapoi la lista PAR"
             >
