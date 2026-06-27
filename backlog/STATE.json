@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "VM1-12",
-  "iterations": 173,
+  "last_completed": "VM1-05-polish",
+  "iterations": 175,
   "last_run_at": "2026-06-28T00:00:00Z",
-  "milestone_status": "VIOLETA: VM1-01..12,13 done (PRs #204-#214). VM1-12 dosar PDF shipped PR #214. All VM1 items complete.",
+  "milestone_status": "VIOLETA: VM1-01..13 done (PRs #204-#216). Polish run 2026-06-28: VM1-12 dosar PDF #214, VM1-01 multi-role #215, VM1-05 vendor-saved indicator #216.",
   "active_milestone": "VIOLETA",
   "items": {
     "SPLIT-401": {
@@ -4176,14 +4176,14 @@
     },
     "VM1-05": {
       "status": "done",
-      "attempts": 1,
+      "attempts": 2,
       "blockers": [],
       "spec": "Violeta-first-meeting.md",
       "milestone": "VIOLETA",
       "phase": "QUICKWINS",
       "depends_on": [],
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/204",
-      "note": "auto-save payee on payment"
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/216",
+      "note": "polish: 'salvat in registru' UI indicator (2026-06-28); original PR #204 shipped backend auto-save"
     },
     "VM1-06": {
       "status": "done",
@@ -4219,15 +4219,16 @@
     },
     "VM1-01": {
       "status": "done",
-      "attempts": 0,
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-01-access-control.md",
       "milestone": "VIOLETA",
       "phase": "ACCESS",
       "depends_on": [],
-      "branch": "feat/VIOLETA-faza-access-rol",
+      "branch": "feat/VIOLETA-VM1-01-multi-role-admin",
       "priority": "high",
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/206"
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/215",
+      "note": "polish: multi-role grouped view (2026-06-28); original PR #206 shipped access control"
     },
     "VM1-02": {
       "status": "done",
