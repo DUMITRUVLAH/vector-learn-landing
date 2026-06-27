@@ -427,4 +427,4 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | VM1-04 | medium | Evenimente legate de proiect (`parEvents` + `eventId`) | done | [spec](specs/VM1-04-events.md) · [PR #210](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/210) |
 | VM1-10 | medium | Foldere PAR — Proiect → status (dep. VM1-04) | done | [spec](specs/VM1-10-folders-project-status.md) · [PR #210](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/210) |
 | VM1-11 | medium | Foldere ierarhice per proiect (vederea Proiect→status) | done | ParFolders.tsx — verified on front-end 2026-06-28 |
-| VM1-12 | high | Dosar complet PDF (PAR+atașamente+ordin de plată) | pending | [spec](specs/VM1-12-dosar-pdf.md) |
+| VM1-12 | high | Dosar complet PDF (PAR+atașamente+ordin de plată) | done | [spec](specs/VM1-12-dosar-pdf.md) · [PR #214](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/214) |

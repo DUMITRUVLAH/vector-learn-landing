@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "DOCMERGE-004",
-  "iterations": 171,
-  "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "VIOLETA: VM1-01..10,13 done (PRs #204-#210). VM1-12 (dosar PDF) pending. Reconciled 2026-06-28: VM1-07 and VM1-11 verified on front-end and marked done.",
+  "last_completed": "VM1-12",
+  "iterations": 173,
+  "last_run_at": "2026-06-28T00:00:00Z",
+  "milestone_status": "VIOLETA: VM1-01..12,13 done (PRs #204-#214). VM1-12 dosar PDF shipped PR #214. All VM1 items complete.",
   "active_milestone": "VIOLETA",
   "items": {
     "SPLIT-401": {
@@ -4312,14 +4312,22 @@
       "note": "folders per project (hierarchical Proiect→status view) — ParFolders.tsx already implements project grouping; verified on front-end 2026-06-28"
     },
     "VM1-12": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/VM1-12-dosar-pdf.md",
       "milestone": "VIOLETA",
       "phase": "DOSAR",
       "depends_on": ["VM1-04"],
-      "priority": "high"
+      "priority": "high",
+      "branch": "feat/VIOLETA-faza-DOSAR-pdf",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/214",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "SHELL-501": {
       "status": "done",
