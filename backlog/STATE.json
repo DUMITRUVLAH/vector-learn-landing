@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "current_item": null,
+  "current_item": "POLISH-001",
   "last_completed": "VM1-05-polish",
-  "iterations": 175,
-  "last_run_at": "2026-06-28T00:00:00Z",
-  "milestone_status": "VIOLETA: VM1-01..13 done (PRs #204-#216). Polish run 2026-06-28: VM1-12 dosar PDF #214, VM1-01 multi-role #215, VM1-05 vendor-saved indicator #216.",
-  "active_milestone": "VIOLETA",
+  "iterations": 176,
+  "last_run_at": "2026-06-28T01:00:00Z",
+  "milestone_status": "POLISH: building POLISH-001 (CommandPalette Cmd+K), POLISH-002 (Dashboard widgets), POLISH-003 (Empty states).",
+  "active_milestone": "POLISH",
   "items": {
     "SPLIT-401": {
       "status": "done",
@@ -2844,8 +2844,8 @@
       }
     },
     "POLISH-001": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-001-nav-quick-search.md",
       "milestone": "POLISH",
