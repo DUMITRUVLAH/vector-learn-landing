@@ -855,6 +855,13 @@
       "when": 1782422165365,
       "tag": "0121_par_events",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1782508800000,
+      "tag": "0122_par_payment_order_kind",
+      "breakpoints": true
     }
   ]
 }

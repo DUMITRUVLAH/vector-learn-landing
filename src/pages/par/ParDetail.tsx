@@ -57,6 +57,7 @@ import {
   issuePurchaseOrder,
   getParMe,
   formatMDL,
+  downloadDosar,
   type ParDetail as ParDetailType,
   type ParRequest,
   type ParLineItem,
@@ -288,6 +289,47 @@ function PdfDownloadButton({ par, onAttached }: PdfButtonProps) {
         {status === "generating" ? "Se generează PDF..." : status === "done" ? "PDF descărcat" : "Download PDF"}
       </button>
       {status === "error" && errMsg && <p role="alert" className="text-xs text-destructive">{errMsg}</p>}
+    </div>
+  );
+}
+
+// ─── VM1-12: Dosar complet PDF button ────────────────────────────────────────
+
+function DosarButton({ par }: { par: ParDetailType }) {
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  const handleDownload = async () => {
+    if (status === "loading") return;
+    setStatus("loading");
+    setErrMsg(null);
+    try {
+      await downloadDosar(par.id, par.requestNo);
+      setStatus("idle");
+    } catch (e: unknown) {
+      setStatus("error");
+      setErrMsg(e instanceof Error ? e.message : "Eroare la generarea dosarului");
+      setTimeout(() => setStatus("idle"), 5000);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <button
+        type="button"
+        onClick={handleDownload}
+        disabled={status === "loading"}
+        aria-label="Descarcă dosarul complet ca PDF (formular + atașamente)"
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted transition-colors min-h-[44px] disabled:opacity-60"
+      >
+        {status === "loading"
+          ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          : <Paperclip className="h-4 w-4" aria-hidden />}
+        {status === "loading" ? "Se generează dosarul..." : "Descarcă dosarul complet (PDF)"}
+      </button>
+      {status === "error" && errMsg && (
+        <p role="alert" className="text-xs text-destructive">{errMsg}</p>
+      )}
     </div>
   );
 }
@@ -701,6 +743,7 @@ export function ParDetailPage() {
             <DuplicateButton parId={par.id} onNavigate={router.navigate} />
             <PoButton par={par} orgName={orgName} />
             <PdfDownloadButton par={par} onAttached={load} />
+            <DosarButton par={par} />
           </div>
         </div>
 
@@ -846,9 +889,37 @@ export function ParDetailPage() {
                     {att.fileName}
                   </a>
                   {att.kind === "par_pdf" && <span className="text-xs text-muted-foreground">(PDF generat)</span>}
+                  {att.kind === "payment_order" && <span className="text-xs text-muted-foreground">(Ordin de plată)</span>}
                 </li>
               ))}
             </ul>
+          )}
+          {/* VM1-12: Upload ordin de plată — visible for finance/admin once PAR is paid */}
+          {currentRoles && (currentRoles.includes("finance") || currentRoles.includes("par_admin")) && par.status === "paid" && (
+            <div className="mt-3 pt-3 border-t border-border">
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Încarc ordin de plată (post-plată)</label>
+              <input
+                type="file"
+                accept=".pdf"
+                aria-label="Selectează ordinul de plată (PDF)"
+                className="text-xs text-foreground file:mr-2 file:py-1 file:px-2 file:rounded file:border file:border-border file:bg-muted file:text-xs file:cursor-pointer"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = async (ev) => {
+                    const dataUrl = ev.target?.result as string;
+                    try {
+                      await uploadAttachment(par.id, { file_name: file.name, file_url: dataUrl, mime: file.type, kind: "payment_order" });
+                      load();
+                    } catch {
+                      // ignore — user can retry
+                    }
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </div>
           )}
         </Section>
 
