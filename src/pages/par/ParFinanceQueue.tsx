@@ -179,6 +179,8 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  // VM1-05: show "salvat în registru ✓" indicator when vendor was auto-saved on payment
+  const [vendorAutoSaved, setVendorAutoSaved] = useState(false);
 
   // Warn user when amount exceeds +10%
   const updateWarning = (amtStr: string) => {
@@ -218,7 +220,18 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
         payment_ref: paymentRef.trim(),
         proof_url: proofUrl.trim() || null,
       };
-      await executePayment(par.id, payload);
+      const result = await executePayment(par.id, payload);
+      // VM1-05: if vendor was auto-saved (new vendorId on the returned PAR, previously none),
+      // show indicator briefly before closing the modal.
+      const autoSaved =
+        result.status === "paid" &&
+        !par.vendorId &&
+        !!result.par.vendorId;
+      if (autoSaved) {
+        setVendorAutoSaved(true);
+        // Give the user 2 seconds to see the indicator, then close
+        await new Promise<void>((res) => setTimeout(res, 2000));
+      }
       onPaid();
       onClose();
     } catch (e: unknown) {
@@ -259,6 +272,18 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
           <div role="status" className="flex items-start gap-2 text-amber-700 dark:text-amber-400 text-sm bg-amber-50 dark:bg-amber-900/20 rounded px-3 py-2">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
             {warning}
+          </div>
+        )}
+
+        {/* VM1-05: auto-save vendor indicator — shown briefly after successful payment */}
+        {vendorAutoSaved && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-2 text-green-700 dark:text-green-400 text-sm bg-green-50 dark:bg-green-900/20 rounded px-3 py-2"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Prestator salvat în registru ✓
           </div>
         )}
 
