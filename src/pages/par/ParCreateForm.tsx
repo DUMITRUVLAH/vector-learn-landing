@@ -294,8 +294,10 @@ export function ParCreateForm() {
         // If there's no line item yet, prefill a synthetic one isn't in scope (PAR lines = phase 2).
         // Just note the total in a state so the user sees it.
       }
-      if (result.currency.value && ["MDL", "EUR", "USD", "RON"].includes(String(result.currency.value))) {
-        setCurrency(result.currency.value as "MDL" | "EUR" | "USD" | "RON");
+      // VM1-03 / Decision 3: only MDL/EUR/USD are supported (RON excluded). Ignore any other
+      // currency the AI extracts so the prefill can't set a value the form + backend reject.
+      if (result.currency.value && ["MDL", "EUR", "USD"].includes(String(result.currency.value))) {
+        setCurrency(result.currency.value as "MDL" | "EUR" | "USD");
       }
       // Clear vendor selection so the new manual name takes precedence
       setVendorId("");
