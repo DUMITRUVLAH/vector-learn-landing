@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { db, closeDb } from "./client";
-import { tenants, users, students, teachers, courses, lessons, branches, leads } from "./schema";
+import { tenants, users, students, teachers, courses, branches, leads } from "./schema";
 import {
   parMembers,
   parSettings,
@@ -126,19 +126,9 @@ async function seed() {
     ])
     .returning();
 
-  const now = new Date();
-  const lessonRows = await db
-    .insert(lessons)
-    .values([
-      { tenantId: tenant.id, courseId: engB2.id, teacherId: teacherRows[0].id, scheduledAt: new Date(now.getTime() + 24 * 3600 * 1000), durationMinutes: 90, status: "scheduled", branchId: defaultBranch.id },
-      { tenantId: tenant.id, courseId: pythonAv.id, teacherId: teacherRows[1].id, scheduledAt: new Date(now.getTime() + 48 * 3600 * 1000), durationMinutes: 120, status: "scheduled", branchId: defaultBranch.id },
-      { tenantId: tenant.id, courseId: pianMid.id, teacherId: teacherRows[2].id, scheduledAt: new Date(now.getTime() + 72 * 3600 * 1000), durationMinutes: 60, status: "scheduled", branchId: defaultBranch.id },
-      { tenantId: tenant.id, courseId: engB2.id, teacherId: teacherRows[0].id, scheduledAt: new Date(now.getTime() - 24 * 3600 * 1000), durationMinutes: 90, status: "completed", branchId: defaultBranch.id },
-      { tenantId: tenant.id, courseId: pythonAv.id, teacherId: teacherRows[1].id, scheduledAt: new Date(now.getTime() - 48 * 3600 * 1000), durationMinutes: 120, status: "completed", branchId: defaultBranch.id },
-    ])
-    .returning();
-
-  console.log(`✅ ${lessonRows.length} lessons created`);
+  // NOTE: the `lessons` CRM table was removed from the schema during the CRM split;
+  // the seed no longer creates lesson rows (courses above are enough for demo).
+  void [engB2, pythonAv, pianMid];
 
   // UX-704: Seed realistic CRM leads spread across pipeline stages so the demo looks alive.
   const norm = (p: string) => p.replace(/\D/g, "").slice(-9);
@@ -164,7 +154,9 @@ async function seed() {
   if (!existingPar) {
     const [parTenant] = await db
       .insert(tenants)
-      .values({ name: "ATIC — Digital Safeguard", slug: PAR_SLUG, plan: "growth" })
+      // appKind "business" is required for /api/business/auth/login — PAR lives in the Business
+      // Suite (/business/par/*). Without it the demo PAR admin is rejected with "no Business access".
+      .values({ name: "ATIC — Digital Safeguard", slug: PAR_SLUG, plan: "growth", appKind: "business" })
       .returning();
 
     // 4 users covering all PAR roles

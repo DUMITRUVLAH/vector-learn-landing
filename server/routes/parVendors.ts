@@ -13,9 +13,11 @@ import { parVendors } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { isValidMoldovaIBAN, isValidIDNP } from "../lib/par/validators";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parVendorsRoutes = new Hono<{ Variables: AuthVariables }>();
 parVendorsRoutes.use("*", requireAuth);
+parVendorsRoutes.use("/:id", parUuidGuard("id"));
 
 const vendorSchema = z.object({
   name: z.string().min(1).max(300),

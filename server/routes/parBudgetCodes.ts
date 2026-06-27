@@ -15,9 +15,13 @@ import { db } from "../db/client";
 import { parBudgetCodes, parRequests } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parBudgetCodesRoutes = new Hono<{ Variables: AuthVariables }>();
 parBudgetCodesRoutes.use("*", requireAuth);
+// Guard the nested `/:id/balance`; the bare `/:id` (PATCH/DELETE) is UUID-constrained at the route
+// level so the literal `/usage` route is never shadowed by a wildcard guard.
+parBudgetCodesRoutes.use("/:id/:action/*", parUuidGuard("id"));
 
 const codeSchema = z.object({
   code: z.string().min(1).max(50),
@@ -195,7 +199,7 @@ parBudgetCodesRoutes.post(
 
 /** PATCH /:id */
 parBudgetCodesRoutes.patch(
-  "/:id",
+  "/:id{[0-9a-fA-F-]{36}}",
   requirePARRole("par_admin"),
   zValidator("json", codeSchema.partial()),
   async (c) => {
@@ -213,7 +217,7 @@ parBudgetCodesRoutes.patch(
 );
 
 /** DELETE /:id — soft delete */
-parBudgetCodesRoutes.delete("/:id", requirePARRole("par_admin"), async (c) => {
+parBudgetCodesRoutes.delete("/:id{[0-9a-fA-F-]{36}}", requirePARRole("par_admin"), async (c) => {
   const tenantId = c.get("user").tenantId;
   const id = c.req.param("id");
   const [row] = await db

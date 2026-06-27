@@ -15,10 +15,12 @@ import { db } from "../db/client";
 import { parEvents } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parEventsRoutes = new Hono<{ Variables: AuthVariables }>();
 
 parEventsRoutes.use("*", requireAuth);
+parEventsRoutes.use("/:id", parUuidGuard("id"));
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 

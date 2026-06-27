@@ -15,9 +15,11 @@ import { parDelegations, parMembers } from "../db/schema/par";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parDelegationsRoutes = new Hono<{ Variables: AuthVariables }>();
 parDelegationsRoutes.use("*", requireAuth);
+parDelegationsRoutes.use("/:id", parUuidGuard("id"));
 
 const createSchema = z.object({
   to_user_id: z.string().uuid(),

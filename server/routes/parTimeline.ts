@@ -15,9 +15,11 @@ import { parAudit, parRequests } from "../db/schema/par";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parTimelineRoutes = new Hono<{ Variables: AuthVariables }>();
 parTimelineRoutes.use("*", requireAuth);
+parTimelineRoutes.use("/:id/:action/*", parUuidGuard("id"));
 
 // ─── GET /api/par/:id/timeline ──────────────────────────────────────────────
 // Returns all par_audit rows for the given PAR, chronologically,

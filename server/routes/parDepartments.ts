@@ -10,9 +10,11 @@ import { db } from "../db/client";
 import { parDepartments } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parDepartmentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parDepartmentsRoutes.use("*", requireAuth);
+parDepartmentsRoutes.use("/:id", parUuidGuard("id"));
 
 const deptSchema = z.object({
   name: z.string().min(1).max(200),

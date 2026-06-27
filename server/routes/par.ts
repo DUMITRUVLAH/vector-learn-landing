@@ -39,6 +39,7 @@ import {
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 import { generateRequestNo } from "../lib/par/requestNo";
 import { isValidMoldovaIBAN, isValidIDNP } from "../lib/par/validators";
 import { recalcParTotal } from "../lib/par/totals";
@@ -47,6 +48,10 @@ import { verifyParBodyHash } from "../lib/par/integrity";
 
 export const parRoutes = new Hono<{ Variables: AuthVariables }>();
 parRoutes.use("*", requireAuth);
+// Guard non-UUID path params before they reach a Postgres uuid query (→ 500). Covers both the
+// bare `/:id` (GET/PATCH/DELETE) and the nested `/:id/...` (submit, line-items, comments, quotes…).
+parRoutes.use("/:id", parUuidGuard("id"));
+parRoutes.use("/:id/:action/*", parUuidGuard("id"));
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 

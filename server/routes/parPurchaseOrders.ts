@@ -12,9 +12,11 @@ import { db } from "../db/client";
 import { parRequests, parPurchaseOrders, parAudit, parSettings } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parPurchaseOrderRoutes = new Hono<{ Variables: AuthVariables }>();
 parPurchaseOrderRoutes.use("*", requireAuth);
+parPurchaseOrderRoutes.use("/:id/:action/*", parUuidGuard("id"));
 
 /** Generate a collision-free PO number per tenant + year. */
 async function generatePoNumber(tenantId: string): Promise<string> {

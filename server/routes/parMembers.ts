@@ -13,10 +13,12 @@ import { users } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { getUserPARRoles } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parMembersRoutes = new Hono<{ Variables: AuthVariables }>();
 
 parMembersRoutes.use("*", requireAuth);
+parMembersRoutes.use("/:id", parUuidGuard("id"));
 
 const assignMemberSchema = z.object({
   userId: z.string().uuid(),
