@@ -20,6 +20,7 @@ import { Link, useRouter } from "@/router/HashRouter";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { getFinMe, type FinRole, type FinOrgProfile } from "@/lib/api/fin";
 import { FinNav } from "@/components/fin/FinNav";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -37,7 +38,7 @@ interface FinLayoutProps {
 export function FinLayout({ children, pageTitle, pageDescription, actions }: FinLayoutProps) {
   // SPLIT-401: Use business session (not CRM session) for identity in /business/fin/* pages.
   const bizSession = useBusinessSession();
-  const { navigate } = useRouter();
+  const { navigate, path } = useRouter();
 
   const [role, setRole] = useState<FinRole | null>(null);
   const [profile, setProfile] = useState<FinOrgProfile | null>(null);
@@ -64,6 +65,19 @@ export function FinLayout({ children, pageTitle, pageDescription, actions }: Fin
       })
       .finally(() => setLoading(false));
   }, []);
+
+  // SPLIT-402 convergence: under /business/* the canonical chrome is BusinessShell (same as
+  // AppShell delegates). FinHome/FinCompany/FinOnboarding used to render their own
+  // "Vector / FinDesk" FinNav shell, so the sidebar/header differed from every other Business
+  // Suite page ("Business Suite" + flat nav). Delegate here so the whole suite is identical.
+  // Hooks above run unconditionally first (Rules of Hooks). Legacy /app/fin/* keeps FinNav.
+  if (path.startsWith("/business")) {
+    return (
+      <BusinessShell pageTitle={pageTitle ?? ""} pageDescription={pageDescription} actions={actions}>
+        {children}
+      </BusinessShell>
+    );
+  }
 
   // SPLIT-401: Business logout → redirect to /business/login (not /app/login).
   const handleLogout = async () => {
