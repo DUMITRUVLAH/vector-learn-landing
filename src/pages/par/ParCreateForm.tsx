@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils";
 
 const ATTACHMENT_KIND_LABELS: Record<ParAttachmentKind, string> = {
   act_of_receipt: "Act de primire", contract: "Contract", quotation: "Ofertă",
-  invoice: "Factură", par_pdf: "PAR PDF", other: "Altul",
+  invoice: "Factură", par_pdf: "PAR PDF", payment_order: "Ordin de plată", other: "Altul",
 };
 
 /** Map server submit `errors[].field` → friendly RO message for the summary + inline. */

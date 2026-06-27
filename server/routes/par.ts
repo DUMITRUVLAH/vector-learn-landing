@@ -1252,6 +1252,169 @@ async function computeOverBudget(
   return { over: usedCents > allocatedCents, overByCents: usedCents - allocatedCents, allocatedCents, usedCents };
 }
 
+// ─── GET /api/par/:id/dosar ─────────────────────────────────────────────────
+// VM1-12: Combined dosar PDF — PAR form pages + supporting attachments + payment order.
+// Uses pdf-lib via DYNAMIC import() only (never top-level — exceljs/PAR-port lesson).
+// Document order: par_pdf → contract → act_of_receipt → quotation → invoice → payment_order → other.
+// Non-PDF attachments (images, DOCX, XLSX) appear as separator pages only.
+// Romanian diacritics are preserved via pdf-lib UTF-8 support.
+
+const DOSAR_ORDER: string[] = [
+  "par_pdf",
+  "contract",
+  "act_of_receipt",
+  "quotation",
+  "invoice",
+  "payment_order",
+  "other",
+];
+
+function kindLabel(kind: string): string {
+  const map: Record<string, string> = {
+    par_pdf: "Formularul PAR",
+    contract: "Contract",
+    act_of_receipt: "Act de recepție",
+    quotation: "Ofertă / Deviz",
+    invoice: "Factură",
+    payment_order: "Ordin de plată",
+    other: "Altele",
+  };
+  return map[kind] ?? kind;
+}
+
+parRoutes.get("/:id/dosar", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+
+  const roles = await getUserPARRoles(user.id, tenantId);
+  const hasAnyRole = roles.length > 0;
+  if (!hasAnyRole && par.requestedByUserId !== user.id) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  // Fetch attachments sorted by our deterministic order
+  const attachments = await db
+    .select()
+    .from(parAttachments)
+    .where(and(eq(parAttachments.parId, parId), eq(parAttachments.tenantId, tenantId)));
+
+  attachments.sort((a, b) => {
+    const ai = DOSAR_ORDER.indexOf(a.kind ?? "other");
+    const bi = DOSAR_ORDER.indexOf(b.kind ?? "other");
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+
+  // ── Dynamic import of pdf-lib (NEVER top-level — exceljs outage lesson) ──
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+
+  const dosar = await PDFDocument.create();
+  const helvetica = await dosar.embedFont(StandardFonts.Helvetica);
+  const helveticaBold = await dosar.embedFont(StandardFonts.HelveticaBold);
+
+  // Helper: add a separator page with centred title
+  const addSeparator = async (title: string, subtitle?: string) => {
+    const page = dosar.addPage([595, 842]); // A4 portrait in points
+    const { width, height } = page.getSize();
+    page.drawText(title, {
+      x: 50,
+      y: height / 2 + 20,
+      size: 18,
+      font: helveticaBold,
+      color: rgb(0.1, 0.1, 0.1),
+      maxWidth: width - 100,
+    });
+    if (subtitle) {
+      page.drawText(subtitle, {
+        x: 50,
+        y: height / 2 - 10,
+        size: 12,
+        font: helvetica,
+        color: rgb(0.4, 0.4, 0.4),
+        maxWidth: width - 100,
+      });
+    }
+  };
+
+  // If no attachments at all, add an informational page
+  if (attachments.length === 0) {
+    await addSeparator(
+      `Dosar PAR — ${par.requestNo ?? "fără număr"}`,
+      "Nu există atașamente. Generați mai întâi PDF-ul formularului PAR."
+    );
+    const pdfBytes = await dosar.save();
+    c.header("Content-Type", "application/pdf");
+    const fileSafe = (par.requestNo ?? `PAR-${parId.slice(0, 8)}`).replace(/[^\w-]+/g, "_");
+    c.header("Content-Disposition", `attachment; filename="Dosar_PAR_${fileSafe}.pdf"`);
+    return c.body(Buffer.from(pdfBytes));
+  }
+
+  let currentKind: string | null = null;
+
+  for (const att of attachments) {
+    const kind = att.kind ?? "other";
+
+    // Add a section separator when the kind changes
+    if (kind !== currentKind) {
+      currentKind = kind;
+      await addSeparator(kindLabel(kind));
+    }
+
+    const fileUrl = att.fileUrl ?? "";
+    const fileName = att.fileName ?? "fișier";
+    const isPdf =
+      fileName.toLowerCase().endsWith(".pdf") ||
+      fileUrl.startsWith("data:application/pdf") ||
+      fileUrl.startsWith("data:application/x-pdf");
+
+    if (!isPdf) {
+      // Non-PDF: add note page
+      const ext = fileName.split(".").pop()?.toUpperCase() ?? "FIȘIER";
+      await addSeparator(
+        `Anexă: ${fileName}`,
+        `(Tipul de fișier ${ext} nu poate fi inclus în PDF — descărcați separat)`
+      );
+      continue;
+    }
+
+    // PDF: embed pages
+    try {
+      let pdfBytes: Uint8Array;
+      if (fileUrl.startsWith("data:")) {
+        // data URI — strip prefix
+        const base64 = fileUrl.split(",")[1];
+        if (!base64) throw new Error("empty data URI");
+        const binary = atob(base64);
+        pdfBytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) pdfBytes[i] = binary.charCodeAt(i);
+      } else {
+        // External URL — fetch
+        const resp = await fetch(fileUrl);
+        if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+        pdfBytes = new Uint8Array(await resp.arrayBuffer());
+      }
+      const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+      const pages = await dosar.copyPages(srcDoc, srcDoc.getPageIndices());
+      for (const pg of pages) dosar.addPage(pg);
+    } catch (err) {
+      // If embedding fails, add error note page
+      await addSeparator(
+        `Anexă: ${fileName}`,
+        `(PDF corupt sau inaccesibil — descărcați separat. Detaliu: ${err instanceof Error ? err.message : "necunoscut"})`
+      );
+    }
+  }
+
+  const pdfBytes = await dosar.save();
+  const fileSafe = (par.requestNo ?? `PAR-${parId.slice(0, 8)}`).replace(/[^\w-]+/g, "_");
+  c.header("Content-Type", "application/pdf");
+  c.header("Content-Disposition", `attachment; filename="Dosar_PAR_${fileSafe}.pdf"`);
+  return c.body(Buffer.from(pdfBytes));
+});
+
 // ─── DELETE /api/par/:id/line-items/:lineId ──────────────────────────────────
 
 parRoutes.delete("/:id/line-items/:lineId", async (c) => {
