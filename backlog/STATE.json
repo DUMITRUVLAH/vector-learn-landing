@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "POLISH-003",
-  "last_completed": "POLISH-002",
-  "iterations": 178,
+  "current_item": null,
+  "last_completed": "POLISH-003",
+  "iterations": 179,
   "last_run_at": "2026-06-28T01:00:00Z",
   "milestone_status": "POLISH: building POLISH-001 (CommandPalette Cmd+K), POLISH-002 (Dashboard widgets), POLISH-003 (Empty states).",
   "active_milestone": "POLISH",
@@ -2878,13 +2878,20 @@
       }
     },
     "POLISH-003": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-003-empty-states.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/POLISH-faza-1-ux-polish",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "LOVES"
+      }
     },
     "CORE-001": {
       "status": "done",

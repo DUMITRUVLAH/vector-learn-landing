@@ -8,6 +8,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Plus, FileText } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { EmptyState } from "@/components/EmptyState";
 import { AgreementTable } from "@/components/fin/AgreementTable";
 import { AgreementDrawer } from "@/components/fin/AgreementDrawer";
 import { CreateAgreementDialog } from "@/components/fin/CreateAgreementDialog";
@@ -92,27 +93,14 @@ export function AgreementsPage() {
         </button>
       }
     >
-      {/* Empty state when no agreements exist at all */}
+      {/* POLISH-003: Empty state when no agreements exist */}
       {!loading && agreements.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-20 text-muted-foreground">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-            <FileText className="h-7 w-7" aria-hidden />
-          </div>
-          <p className="text-base font-medium text-foreground">
-            Niciun contract creat
-          </p>
-          <p className="max-w-sm text-center text-sm">
-            Creează primul contract comercial pentru a urmări serviciile și
-            facturarea automată.
-          </p>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="mt-2 flex min-h-[40px] items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <Plus className="h-4 w-4" aria-hidden />
-            Contract nou
-          </button>
-        </div>
+        <EmptyState
+          icon={<FileText className="h-6 w-6 text-muted-foreground" />}
+          title="Niciun contract creat"
+          description="Creează primul contract comercial pentru a urmări serviciile și facturarea automată."
+          action={{ label: "Contract nou", onClick: () => setShowCreate(true) }}
+        />
       ) : (
         <AgreementTable
           agreements={agreements}
