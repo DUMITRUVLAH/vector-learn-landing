@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": "POLISH-001",
-  "last_completed": "VM1-05-polish",
-  "iterations": 176,
+  "current_item": "POLISH-003",
+  "last_completed": "POLISH-002",
+  "iterations": 178,
   "last_run_at": "2026-06-28T01:00:00Z",
   "milestone_status": "POLISH: building POLISH-001 (CommandPalette Cmd+K), POLISH-002 (Dashboard widgets), POLISH-003 (Empty states).",
   "active_milestone": "POLISH",
@@ -2844,28 +2844,42 @@
       }
     },
     "POLISH-001": {
-      "status": "in_progress",
+      "status": "done",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-001-nav-quick-search.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": []
+      "depends_on": [],
+      "branch": "feat/POLISH-faza-1-ux-polish",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "POLISH-002": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-002-dashboard-widgets.md",
       "milestone": "POLISH",
       "phase": "1",
       "depends_on": [
         "POLISH-001"
-      ]
+      ],
+      "branch": "feat/POLISH-faza-1-ux-polish",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "POLISH-003": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "in_progress",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/POLISH-003-empty-states.md",
       "milestone": "POLISH",
