@@ -417,11 +417,14 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 |----|----------|-------|--------|------|
 | VM1-05 | high | Auto-salvare plătitor în registru la plată | done | [doc](../Violeta-first-meeting.md) · [PR #204](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/204) |
 | VM1-06 | high | Max 10 atașamente + upload multiplu | done | [doc](../Violeta-first-meeting.md) · [PR #204](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/204) |
+| VM1-07 | high | Email la aprobator la submit PAR | done | notify.ts — verified on front-end 2026-06-28 |
 | VM1-08 | high | Email aprobare cu detalii plată (fără IBAN) | done | [doc](../Violeta-first-meeting.md) · [PR #205](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/205) |
 | VM1-09 | — | Aprobare în masă (deja exista, VF-102) | done | [doc](../Violeta-first-meeting.md) |
-| VM1-01 | high | Access-control — modulul ascuns fără rol PAR | pending | [spec](specs/VM1-01-access-control.md) |
-| VM1-02 | medium | Import config din Excel (proiecte/dept/buget) | pending | [spec](specs/VM1-02-import-config-excel.md) |
-| VM1-13 | medium | AI pre-completează din document (payee/sumă/IBAN/scop) | pending | [spec](specs/VM1-13-ai-mapping.md) |
-| VM1-03 | medium | Valute MDL/EUR/USD — rapoarte convertite în MDL (BNM) | pending | [spec](specs/VM1-03-currency-reports.md) |
-| VM1-04 | medium | Evenimente legate de proiect (`parEvents` + `eventId`) | pending | [spec](specs/VM1-04-events.md) |
-| VM1-10 | medium | Foldere PAR — Proiect → status (dep. VM1-04) | pending | [spec](specs/VM1-10-folders-project-status.md) |
+| VM1-01 | high | Access-control — modulul ascuns fără rol PAR | done | [spec](specs/VM1-01-access-control.md) · [PR #206](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/206) |
+| VM1-02 | medium | Import config din Excel (proiecte/dept/buget) | done | [spec](specs/VM1-02-import-config-excel.md) · [PR #207](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/207) |
+| VM1-13 | medium | AI pre-completează din document (payee/sumă/IBAN/scop) | done | [spec](specs/VM1-13-ai-mapping.md) · [PR #208](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/208) |
+| VM1-03 | medium | Valute MDL/EUR/USD — rapoarte convertite în MDL (BNM) | done | [spec](specs/VM1-03-currency-reports.md) · [PR #209](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/209) |
+| VM1-04 | medium | Evenimente legate de proiect (`parEvents` + `eventId`) | done | [spec](specs/VM1-04-events.md) · [PR #210](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/210) |
+| VM1-10 | medium | Foldere PAR — Proiect → status (dep. VM1-04) | done | [spec](specs/VM1-10-folders-project-status.md) · [PR #210](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/210) |
+| VM1-11 | medium | Foldere ierarhice per proiect (vederea Proiect→status) | done | ParFolders.tsx — verified on front-end 2026-06-28 |
+| VM1-12 | high | Dosar complet PDF (PAR+atașamente+ordin de plată) | pending | [spec](specs/VM1-12-dosar-pdf.md) |

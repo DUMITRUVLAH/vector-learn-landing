@@ -4,7 +4,7 @@
   "last_completed": "DOCMERGE-004",
   "iterations": 171,
   "last_run_at": "2026-06-12T00:00:00Z",
-  "milestone_status": "VIOLETA COMPLETE — all VM1-xx delivered (PRs #204-#210 open, awaiting owner review/merge). Loop stopped. Do NOT auto-rebuild VM1 (they have open PRs). Other milestones (SPLIT-402, POLISH-001/002/003) are a separate direction — only build on explicit owner request.",
+  "milestone_status": "VIOLETA: VM1-01..10,13 done (PRs #204-#210). VM1-12 (dosar PDF) pending. Reconciled 2026-06-28: VM1-07 and VM1-11 verified on front-end and marked done.",
   "active_milestone": "VIOLETA",
   "items": {
     "SPLIT-401": {
@@ -4290,6 +4290,36 @@
       "branch": "feat/VIOLETA-faza-evenimente-foldere",
       "priority": "medium",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/210"
+    },
+    "VM1-07": {
+      "status": "done",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "Violeta-first-meeting.md",
+      "milestone": "VIOLETA",
+      "phase": "QUICKWINS",
+      "depends_on": [],
+      "note": "email to approver on PAR submit — notify.ts already implements this; verified on front-end 2026-06-28"
+    },
+    "VM1-11": {
+      "status": "done",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "Violeta-first-meeting.md",
+      "milestone": "VIOLETA",
+      "phase": "EVENTS",
+      "depends_on": ["VM1-10"],
+      "note": "folders per project (hierarchical Proiect→status view) — ParFolders.tsx already implements project grouping; verified on front-end 2026-06-28"
+    },
+    "VM1-12": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/specs/VM1-12-dosar-pdf.md",
+      "milestone": "VIOLETA",
+      "phase": "DOSAR",
+      "depends_on": ["VM1-04"],
+      "priority": "high"
     },
     "SHELL-501": {
       "status": "done",
