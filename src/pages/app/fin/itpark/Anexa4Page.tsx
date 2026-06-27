@@ -21,7 +21,7 @@ import {
   AlertTriangle,
   ShieldCheck,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import { getEngagement, type ItparkEngagement } from "@/lib/api/itparkEngagements";
 import { listLines, type RevenueLine } from "@/lib/api/itparkLines";
@@ -220,20 +220,20 @@ export function Anexa4Page() {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Anexa 4">
+      <BusinessShell pageTitle="Anexa 4">
         <div
           className="flex items-center justify-center min-h-64"
           aria-label="Se încarcă Anexa 4"
         >
           <Loader2 className="w-8 h-8 animate-spin text-primary" aria-hidden="true" />
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
   if (error || !eng) {
     return (
-      <AppShell pageTitle="Anexa 4 — Eroare">
+      <BusinessShell pageTitle="Anexa 4 — Eroare">
         <div
           role="alert"
           className="flex items-center gap-3 p-4 bg-destructive/10 text-destructive rounded-lg mx-4 mt-4"
@@ -241,7 +241,7 @@ export function Anexa4Page() {
           <AlertCircle className="w-5 h-5 shrink-0" aria-hidden="true" />
           <span className="text-sm">{error ?? "Dosarul nu a fost găsit"}</span>
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
@@ -250,7 +250,7 @@ export function Anexa4Page() {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <AppShell pageTitle={`Anexa 4 — ${eng.residentName} ${eng.reportingYear}`}>
+    <BusinessShell pageTitle={`Anexa 4 — ${eng.residentName} ${eng.reportingYear}`}>
       {/* ─── Header ─────────────────────────────────────────────── */}
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between print:hidden">
         <div className="flex items-center gap-3">
@@ -568,6 +568,6 @@ export function Anexa4Page() {
           .print\\:border-gray-400 { border-color: #9ca3af !important; }
         }
       `}</style>
-    </AppShell>
+    </BusinessShell>
   );
 }

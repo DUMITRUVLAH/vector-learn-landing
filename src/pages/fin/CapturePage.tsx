@@ -23,7 +23,7 @@ import {
   FileText,
   RotateCcw,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { CaptureFieldRow } from "@/components/fin/CaptureFieldRow";
 import { InvoiceBulkUpload } from "@/components/fin/InvoiceBulkUpload";
 import { useRouter } from "@/router/HashRouter";
@@ -498,17 +498,17 @@ export default function CapturePage({ captureId }: { captureId: string }) {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Invoice Reporting">
+      <BusinessShell pageTitle="Invoice Reporting">
         <div className="flex min-h-[200px] items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-primary" aria-label="Se încarcă" />
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
   if (error) {
     return (
-      <AppShell pageTitle="Invoice Reporting — Eroare">
+      <BusinessShell pageTitle="Invoice Reporting — Eroare">
         <div className="mx-auto max-w-2xl p-6 text-center">
           <XCircle className="mx-auto mb-3 h-10 w-10 text-destructive" />
           <p className="text-sm text-muted-foreground">{error}</p>
@@ -520,14 +520,14 @@ export default function CapturePage({ captureId }: { captureId: string }) {
             Înapoi la capturi
           </button>
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
   if (!capture) return null;
 
   return (
-    <AppShell pageTitle="Invoice Reporting — Verificare">
+    <BusinessShell pageTitle="Invoice Reporting — Verificare">
       <div className="mx-auto max-w-3xl space-y-6 p-4 sm:p-6">
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
@@ -987,6 +987,6 @@ export default function CapturePage({ captureId }: { captureId: string }) {
           </div>
         )}
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }

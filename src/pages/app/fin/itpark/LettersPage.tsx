@@ -25,7 +25,7 @@ import {
   Clock,
   Save,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import { getEngagement, type ItparkEngagement } from "@/lib/api/itparkEngagements";
 import {
@@ -355,20 +355,20 @@ export function LettersPage() {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Scrisori de confirmare">
+      <BusinessShell pageTitle="Scrisori de confirmare">
         <div
           className="flex items-center justify-center min-h-64"
           aria-label="Se încarcă scrisorile"
         >
           <Loader2 className="w-8 h-8 animate-spin text-primary" aria-hidden="true" />
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
   if (error || !eng) {
     return (
-      <AppShell pageTitle="Scrisori — Eroare">
+      <BusinessShell pageTitle="Scrisori — Eroare">
         <div
           role="alert"
           className="flex items-center gap-3 p-4 bg-destructive/10 text-destructive rounded-lg mx-4 mt-4"
@@ -376,7 +376,7 @@ export function LettersPage() {
           <AlertCircle className="w-5 h-5 shrink-0" aria-hidden="true" />
           <span className="text-sm">{error ?? "Dosarul nu a fost găsit"}</span>
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
@@ -392,7 +392,7 @@ export function LettersPage() {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <AppShell pageTitle={`Scrisori — ${eng.residentName} ${eng.reportingYear}`}>
+    <BusinessShell pageTitle={`Scrisori — ${eng.residentName} ${eng.reportingYear}`}>
       {/* ─── Header ─────────────────────────────────────────────── */}
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3 flex items-center justify-between print:hidden">
         <div className="flex items-center gap-3">
@@ -475,6 +475,6 @@ export function LettersPage() {
           .print\\:space-y-8 > * + * { margin-top: 2rem !important; }
         }
       `}</style>
-    </AppShell>
+    </BusinessShell>
   );
 }

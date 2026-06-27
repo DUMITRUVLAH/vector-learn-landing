@@ -18,7 +18,7 @@ import {
   Building2,
   Upload,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { apiUpload } from "@/lib/api";
 import { formatMDLCents } from "@/lib/api/finCaptures";
 import {
@@ -111,7 +111,7 @@ export default function ReconcilePage() {
   };
 
   return (
-    <AppShell pageTitle="Reconciliere & TVA import">
+    <BusinessShell pageTitle="Reconciliere & TVA import">
       <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
         {/* Header + Synchronize */}
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -324,7 +324,7 @@ export default function ReconcilePage() {
           )}
         </section>
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }
 

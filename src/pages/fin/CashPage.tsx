@@ -13,7 +13,7 @@ import {
   Loader2,
   Upload,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import {
   getTransactions,
@@ -96,7 +96,7 @@ export default function CashPage() {
     .reduce((sum, t) => sum + t.amountCents, 0);
 
   return (
-    <AppShell pageTitle="Încasări (CASH)">
+    <BusinessShell pageTitle="Încasări (CASH)">
       <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -243,6 +243,6 @@ export default function CashPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }

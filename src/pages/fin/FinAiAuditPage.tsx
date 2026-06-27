@@ -21,7 +21,7 @@ import {
   ChevronRight,
   AlertTriangle,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useSession } from "@/hooks/useSession";
 import {
   listAiAuditLog,
@@ -130,16 +130,16 @@ export function FinAiAuditPage() {
 
   if (sessionStatus === "loading") {
     return (
-      <AppShell pageTitle="Audit AI">
+      <BusinessShell pageTitle="Audit AI">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
   return (
-    <AppShell pageTitle="Audit AI — FinDesk">
+    <BusinessShell pageTitle="Audit AI — FinDesk">
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -476,6 +476,6 @@ export function FinAiAuditPage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }

@@ -18,7 +18,7 @@ import {
   ChevronRight,
   Zap,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { Link } from "@/router/HashRouter";
 import {
   getQueue,
@@ -139,7 +139,7 @@ export default function BankLinkQueuePage() {
   }
 
   return (
-    <AppShell pageTitle="Coadă reconciliere">
+    <BusinessShell pageTitle="Coadă reconciliere">
       {/* Back */}
       <div className="mb-4">
         <Link
@@ -355,6 +355,6 @@ export default function BankLinkQueuePage() {
           </div>
         </>
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }

@@ -16,7 +16,7 @@ import {
   AlertCircle,
   List,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { Link, useRouter } from "@/router/HashRouter";
 import {
   listConnections,
@@ -193,7 +193,7 @@ export default function BankLinkImportPage() {
   const conn = connections.find((c) => c.id === selectedConn);
 
   return (
-    <AppShell pageTitle="Import extras bancar">
+    <BusinessShell pageTitle="Import extras bancar">
       {/* Back */}
       <div className="mb-4">
         <Link
@@ -457,6 +457,6 @@ export default function BankLinkImportPage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }

@@ -23,7 +23,7 @@ import {
   TrendingUp,
   Clock,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -625,37 +625,37 @@ export function PartyDetailPage() {
 
   if (!partyId) {
     return (
-      <AppShell pageTitle="Partener">
+      <BusinessShell pageTitle="Partener">
         <div className="text-muted-foreground text-sm">ID partener lipsă.</div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
   if (loading) {
     return (
-      <AppShell pageTitle="Partener">
+      <BusinessShell pageTitle="Partener">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
   if (error || !party) {
     return (
-      <AppShell pageTitle="Partener">
+      <BusinessShell pageTitle="Partener">
         <div className="rounded-md bg-destructive/10 text-destructive px-4 py-3 text-sm flex items-center gap-2">
           <AlertTriangle className="w-4 h-4" />
           {error ?? "Partenerul nu a fost găsit."}
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
   const kindMeta = KIND_META[party.kind];
 
   return (
-    <AppShell
+    <BusinessShell
       pageTitle={party.name}
       pageDescription={`Fișă partener — ${kindMeta.label}`}
       actions={
@@ -930,6 +930,6 @@ export function PartyDetailPage() {
           {toast}
         </div>
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }

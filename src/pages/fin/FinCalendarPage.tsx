@@ -21,7 +21,7 @@ import {
   CalendarDays,
   Loader2,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
 import {
@@ -356,7 +356,7 @@ export function FinCalendarPage() {
   const canUnlockOnly = userRole === "admin";
 
   return (
-    <AppShell
+    <BusinessShell
       pageTitle="Calendar Fiscal"
       pageDescription={`${MONTH_NAMES[month - 1]} ${year} — Obligații fiscale`}
     >
@@ -583,6 +583,6 @@ export function FinCalendarPage() {
           loading={lockLoading}
         />
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }

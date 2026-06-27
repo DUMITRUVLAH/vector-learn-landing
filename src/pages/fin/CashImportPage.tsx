@@ -14,7 +14,7 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import { importFile, type ImportResult } from "@/lib/api/finCash";
 import { cn } from "@/lib/utils";
@@ -91,7 +91,7 @@ export default function CashImportPage() {
   };
 
   return (
-    <AppShell pageTitle="Import extras bancar">
+    <BusinessShell pageTitle="Import extras bancar">
       <div className="mx-auto max-w-2xl space-y-6 p-4 sm:p-6">
         {/* Header */}
         <div>
@@ -278,6 +278,6 @@ export default function CashImportPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }

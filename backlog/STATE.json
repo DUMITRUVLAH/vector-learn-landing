@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "VM1-05-polish",
-  "iterations": 175,
+  "last_completed": "SPLIT-402",
+  "iterations": 180,
   "last_run_at": "2026-06-28T00:00:00Z",
   "milestone_status": "VIOLETA: VM1-01..13 done (PRs #204-#216). Polish run 2026-06-28: VM1-12 dosar PDF #214, VM1-01 multi-role #215, VM1-05 vendor-saved indicator #216.",
   "active_milestone": "VIOLETA",
@@ -26,15 +26,21 @@
       }
     },
     "SPLIT-402": {
-      "status": "pending",
-      "attempts": 0,
+      "status": "done",
+      "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPLIT-402-business-shell-convergence.md",
       "milestone": "SPLIT",
       "phase": "SHELL",
       "depends_on": [],
       "branch": "feat/SPLIT-faza-SHELL2-one-shell",
-      "priority": "high"
+      "priority": "high",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
     },
     "PAR-001": {
       "status": "done",

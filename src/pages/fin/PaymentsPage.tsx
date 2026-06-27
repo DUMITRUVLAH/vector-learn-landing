@@ -20,7 +20,7 @@ import {
   Clock,
   Upload,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import {
   getPayments,
@@ -217,7 +217,7 @@ export default function PaymentsPage() {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <AppShell pageTitle="Plăți (CASH)">
+    <BusinessShell pageTitle="Plăți (CASH)">
       <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -553,6 +553,6 @@ export default function PaymentsPage() {
           }}
         />
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }

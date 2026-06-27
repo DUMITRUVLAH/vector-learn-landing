@@ -18,7 +18,7 @@ import {
   Power,
   GitMerge,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { Link, useRouter } from "@/router/HashRouter";
 import { BankLinkAddDialog } from "@/components/fin/BankLinkAddDialog";
 import {
@@ -152,7 +152,7 @@ export default function BankLinkPage() {
   }
 
   return (
-    <AppShell
+    <BusinessShell
       pageTitle="Conexiuni bancare"
       pageDescription="Import automat extrase bancare OFX/MT940 — GAP G2"
     >
@@ -317,6 +317,6 @@ export default function BankLinkPage() {
           }}
         />
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }

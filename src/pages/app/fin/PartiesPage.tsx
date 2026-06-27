@@ -18,7 +18,7 @@ import {
   TrendingUp,
   Medal,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -447,7 +447,7 @@ export function PartiesPage() {
   const hasMore = items.length < total;
 
   return (
-    <AppShell
+    <BusinessShell
       pageTitle="Parteneri comerciali"
       pageDescription="Clienți, furnizori și parteneri FinDesk"
       actions={
@@ -631,6 +631,6 @@ export function PartiesPage() {
       {addOpen && (
         <AddPartyModal onClose={() => setAddOpen(false)} onCreated={handleCreated} />
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }

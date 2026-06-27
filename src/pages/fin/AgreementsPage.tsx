@@ -7,7 +7,7 @@
  */
 import { useEffect, useState, useCallback } from "react";
 import { Plus, FileText } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { AgreementTable } from "@/components/fin/AgreementTable";
 import { AgreementDrawer } from "@/components/fin/AgreementDrawer";
 import { CreateAgreementDialog } from "@/components/fin/CreateAgreementDialog";
@@ -78,7 +78,7 @@ export function AgreementsPage() {
   }, [fetchAgreements]);
 
   return (
-    <AppShell
+    <BusinessShell
       pageTitle="Contracte"
       pageDescription="Gestiunea contractelor comerciale și a serviciilor recurente"
       actions={
@@ -138,6 +138,6 @@ export function AgreementsPage() {
           onClose={() => setShowCreate(false)}
         />
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }
