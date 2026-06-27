@@ -22,6 +22,7 @@ import {
   fetchUserInfo,
 } from "../auth/google";
 import { hashInviteToken } from "../lib/par/invites";
+import { encrypt, decrypt } from "../lib/crypto";
 
 const signupSchema = z.object({
   tenantName: z.string().min(2).max(200),
@@ -638,6 +639,34 @@ const G_INVITE_COOKIE = "vl_g_invite";
 const G_COOKIE_PATH = "/api/auth/google";
 const OAUTH_COOKIE_TTL_S = 600; // 10 min — the round-trip to Google is short
 
+// SHELL-504: a Google sign-in that resolves to neither an existing account NOR a valid invite
+// MUST NOT silently spawn a new admin tenant (that was the "everyone becomes admin" bug). Instead
+// we hold the *verified* Google identity in this short-lived encrypted cookie and send the user to
+// a "create a workspace or join one" choice screen (/#/business/welcome). The user only ever gets
+// a tenant/role through an explicit choice. TTL is generous so they can read the screen + decide.
+const G_PENDING_COOKIE = "vl_g_pending";
+const G_PENDING_TTL_S = 1800; // 30 min
+
+interface PendingGoogleIdentity {
+  sub: string;
+  email: string;
+  name: string;
+  picture: string | null;
+}
+
+/** Read + decrypt the pending-Google-identity cookie. Returns null if absent/tampered/invalid. */
+function readPendingGoogle(c: Parameters<typeof getCookie>[0]): PendingGoogleIdentity | null {
+  const raw = getCookie(c, G_PENDING_COOKIE);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(decrypt(raw)) as PendingGoogleIdentity;
+    if (!parsed.sub || !parsed.email) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function appUrl(): string {
   return process.env.APP_URL ?? "http://localhost:5173";
 }
@@ -921,43 +950,25 @@ authRoutes.get("/google/callback", async (c) => {
       return c.redirect(`${appUrl()}/#/business/par`);
     }
 
-    // No invite — standard fresh sign-up: create a new tenant + admin account.
-    const baseName = profile.name || profile.email.split("@")[0];
-    let slug = slugify(baseName) || `org-${Math.random().toString(36).slice(2, 8)}`;
-    let attempt = 0;
-    while (await db.query.tenants.findFirst({ where: eq(tenants.slug, slug) })) {
-      attempt += 1;
-      slug = `${slugify(baseName)}-${attempt}`;
-      if (attempt > 50) return fail("google_failed");
-    }
-    const [tenant] = await db
-      .insert(tenants)
-      // This is the Business Suite app — a new Google sign-up must land on a "business"
-      // tenant, else BusinessGuardPage (/api/business/auth/me) rejects it as wrong_app
-      // and bounces the user straight back to the login screen.
-      .values({ name: baseName, slug, plan: "starter", appKind: "business" })
-      .returning();
-    const [created] = await db
-      .insert(users)
-      .values({
-        tenantId: tenant.id,
-        email: profile.email,
-        passwordHash: null,
-        name: profile.name,
-        role: "admin",
-        googleId: profile.sub,
-        authProvider: "google",
-        avatarUrl: profile.picture ?? null,
-      })
-      .returning();
-    user = created;
-
-    // The new user owns this fresh workspace, so make them the FinDesk owner too.
-    // Without a fin_members row, GET /api/fin/members/me 403s and FinLayout shows
-    // "Acces restricționat" — which looks exactly like the Google sign-up not working.
-    await db
-      .insert(finMembers)
-      .values({ tenantId: tenant.id, userId: created.id, role: "owner" });
+    // SHELL-504: No existing account AND no valid invite. DO NOT silently create a new
+    // admin tenant (the old behavior made every un-invited Google sign-in an admin of a
+    // fresh empty workspace — looked like "I became admin / nothing happened"). Instead,
+    // stash the *verified* Google identity in an encrypted cookie and send the user to a
+    // choice screen where they EXPLICITLY pick "create a workspace" or "join with an invite".
+    const pending: PendingGoogleIdentity = {
+      sub: profile.sub,
+      email: profile.email.toLowerCase(),
+      name: profile.name ?? profile.email.split("@")[0],
+      picture: profile.picture ?? null,
+    };
+    setCookie(c, G_PENDING_COOKIE, encrypt(JSON.stringify(pending)), {
+      httpOnly: true,
+      sameSite: "Lax",
+      secure: SECURE_COOKIES,
+      path: "/api/auth/google",
+      maxAge: G_PENDING_TTL_S,
+    });
+    return c.redirect(`${appUrl()}/#/business/welcome`);
   }
 
   // Google verifies the email itself, so we skip the app's 2FA gate here and
@@ -966,6 +977,158 @@ authRoutes.get("/google/callback", async (c) => {
   setSessionCookie(c, token, expiresAt);
 
   return c.redirect(`${appUrl()}/#/business/fin/`);
+});
+
+// ── SHELL-504: Google "create or join" completion (after a no-invite Google sign-in) ─────────
+// The /business/welcome screen reads these. All three rely on the encrypted G_PENDING_COOKIE
+// holding the Google-verified identity; without it they 401 (the user must (re)authenticate).
+
+/** GET /api/auth/google/pending — identity to greet the user on the choice screen (or 401). */
+authRoutes.get("/google/pending", async (c) => {
+  const pending = readPendingGoogle(c);
+  if (!pending) return c.json({ error: "no_pending_identity" }, 401);
+  return c.json({ email: pending.email, name: pending.name });
+});
+
+const createWorkspaceSchema = z.object({ name: z.string().min(2).max(200).optional() });
+
+/** POST /api/auth/google/create-workspace — EXPLICIT new-workspace creation (user becomes admin). */
+authRoutes.post("/google/create-workspace", zValidator("json", createWorkspaceSchema), async (c) => {
+  const pending = readPendingGoogle(c);
+  if (!pending) return c.json({ error: "no_pending_identity" }, 401);
+  const { name } = c.req.valid("json");
+
+  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? undefined;
+  const userAgent = c.req.header("user-agent") ?? undefined;
+
+  const baseName = (name?.trim() || pending.name || pending.email.split("@")[0]);
+  let slug = slugify(baseName) || `org-${Math.random().toString(36).slice(2, 8)}`;
+  let attempt = 0;
+  while (await db.query.tenants.findFirst({ where: eq(tenants.slug, slug) })) {
+    attempt += 1;
+    slug = `${slugify(baseName)}-${attempt}`;
+    if (attempt > 50) return c.json({ error: "slug_exhausted" }, 500);
+  }
+  const [tenant] = await db
+    .insert(tenants)
+    // Business Suite app → new workspace must be a "business" tenant (BusinessGuardPage gate).
+    .values({ name: baseName, slug, plan: "starter", appKind: "business" })
+    .returning();
+  const [created] = await db
+    .insert(users)
+    .values({
+      tenantId: tenant.id,
+      email: pending.email,
+      passwordHash: null,
+      name: pending.name,
+      role: "admin", // creator owns the workspace they explicitly created
+      googleId: pending.sub,
+      authProvider: "google",
+      avatarUrl: pending.picture,
+    })
+    .returning();
+  // Workspace creator is the FinDesk owner too (else GET /api/fin/members/me 403s → "Acces
+  // restricționat"). Best-effort: never fail workspace creation if the FinDesk table is absent.
+  try {
+    await db.insert(finMembers).values({ tenantId: tenant.id, userId: created.id, role: "owner" });
+  } catch (e) {
+    console.warn("[google/create-workspace] fin_members owner insert skipped:", e instanceof Error ? e.message : e);
+  }
+
+  deleteCookie(c, G_PENDING_COOKIE, { path: "/api/auth/google" });
+  const { token, expiresAt } = await createSession(created.id, { ipAddress, userAgent });
+  setSessionCookie(c, token, expiresAt);
+  return c.json({ ok: true, redirect: "/#/business/fin/" });
+});
+
+const joinWithInviteSchema = z.object({ token: z.string().min(1).max(500) });
+
+/** POST /api/auth/google/join — join an existing workspace from the choice screen using an invite
+ *  link/token. Strict email match: the invite's email MUST equal the Google identity's email. */
+authRoutes.post("/google/join", zValidator("json", joinWithInviteSchema), async (c) => {
+  const pending = readPendingGoogle(c);
+  if (!pending) return c.json({ error: "no_pending_identity" }, 401);
+  // Accept either a raw token or a full invite URL/hash containing ?token=… .
+  const rawInput = c.req.valid("json").token.trim();
+  const token = (rawInput.match(/token=([^&\s]+)/)?.[1] ?? rawInput);
+
+  const invite = await db.query.parInvites.findFirst({ where: eq(parInvites.tokenHash, hashInviteToken(token)) });
+  if (!invite) return c.json({ error: "invite_not_found" }, 404);
+  if (invite.acceptedAt !== null) return c.json({ error: "invite_not_found" }, 404);
+  if (invite.expiresAt < new Date()) return c.json({ error: "invite_expired" }, 410);
+  // Strict email match (owner's choice): the invite email must equal the verified Google email.
+  if (invite.email.toLowerCase() !== pending.email.toLowerCase()) {
+    return c.json({ error: "email_mismatch" }, 403);
+  }
+  const inviteTenant = await db.query.tenants.findFirst({ where: eq(tenants.id, invite.tenantId) });
+  if (!inviteTenant) return c.json({ error: "invite_not_found" }, 404);
+  if (inviteTenant.appKind !== "business") {
+    await db.update(tenants).set({ appKind: "business", updatedAt: new Date() }).where(eq(tenants.id, inviteTenant.id));
+  }
+
+  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? undefined;
+  const userAgent = c.req.header("user-agent") ?? undefined;
+
+  type UserRow3 = typeof users.$inferSelect;
+  let joinedUser!: UserRow3;
+  try {
+    await db.transaction(async (tx) => {
+      const claimed = await tx
+        .update(parInvites)
+        .set({ acceptedAt: new Date() })
+        .where(and(eq(parInvites.id, invite.id), isNull(parInvites.acceptedAt)))
+        .returning({ id: parInvites.id });
+      if (claimed.length === 0) throw new Error("INVITE_ALREADY_CONSUMED");
+
+      // The invite email == Google email; reuse an existing same-tenant account or create one.
+      const existing = await tx.query.users.findFirst({
+        where: and(eq(users.tenantId, invite.tenantId), eq(users.email, pending.email.toLowerCase())),
+      });
+      if (existing) {
+        joinedUser = existing;
+        // Link googleId if this account was created by password and is now using Google.
+        if (!existing.googleId) {
+          await tx.update(users).set({ googleId: pending.sub, authProvider: "google" }).where(eq(users.id, existing.id));
+        }
+      } else {
+        const [u] = await tx
+          .insert(users)
+          .values({
+            tenantId: invite.tenantId,
+            email: pending.email.toLowerCase(),
+            passwordHash: null,
+            name: pending.name,
+            role: "teacher", // NON-privileged; PAR access is via par_members, not users.role
+            googleId: pending.sub,
+            authProvider: "google",
+            avatarUrl: pending.picture,
+          })
+          .returning();
+        joinedUser = u;
+      }
+
+      const member = await tx.query.parMembers.findFirst({
+        where: and(
+          eq(parMembers.tenantId, invite.tenantId),
+          eq(parMembers.userId, joinedUser.id),
+          eq(parMembers.role, invite.parRole)
+        ),
+      });
+      if (!member) {
+        await tx.insert(parMembers).values({ tenantId: invite.tenantId, userId: joinedUser.id, role: invite.parRole });
+      }
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message === "INVITE_ALREADY_CONSUMED") {
+      return c.json({ error: "invite_not_found" }, 404);
+    }
+    throw err;
+  }
+
+  deleteCookie(c, G_PENDING_COOKIE, { path: "/api/auth/google" });
+  const { token: sessionToken, expiresAt } = await createSession(joinedUser.id, { ipAddress, userAgent });
+  setSessionCookie(c, sessionToken, expiresAt);
+  return c.json({ ok: true, redirect: "/#/business/par" });
 });
 
 // AUTH-004: mount 2FA and session-management sub-routes

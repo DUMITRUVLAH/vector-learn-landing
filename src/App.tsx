@@ -26,6 +26,7 @@ import { BusinessDashboardPage } from "./pages/business/BusinessDashboardPage";
 import { BusinessGuardPage } from "./components/business/BusinessGuardPage";
 // SHELL-503: PAR invite acceptance (public — no auth guard)
 import { InvitePage } from "./pages/business/InvitePage";
+import { WelcomePage } from "./pages/business/WelcomePage";
 
 // FinDesk pages under /business/fin/*
 import { FinHome } from "./pages/fin/FinHome";
@@ -129,6 +130,10 @@ function Routes() {
   // SHELL-503: PAR invite acceptance page — PUBLIC (no BusinessGuard).
   // Must be before BusinessGuard so unauthenticated invitees can land here.
   if (path.startsWith("/business/invite")) return <InvitePage />;
+
+  // SHELL-504: Google "create or join a workspace" choice screen — PUBLIC (relies on the
+  // short-lived pending-identity cookie set by the Google callback, not on a session).
+  if (path.startsWith("/business/welcome")) return <WelcomePage />;
 
   // Business landing + login
   if (path === "/business" || path === "/business/") return <BusinessLandingPage />;
