@@ -10,10 +10,12 @@ import { db } from "../db/client";
 import { parDoaMatrix, parMembers } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parDoaRoutes = new Hono<{ Variables: AuthVariables }>();
 
 parDoaRoutes.use("*", requireAuth);
+parDoaRoutes.use("/:id", parUuidGuard("id"));
 
 // VF-002: a DOA row may pin a step to a specific user. That user must be a PAR member of this
 // tenant — the explicit assignment then grants them authority to decide that step (see the

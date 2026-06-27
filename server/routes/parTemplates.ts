@@ -21,11 +21,14 @@ import {
   parAudit,
 } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 import { generateRequestNo } from "../lib/par/requestNo";
 import { recalcParTotal } from "../lib/par/totals";
 
 export const parTemplatesRoutes = new Hono<{ Variables: AuthVariables }>();
 parTemplatesRoutes.use("*", requireAuth);
+parTemplatesRoutes.use("/:id", parUuidGuard("id"));
+parTemplatesRoutes.use("/:id/:action/*", parUuidGuard("id"));
 
 /** Shape of what we store in the snapshot JSON */
 interface TemplateSnapshot {

@@ -13,9 +13,11 @@ import { db } from "../db/client";
 import { parRequests, parLineItems, parReceipts, parReceiptLines, parAudit } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parReceiptsRoutes = new Hono<{ Variables: AuthVariables }>();
 parReceiptsRoutes.use("*", requireAuth);
+parReceiptsRoutes.use("/:id/:action/*", parUuidGuard("id"));
 
 const receiptSchema = z.object({
   complete: z.boolean(),

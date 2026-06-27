@@ -26,6 +26,7 @@ import {
 } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 import { notifyPaid } from "../services/par/notify";
 import { applyTenRule } from "../lib/par/payment";
 import { evaluateMatch } from "../lib/par/threeWayMatch";
@@ -33,6 +34,7 @@ import { findVendorByIban, shouldAutoSaveVendor } from "../lib/par/vendorAutoSav
 
 export const parPaymentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parPaymentsRoutes.use("*", requireAuth);
+parPaymentsRoutes.use("/:id/:action/*", parUuidGuard("id"));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -364,6 +366,11 @@ parPaymentsRoutes.post(
       .from(parPayments)
       .where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId)));
 
+    // PAR-113: once the overage was explicitly re-approved (reapprove → overageReapproved=true,
+    // PAR back to in_finance), re-running the 10% rule must NOT bounce the payment back to
+    // reapproval_required again — otherwise the same overage can never be paid (infinite loop).
+    const alreadyReapproved = existing[0]?.overageReapproved === true;
+
     if (existing.length === 0) {
       await db.insert(parPayments).values({
         tenantId,
@@ -388,7 +395,7 @@ parPaymentsRoutes.post(
         .where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId)));
     }
 
-    if (result.needsReapproval) {
+    if (result.needsReapproval && !alreadyReapproved) {
       // → reapproval_required
       await db
         .update(parRequests)

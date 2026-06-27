@@ -10,9 +10,11 @@ import { db } from "../db/client";
 import { parProjects } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parProjectsRoutes = new Hono<{ Variables: AuthVariables }>();
 parProjectsRoutes.use("*", requireAuth);
+parProjectsRoutes.use("/:id", parUuidGuard("id"));
 
 const projectSchema = z.object({
   name: z.string().min(1).max(200),

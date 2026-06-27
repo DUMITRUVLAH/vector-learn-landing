@@ -29,6 +29,7 @@ import {
 } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 import { buildBodyForHash } from "../lib/par/submit";
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { getActiveDelegators } from "../lib/par/delegations";
@@ -43,6 +44,7 @@ import { parPayments } from "../db/schema/par";
 
 export const parApprovalsRoutes = new Hono<{ Variables: AuthVariables }>();
 parApprovalsRoutes.use("*", requireAuth);
+parApprovalsRoutes.use("/:id/:action/*", parUuidGuard("id"));
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 

@@ -19,9 +19,11 @@ import { db } from "../db/client";
 import { parRequests, parAttachments } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
+import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parAttachmentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parAttachmentsRoutes.use("*", requireAuth);
+parAttachmentsRoutes.use("/:parId/:action/*", parUuidGuard("parId"));
 
 // Allowed MIME types aligned with the rest of the repo
 const ALLOWED_MIME_TYPES = [

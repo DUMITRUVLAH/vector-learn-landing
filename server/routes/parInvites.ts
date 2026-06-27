@@ -25,8 +25,11 @@ import {
   INVITE_TTL_MS,
 } from "../lib/par/invites";
 
+import { parUuidGuard } from "../middleware/parUuidGuard";
+
 export const parInvitesRoutes = new Hono<{ Variables: AuthVariables }>();
 parInvitesRoutes.use("*", requireAuth);
+parInvitesRoutes.use("/:id", parUuidGuard("id"));
 
 const inviteSchema = z.object({
   email: z.string().email().max(255),
