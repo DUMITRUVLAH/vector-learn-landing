@@ -575,9 +575,12 @@ function Section({ title, count, requests, onRowClick, emptyMessage, highlight }
                     {r.requestNo}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
-                    {(r as ParRequest & { projectId: string | null }).projectId
-                      ? <span className="text-xs bg-muted px-2 py-0.5 rounded">proj</span>
-                      : "—"}
+                    {(() => {
+                      const pid = (r as ParRequest & { projectId: string | null }).projectId;
+                      return pid
+                        ? <span className="text-xs bg-muted px-2 py-0.5 rounded" title={projectsMap[pid] ?? ""}>{projectsMap[pid] ?? "Proiect"}</span>
+                        : "—";
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-right font-medium">
                     <span className={r.above_micro_threshold ? "text-orange-700 dark:text-orange-300" : "text-foreground"}>

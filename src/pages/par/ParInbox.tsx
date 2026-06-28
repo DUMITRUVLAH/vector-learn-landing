@@ -430,7 +430,7 @@ export default function ParInbox() {
 
   return (
     <AppShell pageTitle={t("inbox.title")}>
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Page header */}
         <div className="flex items-center justify-between">
           <div>
@@ -535,6 +535,7 @@ export default function ParInbox() {
                       <Th k="projectName" label="Proiect" />
                       <Th k="requestedByName" label="Solicitat de" />
                       <th className="px-3 py-2.5 font-medium text-muted-foreground text-left">Scop</th>
+                      <th className="px-3 py-2.5 font-medium text-muted-foreground text-left">Servicii / descriere</th>
                       <Th k="totalEstimatedCents" label="Sumă" align="right" />
                       <Th k="submittedAt" label="Depus" />
                       <th className="px-3 py-2.5 font-medium text-muted-foreground text-right">Acțiuni</th>
@@ -554,10 +555,11 @@ export default function ParInbox() {
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-2 align-middle max-w-[160px] truncate text-foreground font-medium" title={item.payeeName ?? ""}>{item.payeeName ?? "—"}</td>
-                        <td className="px-3 py-2 align-middle max-w-[120px] truncate text-foreground" title={item.projectName ?? ""}>{item.projectName ?? "—"}</td>
-                        <td className="px-3 py-2 align-middle max-w-[120px] truncate text-foreground" title={item.requestedByName ?? ""}>{item.requestedByName ?? "—"}</td>
+                        <td className="px-3 py-2 align-middle text-foreground font-medium min-w-[200px] max-w-[320px]"><span className="line-clamp-2" title={item.payeeName ?? ""}>{item.payeeName ?? "—"}</span></td>
+                        <td className="px-3 py-2 align-middle max-w-[180px] truncate text-foreground" title={item.projectName ?? ""}>{item.projectName ?? "—"}</td>
+                        <td className="px-3 py-2 align-middle max-w-[160px] truncate text-foreground" title={item.requestedByName ?? ""}>{item.requestedByName ?? "—"}</td>
                         <td className="px-3 py-2 align-middle text-muted-foreground text-xs whitespace-nowrap">{PURPOSE_LABEL[item.purpose] ?? item.purpose}</td>
+                        <td className="px-3 py-2 align-middle text-foreground text-xs min-w-[220px] max-w-[360px]"><span className="line-clamp-2" title={item.endUse ?? ""}>{item.endUse || "—"}</span></td>
                         <td className="px-3 py-2 align-middle text-right font-mono text-foreground whitespace-nowrap">{formatMDL(item.totalEstimatedCents)}</td>
                         <td className="px-3 py-2 align-middle text-muted-foreground text-xs whitespace-nowrap">
                           {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
@@ -582,7 +584,7 @@ export default function ParInbox() {
       {/* VF-102: sticky bulk-approve bar */}
       {selectedIds.size > 0 && (
         <div className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-card/95 backdrop-blur-sm shadow-lg">
-          <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
             <span className="text-sm font-medium text-foreground">
               {selectedIds.size} {selectedIds.size === 1 ? "cerere selectată" : "cereri selectate"}
             </span>
