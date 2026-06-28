@@ -148,10 +148,15 @@ export interface ParEvent {
   id: string;
   tenantId: string;
   projectId: string | null;
+  /** Feature 2: resolved project name (from list join) */
+  projectName?: string | null;
   name: string;
   startsAt: string | null;
   endsAt: string | null;
   active: boolean;
+  /** Feature 2: who created this event */
+  createdByUserId?: string | null;
+  createdByName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -918,6 +923,15 @@ export async function getParReportByProject(filters?: ParReportFilters): Promise
   if (filters?.period_to) params.set("to", filters.period_to);
   const qs = params.toString();
   return api(`/api/par/reports/by-project${qs ? `?${qs}` : ""}`);
+}
+
+/** Feature 2: spend per event (calls existing /api/par/reports/by-event) */
+export async function getParReportByEvent(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
+  const params = new URLSearchParams();
+  if (filters?.period_from) params.set("from", filters.period_from);
+  if (filters?.period_to) params.set("to", filters.period_to);
+  const qs = params.toString();
+  return api(`/api/par/reports/by-event${qs ? `?${qs}` : ""}`);
 }
 
 export async function getParReportByChargeTo(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
