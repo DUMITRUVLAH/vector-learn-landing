@@ -529,6 +529,9 @@ export interface ParPaymentRecord {
 export interface ParFinanceQueueItem extends ParRequest {
   above_micro_threshold: boolean;
   payment: ParPaymentRecord | null;
+  requestedByName?: string | null;
+  projectName?: string | null;
+  approverNames?: string[];
 }
 
 export async function getFinanceQueue(): Promise<{ items: ParFinanceQueueItem[]; total: number }> {
@@ -554,7 +557,7 @@ export async function submitSection16(
 export interface PayPayload {
   actual_amount_cents: number;
   payment_date: string; // ISO date or datetime
-  payment_ref: string;
+  payment_ref?: string | null; // optional (owner: not required)
   proof_url?: string | null;
 }
 
