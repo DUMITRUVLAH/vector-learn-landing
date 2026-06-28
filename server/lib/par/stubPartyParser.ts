@@ -412,6 +412,76 @@ function roleForName(
   return { role: "unknown", payerHint: false };
 }
 
+const COMPANY_SUFFIX = "(?:S\\.?\\s?R\\.?\\s?L\\.?|S\\.?\\s?A\\.?|Î\\.\\s?I\\.|I\\.I\\.|SRL|SA|PFA|GȚ)";
+
+/** Find a "Name1 SRL  Name2 SRL" row (the EXECUTOR | BENEFICIAR names line of a 2-column table). */
+function findTwoCompanyNames(text: string): [string, string] | null {
+  const re = new RegExp(`^\\s*([\\p{L}][\\p{L}0-9 .,&"'„”«»-]{1,58}?${COMPANY_SUFFIX})\\.?\\s+([\\p{L}][\\p{L}0-9 .,&"'„”«»-]{1,58}?${COMPANY_SUFFIX})\\.?\\s*$`, "iu");
+  for (const line of text.split(/\r?\n/)) {
+    const m = line.match(re);
+    if (!m) continue;
+    const n1 = m[1].trim().replace(/[„"”]/g, "");
+    const n2 = m[2].trim().replace(/[„"”]/g, "");
+    if (/^(EXECUTOR|CLIENT|BENEFICIAR|FURNIZOR)/i.test(n1) || /^(EXECUTOR|CLIENT|BENEFICIAR|FURNIZOR)/i.test(n2)) continue;
+    return [n1, n2];
+  }
+  return null;
+}
+
+/**
+ * Detect a 2-column EXECUTOR | BENEFICIAR (left | right) requisites table — the standard MD-contract
+ * layout. When the PDF is flattened to text, each requisite label repeats on its line:
+ *   "Cod fiscal <left> Cod fiscal <right>" · "IBAN <left> IBAN <right>" · "Banca <left> Banca <right>"
+ * The per-name windowing can't split these (it merges both columns / both names), so rebuild the two
+ * parties cleanly: left column = EXECUTOR (the service provider = payee), right = CLIENT (the payer).
+ * Returns null when no such table is present (≥2 columnar rows required) so normal parsing continues.
+ */
+function tryParseColumnarContract(text: string): ParExtractedParty[] | null {
+  const labels: Array<{ key: "idno" | "iban" | "bank"; src: string }> = [
+    { key: "idno", src: "Cod\\s*fiscal|IDNO|IDNP" },
+    { key: "iban", src: "IBAN" },
+    { key: "bank", src: "Banca|Bank" },
+  ];
+  const left: Record<string, string> = {};
+  const right: Record<string, string> = {};
+  let rows = 0;
+  for (const line of text.split(/\r?\n/)) {
+    for (const { key, src } of labels) {
+      if (key in left) continue;
+      const ms = [...line.matchAll(new RegExp(`(?:${src})`, "gi"))];
+      if (ms.length !== 2) continue;
+      const a = line.slice((ms[0].index ?? 0) + ms[0][0].length, ms[1].index).replace(/^[\s:.\-]+/, "").trim();
+      const b = line.slice((ms[1].index ?? 0) + ms[1][0].length).replace(/^[\s:.\-]+/, "").trim();
+      if (a && b) { left[key] = a; right[key] = b; rows++; }
+    }
+  }
+  if (rows < 2) return null; // need ≥2 columnar requisite rows to be confident it's a 2-column table
+  const names = findTwoCompanyNames(text);
+  if (!names) return null;
+
+  const mk = (name: string, v: Record<string, string>, role: ParRole, payerHint: boolean): ParExtractedParty => {
+    const idnoDigits = (v.idno ?? "").replace(/\D/g, "");
+    const ibanClean = v.iban ? stripIbanSpaces(v.iban) : "";
+    let bank: string | null = null;
+    if (v.bank) {
+      // value may carry trailing noise from the next cell; take up to the first bank-name token run.
+      const cand = v.bank.split(/\s{2,}/)[0].trim();
+      bank = isPayeeBank(cand) ? cleanBankName(cand) : cand || null;
+    }
+    return {
+      name: cleanName(name),
+      role,
+      idno: /^\d{13}$/.test(idnoDigits) ? idnoDigits : null,
+      iban: /^MD[0-9A-Z]{22}$/.test(ibanClean) ? ibanClean : null,
+      bank,
+      vatCode: null,
+      isPayerHint: payerHint,
+    };
+  };
+  // Convention in MD contracts: the LEFT column is the EXECUTOR (provider = who is paid).
+  return [mk(names[0], left, "executor", false), mk(names[1], right, "client", true)];
+}
+
 /**
  * Turn a document's raw text into a structured multi-party extraction.
  * Deterministic & pure.
@@ -507,13 +577,22 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
     partyMap.set(key, party);
   }
 
-  const workingParties = [...partyMap.values()];
+  let workingParties = [...partyMap.values()];
+
+  // 2-column EXECUTOR | BENEFICIAR requisites table (standard MD contract): rebuild the two parties
+  // cleanly from the columns when detected — this is what the per-name windowing can't handle (it
+  // merges both names and steals/garbles the IBAN/Cod fiscal/Banca). When it fires, skip the
+  // per-name orphan heuristic below (the columnar parties already carry the right requisites).
+  const columnar = tryParseColumnarContract(text);
+  if (columnar) {
+    workingParties = columnar as typeof workingParties;
+  }
 
   // Orphan-requisite attachment: a "Payment details / Beneficiary bank" section often sits at the
   // bottom, far from the supplier's name. If a paid-role party (provider/executor) is missing its
   // IBAN/bank and there's an unclaimed IBAN in a beneficiary/payment section, attach it to the
   // sole paid party rather than the payer it happened to fall next to.
-  const paidParties = workingParties.filter(
+  const paidParties = (columnar ? [] : workingParties).filter(
     (p) => p.role === "executor" || p.role === "provider",
   );
   const payerParties = workingParties.filter((p) => p.role === "client" || p.isPayerHint);
