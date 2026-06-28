@@ -41,6 +41,7 @@ import {
 } from "../lib/par/projectApprovers";
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { getActiveDelegators } from "../lib/par/delegations";
+import { isSelfApproval } from "../lib/par/selfApproval";
 import {
   notifyStepAdvanced,
   notifyFullyApprovedToFinance,
@@ -158,6 +159,13 @@ async function approveParStep(
     .from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
   if (!par) return { ok: false, status: 404, error: "not_found" };
+
+  // SEC-04: segregation of duties — the requestor can NEVER approve their own PAR, even when the
+  // step fell back to role routing (unassigned step + they happen to hold approver/par_admin).
+  // Without this, a sole-admin tenant could submit→approve→pay alone (PAR-CORE.md §324, T-PAR-107-3).
+  if (isSelfApproval(par.requestedByUserId, userId)) {
+    return { ok: false, status: 403, error: "self_approval_forbidden" };
+  }
 
   if (par.status !== "pending_approval") {
     return { ok: false, status: 409, error: `conflict: PAR status is '${par.status}', cannot approve` };
@@ -661,6 +669,11 @@ parApprovalsRoutes.post("/:id/reapprove", async (c) => {
     .from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
   if (!par) return c.json({ error: "not_found" }, 404);
+
+  // SEC-04: the requestor can't re-approve their own overage (it advances the PAR to payment).
+  if (isSelfApproval(par.requestedByUserId, user.id)) {
+    return c.json({ error: "self_approval_forbidden" }, 403);
+  }
 
   if (par.status !== "reapproval_required") {
     return c.json(
