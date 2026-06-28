@@ -31,6 +31,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { buildBodyForHash } from "../lib/par/submit";
+import { backfillStuckApprovalChains } from "../lib/par/doa";
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { getActiveDelegators } from "../lib/par/delegations";
 import {
@@ -283,6 +284,16 @@ parApprovalsRoutes.get("/inbox", async (c) => {
   // Non-approvers with no incoming delegations get an empty inbox (role-aware UI hides the tab anyway).
   if (!isApprover && delegators.size === 0) {
     return c.json({ inbox: [], total: 0 });
+  }
+
+  // Self-heal any PAR stuck "pending_approval" with no approval step (submitted before the empty-chain
+  // fallback). Idempotent; only approvers reach here, so the write is authorized.
+  if (isApprover) {
+    try {
+      await backfillStuckApprovalChains(tenantId);
+    } catch {
+      /* non-blocking — inbox still renders whatever chains exist */
+    }
   }
 
   // Find all pending (unlocked) approval steps for this user:
