@@ -71,8 +71,8 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// Toate secțiunile au header explicit (section non-null) — Dashboard e un link standalone separat.
-// PAR este prima secțiune (VM1-01).
+// Două secțiuni principale: PAR (prima) și FinDesk.
+// ITPark / DocMerge / Setări apar în sidebar doar când ești pe rutele lor (prefix match).
 const NAV_GROUPS: NavGroup[] = [
   {
     section: "PAR — Cereri de plată",
@@ -84,7 +84,6 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    // SPLIT-402: single consolidated FinDesk menu.
     section: "FinDesk — Finanțe",
     prefix: "/business/fin",
     items: [
@@ -109,31 +108,20 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Calendar fiscal", href: "/business/fin/calendar", icon: Calendar },
       { label: "Operațiuni în masă", href: "/business/fin/mass", icon: ListChecks },
       { label: "Export & rapoarte", href: "/business/fin/export", icon: BarChart3 },
+      // Module adiacente — vizibile în sidebar doar din contextul FinDesk
+      { label: "Rezidenți ITPark", href: "/business/fin/itpark", icon: Building2 },
+      { label: "Securitate", href: "/business/fin/settings/security", icon: Shield },
+      { label: "Audit AI", href: "/business/fin/settings/ai-audit", icon: Settings },
     ],
   },
   {
-    section: "ITPark — Rezidenți",
-    prefix: "/business/fin/itpark",
-    items: [
-      // FIX-503: ItparkDetail is mounted at /business/fin/itpark (not /business/itpark)
-      { label: "Rezidenți", href: "/business/fin/itpark", icon: Building2 },
-    ],
-  },
-  {
+    // DocMerge — secțiune separată, vizibilă doar când ești pe /business/docmerge/*
     section: "Document Merge",
     prefix: "/business/docmerge",
     items: [
       { label: "Documente în masă", href: "/business/docmerge/wizard", icon: Wand2 },
       { label: "Templates", href: "/business/docmerge", icon: FileText },
       { label: "Import Excel", href: "/business/docmerge/job", icon: FileSpreadsheet },
-    ],
-  },
-  {
-    section: "Setări",
-    prefix: "/business/fin/settings",
-    items: [
-      { label: "Securitate", href: "/business/fin/settings/security", icon: Shield },
-      { label: "Audit AI", href: "/business/fin/settings/ai-audit", icon: Settings },
     ],
   },
 ];
@@ -319,8 +307,9 @@ export function BusinessShell({
   const baseGroups = isParModule
     ? PAR_NAV_GROUPS
     : NAV_GROUPS.filter((g) => {
-        // Ascunde secțiunea PAR dacă userul nu are niciun rol PAR.
         if (g.section === "PAR — Cereri de plată") return hasPar;
+        // DocMerge apare în sidebar doar când ești pe rutele DocMerge
+        if (g.section === "Document Merge") return path.startsWith("/business/docmerge");
         return true;
       });
 
@@ -402,9 +391,9 @@ export function BusinessShell({
                 <span>Dashboard</span>
               </Link>
             )}
-            {navGroups.map((group, gi) => (
+            {navGroups.map((group) => (
               <SidebarGroup
-                key={gi}
+                key={group.section}
                 group={group}
                 path={path}
                 inboxCount={inboxCount}
