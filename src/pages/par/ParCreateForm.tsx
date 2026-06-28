@@ -16,6 +16,8 @@ import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import { detectPayeeType, type PayeeType } from "@/lib/par/payeeTypeDetector";
+import { isValidMoldovaIBAN } from "@/lib/par/ibanCheck";
+import type { ParPayeeCandidate } from "@/lib/par/parCandidateTypes";
 import { QuotesSection } from "@/components/par/QuotesSection";
 import { ApiError } from "@/lib/api";
 import {
@@ -179,6 +181,8 @@ export function ParCreateForm() {
   const [aiPrefillResult, setAiPrefillResult] = useState<ParPrefillResult | null>(null);
   const [aiPrefillError, setAiPrefillError] = useState<string | null>(null);
   const aiPrefillFileRef = useRef<HTMLInputElement>(null);
+  // PAR AI overhaul: when the document has 2+ equally-plausible payees the user must pick one.
+  const [payeeCandidates, setPayeeCandidates] = useState<ParPayeeCandidate[]>([]);
 
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -286,43 +290,75 @@ export function ParCreateForm() {
     e.target.value = "";
     setAiPrefillError(null);
     setAiPrefillResult(null);
+    setPayeeCandidates([]);
     setAiPrefilling(true);
     try {
       const result = await prefillParFromDocument(file);
       setAiPrefillResult(result);
-      // Auto-apply extracted fields only when value is non-null.
-      // User can still override them (all fields remain editable).
-      if (result.payeeName.value) {
-        const extractedName = String(result.payeeName.value);
-        setPayeeName(extractedName);
-        // Feature 1: auto-detect payee type from AI-extracted name
-        const detected = detectPayeeType(extractedName);
-        if (detected) setPayeeType(detected);
-      }
-      // Feature 3 (PAR-F3): apply extracted bank name → payeeBank field
-      if (result.payeeBank?.value) setPayeeBank(String(result.payeeBank.value));
-      // IBAN: only accept a real MD IBAN. The extractor sometimes returns a 13-digit IDNP/IDNO in
-      // this slot — route that to the IDNP field instead, and never dump a non-IBAN into the IBAN box.
-      if (result.payeeIban.value) {
-        const ibanRaw = String(result.payeeIban.value).replace(/\s/g, "").toUpperCase();
-        if (/^MD\d{2}[A-Z0-9]{20}$/.test(ibanRaw)) setPayeeIban(ibanRaw);
-        else if (/^\d{13}$/.test(ibanRaw)) setPayeeIdnp(ibanRaw);
-      }
+
+      // Common (non-payee) fields always apply, ambiguous or not.
       if (result.endUse.value) setEndUse(String(result.endUse.value));
-      if (result.totalCents.value !== null && typeof result.totalCents.value === "number") {
-        // If there's no line item yet, prefill a synthetic one isn't in scope (PAR lines = phase 2).
-        // Just note the total in a state so the user sees it.
-      }
       if (result.currency.value && ["MDL", "EUR", "USD"].includes(String(result.currency.value))) {
         setCurrency(result.currency.value as "MDL" | "EUR" | "USD");
       }
-      // Clear vendor selection so the new manual name takes precedence
+      // Clear vendor selection so the AI-derived payee takes precedence.
       setVendorId("");
+
+      if (result.needsClarification && result.candidates.length > 0) {
+        // 2+ equally-plausible payees → ask the user. DON'T fill name/IBAN/IDNO yet.
+        setPayeeCandidates(result.candidates);
+      } else {
+        // Single resolved payee → fill from the (server-routed) fields.
+        setPayeeCandidates([]);
+        applyResolvedPayee(result);
+      }
     } catch (err) {
       setAiPrefillError(err instanceof Error ? err.message : "Eroare la analiza documentului.");
     } finally {
       setAiPrefilling(false);
     }
+  };
+
+  /**
+   * Fill the payee fields from a SINGLE resolved prefill result. The server already routed
+   * IDNO-vs-IBAN authoritatively (choosePayee/routeIdAndIban), so the frontend no longer guesses;
+   * we keep one defensive `isValidMoldovaIBAN` guard so an invalid IBAN never lands in the box.
+   */
+  const applyResolvedPayee = (result: ParPrefillResult) => {
+    if (result.payeeName.value) {
+      const extractedName = String(result.payeeName.value);
+      setPayeeName(extractedName);
+    }
+    // payeeType: prefer the server's detection, fall back to the client detector on the name.
+    const serverType = result.payeeType?.value ?? null;
+    const name = result.payeeName.value ? String(result.payeeName.value) : "";
+    const type = serverType ?? detectPayeeType(name);
+    if (type) setPayeeType(type);
+    // IDNO/IDNP — pre-routed by the server; fill as-is.
+    if (result.payeeIdno?.value) setPayeeIdnp(String(result.payeeIdno.value));
+    // Feature 3 (PAR-F3): bank name.
+    if (result.payeeBank?.value) setPayeeBank(String(result.payeeBank.value));
+    // IBAN — defensive: only fill a structurally valid MD IBAN even though the server validated it.
+    if (result.payeeIban.value) {
+      const ibanRaw = String(result.payeeIban.value).replace(/\s/g, "").toUpperCase();
+      if (isValidMoldovaIBAN(ibanRaw)) setPayeeIban(ibanRaw);
+    }
+  };
+
+  /** User picked one of the candidate payees from the "Care companie e beneficiarul plății?" chooser. */
+  const pickCandidate = (c: ParPayeeCandidate) => {
+    setPayeeName(c.name);
+    setPayeeType(c.payeeType ?? detectPayeeType(c.name) ?? "juridic");
+    setPayeeIdnp(c.idno ?? "");
+    setPayeeBank(c.bank ?? "");
+    // Defensive IBAN guard — leave empty (→ "⚠ de verificat") if it isn't a valid MD IBAN.
+    if (c.iban && isValidMoldovaIBAN(c.iban)) {
+      setPayeeIban(c.iban.replace(/\s/g, "").toUpperCase());
+    } else {
+      setPayeeIban("");
+    }
+    setVendorId("");
+    setPayeeCandidates([]); // hide the chooser once a choice is made
   };
 
   // Feature 3: instantiate a template into the current draft
@@ -825,13 +861,14 @@ export function ParCreateForm() {
                 </div>
               )}
 
-              {/* Per-field confidence indicators */}
-              {[
+              {/* Per-field confidence indicators (only when a single payee was resolved) */}
+              {!aiPrefillResult.needsClarification && [
                 { label: "Beneficiar", field: aiPrefillResult.payeeName },
+                { label: "IDNO/IDNP", field: aiPrefillResult.payeeIdno },
                 { label: "IBAN", field: aiPrefillResult.payeeIban },
                 { label: "Scop", field: aiPrefillResult.endUse },
               ].map(({ label, field }) => (
-                field.value !== null && (
+                field.value !== null && String(field.value) !== "" && (
                   <div key={label} className="flex items-baseline gap-2 text-xs">
                     <span className="text-muted-foreground w-16 flex-shrink-0">{label}:</span>
                     <span className="text-foreground truncate max-w-xs">{String(field.value)}</span>
@@ -841,9 +878,54 @@ export function ParCreateForm() {
                   </div>
                 )
               ))}
-              <p className="text-xs text-muted-foreground pt-1">
-                Câmpurile de mai jos au fost completate. Verifică și corectează înainte de trimitere.
+              {!aiPrefillResult.needsClarification && (
+                <p className="text-xs text-muted-foreground pt-1">
+                  Câmpurile de mai jos au fost completate. Verifică și corectează înainte de trimitere.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* PAR AI overhaul: ambiguous payee → ask the user which company is the payee */}
+          {payeeCandidates.length > 0 && (
+            <div
+              role="radiogroup"
+              aria-label="Care companie e beneficiarul plății?"
+              className="rounded-lg border border-primary/40 bg-primary/5 p-3 mb-3 space-y-2"
+            >
+              <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-primary" aria-hidden />
+                Care companie e beneficiarul plății?
               </p>
+              <p className="text-xs text-muted-foreground">
+                Documentul conține mai mulți posibili beneficiari. Alege cine primește plata:
+              </p>
+              <div className="space-y-2">
+                {payeeCandidates.map((c) => (
+                  <button
+                    key={`${c.name}-${c.idno ?? ""}-${c.iban ?? ""}`}
+                    type="button"
+                    onClick={() => pickCandidate(c)}
+                    className="touch-target w-full text-left rounded-lg border border-border bg-card hover:border-primary hover:bg-accent transition-colors p-3 space-y-0.5"
+                  >
+                    <span className="block font-medium text-foreground">{c.name}</span>
+                    {c.idno && (
+                      <span className="block text-xs text-muted-foreground">IDNO {c.idno}</span>
+                    )}
+                    {c.iban && (
+                      <span className="block text-xs text-muted-foreground">
+                        {c.iban}
+                        {c.ibanForeign && (
+                          <span className="text-warning"> (IBAN non-MD ⚠)</span>
+                        )}
+                      </span>
+                    )}
+                    {c.bank && (
+                      <span className="block text-xs text-muted-foreground">{c.bank}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

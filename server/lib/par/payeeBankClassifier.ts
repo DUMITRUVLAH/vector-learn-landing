@@ -13,7 +13,7 @@
  * Covers: BC (Bancă Comercială), Banca/Bank, Maib, credit institutions, savings casses, etc.
  */
 const BANK_KEYWORDS_RE =
-  /^BC\s|^Banca\s|^Bank\s|\bBancă\b|\bBanca\b|\bBank\b|Moldindconbank|Maib\b|Victoriabank|Moldova\s*Agroindbank|Energbank|Fincombank|Eximbank|ProCredit|Mobiasbancă|Mobiasbanca|Microcredit|BNMI|BNM\b|Savings\s*Bank|\bS\.A\.\s*Banca|\bCredit\s*Suisse|\bBancorp|\bB\.C\.\s/i;
+  /^BC\s|^Banca\s|^Bank\s|\bBancă\b|\bBanca\b|\bBank\b|\bbanc[ăa]\b|\bбанк\b|Moldindconbank|\bMAIB\b|\bMICB\b|Victoriabank|Moldova\s*[- ]?Agroindbank|Energbank|EnergBank|Fincombank|FinComBank|Eximbank|EuroCreditBank|Euro\s*Credit\s*Bank|Comer[țt]bank|ProCredit|OTP\s*Bank|Mobiasban[căc]a?|Microcredit|BNMI|\bBNM\b|Casa\s*de\s*Economii|Savings\s*Bank|Credit\s*Union|\bS\.A\.\s*Banca|\bCredit\s*Suisse|\bBancorp|\bB\.C\.\s/i;
 
 /**
  * Returns true if the given name appears to be a bank or financial institution.
