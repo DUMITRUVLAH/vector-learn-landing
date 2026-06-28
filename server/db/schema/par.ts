@@ -312,6 +312,8 @@ export const parRequests = pgTable(
     payeeIdnp: varchar("payee_idnp", { length: 13 }),
     payeeIban: varchar("payee_iban", { length: 34 }),
     payeeBank: varchar("payee_bank", { length: 300 }),
+    /** Feature 1: persoană fizică ("fizic") sau juridică ("juridic"). Null = unset/legacy. */
+    payeeType: varchar("payee_type", { length: 10 }),
     /** Section 13 */
     attachmentsPresent: boolean("attachments_present").notNull().default(false),
     attachmentsNote: text("attachments_note"),

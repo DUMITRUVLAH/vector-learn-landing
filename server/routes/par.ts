@@ -93,6 +93,8 @@ const updateParSchema = z.object({
   payee_idnp: z.string().max(13).optional().nullable(),
   payee_iban: z.string().max(34).optional().nullable(),
   payee_bank: z.string().max(300).optional().nullable(),
+  /** Feature 1: "fizic" (persoană fizică) | "juridic" (persoană juridică) */
+  payee_type: z.enum(["fizic", "juridic"]).optional().nullable(),
   // Section 13
   attachments_present: z.boolean().optional(),
   attachments_note: z.string().max(2000).optional().nullable(),
@@ -918,6 +920,8 @@ parRoutes.patch(
       if (body.payee_iban !== undefined) updateData.payeeIban = body.payee_iban;
       if (body.payee_bank !== undefined) updateData.payeeBank = body.payee_bank;
     }
+    // Feature 1: payee_type is always accepted regardless of vendor_id
+    if (body.payee_type !== undefined) updateData.payeeType = body.payee_type;
 
     // Merge vendor snapshot (overrides inline if vendor_id was provided)
     if (Object.keys(vendorSnapshot).length > 0) {
