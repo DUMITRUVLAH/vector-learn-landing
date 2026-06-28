@@ -50,6 +50,7 @@ import {
   listParMembers,
   assignParMember,
   revokeParMember,
+  getParMe,
   listParInvites,
   createParInvite,
   revokeParInvite,
@@ -1094,6 +1095,97 @@ function InviteSection() {
 
 // ─── Sub-tab: Members ─────────────────────────────────────────────────────────
 
+/**
+ * Self-service role panel. The admin is an implicit par_admin but, to appear in approval chains, they
+ * need an explicit `approver` (or finance/requestor) row — and the generic "Adaugă rol" form demands a
+ * raw UUID nobody knows. This adds a one-click "give MYSELF role X" using getParMe().userId.
+ * (Owner: "vreau să dau rol de aprobator și mie, dar nu pot".)
+ */
+const SELF_ASSIGNABLE: Array<{ value: "approver" | "finance" | "requestor"; label: string }> = [
+  { value: "approver", label: "Aprobator" },
+  { value: "finance", label: "Finanțe" },
+  { value: "requestor", label: "Solicitant" },
+];
+
+function MyRolesPanel({ onChanged }: { onChanged: () => void }) {
+  const [me, setMe] = useState<{ userId: string; roles: string[] } | null>(null);
+  const [role, setRole] = useState<"approver" | "finance" | "requestor">("approver");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const reload = async () => {
+    try {
+      const m = await getParMe();
+      setMe({ userId: m.userId, roles: m.roles ?? [] });
+    } catch {
+      /* ignore — panel just hides */
+    }
+  };
+  useEffect(() => { reload(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!me?.userId) return null;
+  const has = (r: string) => me.roles.includes(r);
+
+  const addToSelf = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await assignParMember({ userId: me.userId, role });
+      await reload();
+      onChanged();
+    } catch {
+      setErr("Nu am putut adăuga rolul.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="p-4 rounded-lg border border-border bg-muted/30 space-y-3">
+      <div className="flex items-center gap-2">
+        <Users className="h-4 w-4 text-primary" aria-hidden />
+        <h3 className="text-sm font-semibold text-foreground">Rolurile mele</h3>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {me.roles.length === 0 ? (
+          <span className="text-sm text-muted-foreground">Niciun rol PAR încă.</span>
+        ) : (
+          me.roles.map((r) => (
+            <span key={r} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+              {INVITE_ROLE_LABELS[r] ?? r}
+            </span>
+          ))
+        )}
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label htmlFor="self-role" className="sr-only">Rol de adăugat mie</label>
+        <select
+          id="self-role"
+          value={role}
+          onChange={(e) => setRole(e.target.value as typeof role)}
+          className="rounded-lg border border-input bg-background px-3 py-2 text-sm min-h-[44px]"
+        >
+          {SELF_ASSIGNABLE.map((o) => (
+            <option key={o.value} value={o.value} disabled={has(o.value)}>
+              {o.label}{has(o.value) ? " (ai deja)" : ""}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={addToSelf}
+          disabled={busy || has(role)}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 min-h-[44px]"
+        >
+          <Plus className="h-4 w-4" aria-hidden />
+          Adaugă-mi acest rol
+        </button>
+      </div>
+      {err && <p className="text-xs text-destructive">{err}</p>}
+    </div>
+  );
+}
+
 function ParMembersTab() {
   const [members, setMembers] = useState<ParMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1166,6 +1258,9 @@ function ParMembersTab() {
 
   return (
     <div className="space-y-6">
+      {/* Self-service: add a PAR role (e.g. Aprobator) to myself without needing my own UUID */}
+      <MyRolesPanel onChanged={load} />
+
       {/* VF-004: invite by email */}
       <InviteSection />
 

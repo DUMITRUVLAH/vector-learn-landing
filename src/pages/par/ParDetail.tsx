@@ -602,6 +602,33 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
 
 let navigate: (path: string) => void = () => {};
 
+/**
+ * Open/download a PAR attachment. Attachments are stored as `data:` URLs (base64). Chrome BLOCKS
+ * top-level navigation to data: URLs, so a plain `<a href="data:…" target="_blank">` does nothing
+ * ("când apas nu se descarcă"). Convert the data URL to a Blob object URL and trigger a real download
+ * with the original filename. Real http(s) URLs just open in a new tab.
+ */
+async function openParAttachment(fileUrl: string, fileName: string): Promise<void> {
+  try {
+    if (!fileUrl) return;
+    if (fileUrl.startsWith("data:")) {
+      const blob = await (await fetch(fileUrl)).blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName || "atasament";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } else {
+      window.open(fileUrl, "_blank", "noopener,noreferrer");
+    }
+  } catch {
+    /* non-blocking — nothing we can do if the blob conversion fails */
+  }
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ParDetailPage() {
@@ -845,9 +872,9 @@ export function ParDetailPage() {
               {par.attachments.map((att) => (
                 <li key={att.id} className="flex items-center gap-2 text-sm">
                   <Paperclip className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" aria-hidden />
-                  <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate" aria-label={`Deschide ${att.fileName}`}>
+                  <button type="button" onClick={() => openParAttachment(att.fileUrl, att.fileName)} className="text-primary hover:underline truncate text-left" aria-label={`Descarcă ${att.fileName}`}>
                     {att.fileName}
-                  </a>
+                  </button>
                   {att.kind === "par_pdf" && <span className="text-xs text-muted-foreground">(PDF generat)</span>}
                 </li>
               ))}
