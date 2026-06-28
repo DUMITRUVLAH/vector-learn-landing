@@ -29,15 +29,16 @@ import { finSfsSettings, finEinvoices } from "../db/schema/finEinvoices";
 import { finInvoices, finInvoiceLines } from "../db/schema/finInvoices";
 import { finParties } from "../db/schema/finParties";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
-import { encrypt, decrypt } from "../lib/crypto";
+import { encrypt } from "../lib/crypto";
 import {
   EfacturaMdClient,
   EfacturaMdError,
   generateSfsInvoiceXml,
   createMockTransport,
-  type EfacturaMdConfig,
   type SfsInvoiceLine,
 } from "../lib/efacturaMoldova";
+// STMT-003: loadSfsConfig moved to server/lib/fin/sfsConfig.ts (shared with finStatement.ts)
+import { loadSfsConfig } from "../lib/fin/sfsConfig";
 
 export const finEinvoicesRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -53,40 +54,6 @@ const upsertSfsSettingsSchema = z.object({
   username: z.string().min(1).max(200).optional(),
   password: z.string().min(1).max(200).optional(),
 });
-
-// ─── Helper: load + decrypt SFS config for a tenant ─────────────────────────
-
-async function loadSfsConfig(
-  tenantId: string
-): Promise<{ config: EfacturaMdConfig; settings: typeof finSfsSettings.$inferSelect } | null> {
-  const rows = await db
-    .select()
-    .from(finSfsSettings)
-    .where(eq(finSfsSettings.tenantId, tenantId))
-    .limit(1);
-
-  if (rows.length === 0) return null;
-
-  const s = rows[0];
-  const hasCredentials = !!(s.usernameEncrypted && s.passwordEncrypted);
-
-  const config: EfacturaMdConfig = {
-    // URL-ul REAL al serviciului SOAP SFS, confirmat din WSDL live
-    // (https://efactura-api.sfs.md/Service.svc?wsdl, namespace tempuri.org,
-    // SOAPAction http://tempuri.org/IService/<Method>). Ghidul listează
-    // `api-test.fisc.md`, dar acel domeniu nu există în DNS — nu îl folosi.
-    // Test și prod folosesc același host (SFS nu expune un sandbox separat aici).
-    endpoint: "https://efactura-api.sfs.md/Service.svc",
-    username: hasCredentials ? decrypt(s.usernameEncrypted!) : "",
-    password: hasCredentials ? decrypt(s.passwordEncrypted!) : "",
-    supplierIdno: s.idno,
-    supplierBankAccount: s.bankAccount,
-    // mock when: environment=mock OR no credentials
-    mock: s.environment === "mock" || !hasCredentials,
-  };
-
-  return { config, settings: s };
-}
 
 // ─── GET /api/fin/einvoices ──────────────────────────────────────────────────
 // EINV-003: list all e-invoices for the tenant (ordered newest first)

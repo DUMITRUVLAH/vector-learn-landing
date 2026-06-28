@@ -883,6 +883,20 @@
       "when": 1751068800002,
       "tag": "0125_par_project_approvers",
       "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1751068800100,
+      "tag": "0126_stmt003_linked_invoice",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1751068800200,
+      "tag": "0127_stmt004_einvoice_xml_payload",
+      "breakpoints": true
     }
   ]
 }

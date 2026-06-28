@@ -87,6 +87,9 @@ import { parReceiptsRoutes } from "./routes/parReceipts";
 // VM1-02: PAR config import (projects/departments/budget codes from Excel)
 import { parConfigImportRoutes } from "./routes/parConfigImport";
 
+// STMT module (STMT-001..004): Statement upload → review → e-Factura → history
+import { finStatementRoutes } from "./routes/finStatement";
+
 // DOCMERGE module (DOCMERGE-001)
 import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
 
@@ -130,6 +133,10 @@ app.route("/api/notifications", notificationRoutes);
 
 // FinDesk Insights widgets (metrics / aging / cashflow forecast / saved views / narratives)
 app.route("/api/analytics/fin", finAnalyticsRoutes);
+
+// STMT-001..004: Statement routes — mounted BEFORE /api/fin to avoid /statement being shadowed
+// by the broad /api/fin catch of finCapturesRoutes/finEinvoicesRoutes.
+app.route("/api/fin/statement", finStatementRoutes);
 
 // FinDesk
 app.route("/api/fin/invoices", finInvoicesRoutes);
