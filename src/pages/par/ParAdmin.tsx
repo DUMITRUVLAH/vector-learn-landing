@@ -35,6 +35,8 @@ import {
   ChevronLeft,
   Upload,
   Download,
+  Calendar,
+  BarChart2,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { cn } from "@/lib/utils";
@@ -80,6 +82,7 @@ import {
   createEvent,
   updateEvent,
   deleteEvent,
+  getParReportByEvent,
   searchRegistryCompanies,
   formatMDL,
   importParConfigExcel,
@@ -1550,25 +1553,237 @@ function ParReferenceData() {
         />
       )}
 
-      {/* VM1-04: Events */}
+      {/* Feature 2: Events — rich table with dates, creator, spend */}
       {section === "events" && (
-        <SimpleRefTable
-          title="Evenimente"
-          items={events}
-          columns={[{ label: "Denumire", key: "name" as const }]}
-          onAdd={(payload) =>
-            createEvent({ name: payload.name as string }).then(load)
-          }
-          onEdit={(id, payload) =>
-            updateEvent(id, { name: payload.name as string }).then(load)
-          }
-          onDelete={(id) => deleteEvent(id).then(load)}
-          addFields={[{ id: "name", label: "Denumire eveniment", placeholder: "ex. Conferința Anuală 2026" }]}
+        <EventsTable
+          events={events}
+          projects={projects}
+          onReload={load}
         />
       )}
 
       {section === "vendors" && (
         <VendorSection vendors={vendors} onReload={load} />
+      )}
+    </div>
+  );
+}
+
+// ─── Feature 2: Events table (rich: dates, creator, spend) ──────────────────
+
+interface EventsTableProps {
+  events: ParEvent[];
+  projects: import("@/lib/api/par").ParProject[];
+  onReload: () => Promise<void>;
+}
+
+function EventsTable({ events, projects, onReload }: EventsTableProps) {
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<{ name: string; project_id: string; starts_at: string; ends_at: string }>({
+    name: "", project_id: "", starts_at: "", ends_at: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [spendByEvent, setSpendByEvent] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    getParReportByEvent()
+      .then((r) => {
+        const map: Record<string, number> = {};
+        for (const item of r.items) if (item.id) map[item.id] = item.totalCents;
+        setSpendByEvent(map);
+      })
+      .catch(() => {/* non-blocking */});
+  }, [events]);
+
+  const reset = () => {
+    setForm({ name: "", project_id: "", starts_at: "", ends_at: "" });
+    setShowForm(false);
+    setEditingId(null);
+  };
+
+  const startEdit = (ev: ParEvent) => {
+    setEditingId(ev.id);
+    setForm({
+      name: ev.name,
+      project_id: ev.projectId ?? "",
+      starts_at: ev.startsAt ? ev.startsAt.slice(0, 10) : "",
+      ends_at: ev.endsAt ? ev.endsAt.slice(0, 10) : "",
+    });
+    setShowForm(true);
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    setSaving(true);
+    try {
+      const payload = {
+        name: form.name.trim(),
+        project_id: form.project_id || null,
+        starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : null,
+        ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
+      };
+      if (editingId) {
+        await updateEvent(editingId, payload);
+      } else {
+        await createEvent(payload);
+      }
+      await onReload();
+      reset();
+    } catch { /* error shown by browser */ }
+    finally { setSaving(false); }
+  };
+
+  const remove = async (id: string) => {
+    await deleteEvent(id).catch(() => {/* */});
+    await onReload();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-foreground">Evenimente</h3>
+        {!showForm && (
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors min-h-[36px]"
+            aria-label="Adaugă eveniment nou"
+          >
+            <Plus className="h-4 w-4" aria-hidden /> Adaugă
+          </button>
+        )}
+      </div>
+
+      {showForm && (
+        <form onSubmit={submit} className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <p className="text-sm font-medium text-foreground">{editingId ? "Editează eveniment" : "Eveniment nou"}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label htmlFor="ev-name" className="block text-xs font-medium text-muted-foreground mb-1">Denumire *</label>
+              <input
+                id="ev-name"
+                type="text"
+                required
+                placeholder="ex. Conferința Anuală 2026"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground w-full focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label htmlFor="ev-project" className="block text-xs font-medium text-muted-foreground mb-1">Proiect (opțional)</label>
+              <select
+                id="ev-project"
+                value={form.project_id}
+                onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value }))}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground w-full focus:outline-none focus:ring-2 focus:ring-ring"
+                aria-label="Proiect"
+              >
+                <option value="">— Neasociat —</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="ev-starts" className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <Calendar className="h-3 w-3" aria-hidden /> Data început
+              </label>
+              <input
+                id="ev-starts"
+                type="date"
+                value={form.starts_at}
+                onChange={(e) => setForm((f) => ({ ...f, starts_at: e.target.value }))}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground w-full focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label htmlFor="ev-ends" className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <Calendar className="h-3 w-3" aria-hidden /> Data sfârșit
+              </label>
+              <input
+                id="ev-ends"
+                type="date"
+                value={form.ends_at}
+                min={form.starts_at || undefined}
+                onChange={(e) => setForm((f) => ({ ...f, ends_at: e.target.value }))}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground w-full focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="submit" disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[36px]">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}
+              {editingId ? "Salvează" : "Adaugă"}
+            </button>
+            <button type="button" onClick={reset}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-sm text-muted-foreground hover:bg-muted transition-colors min-h-[36px]">
+              <X className="h-4 w-4" aria-hidden /> Anulează
+            </button>
+          </div>
+        </form>
+      )}
+
+      {events.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">Niciun eveniment. Adaugă primul eveniment.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="text-left text-muted-foreground border-b border-border text-xs">
+                <th className="pb-2 pr-3 font-medium">Denumire</th>
+                <th className="pb-2 pr-3 font-medium">Proiect</th>
+                <th className="pb-2 pr-3 font-medium">Interval</th>
+                <th className="pb-2 pr-3 font-medium">Adăugat de</th>
+                <th className="pb-2 pr-3 font-medium text-right flex items-center gap-1 justify-end">
+                  <BarChart2 className="h-3 w-3" aria-hidden /> Cheltuieli
+                </th>
+                <th className="pb-2 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((ev) => {
+                const spend = spendByEvent[ev.id];
+                return (
+                  <tr key={ev.id} className="border-b border-border/50 last:border-0">
+                    <td className="py-2 pr-3 font-medium text-foreground">{ev.name}</td>
+                    <td className="py-2 pr-3 text-muted-foreground text-xs">
+                      {ev.projectName ?? "—"}
+                    </td>
+                    <td className="py-2 pr-3 text-xs text-muted-foreground whitespace-nowrap">
+                      {ev.startsAt ? ev.startsAt.slice(0, 10) : "—"}
+                      {ev.endsAt ? ` → ${ev.endsAt.slice(0, 10)}` : ""}
+                    </td>
+                    <td className="py-2 pr-3 text-xs text-muted-foreground">
+                      {ev.createdByName ?? "—"}
+                      {ev.createdAt && (
+                        <span className="block text-[10px]">{new Date(ev.createdAt).toLocaleDateString("ro-MD")}</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-xs font-medium text-foreground">
+                      {spend != null ? formatMDL(spend) : "—"}
+                    </td>
+                    <td className="py-2">
+                      <div className="flex items-center gap-1">
+                        <button type="button" aria-label={`Editează ${ev.name}`}
+                          onClick={() => startEdit(ev)}
+                          className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center">
+                          <Edit2 className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                        <button type="button" aria-label={`Șterge ${ev.name}`}
+                          onClick={() => remove(ev.id)}
+                          className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center">
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
