@@ -582,6 +582,21 @@ async function main() {
     eq((await GET("requestor", "/api/par/reports/by-budget")).status, 403, "status");
   });
 
+  // ═══ VM1-13 — AI prefill: INVOKE the action, not just check the button (§3.5.1quater) ═══
+  // Regression guard for the 2026-06-28 bug: prefill 500'd ("invalid input syntax for type uuid:
+  // par-prefill-<ts>") because a placeholder string was written to a uuid audit column. The old
+  // e2e only asserted the upload button existed — it never CALLED this endpoint, so the audit-log
+  // write (where it blew up) never ran. This scenario uploads a real doc and asserts 200 + shape.
+  await T("POST /api/par/ai-prefill (real doc upload) → 200 with extracted fields (not 500 uuid)", async () => {
+    const doc = "Factura nr 42\nFurnizor: ACME SRL\nIBAN: MD24AG000225100013104168\nSuma: 1500 MDL\nScop: servicii IT\n";
+    const r = await ctxs.requestor.post("/api/par/ai-prefill", {
+      multipart: { file: { name: "factura.txt", mimeType: "text/plain", buffer: Buffer.from(doc, "utf8") } },
+    });
+    eq(r.status(), 200, "status (was 500 'invalid input syntax for type uuid')");
+    const j = await r.json();
+    assert("payeeName" in j && "payeeIban" in j && "totalCents" in j, `prefill shape: ${JSON.stringify(j).slice(0, 120)}`);
+  });
+
   // ═══ BLOC 11 — Invites SHELL-503 (90–92) ═══
   await T("POST invites admin → 201 inviteUrl + token", async () => {
     const r = await POST("admin", "/api/par/invites", { email: "newuser+e2e@example.com", par_role: "requestor" });

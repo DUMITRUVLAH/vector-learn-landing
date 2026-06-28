@@ -326,6 +326,37 @@ up, merge oldest-first ONE at a time, and after each: `npm run check-refs` + `vi
 pass before the next. After the final merge + deploy, `npm run smoke` must be green. A merge
 that hasn't been built+smoke-tested has not shipped — it's just broken code on `main`.
 
+### 3.5.1quater Learn from EVERY mistake — the compounding loop (NON-NEGOTIABLE)
+Whenever a bug escapes to the owner, to prod, or is only caught after "I tested it" — it does NOT
+end at "fixed". A mistake that isn't turned into a permanent guard will recur. Every time you
+discover you were wrong, close this loop **in the same change**:
+
+1. **Root-cause it in one sentence** — the actual mechanism, not the symptom (e.g. "a placeholder
+   `par-prefill-<ts>` string was written to a `uuid` column", not "prefill was broken").
+2. **Add the regression test that WOULD have caught it** — and confirm it FAILS on the old code,
+   PASSES on the fix. Put it where it runs automatically (vitest, or a scenario in the relevant
+   `scripts/e2e-*.mjs`). A fix without a test that locks it is half a fix.
+3. **Record the lesson** — append a short entry under `docs/solutions/<category>/` (the categories
+   exist: build-errors, database-issues, frontend, security-issues, architecture-patterns). If it's
+   a *class* of bug (not a one-off), also add a one-line rule to this file so the next session reads
+   it. Cross-link from the test/code comment.
+
+**The lesson that keeps recurring — test the ACTION, not the affordance.** "The button renders" /
+"the page loads without an error banner" is necessary but NOT sufficient: it does not execute the
+feature. The 2026-06-28 AI-prefill 500 (`invalid input syntax for type uuid: "par-prefill-…"`)
+shipped because the e2e asserted the upload button *existed* but never *called* `POST
+/api/par/ai-prefill` with a document — so the audit-log write (where the bad uuid blew up) never
+ran. Therefore, for EVERY new endpoint and EVERY "AI / extract / upload / generate / merge / pay /
+approve" action: the test must **invoke it once with realistic input and assert a 200 + the
+expected response shape** (or the documented non-200). Rendering a control proves nothing about
+whether clicking it works. The live-API integration smoke (§3.5.1) is exactly this discipline —
+extend it to cover each new action, don't just check the UI mounted.
+
+> Why this is its own rule: bugs the owner has to report are the most expensive kind. The point of
+> writing the lesson down is that the *next* mistake is a new one, never a repeat — the test suite
+> and this file get monotonically stronger. Treat "the owner found a bug I said I tested" as a
+> standing instruction to harden the net, every single time.
+
 ### 3.5.1bis Backlog critic (don't build the first draft of a spec either)
 **Whenever new backlog features are written** (the PLAN step auto-generates a module, or new
 specs/items are added on owner request), the **`backlog-critic`** agent reviews them BEFORE any are
