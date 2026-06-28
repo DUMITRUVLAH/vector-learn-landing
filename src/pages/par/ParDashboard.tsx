@@ -21,6 +21,7 @@ import {
   getParMe,
   getBudgetCodesUsage,
   listEvents,
+  listProjects,
   formatMDL,
   type ParRequest,
   type ParStatus,
@@ -94,9 +95,22 @@ export function ParDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // VM1-10: when arriving from a Folder click, the project/status come in the URL query
+  // (#/business/par?project_id=…&status=…). The URL wins over the saved localStorage filters so the
+  // folder actually narrows the list (before, the dashboard ignored the URL → showed everything).
+  const urlFilters = (() => {
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    const qIdx = hash.indexOf("?");
+    if (qIdx === -1) return { projectId: "", status: "" as ParStatus | "" };
+    const p = new URLSearchParams(hash.slice(qIdx + 1));
+    return { projectId: p.get("project_id") ?? "", status: (p.get("status") as ParStatus) ?? "" };
+  })();
+
   // VF-105: filters are restored from localStorage so they survive a reload.
   const saved = loadSavedFilters();
-  const [statusFilter, setStatusFilter] = useState<ParStatus | "">(saved.status ?? "");
+  const [statusFilter, setStatusFilter] = useState<ParStatus | "">(urlFilters.status || saved.status || "");
+  const [projectFilter, setProjectFilter] = useState<string>(urlFilters.projectId || "");
+  const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
   const [purposeFilter, setPurposeFilter] = useState<ParPurpose | "">(saved.purpose ?? "");
   const [searchQ, setSearchQ] = useState(saved.q ?? "");
   // VF-105: advanced filters (date range + total range in MDL units as strings)
@@ -118,8 +132,9 @@ export function ParDashboard() {
     setStatusFilter(""); setPurposeFilter(""); setSearchQ("");
     setDateFrom(""); setDateTo(""); setMinTotal(""); setMaxTotal("");
     setEventFilter(""); // VM1-04
+    setProjectFilter(""); // VM1-10
   };
-  const hasActiveFilters = !!(statusFilter || purposeFilter || searchQ || dateFrom || dateTo || minTotal || maxTotal || eventFilter);
+  const hasActiveFilters = !!(statusFilter || purposeFilter || searchQ || dateFrom || dateTo || minTotal || maxTotal || eventFilter || projectFilter);
 
   // "Te așteaptă" — real counts for the action banner (role-aware, loaded once)
   const [inboxCount, setInboxCount] = useState(0);
@@ -131,6 +146,8 @@ export function ParDashboard() {
   useEffect(() => {
     // VM1-04: load events for filter dropdown
     listEvents().then((r) => setEvents(r.events)).catch(() => setEvents([]));
+    // VM1-10: project id→name map (for the active-project filter chip from a Folder click)
+    listProjects().then((r) => setProjectsMap(Object.fromEntries(r.items.map((p) => [p.id, p.name])))).catch(() => setProjectsMap({}));
     // Non-approvers get an empty inbox (no 403), so this is safe for everyone.
     getParInbox()
       .then((r) => setInboxCount(r.total))
@@ -181,10 +198,11 @@ export function ParDashboard() {
     load();
   }, [statusFilter, purposeFilter, searchQ, dateFrom, dateTo, minTotal, maxTotal]);
 
-  // Derived sections — VM1-04: apply event filter client-side
-  const filteredByEvent = eventFilter
+  // Derived sections — apply event + project filters client-side (VM1-04 / VM1-10).
+  const filteredByEvent = (eventFilter
     ? requests.filter((r) => (r as ParRequest & { eventId?: string | null }).eventId === eventFilter)
-    : requests;
+    : requests
+  ).filter((r) => !projectFilter || r.projectId === projectFilter);
   const myRequests = filteredByEvent;
   const pendingApproval = filteredByEvent.filter((r) => r.status === "pending_approval");
   const awaitingPayment = filteredByEvent.filter((r) => r.status === "in_finance");
@@ -372,6 +390,18 @@ export function ParDashboard() {
             <SlidersHorizontal className="h-4 w-4" aria-hidden />
             Mai multe filtre
           </button>
+
+          {projectFilter && (
+            <button
+              type="button"
+              onClick={() => setProjectFilter("")}
+              className="inline-flex items-center gap-1.5 h-10 rounded-md px-3 text-sm bg-primary/10 text-primary hover:bg-primary/20 min-h-[44px]"
+              aria-label="Elimină filtrul de proiect"
+            >
+              Proiect: {projectsMap[projectFilter] ?? "selectat"}
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          )}
 
           {hasActiveFilters && (
             <button
