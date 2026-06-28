@@ -17,7 +17,7 @@ import type {
   ParRole,
 } from "../par/parPartyTypes";
 
-const MAX_AI_TEXT_CHARS = 8000;
+const MAX_AI_TEXT_CHARS = 14000;
 
 export const PAR_MULTIPARTY_SYSTEM_PROMPT = `Ești un asistent care extrage TOATE părțile și rechizitele dintr-un document
 (contract, factură, ordin de plată, act, chitanță) pentru o cerere de plată (PAR).
@@ -193,11 +193,48 @@ export interface ExtractParPartiesOpts {
  * Extract all parties + requisites from a document for the PAR payee selection step.
  * Stub mode / parse failure → deterministic regex parser over the same text.
  */
+/**
+ * Build the text sent to the LLM. A naïve slice(0, N) truncated long multi-page contracts BEFORE the
+ * "DATELE JURIDICE / DATE BANCARE" requisites block (IBAN, cod fiscal) which often sits on page 5-9 —
+ * so the IBAN was never extracted. Instead keep the document HEAD (parties/intro/price live here) PLUS
+ * every requisite-bearing line from the rest of the document, capped at the budget.
+ */
+export function buildAiText(raw: string): string {
+  const text = raw ?? "";
+  if (text.length <= MAX_AI_TEXT_CHARS) return text;
+  const HEAD = Math.min(6000, Math.floor(MAX_AI_TEXT_CHARS / 2));
+  const head = text.slice(0, HEAD);
+  // Window-based (NOT line-based) selection: PDF text often has a single huge line, so we take a small
+  // window AROUND each strong requisite anchor anywhere past the head — IBAN, cod fiscal, and the
+  // "DATELE JURIDICE / DATE BANCARE / DATE DE FACTURARE" requisites section (often on page 5-9).
+  const anchorRe =
+    /IBAN|cod\s*fiscal|\bc\/f\b|\bc\/b\b|\bIDNO\b|\bIDNP\b|date(?:le)?\s*(?:juridice|bancare|de\s*facturare|de\s*pl[ăa]ți|de\s*plat)|\bBIC\b|SWIFT|cod\s*bancar|spre\s*plat|total\s*contract/gi;
+  const windows: Array<[number, number]> = [];
+  let m: RegExpExecArray | null;
+  while ((m = anchorRe.exec(text)) !== null && windows.length < 60) {
+    if (m.index < HEAD) continue;
+    windows.push([Math.max(HEAD, m.index - 140), m.index + 220]);
+  }
+  windows.sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const w of windows) {
+    const last = merged[merged.length - 1];
+    if (last && w[0] <= last[1] + 40) last[1] = Math.max(last[1], w[1]);
+    else merged.push([w[0], w[1]]);
+  }
+  let body = "";
+  for (const [s, e] of merged) {
+    if (head.length + body.length + (e - s) + 4 > MAX_AI_TEXT_CHARS) break;
+    body += `\n…\n${text.slice(s, e)}`;
+  }
+  return `${head}\n\n--- DATE DE PLATĂ / RECHIZITE (din restul documentului) ---${body}`;
+}
+
 export async function extractParParties(
   text: string,
   opts: ExtractParPartiesOpts,
 ): Promise<ParPartiesExtraction> {
-  const aiText = (text ?? "").slice(0, MAX_AI_TEXT_CHARS);
+  const aiText = buildAiText(text ?? "");
 
   const result = await callAi({
     action: "capture_extract", // reuse existing action → existing audit + stub plumbing
