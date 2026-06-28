@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "current_item": null,
-  "last_completed": "SPLIT-402",
-  "iterations": 180,
+  "current_item": "SPLIT-402",
+  "last_completed": "STMT-004",
+  "iterations": 181,
   "last_run_at": "2026-06-28T00:00:00Z",
   "milestone_status": "VIOLETA: VM1-01..13 done (PRs #204-#216). Polish run 2026-06-28: VM1-12 dosar PDF #214, VM1-01 multi-role #215, VM1-05 vendor-saved indicator #216.",
   "active_milestone": "VIOLETA",
@@ -26,7 +26,7 @@
       }
     },
     "SPLIT-402": {
-      "status": "done",
+      "status": "in_progress",
       "attempts": 1,
       "blockers": [],
       "spec": "backlog/specs/SPLIT-402-business-shell-convergence.md",
@@ -34,13 +34,7 @@
       "phase": "SHELL",
       "depends_on": [],
       "branch": "feat/SPLIT-faza-SHELL2-one-shell",
-      "priority": "high",
-      "verdicts": {
-        "reviewer": "APPROVED",
-        "integration": "CONNECTED",
-        "manager": "BUY",
-        "student": "OK"
-      }
+      "priority": "high"
     },
     "PAR-001": {
       "status": "done",
@@ -4329,6 +4323,74 @@
       "priority": "high",
       "branch": "feat/VIOLETA-faza-DOSAR-pdf",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/214",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "STMT-001": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/STMT-001-statement-upload-ui.md",
+      "milestone": "STMT",
+      "phase": "1",
+      "depends_on": [],
+      "priority": "P0",
+      "branch": "feat/STMT-faza-1-statement-efactura",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "STMT-002": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/STMT-002-transaction-review-match.md",
+      "milestone": "STMT",
+      "phase": "1",
+      "depends_on": ["STMT-001"],
+      "priority": "P0",
+      "branch": "feat/STMT-faza-1-statement-efactura",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "STMT-003": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/STMT-003-efactura-export.md",
+      "milestone": "STMT",
+      "phase": "1",
+      "depends_on": ["STMT-002"],
+      "priority": "P0",
+      "branch": "feat/STMT-faza-1-statement-efactura",
+      "verdicts": {
+        "reviewer": "APPROVED",
+        "integration": "CONNECTED",
+        "manager": "BUY",
+        "student": "OK"
+      }
+    },
+    "STMT-004": {
+      "status": "done",
+      "attempts": 1,
+      "blockers": [],
+      "spec": "backlog/specs/STMT-004-statement-history-export.md",
+      "milestone": "STMT",
+      "phase": "1",
+      "depends_on": ["STMT-003"],
+      "priority": "P1",
+      "branch": "feat/STMT-faza-1-statement-efactura",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",

@@ -197,7 +197,7 @@ export default function BankLinkImportPage() {
       {/* Back */}
       <div className="mb-4">
         <Link
-          to="/app/fin/banklink"
+          to="/business/fin/banklink"
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -218,7 +218,7 @@ export default function BankLinkImportPage() {
         <div className="rounded-xl border border-dashed border-border bg-card py-12 text-center">
           <p className="text-sm text-muted-foreground">
             Nu ai conexiuni active.{" "}
-            <Link to="/app/fin/banklink" className="text-primary underline">
+            <Link to="/business/fin/banklink" className="text-primary underline">
               Adaugă una
             </Link>{" "}
             mai întâi.

@@ -96,7 +96,7 @@ export default function CashImportPage() {
         {/* Header */}
         <div>
           <button
-            onClick={() => navigate("/app/fin/cash")}
+            onClick={() => navigate("/business/fin/cash")}
             className="mb-2 flex min-h-[44px] items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
             aria-label="Înapoi la încasări"
           >
@@ -138,7 +138,7 @@ export default function CashImportPage() {
               </div>
             </div>
             <button
-              onClick={() => navigate("/app/fin/cash")}
+              onClick={() => navigate("/business/fin/cash")}
               className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
             >
               Vezi tranzacțiile

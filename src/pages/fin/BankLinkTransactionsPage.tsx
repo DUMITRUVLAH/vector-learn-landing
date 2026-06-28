@@ -125,7 +125,7 @@ export default function BankLinkTransactionsPage() {
       {/* Back */}
       <div className="mb-4">
         <Link
-          to="/app/fin/banklink"
+          to="/business/fin/banklink"
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />

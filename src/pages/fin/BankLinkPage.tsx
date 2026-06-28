@@ -167,7 +167,7 @@ export default function BankLinkPage() {
         <div className="flex flex-wrap gap-2">
           {unmatchedCount > 0 && (
             <Link
-              to="/app/fin/banklink/queue"
+              to="/business/fin/banklink/queue"
               className="flex h-9 items-center gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-3 text-sm font-medium text-warning hover:bg-warning/20"
             >
               <GitMerge className="h-4 w-4" />
@@ -175,7 +175,7 @@ export default function BankLinkPage() {
             </Link>
           )}
           <Link
-            to="/app/fin/banklink/transactions"
+            to="/business/fin/banklink/transactions"
             className="flex h-9 items-center gap-1.5 rounded-lg border border-input px-3 text-sm font-medium text-foreground hover:bg-muted"
           >
             <List className="h-4 w-4" />

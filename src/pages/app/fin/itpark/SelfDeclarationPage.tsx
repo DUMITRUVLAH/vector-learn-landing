@@ -114,18 +114,18 @@ export function SelfDeclarationPage() {
     } finally { setSaving(false); }
   };
 
-  if (!id) return <BusinessShell><div className="p-4 text-destructive" role="alert">ID dosar lipsă</div></BusinessShell>;
+  if (!id) return <BusinessShell pageTitle="Declarație pe proprie răspundere"><div className="p-4 text-destructive" role="alert">ID dosar lipsă</div></BusinessShell>;
 
   if (loading) {
-    return <BusinessShell><div className="flex items-center justify-center min-h-64" aria-busy="true"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" role="status" /></div></BusinessShell>;
+    return <BusinessShell pageTitle="Declarație pe proprie răspundere"><div className="flex items-center justify-center min-h-64" aria-busy="true"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" role="status" /></div></BusinessShell>;
   }
 
   if (error) {
-    return <BusinessShell><div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive m-4" role="alert"><p className="font-medium">Eroare</p><p className="text-sm mt-1">{error}</p></div></BusinessShell>;
+    return <BusinessShell pageTitle="Declarație pe proprie răspundere"><div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive m-4" role="alert"><p className="font-medium">Eroare</p><p className="text-sm mt-1">{error}</p></div></BusinessShell>;
   }
 
   return (
-    <BusinessShell>
+    <BusinessShell pageTitle="Declarație pe proprie răspundere">
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         {/* Breadcrumb */}
         <nav aria-label="Navigare" className="flex items-center gap-2 text-sm text-muted-foreground print:hidden">
