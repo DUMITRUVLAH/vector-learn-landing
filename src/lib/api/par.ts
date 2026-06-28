@@ -1225,6 +1225,8 @@ export interface ParPrefillResult {
   currency: ParPrefillField;
   payeeIban: ParPrefillField;
   endUse: ParPrefillField;
+  /** Feature 3 (PAR-F3): bank name extracted separately from beneficiary */
+  payeeBank: ParPrefillField;
   documentClass: {
     value: string | null;
     confidence: number;

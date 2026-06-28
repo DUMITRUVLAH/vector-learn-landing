@@ -51,6 +51,7 @@ vi.mock("@/lib/api/par", () => ({
   requestParChanges: vi.fn().mockResolvedValue({}),
   submitPar: vi.fn().mockResolvedValue({}),
   reapproveOverage: vi.fn().mockResolvedValue({}),
+  getPurchaseOrder: vi.fn().mockResolvedValue(null),
   formatMDL: (c: number) => `${(c / 100).toLocaleString()} MDL`,
   PAR_STATUS_LABELS: {
     draft: "Ciornă",
