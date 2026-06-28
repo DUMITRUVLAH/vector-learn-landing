@@ -53,9 +53,67 @@ export { parseAmount } from "../fin/money";
 
 /** Heuristic fallback parser for MAIB-style statements (used in stub/mock mode). */
 export function parseStatementHeuristic(rawText: string): StatementTxn[] {
+  // Try card-statement format first (two dates + currency code)
+  const cardTxns = parseCardStatement(rawText);
+  if (cardTxns.length > 0) return cardTxns;
+  // Try CSV/Excel tabular format (MAIB Excel export: comma-separated columns with date in col 1)
+  const csvTxns = parseExcelCsvStatement(rawText);
+  if (csvTxns.length > 0) return csvTxns;
+  // Try current-account format (MAIB "Extras de Cont" table: debit/credit columns from PDF)
+  return parseCurrentAccountStatement(rawText);
+}
+
+/**
+ * MAIB current-account Excel/CSV export.
+ * ExcelJS converts each row to comma-separated cells: "1,01.09.2025,ROTARI ANA,286,Plata pentru...,16000,0"
+ * Column order (MAIB standard): N/O, Data, Date partener, No doc, Detalii plata, Debit, Credit
+ */
+function parseExcelCsvStatement(rawText: string): StatementTxn[] {
   const txns: StatementTxn[] = [];
-  // Match: DD.MM.YYYY ... <description> ... <amount> <CUR> ... <accountAmount>
-  // MAIB lines look like: "01.10.2025 01.10.2025 DIGITALOCEAN.COM card ***2084 28.80 USD 488.57 721.92"
+  const lines = rawText.split(/\r?\n/);
+  for (const line of lines) {
+    const cols = line.split(",");
+    if (cols.length < 7) continue;
+    // Col 1: N/O (number), Col 2: date DD.MM.YYYY, cols -2/-1: debit/credit
+    const dateStr = cols[1]?.trim() ?? "";
+    const dateMatch = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(dateStr);
+    if (!dateMatch) continue;
+    const [, d, mo, y] = dateMatch;
+    // Debit is second-to-last non-empty col, credit is last non-empty col
+    const debitRaw = cols[cols.length - 2]?.trim() ?? "0";
+    const creditRaw = cols[cols.length - 1]?.trim() ?? "0";
+    const debit = parseAmount(debitRaw);
+    const credit = parseAmount(creditRaw);
+    if (!Number.isFinite(debit) || !Number.isFinite(credit)) continue;
+    if (debit === 0 && credit === 0) continue;
+    const isIn = credit > 0;
+    const amount = isIn ? credit : debit;
+    // Counterparty in col 3 (index 2), description in col 5 (index 4)
+    const counterparty = cols[2]?.trim() || null;
+    const details = cols.slice(4, cols.length - 2).join(" ").trim();
+    const desc = [counterparty, details].filter(Boolean).join(" — ").slice(0, 300);
+    txns.push({
+      tx_date: `${y}-${mo}-${d}`,
+      description: desc || (isIn ? "Intrare" : "Ieșire"),
+      counterparty: counterparty || null,
+      amount_cents: Math.round(amount * 100),
+      direction: isIn ? "in" : "out",
+      currency: "MDL",
+      orig_amount: null,
+      reportable: "review",
+      reportable_reason: isIn ? "Intrare — verificați dacă necesită factură" : "Plată — verificați dacă necesită factură",
+      reportable_confidence: 0.5,
+    });
+  }
+  return txns;
+}
+
+/**
+ * MAIB card statement rows:
+ * "01.10.2025 01.10.2025 DIGITALOCEAN.COM card ***2084 28.80 USD 488.57 721.92"
+ */
+function parseCardStatement(rawText: string): StatementTxn[] {
+  const txns: StatementTxn[] = [];
   const lineRe =
     /(\d{2}\.\d{2}\.\d{4})\s+\d{2}\.\d{2}\.\d{4}\s+(.+?)\s+([\d.,]+)\s+(USD|EUR|MDL|RON)\s+([\d.,]+)\s+([\d.,]+)/g;
   let m: RegExpExecArray | null;
@@ -64,7 +122,6 @@ export function parseStatementHeuristic(rawText: string): StatementTxn[] {
     const desc = descRaw.replace(/\s+card\s+\*+\d+.*$/i, "").trim();
     const [d, mo, y] = date.split(".");
     const acct = parseAmount(acctAmt);
-    // Direction: MAIB "Alimentare"/"TRANSFER pe card" inflows; everything else outflow.
     const isIn = /alimentare|transfer pe card|intrare/i.test(descRaw);
     txns.push({
       tx_date: `${y}-${mo}-${d}`,
@@ -78,6 +135,134 @@ export function parseStatementHeuristic(rawText: string): StatementTxn[] {
       reportable_reason: isIn ? "Intrare / alimentare cont — fără document" : "Plată — verificați dacă necesită factură",
       reportable_confidence: 0.5,
     });
+  }
+  return txns;
+}
+
+/**
+ * MAIB current-account "Extras de Cont" table format (PDF text layer).
+ * Rows look like (after OCR/text extraction, whitespace-collapsed):
+ *   "1 (R) ROTARI ANA 01.09.2025 286 16000.00 0.00 Plata pentru Servicii..."
+ * or split across lines due to multiline partner block. We match on the date + two
+ * non-negative amounts (debit, credit) that appear on the same logical line.
+ * Pattern: optional N/O prefix, date DD.MM.YYYY, optional doc-nr, debit, credit
+ */
+function parseCurrentAccountStatement(rawText: string): StatementTxn[] {
+  const txns: StatementTxn[] = [];
+  // Flatten to single line per transaction: join the raw text into one string, then
+  // match each row by its date + two trailing amounts.
+  // Row pattern: date  ...description/counterparty blob...  debit  credit
+  // debit=0 means credit>0 (inflow), credit=0 means debit>0 (outflow).
+  const rowRe =
+    /(\d{2}\.\d{2}\.\d{4})\s+\d+\s+([\s\S]*?)\s+([\d\s]+[.,]\d{2})\s+([\d\s]+[.,]\d{2})(?=\s*(?:\d{2}\.\d{2}\.\d{4}|\n\s*\n|SOLD FINAL|RULAJ|$))/g;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(rawText)) !== null) {
+    const [, date, descBlob, debitRaw, creditRaw] = m;
+    const debit = parseAmount(debitRaw.replace(/\s/g, ""));
+    const credit = parseAmount(creditRaw.replace(/\s/g, ""));
+    if (!Number.isFinite(debit) || !Number.isFinite(credit)) continue;
+    if (debit === 0 && credit === 0) continue;
+    const isIn = credit > 0;
+    const amount = isIn ? credit : debit;
+    // descBlob contains counterparty + doc details — take first meaningful line as desc
+    const descLines = descBlob.split(/\n|\r/).map((l) => l.trim()).filter(Boolean);
+    const desc = descLines.join(" ").replace(/\s+/g, " ").trim().slice(0, 300);
+    const [d, mo, y] = date.split(".");
+    txns.push({
+      tx_date: `${y}-${mo}-${d}`,
+      description: desc,
+      counterparty: guessCounterpartyFromCurrentAccount(descLines),
+      amount_cents: Math.round(amount * 100),
+      direction: isIn ? "in" : "out",
+      currency: "MDL",
+      orig_amount: null,
+      reportable: "review",
+      reportable_reason: isIn
+        ? "Intrare — verificați dacă necesită factură"
+        : "Plată — verificați dacă necesită factură",
+      reportable_confidence: 0.5,
+    });
+  }
+
+  // Fallback: simpler line-by-line scan when the regex above matches nothing
+  // (PDF text may collapse columns differently). Look for lines with date + two amounts.
+  if (txns.length === 0) {
+    return parseCurrentAccountFallback(rawText);
+  }
+  return txns;
+}
+
+function guessCounterpartyFromCurrentAccount(descLines: string[]): string | null {
+  for (const line of descLines) {
+    const u = line.toUpperCase();
+    if (u.includes("(R)") || u.includes("(N)")) {
+      // Lines like "(R) ROTARI ANA" or "(N) PROGRAMUL NATIUNILOR..."
+      return line.replace(/^\s*\([RN]\)\s*/i, "").trim().split(/\s{2,}/)[0] ?? null;
+    }
+  }
+  return guessCounterparty(descLines[0] ?? "");
+}
+
+/**
+ * Simpler fallback: scan each line for "date debit credit" at end.
+ * Handles PDFs where text-layer columns are interleaved differently.
+ */
+function parseCurrentAccountFallback(rawText: string): StatementTxn[] {
+  const txns: StatementTxn[] = [];
+  const lines = rawText.split(/\r?\n/);
+  // Build blocks: each block starts with a row-number+date line
+  // "1 (R) ROTARI ANA" / "01.09.2025 286 16000.00 0.00"
+  // After `unpdf`, the MAIB current-account PDF produces lines roughly:
+  //   "N/O Data tranzactiei ..."   (header)
+  //   "(R) ROTARI ANA"             (counterparty)
+  //   "01.09.2025 286 16000.00 0.00"  (date + amounts)
+  //   "Plata pentru..."            (description)
+  // Line ends with debit + credit — two decimal amounts (x.xx) preceded by date + doc-nr.
+  // Use a lookahead-free anchor: match the date, skip non-decimal content, take last two amounts.
+  // The MAIB row: "01.09.2025 286 16000.00 0.00" or "01.09.2025 24437 50 146.85 0.00"
+  const dateAmtRe = /^(\d{2}\.\d{2}\.\d{4})\s+\S+(?:\s+\S+)*?\s+(\d[\d.,]*\d|\d+\.\d{2})\s+(\d[\d.,]*\d|\d+\.\d{2})\s*$/;
+  let pendingCounterparty = "";
+  let pendingDesc = "";
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || /^N\/O\s|^Data tranz|^Date partn|^Detalii|^SOLD |^RULAJ/i.test(line)) {
+      pendingCounterparty = "";
+      pendingDesc = "";
+      continue;
+    }
+    const dm = dateAmtRe.exec(line);
+    if (dm) {
+      const [, date, debitRaw, creditRaw] = dm;
+      const debit = parseAmount(debitRaw);
+      const credit = parseAmount(creditRaw);
+      if (!Number.isFinite(debit) || !Number.isFinite(credit)) continue;
+      if (debit === 0 && credit === 0) continue;
+      const isIn = credit > 0;
+      const amount = isIn ? credit : debit;
+      const [d, mo, y] = date.split(".");
+      // Next line(s) after the date line are the description
+      const nextDesc = lines[i + 1]?.trim() ?? "";
+      const desc = [pendingCounterparty, pendingDesc, nextDesc].filter(Boolean).join(" ").trim().slice(0, 300) ||
+        (isIn ? "Intrare" : "Ieșire");
+      txns.push({
+        tx_date: `${y}-${mo}-${d}`,
+        description: desc,
+        counterparty: pendingCounterparty || null,
+        amount_cents: Math.round(amount * 100),
+        direction: isIn ? "in" : "out",
+        currency: "MDL",
+        orig_amount: null,
+        reportable: "review",
+        reportable_reason: isIn ? "Intrare — verificați dacă necesită factură" : "Plată — verificați dacă necesită factură",
+        reportable_confidence: 0.5,
+      });
+      pendingCounterparty = "";
+      pendingDesc = "";
+    } else if (/^\([RN]\)/.test(line)) {
+      pendingCounterparty = line.replace(/^\([RN]\)\s*/i, "").trim();
+    } else if (/^[A-ZĂÂÎȘȚ]/.test(line) && line.length > 5) {
+      pendingDesc = line;
+    }
   }
   return txns;
 }
