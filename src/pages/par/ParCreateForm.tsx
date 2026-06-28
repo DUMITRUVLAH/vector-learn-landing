@@ -15,6 +15,7 @@ import {
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
+import { detectPayeeType, type PayeeType } from "@/lib/par/payeeTypeDetector";
 import { QuotesSection } from "@/components/par/QuotesSection";
 import { ApiError } from "@/lib/api";
 import {
@@ -157,6 +158,8 @@ export function ParCreateForm() {
   const [payeeIdnp, setPayeeIdnp] = useState("");
   const [payeeIban, setPayeeIban] = useState("");
   const [payeeBank, setPayeeBank] = useState("");
+  // Feature 1: persoană fizică vs juridică toggle
+  const [payeeType, setPayeeType] = useState<PayeeType>("juridic");
   // Attachments (13)
   const [attachmentsPresent, setAttachmentsPresent] = useState(false);
   const [attachmentsNote, setAttachmentsNote] = useState("");
@@ -231,12 +234,13 @@ export function ParCreateForm() {
       vendor_id: vendorId || null,
       payee_name: payeeName || null, payee_idnp: payeeIdnp || null,
       payee_iban: payeeIban || null, payee_bank: payeeBank || null,
+      payee_type: payeeType,
       attachments_present: attachmentsPresent, attachments_note: attachmentsNote || null,
       currency,
     });
   }, [dateOfRequest, requestorTitle, departmentId, dateNeeded, projectId, eventId, budgetCodeId,
       budgetCodeNote, purpose, chargeTo, endUse, vendorId, payeeName,
-      payeeIdnp, payeeIban, payeeBank, attachmentsPresent, attachmentsNote, currency]);
+      payeeIdnp, payeeIban, payeeBank, payeeType, attachmentsPresent, attachmentsNote, currency]);
 
   // Feature 2: fetch budget balance when a budget code is selected
   useEffect(() => {
@@ -268,6 +272,8 @@ export function ParCreateForm() {
   const onRegistrySelect = (company: RegistryCompany) => {
     setPayeeName(company.name);
     setPayeeIdnp(company.idno ?? "");
+    // Selecting from company registry → always juridic
+    setPayeeType("juridic");
     setRegistryQuery("");
     setRegistryResults([]);
     setVendorId("");
@@ -286,7 +292,13 @@ export function ParCreateForm() {
       setAiPrefillResult(result);
       // Auto-apply extracted fields only when value is non-null.
       // User can still override them (all fields remain editable).
-      if (result.payeeName.value) setPayeeName(String(result.payeeName.value));
+      if (result.payeeName.value) {
+        const extractedName = String(result.payeeName.value);
+        setPayeeName(extractedName);
+        // Feature 1: auto-detect payee type from AI-extracted name
+        const detected = detectPayeeType(extractedName);
+        if (detected) setPayeeType(detected);
+      }
       // IBAN: only accept a real MD IBAN. The extractor sometimes returns a 13-digit IDNP/IDNO in
       // this slot — route that to the IDNP field instead, and never dump a non-IBAN into the IBAN box.
       if (result.payeeIban.value) {
@@ -299,8 +311,8 @@ export function ParCreateForm() {
         // If there's no line item yet, prefill a synthetic one isn't in scope (PAR lines = phase 2).
         // Just note the total in a state so the user sees it.
       }
-      if (result.currency.value && ["MDL", "EUR", "USD", "RON"].includes(String(result.currency.value))) {
-        setCurrency(result.currency.value as "MDL" | "EUR" | "USD" | "RON");
+      if (result.currency.value && ["MDL", "EUR", "USD"].includes(String(result.currency.value))) {
+        setCurrency(result.currency.value as "MDL" | "EUR" | "USD");
       }
       // Clear vendor selection so the new manual name takes precedence
       setVendorId("");
@@ -409,7 +421,15 @@ export function ParCreateForm() {
   const onVendorSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const id = e.target.value; setVendorId(id);
     const v = vendors.find((x) => x.id === id);
-    if (v) { setPayeeName(v.name); setPayeeIdnp(v.idnp ?? ""); setPayeeIban(v.iban ?? ""); setPayeeBank(v.bank ?? ""); }
+    if (v) {
+      setPayeeName(v.name);
+      setPayeeIdnp(v.idnp ?? "");
+      setPayeeIban(v.iban ?? "");
+      setPayeeBank(v.bank ?? "");
+      // Feature 1: auto-detect from vendor name
+      const detected = detectPayeeType(v.name);
+      if (detected) setPayeeType(detected);
+    }
   };
 
   /** Client pre-validation → friendly field errors. Returns true if OK. */
@@ -714,6 +734,37 @@ export function ParCreateForm() {
         <Section n="12" title="Beneficiar plată (Payee)">
           {fieldErrors.payee && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="h-3 w-3" aria-hidden />{fieldErrors.payee}</p>}
 
+          {/* Feature 1: Tip beneficiar toggle */}
+          <div className="flex items-center gap-2 mb-3" role="group" aria-label="Tip beneficiar">
+            <span className="text-sm font-medium text-foreground">Tip beneficiar:</span>
+            <button
+              type="button"
+              onClick={() => setPayeeType("fizic")}
+              aria-pressed={payeeType === "fizic"}
+              className={cn(
+                "px-3 py-1.5 rounded-l-md border text-sm font-medium transition-colors min-h-[36px]",
+                payeeType === "fizic"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-foreground border-border hover:bg-muted"
+              )}
+            >
+              Persoană fizică
+            </button>
+            <button
+              type="button"
+              onClick={() => setPayeeType("juridic")}
+              aria-pressed={payeeType === "juridic"}
+              className={cn(
+                "px-3 py-1.5 rounded-r-md border-t border-b border-r text-sm font-medium transition-colors min-h-[36px]",
+                payeeType === "juridic"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-foreground border-border hover:bg-muted"
+              )}
+            >
+              Persoană juridică
+            </button>
+          </div>
+
           {/* VM1-13: AI Prefill — upload document to auto-fill payee/IBAN/scope */}
           <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-border mb-2">
             <button
@@ -794,8 +845,8 @@ export function ParCreateForm() {
             </div>
           )}
 
-          {/* Feature 1: Registry search */}
-          <Field label="Caută companie (contafirm.md)" htmlFor="reg-q" hint="Introdu cel puțin 2 caractere — caută după nume sau IDNO">
+          {/* Feature 1: Registry search — only for juridic (companies) */}
+          {payeeType === "juridic" && <Field label="Caută companie (contafirm.md)" htmlFor="reg-q" hint="Introdu cel puțin 2 caractere — caută după nume sau IDNO">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden />
               <input
@@ -839,7 +890,7 @@ export function ParCreateForm() {
                 ))}
               </ul>
             )}
-          </Field>
+          </Field>}
 
           {vendors.length > 0 && (
             <Field label="Beneficiar salvat" htmlFor="vsel" hint="Alege un beneficiar din registru sau introdu manual mai jos">
@@ -850,9 +901,31 @@ export function ParCreateForm() {
             </Field>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Nume, Prenume" htmlFor="pn"><input id="pn" type="text" placeholder="ex. Roitman Daria" className={inputCls} value={payeeName}
-              onChange={(e) => { setPayeeName(e.target.value); setVendorId(""); }} /></Field>
-            <Field label="IDNP" htmlFor="pi" hint="13 cifre" error={fieldErrors.payee_idnp}>
+            <Field
+              label={payeeType === "fizic" ? "Nume, Prenume" : "Denumire companie"}
+              htmlFor="pn"
+            >
+              <input
+                id="pn"
+                type="text"
+                placeholder={payeeType === "fizic" ? "ex. Roitman Daria" : "ex. ATIC SRL"}
+                className={inputCls}
+                value={payeeName}
+                onChange={(e) => {
+                  setPayeeName(e.target.value);
+                  setVendorId("");
+                  // Auto-detect as user types (only override if detector is confident)
+                  const detected = detectPayeeType(e.target.value);
+                  if (detected) setPayeeType(detected);
+                }}
+              />
+            </Field>
+            <Field
+              label={payeeType === "fizic" ? "IDNP" : "IDNO"}
+              htmlFor="pi"
+              hint="13 cifre"
+              error={fieldErrors.payee_idnp}
+            >
               <input id="pi" type="text" maxLength={13} placeholder="2008001007903" value={payeeIdnp}
                 className={cn(inputCls, fieldErrors.payee_idnp && "border-destructive")}
                 onChange={(e) => { setPayeeIdnp(e.target.value); setFieldErrors((p) => ({ ...p, payee_idnp: "" })); }} />

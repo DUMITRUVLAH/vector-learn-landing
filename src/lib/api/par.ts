@@ -48,6 +48,8 @@ export interface ParRequest {
   payeeIdnp: string | null;
   payeeIban: string | null;
   payeeBank: string | null;
+  /** Feature 1: "fizic" (persoană fizică) | "juridic" (persoană juridică). Null = unset/legacy. */
+  payeeType?: "fizic" | "juridic" | null;
   attachmentsPresent: boolean;
   attachmentsNote: string | null;
   currency: string;
@@ -179,6 +181,8 @@ export interface UpdateParPayload extends CreateParPayload {
   payee_idnp?: string | null;
   payee_iban?: string | null;
   payee_bank?: string | null;
+  /** Feature 1: persoană fizică sau juridică */
+  payee_type?: "fizic" | "juridic" | null;
   attachments_present?: boolean;
   attachments_note?: string | null;
   // VM1-03: RON removed from supported currencies.
