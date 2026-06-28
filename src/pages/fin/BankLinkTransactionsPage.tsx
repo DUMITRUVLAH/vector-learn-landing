@@ -7,7 +7,7 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import { ArrowLeft, Loader2, AlertCircle, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { Link, useRouter } from "@/router/HashRouter";
 import {
   listConnections,
@@ -121,11 +121,11 @@ export default function BankLinkTransactionsPage() {
   }
 
   return (
-    <AppShell pageTitle="Tranzacții importate">
+    <BusinessShell pageTitle="Tranzacții importate">
       {/* Back */}
       <div className="mb-4">
         <Link
-          to="/app/fin/banklink"
+          to="/business/fin/banklink"
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -308,6 +308,6 @@ export default function BankLinkTransactionsPage() {
           </div>
         </>
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }

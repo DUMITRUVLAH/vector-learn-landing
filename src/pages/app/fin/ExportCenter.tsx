@@ -7,7 +7,7 @@
  * selector year/period pentru SAF-T.
  */
 import { useState, useEffect } from "react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import { ExportFormatCard } from "@/components/fin/ExportFormatCard";
@@ -205,7 +205,7 @@ export function ExportCenter() {
   const isSaftFormat = (id: string) => id.startsWith("saf-t");
 
   return (
-    <AppShell
+    <BusinessShell
       pageTitle="Export Contabil"
       pageDescription="Descarcă date contabile în format compatibil 1C, SAGA C, SAF-T RO, SFS Moldova"
     >
@@ -319,7 +319,7 @@ export function ExportCenter() {
           Celelalte formate folosesc filtrele "De la" / "Până la".
         </p>
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }
 

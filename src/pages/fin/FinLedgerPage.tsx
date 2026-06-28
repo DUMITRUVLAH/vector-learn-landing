@@ -30,7 +30,7 @@ import {
   ChevronRight,
   ArrowRight,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useSession } from "@/hooks/useSession";
 import {
   getTrialBalance,
@@ -240,11 +240,11 @@ export function FinLedgerPage() {
 
   if (sessionStatus === "loading") {
     return (
-      <AppShell pageTitle="General Ledger — FinDesk">
+      <BusinessShell pageTitle="General Ledger — FinDesk">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Se incarca" />
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
@@ -253,7 +253,7 @@ export function FinLedgerPage() {
   ) ?? [];
 
   return (
-    <AppShell pageTitle="General Ledger — FinDesk">
+    <BusinessShell pageTitle="General Ledger — FinDesk">
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
 
         {/* Header */}
@@ -888,6 +888,6 @@ export function FinLedgerPage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }

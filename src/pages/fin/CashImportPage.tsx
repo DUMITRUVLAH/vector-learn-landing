@@ -14,7 +14,7 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import { importFile, type ImportResult } from "@/lib/api/finCash";
 import { cn } from "@/lib/utils";
@@ -91,12 +91,12 @@ export default function CashImportPage() {
   };
 
   return (
-    <AppShell pageTitle="Import extras bancar">
+    <BusinessShell pageTitle="Import extras bancar">
       <div className="mx-auto max-w-2xl space-y-6 p-4 sm:p-6">
         {/* Header */}
         <div>
           <button
-            onClick={() => navigate("/app/fin/cash")}
+            onClick={() => navigate("/business/fin/cash")}
             className="mb-2 flex min-h-[44px] items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
             aria-label="Înapoi la încasări"
           >
@@ -138,7 +138,7 @@ export default function CashImportPage() {
               </div>
             </div>
             <button
-              onClick={() => navigate("/app/fin/cash")}
+              onClick={() => navigate("/business/fin/cash")}
               className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
             >
               Vezi tranzacțiile
@@ -278,6 +278,6 @@ export default function CashImportPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }

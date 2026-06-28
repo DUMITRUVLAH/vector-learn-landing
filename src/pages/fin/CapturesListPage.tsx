@@ -18,7 +18,7 @@ import {
   Link2,
   Trash2,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import { apiUpload } from "@/lib/api";
 import {
@@ -441,7 +441,7 @@ export default function CapturesListPage() {
   }, [load]);
 
   return (
-    <AppShell pageTitle="Invoice Reporting">
+    <BusinessShell pageTitle="Invoice Reporting">
       <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -677,6 +677,6 @@ export default function CapturesListPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }

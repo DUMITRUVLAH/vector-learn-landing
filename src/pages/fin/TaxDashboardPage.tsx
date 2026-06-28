@@ -16,7 +16,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -180,7 +180,7 @@ export function TaxDashboardPage() {
     (data?.upcoming_alerts.length ?? 0) > 0 || (data?.overdue_alerts.length ?? 0) > 0;
 
   return (
-    <AppShell pageTitle="Dashboard fiscal">
+    <BusinessShell pageTitle="Dashboard fiscal">
       <div className="mx-auto max-w-4xl space-y-8 px-4 py-8">
         {/* Header */}
         <div className="flex items-center justify-between gap-4">
@@ -419,6 +419,6 @@ export function TaxDashboardPage() {
           </>
         )}
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }

@@ -13,7 +13,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { cn } from "@/lib/utils";
 import {
   FileText,
@@ -546,7 +546,7 @@ export function TaxPage() {
   useEffect(() => { void load(); }, [load]);
 
   return (
-    <AppShell
+    <BusinessShell
       pageTitle="FinDesk — Declarații fiscale"
       pageDescription="Perioade fiscale, calcul TVA + impozit venit, export PDF/CSV"
       actions={
@@ -608,7 +608,7 @@ export function TaxPage() {
           ))}
         </div>
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }
 

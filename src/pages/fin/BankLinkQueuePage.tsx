@@ -18,7 +18,7 @@ import {
   ChevronRight,
   Zap,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { Link } from "@/router/HashRouter";
 import {
   getQueue,
@@ -139,11 +139,11 @@ export default function BankLinkQueuePage() {
   }
 
   return (
-    <AppShell pageTitle="Coadă reconciliere">
+    <BusinessShell pageTitle="Coadă reconciliere">
       {/* Back */}
       <div className="mb-4">
         <Link
-          to="/app/fin/banklink"
+          to="/business/fin/banklink"
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -225,7 +225,7 @@ export default function BankLinkQueuePage() {
             </p>
           </div>
           <Link
-            to="/app/fin/banklink/transactions"
+            to="/business/fin/banklink/transactions"
             className="flex h-9 items-center gap-1.5 rounded-lg border border-input px-3 text-sm hover:bg-muted"
           >
             <GitMerge className="h-4 w-4" />
@@ -315,7 +315,7 @@ export default function BankLinkQueuePage() {
                   <p className="text-xs text-muted-foreground">
                     Niciun candidat detectat automat.{" "}
                     <Link
-                      to="/app/fin/banklink/transactions"
+                      to="/business/fin/banklink/transactions"
                       className="text-primary underline"
                     >
                       Caută manual
@@ -355,6 +355,6 @@ export default function BankLinkQueuePage() {
           </div>
         </>
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }

@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { cn } from "@/lib/utils";
 import {
   ChevronLeft,
@@ -258,7 +258,7 @@ export function PayrollRunDetailPage() {
 
   if (!runId) {
     return (
-      <AppShell pageTitle="Rulaj — Salarizare">
+      <BusinessShell pageTitle="Rulaj — Salarizare">
         <div className="mx-auto max-w-5xl px-4 py-16 text-center">
           <p className="text-muted-foreground">ID rulaj lipsă din URL.</p>
           <a
@@ -268,12 +268,12 @@ export function PayrollRunDetailPage() {
             Înapoi la Salarizare
           </a>
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
   return (
-    <AppShell pageTitle={`Rulaj ${run?.periodMonth ?? "…"} — Salarizare`}>
+    <BusinessShell pageTitle={`Rulaj ${run?.periodMonth ?? "…"} — Salarizare`}>
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -565,6 +565,6 @@ export function PayrollRunDetailPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }

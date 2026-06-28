@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import { getEngagement, type ItparkEngagement } from "@/lib/api/itparkEngagements";
 import { getDoc, upsertDoc } from "@/lib/api/itparkDocs";
@@ -114,18 +114,18 @@ export function SelfDeclarationPage() {
     } finally { setSaving(false); }
   };
 
-  if (!id) return <AppShell><div className="p-4 text-destructive" role="alert">ID dosar lipsă</div></AppShell>;
+  if (!id) return <BusinessShell pageTitle="Declarație pe proprie răspundere"><div className="p-4 text-destructive" role="alert">ID dosar lipsă</div></BusinessShell>;
 
   if (loading) {
-    return <AppShell><div className="flex items-center justify-center min-h-64" aria-busy="true"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" role="status" /></div></AppShell>;
+    return <BusinessShell pageTitle="Declarație pe proprie răspundere"><div className="flex items-center justify-center min-h-64" aria-busy="true"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" role="status" /></div></BusinessShell>;
   }
 
   if (error) {
-    return <AppShell><div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive m-4" role="alert"><p className="font-medium">Eroare</p><p className="text-sm mt-1">{error}</p></div></AppShell>;
+    return <BusinessShell pageTitle="Declarație pe proprie răspundere"><div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive m-4" role="alert"><p className="font-medium">Eroare</p><p className="text-sm mt-1">{error}</p></div></BusinessShell>;
   }
 
   return (
-    <AppShell>
+    <BusinessShell pageTitle="Declarație pe proprie răspundere">
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
         {/* Breadcrumb */}
         <nav aria-label="Navigare" className="flex items-center gap-2 text-sm text-muted-foreground print:hidden">
@@ -196,6 +196,6 @@ export function SelfDeclarationPage() {
           <p className="text-xs text-amber-800 dark:text-amber-200"><strong>Notă:</strong> Semnătura originală este obligatorie pe documentul fizic. Conform art. 312 Cod Penal + art. 18(1) Legea 77/2016.</p>
         </div>
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }

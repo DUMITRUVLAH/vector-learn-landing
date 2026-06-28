@@ -25,7 +25,7 @@ import {
   RotateCcw,
   Ban,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useSession } from "@/hooks/useSession";
 import {
   startRecurringInvoicesJob,
@@ -530,7 +530,7 @@ export function FinMassPage() {
   );
 
   return (
-    <AppShell
+    <BusinessShell
       pageTitle="Operații Bulk"
       pageDescription="Generare facturi în masă + import CSV — FinDesk"
     >
@@ -814,6 +814,6 @@ export function FinMassPage() {
           )}
         </section>
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }

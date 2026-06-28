@@ -264,14 +264,14 @@ export function FinHome() {
           <h2 className="text-sm font-semibold text-foreground mb-3">Acțiuni rapide</h2>
           <div className="flex flex-wrap gap-2">
             <Link
-              to="/app/fin/company"
+              to="/business/fin/company"
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors min-h-[44px]"
             >
               <Building2 className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
               Configurează firma
             </Link>
             <Link
-              to="/app/fin/onboarding"
+              to="/business/fin/onboarding"
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors min-h-[44px]"
             >
               <ArrowRight className="h-3.5 w-3.5 text-primary" aria-hidden="true" />

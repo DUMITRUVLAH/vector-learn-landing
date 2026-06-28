@@ -29,7 +29,7 @@ import {
   CheckCircle2,
   Save,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useSession } from "@/hooks/useSession";
 import {
   getDataSettings,
@@ -206,16 +206,16 @@ export function FinSecuritySettingsPage() {
 
   if (sessionStatus === "loading" || loading) {
     return (
-      <AppShell pageTitle="Securitate — FinDesk">
+      <BusinessShell pageTitle="Securitate — FinDesk">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Se încarcă" />
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
   return (
-    <AppShell pageTitle="Securitate & Confidențialitate — FinDesk">
+    <BusinessShell pageTitle="Securitate & Confidențialitate — FinDesk">
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -548,6 +548,6 @@ export function FinSecuritySettingsPage() {
           </div>
         </div>
       )}
-    </AppShell>
+    </BusinessShell>
   );
 }

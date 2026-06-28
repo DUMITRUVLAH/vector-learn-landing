@@ -34,7 +34,7 @@ import {
   Loader2,
   ClipboardCheck,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import { getEngagement, markEngagementReady, type ItparkEngagement } from "@/lib/api/itparkEngagements";
 import { listLines, type RevenueLine } from "@/lib/api/itparkLines";
@@ -264,22 +264,22 @@ export function ReadinessChecklistPage() {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Checklist Gata — MITP">
+      <BusinessShell pageTitle="Checklist Gata — MITP">
         <div className="flex items-center justify-center min-h-64" aria-busy="true" aria-label="Se încarcă checklist-ul">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" role="status" />
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
   if (error) {
     return (
-      <AppShell pageTitle="Checklist Gata — MITP">
+      <BusinessShell pageTitle="Checklist Gata — MITP">
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive" role="alert">
           <p className="font-medium">Eroare la încărcare</p>
           <p className="text-sm mt-1">{error}</p>
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
@@ -288,7 +288,7 @@ export function ReadinessChecklistPage() {
   const pageTitle = `Checklist Gata — ${engagement.residentName}`;
 
   return (
-    <AppShell pageTitle={pageTitle}>
+    <BusinessShell pageTitle={pageTitle}>
       <div className="space-y-6 max-w-2xl mx-auto">
         {/* Breadcrumb */}
         <nav aria-label="Navigare" className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -416,6 +416,6 @@ export function ReadinessChecklistPage() {
           )}
         </div>
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }

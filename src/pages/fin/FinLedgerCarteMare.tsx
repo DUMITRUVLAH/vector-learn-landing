@@ -18,7 +18,7 @@ import {
   TrendingUp,
   TrendingDown,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useSession } from "@/hooks/useSession";
 import {
   getAccountLedger,
@@ -78,18 +78,18 @@ export function FinLedgerCarteMare({ accountCode }: FinLedgerCarteMareProps) {
 
   if (sessionStatus === "loading") {
     return (
-      <AppShell pageTitle="Carte Mare — FinDesk">
+      <BusinessShell pageTitle="Carte Mare — FinDesk">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Se incarca" />
         </div>
-      </AppShell>
+      </BusinessShell>
     );
   }
 
   const account = data?.account;
 
   return (
-    <AppShell pageTitle={account ? `Cont ${account.code} — Carte Mare` : "Carte Mare — FinDesk"}>
+    <BusinessShell pageTitle={account ? `Cont ${account.code} — Carte Mare` : "Carte Mare — FinDesk"}>
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
 
         {/* Breadcrumb */}
@@ -283,6 +283,6 @@ export function FinLedgerCarteMare({ accountCode }: FinLedgerCarteMareProps) {
           )}
         </div>
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }

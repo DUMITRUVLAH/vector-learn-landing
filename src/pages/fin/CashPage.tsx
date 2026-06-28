@@ -13,7 +13,7 @@ import {
   Loader2,
   Upload,
 } from "lucide-react";
-import { AppShell } from "@/components/app/AppShell";
+import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import {
   getTransactions,
@@ -96,7 +96,7 @@ export default function CashPage() {
     .reduce((sum, t) => sum + t.amountCents, 0);
 
   return (
-    <AppShell pageTitle="Încasări (CASH)">
+    <BusinessShell pageTitle="Încasări (CASH)">
       <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -107,7 +107,7 @@ export default function CashPage() {
             </p>
           </div>
           <button
-            onClick={() => navigate("/app/fin/cash/import")}
+            onClick={() => navigate("/business/fin/cash/import")}
             className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
           >
             <Upload className="h-4 w-4" aria-hidden="true" />
@@ -163,7 +163,7 @@ export default function CashPage() {
               Importați un extras bancar CSV sau MT940 pentru a începe reconcilierea.
             </p>
             <button
-              onClick={() => navigate("/app/fin/cash/import")}
+              onClick={() => navigate("/business/fin/cash/import")}
               className="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
             >
               <Upload className="h-4 w-4" />
@@ -243,6 +243,6 @@ export default function CashPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </BusinessShell>
   );
 }
