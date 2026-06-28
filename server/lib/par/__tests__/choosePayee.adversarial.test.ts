@@ -39,6 +39,38 @@ describe("choosePayee — adversarial regressions", () => {
     },
   );
 
+  // On the LLM path (isStub:false) the role labels are trusted: a "client" (buyer / Autoritatea
+  // contractantă) is NEVER the payee. When the creator's own org is the seller, dropping it leaves
+  // only the buyer → NO payee (not the buyer). Owner-reported: MIXBOOK (buyer) and BNS (client)
+  // were wrongly prefilled when the tenant was Vector Academy (the seller).
+  function llm(parties: ParPartiesExtraction["parties"]): ParPartiesExtraction {
+    return { parties, amountCents: 78400, currency: "MDL", scope: "x", documentClass: "invoice", isStub: false };
+  }
+  it("tenant is the seller; only the buyer/client remains → NO payee (never the buyer)", () => {
+    const ext = llm([
+      { name: "Vector Academy SRL", role: "provider", idno: "1024600035737", iban: "MD87AG000000022516065719" },
+      { name: "S.R.L. MIXBOOK", role: "client", idno: "1017600027590", isPayerHint: true },
+    ]);
+    const r = choosePayee(ext, "Vector Academy SRL");
+    expect(r.payee).toBeNull(); // NOT MIXBOOK
+  });
+  it("same doc, different tenant → the seller (provider) is the payee", () => {
+    const ext = llm([
+      { name: "Vector Academy SRL", role: "provider", idno: "1024600035737", iban: "MD87AG000000022516065719" },
+      { name: "S.R.L. MIXBOOK", role: "client", idno: "1017600027590", isPayerHint: true },
+    ]);
+    const r = choosePayee(ext, "ATIC Digital Safeguard");
+    expect(r.payee?.name).toBe("Vector Academy SRL");
+  });
+  it("LLM path: a real supplier is still chosen even when the tenant is the buyer", () => {
+    const ext = llm([
+      { name: "LAURTOP CAPITAL SRL", role: "provider", iban: "RO78BTRLRONCRT0DD6485101" },
+      { name: "Vector Academy SRL", role: "client", isPayerHint: true },
+    ]);
+    const r = choosePayee(ext, "Vector Academy SRL");
+    expect(r.payee?.name).toBe("LAURTOP CAPITAL SRL");
+  });
+
   // Sanity: a genuine single counterparty supplier (not the tenant, not a bank, not payer-hinted)
   // IS still chosen as the payee — the fixes must not over-suppress.
   it("single legitimate supplier → chosen as payee", () => {
