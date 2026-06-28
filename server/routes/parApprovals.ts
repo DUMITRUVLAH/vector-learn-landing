@@ -18,7 +18,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, asc, desc } from "drizzle-orm";
+import { and, eq, asc, desc, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   parRequests,
@@ -32,6 +32,11 @@ import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { buildBodyForHash } from "../lib/par/submit";
 import { backfillStuckApprovalChains } from "../lib/par/doa";
+import {
+  getProjectApproverMap,
+  getDesignatedApprovers,
+  projectAllowsApprover,
+} from "../lib/par/projectApprovers";
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { getActiveDelegators } from "../lib/par/delegations";
 import {
@@ -162,11 +167,16 @@ async function approveParStep(
     .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)))
     .orderBy(asc(parApprovals.step));
 
-  // VF-302: a step matches the user if assigned to them, role-routed (unassigned + can approve),
-  // OR assigned to someone who delegated to them.
+  // Project-scoped approvers: a role-based step is only the user's to decide if they're a designated
+  // approver of this PAR's project (unrestricted project → any approver). Explicit assignment bypasses.
+  const designated = par.projectId ? await getDesignatedApprovers(tenantId, par.projectId) : new Set<string>();
+  const allowedOnProject = projectAllowsApprover(par.projectId, userId, designated);
+
+  // VF-302: a step matches the user if assigned to them, role-routed (unassigned + can approve +
+  // allowed on the project), OR assigned to someone who delegated to them.
   const stepMatches = (s: typeof approvalSteps[number]) =>
     s.approverUserId === userId ||
-    (s.approverUserId === null && canApprove) ||
+    (s.approverUserId === null && canApprove && allowedOnProject) ||
     (s.approverUserId != null && delegators.has(s.approverUserId));
 
   const lockedStepForUser = approvalSteps.find(
@@ -319,11 +329,26 @@ parApprovalsRoutes.get("/inbox", async (c) => {
       )
     );
 
+  // Project-scoped approvers: for role-based steps, the user must be a designated approver of the
+  // PAR's project (projects with no designated approvers stay open to any approver).
+  const projectApproverMap = await getProjectApproverMap(tenantId);
+  const stepParIds = [...new Set(pendingSteps.map((s) => s.parId))];
+  const projectByPar = new Map<string, string | null>();
+  if (stepParIds.length > 0) {
+    const projRows = await db
+      .select({ id: parRequests.id, projectId: parRequests.projectId })
+      .from(parRequests)
+      .where(and(eq(parRequests.tenantId, tenantId), inArray(parRequests.id, stepParIds)));
+    for (const r of projRows) projectByPar.set(r.id, r.projectId ?? null);
+  }
+
   // Filter to steps the current user can decide
   const mySteps = pendingSteps.filter((s) => {
-    if (s.approverUserId === user.id) return true;
-    // Role-based: no specific user assigned → any approver/par_admin can decide
-    if (s.approverUserId === null && isApprover) return true;
+    if (s.approverUserId === user.id) return true; // explicit assignment → bypasses project scoping
+    // Role-based: any approver/par_admin can decide, IF allowed on this PAR's project.
+    if (s.approverUserId === null && isApprover) {
+      return projectAllowsApprover(projectByPar.get(s.parId), user.id, projectApproverMap.get(projectByPar.get(s.parId) ?? ""));
+    }
     // VF-302: a step assigned to a delegator (X→me active) is mine to decide.
     if (s.approverUserId != null && delegators.has(s.approverUserId)) return true;
     return false;
