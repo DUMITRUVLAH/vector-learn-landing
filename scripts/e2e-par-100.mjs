@@ -384,6 +384,25 @@ async function main() {
   await T("requestor approve parA → 403 (no approver role / not assigned)", async () => {
     eq((await POST("requestor", `/api/par/${parA}/approve`, { comment: "ok" })).status, 403, "status");
   });
+  // SEC-04: segregation of duties — a requestor who ALSO holds the approver role (admin = par_admin)
+  // must NOT be able to approve their OWN PAR, even when the step falls back to role routing.
+  await T("SEC-04: admin approving own submitted PAR → 403 self_approval_forbidden", async () => {
+    const c = await POST("admin", "/api/par", {});
+    eq(c.status, 201, "create status");
+    const selfPar = c.json.id;
+    await POST("admin", `/api/par/${selfPar}/line-items`, { description: "Self item", quantity: 1, unit_price_cents: 100000 });
+    await PATCH("admin", `/api/par/${selfPar}`, {
+      end_use: "Self-approval segregation test",
+      payee_name: "Test Payee",
+      payee_iban: IBAN_A,
+    });
+    const sub = await POST("admin", `/api/par/${selfPar}/submit`, {});
+    eq(sub.status, 200, "submit status");
+    eq(sub.json.status, "pending_approval", "submitted");
+    const appr = await POST("admin", `/api/par/${selfPar}/approve`, { comment: "approving my own" });
+    eq(appr.status, 403, "self-approval must be 403");
+    assert(JSON.stringify(appr.json).includes("self_approval_forbidden"), `error=${JSON.stringify(appr.json)}`);
+  });
   await T("approver approve parA (1 step) → in_finance (execute_payment auto-routes)", async () => {
     const r = await POST("approver", `/api/par/${parA}/approve`, { comment: "Aprobat", signatureName: "Ana Chirita" });
     eq(r.status, 200, "status");

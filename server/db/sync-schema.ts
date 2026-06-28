@@ -114,6 +114,19 @@ async function main() {
     `CREATE INDEX IF NOT EXISTS "par_project_approvers_project_idx" ON "par_project_approvers" ("project_id")`,
     `CREATE INDEX IF NOT EXISTS "par_project_approvers_tenant_idx" ON "par_project_approvers" ("tenant_id")`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "par_project_approvers_project_user_uniq" ON "par_project_approvers" ("project_id","user_id")`,
+    // SEC-02: login rate-limiting store — request path (login) reads/writes it on every attempt,
+    // so heal it on deploy before the 0129 migration lands (Vercel ships code before migrations).
+    `CREATE TABLE IF NOT EXISTS "login_attempts" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "attempt_key" varchar(320) NOT NULL,
+      "count" integer NOT NULL DEFAULT 0,
+      "window_start" timestamp with time zone NOT NULL DEFAULT now(),
+      "locked_until" timestamp with time zone,
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+      CONSTRAINT "login_attempts_attempt_key_unique" UNIQUE ("attempt_key")
+    )`,
+    `CREATE INDEX IF NOT EXISTS "login_attempts_key_idx" ON "login_attempts" ("attempt_key")`,
+    `CREATE INDEX IF NOT EXISTS "login_attempts_locked_idx" ON "login_attempts" ("locked_until")`,
   ];
   for (const stmt of ENSURE_STATEMENTS) {
     try {

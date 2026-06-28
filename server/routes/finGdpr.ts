@@ -14,17 +14,24 @@
  */
 
 import { Hono } from "hono";
-import { eq, and, lt, isNull, or } from "drizzle-orm";
+import { eq, and, lt } from "drizzle-orm";
 import { db } from "../db/client";
 import { students } from "../db/schema/students";
 import { consentRequests } from "../db/schema/consent";
 import { aiAuditLog } from "../db/schema/aiAuditLog";
 import { finDataSettings, FIN_DATA_SETTINGS_DEFAULTS } from "../db/schema/finDataSettings";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireFinRole } from "../middleware/requireFinRole";
+import { writeAuditLog } from "../lib/auditLogger";
 
 export const finGdprRoutes = new Hono<{ Variables: AuthVariables }>();
 
 finGdprRoutes.use("*", requireAuth);
+
+/** Client IP from proxy headers, for the audit trail. */
+function clientIp(c: { req: { header: (k: string) => string | undefined } }): string | null {
+  return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? null;
+}
 
 // ─── Helper: get retention_days_students ──────────────────────────────────────
 
@@ -48,13 +55,11 @@ async function getStudentRetentionDays(tenantId: string): Promise<number> {
 
 // ─── GET /api/fin/gdpr/export/:studentId ──────────────────────────────────────
 
-finGdprRoutes.get("/export/:studentId", async (c) => {
+// SEC-05: exporting a data subject's PII is owner-only within the FinDesk workspace.
+// The previous gate used the CRM users.role (admin/manager), which let a fin-viewer who happened
+// to be a CRM admin export PII. requireFinRole checks the FinDesk membership role instead.
+finGdprRoutes.get("/export/:studentId", requireFinRole("owner"), async (c) => {
   const user = c.get("user");
-
-  // Only admin or manager may export student GDPR data
-  if (user.role !== "admin" && user.role !== "manager") {
-    return c.json({ error: "forbidden: admin or manager role required" }, 403);
-  }
 
   const tenantId = user.tenantId;
   const studentId = c.req.param("studentId");
@@ -122,27 +127,33 @@ finGdprRoutes.get("/export/:studentId", async (c) => {
 
 const GDPR_REMOVED = "[GDPR_REMOVED]";
 
-finGdprRoutes.post("/anonymize-old", async (c) => {
+// SEC-05: mass anonymisation is irreversible — owner-only, requires an explicit confirm flag,
+// and only touches ARCHIVED students (a real "no longer active" signal). The old code keyed off
+// `updatedAt < cutoff`, which would wipe the PII of an ACTIVE student whose row simply hadn't been
+// edited in a while. Every run is written to the audit log.
+finGdprRoutes.post("/anonymize-old", requireFinRole("owner"), async (c) => {
   const user = c.get("user");
+  const tenantId = user.tenantId;
 
-  // Only admin may trigger mass anonymisation
-  if (user.role !== "admin") {
-    return c.json({ error: "forbidden: admin role required" }, 403);
+  // Explicit confirmation required for a destructive, irreversible operation.
+  const body = await c.req.json<{ confirm?: boolean }>().catch(() => ({}) as { confirm?: boolean });
+  if (body.confirm !== true) {
+    return c.json({ error: "confirmation_required", detail: "pass { confirm: true } to run anonymisation" }, 400);
   }
 
-  const tenantId = user.tenantId;
   const retentionDays = await getStudentRetentionDays(tenantId);
 
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - retentionDays);
 
-  // Find students inactive (updatedAt) older than cutoff and not already anonymised
+  // Only ARCHIVED students past the retention cutoff — never active/trial/paused ones.
   const oldStudents = await db
     .select({ id: students.id })
     .from(students)
     .where(
       and(
         eq(students.tenantId, tenantId),
+        eq(students.status, "archived"),
         lt(students.updatedAt, cutoff)
       )
     );
@@ -151,8 +162,6 @@ finGdprRoutes.post("/anonymize-old", async (c) => {
     return c.json({ anonymized: 0 }, 200);
   }
 
-  // Anonymise PII fields in a single update per student
-  // We process in batches to avoid overly large queries
   let anonymized = 0;
   for (const { id } of oldStudents) {
     await db
@@ -174,6 +183,15 @@ finGdprRoutes.post("/anonymize-old", async (c) => {
       );
     anonymized++;
   }
+
+  await writeAuditLog({
+    tenantId,
+    actorId: user.id,
+    actionType: "gdpr_anonymize_old",
+    targetType: "student",
+    newValue: { anonymized, retentionDays, status: "archived" },
+    ipAddress: clientIp(c),
+  });
 
   return c.json({ anonymized }, 200);
 });

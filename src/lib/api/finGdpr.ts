@@ -51,8 +51,11 @@ export async function exportGdprData(studentId: string): Promise<GdprExportPaylo
 }
 
 export async function anonymizeOldStudents(): Promise<AnonymizeResponse> {
+  // SEC-05: the endpoint requires an explicit confirmation flag for this irreversible action.
   return api<AnonymizeResponse>("/api/fin/gdpr/anonymize-old", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm: true }),
   });
 }
 

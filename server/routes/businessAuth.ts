@@ -19,6 +19,7 @@ import { tenants, users } from "../db/schema";
 import { verifyPassword } from "../auth/password";
 import { createSession, revokeSession, getSessionUser, SESSION_COOKIE } from "../auth/session";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { checkRateLimit, recordFailure, clearRateLimit, rateLimitKey } from "../lib/rateLimit";
 
 const loginSchema = z.object({
   email: z.string().email().max(255),
@@ -47,16 +48,27 @@ export const businessAuthRoutes = new Hono<{ Variables: AuthVariables }>();
 businessAuthRoutes.post("/auth/login", zValidator("json", loginSchema), async (c) => {
   const body = c.req.valid("json");
 
+  // SEC-02: durable brute-force throttle, keyed by (email + IP). Check before touching the DB.
+  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? undefined;
+  const rlKey = rateLimitKey(body.email, ip);
+  const rl = await checkRateLimit(rlKey);
+  if (rl.limited) {
+    c.header("Retry-After", String(rl.retryAfterSec));
+    return c.json({ error: "too_many_attempts", retryAfterSec: rl.retryAfterSec }, 429);
+  }
+
   const user = await db.query.users.findFirst({
     where: eq(users.email, body.email),
   });
 
   if (!user || !user.passwordHash) {
+    await recordFailure(rlKey);
     return c.json({ error: "invalid_credentials" }, 401);
   }
 
   const ok = await verifyPassword(body.password, user.passwordHash);
   if (!ok) {
+    await recordFailure(rlKey);
     return c.json({ error: "invalid_credentials" }, 401);
   }
 
@@ -78,7 +90,10 @@ businessAuthRoutes.post("/auth/login", zValidator("json", loginSchema), async (c
     return c.json({ error: "account_disabled" }, 401);
   }
 
-  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? null;
+  // Valid credentials + allowed app → clear the throttle bucket.
+  await clearRateLimit(rlKey);
+
+  const ipAddress = ip ?? null;
   const userAgent = c.req.header("user-agent") ?? null;
 
   const { token, expiresAt } = await createSession(user.id, {
