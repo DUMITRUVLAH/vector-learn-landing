@@ -21,28 +21,47 @@ export function projectAllowsApprover(
   return designated.has(userId);
 }
 
-/** Map projectId → Set<approverUserId> for a tenant. Projects absent = unrestricted. */
+/** True for "relation/table does not exist" — the table may lag the code on a fresh deploy. */
+function isMissingTable(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /par_project_approvers.*does not exist|relation .*does not exist|no such table/i.test(msg);
+}
+
+/**
+ * Map projectId → Set<approverUserId> for a tenant. Projects absent = unrestricted. If the table is
+ * missing (migration lags the code deploy), return an EMPTY map → no scoping → any approver, instead
+ * of 500-ing the inbox. Scoping is additive, so "table not there yet" safely means "not configured".
+ */
 export async function getProjectApproverMap(tenantId: string): Promise<Map<string, Set<string>>> {
-  const rows = await db
-    .select({ projectId: parProjectApprovers.projectId, userId: parProjectApprovers.userId })
-    .from(parProjectApprovers)
-    .where(eq(parProjectApprovers.tenantId, tenantId));
   const map = new Map<string, Set<string>>();
-  for (const r of rows) {
-    let set = map.get(r.projectId);
-    if (!set) { set = new Set(); map.set(r.projectId, set); }
-    set.add(r.userId);
+  try {
+    const rows = await db
+      .select({ projectId: parProjectApprovers.projectId, userId: parProjectApprovers.userId })
+      .from(parProjectApprovers)
+      .where(eq(parProjectApprovers.tenantId, tenantId));
+    for (const r of rows) {
+      let set = map.get(r.projectId);
+      if (!set) { set = new Set(); map.set(r.projectId, set); }
+      set.add(r.userId);
+    }
+  } catch (err) {
+    if (!isMissingTable(err)) throw err;
   }
   return map;
 }
 
-/** Designated approvers for a single project (empty set = unrestricted). */
+/** Designated approvers for a single project (empty set = unrestricted, incl. when the table lags). */
 export async function getDesignatedApprovers(tenantId: string, projectId: string): Promise<Set<string>> {
-  const rows = await db
-    .select({ userId: parProjectApprovers.userId })
-    .from(parProjectApprovers)
-    .where(and(eq(parProjectApprovers.tenantId, tenantId), eq(parProjectApprovers.projectId, projectId)));
-  return new Set(rows.map((r) => r.userId));
+  try {
+    const rows = await db
+      .select({ userId: parProjectApprovers.userId })
+      .from(parProjectApprovers)
+      .where(and(eq(parProjectApprovers.tenantId, tenantId), eq(parProjectApprovers.projectId, projectId)));
+    return new Set(rows.map((r) => r.userId));
+  } catch (err) {
+    if (isMissingTable(err)) return new Set();
+    throw err;
+  }
 }
 
 /** Replace a project's full approver list (admin action). Deletes then inserts in one transaction. */

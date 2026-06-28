@@ -84,6 +84,31 @@ async function main() {
     }
   }
 
+  // Self-heal NEW tables whose migration may lag the code deploy (the #1 client-facing 500: new code
+  // queries a table the prod DB doesn't have yet — e.g. "relation par_project_approvers does not
+  // exist"). Idempotent CREATE … IF NOT EXISTS, one statement per call (multi-statement unsafe() can
+  // trip the driver). A real migration still ships the table; this is the safety net for deploy lag.
+  const ENSURE_STATEMENTS: string[] = [
+    `CREATE TABLE IF NOT EXISTS "par_project_approvers" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "project_id" uuid NOT NULL REFERENCES "par_projects"("id") ON DELETE cascade,
+      "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "par_project_approvers_project_idx" ON "par_project_approvers" ("project_id")`,
+    `CREATE INDEX IF NOT EXISTS "par_project_approvers_tenant_idx" ON "par_project_approvers" ("tenant_id")`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "par_project_approvers_project_user_uniq" ON "par_project_approvers" ("project_id","user_id")`,
+  ];
+  for (const stmt of ENSURE_STATEMENTS) {
+    try {
+      await sql.unsafe(stmt);
+    } catch (e) {
+      console.warn(`[sync-schema] ensure-table stmt skipped:`, e instanceof Error ? e.message : e);
+    }
+  }
+  console.log(`[sync-schema] ensured par_project_approvers`);
+
   console.log(`[sync-schema] done — ${added} missing column(s) added.`);
   await sql.end();
 }
