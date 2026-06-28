@@ -477,6 +477,7 @@ export function ParDashboard() {
               requests={myRequests}
               onRowClick={(id) => navigate(`/business/par/${id}`)}
               emptyMessage="Nu ai cereri de plată încă."
+              projectsMap={projectsMap}
             />
 
             {/* Pending my approval (only shown if there are any) */}
@@ -487,6 +488,7 @@ export function ParDashboard() {
                 requests={pendingApproval}
                 onRowClick={(id) => navigate(`/business/par/${id}`)}
                 emptyMessage=""
+                projectsMap={projectsMap}
                 highlight
               />
             )}
@@ -499,6 +501,7 @@ export function ParDashboard() {
                 requests={awaitingPayment}
                 onRowClick={(id) => navigate(`/business/par/${id}`)}
                 emptyMessage=""
+                projectsMap={projectsMap}
                 highlight
               />
             )}
@@ -518,9 +521,11 @@ interface SectionProps {
   onRowClick: (id: string) => void;
   emptyMessage: string;
   highlight?: boolean;
+  /** projectId → name, to render the project column as a name (not a UUID/placeholder). */
+  projectsMap: Record<string, string>;
 }
 
-function Section({ title, count, requests, onRowClick, emptyMessage, highlight }: SectionProps) {
+function Section({ title, count, requests, onRowClick, emptyMessage, highlight, projectsMap }: SectionProps) {
   return (
     <section aria-labelledby={`section-${title}`}>
       <div className="flex items-center gap-2 mb-3">
