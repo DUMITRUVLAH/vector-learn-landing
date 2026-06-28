@@ -34,11 +34,26 @@ REGULI ABSOLUTE:
                      (Prestator, Furnizor, Vânzător, Antreprenor, Subantreprenor,
                       RU Исполнитель/Поставщик/Подрядчик/Субподрядчик, EN Supplier/Seller/Contractor/Bill From).
        "client"    = cel care PLĂTEȘTE / cumpără / comandă (Cumpărător, Plătitor, Ordonator,
-                     RU Заказчик/Плательщик, EN Buyer/Bill To). ATENȚIE: în multe contracte
-                     din Moldova cuvântul "BENEFICIAR" înseamnă CLIENTUL care plătește —
-                     în acest caz role = "client", NU "provider".
+                     Achizitor, "Autoritatea contractantă", "Bill To", "Către" pe o factură,
+                     RU Заказчик/Плательщик, EN Buyer/Bill To). ATENȚIE FOARTE IMPORTANT: în
+                     contractele și actele din Moldova cuvântul "BENEFICIAR" și "Autoritatea
+                     contractantă" înseamnă aproape ÎNTOTDEAUNA CLIENTUL care plătește (cel care
+                     primește serviciul) — deci role = "client", NU "provider", chiar dacă scrie
+                     "Beneficiar". Pe o factură, "De la" = vânzătorul (provider), "Către" = clientul.
        "bank"      = o instituție bancară (BC ... S.A., Maib, Victoriabank ...). NU e o parte plătibilă.
        "unknown"   = rolul nu poate fi stabilit.
+   REGULĂ DE AUR: beneficiarul plății (cel pe care îl alegem) este ÎNTOTDEAUNA Prestatorul /
+   Furnizorul / Executorul / Vânzătorul (provider/executor) — cel care PRESTEAZĂ și PRIMEȘTE banii.
+   NU alege niciodată Clientul / Beneficiarul-din-contract / Autoritatea contractantă ca fiind plătit.
+   INDICII PUTERNICE pentru a găsi VÂNZĂTORUL/PRESTATORUL (= provider):
+     • Pe o factură/cont de plată: "De la" / "Furnizor" / "Vânzător" / "Bill From" = vânzătorul (provider);
+       "Către" / "Client" / "Cumpărător" / "Bill To" = cumpărătorul (client). NU confunda direcția.
+     • Partea ale cărei DATE BANCARE (IBAN, cont, bancă) sunt listate PENTRU ÎNCASARE este aproape
+       sigur VÂNZĂTORUL/PRESTATORUL (provider) — pune IBAN-ul respectiv la ACEA parte.
+     • EXEMPLU: "Cont de plată 251. Către S.R.L. MIXBOOK. De la Vector Academy. IBAN MD87... (al Vector
+       Academy)." → MIXBOOK = "client" (Către, cumpărătorul care plătește); Vector Academy = "provider"
+       (De la, vânzătorul, are IBAN-ul de încasare) = beneficiarul plății. Deci role MIXBOOK="client",
+       role "Vector Academy"="provider", iar IBAN-ul MD87... aparține Vector Academy.
    - TABEL CU DOUĂ COLOANE (foarte frecvent în contractele MD): blocul de recuzite e adesea un
      tabel "EXECUTOR | BENEFICIAR" care, în text, are fiecare etichetă REPETATĂ pe linie
      ("Cod fiscal X Cod fiscal Y", "IBAN X IBAN Y", "Banca X Banca Y"). PRIMA valoare aparține
