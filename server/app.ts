@@ -95,9 +95,13 @@ import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
 
 export const app = new Hono();
 
+// SEC-03: never leak raw error text (SQL fragments, table/column names, fs paths, stack) to
+// clients in production — it's free schema/stack reconnaissance. Log the full error server-side;
+// return an opaque body in prod, the message only in dev.
+const isProd = process.env.NODE_ENV === "production";
 app.onError((err, c) => {
-  console.error("[ERR]", err.message);
-  return c.json({ error: err.message }, 500);
+  console.error("[ERR]", err.stack ?? err.message);
+  return c.json(isProd ? { error: "internal_error" } : { error: err.message }, 500);
 });
 
 app.use("*", logger());
@@ -219,8 +223,9 @@ app.get("/api/health", async (c) => {
     await db.execute(sql`SELECT 1 as ping`);
     return c.json({ ok: true, db: "connected", time: new Date().toISOString() });
   } catch (error) {
+    console.error("[health]", error instanceof Error ? error.stack : error);
     return c.json(
-      { ok: false, db: "disconnected", error: error instanceof Error ? error.message : "unknown" },
+      { ok: false, db: "disconnected", error: isProd ? "internal_error" : error instanceof Error ? error.message : "unknown" },
       503
     );
   }
@@ -244,7 +249,8 @@ app.get("/api/health/db", async (c) => {
       counts: { tenants: tenantCount.c, users: userCount.c },
     });
   } catch (error) {
-    return c.json({ ok: false, error: error instanceof Error ? error.message : "unknown" }, 503);
+    console.error("[health/db]", error instanceof Error ? error.stack : error);
+    return c.json({ ok: false, error: isProd ? "internal_error" : error instanceof Error ? error.message : "unknown" }, 503);
   }
 });
 
