@@ -419,7 +419,9 @@ export const parAttachments = pgTable(
     parId: uuid("par_id")
       .notNull()
       .references(() => parRequests.id, { onDelete: "cascade" }),
-    fileUrl: varchar("file_url", { length: 2000 }).notNull(),
+    // base64 data URLs (megabytes) are stored here — MUST be text, not varchar(2000), or any real
+    // file upload fails with "value too long for type character varying(2000)".
+    fileUrl: text("file_url").notNull(),
     fileName: varchar("file_name", { length: 500 }).notNull(),
     kind: parAttachmentKindEnum("kind").notNull().default("other"),
     uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
@@ -453,7 +455,8 @@ export const parPayments = pgTable(
     actualAmountCents: integer("actual_amount_cents"),
     paymentDate: timestamp("payment_date", { withTimezone: true }),
     paymentRef: varchar("payment_ref", { length: 500 }),
-    proofUrl: varchar("proof_url", { length: 2000 }),
+    // may hold a base64 proof image — text, not varchar(2000), for the same reason as file_url.
+    proofUrl: text("proof_url"),
     /** True if the 10%-overage rule triggered and a re-approval was granted */
     overageReapproved: boolean("overage_reapproved").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

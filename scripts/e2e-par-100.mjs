@@ -37,7 +37,10 @@ const USERS = {
 const IBAN_A = "MD24AG000225100013104168";
 const IBAN_B = "MD21EX000000000001234567";
 const IDNP = "2002600012345";
-const PDF_DATAURL = "data:application/pdf;base64,JVBERi0xLjQKJeLjz9MK"; // tiny valid-prefixed PDF
+// REALISTIC size: a base64 data URL for a real file is megabytes, FAR longer than 2000 chars.
+// A tiny stub hid the bug where par_attachments.file_url was varchar(2000) → real uploads 500'd
+// with "value too long for type character varying(2000)" (§3.5.1quater — test realistic input).
+const PDF_DATAURL = "data:application/pdf;base64," + "JVBERi0xLjQK".repeat(400); // ~4800 chars > 2000
 
 // ── tiny test runner ────────────────────────────────────────────────────────
 let passed = 0;
@@ -459,6 +462,15 @@ async function main() {
     const r = await GET("admin", "/api/par/vendors");
     const vendors = r.json.vendors ?? r.json;
     assert(JSON.stringify(vendors).replace(/\s/g, "").includes(IBAN_A), "vendor with payee IBAN auto-saved");
+  });
+  await T("VM1-05 vendor save dedups by IBAN (re-save → existing, no duplicate)", async () => {
+    const before = ((await GET("admin", "/api/par/vendors")).json.vendors ?? []).length;
+    const r1 = await POST("admin", "/api/par/vendors", { name: "Dedup Co", iban: IBAN_B, idnp: IDNP });
+    assert(r1.status === 201 || r1.status === 200, `first save ${r1.status}`);
+    const r2 = await POST("admin", "/api/par/vendors", { name: "Dedup Co again", iban: IBAN_B });
+    eq(r2.status, 200, "second save → 200 (existing, not 201)");
+    const after = ((await GET("admin", "/api/par/vendors")).json.vendors ?? []).length;
+    eq(after, before + 1, "exactly one vendor added for the IBAN (no duplicate)");
   });
   await T("create parE medium (600000 = 6000 MDL) for 2-step DOA", async () => {
     parE = await makePayablePar("requestor", 600000);
