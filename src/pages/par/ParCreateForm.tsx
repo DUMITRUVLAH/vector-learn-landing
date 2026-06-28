@@ -287,7 +287,13 @@ export function ParCreateForm() {
       // Auto-apply extracted fields only when value is non-null.
       // User can still override them (all fields remain editable).
       if (result.payeeName.value) setPayeeName(String(result.payeeName.value));
-      if (result.payeeIban.value) setPayeeIban(String(result.payeeIban.value).toUpperCase());
+      // IBAN: only accept a real MD IBAN. The extractor sometimes returns a 13-digit IDNP/IDNO in
+      // this slot — route that to the IDNP field instead, and never dump a non-IBAN into the IBAN box.
+      if (result.payeeIban.value) {
+        const ibanRaw = String(result.payeeIban.value).replace(/\s/g, "").toUpperCase();
+        if (/^MD\d{2}[A-Z0-9]{20}$/.test(ibanRaw)) setPayeeIban(ibanRaw);
+        else if (/^\d{13}$/.test(ibanRaw)) setPayeeIdnp(ibanRaw);
+      }
       if (result.endUse.value) setEndUse(String(result.endUse.value));
       if (result.totalCents.value !== null && typeof result.totalCents.value === "number") {
         // If there's no line item yet, prefill a synthetic one isn't in scope (PAR lines = phase 2).
@@ -646,7 +652,9 @@ export function ParCreateForm() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:max-w-md">
               <Field label="Cant." htmlFor="nlQty"><input id="nlQty" type="number" min="1" className={inputCls} value={nlQty} onChange={(e) => setNlQty(e.target.value)} /></Field>
               <Field label="UM" htmlFor="nlUnit"><input id="nlUnit" type="text" placeholder="sesie" className={inputCls} value={nlUnit} onChange={(e) => setNlUnit(e.target.value)} /></Field>
-              <Field label="Preț/u (MDL)" htmlFor="nlPrice"><input id="nlPrice" type="number" min="0" placeholder="7000" className={inputCls} value={nlPrice}
+              {/* Price is entered in the PAR's selected currency — keep the label in sync so the
+                  user doesn't type MDL amounts while the request is in EUR/USD. */}
+              <Field label={`Preț/u (${currency})`} htmlFor="nlPrice"><input id="nlPrice" type="number" min="0" placeholder="7000" className={inputCls} value={nlPrice}
                 onChange={(e) => setNlPrice(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLine()} /></Field>
             </div>
             {lineError && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="h-3 w-3" aria-hidden />{lineError}</p>}
