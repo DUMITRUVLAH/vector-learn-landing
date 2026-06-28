@@ -285,10 +285,10 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
             <Link
               to="/business/dashboard"
               className="flex items-center gap-2 font-display font-bold text-base select-none"
-              aria-label="Business Suite — acasă"
+              aria-label="FinFlow — acasă"
             >
               <Briefcase className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />
-              <span className="hidden sm:inline text-foreground">Business Suite</span>
+              <span className="hidden sm:inline text-foreground">FinFlow</span>
               {bizData?.tenant?.name && (
                 <>
                   <span className="hidden sm:inline text-xs text-muted-foreground">/</span>
@@ -417,10 +417,10 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
             <a
               href="#/business"
               className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              aria-label="Deschide Business Suite (FinDesk, PAR, ITPark)"
+              aria-label="Deschide FinFlow (PAR, ITPark)"
             >
               <Briefcase className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span>Business Suite</span>
+              <span>FinFlow</span>
             </a>
           </div>
         </aside>

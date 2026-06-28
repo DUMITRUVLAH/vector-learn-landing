@@ -30,6 +30,7 @@ import { WelcomePage } from "./pages/business/WelcomePage";
 
 // FinDesk pages under /business/fin/*
 import { FinHome } from "./pages/fin/FinHome";
+import { FinCompany } from "./pages/fin/FinCompany";
 import { FinOnboarding } from "./pages/fin/FinOnboarding";
 import { FinAiAuditPage } from "./pages/fin/FinAiAuditPage";
 import { FinSecuritySettingsPage } from "./pages/fin/FinSecuritySettingsPage";
@@ -196,6 +197,7 @@ function Routes() {
   if (path.startsWith("/business/fin/mass")) return <BusinessGuardPage><Suspense fallback={null}><FinMassPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/tax")) return <BusinessGuardPage><Suspense fallback={null}><TaxPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/onboarding")) return <BusinessGuardPage><FinOnboarding /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/company")) return <BusinessGuardPage><FinCompany /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/")) return <BusinessGuardPage><FinHome /></BusinessGuardPage>;
 
   // PAR routes under /business/par/*

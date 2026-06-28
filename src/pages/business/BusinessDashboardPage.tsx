@@ -274,8 +274,8 @@ export function BusinessDashboardPage() {
 
   return (
     <BusinessShell
-      pageTitle="Business Suite"
-      pageDescription="Tablou de bord — FinDesk · PAR · ITPark"
+      pageTitle="FinFlow"
+      pageDescription="Tablou de bord — PAR · ITPark"
       actions={
         <div className="flex items-center gap-2">
           {/* POLISH-002: Widget customizer trigger */}

@@ -2,7 +2,7 @@
  * SPLIT-101: BusinessShell — shell-ul aplicației Business Suite.
  *
  * Echivalentul AppShell pentru Business Suite (FinDesk + PAR + ITPark).
- * Sidebar propriu cu secțiunile: Dashboard, FinDesk, PAR, ITPark.
+ * Sidebar propriu cu secțiunile: Dashboard, PAR (primul), FinDesk, ITPark.
  * Guard: dacă sesiunea business lipsește → redirect la /business/login.
  * Design: Vector 365 semantic tokens, light+dark, WCAG AA.
  */
@@ -10,7 +10,6 @@ import { ReactNode, useEffect, useState } from "react";
 import {
   LayoutDashboard,
   LogOut,
-  Briefcase,
   Landmark,
   ClipboardList,
   Building2,
@@ -35,7 +34,9 @@ import {
   Shield,
   ArrowLeft,
   FolderOpen,
+  ChevronDown,
 } from "lucide-react";
+import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
@@ -59,17 +60,18 @@ interface NavItem {
   icon: typeof LayoutDashboard;
   /**
    * SHELL-502: PAR roles allowed to SEE this nav item. Undefined = any PAR member.
-   * A requestor (project manager) must not even see approval/finance/admin links —
-   * the backend already 403s the data, this hides the links so the UI matches the rights.
    */
   roles?: ParNavRole[];
 }
 
 interface NavGroup {
   section: string | null;
+  /** Prefix used to detect if the current path is inside this group (for auto-expand). */
+  prefix?: string;
   items: NavItem[];
 }
 
+// PAR is first so it's most accessible for NGO users (VM1-01).
 const NAV_GROUPS: NavGroup[] = [
   {
     section: null,
@@ -78,12 +80,21 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    // SPLIT-402: this is the SINGLE Business Suite menu (was split across BusinessShell +
-    // AppShell.BUSINESS_NAV_GROUPS). It's the full superset so no module is lost when AppShell
-    // delegates here. Keep grouped + curated.
+    section: "PAR — Cereri de plată",
+    prefix: "/business/par",
+    items: [
+      { label: "Cereri", href: "/business/par", icon: ClipboardList },
+      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, roles: ["approver", "par_admin"] },
+      { label: "Rapoarte PAR", href: "/business/par/reports", icon: FileText, roles: ["approver", "finance", "par_admin"] },
+    ],
+  },
+  {
+    // SPLIT-402: single consolidated FinDesk menu.
     section: "FinDesk — Finanțe",
+    prefix: "/business/fin",
     items: [
       { label: "Acasă FinDesk", href: "/business/fin/", icon: Home },
+      { label: "Compania mea", href: "/business/fin/company", icon: Building2 },
       { label: "Facturi", href: "/business/fin/invoices", icon: Receipt },
       { label: "Cont de plată", href: "/business/fin/invoices/document", icon: FileText },
       { label: "e-Factura", href: "/business/fin/einvoices", icon: FileText },
@@ -107,15 +118,8 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    section: "PAR — Cereri de plată",
-    items: [
-      { label: "Cereri", href: "/business/par", icon: ClipboardList },
-      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, roles: ["approver", "par_admin"] },
-      { label: "Rapoarte PAR", href: "/business/par/reports", icon: FileText, roles: ["approver", "finance", "par_admin"] },
-    ],
-  },
-  {
     section: "ITPark — Rezidenți",
+    prefix: "/business/fin/itpark",
     items: [
       // FIX-503: ItparkDetail is mounted at /business/fin/itpark (not /business/itpark)
       { label: "Rezidenți", href: "/business/fin/itpark", icon: Building2 },
@@ -123,6 +127,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     section: "Document Merge",
+    prefix: "/business/docmerge",
     items: [
       // DOCMERGE-004: end-to-end wizard (primary entry point)
       { label: "Documente în masă", href: "/business/docmerge/wizard", icon: Wand2 },
@@ -134,6 +139,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     section: "Setări",
+    prefix: "/business/fin/settings",
     items: [
       { label: "Securitate", href: "/business/fin/settings/security", icon: Shield },
       { label: "Audit AI", href: "/business/fin/settings/ai-audit", icon: Settings },
@@ -143,15 +149,8 @@ const NAV_GROUPS: NavGroup[] = [
 
 /**
  * PAR-only navigation — shown when the current route is under /business/par/*.
- * Entering the PAR module gives a focused sidebar with ONLY PAR features, plus a
- * "back to all modules" link. Mirrors the structure of the standalone PAR app.
  */
-// SHELL-502: per-item PAR roles mirror the backend guards (requirePARRole):
-//   - "Cereri de plată" (list, scoped to own): any PAR member (incl. requestor)
-//   - Inbox/approve: approver | par_admin
-//   - Finance queue: finance | par_admin
-//   - Folders/Reports (analysis): approver | finance | par_admin (reports route 403s requestor)
-//   - Administrare (members/DOA/settings/import): par_admin
+// SHELL-502: per-item PAR roles mirror the backend guards (requirePARRole).
 const PAR_NAV_GROUPS: NavGroup[] = [
   {
     section: null,
@@ -171,8 +170,6 @@ const PAR_NAV_GROUPS: NavGroup[] = [
   {
     section: "Administrare",
     items: [
-      // ParAdmin: tabs for Settings, Members (echipă), Reference data
-      // (linii bugetare, departamente, proiecte, furnizori) + DOA matrix.
       { label: "Administrare PAR", href: "/business/par/admin", icon: Settings, roles: ["par_admin"] },
     ],
   },
@@ -183,11 +180,94 @@ export const NAV_GROUPS_EXPORT: NavGroup[] = NAV_GROUPS;
 
 /**
  * Pagini publice: nu necesită sesiune business.
- * /business = landing page (exact match sau /business exact)
- * /business/login = pagina de login
  */
 const PUBLIC_PATHS = ["/business/login"];
 const PUBLIC_EXACT = ["/business"];
+
+/** Collapsible sidebar group with a clickable section header. */
+function SidebarGroup({
+  group,
+  path,
+  defaultOpen,
+  inboxCount,
+  financeCount,
+}: {
+  group: NavGroup;
+  path: string;
+  defaultOpen: boolean;
+  inboxCount: number;
+  financeCount: number;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  // Auto-open when navigating into this group.
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
+
+  return (
+    <div className="mt-1">
+      {group.section && (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-muted hover:text-foreground transition-colors min-h-[36px]"
+          aria-expanded={open}
+        >
+          <span>{group.section}</span>
+          <ChevronDown
+            className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", open && "rotate-180")}
+            aria-hidden="true"
+          />
+        </button>
+      )}
+      {(open || !group.section) && (
+        <div className="mt-0.5 flex flex-col gap-0.5">
+          {group.items.map((item) => {
+            const Icon = item.icon;
+            const isIndexItem =
+              item.href === "/business/dashboard" || item.href === "/business/par";
+            const active = isIndexItem
+              ? path === item.href || path === item.href + "/"
+              : path.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                to={item.href}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors min-h-[44px]",
+                  active
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+                aria-current={active ? "page" : undefined}
+              >
+                <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="flex-1">{item.label}</span>
+                {item.href === "/business/par/inbox" && inboxCount > 0 && (
+                  <span
+                    className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold"
+                    aria-label={`${inboxCount} cereri în așteptare`}
+                  >
+                    {inboxCount}
+                  </span>
+                )}
+                {item.href === "/business/par/finance" && financeCount > 0 && (
+                  <span
+                    className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold"
+                    aria-label={`${financeCount} cereri în coada de finanțe`}
+                  >
+                    {financeCount}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function BusinessShell({
   children,
@@ -199,13 +279,10 @@ export function BusinessShell({
   const session = useBusinessSession();
 
   // VM1-01: fetch PAR roles to gate the PAR navigation section.
-  // While loading, hasPar = false so the section stays hidden (no flicker).
-  // On error / 401 → useParRoles returns roles=[], so hasPar = false (fail-closed).
   const { roles: parRoles, status: parRolesStatus } = useParRoles();
   const hasPar = parRolesStatus === "resolved" && parRoles.length >= 1;
 
-  // Notification badges: count of PARs awaiting THIS user's approval, and items in the finance queue
-  // (refreshed periodically + on navigation). Only fetched for the relevant roles; 0 hides the badge.
+  // Notification badges
   const canApproveNav = parRoles.some((r) => ["approver", "par_admin"].includes(r));
   const canFinanceNav = parRoles.some((r) => ["finance", "par_admin"].includes(r));
   const [inboxCount, setInboxCount] = useState(0);
@@ -222,29 +299,22 @@ export function BusinessShell({
     return () => { alive = false; clearInterval(iv); };
   }, [canApproveNav, canFinanceNav, path]);
 
-  // SPLIT-501: inside the PAR module, show a focused PAR-only sidebar instead of
-  // the full Business Suite menu. Every /business/par/* page (which renders via
-  // AppShell → BusinessShell) gets it automatically.
+  // SPLIT-501: inside PAR module → focused PAR-only sidebar.
   const isParModule = path.startsWith("/business/par");
-  // VM1-01: PAR module sidebar is only shown if user has PAR roles.
-  // If user navigates to /business/par/* without a role, server returns 403 — no need
-  // to hide PAR_NAV_GROUPS here, but we do hide the main NAV_GROUPS PAR section.
+
   const baseGroups = isParModule
     ? PAR_NAV_GROUPS
     : NAV_GROUPS.filter((g) => {
-        // Hide "PAR — Cereri de plată" section when user has no PAR role.
-        // All other sections (FinDesk, ITPark, DocMerge, Setări, etc.) always visible.
         if (g.section === "PAR — Cereri de plată") return hasPar;
         return true;
       });
-  // SHELL-502: per-item PAR role filter so a requestor (project manager) sees ONLY their part
-  // (Cereri de plată) — not approve/finance/admin/reports. Items without `roles` are unrestricted
-  // (FinDesk/ITPark/etc.). Drop groups left empty. Backend already 403s; this aligns the UI.
+
+  // SHELL-502: per-item PAR role filter.
   const navGroups = baseGroups
     .map((g) => ({ ...g, items: g.items.filter((it) => !it.roles || it.roles.some((r) => parRoles.includes(r))) }))
     .filter((g) => g.items.length > 0);
 
-  // Guard: redirecționează la /business/login dacă sesiunea lipsește.
+  // Guard: redirect if unauthenticated.
   useEffect(() => {
     const isPublic =
       PUBLIC_EXACT.includes(path) ||
@@ -267,10 +337,10 @@ export function BusinessShell({
         <Link
           to="/business/dashboard"
           className="flex items-center gap-2 font-display font-bold text-base select-none"
-          aria-label="Business Suite — acasă"
+          aria-label="FinFlow — acasă"
         >
-          <Briefcase className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />
-          <span className="hidden sm:inline text-foreground">Business Suite</span>
+          <FinFlowMark size={28} />
+          <span className="hidden sm:inline text-foreground">FinFlow</span>
         </Link>
         <div className="flex-1" />
         <NotificationBell />
@@ -278,7 +348,7 @@ export function BusinessShell({
           type="button"
           onClick={handleLogout}
           className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors min-h-[44px]"
-          aria-label="Deconectare Business Suite"
+          aria-label="Deconectare FinFlow"
         >
           <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="hidden sm:inline">Ieșire</span>
@@ -291,7 +361,7 @@ export function BusinessShell({
           className="hidden md:flex flex-col w-56 shrink-0 border-r border-border bg-card overflow-y-auto"
           aria-label="Navigare Business Suite"
         >
-          <nav className="flex flex-col gap-1 p-3 flex-1">
+          <nav className="flex flex-col gap-0.5 p-3 flex-1">
             {isParModule && (
               <Link
                 to="/business/dashboard"
@@ -302,57 +372,19 @@ export function BusinessShell({
                 <span>Toate modulele</span>
               </Link>
             )}
-            {navGroups.map((group, gi) => (
-              <div key={gi} className={gi > 0 ? "mt-3" : undefined}>
-                {group.section && (
-                  <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {group.section}
-                  </p>
-                )}
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  // Exact match for "index" items (dashboard, PAR root) so they
-                  // don't stay highlighted on every sub-route.
-                  const isIndexItem =
-                    item.href === "/business/dashboard" || item.href === "/business/par";
-                  const active = isIndexItem
-                    ? path === item.href || path === item.href + "/"
-                    : path.startsWith(item.href);
-                  return (
-                    <Link
-                      key={item.href}
-                      to={item.href}
-                      className={cn(
-                        "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors min-h-[44px]",
-                        active
-                          ? "bg-primary/10 text-primary"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                      )}
-                      aria-current={active ? "page" : undefined}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span className="flex-1">{item.label}</span>
-                      {item.href === "/business/par/inbox" && inboxCount > 0 && (
-                        <span
-                          className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold"
-                          aria-label={`${inboxCount} cereri în așteptare`}
-                        >
-                          {inboxCount}
-                        </span>
-                      )}
-                      {item.href === "/business/par/finance" && financeCount > 0 && (
-                        <span
-                          className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold"
-                          aria-label={`${financeCount} cereri în coada de finanțe`}
-                        >
-                          {financeCount}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            ))}
+            {navGroups.map((group, gi) => {
+              const isInGroup = group.prefix ? path.startsWith(group.prefix) : false;
+              return (
+                <SidebarGroup
+                  key={gi}
+                  group={group}
+                  path={path}
+                  defaultOpen={isInGroup || !group.section}
+                  inboxCount={inboxCount}
+                  financeCount={financeCount}
+                />
+              );
+            })}
           </nav>
         </aside>
 
