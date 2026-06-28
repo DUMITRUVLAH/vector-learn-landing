@@ -75,6 +75,8 @@ export interface ParPrefillResult {
   candidates: ParPrefillCandidate[];
   /** the full party list the extractor found (debug / advanced UI) */
   parties: Array<{ name: string; role: string; idno: string | null; iban: string | null }>;
+  /** line items / services to pre-fill the "Articole" section (unit price in cents) */
+  lineItems: Array<{ description: string; quantity: number; unit: string | null; unitPriceCents: number }>;
   /** true if the extraction used the mock stub (no API key) */
   isStub: boolean;
 }
@@ -200,6 +202,12 @@ parAiPrefillRoutes.post(
         role: p.role,
         idno: p.idno ?? null,
         iban: p.iban ?? null,
+      })),
+      lineItems: (extraction.lineItems ?? []).map((it) => ({
+        description: it.description,
+        quantity: it.quantity,
+        unit: it.unit,
+        unitPriceCents: it.unitPriceCents,
       })),
       isStub: extraction.isStub,
     };

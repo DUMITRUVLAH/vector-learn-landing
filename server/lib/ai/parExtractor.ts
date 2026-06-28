@@ -87,6 +87,15 @@ REGULI ABSOLUTE:
      pune-l în idno, NU în iban.
    - bank: numele băncii părții (ex. "BC Victoriabank S.A.", "Maib").
    - bic: codul SWIFT/BIC dacă există.
+3b. line_items: lista ARTICOLELOR/serviciilor din document (din tabelul de produse/servicii/devizul de
+   cost — "Denumire", "Serviciu", "Items/Services", "Descriere"). Fiecare cu: description (denumirea
+   serviciului/produsului, scurtă), quantity (cantitatea ca NUMĂR întreg, implicit 1), unit (unitatea de
+   măsură: "buc"/"sesie"/"ore"/"participanți"/"zi" etc., sau null), unit_price (prețul UNITAR în unități
+   ÎNTREGI ale valutei — NU în cenți, NU înmulțit cu 100; dacă în tabel apare doar suma totală pe rând,
+   pune-o ca unit_price cu quantity=1). Returnează un rând PER serviciu listat. Dacă documentul nu are
+   articole detaliate (doar un total), returnează [] (lista goală). Exemplu: "Ziua 1 de training ... 4 000",
+   "Pregătire materiale ... 10 500" → 2 articole. "provision of psihologic session services 1 sesie 7 000"
+   → un articol {description:"provision of psihologic session services", quantity:1, unit:"sesie", unit_price:7000}.
 3. amount: suma DE PLATĂ în UNITĂȚI ÎNTREGI ale valutei (lei/euro/dolari) — NU în cenți,
    NU înmulți cu 100; aplicația face conversia. Folosește TOTALUL de plată ("Total de plată",
    "TOTAL DUE", "Итого к оплате", "всего", "Suma", "Remunerația", "în mărime de", "стоимость",
@@ -111,6 +120,9 @@ Returnează DOAR JSON:
   "amount": { "value": 0.0 sau null, "confidence": 0.0 },
   "currency": "MDL|EUR|USD" sau null,
   "scope": { "value": "..." sau null, "confidence": 0.0 },
+  "line_items": [
+    { "description": "...", "quantity": 1, "unit": "..." sau null, "unit_price": 0.0 }
+  ],
   "document_class": { "value": "invoice|receipt|not_invoice" sau null, "confidence": 0.0, "reason": "..." }
 }`;
 
@@ -188,6 +200,26 @@ export function normalizeParExtraction(json: Record<string, unknown>): ParPartie
     : null;
   const documentClassReason = asStringOrNull(dcObj.reason) ?? undefined;
 
+  // line_items: unit_price is in MAJOR units in the JSON → ×100 to cents (same as amount).
+  const rawItems = Array.isArray(json.line_items) ? (json.line_items as Array<Record<string, unknown>>) : [];
+  const lineItems = rawItems
+    .map((it) => {
+      const description = (asStringOrNull(it.description) ?? "").trim();
+      const major =
+        typeof it.unit_price === "number"
+          ? it.unit_price
+          : parseFloat(String(it.unit_price ?? "").replace(/\s/g, "").replace(",", "."));
+      const qty = Math.max(1, Math.round(Number(it.quantity) || 1));
+      return {
+        description,
+        quantity: qty,
+        unit: asStringOrNull(it.unit),
+        unitPriceCents: Number.isFinite(major) && major >= 0 ? Math.round(major * 100) : 0,
+      };
+    })
+    .filter((it) => it.description.length > 0)
+    .slice(0, 30);
+
   return {
     parties,
     amountCents,
@@ -196,6 +228,7 @@ export function normalizeParExtraction(json: Record<string, unknown>): ParPartie
     scope,
     documentClass,
     documentClassReason,
+    lineItems,
     isStub: false,
   };
 }

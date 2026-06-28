@@ -16,7 +16,7 @@ const mockGetPar = vi.fn();
 const mockGetParMe = vi.fn();
 
 vi.mock("@/router/HashRouter", () => ({
-  useRouter: () => ({ path: "/app/par/par-test-id", navigate: vi.fn() }),
+  useRouter: () => ({ path: "/business/par/par-test-id", navigate: vi.fn() }),
 }));
 
 vi.mock("@/components/app/AppShell", () => ({

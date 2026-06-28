@@ -1254,6 +1254,8 @@ export interface ParPrefillResult {
   candidates: ParPrefillCandidate[];
   /** the full party list the extractor found (debug / advanced UI) */
   parties?: Array<{ name: string; role: string; idno: string | null; iban: string | null }>;
+  /** line items / services to pre-fill the "Articole" section (unit price in cents) */
+  lineItems?: Array<{ description: string; quantity: number; unit: string | null; unitPriceCents: number }>;
   isStub: boolean;
 }
 

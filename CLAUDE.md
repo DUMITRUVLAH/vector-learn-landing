@@ -352,6 +352,16 @@ expected response shape** (or the documented non-200). Rendering a control prove
 whether clicking it works. The live-API integration smoke (§3.5.1) is exactly this discipline —
 extend it to cover each new action, don't just check the UI mounted.
 
+**Corollary — a test that mocks the OLD route passes while prod (the REAL route) breaks.** The
+2026-06-28 PAR-detail `http_404` shipped because `ParDetail.tsx` parsed the id with a hardcoded
+`/^\/app\/par\//` strip, but the app had migrated the route to `/business/par/:id` (App.tsx
+redirects the legacy prefix). On the real path the strip didn't match → `id=""` → every just-created
+PAR 404'd. The unit tests stayed green because their `useRouter` mock still fed the OLD
+`path: "/app/par/..."`. Lesson: when a route prefix moves (`/app/*` → `/business/*`), the path-parsing
+in the page component AND its test's mocked `path` must move together — a stale mock tests a dead
+route. Parse route params **route-agnostically** (`path.match(/\/par\/([^/]+)/)`, not a fixed-prefix
+strip), and point test mocks at the route the app actually navigates to.
+
 > Why this is its own rule: bugs the owner has to report are the most expensive kind. The point of
 > writing the lesson down is that the *next* mistake is a new one, never a repeat — the test suite
 > and this file get monotonically stronger. Treat "the owner found a bug I said I tested" as a
