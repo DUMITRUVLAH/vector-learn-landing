@@ -157,7 +157,6 @@ export function ParCreateForm() {
   const [payeeIdnp, setPayeeIdnp] = useState("");
   const [payeeIban, setPayeeIban] = useState("");
   const [payeeBank, setPayeeBank] = useState("");
-  const [saveVendor, setSaveVendor] = useState(false);
   // Attachments (13)
   const [attachmentsPresent, setAttachmentsPresent] = useState(false);
   const [attachmentsNote, setAttachmentsNote] = useState("");
@@ -404,7 +403,7 @@ export function ParCreateForm() {
   const onVendorSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const id = e.target.value; setVendorId(id);
     const v = vendors.find((x) => x.id === id);
-    if (v) { setPayeeName(v.name); setPayeeIdnp(v.idnp ?? ""); setPayeeIban(v.iban ?? ""); setPayeeBank(v.bank ?? ""); setSaveVendor(false); }
+    if (v) { setPayeeName(v.name); setPayeeIdnp(v.idnp ?? ""); setPayeeIban(v.iban ?? ""); setPayeeBank(v.bank ?? ""); }
   };
 
   /** Client pre-validation → friendly field errors. Returns true if OK. */
@@ -442,10 +441,18 @@ export function ParCreateForm() {
     setBusy(true);
     try {
       await patchHeader(parId);
-      // Save a new beneficiary to the registry for reuse, if requested.
-      if (saveVendor && !vendorId && payeeName.trim()) {
-        try { await createVendor({ name: payeeName.trim(), idnp: payeeIdnp || null, iban: payeeIban || null, bank: payeeBank || null }); }
-        catch { /* non-blocking — don't fail submit if vendor save fails */ }
+      // VM1-05: auto-save EVERY inline beneficiary that has a (valid) IBAN to the registry for
+      // reuse — manual or AI-filled, no checkbox needed. The server dedups by IBAN, so re-saving
+      // the same beneficiary just links to the existing entry. Non-blocking.
+      if (!vendorId && payeeName.trim() && payeeIban.trim()) {
+        try {
+          await createVendor({
+            name: payeeName.trim(),
+            idnp: payeeIdnp || null,
+            iban: payeeIban.trim().toUpperCase(),
+            bank: payeeBank || null,
+          });
+        } catch { /* non-blocking — don't fail submit if vendor save fails */ }
       }
       const submitted = await submitPar(parId);
       navigate(`/business/par/${submitted.id}`);
@@ -747,8 +754,8 @@ export function ParCreateForm() {
 
               {/* Non-financial document guard */}
               {aiPrefillResult.documentClass.not_financial && (
-                <div className="flex items-start gap-2 p-2 rounded-md bg-warning/10 text-warning-foreground text-xs">
-                  <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden />
+                <div className="flex items-start gap-2 p-2 rounded-md bg-warning/10 border border-warning/30 text-foreground text-xs">
+                  <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5 text-warning" aria-hidden />
                   <span>
                     Documentul nu pare a fi o factură sau bon financiar
                     {aiPrefillResult.documentClass.reason && ` — ${aiPrefillResult.documentClass.reason}`}.
@@ -849,11 +856,11 @@ export function ParCreateForm() {
             </Field>
             <Field label="Bancă" htmlFor="pbk"><input id="pbk" type="text" placeholder="ex. BC Moldindconbank S.A." className={inputCls} value={payeeBank} onChange={(e) => setPayeeBank(e.target.value)} /></Field>
           </div>
-          {!vendorId && payeeName.trim() && (
-            <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-              <input type="checkbox" checked={saveVendor} onChange={(e) => setSaveVendor(e.target.checked)} className="accent-primary h-4 w-4" />
-              Salvează acest beneficiar pentru reutilizare
-            </label>
+          {!vendorId && payeeName.trim() && payeeIban.trim() && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" aria-hidden />
+              Beneficiarul cu IBAN se salvează automat în registru pentru reutilizare.
+            </p>
           )}
           <p className="text-xs text-muted-foreground">Datele beneficiarului sunt confidențiale (GDPR) — vizibile doar solicitantului, aprobatorilor și finanțelor.</p>
         </Section>
