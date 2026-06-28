@@ -71,14 +71,9 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// PAR is first so it's most accessible for NGO users (VM1-01).
+// Toate secțiunile au header explicit (section non-null) — Dashboard e un link standalone separat.
+// PAR este prima secțiune (VM1-01).
 const NAV_GROUPS: NavGroup[] = [
-  {
-    section: null,
-    items: [
-      { label: "Dashboard", href: "/business/dashboard", icon: LayoutDashboard },
-    ],
-  },
   {
     section: "PAR — Cereri de plată",
     prefix: "/business/par",
@@ -108,7 +103,6 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Mijloace fixe", href: "/business/fin/assets", icon: Building2 },
       { label: "Stocuri", href: "/business/fin/inventory", icon: BookOpen },
       { label: "Buget", href: "/business/fin/budget", icon: BarChart3 },
-      { label: "Tablou de bord", href: "/business/fin/ledger", icon: TrendingUp },
       { label: "Invoice Reporting", href: "/business/fin/captures", icon: Zap },
       { label: "Reconciliere & TVA import", href: "/business/fin/reconcile", icon: RefreshCw },
       { label: "Conturi bancare", href: "/business/fin/banklink", icon: Banknote },
@@ -129,11 +123,8 @@ const NAV_GROUPS: NavGroup[] = [
     section: "Document Merge",
     prefix: "/business/docmerge",
     items: [
-      // DOCMERGE-004: end-to-end wizard (primary entry point)
       { label: "Documente în masă", href: "/business/docmerge/wizard", icon: Wand2 },
-      // DOCMERGE-001: manage templates
       { label: "Templates", href: "/business/docmerge", icon: FileText },
-      // DOCMERGE-002: Excel import wizard (legacy / advanced)
       { label: "Import Excel", href: "/business/docmerge/job", icon: FileSpreadsheet },
     ],
   },
@@ -184,85 +175,108 @@ export const NAV_GROUPS_EXPORT: NavGroup[] = NAV_GROUPS;
 const PUBLIC_PATHS = ["/business/login"];
 const PUBLIC_EXACT = ["/business"];
 
-/** Collapsible sidebar group with a clickable section header. */
+/** Single nav link row used inside SidebarGroup. */
+function NavLink({
+  item,
+  path,
+  inboxCount,
+  financeCount,
+}: {
+  item: NavItem;
+  path: string;
+  inboxCount: number;
+  financeCount: number;
+}) {
+  const Icon = item.icon;
+  // "Cereri" root and "Acasă FinDesk" should only be active on exact match, not every sub-route.
+  const isIndexItem = item.href === "/business/par" || item.href === "/business/fin/";
+  const active = isIndexItem
+    ? path === item.href || path === item.href.replace(/\/$/, "")
+    : path.startsWith(item.href);
+  return (
+    <Link
+      to={item.href}
+      className={cn(
+        "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors min-h-[44px]",
+        active
+          ? "bg-primary/10 text-primary"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+      )}
+      aria-current={active ? "page" : undefined}
+    >
+      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+      <span className="flex-1">{item.label}</span>
+      {item.href === "/business/par/inbox" && inboxCount > 0 && (
+        <span
+          className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold"
+          aria-label={`${inboxCount} cereri în așteptare`}
+        >
+          {inboxCount}
+        </span>
+      )}
+      {item.href === "/business/par/finance" && financeCount > 0 && (
+        <span
+          className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold"
+          aria-label={`${financeCount} cereri în coada de finanțe`}
+        >
+          {financeCount}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+/** Collapsible sidebar section. Only opens when the current path is inside this group. */
 function SidebarGroup({
   group,
   path,
-  defaultOpen,
   inboxCount,
   financeCount,
 }: {
   group: NavGroup;
   path: string;
-  defaultOpen: boolean;
   inboxCount: number;
   financeCount: number;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  // A group is "active" when the current path falls under its prefix.
+  const isActive = !!group.prefix && path.startsWith(group.prefix);
+  const [open, setOpen] = useState(isActive);
 
-  // Auto-open when navigating into this group.
+  // Auto-expand when navigating INTO this group; do NOT auto-close others.
   useEffect(() => {
-    if (defaultOpen) setOpen(true);
-  }, [defaultOpen]);
+    if (isActive) setOpen(true);
+  }, [isActive]);
 
   return (
     <div className="mt-1">
-      {group.section && (
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-muted hover:text-foreground transition-colors min-h-[36px]"
-          aria-expanded={open}
-        >
-          <span>{group.section}</span>
-          <ChevronDown
-            className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", open && "rotate-180")}
-            aria-hidden="true"
-          />
-        </button>
-      )}
-      {(open || !group.section) && (
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider transition-colors min-h-[36px]",
+          isActive
+            ? "text-primary hover:bg-primary/5"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        )}
+        aria-expanded={open}
+      >
+        <span>{group.section}</span>
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", open && "rotate-180")}
+          aria-hidden="true"
+        />
+      </button>
+      {open && (
         <div className="mt-0.5 flex flex-col gap-0.5">
-          {group.items.map((item) => {
-            const Icon = item.icon;
-            const isIndexItem =
-              item.href === "/business/dashboard" || item.href === "/business/par";
-            const active = isIndexItem
-              ? path === item.href || path === item.href + "/"
-              : path.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                to={item.href}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors min-h-[44px]",
-                  active
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                )}
-                aria-current={active ? "page" : undefined}
-              >
-                <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span className="flex-1">{item.label}</span>
-                {item.href === "/business/par/inbox" && inboxCount > 0 && (
-                  <span
-                    className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold"
-                    aria-label={`${inboxCount} cereri în așteptare`}
-                  >
-                    {inboxCount}
-                  </span>
-                )}
-                {item.href === "/business/par/finance" && financeCount > 0 && (
-                  <span
-                    className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold"
-                    aria-label={`${financeCount} cereri în coada de finanțe`}
-                  >
-                    {financeCount}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+          {group.items.map((item) => (
+            <NavLink
+              key={item.href}
+              item={item}
+              path={path}
+              inboxCount={inboxCount}
+              financeCount={financeCount}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -305,6 +319,7 @@ export function BusinessShell({
   const baseGroups = isParModule
     ? PAR_NAV_GROUPS
     : NAV_GROUPS.filter((g) => {
+        // Ascunde secțiunea PAR dacă userul nu are niciun rol PAR.
         if (g.section === "PAR — Cereri de plată") return hasPar;
         return true;
       });
@@ -362,29 +377,40 @@ export function BusinessShell({
           aria-label="Navigare Business Suite"
         >
           <nav className="flex flex-col gap-0.5 p-3 flex-1">
-            {isParModule && (
+            {isParModule ? (
               <Link
                 to="/business/dashboard"
-                className="flex items-center gap-2 rounded-md px-3 py-2 mb-2 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors min-h-[44px]"
+                className="flex items-center gap-2 rounded-md px-3 py-2 mb-1 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors min-h-[44px]"
                 aria-label="Înapoi la toate modulele"
               >
                 <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
                 <span>Toate modulele</span>
               </Link>
+            ) : (
+              /* Dashboard standalone link — nu face parte din nicio secțiune */
+              <Link
+                to="/business/dashboard"
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors min-h-[44px] mb-1",
+                  path === "/business/dashboard" || path === "/business/dashboard/"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+                aria-current={path.startsWith("/business/dashboard") ? "page" : undefined}
+              >
+                <LayoutDashboard className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>Dashboard</span>
+              </Link>
             )}
-            {navGroups.map((group, gi) => {
-              const isInGroup = group.prefix ? path.startsWith(group.prefix) : false;
-              return (
-                <SidebarGroup
-                  key={gi}
-                  group={group}
-                  path={path}
-                  defaultOpen={isInGroup || !group.section}
-                  inboxCount={inboxCount}
-                  financeCount={financeCount}
-                />
-              );
-            })}
+            {navGroups.map((group, gi) => (
+              <SidebarGroup
+                key={gi}
+                group={group}
+                path={path}
+                inboxCount={inboxCount}
+                financeCount={financeCount}
+              />
+            ))}
           </nav>
         </aside>
 
