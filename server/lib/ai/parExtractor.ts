@@ -60,6 +60,24 @@ REGULI ABSOLUTE:
      PRIMEI părți (coloana stângă, de obicei EXECUTOR), A DOUA valoare celei de-a doua părți
      (coloana dreaptă, CLIENT). Asociază fiecare IBAN/cod fiscal/bancă cu partea CORECTĂ — nu le
      amesteca și nu le pune pe toate la o singură parte.
+   - FORMULAR DE PLATĂ / PAR / secțiune "Beneficiar plată / Payee": dacă documentul e un formular de
+     cerere de plată (ex. "Payment Action Request (PAR) Form") sau are o secțiune de beneficiar al
+     plății, BENEFICIARUL este persoana/firma de la "Name, Surname" / "Nume, Prenume" / "Beneficiar" /
+     "Payee" din secțiunea de plată — NU "Requested By"/"Solicitant"/"Requestor", NU semnatarii
+     ("Approver"/"Aprobator"/"Director"/"Executive Director"). Acel beneficiar poate fi o PERSOANĂ
+     FIZICĂ (un nume de om, ex. "Daria Roitman", fără SRL/SA) — listează-l ca parte cu role="provider"
+     (e cel plătit). Ia IDNP-ul, IBAN-ul și banca din APROPIEREA acelui nume. Ignoră solicitantul și
+     aprobatorii ca beneficiari.
+   - RECUNOAȘTE VALORILE DUPĂ FORMAT, nu doar după etichetă (etichetele pot fi greșite/încurcate într-un
+     formular): un IBAN = "MD" + 2 cifre + 20 caractere (sau IBAN străin RO../DE..); un IDNP/IDNO/cod
+     fiscal = EXACT 13 cifre. Dacă sub eticheta "IDNP:" apare o valoare în format IBAN (MD...), aceea e
+     IBAN-ul → pune-o în iban. ORICE număr de EXACT 13 cifre din secțiunea beneficiarului — chiar pe o
+     linie separată, fără etichetă, sau după "Bank:" — este IDNP-ul beneficiarului → pune-l în idno.
+     Asociază fiecare valoare cu beneficiarul după FORMAT, nu după poziția etichetei.
+     EXEMPLU (formular PAR): "Name, Surname: Daria Roitman / IDNP: / MD48ML000002259A19498121 / IBAN: /
+     Bank: BC Moldindconbank S.A. / 2008001007903" → beneficiar persoană fizică "Daria Roitman",
+     iban="MD48ML000002259A19498121" (e format IBAN, deși scrie sub IDNP), idno="2008001007903" (13 cifre,
+     deși plutește după bancă), bank="BC Moldindconbank S.A.".
    - idno: codul fiscal / IDNO / IDNP — EXACT 13 cifre. "cod fiscal" = "IDNO" = "IDNP" = "ИДНО"
      = "fiscal code" — toate sunt ACELAȘI lucru. Pune-l în idno.
    - vatCode: "Cod TVA" / "Cod IVA" / "VAT" / "Код НДС" / "USt-IdNr" — acesta NU este idno.
