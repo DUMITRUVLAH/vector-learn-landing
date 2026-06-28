@@ -141,7 +141,7 @@ export interface ParPayment {
 
 // Config entities
 export interface ParDepartment { id: string; name: string; active: boolean; }
-export interface ParProject { id: string; name: string; donor: string | null; active: boolean; }
+export interface ParProject { id: string; name: string; donor: string | null; active: boolean; approverUserIds?: string[]; }
 export interface ParBudgetCode { id: string; code: string; name: string; active: boolean; }
 /** VM1-04: Event — sub-entity of a project */
 export interface ParEvent {
@@ -597,6 +597,14 @@ export async function listDepartments(): Promise<{ items: ParDepartment[] }> {
 export async function listProjects(): Promise<{ items: ParProject[] }> {
   return api<{ items?: ParProject[]; projects?: ParProject[] }>("/api/par/projects")
     .then((r) => ({ items: (r as { items?: ParProject[]; projects?: ParProject[] }).items ?? (r as { items?: ParProject[]; projects?: ParProject[] }).projects ?? [] }));
+}
+
+/** Replace a project's designated approver list (par_admin). Empty = unrestricted (any approver). */
+export async function setProjectApprovers(projectId: string, userIds: string[]): Promise<{ ok: boolean; approverUserIds: string[] }> {
+  return api<{ ok: boolean; approverUserIds: string[] }>(`/api/par/projects/${projectId}/approvers`, {
+    method: "PUT",
+    body: JSON.stringify({ userIds }),
+  });
 }
 
 export async function listBudgetCodes(): Promise<{ items: ParBudgetCode[] }> {

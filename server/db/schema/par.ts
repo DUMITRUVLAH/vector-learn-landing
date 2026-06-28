@@ -14,6 +14,7 @@ import {
   text,
   timestamp,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { users } from "./users";
@@ -126,6 +127,34 @@ export const parProjects = pgTable(
   },
   (t) => ({
     tenantIdx: index("par_projects_tenant_idx").on(t.tenantId),
+  })
+);
+
+/**
+ * Project-scoped approvers (VF-approval-scoping): which users may approve PARs on a given project.
+ * If a project has ≥1 row here, ONLY those users (who also hold the `approver`/`par_admin` role) can
+ * decide its role-based approval steps. A project with NO rows → any approver (global, the default).
+ * Managed by the par_admin only.
+ */
+export const parProjectApprovers = pgTable(
+  "par_project_approvers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => parProjects.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    projectIdx: index("par_project_approvers_project_idx").on(t.projectId),
+    tenantIdx: index("par_project_approvers_tenant_idx").on(t.tenantId),
+    uniqProjectUser: uniqueIndex("par_project_approvers_project_user_uniq").on(t.projectId, t.userId),
   })
 );
 

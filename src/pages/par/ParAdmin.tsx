@@ -19,6 +19,7 @@ import {
   Users,
   BookOpen,
   Shield,
+  ShieldCheck,
   Loader2,
   Plus,
   Trash2,
@@ -72,6 +73,7 @@ import {
   updateDepartment,
   deleteDepartment,
   createProject,
+  setProjectApprovers,
   updateProject,
   deleteProject,
   createBudgetCode,
@@ -1631,21 +1633,24 @@ function ParReferenceData() {
       )}
 
       {section === "projects" && (
-        <SimpleRefTable
-          title="Proiecte / Programe"
-          items={projects}
-          columns={[
-            { label: "Denumire", key: "name" as const },
-            { label: "Donor", key: "donor" as const },
-          ]}
-          onAdd={(payload) => createProject(payload as { name: string; donor?: string }).then(load)}
-          onEdit={(id, payload) => updateProject(id, payload as Partial<{ name: string; donor?: string }>).then(load)}
-          onDelete={(id) => deleteProject(id).then(load)}
-          addFields={[
-            { id: "name", label: "Denumire", placeholder: "ex. Digital Safeguard" },
-            { id: "donor", label: "Donor (opțional)", placeholder: "ex. USAID" },
-          ]}
-        />
+        <div className="space-y-6">
+          <SimpleRefTable
+            title="Proiecte / Programe"
+            items={projects}
+            columns={[
+              { label: "Denumire", key: "name" as const },
+              { label: "Donor", key: "donor" as const },
+            ]}
+            onAdd={(payload) => createProject(payload as { name: string; donor?: string }).then(load)}
+            onEdit={(id, payload) => updateProject(id, payload as Partial<{ name: string; donor?: string }>).then(load)}
+            onDelete={(id) => deleteProject(id).then(load)}
+            addFields={[
+              { id: "name", label: "Denumire", placeholder: "ex. Digital Safeguard" },
+              { id: "donor", label: "Donor (opțional)", placeholder: "ex. USAID" },
+            ]}
+          />
+          <ProjectApproversSection projects={projects} onReload={load} />
+        </div>
       )}
 
       {/* Feature 2: Events — rich table with dates, creator, spend */}
@@ -1659,6 +1664,116 @@ function ParReferenceData() {
 
       {section === "vendors" && (
         <VendorSection vendors={vendors} onReload={load} />
+      )}
+    </div>
+  );
+}
+
+// ─── Project-scoped approvers (VF-approval-scoping) ─────────────────────────
+// Per project, the par_admin picks which approvers may decide its PARs. No selection = any approver.
+
+function ProjectApproversSection({
+  projects,
+  onReload,
+}: {
+  projects: import("@/lib/api/par").ParProject[];
+  onReload: () => Promise<void>;
+}) {
+  // Eligible approvers = unique users holding the approver/par_admin role.
+  const [approvers, setApprovers] = useState<Array<{ userId: string; name: string }>>([]);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    listParMembers()
+      .then(({ members }) => {
+        const seen = new Set<string>();
+        const list: Array<{ userId: string; name: string }> = [];
+        for (const m of members) {
+          if (m.role !== "approver" && m.role !== "par_admin") continue;
+          if (seen.has(m.userId)) continue;
+          seen.add(m.userId);
+          list.push({ userId: m.userId, name: m.userName || m.userEmail || m.userId.slice(0, 8) });
+        }
+        setApprovers(list);
+      })
+      .catch(() => setErr("Nu am putut încărca aprobatorii."));
+  }, []);
+
+  const toggle = async (project: import("@/lib/api/par").ParProject, userId: string) => {
+    const current = new Set(project.approverUserIds ?? []);
+    if (current.has(userId)) current.delete(userId);
+    else current.add(userId);
+    setSavingId(project.id);
+    setErr(null);
+    try {
+      await setProjectApprovers(project.id, [...current]);
+      await onReload();
+    } catch {
+      setErr("Nu am putut salva aprobatorii proiectului.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-primary" aria-hidden />
+          Aprobatori pe proiect
+        </h3>
+        <p className="text-xs text-muted-foreground mt-1">
+          Alege cine poate aproba cererile fiecărui proiect. Fără nicio bifă = orice aprobator poate decide.
+        </p>
+      </div>
+
+      {err && <p className="text-xs text-destructive">{err}</p>}
+
+      {approvers.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Niciun aprobator încă. Adaugă rolul „Aprobator" unui membru (tab Membri) ca să apară aici.
+        </p>
+      ) : projects.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Niciun proiect încă.</p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {projects.map((p) => {
+            const selected = new Set(p.approverUserIds ?? []);
+            return (
+              <li key={p.id} className="py-3 flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="sm:w-48 shrink-0">
+                  <p className="text-sm font-medium text-foreground">{p.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selected.size === 0 ? "Toți aprobatorii" : `${selected.size} aprobator(i)`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {approvers.map((a) => {
+                    const on = selected.has(a.userId);
+                    return (
+                      <button
+                        key={a.userId}
+                        type="button"
+                        onClick={() => toggle(p, a.userId)}
+                        disabled={savingId === p.id}
+                        aria-pressed={on}
+                        className={cn(
+                          "px-2.5 py-1 rounded-full text-xs font-medium border transition-colors min-h-[32px] disabled:opacity-50",
+                          on
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-muted-foreground border-input hover:border-primary/50"
+                        )}
+                      >
+                        {a.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );

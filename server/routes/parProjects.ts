@@ -11,10 +11,12 @@ import { parProjects } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
+import { getProjectApproverMap, setProjectApprovers } from "../lib/par/projectApprovers";
 
 export const parProjectsRoutes = new Hono<{ Variables: AuthVariables }>();
 parProjectsRoutes.use("*", requireAuth);
 parProjectsRoutes.use("/:id", parUuidGuard("id"));
+parProjectsRoutes.use("/:id/:action/*", parUuidGuard("id"));
 
 const projectSchema = z.object({
   name: z.string().min(1).max(200),
@@ -29,8 +31,32 @@ parProjectsRoutes.get("/", async (c) => {
     .from(parProjects)
     .where(and(eq(parProjects.tenantId, tenantId), eq(parProjects.active, true)))
     .orderBy(asc(parProjects.name));
-  return c.json({ projects: rows });
+  // Attach the designated approver user-ids per project ([] = unrestricted → any approver).
+  const approverMap = await getProjectApproverMap(tenantId);
+  const projects = rows.map((p) => ({ ...p, approverUserIds: [...(approverMap.get(p.id) ?? [])] }));
+  return c.json({ projects });
 });
+
+const approversSchema = z.object({ userIds: z.array(z.string().uuid()).max(50) });
+
+/** PUT /api/par/projects/:id/approvers — replace a project's designated approver list (par_admin). */
+parProjectsRoutes.put(
+  "/:id/approvers",
+  requirePARRole("par_admin"),
+  zValidator("json", approversSchema),
+  async (c) => {
+    const tenantId = c.get("user").tenantId;
+    const id = c.req.param("id");
+    const [proj] = await db
+      .select({ id: parProjects.id })
+      .from(parProjects)
+      .where(and(eq(parProjects.id, id), eq(parProjects.tenantId, tenantId)));
+    if (!proj) return c.json({ error: "not_found" }, 404);
+    await setProjectApprovers(tenantId, id, c.req.valid("json").userIds);
+    const approverMap = await getProjectApproverMap(tenantId);
+    return c.json({ ok: true, approverUserIds: [...(approverMap.get(id) ?? [])] });
+  }
+);
 
 parProjectsRoutes.post(
   "/",
