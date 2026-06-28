@@ -315,7 +315,12 @@ are NON-NEGOTIABLE:
    type-quality errors (those don't crash at runtime); do not "fix" it by gating all of tsc.
 2. **Self-healing schema sync (`server/db/sync-schema.ts`).** Runs after migrations on every
    deploy; adds (never drops) any column the schema expects but the DB lacks. Prevents
-   "column X does not exist". Whole missing TABLES still need a real migration — it logs those.
+   "column X does not exist". **When you add a NEW TABLE that request-path code queries, ALSO add a
+   `CREATE TABLE … IF NOT EXISTS` for it to sync-schema's `ENSURE_STATEMENTS` in the same commit** —
+   Vercel deploys CODE before migrations finish, so without the heal the feature 500s with
+   "relation X does not exist" until the migration lands (this bit `par_project_approvers`, 2026-06-28).
+   Belt-and-suspenders with the real migration; and make the query degrade gracefully (catch
+   missing-table → empty result) so a lag never crashes the page.
 3. **Post-deploy smoke (`npm run smoke` → `scripts/e2e-smoke.mjs`).** Real headless-browser
    login + 23-route sweep that scans for caught error TEXT (red messages), not just JS crashes —
    because most API failures render as text and a pageerror-only check reports false "all clean".
