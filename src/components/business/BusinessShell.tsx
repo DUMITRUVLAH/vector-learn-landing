@@ -40,7 +40,7 @@ import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { useParRoles } from "@/hooks/useParRoles";
-import { getParInbox } from "@/lib/api/par";
+import { getParInbox, getFinanceQueue } from "@/lib/api/par";
 import { NotificationBell } from "@/components/app/NotificationBell";
 
 interface BusinessShellProps {
@@ -204,19 +204,23 @@ export function BusinessShell({
   const { roles: parRoles, status: parRolesStatus } = useParRoles();
   const hasPar = parRolesStatus === "resolved" && parRoles.length >= 1;
 
-  // Notification badge: count of PARs awaiting THIS user's approval (refreshed periodically + on
-  // navigation). Only fetched for approvers/admins; 0 hides the badge.
+  // Notification badges: count of PARs awaiting THIS user's approval, and items in the finance queue
+  // (refreshed periodically + on navigation). Only fetched for the relevant roles; 0 hides the badge.
   const canApproveNav = parRoles.some((r) => ["approver", "par_admin"].includes(r));
+  const canFinanceNav = parRoles.some((r) => ["finance", "par_admin"].includes(r));
   const [inboxCount, setInboxCount] = useState(0);
+  const [financeCount, setFinanceCount] = useState(0);
   useEffect(() => {
-    if (!canApproveNav) { setInboxCount(0); return; }
+    if (!canApproveNav && !canFinanceNav) { setInboxCount(0); setFinanceCount(0); return; }
     let alive = true;
-    const fetchCount = () =>
-      getParInbox().then((r) => { if (alive) setInboxCount(r.total ?? 0); }).catch(() => {});
-    fetchCount();
-    const iv = setInterval(fetchCount, 60_000);
+    const fetchCounts = () => {
+      if (canApproveNav) getParInbox().then((r) => { if (alive) setInboxCount(r.total ?? 0); }).catch(() => {});
+      if (canFinanceNav) getFinanceQueue().then((r) => { if (alive) setFinanceCount(r.total ?? 0); }).catch(() => {});
+    };
+    fetchCounts();
+    const iv = setInterval(fetchCounts, 60_000);
     return () => { alive = false; clearInterval(iv); };
-  }, [canApproveNav, path]);
+  }, [canApproveNav, canFinanceNav, path]);
 
   // SPLIT-501: inside the PAR module, show a focused PAR-only sidebar instead of
   // the full Business Suite menu. Every /business/par/* page (which renders via
@@ -334,6 +338,14 @@ export function BusinessShell({
                           aria-label={`${inboxCount} cereri în așteptare`}
                         >
                           {inboxCount}
+                        </span>
+                      )}
+                      {item.href === "/business/par/finance" && financeCount > 0 && (
+                        <span
+                          className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold"
+                          aria-label={`${financeCount} cereri în coada de finanțe`}
+                        >
+                          {financeCount}
                         </span>
                       )}
                     </Link>

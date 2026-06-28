@@ -123,12 +123,21 @@ parAttachmentsRoutes.post(
 
     if (!par) return c.json({ error: "not_found" }, 404);
 
-    // Only author can upload; only in editable statuses
-    if (par.requestedByUserId !== user.id) {
-      return c.json({ error: "forbidden: only the author can add attachments" }, 403);
-    }
-    if (!EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number])) {
-      return c.json({ error: `forbidden: PAR status '${par.status}' is not editable` }, 403);
+    // Permission: the author may attach while the PAR is editable (draft/changes_requested). ADDITIONALLY,
+    // finance/par_admin may attach the payment-confirmation doc to the dossier at the finance stage
+    // (approved/in_finance/paid/reapproval_required) — the proof of payment must live with the request.
+    const roles = await getUserPARRoles(user.id, tenantId);
+    const isFinance = roles.includes("finance") || roles.includes("par_admin");
+    const FINANCE_STAGE_STATUSES = ["approved", "in_finance", "reapproval_required", "paid"];
+    const authorCanEdit =
+      par.requestedByUserId === user.id &&
+      EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number]);
+    const financeCanAttach = isFinance && FINANCE_STAGE_STATUSES.includes(par.status);
+    if (!authorCanEdit && !financeCanAttach) {
+      return c.json(
+        { error: `forbidden: cannot add attachments (status '${par.status}')` },
+        403
+      );
     }
 
     // VM1-06: enforce the max-attachments limit on the server (UI guards too, but the

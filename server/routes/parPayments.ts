@@ -23,7 +23,9 @@ import {
   parSettings,
   parApprovals,
   parVendors,
+  parProjects,
 } from "../db/schema/par";
+import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
@@ -135,7 +137,8 @@ const section16Schema = z.object({
 const paySchema = z.object({
   actual_amount_cents: z.number().int().positive("actual_amount_cents must be a positive integer"),
   payment_date: z.string().datetime({ offset: true }).or(z.string().date()),
-  payment_ref: z.string().min(1).max(500),
+  // Referința plății este opțională (owner: nu o face obligatorie).
+  payment_ref: z.string().max(500).optional().nullable(),
   proof_url: z.string().url().max(2000).optional().nullable(),
 });
 
@@ -180,10 +183,45 @@ parPaymentsRoutes.get("/finance", async (c) => {
     for (const p of pmts) paymentsMap[p.parId] = p;
   }
 
+  // Resolve display names (finance needs: who requested, which project, who approved).
+  const approvalRows = parIds.length
+    ? await db
+        .select({ parId: parApprovals.parId, step: parApprovals.step, decision: parApprovals.decision, approverUserId: parApprovals.approverUserId })
+        .from(parApprovals)
+        .where(and(eq(parApprovals.tenantId, tenantId), inArray(parApprovals.parId, parIds)))
+    : [];
+  const projectIds = [...new Set(queue.map((p) => p.projectId).filter((v): v is string => !!v))];
+  const userIds = [
+    ...new Set([
+      ...queue.map((p) => p.requestedByUserId).filter((v): v is string => !!v),
+      ...approvalRows.filter((a) => a.step >= 1 && a.decision === "approved" && a.approverUserId).map((a) => a.approverUserId as string),
+    ]),
+  ];
+  const projRows = projectIds.length
+    ? await db.select({ id: parProjects.id, name: parProjects.name }).from(parProjects)
+        .where(and(eq(parProjects.tenantId, tenantId), inArray(parProjects.id, projectIds)))
+    : [];
+  const userRows = userIds.length
+    ? await db.select({ id: users.id, name: users.name }).from(users)
+        .where(and(eq(users.tenantId, tenantId), inArray(users.id, userIds)))
+    : [];
+  const projName = (id: string | null) => (id && projRows.find((r) => r.id === id)?.name) || null;
+  const userName = (id: string | null) => (id && userRows.find((r) => r.id === id)?.name) || null;
+  const approversFor = (parId: string) =>
+    [...new Set(
+      approvalRows
+        .filter((a) => a.parId === parId && a.step >= 1 && a.decision === "approved" && a.approverUserId)
+        .map((a) => userName(a.approverUserId))
+        .filter((n): n is string => !!n),
+    )];
+
   const items = queue.map((p) => ({
     ...p,
     above_micro_threshold: p.totalEstimatedCents > threshold,
     payment: paymentsMap[p.id] ?? null,
+    requestedByName: userName(p.requestedByUserId),
+    projectName: projName(p.projectId),
+    approverNames: approversFor(p.id),
   }));
 
   return c.json({ items, total: items.length });
@@ -377,7 +415,7 @@ parPaymentsRoutes.post(
         parId,
         actualAmountCents: body.actual_amount_cents,
         paymentDate: new Date(body.payment_date),
-        paymentRef: body.payment_ref,
+        paymentRef: body.payment_ref ?? null,
         proofUrl: body.proof_url ?? null,
         receivedAt: now,
         receivedByUserId: user.id,
@@ -388,7 +426,7 @@ parPaymentsRoutes.post(
         .set({
           actualAmountCents: body.actual_amount_cents,
           paymentDate: new Date(body.payment_date),
-          paymentRef: body.payment_ref,
+          paymentRef: body.payment_ref ?? null,
           proofUrl: body.proof_url ?? null,
           updatedAt: now,
         })
@@ -455,7 +493,7 @@ parPaymentsRoutes.post(
         parId,
         actorUserId: user.id,
         event: "paid",
-        detail: `Actual amount: ${body.actual_amount_cents} cents. Ref: ${body.payment_ref}`,
+        detail: `Actual amount: ${body.actual_amount_cents} cents. Ref: ${body.payment_ref ?? "-"}`,
       });
 
       // Notify requestor
