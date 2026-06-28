@@ -299,6 +299,8 @@ export function ParCreateForm() {
         const detected = detectPayeeType(extractedName);
         if (detected) setPayeeType(detected);
       }
+      // Feature 3 (PAR-F3): apply extracted bank name → payeeBank field
+      if (result.payeeBank?.value) setPayeeBank(String(result.payeeBank.value));
       // IBAN: only accept a real MD IBAN. The extractor sometimes returns a 13-digit IDNP/IDNO in
       // this slot — route that to the IDNP field instead, and never dump a non-IBAN into the IBAN box.
       if (result.payeeIban.value) {

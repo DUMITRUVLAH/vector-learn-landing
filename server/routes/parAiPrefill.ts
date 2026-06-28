@@ -17,6 +17,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { extractCaptureFields } from "../lib/ai/captureExtractor";
 import { extractPdfText } from "../lib/ai/pdfText";
+import { isPayeeBank, extractBeneficiaryFromVendorName } from "../lib/par/payeeBankClassifier";
 
 export const parAiPrefillRoutes = new Hono<{ Variables: AuthVariables }>();
 parAiPrefillRoutes.use("*", requireAuth);
@@ -31,7 +32,7 @@ export interface ParPrefillField {
 }
 
 export interface ParPrefillResult {
-  /** payee display name — maps from vendor_name */
+  /** payee display name — maps from beneficiary_name (preferred) or vendor_name (non-bank) */
   payeeName: ParPrefillField;
   /** payment total — maps from amount_cents (already in cents) */
   totalCents: ParPrefillField;
@@ -41,6 +42,11 @@ export interface ParPrefillResult {
   payeeIban: ParPrefillField;
   /** end-use/purpose description — maps from purpose */
   endUse: ParPrefillField;
+  /**
+   * Feature 3: bank name — maps from bank_name (explicit) or vendor_name when vendor IS a bank.
+   * null if no bank detected. Caller maps this to the "Bancă" field.
+   */
+  payeeBank: ParPrefillField;
   /** The document class the AI determined — 'not_invoice' triggers a non-blocking warning */
   documentClass: {
     value: string | null;
@@ -110,24 +116,89 @@ parAiPrefillRoutes.post(
     // breaks the whole prefill. The prefill isn't tied to a saved PAR yet, so a random UUID is fine.
     const prefillId = randomUUID();
 
+    // Feature 3 (PAR-F3): PAR-specific addendum instructs the AI to separate BENEFICIARY from BANK.
+    // For a payment doc, the bank ("BC Moldindconbank") routes to payeeBank, not to the payee name.
+    const PAR_ADDENDUM = `
+INSTRUCȚIUNI SUPLIMENTARE PENTRU CERERI DE PLATĂ (PAR):
+11. beneficiary_name: numele BENEFICIARULUI real al plății (persoana/compania căreia i se plătește),
+    NU banca. Dacă documentul conține o bancă și un beneficiar, extrage separat.
+    Format: la fel ca vendor_name.
+12. bank_name: numele BĂNCII beneficiarului (ex. "BC Moldindconbank S.A.", "Maib", "Victoriabank").
+    Dacă nu există bancă explicită pe document, value: null.
+
+Adaugă în JSON aceste două câmpuri (dacă nu le poți determina → value: null, confidence: 0):
+  "beneficiary_name": { "value": "...", "confidence": 0.0 },
+  "bank_name": { "value": "...", "confidence": 0.0 }
+`;
+
     const extraction = await extractCaptureFields(
       rawText,
       user.tenantId,
       user.id,
       prefillId,
       imageDataUrl,
+      PAR_ADDENDUM,
     );
 
     const { extractedFields, isStub } = extraction;
 
     // ─── Map extracted fields to PAR fields ───────────────────────────────────
 
-    // payeeName ← vendor_name
+    // Feature 3: Determine payeeName and payeeBank with bank/beneficiary disambiguation.
+    //
+    // Priority:
+    //  1. If AI returned beneficiary_name (explicit) → use it as payeeName
+    //  2. Else if vendor_name is a bank → vendor_name becomes payeeBank, payeeName = null (low_confidence)
+    //  3. Else → vendor_name is payeeName (standard path)
+    //
+    // payeeBank:
+    //  1. If AI returned bank_name → use it
+    //  2. Else if vendor_name is a bank → use vendor_name as bank
+    //  3. Else → null
+
     const vendorField = extractedFields.vendor_name;
-    const payeeName: ParPrefillField = {
-      value: (vendorField?.value as string | null) ?? null,
-      confidence: vendorField?.confidence ?? 0,
-      ...(vendorField?.low_confidence ? { low_confidence: true } : {}),
+    const vendorValue = (vendorField?.value as string | null) ?? null;
+    const beneficiaryField = extractedFields.beneficiary_name;
+    const beneficiaryValue = (beneficiaryField?.value as string | null) ?? null;
+    const bankField = extractedFields.bank_name;
+    const bankValue = (bankField?.value as string | null) ?? null;
+
+    // Check whether the extracted vendor_name looks like a bank (BC…, Banca…, etc.)
+    const vendorIsBank = vendorValue ? isPayeeBank(vendorValue) : false;
+
+    let payeeName: ParPrefillField;
+    if (beneficiaryValue) {
+      // AI explicitly extracted the beneficiary — most reliable
+      payeeName = {
+        value: beneficiaryValue,
+        confidence: beneficiaryField?.confidence ?? 0.8,
+        ...(beneficiaryField?.low_confidence ? { low_confidence: true } : {}),
+      };
+    } else if (vendorIsBank) {
+      // vendor_name turned out to be the bank — payee is unknown, mark low confidence
+      payeeName = {
+        value: null,
+        confidence: 0.3,
+        low_confidence: true,
+      };
+    } else {
+      // Standard: vendor_name IS the payee
+      payeeName = {
+        value: vendorValue,
+        confidence: vendorField?.confidence ?? 0,
+        ...(vendorField?.low_confidence ? { low_confidence: true } : {}),
+      };
+    }
+
+    // payeeBank: prefer explicit bank_name, else use vendor_name when it's a bank
+    const payeeBankValue = bankValue ?? (vendorIsBank ? vendorValue : null);
+    const payeeBankConf = payeeBankValue
+      ? (bankField?.confidence ?? (vendorIsBank ? (vendorField?.confidence ?? 0) : 0))
+      : 0;
+    const payeeBank: ParPrefillField = {
+      value: payeeBankValue,
+      confidence: payeeBankConf,
+      ...(payeeBankValue ? {} : { low_confidence: true }),
     };
 
     // totalCents ← amount_cents (already in cents from captureExtractor)
@@ -181,6 +252,7 @@ parAiPrefillRoutes.post(
       currency,
       payeeIban,
       endUse,
+      payeeBank,
       documentClass,
       isStub,
     };
