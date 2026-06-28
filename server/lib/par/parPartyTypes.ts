@@ -58,7 +58,20 @@ export interface ParPartiesExtraction {
    * to the (wrong) total. Set by the stub parser / prompt rule.
    */
   hasPerPartyAmounts?: boolean;
+  /** Line items / services from the document (section 10 "Articole"). Unit price in CENTS. */
+  lineItems?: ParExtractedLineItem[];
   isStub: boolean;
+}
+
+export interface ParExtractedLineItem {
+  /** Service / product description. */
+  description: string;
+  /** Integer quantity (≥1). */
+  quantity: number;
+  /** Unit of measure ("buc", "sesie", "ore", "participanți"…) or null. */
+  unit: string | null;
+  /** Unit price in CENTS (minor units). */
+  unitPriceCents: number;
 }
 
 // ─── choosePayee result contract ──────────────────────────────────────────────

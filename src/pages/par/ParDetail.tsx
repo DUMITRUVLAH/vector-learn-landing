@@ -610,7 +610,10 @@ export function ParDetailPage() {
   const { path } = router;
   const { data: session } = useSession();
   const orgName = session?.tenant.name ?? "Organizație";
-  const id = path.replace(/^\/app\/par\//, "").split("/")[0];
+  // Route-agnostic: the PAR detail lives at /business/par/:id (legacy /app/par/:id is redirected to it
+  // by App.tsx). Match the segment AFTER "/par/" so either prefix works — a hardcoded "/app/par/" strip
+  // left id="" on the real /business/par/ path → every just-created PAR 404'd.
+  const id = path.match(/\/par\/([^/]+)/)?.[1] ?? "";
 
   const [par, setPar] = useState<ParDetailType | null>(null);
   const [loading, setLoading] = useState(true);

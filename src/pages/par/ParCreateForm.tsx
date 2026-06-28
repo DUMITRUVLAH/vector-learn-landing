@@ -312,6 +312,10 @@ export function ParCreateForm() {
         setPayeeCandidates([]);
         applyResolvedPayee(result);
       }
+      // Articole: pre-fill the line items (services + qty + unit price) extracted from the document.
+      if (result.lineItems && result.lineItems.length > 0) {
+        await applyLineItems(result.lineItems);
+      }
     } catch (err) {
       setAiPrefillError(err instanceof Error ? err.message : "Eroare la analiza documentului.");
     } finally {
@@ -343,6 +347,38 @@ export function ParCreateForm() {
       const ibanRaw = String(result.payeeIban.value).replace(/\s/g, "").toUpperCase();
       if (isValidMoldovaIBAN(ibanRaw)) setPayeeIban(ibanRaw);
     }
+  };
+
+  /**
+   * Pre-fill the "Articole" section from AI-extracted line items. Only runs when the draft has NO
+   * line items yet (so re-running prefill, or a user who already added rows, never gets duplicates).
+   * Each item is persisted via addLineItem so the server recomputes the PAR total + threshold.
+   */
+  const applyLineItems = async (items: NonNullable<ParPrefillResult["lineItems"]>) => {
+    if (!parId || items.length === 0 || lineItems.length > 0) return;
+    for (const it of items) {
+      const desc = it.description.trim();
+      if (!desc) continue;
+      try {
+        const res = await addLineItem(parId, {
+          description: desc,
+          quantity: Math.max(1, Math.round(it.quantity) || 1),
+          unit: it.unit?.trim() || null,
+          unit_price_cents: Math.max(0, Math.round(it.unitPriceCents)),
+        });
+        setLineItems((p) => [...p, res.line_item]);
+        setTotalCents(res.par_total_estimated_cents);
+        setAboveThreshold(res.above_micro_threshold);
+      } catch {
+        /* non-blocking — the user can still add the row manually */
+      }
+    }
+    setFieldErrors((p) => {
+      const { line_items, total, ...rest } = p;
+      void line_items;
+      void total;
+      return rest;
+    });
   };
 
   /** User picked one of the candidate payees from the "Care companie e beneficiarul plății?" chooser. */
@@ -396,10 +432,12 @@ export function ParCreateForm() {
   const addLine = async () => {
     if (!parId) return;
     const qty = parseInt(nlQty, 10);
-    const price = parseInt(nlPrice.replace(/[^0-9]/g, ""), 10);
+    // Preț/u is entered in MDL (major units) → convert to cents. Accept "2000", "2000.50", "2000,50".
+    const priceMajor = parseFloat(nlPrice.replace(/\s/g, "").replace(",", "."));
     if (!nlDesc.trim()) return setLineError("Descrierea este obligatorie");
     if (!qty || qty <= 0) return setLineError("Cantitatea trebuie să fie > 0");
-    if (isNaN(price) || price < 0) return setLineError("Prețul trebuie să fie ≥ 0");
+    if (isNaN(priceMajor) || priceMajor < 0) return setLineError("Prețul trebuie să fie ≥ 0");
+    const price = Math.round(priceMajor * 100);
     setLineError(null); setAddingLine(true);
     try {
       const res = await addLineItem(parId, {
