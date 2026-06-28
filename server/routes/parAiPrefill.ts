@@ -12,6 +12,7 @@
  * mount-exempt: not stand-alone — mounted in app.ts as /api/par/ai-prefill
  */
 import { Hono } from "hono";
+import { randomUUID } from "node:crypto";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { extractCaptureFields } from "../lib/ai/captureExtractor";
@@ -104,8 +105,10 @@ parAiPrefillRoutes.post(
       rawText = "";
     }
 
-    // Use a placeholder capture ID for the audit log (prefill-specific)
-    const prefillId = `par-prefill-${Date.now()}`;
+    // Audit/AI-usage log references this via a `uuid` entity_id column, so it MUST be a real UUID —
+    // a string like `par-prefill-<ts>` triggers Postgres "invalid input syntax for type uuid" and
+    // breaks the whole prefill. The prefill isn't tied to a saved PAR yet, so a random UUID is fine.
+    const prefillId = randomUUID();
 
     const extraction = await extractCaptureFields(
       rawText,
