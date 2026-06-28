@@ -39,6 +39,12 @@ REGULI ABSOLUTE:
                      în acest caz role = "client", NU "provider".
        "bank"      = o instituție bancară (BC ... S.A., Maib, Victoriabank ...). NU e o parte plătibilă.
        "unknown"   = rolul nu poate fi stabilit.
+   - TABEL CU DOUĂ COLOANE (foarte frecvent în contractele MD): blocul de recuzite e adesea un
+     tabel "EXECUTOR | BENEFICIAR" care, în text, are fiecare etichetă REPETATĂ pe linie
+     ("Cod fiscal X Cod fiscal Y", "IBAN X IBAN Y", "Banca X Banca Y"). PRIMA valoare aparține
+     PRIMEI părți (coloana stângă, de obicei EXECUTOR), A DOUA valoare celei de-a doua părți
+     (coloana dreaptă, CLIENT). Asociază fiecare IBAN/cod fiscal/bancă cu partea CORECTĂ — nu le
+     amesteca și nu le pune pe toate la o singură parte.
    - idno: codul fiscal / IDNO / IDNP — EXACT 13 cifre. "cod fiscal" = "IDNO" = "IDNP" = "ИДНО"
      = "fiscal code" — toate sunt ACELAȘI lucru. Pune-l în idno.
    - vatCode: "Cod TVA" / "Cod IVA" / "VAT" / "Код НДС" / "USt-IdNr" — acesta NU este idno.
