@@ -6,7 +6,7 @@
  * Guard: dacă sesiunea business lipsește → redirect la /business/login.
  * Design: Vector 365 semantic tokens, light+dark, WCAG AA.
  */
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import {
   LayoutDashboard,
   LogOut,
@@ -40,6 +40,7 @@ import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { useParRoles } from "@/hooks/useParRoles";
+import { getParInbox } from "@/lib/api/par";
 import { NotificationBell } from "@/components/app/NotificationBell";
 
 interface BusinessShellProps {
@@ -203,6 +204,20 @@ export function BusinessShell({
   const { roles: parRoles, status: parRolesStatus } = useParRoles();
   const hasPar = parRolesStatus === "resolved" && parRoles.length >= 1;
 
+  // Notification badge: count of PARs awaiting THIS user's approval (refreshed periodically + on
+  // navigation). Only fetched for approvers/admins; 0 hides the badge.
+  const canApproveNav = parRoles.some((r) => ["approver", "par_admin"].includes(r));
+  const [inboxCount, setInboxCount] = useState(0);
+  useEffect(() => {
+    if (!canApproveNav) { setInboxCount(0); return; }
+    let alive = true;
+    const fetchCount = () =>
+      getParInbox().then((r) => { if (alive) setInboxCount(r.total ?? 0); }).catch(() => {});
+    fetchCount();
+    const iv = setInterval(fetchCount, 60_000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [canApproveNav, path]);
+
   // SPLIT-501: inside the PAR module, show a focused PAR-only sidebar instead of
   // the full Business Suite menu. Every /business/par/* page (which renders via
   // AppShell → BusinessShell) gets it automatically.
@@ -313,6 +328,14 @@ export function BusinessShell({
                     >
                       <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                       <span className="flex-1">{item.label}</span>
+                      {item.href === "/business/par/inbox" && inboxCount > 0 && (
+                        <span
+                          className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold"
+                          aria-label={`${inboxCount} cereri în așteptare`}
+                        >
+                          {inboxCount}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}

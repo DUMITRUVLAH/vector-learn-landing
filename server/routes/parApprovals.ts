@@ -26,7 +26,9 @@ import {
   parAudit,
   parMembers,
   parSettings,
+  parProjects,
 } from "../db/schema/par";
+import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
@@ -379,17 +381,33 @@ parApprovalsRoutes.get("/inbox", async (c) => {
     .where(eq(parSettings.tenantId, tenantId));
   const threshold = settings?.threshold ?? 1000000;
 
-  const inbox = pars
-    .filter((p) => parIds.includes(p.id))
-    .map((p) => {
-      const myStep = mySteps.find((s) => s.parId === p.id);
-      return {
-        ...p,
-        above_micro_threshold: p.totalEstimatedCents > threshold,
-        my_step: myStep?.step ?? null,
-        my_step_label: myStep?.approverRoleLabel ?? null,
-      };
-    });
+  const inboxPars = pars.filter((p) => parIds.includes(p.id));
+
+  // Resolve display names so approver cards show people/projects, not UUIDs.
+  const projectIds = [...new Set(inboxPars.map((p) => p.projectId).filter((v): v is string => !!v))];
+  const requestorIds = [...new Set(inboxPars.map((p) => p.requestedByUserId).filter((v): v is string => !!v))];
+  const projRows = projectIds.length
+    ? await db.select({ id: parProjects.id, name: parProjects.name }).from(parProjects)
+        .where(and(eq(parProjects.tenantId, tenantId), inArray(parProjects.id, projectIds)))
+    : [];
+  const userRows = requestorIds.length
+    ? await db.select({ id: users.id, name: users.name }).from(users)
+        .where(and(eq(users.tenantId, tenantId), inArray(users.id, requestorIds)))
+    : [];
+  const projName = (id: string | null) => (id && projRows.find((r) => r.id === id)?.name) || null;
+  const reqName = (id: string | null) => (id && userRows.find((r) => r.id === id)?.name) || null;
+
+  const inbox = inboxPars.map((p) => {
+    const myStep = mySteps.find((s) => s.parId === p.id);
+    return {
+      ...p,
+      above_micro_threshold: p.totalEstimatedCents > threshold,
+      my_step: myStep?.step ?? null,
+      my_step_label: myStep?.approverRoleLabel ?? null,
+      projectName: projName(p.projectId),
+      requestedByName: reqName(p.requestedByUserId),
+    };
+  });
 
   return c.json({ inbox, total: inbox.length });
 });
