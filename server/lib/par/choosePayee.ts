@@ -236,11 +236,19 @@ export function choosePayee(
   }
 
   // 1. Drop banks + self/payer-by-name.
+  // On the LLM path (not the coarse stub), the extractor's role labels are reliable, so an explicit
+  // "client" (buyer/payer — MIXBOOK on a "Cont de plată", the "Autoritatea contractantă" on a
+  // procurement contract) is NEVER the payee — drop it. This matters when the creator's own org is
+  // the seller/Prestator: after self-exclusion only the client/buyer remains, and we must NOT prefill
+  // the buyer as the beneficiary (→ yields no payee instead, which is correct: there is no one to pay).
+  // The stub mislabels both parties "client", so we keep the lenient behavior there (isPayerHint only).
+  const trustRoles = ext.isStub === false;
   const pool = ext.parties.filter(
     (p) =>
       p.role !== "bank" &&
       !isPayeeBank(p.name) &&
-      !fuzzyOrgMatch(p.name, tenantOrgName),
+      !fuzzyOrgMatch(p.name, tenantOrgName) &&
+      !(trustRoles && p.role === "client"),
   );
 
   // 3. Build validated candidates from the pool.
