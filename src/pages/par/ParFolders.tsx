@@ -93,6 +93,8 @@ const FOLDER_DEFS: { status: FolderStatus; label: string; statuses: string[] }[]
 type ParRow = ParRequest & { eventId?: string | null; totalMdlCents?: number | null };
 
 function buildBuckets(rows: ParRow[]): FolderBucket[] {
+  // Always return all 3 status folders (De aprobat / Aprobate / Plătite) so the structure is
+  // consistent per project — even an empty one shows (count 0), as the owner requested.
   return FOLDER_DEFS.map((def) => {
     const matching = rows.filter((r) => def.statuses.includes(r.status));
     return {
@@ -100,7 +102,7 @@ function buildBuckets(rows: ParRow[]): FolderBucket[] {
       count: matching.length,
       totalMdlCents: matching.reduce((s, r) => s + (r.totalMdlCents ?? r.totalEstimatedCents), 0),
     };
-  }).filter((b) => b.count > 0);
+  });
 }
 
 function buildFolders(

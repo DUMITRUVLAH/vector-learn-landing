@@ -404,7 +404,7 @@ export default function ParFinanceQueue() {
 
   return (
     <AppShell pageTitle="Coadă finanțe" pageDescription="PAR-uri aprobate — plată internă">
-      <div className="container mx-auto px-4 py-6 max-w-5xl space-y-6">
+      <div className="container mx-auto px-4 py-6 max-w-7xl space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
