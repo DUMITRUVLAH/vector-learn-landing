@@ -27,6 +27,7 @@ import {
   type RecoveryCode,
 } from "../../auth/twoFactor";
 import { SESSION_COOKIE } from "../../auth/session";
+import { checkRateLimit, recordFailure, clearRateLimit, rateLimitKey } from "../../lib/rateLimit";
 
 export const twoFactorRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -126,6 +127,15 @@ twoFactorRoutes.post(
     if (!session.twoFactorPending) return c.json({ error: "session_not_pending" }, 400);
     if (session.expiresAt.getTime() < Date.now()) return c.json({ error: "session_expired" }, 401);
 
+    // SEC-02: throttle TOTP guessing — a 6-digit code is only ~1M combos, so an unlimited
+    // verify endpoint is brute-forceable. Key by the pending session's userId.
+    const rlKey = rateLimitKey(`2fa:${session.userId}`, undefined);
+    const rl = await checkRateLimit(rlKey);
+    if (rl.limited) {
+      c.header("Retry-After", String(rl.retryAfterSec));
+      return c.json({ error: "too_many_attempts", retryAfterSec: rl.retryAfterSec }, 429);
+    }
+
     const tfRow = await db.query.twoFactorSettings.findFirst({
       where: eq(twoFactorSettings.userId, session.userId),
     });
@@ -157,7 +167,11 @@ twoFactorRoutes.post(
       }
     }
 
-    if (!verified) return c.json({ error: "invalid_code" }, 400);
+    if (!verified) {
+      await recordFailure(rlKey);
+      return c.json({ error: "invalid_code" }, 400);
+    }
+    await clearRateLimit(rlKey);
 
     // Mark session as no longer pending
     await db

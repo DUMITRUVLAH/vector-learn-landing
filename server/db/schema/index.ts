@@ -64,3 +64,5 @@ export * from "./templates";
 export * from "./promoCodes";
 // Document Merge module (DOCMERGE-001)
 export * from "./docmergeTemplates";
+// SEC-02: durable login rate-limiting
+export * from "./loginAttempts";

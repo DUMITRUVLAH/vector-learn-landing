@@ -23,6 +23,12 @@ import {
 } from "../auth/google";
 import { hashInviteToken } from "../lib/par/invites";
 import { encrypt, decrypt } from "../lib/crypto";
+import { checkRateLimit, recordFailure, clearRateLimit, rateLimitKey } from "../lib/rateLimit";
+
+/** Extract the client IP from proxy headers (Vercel sets x-forwarded-for). */
+function clientIp(c: { req: { header: (k: string) => string | undefined } }): string | undefined {
+  return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? undefined;
+}
 
 const signupSchema = z.object({
   tenantName: z.string().min(2).max(200),
@@ -105,21 +111,35 @@ authRoutes.post("/signup", zValidator("json", signupSchema), async (c) => {
 
 authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
   const body = c.req.valid("json");
+
+  // SEC-02: durable brute-force throttle, keyed by (email + IP). Check BEFORE touching the DB.
+  const rlKey = rateLimitKey(body.email, clientIp(c));
+  const rl = await checkRateLimit(rlKey);
+  if (rl.limited) {
+    c.header("Retry-After", String(rl.retryAfterSec));
+    return c.json({ error: "too_many_attempts", retryAfterSec: rl.retryAfterSec }, 429);
+  }
+
   const user = await db.query.users.findFirst({
     where: eq(users.email, body.email),
   });
   if (!user) {
+    await recordFailure(rlKey);
     return c.json({ error: "invalid_credentials" }, 401);
   }
   // Google-only accounts have no local password hash — they must use Google
   // sign-in. Return the generic error to avoid leaking which accounts exist.
   if (!user.passwordHash) {
+    await recordFailure(rlKey);
     return c.json({ error: "invalid_credentials" }, 401);
   }
   const ok = await verifyPassword(body.password, user.passwordHash);
   if (!ok) {
+    await recordFailure(rlKey);
     return c.json({ error: "invalid_credentials" }, 401);
   }
+  // Success → clear the throttle bucket.
+  await clearRateLimit(rlKey);
 
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, user.tenantId) });
   if (!tenant) return c.json({ error: "tenant_not_found" }, 500);
