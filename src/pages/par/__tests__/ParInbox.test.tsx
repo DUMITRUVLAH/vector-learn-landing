@@ -112,8 +112,8 @@ describe("ParInbox", () => {
     render(<ParInbox />);
 
     await waitFor(() => {
-      // 2 cereri in aşteptare
-      expect(screen.getByText(/2 cereri în așteptare/)).toBeTruthy();
+      // Excel-style table count bar: "2 din 2 cereri"
+      expect(screen.getByText(/2 din 2/)).toBeTruthy();
     });
   });
 
