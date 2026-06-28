@@ -723,7 +723,7 @@ export function ParDetailPage() {
             </div>
             <p className="text-sm text-muted-foreground mt-1">
               {PURPOSE_LABEL[par.purpose] ?? par.purpose}
-              {par.projectId ? ` · ${par.projectId}` : ""}
+              {par.projectName ? ` · ${par.projectName}` : ""}
               {` · Creat ${fmtDate(par.createdAt)}`}
             </p>
           </div>
@@ -748,18 +748,18 @@ export function ParDetailPage() {
         <Section num="1–7" title="Informații cerere">
           <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
             <Field label="1. Data cererii" value={fmtDate(par.dateOfRequest)} />
-            <Field label="2. Solicitat de" value={par.requestedByUserId} />
+            <Field label="2. Solicitat de" value={par.requestedByName ?? "—"} />
             <Field label="3. Titlu / Cod" value={par.requestorTitle} />
-            <Field label="4. Departament" value={par.departmentId} />
+            <Field label="4. Departament" value={par.departmentName ?? "—"} />
             <Field label="5. Data necesară" value={fmtDate(par.dateNeeded)} />
-            <Field label="6. Pentru / Livrare la" value={par.projectId} />
+            <Field label="6. Pentru / Livrare la" value={par.projectName ?? "—"} />
             {/* VM1-04: show event if set */}
-            {(par as ParRequest & { eventId?: string | null }).eventId && (
-              <Field label="6b. Eveniment" value={(par as ParRequest & { eventId?: string | null }).eventId} />
+            {(par as ParDetailType & { eventName?: string | null }).eventName && (
+              <Field label="6b. Eveniment" value={(par as ParDetailType & { eventName?: string | null }).eventName} />
             )}
             <Field
               label="7. Cod bugetar"
-              value={[par.budgetCodeId, par.budgetCodeNote].filter(Boolean).join(" — ")}
+              value={[par.budgetCodeLabel, par.budgetCodeNote].filter(Boolean).join(" — ") || "—"}
             />
           </dl>
         </Section>

@@ -101,6 +101,7 @@ export interface ParDetail extends ParRequest {
   requestedByName?: string | null;
   departmentName?: string | null;
   projectName?: string | null;
+  eventName?: string | null;
   budgetCodeLabel?: string | null;
   receivedByName?: string | null;
   assignedToName?: string | null;
@@ -121,10 +122,12 @@ export interface ParApproval {
   createdAt: string;
 }
 
-/** PAR-108: inbox item (PAR + active step info) */
+/** PAR-108: inbox item (PAR + active step info + resolved display names) */
 export interface ParInboxItem extends ParRequest {
   my_step: number | null;
   my_step_label: string | null;
+  projectName?: string | null;
+  requestedByName?: string | null;
 }
 
 export interface ParPayment {

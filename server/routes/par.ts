@@ -33,6 +33,7 @@ import {
   parDepartments,
   parProjects,
   parBudgetCodes,
+  parEvents,
   parComments,
   parQuotes,
 } from "../db/schema/par";
@@ -776,6 +777,14 @@ parRoutes.get("/:id", async (c) => {
         .where(and(eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.id, par.budgetCodeId)))
     : [];
 
+  const evId = (par as { eventId?: string | null }).eventId ?? null;
+  const [evt] = evId
+    ? await db
+        .select({ name: parEvents.name })
+        .from(parEvents)
+        .where(and(eq(parEvents.tenantId, tenantId), eq(parEvents.id, evId)))
+    : [];
+
   return c.json({
     ...parData,
     above_micro_threshold: par.totalEstimatedCents > threshold,
@@ -787,6 +796,7 @@ parRoutes.get("/:id", async (c) => {
     requestedByName: userName(par.requestedByUserId),
     departmentName: dept?.name ?? null,
     projectName: proj?.name ?? null,
+    eventName: evt?.name ?? null,
     budgetCodeLabel: bc ? [bc.code, bc.name].filter(Boolean).join(" — ") : null,
     receivedByName: userName(payment?.receivedByUserId),
     assignedToName: userName(payment?.assignedToUserId),

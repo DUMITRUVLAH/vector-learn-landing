@@ -38,6 +38,12 @@ interface DecisionModalProps {
   defaultSignatureName?: string;
 }
 
+const PURPOSE_LABEL: Record<string, string> = {
+  execute_payment: "Execută plata",
+  obtain_quotations: "Obține oferte",
+  provide_estimate: "Estimare de cost",
+};
+
 const DECISION_CONFIG: Record<
   DecisionType,
   {
@@ -309,9 +315,41 @@ function InboxCard({ item, onAction, selected, onToggleSelect, bulkResult }: Inb
         </div>
       </div>
 
+      {/* Human-readable detail an approver needs to decide — company, services, project, requestor */}
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-sm border-t border-border pt-2.5">
+        {item.payeeName && (
+          <div className="flex gap-1.5">
+            <dt className="text-muted-foreground shrink-0">Beneficiar:</dt>
+            <dd className="font-medium text-foreground truncate" title={item.payeeName}>{item.payeeName}</dd>
+          </div>
+        )}
+        {item.projectName && (
+          <div className="flex gap-1.5">
+            <dt className="text-muted-foreground shrink-0">Proiect:</dt>
+            <dd className="text-foreground truncate" title={item.projectName}>{item.projectName}</dd>
+          </div>
+        )}
+        {item.requestedByName && (
+          <div className="flex gap-1.5">
+            <dt className="text-muted-foreground shrink-0">Solicitat de:</dt>
+            <dd className="text-foreground truncate" title={item.requestedByName}>{item.requestedByName}</dd>
+          </div>
+        )}
+        <div className="flex gap-1.5">
+          <dt className="text-muted-foreground shrink-0">Scop:</dt>
+          <dd className="text-foreground">{PURPOSE_LABEL[item.purpose] ?? item.purpose}</dd>
+        </div>
+        {item.endUse && (
+          <div className="flex gap-1.5 sm:col-span-2">
+            <dt className="text-muted-foreground shrink-0">Servicii:</dt>
+            <dd className="text-foreground line-clamp-2" title={item.endUse}>{item.endUse}</dd>
+          </div>
+        )}
+      </dl>
+
       {/* Amount + step */}
       <div className="flex items-center justify-between text-sm">
-        <span className="font-medium text-foreground">{formatMDL(item.totalEstimatedCents)}</span>
+        <span className="font-semibold text-foreground text-base">{formatMDL(item.totalEstimatedCents)}</span>
         <span className="text-muted-foreground text-xs">
           Pasul meu: <span className="font-medium text-foreground">{item.my_step_label ?? "—"}</span>
         </span>
