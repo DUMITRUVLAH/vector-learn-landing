@@ -1219,20 +1219,41 @@ export interface ParPrefillField {
   low_confidence?: boolean;
 }
 
+/** A payee candidate offered to the user when the document is ambiguous. */
+export interface ParPrefillCandidate {
+  name: string;
+  idno: string | null;
+  iban: string | null;
+  /** true if a non-MD but ISO-13616-valid IBAN → UI shows "verificați (IBAN non-MD)" */
+  ibanForeign?: boolean;
+  bank: string | null;
+  payeeType: "fizic" | "juridic" | null;
+}
+
 export interface ParPrefillResult {
   payeeName: ParPrefillField;
+  /** payee fiscal id (IDNO/IDNP) — pre-routed on the server */
+  payeeIdno: ParPrefillField;
   totalCents: ParPrefillField;
   currency: ParPrefillField;
   payeeIban: ParPrefillField;
   endUse: ParPrefillField;
   /** Feature 3 (PAR-F3): bank name extracted separately from beneficiary */
   payeeBank: ParPrefillField;
+  /** persoană fizică vs juridică (auto-detected; UI can override) */
+  payeeType: { value: "fizic" | "juridic" | null; confidence: number };
   documentClass: {
     value: string | null;
     confidence: number;
     reason?: string;
     not_financial?: boolean;
   };
+  /** true when 2+ equally-plausible payees → UI must ask "Care companie e beneficiarul plății?" */
+  needsClarification: boolean;
+  /** the candidate payees to choose from (empty when resolved) */
+  candidates: ParPrefillCandidate[];
+  /** the full party list the extractor found (debug / advanced UI) */
+  parties?: Array<{ name: string; role: string; idno: string | null; iban: string | null }>;
   isStub: boolean;
 }
 
