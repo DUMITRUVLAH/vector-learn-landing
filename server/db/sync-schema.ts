@@ -65,6 +65,25 @@ async function main() {
   if (missingTables.length > 0) {
     console.warn(`[sync-schema] ⚠ tables in schema but NOT in DB (need a real migration): ${missingTables.join(", ")}`);
   }
+
+  // Belt-and-suspenders type fix (migration 0122): these columns hold base64 data URLs (megabytes)
+  // and were once varchar(2000) → real file uploads 500'd with "value too long for type character
+  // varying(2000)". If the migration didn't apply (tracking desync), heal it here. Idempotent:
+  // varchar→text is a no-op metadata change once it's already text.
+  const TEXT_WIDEN: Array<[string, string]> = [
+    ["par_attachments", "file_url"],
+    ["par_payments", "proof_url"],
+  ];
+  for (const [table, col] of TEXT_WIDEN) {
+    try {
+      await sql.unsafe(`ALTER TABLE "${table}" ALTER COLUMN "${col}" TYPE text`);
+      console.log(`[sync-schema] ~${table}.${col} → text`);
+    } catch (e) {
+      // table/column may not exist yet on a given DB — non-fatal.
+      console.warn(`[sync-schema] widen ${table}.${col} skipped:`, e instanceof Error ? e.message : e);
+    }
+  }
+
   console.log(`[sync-schema] done — ${added} missing column(s) added.`);
   await sql.end();
 }
