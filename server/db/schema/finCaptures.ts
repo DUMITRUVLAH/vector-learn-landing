@@ -32,6 +32,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { users } from "./users";
+import { finInvoices } from "./finInvoices";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -352,6 +353,11 @@ export const finCaptureLines = pgTable(
 
     /** Matcher confidence in basis points (0..10000). 10000 = manual link. */
     matchScoreBp: integer("match_score_bp").notNull().default(0),
+
+    /** STMT-003: fin_invoice created when submitting this line to e-Factura SFS. */
+    linkedFinInvoiceId: uuid("linked_fin_invoice_id").references(() => finInvoices.id, {
+      onDelete: "set null",
+    }),
 
     /** Reviewer who confirmed/overrode this line. */
     reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),

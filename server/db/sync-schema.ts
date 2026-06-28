@@ -88,6 +88,21 @@ async function main() {
   // queries a table the prod DB doesn't have yet — e.g. "relation par_project_approvers does not
   // exist"). Idempotent CREATE … IF NOT EXISTS, one statement per call (multi-statement unsafe() can
   // trip the driver). A real migration still ships the table; this is the safety net for deploy lag.
+  // STMT-003: ensure linked_fin_invoice_id column exists on fin_capture_lines.
+  // Migration 0126 adds it; this heal covers any deploy-lag window.
+  const ENSURE_COLUMN_STMTS: string[] = [
+    `ALTER TABLE fin_capture_lines ADD COLUMN IF NOT EXISTS linked_fin_invoice_id uuid REFERENCES fin_invoices(id) ON DELETE SET NULL`,
+    `CREATE INDEX IF NOT EXISTS fin_cap_lines_linked_inv_idx ON fin_capture_lines(linked_fin_invoice_id)`,
+  ];
+  for (const stmt of ENSURE_COLUMN_STMTS) {
+    try {
+      await sql.unsafe(stmt);
+    } catch (e) {
+      console.warn(`[sync-schema] ensure-column stmt skipped:`, e instanceof Error ? e.message : e);
+    }
+  }
+  console.log(`[sync-schema] ensured linked_fin_invoice_id on fin_capture_lines`);
+
   const ENSURE_STATEMENTS: string[] = [
     `CREATE TABLE IF NOT EXISTS "par_project_approvers" (
       "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

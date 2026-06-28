@@ -66,6 +66,11 @@ import { FinInsightsPage } from "./pages/finance/FinInsightsPage";
 import { lazy, Suspense, useState, useEffect as _useEffect } from "react";
 import { getParMe } from "./lib/api/par";
 
+// STMT-001..004: Statement pages
+const StatementUploadPage = lazy(() => import("./pages/fin/StatementUploadPage"));
+const StatementReviewPage = lazy(() => import("./pages/fin/StatementReviewPage"));
+const StatementHistoryPage = lazy(() => import("./pages/fin/StatementHistoryPage"));
+
 const BankLinkPage = lazy(() => import("./pages/fin/BankLinkPage"));
 const BankLinkImportPage = lazy(() => import("./pages/fin/BankLinkImportPage"));
 const BankLinkQueuePage = lazy(() => import("./pages/fin/BankLinkQueuePage"));
@@ -163,6 +168,17 @@ function Routes() {
     if (capMatch) return <BusinessGuardPage><CapturePage captureId={capMatch[1]} /></BusinessGuardPage>;
   }
   if (path.startsWith("/business/fin/captures")) return <BusinessGuardPage><CapturesListPage /></BusinessGuardPage>;
+
+  // STMT-001..004: Statement routes — most-specific prefix first
+  if (path.startsWith("/business/fin/statement/upload"))
+    return <BusinessGuardPage><Suspense fallback={null}><StatementUploadPage /></Suspense></BusinessGuardPage>;
+  {
+    const stmtMatch = path.match(/^\/business\/fin\/statement\/([^/?]+)/);
+    if (stmtMatch)
+      return <BusinessGuardPage><Suspense fallback={null}><StatementReviewPage captureId={stmtMatch[1]} /></Suspense></BusinessGuardPage>;
+  }
+  if (path.startsWith("/business/fin/statement"))
+    return <BusinessGuardPage><Suspense fallback={null}><StatementHistoryPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/reconcile")) return <BusinessGuardPage><ReconcilePage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/payments")) return <BusinessGuardPage><Suspense fallback={null}><FinPaymentsPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/calendar")) return <BusinessGuardPage><Suspense fallback={null}><FinCalendarPage /></Suspense></BusinessGuardPage>;

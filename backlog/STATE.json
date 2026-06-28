@@ -1,8 +1,8 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "POLISH-003",
-  "iterations": 186,
+  "last_completed": "STMT-004",
+  "iterations": 180,
   "last_run_at": "2026-06-28T00:00:00Z",
   "milestone_status": "VIOLETA: VM1-01..13 done (PRs #204-#216). Polish run 2026-06-28: VM1-12 dosar PDF #214, VM1-01 multi-role #215, VM1-05 vendor-saved indicator #216.",
   "active_milestone": "VIOLETA",
@@ -26,22 +26,15 @@
       }
     },
     "SPLIT-402": {
-      "status": "done",
-      "attempts": 1,
+      "status": "pending",
+      "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/SPLIT-402-business-shell-convergence.md",
       "milestone": "SPLIT",
       "phase": "SHELL",
       "depends_on": [],
       "branch": "feat/SPLIT-faza-SHELL2-one-shell",
-      "priority": "high",
-      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/217",
-      "verdicts": {
-        "reviewer": "APPROVED",
-        "integration": "CONNECTED",
-        "manager": "BUY",
-        "student": "N/A"
-      }
+      "priority": "high"
     },
     "PAR-001": {
       "status": "done",
@@ -2851,54 +2844,33 @@
       }
     },
     "POLISH-001": {
-      "status": "done",
-      "attempts": 1,
+      "status": "pending",
+      "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/POLISH-001-nav-quick-search.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": [],
-      "branch": "feat/POLISH-faza-1-ux-polish",
-      "verdicts": {
-        "reviewer": "APPROVED",
-        "integration": "CONNECTED",
-        "manager": "BUY",
-        "student": "LOVES"
-      }
+      "depends_on": []
     },
     "POLISH-002": {
-      "status": "done",
-      "attempts": 1,
+      "status": "pending",
+      "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/POLISH-002-dashboard-widgets.md",
       "milestone": "POLISH",
       "phase": "1",
       "depends_on": [
         "POLISH-001"
-      ],
-      "branch": "feat/POLISH-faza-1-ux-polish",
-      "verdicts": {
-        "reviewer": "APPROVED",
-        "integration": "CONNECTED",
-        "manager": "BUY",
-        "student": "OK"
-      }
+      ]
     },
     "POLISH-003": {
-      "status": "done",
-      "attempts": 1,
+      "status": "pending",
+      "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/POLISH-003-empty-states.md",
       "milestone": "POLISH",
       "phase": "1",
-      "depends_on": [],
-      "branch": "feat/POLISH-faza-1-ux-polish",
-      "verdicts": {
-        "reviewer": "APPROVED",
-        "integration": "CONNECTED",
-        "manager": "BUY",
-        "student": "OK"
-      }
+      "depends_on": []
     },
     "CORE-001": {
       "status": "done",
@@ -4337,7 +4309,9 @@
       "spec": "Violeta-first-meeting.md",
       "milestone": "VIOLETA",
       "phase": "EVENTS",
-      "depends_on": ["VM1-10"],
+      "depends_on": [
+        "VM1-10"
+      ],
       "note": "folders per project (hierarchical Proiect→status view) — ParFolders.tsx already implements project grouping; verified on front-end 2026-06-28"
     },
     "VM1-12": {
@@ -4347,7 +4321,9 @@
       "spec": "backlog/specs/VM1-12-dosar-pdf.md",
       "milestone": "VIOLETA",
       "phase": "DOSAR",
-      "depends_on": ["VM1-04"],
+      "depends_on": [
+        "VM1-04"
+      ],
       "priority": "high",
       "branch": "feat/VIOLETA-faza-DOSAR-pdf",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/214",
@@ -4368,11 +4344,12 @@
       "depends_on": [],
       "priority": "P0",
       "branch": "feat/STMT-faza-1-statement-efactura",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/238",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
         "manager": "BUY",
-        "student": "OK"
+        "student": "PASS"
       }
     },
     "STMT-002": {
@@ -4381,15 +4358,18 @@
       "blockers": [],
       "spec": "backlog/specs/STMT-002-transaction-review-match.md",
       "milestone": "STMT",
-      "phase": "1",
-      "depends_on": ["STMT-001"],
+      "phase": "2",
+      "depends_on": [
+        "STMT-001"
+      ],
       "priority": "P0",
       "branch": "feat/STMT-faza-1-statement-efactura",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/238",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
         "manager": "BUY",
-        "student": "OK"
+        "student": "PASS"
       }
     },
     "STMT-003": {
@@ -4398,15 +4378,18 @@
       "blockers": [],
       "spec": "backlog/specs/STMT-003-efactura-export.md",
       "milestone": "STMT",
-      "phase": "1",
-      "depends_on": ["STMT-002"],
+      "phase": "3",
+      "depends_on": [
+        "STMT-002"
+      ],
       "priority": "P0",
       "branch": "feat/STMT-faza-1-statement-efactura",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/238",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
         "manager": "BUY",
-        "student": "OK"
+        "student": "PASS"
       }
     },
     "STMT-004": {
@@ -4415,15 +4398,18 @@
       "blockers": [],
       "spec": "backlog/specs/STMT-004-statement-history-export.md",
       "milestone": "STMT",
-      "phase": "1",
-      "depends_on": ["STMT-003"],
+      "phase": "4",
+      "depends_on": [
+        "STMT-003"
+      ],
       "priority": "P1",
       "branch": "feat/STMT-faza-1-statement-efactura",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/238",
       "verdicts": {
         "reviewer": "APPROVED",
         "integration": "CONNECTED",
         "manager": "BUY",
-        "student": "OK"
+        "student": "PASS"
       }
     },
     "SHELL-501": {
