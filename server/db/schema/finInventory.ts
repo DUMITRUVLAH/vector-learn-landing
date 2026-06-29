@@ -4,7 +4,7 @@
  * Metoda: Cost Mediu Ponderat (CMP / WAC) — SNC 2 Moldova
  */
 
-import { pgTable, uuid, text, varchar, bigint, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, varchar, bigint, boolean, timestamp, index } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { users } from "./users";
 import { invoices } from "./invoices";
@@ -56,7 +56,10 @@ export const finInventoryItems = pgTable("fin_inventory_items", {
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // PERF-04: every inventory query filters by tenant; without this it's a seq scan per page load.
+  tenantIdx: index("fin_inventory_items_tenant_idx").on(t.tenantId),
+}));
 
 export type FinInventoryItem = typeof finInventoryItems.$inferSelect;
 export type NewFinInventoryItem = typeof finInventoryItems.$inferInsert;
@@ -130,7 +133,13 @@ export const finStockMovements = pgTable("fin_stock_movements", {
 
   movedAt: timestamp("moved_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  // PERF-04: the append-only movements ledger grows unbounded. Index the tenant filter, the
+  // per-item history lookup, and the tenant+time range used by reports.
+  tenantIdx: index("fin_stock_movements_tenant_idx").on(t.tenantId),
+  itemIdx: index("fin_stock_movements_item_idx").on(t.itemId),
+  tenantDateIdx: index("fin_stock_movements_tenant_date_idx").on(t.tenantId, t.createdAt),
+}));
 
 export type FinStockMovement = typeof finStockMovements.$inferSelect;
 export type NewFinStockMovement = typeof finStockMovements.$inferInsert;
