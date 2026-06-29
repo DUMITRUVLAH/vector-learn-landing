@@ -47,10 +47,31 @@ function createConnection(): {
     // local/container server `max:1` serializes requests into a deadlock, so local keeps a
     // normal pool. SSL comes from the URL's own `sslmode=require`; passing ssl:"require" here too
     // double-negotiates and can stall the handshake, so it is left to the connection string.
+    //
+    // SCALING TO ~500 CONCURRENT USERS (no infra change):
+    //   max:1 per function is correct here. Each Vercel instance serves ~1 request at a time and
+    //   opens ONE connection to the Supabase *transaction pooler* (pgBouncer, :6543), which
+    //   multiplexes hundreds of client connections onto a small real-Postgres pool. So 500
+    //   concurrent users → ~500 pooler clients → fine, as long as no single request hogs its
+    //   connection. `statement_timeout`/`idle_in_transaction_session_timeout` below cap a runaway
+    //   query at 25s/10s so one slow query can't pin a pooler connection for the whole 30s
+    //   function lifetime and starve the pool. (The real throughput levers are the N+1/index
+    //   fixes that shorten how long each request holds its connection — see the perf backlog.)
     const client = postgres(
       databaseUrl,
       onVercel
-        ? { prepare: false, fetch_types: false, max: 1, connect_timeout: 10, idle_timeout: 20 }
+        ? {
+            prepare: false,
+            fetch_types: false,
+            max: 1,
+            connect_timeout: 10,
+            idle_timeout: 20,
+            // Cap per-connection query time so a pathological query frees the pooler slot fast.
+            connection: {
+              statement_timeout: 25_000,
+              idle_in_transaction_session_timeout: 10_000,
+            },
+          }
         : { prepare: false }
     );
     return {
