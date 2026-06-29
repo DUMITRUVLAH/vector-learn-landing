@@ -31,7 +31,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, sql, desc, gte, lt } from "drizzle-orm";
+import { and, eq, sql, desc, gte, lt, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { finCaptures, finCaptureLines } from "../db/schema/finCaptures";
 import { finInvoices } from "../db/schema/finInvoices";
@@ -317,27 +317,67 @@ finStatementRoutes.post("/:captureId/match", async (c) => {
 
   const assignment = assignInvoicesToLines(invoicePool, candidates);
 
-  let matched = lines.length - autoLines.length; // manual links already counted
-  let unmatched = 0;
+  // PERF-05: batch the writes. The old code issued one UPDATE per line (N round-trips on the
+  // serverless max:1 pool → timeout risk + connection hogging under concurrency). We now split
+  // the lines into matched/missing and issue at most TWO statements total, regardless of N.
+  const matchedHits: { id: string; invoiceId: string; scoreBp: number }[] = [];
+  const missingIds: string[] = [];
   for (const l of autoLines) {
     const hit = assignment.get(l.id);
-    if (hit) {
-      matched += 1;
-      await db.update(finCaptureLines).set({
+    if (hit) matchedHits.push({ id: l.id, invoiceId: hit.invoiceId, scoreBp: Math.round(hit.confidence * 10000) });
+    else missingIds.push(l.id);
+  }
+
+  const matched = lines.length - autoLines.length + matchedHits.length; // manual links + new matches
+  const unmatched = missingIds.length;
+
+  // One bulk UPDATE for all "missing" lines.
+  if (missingIds.length > 0) {
+    await db
+      .update(finCaptureLines)
+      .set({ matchStatus: "missing", matchedCaptureId: null, matchScoreBp: 0, updatedAt: new Date() })
+      .where(
+        and(
+          eq(finCaptureLines.tenantId, user.tenantId),
+          inArray(finCaptureLines.id, missingIds),
+        ),
+      );
+  }
+
+  // One UPDATE for all matched lines, using CASE expressions so each row gets its own
+  // invoiceId/score in a single statement.
+  if (matchedHits.length > 0) {
+    const idList = matchedHits.map((h) => h.id);
+    const invoiceCase = sql.join(
+      [
+        sql`CASE`,
+        ...matchedHits.map((h) => sql`WHEN ${finCaptureLines.id} = ${h.id} THEN ${h.invoiceId}::uuid`),
+        sql`END`,
+      ],
+      sql` `,
+    );
+    const scoreCase = sql.join(
+      [
+        sql`CASE`,
+        ...matchedHits.map((h) => sql`WHEN ${finCaptureLines.id} = ${h.id} THEN ${h.scoreBp}::int`),
+        sql`END`,
+      ],
+      sql` `,
+    );
+    await db
+      .update(finCaptureLines)
+      .set({
         matchStatus: "matched",
-        matchedCaptureId: hit.invoiceId,
-        matchScoreBp: Math.round(hit.confidence * 10000),
+        matchedCaptureId: invoiceCase,
+        matchScoreBp: scoreCase,
         updatedAt: new Date(),
-      }).where(eq(finCaptureLines.id, l.id));
-    } else {
-      unmatched += 1;
-      await db.update(finCaptureLines).set({
-        matchStatus: "missing",
-        matchedCaptureId: null,
-        matchScoreBp: 0,
-        updatedAt: new Date(),
-      }).where(eq(finCaptureLines.id, l.id));
-    }
+      })
+      .where(
+        and(
+          eq(finCaptureLines.tenantId, user.tenantId),
+          inArray(finCaptureLines.id, idList),
+        ),
+      );
   }
 
   return c.json({ matched, unmatched, total: lines.length });
