@@ -75,6 +75,18 @@ writeFileSync(
       version: 3,
       routes: [
         { src: "/api/(.*)", dest: "/api" },
+        // PERF-03 / scaling: Vite emits content-hashed assets (index-<hash>.js, *.css) — safe to
+        // cache forever (a change → a new filename). Tagging /assets/* immutable stops every repeat
+        // visitor and every chunk re-request from re-validating the whole payload against the
+        // server, which directly cuts load under high concurrency. index.html + the SW stay
+        // no-cache so a new deploy (which rewrites the hashed filenames) is picked up immediately.
+        {
+          src: "/assets/(.*)",
+          headers: { "Cache-Control": "public, max-age=31536000, immutable" },
+          continue: true,
+        },
+        { src: "/(sw\\.js|service-worker\\.js)", headers: { "Cache-Control": "no-cache" }, continue: true },
+        { src: "/(index\\.html)?$", headers: { "Cache-Control": "public, max-age=0, must-revalidate" }, continue: true },
         { handle: "filesystem" },
         { src: "/(.*)", dest: "/index.html" },
       ],
