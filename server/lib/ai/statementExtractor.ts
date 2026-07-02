@@ -16,6 +16,10 @@ export interface StatementTxn {
   tx_date: string | null; // YYYY-MM-DD
   description: string;
   counterparty: string | null;
+  /** STMT-005: partner fiscal code (IDNO/IDNP, 13 digits in MD) — the future e-Factura buyer. */
+  counterparty_idno: string | null;
+  /** STMT-005: partner bank account (IBAN or internal account number). */
+  counterparty_iban: string | null;
   amount_cents: number; // positive, account currency (MDL) minor units
   direction: "in" | "out";
   currency: string; // account currency (MDL)
@@ -39,10 +43,13 @@ REGULI:
 6. reportable: marchează "review" pentru TOATE (contabilul decide); reason scurt în română
    (ex: "Plată furnizor — necesită factură", "Transfer intern — fără document").
 7. tx_date format YYYY-MM-DD.
+8. counterparty_idno: codul fiscal (IDNO/IDNP, 13 cifre) al partenerului, dacă apare în extras; altfel null.
+9. counterparty_iban: IBAN-ul sau numărul de cont al partenerului, dacă apare; altfel null.
 
 Returnează DOAR JSON:
 { "transactions": [
-  { "tx_date":"2025-10-01","description":"...","counterparty":"...","amount_cents":48857,
+  { "tx_date":"2025-10-01","description":"...","counterparty":"...","counterparty_idno":"1009600020033",
+    "counterparty_iban":"MD94AG000000022512036601","amount_cents":48857,
     "direction":"out","currency":"MDL","orig_amount":"28.80 USD",
     "reportable":"review","reportable_reason":"...","reportable_confidence":0.6 }
 ] }`;
@@ -53,6 +60,10 @@ export { parseAmount } from "../fin/money";
 
 /** Heuristic fallback parser for MAIB-style statements (used in stub/mock mode). */
 export function parseStatementHeuristic(rawText: string): StatementTxn[] {
+  // STMT-005: MAIB current-account PDF via unpdf produces ONE merged line (no \n) with a very
+  // specific row anatomy incl. partner IDNO+IBAN — try the exact parser first.
+  const mergedTxns = parseMaibMergedStatement(rawText);
+  if (mergedTxns.length > 0) return mergedTxns;
   // Try card-statement format first (two dates + currency code)
   const cardTxns = parseCardStatement(rawText);
   if (cardTxns.length > 0) return cardTxns;
@@ -61,6 +72,117 @@ export function parseStatementHeuristic(rawText: string): StatementTxn[] {
   if (csvTxns.length > 0) return csvTxns;
   // Try current-account format (MAIB "Extras de Cont" table: debit/credit columns from PDF)
   return parseCurrentAccountStatement(rawText);
+}
+
+// ─── STMT-005: MAIB current-account PDF (merged single-line text) ─────────────
+//
+// `unpdf` flattens the MAIB "Extras de Cont" PDF into ONE line. Each row reads:
+//   <N> <partner name> <DD.MM.YYYY> <debit> <credit>[glued docno] [docno …] <details> <partner IBAN|account> <partner IDNO(13)>
+// e.g.:
+//   12 (R) AMDARIS S.R.L. 07.05.2026 0.00 7866.00299 Plata pentru Servicii … MD94AG000000022512036601 1009600020033
+// The trailing partner account + 13-digit IDNO give us the e-Factura buyer for free.
+
+// Separator before the partner account tolerates a stray "/" glued to the IBAN
+// (row observed in the wild: "… pe teritoriul Repub licii Moldova /MD04TRGAAA… 1006601000037").
+const MAIB_MERGED_ROW_RE =
+  /(?:^|\s)(\d{1,3})\s+((?:\([RN]\)\s*)?\S[\s\S]{0,180}?)\s+(\d{2}\.\d{2}\.\d{4})\s+(\d{1,10}\.\d{2})\s+(\d{1,10}\.\d{2})(\d{0,7})\s+([\s\S]{0,600}?)[\s/]+(MD[0-9A-Z]{18,30}|\d{5,20})\s+(\d{13})(?=\s+\d{1,3}\s+\S|\s*SOLD\s+FINAL|\s*RULAJ|\s*$)/g;
+
+// A full row header (date + debit + credit) INSIDE a captured details blob means the lazy
+// match swallowed the next row (happens when the current row's own account/IDNO tail is
+// scrambled by the PDF text layer). We then salvage the outer row without its IBAN/IDNO and
+// rewind the scan so the swallowed row is re-matched on its own.
+const SWALLOWED_ROW_RE = /\s\d{1,3}\s+\(?[A-ZĂÂÎȘȚ][\s\S]{0,180}?\d{2}\.\d{2}\.\d{4}\s+\d{1,10}\.\d{2}\s+\d{1,10}\.\d{2}/;
+
+/** Holder (own company) IDNO from the statement header: "<IDNO(13)> <IBAN> <CUR> Sold Initial…". */
+function parseHolderIdno(rawText: string): string | null {
+  const m = /(\d{13})\s+MD[0-9A-Z]{18,30}\s+[A-Z]{3}\s/.exec(rawText.slice(0, 1500));
+  return m ? m[1] : null;
+}
+
+/** Auto-triage: own-account transfers and bank fees are NOT e-Factura candidates. */
+function classifyMaibRow(input: {
+  holderIdno: string | null;
+  partnerName: string;
+  partnerIdno: string;
+  details: string;
+  direction: "in" | "out";
+}): { reportable: "yes" | "no" | "review"; reason: string; confidence: number } {
+  if (input.holderIdno && input.partnerIdno === input.holderIdno) {
+    return { reportable: "no", reason: "Transfer intern între conturile proprii", confidence: 0.9 };
+  }
+  if (
+    /^BC\s*['’]?MAIB['’]?/i.test(input.partnerName) ||
+    /comision|transfer pentru operatiuni de accep|revers pentru operatiuni|com\.\s*plati|com\.trans/i.test(input.details)
+  ) {
+    return { reportable: "no", reason: "Operațiune bancară (comision / decontare card)", confidence: 0.85 };
+  }
+  if (input.direction === "in") {
+    return { reportable: "yes", reason: "Încasare de la client — candidat e-Factura", confidence: 0.8 };
+  }
+  return { reportable: "review", reason: "Plată furnizor — verificați factura primită", confidence: 0.6 };
+}
+
+export function parseMaibMergedStatement(rawText: string): StatementTxn[] {
+  // This format has no newlines — a text WITH many newlines is some other layout.
+  if (!/Extras de Cont/i.test(rawText.slice(0, 2000))) return [];
+  const holderIdno = parseHolderIdno(rawText);
+  const txns: StatementTxn[] = [];
+  let lastRowNo = 0;
+  let m: RegExpExecArray | null;
+  MAIB_MERGED_ROW_RE.lastIndex = 0;
+  while ((m = MAIB_MERGED_ROW_RE.exec(rawText)) !== null) {
+    const [, rowNoRaw, nameRaw, date, debitRaw, creditRaw, , detailsRawFull, accountRaw, idnoRaw] = m;
+    const rowNo = parseInt(rowNoRaw, 10);
+    // Row numbers are strictly increasing — reject false-positive matches inside details.
+    if (rowNo <= lastRowNo) continue;
+    const debit = parseAmount(debitRaw);
+    const credit = parseAmount(creditRaw);
+    if (!Number.isFinite(debit) || !Number.isFinite(credit)) continue;
+    if (debit === 0 && credit === 0) continue;
+    lastRowNo = rowNo;
+
+    // Swallow guard: if the details blob contains the NEXT row's header, this match crossed a
+    // row boundary. Keep the outer row (its own date/amounts/name are sound) but drop the
+    // suspect account/IDNO, truncate details, and rewind so the inner row parses on its own.
+    let detailsRaw = detailsRawFull;
+    let account: string | null = accountRaw;
+    let idno: string | null = idnoRaw;
+    const swallowed = SWALLOWED_ROW_RE.exec(detailsRawFull);
+    if (swallowed) {
+      detailsRaw = detailsRawFull.slice(0, swallowed.index);
+      account = null;
+      idno = null;
+      const innerOffset = m[0].indexOf(detailsRawFull) + swallowed.index;
+      MAIB_MERGED_ROW_RE.lastIndex = m.index + innerOffset;
+    }
+    const isIn = credit > 0;
+    const amount = isIn ? credit : debit;
+    const partnerName = nameRaw.replace(/^\([RN]\)\s*/i, "").replace(/\s+/g, " ").trim();
+    // Details may start with the (split) document number — strip leading digit groups.
+    const details = detailsRaw
+      .replace(/^(?:\d{1,7}\s+){0,3}/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const direction: "in" | "out" = isIn ? "in" : "out";
+    const verdict = classifyMaibRow({ holderIdno, partnerName, partnerIdno: idno ?? "", details, direction });
+    const [d, mo, y] = date.split(".");
+    txns.push({
+      tx_date: `${y}-${mo}-${d}`,
+      description: (details || (isIn ? "Intrare" : "Ieșire")).slice(0, 300),
+      counterparty: partnerName.slice(0, 300) || null,
+      counterparty_idno: idno,
+      counterparty_iban: account,
+      amount_cents: Math.round(amount * 100),
+      direction,
+      currency: "MDL",
+      orig_amount: null,
+      reportable: verdict.reportable,
+      reportable_reason: verdict.reason,
+      reportable_confidence: verdict.confidence,
+    });
+  }
+  // A real statement has ≥2 rows; a single match on random text is likely a false positive.
+  return txns.length >= 2 ? txns : [];
 }
 
 /**
@@ -92,10 +214,15 @@ function parseExcelCsvStatement(rawText: string): StatementTxn[] {
     const counterparty = cols[2]?.trim() || null;
     const details = cols.slice(4, cols.length - 2).join(" ").trim();
     const desc = [counterparty, details].filter(Boolean).join(" — ").slice(0, 300);
+    // STMT-005: MAIB Excel keeps partner IDNO/IBAN in the partner cell — mine them from the row.
+    const idnoMatch = /\b([12]\d{12})\b/.exec(line);
+    const ibanMatch = /\b(MD[0-9A-Z]{18,30})\b/.exec(line);
     txns.push({
       tx_date: `${y}-${mo}-${d}`,
       description: desc || (isIn ? "Intrare" : "Ieșire"),
       counterparty: counterparty || null,
+      counterparty_idno: idnoMatch ? idnoMatch[1] : null,
+      counterparty_iban: ibanMatch ? ibanMatch[1] : null,
       amount_cents: Math.round(amount * 100),
       direction: isIn ? "in" : "out",
       currency: "MDL",
@@ -127,6 +254,8 @@ function parseCardStatement(rawText: string): StatementTxn[] {
       tx_date: `${y}-${mo}-${d}`,
       description: desc,
       counterparty: guessCounterparty(desc),
+      counterparty_idno: null,
+      counterparty_iban: null,
       amount_cents: Math.round((Number.isFinite(acct) ? acct : 0) * 100),
       direction: isIn ? "in" : "out",
       currency: "MDL",
@@ -172,6 +301,8 @@ function parseCurrentAccountStatement(rawText: string): StatementTxn[] {
       tx_date: `${y}-${mo}-${d}`,
       description: desc,
       counterparty: guessCounterpartyFromCurrentAccount(descLines),
+      counterparty_idno: null,
+      counterparty_iban: null,
       amount_cents: Math.round(amount * 100),
       direction: isIn ? "in" : "out",
       currency: "MDL",
@@ -248,6 +379,8 @@ function parseCurrentAccountFallback(rawText: string): StatementTxn[] {
         tx_date: `${y}-${mo}-${d}`,
         description: desc,
         counterparty: pendingCounterparty || null,
+        counterparty_idno: null,
+        counterparty_iban: null,
         amount_cents: Math.round(amount * 100),
         direction: isIn ? "in" : "out",
         currency: "MDL",
@@ -364,6 +497,14 @@ function normalizeTxns(raw: unknown[]): StatementTxn[] {
       tx_date: typeof t.tx_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t.tx_date) ? t.tx_date : null,
       description: desc,
       counterparty: typeof t.counterparty === "string" ? t.counterparty : null,
+      counterparty_idno:
+        typeof t.counterparty_idno === "string" && /^\d{7,13}$/.test(t.counterparty_idno)
+          ? t.counterparty_idno
+          : null,
+      counterparty_iban:
+        typeof t.counterparty_iban === "string" && /^[A-Z0-9]{5,34}$/.test(t.counterparty_iban.trim())
+          ? t.counterparty_iban.trim()
+          : null,
       amount_cents: cents,
       direction: dir,
       currency: typeof t.currency === "string" ? t.currency : "MDL",

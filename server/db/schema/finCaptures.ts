@@ -321,6 +321,12 @@ export const finCaptureLines = pgTable(
     /** Vendor/counterparty the AI inferred from the description (e.g. "Meta / Facebook Ads"). */
     counterparty: varchar("counterparty", { length: 300 }),
 
+    /** STMT-005: partner fiscal code (IDNO/IDNP) from the statement — the e-Factura buyer. */
+    counterpartyIdno: varchar("counterparty_idno", { length: 13 }),
+
+    /** STMT-005: partner bank account (IBAN or internal account number) from the statement. */
+    counterpartyIban: varchar("counterparty_iban", { length: 34 }),
+
     /** Amount in the account currency, minor units (cents). Always positive. */
     amountCents: integer("amount_cents").notNull().default(0),
 
