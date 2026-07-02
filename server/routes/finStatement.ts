@@ -40,6 +40,7 @@ import { finEinvoices } from "../db/schema/finEinvoices";
 import { finParties } from "../db/schema/finParties";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { buildCapture, deriveFileInput, type CaptureInput } from "./finCaptures";
+import { cellTextForStatement } from "../lib/ai/statementExtractor";
 import { loadSfsConfig } from "../lib/fin/sfsConfig";
 import {
   EfacturaMdClient,
@@ -179,12 +180,14 @@ finStatementRoutes.post("/upload", async (c) => {
     if (!ws) {
       return c.json({ error: "invalid_file" }, 400);
     }
+    // STMT-006: cells are rich-text / hyperlink / formula OBJECTS — String(v) yields
+    // "[object Object]" and destroys the data (the bug behind "Eroare la upload" on Excel).
+    // Extract real text via cellTextForStatement and TAB-join (amounts contain commas, so a
+    // comma delimiter would corrupt "346 764,10"). parseMaibExcelStatement consumes this.
     const rows: string[] = [];
     ws.eachRow((row) => {
-      const cells = (row.values as (string | number | null | undefined)[]).slice(1);
-      // STMT-005: MAIB puts partner name+IDNO+IBAN in ONE multiline cell — flatten the
-      // newlines so one statement row stays one CSV line for the parser.
-      rows.push(cells.map((v) => (v !== null && v !== undefined ? String(v).replace(/[\r\n]+/g, " ") : "")).join(","));
+      const cells = (row.values as unknown[]).slice(1);
+      rows.push(cells.map((v) => cellTextForStatement(v).replace(/[\r\n\t]+/g, " ")).join("\t"));
     });
     rawText = rows.join("\n");
   } else {

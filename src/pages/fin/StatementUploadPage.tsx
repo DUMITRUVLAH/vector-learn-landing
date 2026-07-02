@@ -196,6 +196,17 @@ export default function StatementUploadPage() {
           </div>
         )}
 
+        {/* ── Zero-transaction notice (upload OK, but nothing recognized) ── */}
+        {captureId && lineCount === 0 && !uploading && (
+          <div
+            role="status"
+            className="rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/10 dark:border-yellow-800 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-400"
+          >
+            Fișierul s-a încărcat, dar nu am recunoscut nicio tranzacție în el. Verifică să fie un
+            extras de cont curent (nu un extras de card) în format PDF, Excel (.xlsx), CSV, MT940 sau OFX.
+          </div>
+        )}
+
         {/* ── Preview table ──────────────────────────────────────────────── */}
         {lines.length > 0 && captureId && (
           <div className="space-y-4">

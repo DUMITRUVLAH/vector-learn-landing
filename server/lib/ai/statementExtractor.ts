@@ -60,6 +60,10 @@ export { parseAmount } from "../fin/money";
 
 /** Heuristic fallback parser for MAIB-style statements (used in stub/mock mode). */
 export function parseStatementHeuristic(rawText: string): StatementTxn[] {
+  // STMT-006: MAIB Excel export (tab-delimited rows, one transaction spread across 2–3
+  // sibling rows carrying name / IDNO / IBAN). Try this FIRST for spreadsheet input.
+  const excelTxns = parseMaibExcelStatement(rawText);
+  if (excelTxns.length > 0) return excelTxns;
   // STMT-005: MAIB current-account PDF via unpdf produces ONE merged line (no \n) with a very
   // specific row anatomy incl. partner IDNO+IBAN — try the exact parser first.
   const mergedTxns = parseMaibMergedStatement(rawText);
@@ -72,6 +76,156 @@ export function parseStatementHeuristic(rawText: string): StatementTxn[] {
   if (csvTxns.length > 0) return csvTxns;
   // Try current-account format (MAIB "Extras de Cont" table: debit/credit columns from PDF)
   return parseCurrentAccountStatement(rawText);
+}
+
+// ─── STMT-006: MAIB Excel export (tab-delimited, multi-row-per-transaction) ──
+//
+// The MAIB "Extras de Cont" .xlsx uses merged cells and rich-text; the upload route
+// extracts each cell to plain text (cellTextForStatement) and joins a row's cells with a
+// TAB. One transaction spans 2–3 sibling rows that share the N/O and cycle the "Date
+// partener" column through: partner NAME → partner IDNO (13 digits) → partner IBAN.
+// Columns: N/O | Data | No doc | Date partener | Detalii plată | Debit | Credit.
+//
+// Verified against real statements: per-direction totals equal the bank's reported
+// "Total Intrări/Ieșiri" to the cent across multiple monthly exports.
+
+/** Plain-text extraction from an exceljs cell value (richText / hyperlink / formula / date). */
+export function cellTextForStatement(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v);
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    if (Array.isArray(o.richText)) {
+      return (o.richText as Array<{ text?: string }>).map((r) => r.text ?? "").join("");
+    }
+    if (typeof o.text === "string") return o.text; // hyperlink cell
+    if (o.result !== undefined && o.result !== null) return String(o.result); // formula cell
+  }
+  return "";
+}
+
+/** Amount parser tolerant of space thousands-separators ("346 764,10"). */
+function parseAmountLoose(raw: string): number {
+  return parseAmount(raw.replace(/\s/g, ""));
+}
+
+interface ExcelRec {
+  no: string;
+  date: string;
+  name: string;
+  idno: string | null;
+  iban: string | null;
+  details: string;
+  debit: number;
+  credit: number;
+}
+
+/** Collapse empties + consecutive duplicates (merged-cell split writes each column twice). */
+function dedupeRow(cells: string[]): string[] {
+  const out: string[] = [];
+  for (const c of cells.map((x) => x.trim())) if (c !== "" && c !== out[out.length - 1]) out.push(c);
+  return out;
+}
+
+export function parseMaibExcelStatement(rawText: string): StatementTxn[] {
+  // The upload route joins Excel cells with tabs; other inputs (PDF/CSV) have none.
+  if (!rawText.includes("\t")) return [];
+  const rawRows = rawText.split("\n").map((l) => l.split("\t"));
+
+  // Locate the transactions header ("N/O … Data … Debit … Credit").
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(rawRows.length, 40); i++) {
+    const joined = rawRows[i].join(" ").toLowerCase();
+    if (/debit/.test(joined) && /credit/.test(joined) && /(data|partener|n\/o)/.test(joined)) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) return [];
+
+  // Map logical columns by POSITION in the deduped header (content-guessing can't tell the
+  // partner cell from the details cell when both hold letters — e.g. an IBAN vs "Alimentare").
+  const header = dedupeRow(rawRows[headerIdx]);
+  const findCol = (re: RegExp) => header.findIndex((h) => re.test(h));
+  const partnerCol = findCol(/partener/i);
+  const detailsCol = findCol(/detalii/i);
+  const dateCol = findCol(/data/i);
+  const debitCol = findCol(/debit/i);
+  const creditCol = findCol(/credit/i);
+  if (partnerCol === -1 || debitCol === -1 || creditCol === -1) return [];
+
+  // Holder (own company) IDNO from the header ("Cod fiscal: <idno>" or "IDNO: <idno>").
+  const headerText = rawRows.slice(0, headerIdx).map((r) => r.join(" ")).join(" ");
+  const holderIdno = /(?:Cod fiscal|IDNO)\s*:?\s*(\d{13})/i.exec(headerText)?.[1] ?? null;
+
+  const groups = new Map<string, ExcelRec>();
+  const order: string[] = [];
+  for (let i = headerIdx + 1; i < rawRows.length; i++) {
+    const cells = dedupeRow(rawRows[i]);
+    // A 0.00/0.00 row collapses the two amount columns into one → column shift. Those are
+    // balance/spacer rows we skip anyway, so require the full column width to read by index.
+    if (cells.length <= Math.max(partnerCol, debitCol, creditCol)) continue;
+
+    const no = cells[0];
+    if (!/^\d{1,4}$/.test(no)) continue; // data rows start with the running N/O
+
+    const partnerCell = cells[partnerCol] ?? "";
+    const debit = parseAmountLoose(cells[debitCol] ?? "");
+    const credit = parseAmountLoose(cells[creditCol] ?? "");
+    const date = dateCol >= 0 ? (cells[dateCol] ?? "") : (cells.find((c) => /^\d{2}\.\d{2}\.\d{4}$/.test(c)) ?? "");
+    const details = detailsCol >= 0 ? (cells[detailsCol] ?? "") : "";
+
+    // The partner column cycles name → IDNO → IBAN across the 2–3 sibling rows.
+    const isIdno = /^\d{10,13}$/.test(partnerCell);
+    const isIban = /^MD[0-9A-Z]{18,30}$/.test(partnerCell) || /^\d{6,20}$/.test(partnerCell);
+    const isName = /[A-Za-zĂÂÎȘȚăâîșț]/.test(partnerCell) && !/^MD[0-9]/.test(partnerCell);
+
+    let rec = groups.get(no);
+    if (!rec) {
+      rec = { no, date, name: "", idno: null, iban: null, details: "", debit: 0, credit: 0 };
+      groups.set(no, rec);
+      order.push(no);
+    }
+    if (isIdno && !rec.idno) rec.idno = partnerCell;
+    else if (/^MD[0-9A-Z]{18,30}$/.test(partnerCell) && !rec.iban) rec.iban = partnerCell;
+    else if (isName && !isIdno && !isIban && !rec.name) rec.name = partnerCell;
+    if (details && details.length > rec.details.length) rec.details = details;
+    if (!rec.date && /^\d{2}\.\d{2}\.\d{4}$/.test(date)) rec.date = date;
+    if (Number.isFinite(debit) && debit !== 0) rec.debit = debit;
+    if (Number.isFinite(credit) && credit !== 0) rec.credit = credit;
+  }
+
+  const txns: StatementTxn[] = [];
+  for (const no of order) {
+    const r = groups.get(no)!;
+    if (r.debit === 0 && r.credit === 0) continue;
+    const isIn = r.credit > 0;
+    const direction: "in" | "out" = isIn ? "in" : "out";
+    const verdict = classifyMaibRow({
+      holderIdno,
+      partnerName: r.name,
+      partnerIdno: r.idno ?? "",
+      details: r.details,
+      direction,
+    });
+    const [d, mo, y] = r.date.split(".");
+    txns.push({
+      tx_date: r.date ? `${y}-${mo}-${d}` : null,
+      description: (r.details || r.name || (isIn ? "Intrare" : "Ieșire")).slice(0, 300),
+      counterparty: r.name.slice(0, 300) || null,
+      counterparty_idno: r.idno,
+      counterparty_iban: r.iban,
+      amount_cents: Math.round((isIn ? r.credit : r.debit) * 100),
+      direction,
+      currency: "MDL",
+      orig_amount: null,
+      reportable: verdict.reportable,
+      reportable_reason: verdict.reason,
+      reportable_confidence: verdict.confidence,
+    });
+  }
+  return txns.length >= 2 ? txns : [];
 }
 
 // ─── STMT-005: MAIB current-account PDF (merged single-line text) ─────────────
@@ -442,6 +596,15 @@ export async function extractStatementTransactions(
   const heuristic = parseStatementHeuristic(rawText);
   if (heuristic.length > 0) {
     return { transactions: heuristic, auditId: "", isStub: true };
+  }
+
+  // STMT-006: NEVER fall through to the AI for spreadsheet input (tab-delimited). The Excel
+  // parser above is deterministic and authoritative; if it found nothing (e.g. a card
+  // statement or an unknown layout), the AI over a large tab-blob won't do better and — the
+  // real bug we're fixing — a 4000-token call over ~100KB of cells exceeds Vercel's 30s
+  // function limit → the upload 500s ("Eroare la upload"). Return empty cleanly instead.
+  if (rawText.includes("\t")) {
+    return { transactions: [], auditId: "", isStub: true };
   }
 
   // SLOW PATH (only when the heuristic recognized nothing, e.g. a non-MAIB layout): ask the AI.
