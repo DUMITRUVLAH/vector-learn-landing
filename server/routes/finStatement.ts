@@ -11,6 +11,7 @@
  *   GET    /api/fin/statement/:captureId/summary                   STMT-002
  *   POST   /api/fin/statement/:captureId/lines/:lineId/submit-efactura  STMT-003
  *   POST   /api/fin/statement/:captureId/submit-efactura-batch     STMT-003
+ *   POST   /api/fin/statement/:captureId/export-xml                STMT-005 (download XML, no SFS call)
  *   GET    /api/fin/statement/:captureId/lines/:lineId/efactura-status  STMT-003
  *   GET    /api/fin/statement                                      STMT-004
  *   GET    /api/fin/statement/export/saga-csv                      STMT-004
@@ -31,7 +32,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, sql, desc, gte, lt } from "drizzle-orm";
+import { and, eq, sql, desc } from "drizzle-orm";
 import { db } from "../db/client";
 import { finCaptures, finCaptureLines } from "../db/schema/finCaptures";
 import { finInvoices } from "../db/schema/finInvoices";
@@ -44,8 +45,12 @@ import {
   EfacturaMdClient,
   generateSfsInvoiceXml,
   createMockTransport,
-  type SfsInvoiceLine,
 } from "../lib/efacturaMoldova";
+import {
+  validateLineForEfactura,
+  buildSfsInvoiceInputFromLine,
+  efacturaErrorMessage,
+} from "../lib/fin/statementEfactura";
 import { assignInvoicesToLines, type LineCandidate } from "../lib/fin/invoiceLineMatch";
 import { sanitizePgText } from "../lib/fin/money";
 
@@ -61,6 +66,8 @@ const patchLineSchema = z.object({
   txDate:           z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   description:      z.string().max(500).optional(),
   counterparty:     z.string().max(300).nullable().optional(),
+  counterpartyIdno: z.string().regex(/^\d{7,13}$/).nullable().optional(),
+  counterpartyIban: z.string().regex(/^[A-Z0-9]{5,34}$/).nullable().optional(),
   amountCents:      z.number().int().min(0).optional(),
   direction:        z.enum(["in", "out"]).optional(),
   reportable:       z.enum(["yes", "no", "review"]).optional(),
@@ -68,6 +75,11 @@ const patchLineSchema = z.object({
 });
 
 const batchSubmitSchema = z.object({
+  lineIds: z.array(z.string().uuid()).min(1).max(50),
+});
+
+// STMT-005: export selected lines as SFS XML files (for manual Import XML in the SFS portal)
+const exportXmlSchema = z.object({
   lineIds: z.array(z.string().uuid()).min(1).max(50),
 });
 
@@ -81,6 +93,8 @@ function serializeLine(l: typeof finCaptureLines.$inferSelect) {
     txDate: l.txDate,
     description: l.description,
     counterparty: l.counterparty,
+    counterpartyIdno: l.counterpartyIdno,
+    counterpartyIban: l.counterpartyIban,
     amountCents: l.amountCents,
     direction: l.direction,
     currency: l.currency,
@@ -168,7 +182,9 @@ finStatementRoutes.post("/upload", async (c) => {
     const rows: string[] = [];
     ws.eachRow((row) => {
       const cells = (row.values as (string | number | null | undefined)[]).slice(1);
-      rows.push(cells.map((v) => (v !== null && v !== undefined ? String(v) : "")).join(","));
+      // STMT-005: MAIB puts partner name+IDNO+IBAN in ONE multiline cell — flatten the
+      // newlines so one statement row stays one CSV line for the parser.
+      rows.push(cells.map((v) => (v !== null && v !== undefined ? String(v).replace(/[\r\n]+/g, " ") : "")).join(","));
     });
     rawText = rows.join("\n");
   } else {
@@ -382,9 +398,14 @@ finStatementRoutes.post("/:captureId/lines/:lineId/submit-efactura", async (c) =
   if (!line) return c.json({ error: "not_found" }, 404);
   if (line.captureId !== captureId) return c.json({ error: "not_found" }, 404);
 
-  // 2. Validations
-  if (line.amountCents === 0) return c.json({ error: "amount_zero" }, 422);
-  if (line.linkedFinInvoiceId) return c.json({ error: "already_exported" }, 409);
+  // 2. Validations — the REAL rules live in statementEfactura.ts (shared with tests)
+  const validationError = validateLineForEfactura(line);
+  if (validationError === "already_exported") {
+    return c.json({ error: validationError, message: efacturaErrorMessage(validationError) }, 409);
+  }
+  if (validationError) {
+    return c.json({ error: validationError, message: efacturaErrorMessage(validationError) }, 422);
+  }
 
   // 3. Lookup/create fin_parties
   const partyName = (line.counterparty ?? "Necunoscut").trim();
@@ -400,7 +421,7 @@ finStatementRoutes.post("/:captureId/lines/:lineId/submit-efactura", async (c) =
   } else {
     const [newParty] = await db
       .insert(finParties)
-      .values({ tenantId: user.tenantId, name: partyName, kind: "supplier", country: "MD" })
+      .values({ tenantId: user.tenantId, name: partyName, kind: "client", country: "MD", idno: line.counterpartyIdno ?? undefined })
       .returning();
     partyId = newParty.id;
   }
@@ -429,52 +450,37 @@ finStatementRoutes.post("/:captureId/lines/:lineId/submit-efactura", async (c) =
     })
     .returning();
 
-  // 5. Generate XML + submit SFS
+  // 5. Generate XML (correct SfsInvoiceInput shape — buyer IDNO from the statement) + submit SFS
   const sfsData = await loadSfsConfig(user.tenantId);
   const config = sfsData?.config ?? { mock: true, supplierIdno: "UNKNOWN", supplierBankAccount: "", endpoint: "", username: "", password: "" };
   const isMock = !sfsData || config.mock;
   const transport = isMock ? createMockTransport() : undefined;
   const client = new EfacturaMdClient(config, transport);
 
-  const sfsLines: SfsInvoiceLine[] = [
-    {
-      lineNumber: 1,
-      description: line.description ?? "Tranzacție extras de cont",
-      quantity: 1,
-      unitPrice: line.amountCents / 100,
-      vatRate: 0,
-      totalWithoutVat: line.amountCents / 100,
-      totalVat: 0,
-      total: line.amountCents / 100,
-    },
-  ];
+  const xml = generateSfsInvoiceXml(
+    buildSfsInvoiceInputFromLine(line, { idno: config.supplierIdno, bankAccount: config.supplierBankAccount ?? "" }, invoiceRow.id),
+  );
 
-  const xml = generateSfsInvoiceXml({
-    invoiceNumber: invoiceRow.invoiceNumber,
-    issueDate: invoiceRow.issuedAt!.toISOString().slice(0, 10),
-    supplierIdno: config.supplierIdno,
-    supplierBankAccount: config.supplierBankAccount ?? "",
-    buyerIdno: "",
-    buyerName: line.counterparty ?? "Necunoscut",
-    lines: sfsLines,
-  });
-
-  let sfsStatus: "mock" | "sent" | "pending" = "pending";
+  // UI-facing status ("mock" when SFS is simulated); DB stores enum-valid values only.
+  let sfsStatus: "mock" | "sent" | "pending" | "rejected" = isMock ? "mock" : "pending";
+  let sfsErrorMessage: string | null = null;
   try {
     const result = await client.postInvoices(xml, invoiceRow.invoiceNumber);
     // status 1=ACCEPTED, 2=SUCCESS from SFS
-    sfsStatus = isMock ? "mock" : (result.status <= 2 ? "sent" : "pending");
-  } catch {
-    sfsStatus = isMock ? "mock" : "pending";
+    if (!isMock) sfsStatus = result.status <= 2 ? "sent" : "pending";
+  } catch (err) {
+    sfsErrorMessage = err instanceof Error ? err.message : "Eroare SFS necunoscută";
+    if (!isMock) sfsStatus = "rejected";
   }
 
-  // 6. Create fin_einvoices row
+  // 6. Create fin_einvoices row ("mock" is not a DB enum value — store "pending")
   const [einvoiceRow] = await db
     .insert(finEinvoices)
     .values({
       tenantId: user.tenantId,
       finInvoiceId: invoiceRow.id,
-      sfsStatus,
+      sfsStatus: sfsStatus === "mock" ? "pending" : sfsStatus,
+      sfsErrorMessage: sfsErrorMessage ?? undefined,
       xmlPayload: xml,
       submittedAt: new Date(),
     })
@@ -518,12 +524,9 @@ finStatementRoutes.post(
           results.push({ lineId, ok: false, error: "not_found" });
           continue;
         }
-        if (line.amountCents === 0) {
-          results.push({ lineId, ok: false, error: "amount_zero" });
-          continue;
-        }
-        if (line.linkedFinInvoiceId) {
-          results.push({ lineId, ok: false, error: "already_exported" });
+        const validationError = validateLineForEfactura(line);
+        if (validationError) {
+          results.push({ lineId, ok: false, error: validationError, message: efacturaErrorMessage(validationError) });
           continue;
         }
 
@@ -540,7 +543,7 @@ finStatementRoutes.post(
         } else {
           const [newParty] = await db
             .insert(finParties)
-            .values({ tenantId: user.tenantId, name: partyName, kind: "supplier", country: "MD" })
+            .values({ tenantId: user.tenantId, name: partyName, kind: "client", country: "MD", idno: line.counterpartyIdno ?? undefined })
             .returning();
           partyId = newParty.id;
         }
@@ -574,38 +577,30 @@ finStatementRoutes.post(
         const transport = isMock ? createMockTransport() : undefined;
         const client = new EfacturaMdClient(config, transport);
 
-        const sfsLines: SfsInvoiceLine[] = [{
-          lineNumber: 1,
-          description: line.description ?? "Tranzacție extras de cont",
-          quantity: 1,
-          unitPrice: line.amountCents / 100,
-          vatRate: 0,
-          totalWithoutVat: line.amountCents / 100,
-          totalVat: 0,
-          total: line.amountCents / 100,
-        }];
+        const xml = generateSfsInvoiceXml(
+          buildSfsInvoiceInputFromLine(line, { idno: config.supplierIdno, bankAccount: config.supplierBankAccount ?? "" }, invoiceRow.id),
+        );
 
-        const xml = generateSfsInvoiceXml({
-          invoiceNumber: invoiceRow.invoiceNumber,
-          issueDate: invoiceRow.issuedAt!.toISOString().slice(0, 10),
-          supplierIdno: config.supplierIdno,
-          supplierBankAccount: config.supplierBankAccount ?? "",
-          buyerIdno: "",
-          buyerName: line.counterparty ?? "Necunoscut",
-          lines: sfsLines,
-        });
-
-        let sfsStatus: "mock" | "sent" | "pending" = "pending";
+        let sfsStatus: "mock" | "sent" | "pending" | "rejected" = isMock ? "mock" : "pending";
+        let sfsErrorMessage: string | null = null;
         try {
           const result = await client.postInvoices(xml, invoiceRow.invoiceNumber);
-          sfsStatus = isMock ? "mock" : (result.status <= 2 ? "sent" : "pending");
-        } catch {
-          sfsStatus = isMock ? "mock" : "pending";
+          if (!isMock) sfsStatus = result.status <= 2 ? "sent" : "pending";
+        } catch (err) {
+          sfsErrorMessage = err instanceof Error ? err.message : "Eroare SFS necunoscută";
+          if (!isMock) sfsStatus = "rejected";
         }
 
         const [einvoiceRow] = await db
           .insert(finEinvoices)
-          .values({ tenantId: user.tenantId, finInvoiceId: invoiceRow.id, sfsStatus, xmlPayload: xml, submittedAt: new Date() })
+          .values({
+            tenantId: user.tenantId,
+            finInvoiceId: invoiceRow.id,
+            sfsStatus: sfsStatus === "mock" ? "pending" : sfsStatus,
+            sfsErrorMessage: sfsErrorMessage ?? undefined,
+            xmlPayload: xml,
+            submittedAt: new Date(),
+          })
           .returning();
 
         await db.update(finCaptureLines).set({
@@ -622,6 +617,89 @@ finStatementRoutes.post(
     }
 
     return c.json({ submitted, errors: results.filter((r) => !r.ok), results });
+  },
+);
+
+// ─── STMT-005: POST /:captureId/export-xml ────────────────────────────────────
+// Generates the SFS invoice XML for the selected lines ON THE FLY and returns it as a
+// download (single .xml, or .zip for multiple). NO SFS credentials and NO SFS call needed —
+// the file is meant for manual «Import XML» in the SFS e-Factura portal (Eu sunt Furnizor →
+// Fișierele XML → Import XML). Requires only the company IDNO+IBAN from Configurare SFS.
+// All-or-nothing: if ANY selected line is invalid, returns 422 with per-line errors so the
+// user never believes an incomplete batch was exported. Stateless — no DB writes.
+
+finStatementRoutes.post(
+  "/:captureId/export-xml",
+  zValidator("json", exportXmlSchema),
+  async (c) => {
+    const user = c.get("user");
+    const captureId = c.req.param("captureId");
+    const { lineIds } = c.req.valid("json");
+
+    const sfsData = await loadSfsConfig(user.tenantId);
+    if (!sfsData?.config.supplierIdno) {
+      return c.json(
+        {
+          error: "sfs_settings_missing",
+          message: "Completează IDNO-ul și IBAN-ul companiei în e-Factura → Configurare SFS (nu sunt necesare credențiale API pentru export XML).",
+        },
+        422,
+      );
+    }
+    const supplier = { idno: sfsData.config.supplierIdno, bankAccount: sfsData.config.supplierBankAccount ?? "" };
+
+    const rows = await db.query.finCaptureLines.findMany({
+      where: and(eq(finCaptureLines.captureId, captureId), eq(finCaptureLines.tenantId, user.tenantId)),
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+
+    const errors: Array<{ lineId: string; error: string; message: string }> = [];
+    const files: Array<{ name: string; xml: string }> = [];
+    for (const lineId of lineIds) {
+      const line = byId.get(lineId);
+      if (!line) {
+        errors.push({ lineId, error: "not_found", message: "Linia nu există în acest extras." });
+        continue;
+      }
+      // Export is allowed for lines already submitted via API (re-download is harmless),
+      // so skip only the data-quality rules, not "already_exported".
+      const validationError = validateLineForEfactura({ ...line, linkedFinInvoiceId: null });
+      if (validationError) {
+        errors.push({ lineId, error: validationError, message: efacturaErrorMessage(validationError) });
+        continue;
+      }
+      const xml = generateSfsInvoiceXml(buildSfsInvoiceInputFromLine(line, supplier, line.id));
+      const datePart = line.txDate ?? "fara-data";
+      const namePart = (line.counterparty ?? "partener").replace(/[^\p{L}\p{N}]+/gu, "-").slice(0, 40);
+      files.push({ name: `efactura-${datePart}-${namePart}-${line.id.slice(0, 8)}.xml`, xml });
+    }
+
+    if (errors.length > 0) {
+      return c.json({ error: "invalid_lines", errors, validCount: files.length }, 422);
+    }
+
+    if (files.length === 1) {
+      return new Response(files[0].xml, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/xml; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${files[0].name}"`,
+        },
+      });
+    }
+
+    // Dynamic import — never top-level (prod outage rule)
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    for (const f of files) zip.file(f.name, f.xml);
+    const buf = await zip.generateAsync({ type: "nodebuffer" });
+    return new Response(buf, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="efacturi-extras-${captureId.slice(0, 8)}.zip"`,
+      },
+    });
   },
 );
 

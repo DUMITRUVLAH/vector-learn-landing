@@ -659,6 +659,8 @@ export async function buildCapture(
             txDate: t.tx_date,
             description: t.description,
             counterparty: t.counterparty,
+            counterpartyIdno: t.counterparty_idno,
+            counterpartyIban: t.counterparty_iban,
             amountCents: t.amount_cents,
             direction: t.direction,
             currency: t.currency,
