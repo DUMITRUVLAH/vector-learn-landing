@@ -72,7 +72,9 @@ export default function StatementHistoryPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch("/api/fin/statement/?limit=50&offset=0");
+      // No trailing slash before the query: on Vercel, `/api/fin/statement/?…` 404s (Hono's
+      // mounted `.get("/")` matches `/api/fin/statement`, not `/api/fin/statement/`).
+      const res = await apiFetch("/api/fin/statement?limit=50&offset=0");
       if (!res.ok) throw new Error("load_failed");
       const data = await res.json() as { statements: StatementRow[]; total: number };
       setStatements(data.statements);

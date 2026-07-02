@@ -82,7 +82,12 @@ describe("T-STMT-004-1 [blocant]: StatementHistoryPage smoke", () => {
     expect(document.body).toBeTruthy();
   });
 
-  it("T-STMT-004-2 [blocant]: calls GET /api/fin/statement/ on mount", async () => {
+  it("T-STMT-004-2 [blocant]: calls GET /api/fin/statement WITHOUT a trailing slash", async () => {
+    // Regression (STMT-008): the list URL had a trailing slash — `/api/fin/statement/?…` —
+    // which 404s on Vercel (Hono's mounted `.get("/")` matches `/api/fin/statement`, not the
+    // slashed form), so the page showed "Eroare la încărcarea extraselor" in prod. This test
+    // asserted the BROKEN URL before, so it stayed green while prod broke — now it locks the
+    // correct URL (§3.5.1quater: don't test a dead route).
     const { default: StatementHistoryPage } = await import(
       "@/pages/fin/StatementHistoryPage"
     );
@@ -90,10 +95,8 @@ describe("T-STMT-004-1 [blocant]: StatementHistoryPage smoke", () => {
 
     await waitFor(() => {
       const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
-      const listCall = calls.find(([url]: [string]) =>
-        url.includes("/api/fin/statement/")
-      );
-      expect(listCall).toBeTruthy();
+      expect(calls.some(([url]: [string]) => /\/api\/fin\/statement\?/.test(url))).toBe(true);
+      expect(calls.some(([url]: [string]) => url.includes("/api/fin/statement/?"))).toBe(false);
     });
   });
 
