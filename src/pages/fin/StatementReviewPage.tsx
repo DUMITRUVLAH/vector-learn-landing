@@ -21,6 +21,8 @@ interface StatementLine {
   txDate: string | null;
   description: string;
   counterparty: string | null;
+  counterpartyIdno: string | null;
+  counterpartyIban: string | null;
   amountCents: number;
   direction: string;
   reportable: string;
@@ -151,9 +153,45 @@ export default function StatementReviewPage({ captureId }: StatementReviewPagePr
     showToast("Linie actualizată.");
   };
 
+  // e-Factura candidates = incoming client payments not yet invoiced.
+  // (OUT lines are supplier invoices TO us — we can't issue e-Factura for those.)
+  const isEfacturaCandidate = (l: StatementLine) =>
+    l.direction === "in" && l.reportable === "yes" && !l.linkedFinInvoiceId;
+
   const handleSelectAll = () => {
-    const reportableIds = lines.filter((l) => l.reportable === "yes" && !l.linkedFinInvoiceId).map((l) => l.id);
-    setSelected(new Set(reportableIds));
+    setSelected(new Set(lines.filter(isEfacturaCandidate).map((l) => l.id)));
+  };
+
+  const selectedMissingIdno = lines.filter((l) => selected.has(l.id) && !l.counterpartyIdno).length;
+
+  const [exporting, setExporting] = useState(false);
+  const handleExportXml = async () => {
+    setExporting(true);
+    try {
+      const res = await apiFetch(`/api/fin/statement/${captureId}/export-xml`, {
+        method: "POST",
+        body: JSON.stringify({ lineIds: Array.from(selected) }),
+      });
+      if (res.status === 422) {
+        const data = await res.json() as { message?: string; errors?: Array<{ message: string }> };
+        showToast(data.message ?? data.errors?.[0]?.message ?? "Linii invalide pentru export.", "err");
+        return;
+      }
+      if (!res.ok) throw new Error("export_failed");
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const fnMatch = /filename="([^"]+)"/.exec(disposition);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fnMatch?.[1] ?? `efacturi-${captureId.slice(0, 8)}.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      showToast(`XML generat pentru ${selected.size} linie(i). Importă-l în portalul SFS (Fișierele XML → Import XML).`);
+    } catch {
+      showToast("Eroare la generarea XML. Încearcă din nou.", "err");
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleSubmitEfactura = async () => {
@@ -189,7 +227,7 @@ export default function StatementReviewPage({ captureId }: StatementReviewPagePr
       setEditValues({});
     } else {
       const line = lines.find((l) => l.id === id);
-      if (line) setEditValues({ txDate: line.txDate ?? "", description: line.description, counterparty: line.counterparty ?? "", amountCents: line.amountCents, direction: line.direction as "in" | "out", reportable: line.reportable as "yes" | "no" | "review" });
+      if (line) setEditValues({ txDate: line.txDate ?? "", description: line.description, counterparty: line.counterparty ?? "", counterpartyIdno: line.counterpartyIdno ?? "", counterpartyIban: line.counterpartyIban ?? "", amountCents: line.amountCents, direction: line.direction as "in" | "out", reportable: line.reportable as "yes" | "no" | "review" });
       setExpandedId(id);
     }
   };
@@ -309,12 +347,30 @@ export default function StatementReviewPage({ captureId }: StatementReviewPagePr
             {submitting ? "Se trimite..." : `Trimite la e-Factura (${selected.size})`}
           </button>
 
+          <button
+            type="button"
+            disabled={selected.size === 0 || exporting}
+            onClick={handleExportXml}
+            title="Generează fișierele XML pentru import manual în portalul SFS — nu trimite nimic la SFS"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50 min-h-[44px]"
+          >
+            {exporting ? "Se generează..." : `Descarcă XML (${selected.size})`}
+          </button>
+
           {hasMockLines && (
             <a href="#/business/fin/sfs-settings" className="text-primary underline text-sm">
               Configurează SFS
             </a>
           )}
         </div>
+
+        {/* ── Missing-IDNO warning for current selection ──────────────────── */}
+        {selectedMissingIdno > 0 && (
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/10 dark:border-yellow-800 px-4 py-3 text-sm text-yellow-800 dark:text-yellow-400" role="alert">
+            {selectedMissingIdno} linie(i) selectată(e) nu au IDNO-ul cumpărătorului — factura ar fi respinsă de SFS.
+            Apasă pe linie și completează câmpul IDNO înainte de a genera.
+          </div>
+        )}
 
         {/* ── Submit confirmation dialog ──────────────────────────────────── */}
         {showConfirm && (
@@ -362,7 +418,7 @@ export default function StatementReviewPage({ captureId }: StatementReviewPagePr
                       <input
                         type="checkbox"
                         aria-label="Selectează toate raportabilele"
-                        checked={selected.size > 0 && selected.size === lines.filter((l) => l.reportable === "yes" && !l.linkedFinInvoiceId).length}
+                        checked={selected.size > 0 && selected.size === lines.filter(isEfacturaCandidate).length}
                         onChange={(e) => e.target.checked ? handleSelectAll() : setSelected(new Set())}
                         className="rounded"
                       />
@@ -370,6 +426,7 @@ export default function StatementReviewPage({ captureId }: StatementReviewPagePr
                     <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Data</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Descriere</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Contraparte</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">IDNO</th>
                     <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Sumă</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Dir</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Match</th>
@@ -404,6 +461,13 @@ export default function StatementReviewPage({ captureId }: StatementReviewPagePr
                         </td>
                         <td className="px-3 py-2 max-w-[180px] truncate">{line.description}</td>
                         <td className="px-3 py-2 text-muted-foreground max-w-[140px] truncate">{line.counterparty ?? "—"}</td>
+                        <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
+                          {line.counterpartyIdno ?? (
+                            line.direction === "in"
+                              ? <span className="text-yellow-700 dark:text-yellow-400">lipsește</span>
+                              : <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-right font-mono text-xs whitespace-nowrap">
                           {formatMDL(line.amountCents)}
                         </td>
@@ -436,7 +500,7 @@ export default function StatementReviewPage({ captureId }: StatementReviewPagePr
                       {/* Inline edit row */}
                       {expandedId === line.id && (
                         <tr key={`${line.id}-edit`} className="bg-muted/20">
-                          <td colSpan={8} className="px-4 py-4">
+                          <td colSpan={9} className="px-4 py-4">
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                               <div>
                                 <label className="block text-xs font-medium text-muted-foreground mb-1">Data (YYYY-MM-DD)</label>
@@ -464,6 +528,29 @@ export default function StatementReviewPage({ captureId }: StatementReviewPagePr
                                   value={editValues.counterparty ?? ""}
                                   onChange={(e) => setEditValues((v) => ({ ...v, counterparty: e.target.value }))}
                                   className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-muted-foreground mb-1">IDNO cumpărător (7–13 cifre)</label>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={editValues.counterpartyIdno ?? ""}
+                                  onChange={(e) => setEditValues((v) => ({ ...v, counterpartyIdno: e.target.value.replace(/\D/g, "") }))}
+                                  className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono"
+                                  placeholder="1024600035737"
+                                  maxLength={13}
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-muted-foreground mb-1">IBAN / cont partener</label>
+                                <input
+                                  type="text"
+                                  value={editValues.counterpartyIban ?? ""}
+                                  onChange={(e) => setEditValues((v) => ({ ...v, counterpartyIban: e.target.value.toUpperCase().replace(/\s/g, "") }))}
+                                  className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono"
+                                  placeholder="MD87AG000000022516065719"
+                                  maxLength={34}
                                 />
                               </div>
                               <div>
@@ -503,7 +590,7 @@ export default function StatementReviewPage({ captureId }: StatementReviewPagePr
                             <div className="flex gap-2 mt-3">
                               <button
                                 type="button"
-                                onClick={() => handlePatch(line.id, { txDate: editValues.txDate ?? undefined, description: editValues.description, counterparty: editValues.counterparty, amountCents: editValues.amountCents, direction: editValues.direction as "in" | "out", reportable: editValues.reportable as "yes" | "no" | "review" })}
+                                onClick={() => handlePatch(line.id, { txDate: editValues.txDate ?? undefined, description: editValues.description, counterparty: editValues.counterparty, counterpartyIdno: editValues.counterpartyIdno || null, counterpartyIban: editValues.counterpartyIban || null, amountCents: editValues.amountCents, direction: editValues.direction as "in" | "out", reportable: editValues.reportable as "yes" | "no" | "review" })}
                                 className="px-4 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors min-h-[36px]"
                               >
                                 Salvează
