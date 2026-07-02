@@ -1,11 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "node scripts/check-undefined-refs.mjs && node scripts/check-route-mounts.mjs && node scripts/check-nav-links.mjs && node scripts/check-migration-breakpoints.mjs && node scripts/vercel-migrate.mjs && vite build && node scripts/build-vercel.mjs",
-  "framework": null,
-  "crons": [
-    {
-      "path": "/api/fin/cron/run-recurring",
-      "schedule": "0 6 * * *"
-    }
-  ]
+  "framework": null
 }
