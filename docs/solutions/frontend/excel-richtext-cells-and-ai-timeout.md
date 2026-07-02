@@ -32,3 +32,17 @@ failure only exists where the AI key is set (prod). Two environment-specific fac
 - **Test each upload FORMAT, not just one.** The PDF smoke green ≠ Excel works. Verified the
   Excel action against real files (totals equal the bank's reported Total Intrări/Ieșiri to the
   cent) + 12 regression tests that fail on the old code.
+
+## Follow-up (STMT-007): the ACTUAL prod 500 was a packaging bug, not the timeout
+
+The richText fix above was necessary but did NOT resolve the owner's error, because
+`await import("exceljs")` was throwing **before any parsing**: `scripts/build-vercel.mjs`
+listed `exceljs` in esbuild's `external`. The Vercel Build Output API `.func` directory ships
+ONLY the bundled `index.mjs` — there is no `node_modules` — so an external package can never
+resolve at runtime → `500: Cannot find package 'exceljs'` on every `.xlsx` upload (statement
+import AND the PAR Excel export). Fix: remove exceljs from `external` (esbuild bundles it
+fine; 8.2 MB). **Rule: never mark a package that request-path code imports as esbuild
+`external` in build-vercel.mjs.** Only guarded/never-on-Vercel packages (pglite, playwright)
+may be external. Lesson reinforced: when the fix you shipped doesn't clear the reported error,
+re-derive the root cause from the ACTUAL failing environment — don't assume your first theory
+was complete.
