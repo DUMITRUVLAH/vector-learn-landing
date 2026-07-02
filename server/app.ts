@@ -90,6 +90,9 @@ import { parConfigImportRoutes } from "./routes/parConfigImport";
 // STMT module (STMT-001..004): Statement upload → review → e-Factura → history
 import { finStatementRoutes } from "./routes/finStatement";
 
+// AUTOBILL: daily recurring-billing cron (generate → e-Factura → email PDF)
+import { finCronRoutes } from "./routes/finCron";
+
 // DOCMERGE module (DOCMERGE-001)
 import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
 
@@ -137,6 +140,7 @@ app.route("/api/analytics/fin", finAnalyticsRoutes);
 // STMT-001..004: Statement routes — mounted BEFORE /api/fin to avoid /statement being shadowed
 // by the broad /api/fin catch of finCapturesRoutes/finEinvoicesRoutes.
 app.route("/api/fin/statement", finStatementRoutes);
+app.route("/api/fin/cron", finCronRoutes);
 
 // FinDesk
 app.route("/api/fin/invoices", finInvoicesRoutes);

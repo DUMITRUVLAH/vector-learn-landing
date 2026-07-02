@@ -39,6 +39,7 @@ import {
 } from "../lib/efacturaMoldova";
 // STMT-003: loadSfsConfig moved to server/lib/fin/sfsConfig.ts (shared with finStatement.ts)
 import { loadSfsConfig } from "../lib/fin/sfsConfig";
+import { submitInvoiceToSfs } from "../lib/fin/submitInvoiceToSfs";
 
 export const finEinvoicesRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -262,204 +263,30 @@ finEinvoicesRoutes.post("/einvoices/:invoiceId/submit", async (c) => {
   const user = c.get("user");
   const invoiceId = c.req.param("invoiceId");
 
-  // Load SFS settings
-  const sfsData = await loadSfsConfig(user.tenantId);
-  if (!sfsData) {
-    return c.json({ error: "sfs_not_configured" }, 400);
-  }
+  // Delegates to the shared helper (server/lib/fin/submitInvoiceToSfs.ts) so the manual button
+  // and the daily auto-billing cron run byte-identical logic. Map the structured result → HTTP.
+  const result = await submitInvoiceToSfs(user.tenantId, invoiceId);
 
-  const { config } = sfsData;
-
-  // Check if already submitted
-  const existing = await db
-    .select()
-    .from(finEinvoices)
-    .where(
-      and(eq(finEinvoices.finInvoiceId, invoiceId), eq(finEinvoices.tenantId, user.tenantId))
-    )
-    .limit(1);
-
-  if (existing.length > 0 && existing[0].sfsStatus !== "pending") {
-    return c.json(
-      {
-        error: "already_submitted",
-        sfsStatus: existing[0].sfsStatus,
-      },
-      409
-    );
-  }
-
-  // Build SFS client — REUSE EfacturaMdClient
-  const transport = config.mock ? createMockTransport() : undefined;
-  const client = new EfacturaMdClient(config, transport);
-
-  // ── Load the real invoice + buyer + line items ──────────────────────────────
-  const [invoice] = await db
-    .select()
-    .from(finInvoices)
-    .where(and(eq(finInvoices.id, invoiceId), eq(finInvoices.tenantId, user.tenantId)))
-    .limit(1);
-
-  if (!invoice) {
-    return c.json({ error: "invoice_not_found" }, 404);
-  }
-
-  // Buyer IDNO + bank from fin_parties (the invoice recipient).
-  let buyerIdno = "";
-  let buyerBankAccount: string | undefined;
-  if (invoice.partyId) {
-    const [party] = await db
-      .select()
-      .from(finParties)
-      .where(and(eq(finParties.id, invoice.partyId), eq(finParties.tenantId, user.tenantId)))
-      .limit(1);
-    buyerIdno = party?.idno ?? "";
-    buyerBankAccount = party?.iban ?? undefined;
-  }
-
-  if (!buyerIdno) {
-    return c.json({ error: "buyer_idno_missing", detail: "Factura nu are un cumpărător cu IDNO." }, 422);
-  }
-
-  // SFS cere OBLIGATORIU contul bancar al cumpărătorului (Buyer/BankAccount).
-  // Fără el, PostInvoices eșuează cu "Object reference not set to an instance of
-  // an object" (NullReferenceException pe server). Verificat live. Blocăm cu mesaj
-  // clar în loc să lăsăm SFS să dea eroarea criptică.
-  if (!buyerBankAccount) {
-    return c.json(
-      {
-        error: "buyer_iban_missing",
-        detail:
-          "Cumpărătorul nu are cont bancar (IBAN) completat. SFS îl cere obligatoriu. " +
-          "Adaugă IBAN-ul partenerului în fișa lui, apoi retrimite.",
-      },
-      422
-    );
-  }
-
-  const lineRows = await db
-    .select()
-    .from(finInvoiceLines)
-    .where(eq(finInvoiceLines.invoiceId, invoiceId));
-
-  if (lineRows.length === 0) {
-    return c.json({ error: "invoice_has_no_lines" }, 422);
-  }
-
-  const lines: SfsInvoiceLine[] = lineRows.map((l, i) => ({
-    code: l.serviceId ?? String(i + 1),
-    name: l.description,
-    unitOfMeasure: "buc",
-    quantity: l.quantity,
-    // cents → currency units, fără TVA (unitPriceCents e prețul unitar fără TVA).
-    unitPriceWithoutVat: l.unitPriceCents / 100,
-    vatRate: l.vatPct,
-  }));
-
-  const requestId = randomUUID();
-  const now = new Date();
-
-  let xml: string;
-  try {
-    xml = generateSfsInvoiceXml({
-      supplierIdno: config.supplierIdno,
-      supplierBankAccount: config.supplierBankAccount,
-      buyerIdno,
-      buyerBankAccount,
-      deliveryDate: invoice.issuedAt ?? now,
-      // APIeInvoiceId — îl folosim la reconciliere (SearchInvoices §5.15) ca să
-      // aflăm Seria/Number atribuite de SFS după postare.
-      internalId: invoiceId,
-      lines,
-    });
-  } catch (err) {
-    return c.json(
-      { error: "xml_generation_failed", detail: err instanceof Error ? err.message : String(err) },
-      500
-    );
-  }
-
-  try {
-    const result = await client.postInvoices(xml, requestId);
-
-    // În fluxul semiautomatizat SFS atribuie Seria + Number la postare. Le aflăm
-    // imediat după, căutând după APIeInvoiceId (= invoiceId). Dacă încă nu e
-    // indexată, rămân null și se completează la următorul /sync.
-    let sfsSerialNumber: string | null = null;
-    let sfsNumber: string | null = null;
-    if (!result.errorMessage) {
-      try {
-        const found = await client.searchByApiInvoiceId(invoiceId, randomUUID());
-        if (found) {
-          sfsSerialNumber = found.seria || null;
-          sfsNumber = found.number || null;
-        }
-      } catch {
-        // Reconcilierea poate întârzia; nu blocăm trimiterea pentru asta.
-      }
+  if (result.ok) {
+    if (result.alreadyDone) {
+      return c.json({ error: "already_submitted", sfsStatus: result.sfsStatus }, 409);
     }
-    const sfsInvoiceId = sfsNumber;
-
-    // Upsert fin_einvoices row
-    if (existing.length > 0) {
-      await db
-        .update(finEinvoices)
-        .set({
-          sfsStatus: "sent",
-          sfsSerialNumber,
-          sfsInvoiceId,
-          sfsRequestStatus: result.status,
-          sfsErrorMessage: result.errorMessage,
-          submittedAt: now,
-          updatedAt: now,
-        })
-        .where(eq(finEinvoices.id, existing[0].id));
-    } else {
-      await db.insert(finEinvoices).values({
-        tenantId: user.tenantId,
-        finInvoiceId: invoiceId,
-        sfsStatus: "sent",
-        sfsSerialNumber,
-        sfsInvoiceId,
-        sfsRequestStatus: result.status,
-        sfsErrorMessage: result.errorMessage,
-        submittedAt: now,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-
-    const [row] = await db
-      .select()
-      .from(finEinvoices)
-      .where(
-        and(eq(finEinvoices.finInvoiceId, invoiceId), eq(finEinvoices.tenantId, user.tenantId))
-      )
-      .limit(1);
-
-    return c.json({ data: { id: row.id, sfsStatus: row.sfsStatus, submittedAt: row.submittedAt?.toISOString() ?? null } });
-  } catch (err) {
-    const msg = err instanceof EfacturaMdError ? err.message : String(err);
-
-    // Update or insert row with error state
-    if (existing.length > 0) {
-      await db
-        .update(finEinvoices)
-        .set({ sfsStatus: "pending", sfsErrorMessage: msg, updatedAt: now })
-        .where(eq(finEinvoices.id, existing[0].id));
-    } else {
-      await db.insert(finEinvoices).values({
-        tenantId: user.tenantId,
-        finInvoiceId: invoiceId,
-        sfsStatus: "pending",
-        sfsErrorMessage: msg,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-
-    return c.json({ error: "sfs_submission_failed", detail: msg }, 422);
+    return c.json({ data: { id: result.einvoiceId, sfsStatus: result.sfsStatus, submittedAt: new Date().toISOString() } });
   }
+
+  const statusByReason: Record<string, number> = {
+    sfs_not_configured: 400,
+    invoice_not_found: 404,
+    buyer_idno_missing: 422,
+    buyer_iban_missing: 422,
+    invoice_has_no_lines: 422,
+    xml_generation_failed: 500,
+    sfs_submission_failed: 422,
+  };
+  return c.json(
+    { error: result.reason, detail: result.detail },
+    (statusByReason[result.reason ?? "sfs_submission_failed"] ?? 422) as 400 | 404 | 409 | 422 | 500,
+  );
 });
 
 // ─── POST /api/fin/einvoices/:invoiceId/sync ─────────────────────────────────
