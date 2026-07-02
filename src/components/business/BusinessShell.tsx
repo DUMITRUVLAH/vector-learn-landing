@@ -142,13 +142,15 @@ const PAR_NAV_GROUPS: NavGroup[] = [
   },
   {
     section: "Analiză",
+    prefix: "/business/par",
     items: [
-      { label: "Foldere proiecte", href: "/business/par/folders", icon: FolderOpen, roles: ["approver", "finance", "par_admin"] }, // VM1-10
+      { label: "Foldere proiecte", href: "/business/par/folders", icon: FolderOpen, roles: ["approver", "finance", "par_admin"] },
       { label: "Rapoarte & statistici", href: "/business/par/reports", icon: BarChart3, roles: ["approver", "finance", "par_admin"] },
     ],
   },
   {
     section: "Administrare",
+    prefix: "/business/par",
     items: [
       { label: "Administrare PAR", href: "/business/par/admin", icon: Settings, roles: ["par_admin"] },
     ],
@@ -215,7 +217,12 @@ function NavLink({
   );
 }
 
-/** Collapsible sidebar section. Only opens when the current path is inside this group. */
+// AUTOBILL/sidebar: the shell remounts on every navigation, so component state resets and the
+// sidebar "jumps". These module-level stores survive remounts within a session.
+const sectionOpenState = new Map<string, boolean>(); // section label → expanded?
+const badgeCache = { inbox: 0, finance: 0 }; // last seen notification counts
+
+/** Collapsible sidebar section. Opens when active; always-open when section is null. */
 function SidebarGroup({
   group,
   path,
@@ -227,22 +234,50 @@ function SidebarGroup({
   inboxCount: number;
   financeCount: number;
 }) {
-  // A group is "active" when the current path falls under its prefix.
   const isActive = !!group.prefix && path.startsWith(group.prefix);
-  const [open, setOpen] = useState(isActive);
+  // Sections without a label are always visible (no toggle needed).
+  const hasHeader = group.section !== null;
+  // Persist open/closed across shell remounts (each nav remounts the shell) so sections don't
+  // reset and the sidebar doesn't "jump". Keyed by section label.
+  const stateKey = group.section ?? "_";
+  const [open, setOpen] = useState(() => {
+    const remembered = sectionOpenState.get(stateKey);
+    return remembered ?? (!hasHeader || isActive);
+  });
+  const setOpenPersisted = (next: boolean) => {
+    sectionOpenState.set(stateKey, next);
+    setOpen(next);
+  };
 
-  // Auto-expand when navigating INTO this group; do NOT auto-close others.
+  // Keep in sync with route changes — expand active, keep others as-is.
   useEffect(() => {
-    if (isActive) setOpen(true);
+    if (isActive) setOpenPersisted(true);
   }, [isActive]);
 
+  if (!hasHeader) {
+    // Render items directly, no toggle button.
+    return (
+      <div className="flex flex-col gap-0.5">
+        {group.items.map((item) => (
+          <NavLink
+            key={item.href}
+            item={item}
+            path={path}
+            inboxCount={inboxCount}
+            financeCount={financeCount}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-1">
+    <div className="mt-2">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpenPersisted(!open)}
         className={cn(
-          "w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider transition-colors min-h-[36px]",
+          "w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider transition-colors",
           isActive
             ? "text-primary hover:bg-primary/5"
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -288,19 +323,22 @@ export function BusinessShell({
   // Notification badges
   const canApproveNav = parRoles.some((r) => ["approver", "par_admin"].includes(r));
   const canFinanceNav = parRoles.some((r) => ["finance", "par_admin"].includes(r));
-  const [inboxCount, setInboxCount] = useState(0);
-  const [financeCount, setFinanceCount] = useState(0);
+  // Seed from the module cache so a remount shows the last counts instantly (no flash), then
+  // refresh. `path` is intentionally NOT a dependency — badges don't change per navigation, so
+  // re-fetching on every click was pure noise (the "re-query on every click").
+  const [inboxCount, setInboxCount] = useState(badgeCache.inbox);
+  const [financeCount, setFinanceCount] = useState(badgeCache.finance);
   useEffect(() => {
     if (!canApproveNav && !canFinanceNav) { setInboxCount(0); setFinanceCount(0); return; }
     let alive = true;
     const fetchCounts = () => {
-      if (canApproveNav) getParInbox().then((r) => { if (alive) setInboxCount(r.total ?? 0); }).catch(() => {});
-      if (canFinanceNav) getFinanceQueue().then((r) => { if (alive) setFinanceCount(r.total ?? 0); }).catch(() => {});
+      if (canApproveNav) getParInbox().then((r) => { badgeCache.inbox = r.total ?? 0; if (alive) setInboxCount(badgeCache.inbox); }).catch(() => {});
+      if (canFinanceNav) getFinanceQueue().then((r) => { badgeCache.finance = r.total ?? 0; if (alive) setFinanceCount(badgeCache.finance); }).catch(() => {});
     };
     fetchCounts();
     const iv = setInterval(fetchCounts, 60_000);
     return () => { alive = false; clearInterval(iv); };
-  }, [canApproveNav, canFinanceNav, path]);
+  }, [canApproveNav, canFinanceNav]);
 
   // SPLIT-501: inside PAR module → focused PAR-only sidebar.
   const isParModule = path.startsWith("/business/par");
