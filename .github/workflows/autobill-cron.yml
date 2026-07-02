@@ -1,0 +1,34 @@
+name: AUTOBILL daily recurring billing
+
+# Triggers the cross-tenant auto-billing engine on prod once a day. We use GitHub Actions
+# (not Vercel Cron) because Vercel Cron validation failed this project's deploy at the
+# "Deploying outputs" step. The endpoint self-gates on CRON_SECRET, so this only works when
+# the CRON_SECRET repo secret matches the CRON_SECRET env var on Vercel.
+on:
+  schedule:
+    # 06:00 UTC daily. GitHub may delay scheduled runs by a few minutes at peak.
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: autobill-cron
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger recurring billing
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ vars.AUTOBILL_BASE_URL || 'https://www.finflow.best' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::warning::CRON_SECRET repo secret not set — skipping (endpoint would 401)."
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/out.json -w "%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/fin/cron/run-recurring")
+          echo "HTTP $code"; cat /tmp/out.json || true
+          if [ "$code" != "200" ]; then echo "::error::auto-billing run failed ($code)"; exit 1; fi

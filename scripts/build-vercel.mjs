@@ -71,8 +71,9 @@ writeFileSync(
 );
 
 // 3. Routing: /api/* → the function; everything else → static (SPA index for unknown paths)
-// AUTOBILL: with the Build Output API, Vercel reads cron jobs from THIS config.json (not from
-// vercel.json). run-recurring fires daily at 06:00 UTC; it self-gates on CRON_SECRET.
+// NOTE: the AUTOBILL daily cron is triggered by a GitHub Action (.github/workflows/autobill-cron.yml)
+// hitting /api/fin/cron/run-recurring — NOT a Vercel Cron. A `crons` entry here failed the deploy
+// at the "Deploying outputs" step (account/plan cron validation), so we schedule externally.
 writeFileSync(
   `${OUT}/config.json`,
   JSON.stringify(
@@ -83,7 +84,6 @@ writeFileSync(
         { handle: "filesystem" },
         { src: "/(.*)", dest: "/index.html" },
       ],
-      crons: [{ path: "/api/fin/cron/run-recurring", schedule: "0 6 * * *" }],
     },
     null,
     2
