@@ -51,55 +51,50 @@ describe("STMT-003: batchSubmit schema (pure)", () => {
   });
 });
 
-// ─── Backend: amountCents validation rule (pure) ─────────────────────────────
+// ─── Backend: line validation rules — the REAL module the routes use ─────────
+// (STMT-005 replaced the local test-only copy: a test that exercises a dead copy
+// passes while prod breaks — §3.5.1quater. These now import the exact functions
+// finStatement.ts calls; the endpoints themselves are exercised for real in
+// server/__tests__/statementEfactura.routes.test.ts against PGlite.)
 
-function validateSubmitLine(amountCents: number, alreadyLinked: boolean) {
-  if (amountCents === 0) return { ok: false, status: 400, error: "zero_amount" };
-  if (alreadyLinked) return { ok: false, status: 409, error: "already_linked" };
-  return { ok: true };
-}
+import {
+  validateLineForEfactura,
+  type LineForEfactura,
+} from "../../../server/lib/fin/statementEfactura";
 
-describe("STMT-003: submit validation rules (pure)", () => {
+const baseLine: LineForEfactura = {
+  amountCents: 15000,
+  direction: "in",
+  linkedFinInvoiceId: null,
+  counterpartyIdno: "1009600020033",
+  counterpartyIban: "MD94AG000000022512036601",
+  counterparty: "AMDARIS S.R.L.",
+  description: "Plata pentru Servicii",
+  txDate: "2026-05-07",
+};
+
+describe("STMT-003/005: submit validation rules (REAL module)", () => {
   it("T-STMT-003-1 [blocant]: rejects zero amount", () => {
-    const r = validateSubmitLine(0, false);
-    expect(r.ok).toBe(false);
-    expect(r.status).toBe(400);
+    expect(validateLineForEfactura({ ...baseLine, amountCents: 0 })).toBe("amount_zero");
   });
 
   it("T-STMT-003-2 [blocant]: rejects already-linked line", () => {
-    const r = validateSubmitLine(15000, true);
-    expect(r.ok).toBe(false);
-    expect(r.status).toBe(409);
+    expect(validateLineForEfactura({ ...baseLine, linkedFinInvoiceId: "x" })).toBe("already_exported");
   });
 
-  it("T-STMT-003-3 [blocant]: accepts valid unlinked line", () => {
-    const r = validateSubmitLine(15000, false);
-    expect(r.ok).toBe(true);
+  it("T-STMT-003-3 [blocant]: accepts valid unlinked incoming line", () => {
+    expect(validateLineForEfactura(baseLine)).toBeNull();
+  });
+
+  it("T-STMT-005 [blocant]: rejects OUT lines (e-Factura only for incoming payments)", () => {
+    expect(validateLineForEfactura({ ...baseLine, direction: "out" })).toBe("only_incoming");
+  });
+
+  it("T-STMT-005 [blocant]: rejects missing buyer IDNO", () => {
+    expect(validateLineForEfactura({ ...baseLine, counterpartyIdno: null })).toBe("missing_buyer_idno");
   });
 
   it("accepts large amount", () => {
-    const r = validateSubmitLine(100_000_00, false); // 100,000 MDL
-    expect(r.ok).toBe(true);
-  });
-});
-
-// ─── Live integration smoke: POST /api/fin/statement/:id/submit-efactura ─────
-// This test is a stub that documents the expected API contract.
-// The actual call is covered by scripts/e2e-efactura.mjs (live smoke).
-
-describe("T-STMT-003-5 [blocant]: efactura endpoint contract (stubbed)", () => {
-  it("submit-efactura should return einvoiceId + sfsStatus on 200", () => {
-    // The real endpoint POST /api/fin/statement/:captureId/lines/:lineId/submit-efactura
-    // is covered by scripts/e2e-efactura.mjs which boots the full server + calls it.
-    // Here we just assert the expected response shape.
-    const mockResponse = {
-      einvoiceId: "c0a80101-0000-4000-a000-000000000099",
-      sfsStatus: "mock",
-      invoiceNumber: "VL-2024/001",
-      xmlPreview: "<Invoice/>",
-    };
-    expect(mockResponse.einvoiceId).toBeTruthy();
-    expect(["mock", "sent", "pending"]).toContain(mockResponse.sfsStatus);
-    expect(mockResponse.invoiceNumber).toBeTruthy();
+    expect(validateLineForEfactura({ ...baseLine, amountCents: 100_000_00 })).toBeNull();
   });
 });
