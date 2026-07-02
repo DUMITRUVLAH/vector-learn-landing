@@ -71,6 +71,8 @@ writeFileSync(
 );
 
 // 3. Routing: /api/* → the function; everything else → static (SPA index for unknown paths)
+// AUTOBILL: with the Build Output API, Vercel reads cron jobs from THIS config.json (not from
+// vercel.json). run-recurring fires daily at 06:00 UTC; it self-gates on CRON_SECRET.
 writeFileSync(
   `${OUT}/config.json`,
   JSON.stringify(
@@ -81,6 +83,7 @@ writeFileSync(
         { handle: "filesystem" },
         { src: "/(.*)", dest: "/index.html" },
       ],
+      crons: [{ path: "/api/fin/cron/run-recurring", schedule: "0 6 * * *" }],
     },
     null,
     2
