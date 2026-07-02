@@ -184,6 +184,10 @@ function Routes() {
   if (path.startsWith("/business/fin/payments")) return <BusinessGuardPage><Suspense fallback={null}><FinPaymentsPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/calendar")) return <BusinessGuardPage><Suspense fallback={null}><FinCalendarPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/banklink")) return <BusinessGuardPage><Suspense fallback={null}><BankLinkPage /></Suspense></BusinessGuardPage>;
+  // AUTOBILL: the exact detail route MUST be matched before the startsWith list route below,
+  // otherwise /business/fin/parties/:id renders the LIST (the detail route further down was
+  // dead code) and clicking a partner appeared to "throw".
+  if (path.match(/^\/business\/fin\/parties\/[^/]+$/)) return <BusinessGuardPage><PartyDetailPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/parties")) return <BusinessGuardPage><PartiesPage /></BusinessGuardPage>;
   // FIX-502: /business/fin/payroll/runs/:id must be matched before the list route
   if (path.match(/^\/business\/fin\/payroll\/runs\/[^/]+/)) return <BusinessGuardPage><PayrollRunDetailPage /></BusinessGuardPage>;
@@ -228,8 +232,7 @@ function Routes() {
   }
   if (path.startsWith("/business/conturi-plata")) return <BusinessGuardPage><PaymentAccountsPage /></BusinessGuardPage>;
 
-  // Parties detail
-  if (path.match(/^\/business\/fin\/parties\/[^/]+$/)) return <BusinessGuardPage><PartyDetailPage /></BusinessGuardPage>;
+  // (Parties detail is matched above, before the /business/fin/parties list route.)
 
   // Fallback: orice altceva → /business
   return <RedirectToBusiness />;

@@ -125,7 +125,7 @@ function FinDeskSection({ engagement, onLinked }: FinDeskSectionProps) {
             <div className="min-w-0 flex-1">
               <p className="text-xs text-muted-foreground">Partener FinDesk</p>
               <a
-                href={`#/app/fin/parties/${engagement.finPartyId}`}
+                href={`#/business/fin/parties/${engagement.finPartyId}`}
                 className="text-sm font-medium text-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded truncate block"
               >
                 {engagement.residentName}
