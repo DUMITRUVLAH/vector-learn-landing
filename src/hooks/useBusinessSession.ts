@@ -8,6 +8,7 @@
  */
 import { useEffect, useState, useCallback } from "react";
 import { api, ApiError } from "@/lib/api";
+import { clearSessionCache } from "@/lib/sessionCache";
 
 export interface BusinessSessionUser {
   id: string;
@@ -68,6 +69,8 @@ export function useBusinessSession() {
     } catch {
       // ignore
     }
+    // Drop cached identity (fin-me, par-me) so a different user doesn't see stale nav/roles.
+    clearSessionCache();
     setState({ status: "unauthenticated", data: null, error: null });
   }, []);
 
