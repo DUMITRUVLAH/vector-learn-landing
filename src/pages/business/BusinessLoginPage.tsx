@@ -8,6 +8,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, LogIn } from "lucide-react";
 import { AuthLayout } from "@/components/app/AuthLayout";
+import { FinFlowLogo } from "@/components/business/FinFlowLogo";
 import { api, ApiError } from "@/lib/api";
 import { useRouter } from "@/router/HashRouter";
 
@@ -67,8 +68,9 @@ export function BusinessLoginPage() {
 
   return (
     <AuthLayout
-      title="Business Suite"
-      subtitle="FinDesk · PAR · ITPark — conectați-vă în cont"
+      title="FinFlow"
+      subtitle="PAR · ITPark — conectați-vă în cont"
+      headerLogo={<FinFlowLogo width={80} variant="color" />}
     >
       <form onSubmit={submit} className="space-y-4">
         <div>
@@ -113,7 +115,7 @@ export function BusinessLoginPage() {
           className="inline-flex items-center justify-center gap-2 w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-target"
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LogIn className="h-4 w-4" aria-hidden="true" />}
-          Conectare Business Suite
+          Conectare FinFlow
         </button>
 
         <div className="relative my-1">

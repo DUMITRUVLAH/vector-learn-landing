@@ -160,6 +160,9 @@ export const finEinvoices = pgTable(
     /** Error message from SFS if the submission failed. */
     sfsErrorMessage: text("sfs_error_message"),
 
+    /** Raw XML payload sent to SFS. Stored for audit + STMT-004 ZIP download. */
+    xmlPayload: text("xml_payload"),
+
     /** When the invoice was first submitted to SFS. null = not yet submitted. */
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
 

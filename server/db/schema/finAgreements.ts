@@ -77,6 +77,16 @@ export const finAgreements = pgTable(
     /** ISO 4217 currency code for all services in this contract (e.g. MDL, RON, EUR) */
     currency: char("currency", { length: 3 }).notNull().default("MDL"),
     notes: text("notes"),
+    /**
+     * AUTOBILL: when true, the daily recurring-billing cron auto-generates the invoice for due
+     * services on this contract, submits it to SFS e-Factura, AND emails the PDF to the client —
+     * with zero manual clicks. Requires the linked party to have an IDNO (e-Factura buyer) and an
+     * email (PDF delivery); the cron skips-with-reason when either is missing. Default off so
+     * nothing bills automatically until the owner opts a contract in.
+     */
+    autoBilling: boolean("auto_billing").notNull().default(false),
+    /** AUTOBILL: last time the cron processed this contract (for the UI + audit). */
+    autoBilledAt: timestamp("auto_billed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -93,6 +93,8 @@ const FOLDER_DEFS: { status: FolderStatus; label: string; statuses: string[] }[]
 type ParRow = ParRequest & { eventId?: string | null; totalMdlCents?: number | null };
 
 function buildBuckets(rows: ParRow[]): FolderBucket[] {
+  // Always return all 3 status folders (De aprobat / Aprobate / Plătite) so the structure is
+  // consistent per project — even an empty one shows (count 0), as the owner requested.
   return FOLDER_DEFS.map((def) => {
     const matching = rows.filter((r) => def.statuses.includes(r.status));
     return {
@@ -100,7 +102,7 @@ function buildBuckets(rows: ParRow[]): FolderBucket[] {
       count: matching.length,
       totalMdlCents: matching.reduce((s, r) => s + (r.totalMdlCents ?? r.totalEstimatedCents), 0),
     };
-  }).filter((b) => b.count > 0);
+  });
 }
 
 function buildFolders(
@@ -178,18 +180,26 @@ const folderStatusColor: Record<FolderStatus, string> = {
 };
 
 function BucketRow({ bucket, onNavigate }: { bucket: FolderBucket; onNavigate: () => void }) {
+  const isPaid = bucket.status === "paid";
   return (
     <button
       type="button"
       onClick={onNavigate}
-      className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors w-full text-left min-h-[44px] group"
+      className={cn(
+        "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors w-full text-left min-h-[44px] group",
+        isPaid
+          ? "bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30"
+          : "hover:bg-muted"
+      )}
       aria-label={`${bucket.label}: ${bucket.count} cereri, ${formatMDL(bucket.totalMdlCents)}`}
     >
       <Folder
         className={cn("h-4 w-4 flex-shrink-0", folderStatusColor[bucket.status])}
         aria-hidden
       />
-      <span className="flex-1 text-sm text-foreground">{bucket.label}</span>
+      <span className={cn("flex-1 text-sm", isPaid ? "text-green-700 dark:text-green-400 font-medium" : "text-foreground")}>
+        {bucket.label}
+      </span>
       <span className="text-xs text-muted-foreground tabular-nums">{bucket.count} cereri</span>
       <span className="text-xs font-medium text-foreground tabular-nums ml-2 hidden sm:inline">
         {formatMDL(bucket.totalMdlCents)}

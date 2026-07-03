@@ -6,8 +6,9 @@
  * CTA primar "Intră în cont" → /business/login.
  * Vector 365 semantic tokens, light+dark, WCAG AA.
  */
-import { Landmark, ClipboardList, Building2, LogIn, ArrowRight } from "lucide-react";
+import { ClipboardList, Building2, LogIn, ArrowRight, Landmark } from "lucide-react";
 import { Link } from "@/router/HashRouter";
+import { FinFlowMark } from "@/components/business/FinFlowLogo";
 
 interface ModuleCard {
   icon: typeof Landmark;
@@ -50,8 +51,8 @@ export function BusinessLandingPage() {
       {/* Nav bar minimal */}
       <header className="h-14 border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-20 flex items-center px-4 sm:px-8 gap-4">
         <span className="font-display font-bold text-base flex items-center gap-2">
-          <Landmark className="h-5 w-5 text-primary" aria-hidden="true" />
-          Business Suite
+          <FinFlowMark size={28} />
+          <span className="hidden sm:inline">FinFlow</span>
         </span>
         <div className="flex-1" />
         <Link
@@ -66,10 +67,10 @@ export function BusinessLandingPage() {
       {/* Hero */}
       <section className="py-20 px-4 sm:px-8 text-center max-w-3xl mx-auto">
         <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary mb-6">
-          FinDesk · PAR · ITPark
+          FinFlow · PAR · ITPark
         </div>
         <h1 className="text-4xl sm:text-5xl font-display font-bold tracking-tight text-foreground mb-4">
-          Business Suite —<br />
+          FinFlow —<br />
           <span className="text-primary">Controlul financiar complet</span>
         </h1>
         <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
@@ -141,7 +142,7 @@ export function BusinessLandingPage() {
           Gata de pornit?
         </h2>
         <p className="text-muted-foreground text-sm mb-6">
-          Logați-vă cu contul Business Suite și accesați FinDesk, PAR și ITPark.
+          Logați-vă cu contul FinFlow și accesați modulele PAR și ITPark.
         </p>
         <Link
           to="/business/login"
@@ -155,7 +156,7 @@ export function BusinessLandingPage() {
       {/* Footer minimal */}
       <footer className="py-6 px-4 sm:px-8 text-center border-t border-border">
         <p className="text-xs text-muted-foreground">
-          Business Suite · FinDesk · PAR · ITPark ·{" "}
+          FinFlow · PAR · ITPark ·{" "}
           <Link to="/" className="underline hover:text-foreground transition-colors">
             CRM Educațional →
           </Link>

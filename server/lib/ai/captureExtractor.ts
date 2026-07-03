@@ -81,6 +81,10 @@ export const CAPTURE_EXTRACT_STUB: ExtractedFields = {
   purpose: { value: "Cheltuială echipă — verificați descrierea", confidence: 0.6, low_confidence: true },
   reportable: { value: true, confidence: 0.9, reason: "Factură cu TVA deductibil → intră în declarația TVA" },
   document_class: { value: "invoice", confidence: 0.9, reason: "Factură cu furnizor și TVA" },
+  // Feature 3 (PAR-F3): PAR-specific fields — null in FinDesk capture stub; overridden in PAR stub.
+  // The PAR ai-prefill route uses a PAR-specific stub (see parAiPrefill.ts CAPTURE_EXTRACT_STUB_PAR).
+  beneficiary_name: { value: null, confidence: 0, low_confidence: true },
+  bank_name: { value: null, confidence: 0, low_confidence: true },
 };
 
 // ─── Field processing ─────────────────────────────────────────────────────────
@@ -129,6 +133,9 @@ function processFields(raw: Record<string, unknown>): ExtractedFields {
     "category",
     "reference",
     "purpose",
+    // Feature 3 (PAR): optional fields requested via promptAddendum
+    "beneficiary_name",
+    "bank_name",
   ] as const;
 
   for (const key of keys) {
@@ -232,12 +239,15 @@ export async function extractCaptureFields(
   userId: string,
   captureId: string,
   imageDataUrl?: string,
+  /** Feature 3 (PAR): optional extra instructions appended to the system prompt.
+   * Used by parAiPrefill to request beneficiary_name / bank_name separation. */
+  promptAddendum?: string,
 ): Promise<CaptureExtractionResult> {
   const aiText =
     rawText.length > MAX_AI_TEXT_CHARS ? `${rawText.slice(0, MAX_AI_TEXT_CHARS)}\n[…text trunchiat]` : rawText;
   const callOptions: AiCallOptions = {
     action: "capture_extract",
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: promptAddendum ? `${SYSTEM_PROMPT}\n\n${promptAddendum}` : SYSTEM_PROMPT,
     // With an image, instruct the model to read the document; otherwise use the OCR text.
     userMessage: imageDataUrl
       ? "Extrage câmpurile financiare din factura/bonul din imaginea atașată."

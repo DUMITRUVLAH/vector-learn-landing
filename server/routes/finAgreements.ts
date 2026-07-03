@@ -35,6 +35,8 @@ const createAgreementSchema = z.object({
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format dată: YYYY-MM-DD").optional().nullable(),
   currency: z.string().length(3, "Codul valutei trebuie să fie ISO 4217 (3 litere)").optional().default("MDL"),
   notes: z.string().max(2000).optional().nullable(),
+  /** AUTOBILL: opt this contract into the daily auto-billing cron. */
+  autoBilling: z.boolean().optional(),
 });
 
 const updateAgreementSchema = createAgreementSchema.partial();
@@ -371,6 +373,7 @@ finAgreementsRoutes.patch("/:id", zValidator("json", updateAgreementSchema), asy
   if (body.endDate !== undefined) updateData.endDate = body.endDate ?? null;
   if (body.currency !== undefined) updateData.currency = body.currency;
   if (body.notes !== undefined) updateData.notes = body.notes ?? null;
+  if (body.autoBilling !== undefined) updateData.autoBilling = body.autoBilling;
 
   if (Object.keys(updateData).length === 0) {
     return c.json({ error: "no_fields_to_update" }, 422);

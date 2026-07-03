@@ -315,7 +315,12 @@ are NON-NEGOTIABLE:
    type-quality errors (those don't crash at runtime); do not "fix" it by gating all of tsc.
 2. **Self-healing schema sync (`server/db/sync-schema.ts`).** Runs after migrations on every
    deploy; adds (never drops) any column the schema expects but the DB lacks. Prevents
-   "column X does not exist". Whole missing TABLES still need a real migration — it logs those.
+   "column X does not exist". **When you add a NEW TABLE that request-path code queries, ALSO add a
+   `CREATE TABLE … IF NOT EXISTS` for it to sync-schema's `ENSURE_STATEMENTS` in the same commit** —
+   Vercel deploys CODE before migrations finish, so without the heal the feature 500s with
+   "relation X does not exist" until the migration lands (this bit `par_project_approvers`, 2026-06-28).
+   Belt-and-suspenders with the real migration; and make the query degrade gracefully (catch
+   missing-table → empty result) so a lag never crashes the page.
 3. **Post-deploy smoke (`npm run smoke` → `scripts/e2e-smoke.mjs`).** Real headless-browser
    login + 23-route sweep that scans for caught error TEXT (red messages), not just JS crashes —
    because most API failures render as text and a pageerror-only check reports false "all clean".
@@ -325,6 +330,47 @@ are NON-NEGOTIABLE:
 up, merge oldest-first ONE at a time, and after each: `npm run check-refs` + `vite build` must
 pass before the next. After the final merge + deploy, `npm run smoke` must be green. A merge
 that hasn't been built+smoke-tested has not shipped — it's just broken code on `main`.
+
+### 3.5.1quater Learn from EVERY mistake — the compounding loop (NON-NEGOTIABLE)
+Whenever a bug escapes to the owner, to prod, or is only caught after "I tested it" — it does NOT
+end at "fixed". A mistake that isn't turned into a permanent guard will recur. Every time you
+discover you were wrong, close this loop **in the same change**:
+
+1. **Root-cause it in one sentence** — the actual mechanism, not the symptom (e.g. "a placeholder
+   `par-prefill-<ts>` string was written to a `uuid` column", not "prefill was broken").
+2. **Add the regression test that WOULD have caught it** — and confirm it FAILS on the old code,
+   PASSES on the fix. Put it where it runs automatically (vitest, or a scenario in the relevant
+   `scripts/e2e-*.mjs`). A fix without a test that locks it is half a fix.
+3. **Record the lesson** — append a short entry under `docs/solutions/<category>/` (the categories
+   exist: build-errors, database-issues, frontend, security-issues, architecture-patterns). If it's
+   a *class* of bug (not a one-off), also add a one-line rule to this file so the next session reads
+   it. Cross-link from the test/code comment.
+
+**The lesson that keeps recurring — test the ACTION, not the affordance.** "The button renders" /
+"the page loads without an error banner" is necessary but NOT sufficient: it does not execute the
+feature. The 2026-06-28 AI-prefill 500 (`invalid input syntax for type uuid: "par-prefill-…"`)
+shipped because the e2e asserted the upload button *existed* but never *called* `POST
+/api/par/ai-prefill` with a document — so the audit-log write (where the bad uuid blew up) never
+ran. Therefore, for EVERY new endpoint and EVERY "AI / extract / upload / generate / merge / pay /
+approve" action: the test must **invoke it once with realistic input and assert a 200 + the
+expected response shape** (or the documented non-200). Rendering a control proves nothing about
+whether clicking it works. The live-API integration smoke (§3.5.1) is exactly this discipline —
+extend it to cover each new action, don't just check the UI mounted.
+
+**Corollary — a test that mocks the OLD route passes while prod (the REAL route) breaks.** The
+2026-06-28 PAR-detail `http_404` shipped because `ParDetail.tsx` parsed the id with a hardcoded
+`/^\/app\/par\//` strip, but the app had migrated the route to `/business/par/:id` (App.tsx
+redirects the legacy prefix). On the real path the strip didn't match → `id=""` → every just-created
+PAR 404'd. The unit tests stayed green because their `useRouter` mock still fed the OLD
+`path: "/app/par/..."`. Lesson: when a route prefix moves (`/app/*` → `/business/*`), the path-parsing
+in the page component AND its test's mocked `path` must move together — a stale mock tests a dead
+route. Parse route params **route-agnostically** (`path.match(/\/par\/([^/]+)/)`, not a fixed-prefix
+strip), and point test mocks at the route the app actually navigates to.
+
+> Why this is its own rule: bugs the owner has to report are the most expensive kind. The point of
+> writing the lesson down is that the *next* mistake is a new one, never a repeat — the test suite
+> and this file get monotonically stronger. Treat "the owner found a bug I said I tested" as a
+> standing instruction to harden the net, every single time.
 
 ### 3.5.1bis Backlog critic (don't build the first draft of a spec either)
 **Whenever new backlog features are written** (the PLAN step auto-generates a module, or new

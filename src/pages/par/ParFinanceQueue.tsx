@@ -26,6 +26,7 @@ import {
   getFinanceQueue,
   submitSection16,
   executePayment,
+  uploadAttachment,
   formatMDL,
   type ParFinanceQueueItem,
   type Section16Payload,
@@ -165,9 +166,16 @@ interface PayModalProps {
   onPaid: () => void;
 }
 
+/** Convert a "1234.56" / "1234,56" MDL string to integer cents. */
+function mdlStringToCents(s: string): number {
+  const major = parseFloat(s.replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(major) ? Math.round(major * 100) : NaN;
+}
+
 function PayModal({ par, onClose, onPaid }: PayModalProps) {
-  const [actualAmountCents, setActualAmountCents] = useState(
-    par.payment?.actualAmountCents?.toString() ?? ""
+  // Suma reală este în MDL și se pre-completează cu suma integrală (estimatul) — editabilă.
+  const [actualAmountMdl, setActualAmountMdl] = useState(
+    (((par.payment?.actualAmountCents ?? par.totalEstimatedCents) || 0) / 100).toFixed(2)
   );
   const [paymentDate, setPaymentDate] = useState(
     par.payment?.paymentDate
@@ -175,7 +183,7 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
       : new Date().toISOString().slice(0, 10)
   );
   const [paymentRef, setPaymentRef] = useState(par.payment?.paymentRef ?? "");
-  const [proofUrl, setProofUrl] = useState(par.payment?.proofUrl ?? "");
+  const [proofFile, setProofFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -183,42 +191,53 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
   const [vendorAutoSaved, setVendorAutoSaved] = useState(false);
 
   // Warn user when amount exceeds +10%
-  const updateWarning = (amtStr: string) => {
-    const amt = parseInt(amtStr, 10);
+  const updateWarning = (mdlStr: string) => {
+    const amt = mdlStringToCents(mdlStr);
     if (!isNaN(amt) && par.above_micro_threshold) {
       const max = Math.floor((par.totalEstimatedCents * 110) / 100);
-      if (amt > max) {
-        setWarning(
-          `Suma (${formatMDL(amt)}) depășește estimatul cu >10% (max ${formatMDL(max)}). ` +
-            "Va fi necesar un re-aprobare înainte de plată."
-        );
-      } else {
-        setWarning(null);
-      }
+      setWarning(
+        amt > max
+          ? `Suma (${formatMDL(amt)}) depășește estimatul cu >10% (max ${formatMDL(max)}). ` +
+              "Va fi necesar un re-aprobare înainte de plată."
+          : null
+      );
     } else {
       setWarning(null);
     }
   };
 
+  const fileToDataUrl = (f: File) =>
+    new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = reject;
+      r.readAsDataURL(f);
+    });
+
   const handlePay = async () => {
-    const amt = parseInt(actualAmountCents, 10);
+    const amt = mdlStringToCents(actualAmountMdl);
     if (isNaN(amt) || amt <= 0) {
-      setError("Suma reală trebuie să fie un număr întreg pozitiv (în bani/cents).");
-      return;
-    }
-    if (!paymentRef.trim()) {
-      setError("Referința plății este obligatorie.");
+      setError("Suma reală trebuie să fie un număr pozitiv (în MDL).");
       return;
     }
 
     setSaving(true);
     setError(null);
     try {
+      // Attach the payment-confirmation PDF to the dossier (section 13) BEFORE recording the payment.
+      if (proofFile) {
+        const dataUrl = await fileToDataUrl(proofFile);
+        await uploadAttachment(par.id, {
+          file_name: `Dovadă plată — ${par.requestNo}${proofFile.name ? ` (${proofFile.name})` : ""}`,
+          file_url: dataUrl,
+          mime: proofFile.type || "application/pdf",
+          kind: "other",
+        });
+      }
       const payload: PayPayload = {
         actual_amount_cents: amt,
         payment_date: paymentDate,
-        payment_ref: paymentRef.trim(),
-        proof_url: proofUrl.trim() || null,
+        payment_ref: paymentRef.trim() || null,
       };
       const result = await executePayment(par.id, payload);
       // VM1-05: if vendor was auto-saved (new vendorId on the returned PAR, previously none),
@@ -290,26 +309,24 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
         <div className="space-y-3">
           <div>
             <label htmlFor="actual-amount" className="block text-sm font-medium text-foreground mb-1">
-              Suma reală (bani/cents) <span aria-hidden="true" className="text-destructive">*</span>
+              Suma reală (MDL) <span aria-hidden="true" className="text-destructive">*</span>
             </label>
             <input
               id="actual-amount"
               type="number"
-              min={1}
-              step={1}
-              value={actualAmountCents}
+              min={0}
+              step="0.01"
+              value={actualAmountMdl}
               onChange={(e) => {
-                setActualAmountCents(e.target.value);
+                setActualAmountMdl(e.target.value);
                 updateWarning(e.target.value);
               }}
-              placeholder="ex. 700000 = 7.000,00 MDL"
+              placeholder="ex. 7000"
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
-            {actualAmountCents && !isNaN(parseInt(actualAmountCents, 10)) && (
-              <p className="text-xs text-muted-foreground mt-1">
-                = {formatMDL(parseInt(actualAmountCents, 10))}
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground mt-1">
+              Pre-completat cu suma estimată ({formatMDL(par.totalEstimatedCents)}). Schimbă dacă plata reală diferă.
+            </p>
           </div>
 
           <div>
@@ -327,7 +344,7 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
 
           <div>
             <label htmlFor="payment-ref" className="block text-sm font-medium text-foreground mb-1">
-              Referință plată <span aria-hidden="true" className="text-destructive">*</span>
+              Referință plată <span className="text-muted-foreground font-normal">(opțional)</span>
             </label>
             <input
               id="payment-ref"
@@ -341,18 +358,19 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
           </div>
 
           <div>
-            <label htmlFor="proof-url" className="block text-sm font-medium text-foreground mb-1">
-              Dovada plății (URL, opțional)
+            <label htmlFor="proof-file" className="block text-sm font-medium text-foreground mb-1">
+              Dovada plății (PDF, opțional)
             </label>
             <input
-              id="proof-url"
-              type="url"
-              value={proofUrl}
-              onChange={(e) => setProofUrl(e.target.value)}
-              placeholder="https://…"
-              maxLength={2000}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              id="proof-file"
+              type="file"
+              accept="application/pdf,image/*"
+              onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+              className="w-full text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-primary/90 file:cursor-pointer"
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              {proofFile ? `Se atașează la dosar: ${proofFile.name}` : "Confirmarea de plată se atașează la dosarul cererii (secțiunea Atașamente)."}
+            </p>
           </div>
         </div>
 
@@ -411,7 +429,7 @@ export default function ParFinanceQueue() {
 
   return (
     <AppShell pageTitle="Coadă finanțe" pageDescription="PAR-uri aprobate — plată internă">
-      <div className="container mx-auto px-4 py-6 max-w-5xl space-y-6">
+      <div className="container mx-auto px-4 py-6 max-w-7xl space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -462,7 +480,10 @@ export default function ParFinanceQueue() {
                 <tr className="bg-muted/50 border-b border-border">
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nr.</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Beneficiar</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Proiect</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground">Solicitant</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Aprobat de</th>
                   <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estimat</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground">Secț. 16</th>
                   <th className="text-right px-4 py-3 font-medium text-muted-foreground">Acțiuni</th>
@@ -493,8 +514,17 @@ export default function ParFinanceQueue() {
                         )}
                       </div>
                     </td>
+                    <td className="px-4 py-3 text-foreground text-xs max-w-[160px] truncate" title={par.payeeName ?? ""}>
+                      {par.payeeName ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-foreground text-xs max-w-[140px] truncate" title={par.projectName ?? ""}>
+                      {par.projectName ?? "—"}
+                    </td>
                     <td className="px-4 py-3 text-foreground text-xs">
-                      {par.requestorTitle ?? "—"}
+                      {par.requestedByName ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-foreground text-xs max-w-[160px] truncate" title={(par.approverNames ?? []).join(", ")}>
+                      {par.approverNames && par.approverNames.length > 0 ? par.approverNames.join(", ") : "—"}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-foreground">
                       {formatMDL(par.totalEstimatedCents)}

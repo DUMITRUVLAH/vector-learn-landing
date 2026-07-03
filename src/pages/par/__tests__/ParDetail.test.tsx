@@ -16,7 +16,7 @@ const mockGetPar = vi.fn();
 const mockGetParMe = vi.fn();
 
 vi.mock("@/router/HashRouter", () => ({
-  useRouter: () => ({ path: "/app/par/par-test-id", navigate: vi.fn() }),
+  useRouter: () => ({ path: "/business/par/par-test-id", navigate: vi.fn() }),
 }));
 
 vi.mock("@/components/app/AppShell", () => ({
@@ -51,6 +51,7 @@ vi.mock("@/lib/api/par", () => ({
   requestParChanges: vi.fn().mockResolvedValue({}),
   submitPar: vi.fn().mockResolvedValue({}),
   reapproveOverage: vi.fn().mockResolvedValue({}),
+  getPurchaseOrder: vi.fn().mockResolvedValue(null),
   formatMDL: (c: number) => `${(c / 100).toLocaleString()} MDL`,
   PAR_STATUS_LABELS: {
     draft: "Ciornă",

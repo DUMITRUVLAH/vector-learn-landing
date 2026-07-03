@@ -43,6 +43,13 @@ export function isValidIBAN(iban: string): boolean {
 }
 
 /**
+ * Validate any-country IBAN (ISO 13616 mod-97), regardless of country format.
+ * Re-export of isValidIBAN — used for foreign-supplier IBAN capture (PAR-SCEN-07, PAR-FIX-17)
+ * where a German/foreign IBAN is legitimate and must be captured + flagged, not dropped.
+ */
+export const isValidIBANAnyCountry = isValidIBAN;
+
+/**
  * Validate a Moldova IDNP: exactly 13 decimal digits.
  * CORE §0.12: "Moldova personal ID — 13 digits"
  */
