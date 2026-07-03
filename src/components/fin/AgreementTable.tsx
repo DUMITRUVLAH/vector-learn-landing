@@ -6,7 +6,7 @@
  * WCAG AA: touch targets ≥44px, readable contrast, keyboard-accessible.
  */
 import { useState, useCallback } from "react";
-import { Search, AlertTriangle, FileText, ChevronRight } from "lucide-react";
+import { Search, AlertTriangle, FileText, ChevronRight, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Agreement, AgreementStatus } from "@/lib/api/finAgreements";
 
@@ -183,6 +183,7 @@ export function AgreementTable({
                   <th className="px-4 py-3">Titlu contract</th>
                   <th className="px-4 py-3">Partener</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Facturare</th>
                   <th className="px-4 py-3">Valută</th>
                   <th className="px-4 py-3">Data start</th>
                   <th className="px-4 py-3">Data end</th>
@@ -212,6 +213,19 @@ export function AgreementTable({
                     </td>
                     <td className="px-4 py-3">
                       <AgreementStatusBadge status={a.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      {a.autoBilling ? (
+                        <span
+                          title={a.autoBilledAt ? `Ultima rulare automată: ${new Date(a.autoBilledAt).toLocaleString("ro-MD")}` : "Se facturează automat (e-Factura + email)"}
+                          className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
+                        >
+                          <RefreshCw className="h-3 w-3" aria-hidden />
+                          Auto
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Manual</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {a.currency}

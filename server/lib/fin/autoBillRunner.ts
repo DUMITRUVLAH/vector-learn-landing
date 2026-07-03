@@ -16,7 +16,7 @@
 import { and, eq, lte, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { finAgreements, finAgreementServices } from "../../db/schema/finAgreements";
-import { finSfsSettings } from "../../db/schema/finEinvoices";
+import { finOrgProfile } from "../../db/schema/finCore";
 import { makeRecurringInvoiceProcessor } from "../finRecurringProcessor";
 import { submitInvoiceToSfs } from "./submitInvoiceToSfs";
 import { emailInvoiceToClient } from "./emailInvoice";
@@ -119,14 +119,14 @@ export async function runAutoBilling(opts: { tenantId?: string; now?: Date } = {
       const einv = await submitInvoiceToSfs(agreement.tenantId, invoiceId);
       outcome.einvoice = { ok: einv.ok, reason: einv.reason, sfsStatus: einv.sfsStatus };
 
-      // 3. Email the PDF to the client.
+      // 3. Email the PDF to the client — signed with the company's REAL legal name.
       if (!supplierNameByTenant.has(agreement.tenantId)) {
-        const [sfs] = await db
-          .select({ idno: finSfsSettings.idno })
-          .from(finSfsSettings)
-          .where(eq(finSfsSettings.tenantId, agreement.tenantId))
+        const [org] = await db
+          .select({ legalName: finOrgProfile.legalName })
+          .from(finOrgProfile)
+          .where(eq(finOrgProfile.tenantId, agreement.tenantId))
           .limit(1);
-        supplierNameByTenant.set(agreement.tenantId, sfs?.idno ? `Furnizor IDNO ${sfs.idno}` : "Furnizor");
+        supplierNameByTenant.set(agreement.tenantId, org?.legalName ?? "Furnizor");
       }
       const email = await emailInvoiceToClient(agreement.tenantId, invoiceId, {
         supplierName: supplierNameByTenant.get(agreement.tenantId),
