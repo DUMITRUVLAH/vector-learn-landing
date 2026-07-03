@@ -18,7 +18,8 @@ import {
 } from "lucide-react";
 import { Link, useRouter } from "@/router/HashRouter";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
-import { getFinMe, type FinRole, type FinOrgProfile } from "@/lib/api/fin";
+import { getFinMe, type FinRole, type FinOrgProfile, type FinMeResponse } from "@/lib/api/fin";
+import { cachedOnce, peekResolved } from "@/lib/sessionCache";
 import { FinNav } from "@/components/fin/FinNav";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { cn } from "@/lib/utils";
@@ -40,16 +41,25 @@ export function FinLayout({ children, pageTitle, pageDescription, actions }: Fin
   const bizSession = useBusinessSession();
   const { navigate, path } = useRouter();
 
-  const [role, setRole] = useState<FinRole | null>(null);
-  const [profile, setProfile] = useState<FinOrgProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [accessError, setAccessError] = useState<string | null>(null);
+  // Session cache: the shell remounts on every navigation. Seed from an already-resolved
+  // getFinMe so a click doesn't flash the loading spinner or re-hit the API (the "refresh").
+  const cachedMe = peekResolved<FinMeResponse | null>("fin-me");
+  const [role, setRole] = useState<FinRole | null>(
+    cachedMe ? (cachedMe.member.role as FinRole) : null,
+  );
+  const [profile, setProfile] = useState<FinOrgProfile | null>(cachedMe?.profile ?? null);
+  const [loading, setLoading] = useState(cachedMe === undefined);
+  const [accessError, setAccessError] = useState<string | null>(
+    cachedMe === null ? "Nu ești înregistrat(ă) în spațiul de lucru FinDesk. Solicită acces de la administratorul workspace-ului." : null,
+  );
 
   // Mobile sidebar state
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    getFinMe()
+    // Already seeded from cache → don't re-fetch on this mount.
+    if (cachedMe !== undefined) return;
+    cachedOnce("fin-me", getFinMe)
       .then((res) => {
         if (!res) {
           setAccessError(
@@ -64,6 +74,7 @@ export function FinLayout({ children, pageTitle, pageDescription, actions }: Fin
         setAccessError("Eroare la încărcare. Încearcă din nou.");
       })
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // SPLIT-402 convergence: under /business/* the canonical chrome is BusinessShell (same as

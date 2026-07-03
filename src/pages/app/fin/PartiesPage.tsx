@@ -1,5 +1,5 @@
 /**
- * PARTY-003/004: FinDesk — /app/fin/parties
+ * PARTY-003/004: FinDesk — /business/fin/parties
  *
  * List page for business partners (clients, suppliers, both).
  * Features: search (debounced), kind filter, isActive toggle,
@@ -488,7 +488,7 @@ export function PartiesPage() {
 
       {/* Top Clienți tab */}
       {pageTab === "top" && (
-        <TopClientsSection onSelectParty={(id) => navigate(`/app/fin/parties/${id}`)} />
+        <TopClientsSection onSelectParty={(id) => navigate(`/business/fin/parties/${id}`)} />
       )}
 
       {/* Lista tab */}
@@ -573,7 +573,7 @@ export function PartiesPage() {
                 {items.map((party) => (
                   <tr
                     key={party.id}
-                    onClick={() => navigate(`/app/fin/parties/${party.id}`)}
+                    onClick={() => navigate(`/business/fin/parties/${party.id}`)}
                     className="cursor-pointer hover:bg-muted/40 transition-colors"
                   >
                     <td className="px-4 py-3 font-medium">{party.name}</td>

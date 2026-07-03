@@ -44,6 +44,7 @@ import {
   Shield,
   LayoutDashboard,
   ChevronRight,
+  FileUp,
 } from "lucide-react";
 import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
@@ -102,6 +103,7 @@ const FIN_NAV: FinNavGroup[] = [
     items: [
       { id: "expenses", label: "Cheltuieli", href: "/business/fin/expenses", icon: ShoppingCart },
       { id: "capture", label: "Invoice Reporting", href: "/business/fin/captures", icon: ScanLine },
+      { id: "statement", label: "Import Extras", href: "/business/fin/statement/upload", icon: FileUp },
     ],
   },
   {

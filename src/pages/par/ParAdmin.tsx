@@ -19,6 +19,7 @@ import {
   Users,
   BookOpen,
   Shield,
+  ShieldCheck,
   Loader2,
   Plus,
   Trash2,
@@ -35,6 +36,8 @@ import {
   ChevronLeft,
   Upload,
   Download,
+  Calendar,
+  BarChart2,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { cn } from "@/lib/utils";
@@ -48,6 +51,7 @@ import {
   listParMembers,
   assignParMember,
   revokeParMember,
+  getParMe,
   listParInvites,
   createParInvite,
   revokeParInvite,
@@ -69,6 +73,7 @@ import {
   updateDepartment,
   deleteDepartment,
   createProject,
+  setProjectApprovers,
   updateProject,
   deleteProject,
   createBudgetCode,
@@ -80,6 +85,7 @@ import {
   createEvent,
   updateEvent,
   deleteEvent,
+  getParReportByEvent,
   searchRegistryCompanies,
   formatMDL,
   importParConfigExcel,
@@ -1091,6 +1097,97 @@ function InviteSection() {
 
 // ─── Sub-tab: Members ─────────────────────────────────────────────────────────
 
+/**
+ * Self-service role panel. The admin is an implicit par_admin but, to appear in approval chains, they
+ * need an explicit `approver` (or finance/requestor) row — and the generic "Adaugă rol" form demands a
+ * raw UUID nobody knows. This adds a one-click "give MYSELF role X" using getParMe().userId.
+ * (Owner: "vreau să dau rol de aprobator și mie, dar nu pot".)
+ */
+const SELF_ASSIGNABLE: Array<{ value: "approver" | "finance" | "requestor"; label: string }> = [
+  { value: "approver", label: "Aprobator" },
+  { value: "finance", label: "Finanțe" },
+  { value: "requestor", label: "Solicitant" },
+];
+
+function MyRolesPanel({ onChanged }: { onChanged: () => void }) {
+  const [me, setMe] = useState<{ userId: string; roles: string[] } | null>(null);
+  const [role, setRole] = useState<"approver" | "finance" | "requestor">("approver");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const reload = async () => {
+    try {
+      const m = await getParMe();
+      setMe({ userId: m.userId, roles: m.roles ?? [] });
+    } catch {
+      /* ignore — panel just hides */
+    }
+  };
+  useEffect(() => { reload(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!me?.userId) return null;
+  const has = (r: string) => me.roles.includes(r);
+
+  const addToSelf = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await assignParMember({ userId: me.userId, role });
+      await reload();
+      onChanged();
+    } catch {
+      setErr("Nu am putut adăuga rolul.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="p-4 rounded-lg border border-border bg-muted/30 space-y-3">
+      <div className="flex items-center gap-2">
+        <Users className="h-4 w-4 text-primary" aria-hidden />
+        <h3 className="text-sm font-semibold text-foreground">Rolurile mele</h3>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {me.roles.length === 0 ? (
+          <span className="text-sm text-muted-foreground">Niciun rol PAR încă.</span>
+        ) : (
+          me.roles.map((r) => (
+            <span key={r} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+              {INVITE_ROLE_LABELS[r] ?? r}
+            </span>
+          ))
+        )}
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label htmlFor="self-role" className="sr-only">Rol de adăugat mie</label>
+        <select
+          id="self-role"
+          value={role}
+          onChange={(e) => setRole(e.target.value as typeof role)}
+          className="rounded-lg border border-input bg-background px-3 py-2 text-sm min-h-[44px]"
+        >
+          {SELF_ASSIGNABLE.map((o) => (
+            <option key={o.value} value={o.value} disabled={has(o.value)}>
+              {o.label}{has(o.value) ? " (ai deja)" : ""}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={addToSelf}
+          disabled={busy || has(role)}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 min-h-[44px]"
+        >
+          <Plus className="h-4 w-4" aria-hidden />
+          Adaugă-mi acest rol
+        </button>
+      </div>
+      {err && <p className="text-xs text-destructive">{err}</p>}
+    </div>
+  );
+}
+
 function ParMembersTab() {
   const [members, setMembers] = useState<ParMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1163,6 +1260,9 @@ function ParMembersTab() {
 
   return (
     <div className="space-y-6">
+      {/* Self-service: add a PAR role (e.g. Aprobator) to myself without needing my own UUID */}
+      <MyRolesPanel onChanged={load} />
+
       {/* VF-004: invite by email */}
       <InviteSection />
 
@@ -1533,42 +1633,367 @@ function ParReferenceData() {
       )}
 
       {section === "projects" && (
-        <SimpleRefTable
-          title="Proiecte / Programe"
-          items={projects}
-          columns={[
-            { label: "Denumire", key: "name" as const },
-            { label: "Donor", key: "donor" as const },
-          ]}
-          onAdd={(payload) => createProject(payload as { name: string; donor?: string }).then(load)}
-          onEdit={(id, payload) => updateProject(id, payload as Partial<{ name: string; donor?: string }>).then(load)}
-          onDelete={(id) => deleteProject(id).then(load)}
-          addFields={[
-            { id: "name", label: "Denumire", placeholder: "ex. Digital Safeguard" },
-            { id: "donor", label: "Donor (opțional)", placeholder: "ex. USAID" },
-          ]}
-        />
+        <div className="space-y-6">
+          <SimpleRefTable
+            title="Proiecte / Programe"
+            items={projects}
+            columns={[
+              { label: "Denumire", key: "name" as const },
+              { label: "Donor", key: "donor" as const },
+            ]}
+            onAdd={(payload) => createProject(payload as { name: string; donor?: string }).then(load)}
+            onEdit={(id, payload) => updateProject(id, payload as Partial<{ name: string; donor?: string }>).then(load)}
+            onDelete={(id) => deleteProject(id).then(load)}
+            addFields={[
+              { id: "name", label: "Denumire", placeholder: "ex. Digital Safeguard" },
+              { id: "donor", label: "Donor (opțional)", placeholder: "ex. USAID" },
+            ]}
+          />
+          <ProjectApproversSection projects={projects} onReload={load} />
+        </div>
       )}
 
-      {/* VM1-04: Events */}
+      {/* Feature 2: Events — rich table with dates, creator, spend */}
       {section === "events" && (
-        <SimpleRefTable
-          title="Evenimente"
-          items={events}
-          columns={[{ label: "Denumire", key: "name" as const }]}
-          onAdd={(payload) =>
-            createEvent({ name: payload.name as string }).then(load)
-          }
-          onEdit={(id, payload) =>
-            updateEvent(id, { name: payload.name as string }).then(load)
-          }
-          onDelete={(id) => deleteEvent(id).then(load)}
-          addFields={[{ id: "name", label: "Denumire eveniment", placeholder: "ex. Conferința Anuală 2026" }]}
+        <EventsTable
+          events={events}
+          projects={projects}
+          onReload={load}
         />
       )}
 
       {section === "vendors" && (
         <VendorSection vendors={vendors} onReload={load} />
+      )}
+    </div>
+  );
+}
+
+// ─── Project-scoped approvers (VF-approval-scoping) ─────────────────────────
+// Per project, the par_admin picks which approvers may decide its PARs. No selection = any approver.
+
+function ProjectApproversSection({
+  projects,
+  onReload,
+}: {
+  projects: import("@/lib/api/par").ParProject[];
+  onReload: () => Promise<void>;
+}) {
+  // Eligible approvers = unique users holding the approver/par_admin role.
+  const [approvers, setApprovers] = useState<Array<{ userId: string; name: string }>>([]);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    listParMembers()
+      .then(({ members }) => {
+        const seen = new Set<string>();
+        const list: Array<{ userId: string; name: string }> = [];
+        for (const m of members) {
+          if (m.role !== "approver" && m.role !== "par_admin") continue;
+          if (seen.has(m.userId)) continue;
+          seen.add(m.userId);
+          list.push({ userId: m.userId, name: m.userName || m.userEmail || m.userId.slice(0, 8) });
+        }
+        setApprovers(list);
+      })
+      .catch(() => setErr("Nu am putut încărca aprobatorii."));
+  }, []);
+
+  const toggle = async (project: import("@/lib/api/par").ParProject, userId: string) => {
+    const current = new Set(project.approverUserIds ?? []);
+    if (current.has(userId)) current.delete(userId);
+    else current.add(userId);
+    setSavingId(project.id);
+    setErr(null);
+    try {
+      await setProjectApprovers(project.id, [...current]);
+      await onReload();
+    } catch {
+      setErr("Nu am putut salva aprobatorii proiectului.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-primary" aria-hidden />
+          Aprobatori pe proiect
+        </h3>
+        <p className="text-xs text-muted-foreground mt-1">
+          Alege cine poate aproba cererile fiecărui proiect. Fără nicio bifă = orice aprobator poate decide.
+        </p>
+      </div>
+
+      {err && <p className="text-xs text-destructive">{err}</p>}
+
+      {approvers.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Niciun aprobator încă. Adaugă rolul „Aprobator" unui membru (tab Membri) ca să apară aici.
+        </p>
+      ) : projects.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Niciun proiect încă.</p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {projects.map((p) => {
+            const selected = new Set(p.approverUserIds ?? []);
+            return (
+              <li key={p.id} className="py-3 flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="sm:w-48 shrink-0">
+                  <p className="text-sm font-medium text-foreground">{p.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selected.size === 0 ? "Toți aprobatorii" : `${selected.size} aprobator(i)`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {approvers.map((a) => {
+                    const on = selected.has(a.userId);
+                    return (
+                      <button
+                        key={a.userId}
+                        type="button"
+                        onClick={() => toggle(p, a.userId)}
+                        disabled={savingId === p.id}
+                        aria-pressed={on}
+                        className={cn(
+                          "px-2.5 py-1 rounded-full text-xs font-medium border transition-colors min-h-[32px] disabled:opacity-50",
+                          on
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-muted-foreground border-input hover:border-primary/50"
+                        )}
+                      >
+                        {a.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── Feature 2: Events table (rich: dates, creator, spend) ──────────────────
+
+interface EventsTableProps {
+  events: ParEvent[];
+  projects: import("@/lib/api/par").ParProject[];
+  onReload: () => Promise<void>;
+}
+
+function EventsTable({ events, projects, onReload }: EventsTableProps) {
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<{ name: string; project_id: string; starts_at: string; ends_at: string }>({
+    name: "", project_id: "", starts_at: "", ends_at: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [spendByEvent, setSpendByEvent] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    getParReportByEvent()
+      .then((r) => {
+        const map: Record<string, number> = {};
+        for (const item of r.items) if (item.id) map[item.id] = item.totalCents;
+        setSpendByEvent(map);
+      })
+      .catch(() => {/* non-blocking */});
+  }, [events]);
+
+  const reset = () => {
+    setForm({ name: "", project_id: "", starts_at: "", ends_at: "" });
+    setShowForm(false);
+    setEditingId(null);
+  };
+
+  const startEdit = (ev: ParEvent) => {
+    setEditingId(ev.id);
+    setForm({
+      name: ev.name,
+      project_id: ev.projectId ?? "",
+      starts_at: ev.startsAt ? ev.startsAt.slice(0, 10) : "",
+      ends_at: ev.endsAt ? ev.endsAt.slice(0, 10) : "",
+    });
+    setShowForm(true);
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    setSaving(true);
+    try {
+      const payload = {
+        name: form.name.trim(),
+        project_id: form.project_id || null,
+        starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : null,
+        ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
+      };
+      if (editingId) {
+        await updateEvent(editingId, payload);
+      } else {
+        await createEvent(payload);
+      }
+      await onReload();
+      reset();
+    } catch { /* error shown by browser */ }
+    finally { setSaving(false); }
+  };
+
+  const remove = async (id: string) => {
+    await deleteEvent(id).catch(() => {/* */});
+    await onReload();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-foreground">Evenimente</h3>
+        {!showForm && (
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors min-h-[36px]"
+            aria-label="Adaugă eveniment nou"
+          >
+            <Plus className="h-4 w-4" aria-hidden /> Adaugă
+          </button>
+        )}
+      </div>
+
+      {showForm && (
+        <form onSubmit={submit} className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <p className="text-sm font-medium text-foreground">{editingId ? "Editează eveniment" : "Eveniment nou"}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label htmlFor="ev-name" className="block text-xs font-medium text-muted-foreground mb-1">Denumire *</label>
+              <input
+                id="ev-name"
+                type="text"
+                required
+                placeholder="ex. Conferința Anuală 2026"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground w-full focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label htmlFor="ev-project" className="block text-xs font-medium text-muted-foreground mb-1">Proiect (opțional)</label>
+              <select
+                id="ev-project"
+                value={form.project_id}
+                onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value }))}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground w-full focus:outline-none focus:ring-2 focus:ring-ring"
+                aria-label="Proiect"
+              >
+                <option value="">— Neasociat —</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="ev-starts" className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <Calendar className="h-3 w-3" aria-hidden /> Data început
+              </label>
+              <input
+                id="ev-starts"
+                type="date"
+                value={form.starts_at}
+                onChange={(e) => setForm((f) => ({ ...f, starts_at: e.target.value }))}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground w-full focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label htmlFor="ev-ends" className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                <Calendar className="h-3 w-3" aria-hidden /> Data sfârșit
+              </label>
+              <input
+                id="ev-ends"
+                type="date"
+                value={form.ends_at}
+                min={form.starts_at || undefined}
+                onChange={(e) => setForm((f) => ({ ...f, ends_at: e.target.value }))}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground w-full focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="submit" disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[36px]">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}
+              {editingId ? "Salvează" : "Adaugă"}
+            </button>
+            <button type="button" onClick={reset}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-sm text-muted-foreground hover:bg-muted transition-colors min-h-[36px]">
+              <X className="h-4 w-4" aria-hidden /> Anulează
+            </button>
+          </div>
+        </form>
+      )}
+
+      {events.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">Niciun eveniment. Adaugă primul eveniment.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="text-left text-muted-foreground border-b border-border text-xs">
+                <th className="pb-2 pr-3 font-medium">Denumire</th>
+                <th className="pb-2 pr-3 font-medium">Proiect</th>
+                <th className="pb-2 pr-3 font-medium">Interval</th>
+                <th className="pb-2 pr-3 font-medium">Adăugat de</th>
+                <th className="pb-2 pr-3 font-medium text-right flex items-center gap-1 justify-end">
+                  <BarChart2 className="h-3 w-3" aria-hidden /> Cheltuieli
+                </th>
+                <th className="pb-2 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((ev) => {
+                const spend = spendByEvent[ev.id];
+                return (
+                  <tr key={ev.id} className="border-b border-border/50 last:border-0">
+                    <td className="py-2 pr-3 font-medium text-foreground">{ev.name}</td>
+                    <td className="py-2 pr-3 text-muted-foreground text-xs">
+                      {ev.projectName ?? "—"}
+                    </td>
+                    <td className="py-2 pr-3 text-xs text-muted-foreground whitespace-nowrap">
+                      {ev.startsAt ? ev.startsAt.slice(0, 10) : "—"}
+                      {ev.endsAt ? ` → ${ev.endsAt.slice(0, 10)}` : ""}
+                    </td>
+                    <td className="py-2 pr-3 text-xs text-muted-foreground">
+                      {ev.createdByName ?? "—"}
+                      {ev.createdAt && (
+                        <span className="block text-[10px]">{new Date(ev.createdAt).toLocaleDateString("ro-MD")}</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums text-xs font-medium text-foreground">
+                      {spend != null ? formatMDL(spend) : "—"}
+                    </td>
+                    <td className="py-2">
+                      <div className="flex items-center gap-1">
+                        <button type="button" aria-label={`Editează ${ev.name}`}
+                          onClick={() => startEdit(ev)}
+                          className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center">
+                          <Edit2 className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                        <button type="button" aria-label={`Șterge ${ev.name}`}
+                          onClick={() => remove(ev.id)}
+                          className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center">
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

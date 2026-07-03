@@ -18,7 +18,7 @@ import type { ParDetail } from "@/lib/api/par";
 
 vi.mock("@/router/HashRouter", () => ({
   useRouter: () => ({
-    path: "/app/par/par-uuid-001",
+    path: "/business/par/par-uuid-001",
     navigate: vi.fn(),
   }),
 }));

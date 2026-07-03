@@ -63,13 +63,41 @@ parVendorsRoutes.post(
     const validation = validateVendorFields(body);
     if (!validation.ok) return c.json({ error: validation.error }, 400);
 
+    // VM1-05: dedup by IBAN (normalized) so saving the same beneficiary repeatedly — whether typed
+    // manually or filled by AI — links to the existing registry entry instead of creating duplicates.
+    // Backfill any fields the existing record was missing. Returns 200 (existing) vs 201 (created).
+    const normIban = body.iban ? body.iban.replace(/\s/g, "").toUpperCase() : null;
+    if (normIban) {
+      const existing = await db
+        .select()
+        .from(parVendors)
+        .where(and(eq(parVendors.tenantId, tenantId), eq(parVendors.iban, normIban)))
+        .limit(1);
+      if (existing[0]) {
+        const e = existing[0];
+        const patch: Record<string, unknown> = {};
+        if (!e.idnp && body.idnp) patch.idnp = body.idnp;
+        if (!e.bank && body.bank) patch.bank = body.bank;
+        if (!e.active) patch.active = true;
+        if (Object.keys(patch).length) {
+          const [updated] = await db
+            .update(parVendors)
+            .set({ ...patch, updatedAt: new Date() })
+            .where(and(eq(parVendors.id, e.id), eq(parVendors.tenantId, tenantId)))
+            .returning();
+          return c.json(updated, 200);
+        }
+        return c.json(e, 200);
+      }
+    }
+
     const [row] = await db
       .insert(parVendors)
       .values({
         tenantId,
         name: body.name,
         idnp: body.idnp ?? null,
-        iban: body.iban ?? null,
+        iban: normIban,
         bank: body.bank ?? null,
         notes: body.notes ?? null,
       })

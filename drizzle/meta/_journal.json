@@ -859,8 +859,85 @@
     {
       "idx": 122,
       "version": "7",
-      "when": 1782508800000,
-      "tag": "0122_par_payment_order_kind",
+      "when": 1782422166365,
+      "tag": "0122_par_attachment_url_text",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1751068800000,
+      "tag": "0123_par_payee_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1751068800001,
+      "tag": "0124_par_events_created_by",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1751068800002,
+      "tag": "0125_par_project_approvers",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1751068800100,
+      "tag": "0126_stmt003_linked_invoice",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1751068800200,
+      "tag": "0127_stmt004_einvoice_xml_payload",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1751155200000,
+      "tag": "0128_findesk_bootstrap",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1751241600000,
+      "tag": "0129_stmt005_counterparty_idno",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1751241600100,
+      "tag": "0131_fin_invoices_number_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1751500000000,
+      "tag": "0132_autobill_agreements",
+      "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1751600000000,
+      "tag": "0133_autobill_backfill_notnull",
+      "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1751600001000,
+      "tag": "0134_par_payment_order_kind",
       "breakpoints": true
     }
   ]

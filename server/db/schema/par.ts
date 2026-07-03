@@ -14,6 +14,7 @@ import {
   text,
   timestamp,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { users } from "./users";
@@ -130,6 +131,34 @@ export const parProjects = pgTable(
   })
 );
 
+/**
+ * Project-scoped approvers (VF-approval-scoping): which users may approve PARs on a given project.
+ * If a project has ≥1 row here, ONLY those users (who also hold the `approver`/`par_admin` role) can
+ * decide its role-based approval steps. A project with NO rows → any approver (global, the default).
+ * Managed by the par_admin only.
+ */
+export const parProjectApprovers = pgTable(
+  "par_project_approvers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => parProjects.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    projectIdx: index("par_project_approvers_project_idx").on(t.projectId),
+    tenantIdx: index("par_project_approvers_tenant_idx").on(t.tenantId),
+    uniqProjectUser: uniqueIndex("par_project_approvers_project_user_uniq").on(t.projectId, t.userId),
+  })
+);
+
 /** Budget codes (section 7) */
 export const parBudgetCodes = pgTable(
   "par_budget_codes",
@@ -166,6 +195,8 @@ export const parEvents = pgTable(
     startsAt: timestamp("starts_at", { withTimezone: true }),
     endsAt: timestamp("ends_at", { withTimezone: true }),
     active: boolean("active").notNull().default(true),
+    /** Feature 2: who created this event (for "added by" display) */
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -313,6 +344,8 @@ export const parRequests = pgTable(
     payeeIdnp: varchar("payee_idnp", { length: 13 }),
     payeeIban: varchar("payee_iban", { length: 34 }),
     payeeBank: varchar("payee_bank", { length: 300 }),
+    /** Feature 1: persoană fizică ("fizic") sau juridică ("juridic"). Null = unset/legacy. */
+    payeeType: varchar("payee_type", { length: 10 }),
     /** Section 13 */
     attachmentsPresent: boolean("attachments_present").notNull().default(false),
     attachmentsNote: text("attachments_note"),
@@ -420,7 +453,9 @@ export const parAttachments = pgTable(
     parId: uuid("par_id")
       .notNull()
       .references(() => parRequests.id, { onDelete: "cascade" }),
-    fileUrl: varchar("file_url", { length: 2000 }).notNull(),
+    // base64 data URLs (megabytes) are stored here — MUST be text, not varchar(2000), or any real
+    // file upload fails with "value too long for type character varying(2000)".
+    fileUrl: text("file_url").notNull(),
     fileName: varchar("file_name", { length: 500 }).notNull(),
     kind: parAttachmentKindEnum("kind").notNull().default("other"),
     uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
@@ -454,7 +489,8 @@ export const parPayments = pgTable(
     actualAmountCents: integer("actual_amount_cents"),
     paymentDate: timestamp("payment_date", { withTimezone: true }),
     paymentRef: varchar("payment_ref", { length: 500 }),
-    proofUrl: varchar("proof_url", { length: 2000 }),
+    // may hold a base64 proof image — text, not varchar(2000), for the same reason as file_url.
+    proofUrl: text("proof_url"),
     /** True if the 10%-overage rule triggered and a re-approval was granted */
     overageReapproved: boolean("overage_reapproved").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

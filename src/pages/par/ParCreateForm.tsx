@@ -15,6 +15,9 @@ import {
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
+import { detectPayeeType, type PayeeType } from "@/lib/par/payeeTypeDetector";
+import { isValidMoldovaIBAN } from "@/lib/par/ibanCheck";
+import type { ParPayeeCandidate } from "@/lib/par/parCandidateTypes";
 import { QuotesSection } from "@/components/par/QuotesSection";
 import { ApiError } from "@/lib/api";
 import {
@@ -157,7 +160,8 @@ export function ParCreateForm() {
   const [payeeIdnp, setPayeeIdnp] = useState("");
   const [payeeIban, setPayeeIban] = useState("");
   const [payeeBank, setPayeeBank] = useState("");
-  const [saveVendor, setSaveVendor] = useState(false);
+  // Feature 1: persoană fizică vs juridică toggle
+  const [payeeType, setPayeeType] = useState<PayeeType>("juridic");
   // Attachments (13)
   const [attachmentsPresent, setAttachmentsPresent] = useState(false);
   const [attachmentsNote, setAttachmentsNote] = useState("");
@@ -177,6 +181,8 @@ export function ParCreateForm() {
   const [aiPrefillResult, setAiPrefillResult] = useState<ParPrefillResult | null>(null);
   const [aiPrefillError, setAiPrefillError] = useState<string | null>(null);
   const aiPrefillFileRef = useRef<HTMLInputElement>(null);
+  // PAR AI overhaul: when the document has 2+ equally-plausible payees the user must pick one.
+  const [payeeCandidates, setPayeeCandidates] = useState<ParPayeeCandidate[]>([]);
 
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -232,12 +238,13 @@ export function ParCreateForm() {
       vendor_id: vendorId || null,
       payee_name: payeeName || null, payee_idnp: payeeIdnp || null,
       payee_iban: payeeIban || null, payee_bank: payeeBank || null,
+      payee_type: payeeType,
       attachments_present: attachmentsPresent, attachments_note: attachmentsNote || null,
       currency,
     });
   }, [dateOfRequest, requestorTitle, departmentId, dateNeeded, projectId, eventId, budgetCodeId,
       budgetCodeNote, purpose, chargeTo, endUse, vendorId, payeeName,
-      payeeIdnp, payeeIban, payeeBank, attachmentsPresent, attachmentsNote, currency]);
+      payeeIdnp, payeeIban, payeeBank, payeeType, attachmentsPresent, attachmentsNote, currency]);
 
   // Feature 2: fetch budget balance when a budget code is selected
   useEffect(() => {
@@ -269,6 +276,8 @@ export function ParCreateForm() {
   const onRegistrySelect = (company: RegistryCompany) => {
     setPayeeName(company.name);
     setPayeeIdnp(company.idno ?? "");
+    // Selecting from company registry → always juridic
+    setPayeeType("juridic");
     setRegistryQuery("");
     setRegistryResults([]);
     setVendorId("");
@@ -281,29 +290,111 @@ export function ParCreateForm() {
     e.target.value = "";
     setAiPrefillError(null);
     setAiPrefillResult(null);
+    setPayeeCandidates([]);
     setAiPrefilling(true);
     try {
       const result = await prefillParFromDocument(file);
       setAiPrefillResult(result);
-      // Auto-apply extracted fields only when value is non-null.
-      // User can still override them (all fields remain editable).
-      if (result.payeeName.value) setPayeeName(String(result.payeeName.value));
-      if (result.payeeIban.value) setPayeeIban(String(result.payeeIban.value).toUpperCase());
+
+      // Common (non-payee) fields always apply, ambiguous or not.
       if (result.endUse.value) setEndUse(String(result.endUse.value));
-      if (result.totalCents.value !== null && typeof result.totalCents.value === "number") {
-        // If there's no line item yet, prefill a synthetic one isn't in scope (PAR lines = phase 2).
-        // Just note the total in a state so the user sees it.
+      if (result.currency.value && ["MDL", "EUR", "USD"].includes(String(result.currency.value))) {
+        setCurrency(result.currency.value as "MDL" | "EUR" | "USD");
       }
-      if (result.currency.value && ["MDL", "EUR", "USD", "RON"].includes(String(result.currency.value))) {
-        setCurrency(result.currency.value as "MDL" | "EUR" | "USD" | "RON");
-      }
-      // Clear vendor selection so the new manual name takes precedence
+      // Clear vendor selection so the AI-derived payee takes precedence.
       setVendorId("");
+
+      if (result.needsClarification && result.candidates.length > 0) {
+        // 2+ equally-plausible payees → ask the user. DON'T fill name/IBAN/IDNO yet.
+        setPayeeCandidates(result.candidates);
+      } else {
+        // Single resolved payee → fill from the (server-routed) fields.
+        setPayeeCandidates([]);
+        applyResolvedPayee(result);
+      }
+      // Articole: pre-fill the line items (services + qty + unit price) extracted from the document.
+      if (result.lineItems && result.lineItems.length > 0) {
+        await applyLineItems(result.lineItems);
+      }
     } catch (err) {
       setAiPrefillError(err instanceof Error ? err.message : "Eroare la analiza documentului.");
     } finally {
       setAiPrefilling(false);
     }
+  };
+
+  /**
+   * Fill the payee fields from a SINGLE resolved prefill result. The server already routed
+   * IDNO-vs-IBAN authoritatively (choosePayee/routeIdAndIban), so the frontend no longer guesses;
+   * we keep one defensive `isValidMoldovaIBAN` guard so an invalid IBAN never lands in the box.
+   */
+  const applyResolvedPayee = (result: ParPrefillResult) => {
+    if (result.payeeName.value) {
+      const extractedName = String(result.payeeName.value);
+      setPayeeName(extractedName);
+    }
+    // payeeType: prefer the server's detection, fall back to the client detector on the name.
+    const serverType = result.payeeType?.value ?? null;
+    const name = result.payeeName.value ? String(result.payeeName.value) : "";
+    const type = serverType ?? detectPayeeType(name);
+    if (type) setPayeeType(type);
+    // IDNO/IDNP — pre-routed by the server; fill as-is.
+    if (result.payeeIdno?.value) setPayeeIdnp(String(result.payeeIdno.value));
+    // Feature 3 (PAR-F3): bank name.
+    if (result.payeeBank?.value) setPayeeBank(String(result.payeeBank.value));
+    // IBAN — defensive: only fill a structurally valid MD IBAN even though the server validated it.
+    if (result.payeeIban.value) {
+      const ibanRaw = String(result.payeeIban.value).replace(/\s/g, "").toUpperCase();
+      if (isValidMoldovaIBAN(ibanRaw)) setPayeeIban(ibanRaw);
+    }
+  };
+
+  /**
+   * Pre-fill the "Articole" section from AI-extracted line items. Only runs when the draft has NO
+   * line items yet (so re-running prefill, or a user who already added rows, never gets duplicates).
+   * Each item is persisted via addLineItem so the server recomputes the PAR total + threshold.
+   */
+  const applyLineItems = async (items: NonNullable<ParPrefillResult["lineItems"]>) => {
+    if (!parId || items.length === 0 || lineItems.length > 0) return;
+    for (const it of items) {
+      const desc = it.description.trim();
+      if (!desc) continue;
+      try {
+        const res = await addLineItem(parId, {
+          description: desc,
+          quantity: Math.max(1, Math.round(it.quantity) || 1),
+          unit: it.unit?.trim() || null,
+          unit_price_cents: Math.max(0, Math.round(it.unitPriceCents)),
+        });
+        setLineItems((p) => [...p, res.line_item]);
+        setTotalCents(res.par_total_estimated_cents);
+        setAboveThreshold(res.above_micro_threshold);
+      } catch {
+        /* non-blocking — the user can still add the row manually */
+      }
+    }
+    setFieldErrors((p) => {
+      const { line_items, total, ...rest } = p;
+      void line_items;
+      void total;
+      return rest;
+    });
+  };
+
+  /** User picked one of the candidate payees from the "Care companie e beneficiarul plății?" chooser. */
+  const pickCandidate = (c: ParPayeeCandidate) => {
+    setPayeeName(c.name);
+    setPayeeType(c.payeeType ?? detectPayeeType(c.name) ?? "juridic");
+    setPayeeIdnp(c.idno ?? "");
+    setPayeeBank(c.bank ?? "");
+    // Defensive IBAN guard — leave empty (→ "⚠ de verificat") if it isn't a valid MD IBAN.
+    if (c.iban && isValidMoldovaIBAN(c.iban)) {
+      setPayeeIban(c.iban.replace(/\s/g, "").toUpperCase());
+    } else {
+      setPayeeIban("");
+    }
+    setVendorId("");
+    setPayeeCandidates([]); // hide the chooser once a choice is made
   };
 
   // Feature 3: instantiate a template into the current draft
@@ -341,10 +432,12 @@ export function ParCreateForm() {
   const addLine = async () => {
     if (!parId) return;
     const qty = parseInt(nlQty, 10);
-    const price = parseInt(nlPrice.replace(/[^0-9]/g, ""), 10);
+    // Preț/u is entered in MDL (major units) → convert to cents. Accept "2000", "2000.50", "2000,50".
+    const priceMajor = parseFloat(nlPrice.replace(/\s/g, "").replace(",", "."));
     if (!nlDesc.trim()) return setLineError("Descrierea este obligatorie");
     if (!qty || qty <= 0) return setLineError("Cantitatea trebuie să fie > 0");
-    if (isNaN(price) || price < 0) return setLineError("Prețul trebuie să fie ≥ 0");
+    if (isNaN(priceMajor) || priceMajor < 0) return setLineError("Prețul trebuie să fie ≥ 0");
+    const price = Math.round(priceMajor * 100);
     setLineError(null); setAddingLine(true);
     try {
       const res = await addLineItem(parId, {
@@ -404,7 +497,15 @@ export function ParCreateForm() {
   const onVendorSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const id = e.target.value; setVendorId(id);
     const v = vendors.find((x) => x.id === id);
-    if (v) { setPayeeName(v.name); setPayeeIdnp(v.idnp ?? ""); setPayeeIban(v.iban ?? ""); setPayeeBank(v.bank ?? ""); setSaveVendor(false); }
+    if (v) {
+      setPayeeName(v.name);
+      setPayeeIdnp(v.idnp ?? "");
+      setPayeeIban(v.iban ?? "");
+      setPayeeBank(v.bank ?? "");
+      // Feature 1: auto-detect from vendor name
+      const detected = detectPayeeType(v.name);
+      if (detected) setPayeeType(detected);
+    }
   };
 
   /** Client pre-validation → friendly field errors. Returns true if OK. */
@@ -442,10 +543,18 @@ export function ParCreateForm() {
     setBusy(true);
     try {
       await patchHeader(parId);
-      // Save a new beneficiary to the registry for reuse, if requested.
-      if (saveVendor && !vendorId && payeeName.trim()) {
-        try { await createVendor({ name: payeeName.trim(), idnp: payeeIdnp || null, iban: payeeIban || null, bank: payeeBank || null }); }
-        catch { /* non-blocking — don't fail submit if vendor save fails */ }
+      // VM1-05: auto-save EVERY inline beneficiary that has a (valid) IBAN to the registry for
+      // reuse — manual or AI-filled, no checkbox needed. The server dedups by IBAN, so re-saving
+      // the same beneficiary just links to the existing entry. Non-blocking.
+      if (!vendorId && payeeName.trim() && payeeIban.trim()) {
+        try {
+          await createVendor({
+            name: payeeName.trim(),
+            idnp: payeeIdnp || null,
+            iban: payeeIban.trim().toUpperCase(),
+            bank: payeeBank || null,
+          });
+        } catch { /* non-blocking — don't fail submit if vendor save fails */ }
       }
       const submitted = await submitPar(parId);
       navigate(`/business/par/${submitted.id}`);
@@ -639,7 +748,9 @@ export function ParCreateForm() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:max-w-md">
               <Field label="Cant." htmlFor="nlQty"><input id="nlQty" type="number" min="1" className={inputCls} value={nlQty} onChange={(e) => setNlQty(e.target.value)} /></Field>
               <Field label="UM" htmlFor="nlUnit"><input id="nlUnit" type="text" placeholder="sesie" className={inputCls} value={nlUnit} onChange={(e) => setNlUnit(e.target.value)} /></Field>
-              <Field label="Preț/u (MDL)" htmlFor="nlPrice"><input id="nlPrice" type="number" min="0" placeholder="7000" className={inputCls} value={nlPrice}
+              {/* Price is entered in the PAR's selected currency — keep the label in sync so the
+                  user doesn't type MDL amounts while the request is in EUR/USD. */}
+              <Field label={`Preț/u (${currency})`} htmlFor="nlPrice"><input id="nlPrice" type="number" min="0" placeholder="7000" className={inputCls} value={nlPrice}
                 onChange={(e) => setNlPrice(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLine()} /></Field>
             </div>
             {lineError && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="h-3 w-3" aria-hidden />{lineError}</p>}
@@ -699,6 +810,37 @@ export function ParCreateForm() {
         <Section n="12" title="Beneficiar plată (Payee)">
           {fieldErrors.payee && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="h-3 w-3" aria-hidden />{fieldErrors.payee}</p>}
 
+          {/* Feature 1: Tip beneficiar toggle */}
+          <div className="flex items-center gap-2 mb-3" role="group" aria-label="Tip beneficiar">
+            <span className="text-sm font-medium text-foreground">Tip beneficiar:</span>
+            <button
+              type="button"
+              onClick={() => setPayeeType("fizic")}
+              aria-pressed={payeeType === "fizic"}
+              className={cn(
+                "px-3 py-1.5 rounded-l-md border text-sm font-medium transition-colors min-h-[36px]",
+                payeeType === "fizic"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-foreground border-border hover:bg-muted"
+              )}
+            >
+              Persoană fizică
+            </button>
+            <button
+              type="button"
+              onClick={() => setPayeeType("juridic")}
+              aria-pressed={payeeType === "juridic"}
+              className={cn(
+                "px-3 py-1.5 rounded-r-md border-t border-b border-r text-sm font-medium transition-colors min-h-[36px]",
+                payeeType === "juridic"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-foreground border-border hover:bg-muted"
+              )}
+            >
+              Persoană juridică
+            </button>
+          </div>
+
           {/* VM1-13: AI Prefill — upload document to auto-fill payee/IBAN/scope */}
           <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-border mb-2">
             <button
@@ -747,8 +889,8 @@ export function ParCreateForm() {
 
               {/* Non-financial document guard */}
               {aiPrefillResult.documentClass.not_financial && (
-                <div className="flex items-start gap-2 p-2 rounded-md bg-warning/10 text-warning-foreground text-xs">
-                  <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden />
+                <div className="flex items-start gap-2 p-2 rounded-md bg-warning/10 border border-warning/30 text-foreground text-xs">
+                  <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5 text-warning" aria-hidden />
                   <span>
                     Documentul nu pare a fi o factură sau bon financiar
                     {aiPrefillResult.documentClass.reason && ` — ${aiPrefillResult.documentClass.reason}`}.
@@ -757,13 +899,14 @@ export function ParCreateForm() {
                 </div>
               )}
 
-              {/* Per-field confidence indicators */}
-              {[
+              {/* Per-field confidence indicators (only when a single payee was resolved) */}
+              {!aiPrefillResult.needsClarification && [
                 { label: "Beneficiar", field: aiPrefillResult.payeeName },
+                { label: "IDNO/IDNP", field: aiPrefillResult.payeeIdno },
                 { label: "IBAN", field: aiPrefillResult.payeeIban },
                 { label: "Scop", field: aiPrefillResult.endUse },
               ].map(({ label, field }) => (
-                field.value !== null && (
+                field.value !== null && String(field.value) !== "" && (
                   <div key={label} className="flex items-baseline gap-2 text-xs">
                     <span className="text-muted-foreground w-16 flex-shrink-0">{label}:</span>
                     <span className="text-foreground truncate max-w-xs">{String(field.value)}</span>
@@ -773,14 +916,59 @@ export function ParCreateForm() {
                   </div>
                 )
               ))}
-              <p className="text-xs text-muted-foreground pt-1">
-                Câmpurile de mai jos au fost completate. Verifică și corectează înainte de trimitere.
-              </p>
+              {!aiPrefillResult.needsClarification && (
+                <p className="text-xs text-muted-foreground pt-1">
+                  Câmpurile de mai jos au fost completate. Verifică și corectează înainte de trimitere.
+                </p>
+              )}
             </div>
           )}
 
-          {/* Feature 1: Registry search */}
-          <Field label="Caută companie (contafirm.md)" htmlFor="reg-q" hint="Introdu cel puțin 2 caractere — caută după nume sau IDNO">
+          {/* PAR AI overhaul: ambiguous payee → ask the user which company is the payee */}
+          {payeeCandidates.length > 0 && (
+            <div
+              role="radiogroup"
+              aria-label="Care companie e beneficiarul plății?"
+              className="rounded-lg border border-primary/40 bg-primary/5 p-3 mb-3 space-y-2"
+            >
+              <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-primary" aria-hidden />
+                Care companie e beneficiarul plății?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Documentul conține mai mulți posibili beneficiari. Alege cine primește plata:
+              </p>
+              <div className="space-y-2">
+                {payeeCandidates.map((c) => (
+                  <button
+                    key={`${c.name}-${c.idno ?? ""}-${c.iban ?? ""}`}
+                    type="button"
+                    onClick={() => pickCandidate(c)}
+                    className="touch-target w-full text-left rounded-lg border border-border bg-card hover:border-primary hover:bg-accent transition-colors p-3 space-y-0.5"
+                  >
+                    <span className="block font-medium text-foreground">{c.name}</span>
+                    {c.idno && (
+                      <span className="block text-xs text-muted-foreground">IDNO {c.idno}</span>
+                    )}
+                    {c.iban && (
+                      <span className="block text-xs text-muted-foreground">
+                        {c.iban}
+                        {c.ibanForeign && (
+                          <span className="text-warning"> (IBAN non-MD ⚠)</span>
+                        )}
+                      </span>
+                    )}
+                    {c.bank && (
+                      <span className="block text-xs text-muted-foreground">{c.bank}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Feature 1: Registry search — only for juridic (companies) */}
+          {payeeType === "juridic" && <Field label="Caută companie (contafirm.md)" htmlFor="reg-q" hint="Introdu cel puțin 2 caractere — caută după nume sau IDNO">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden />
               <input
@@ -824,7 +1012,7 @@ export function ParCreateForm() {
                 ))}
               </ul>
             )}
-          </Field>
+          </Field>}
 
           {vendors.length > 0 && (
             <Field label="Beneficiar salvat" htmlFor="vsel" hint="Alege un beneficiar din registru sau introdu manual mai jos">
@@ -835,9 +1023,31 @@ export function ParCreateForm() {
             </Field>
           )}
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Nume, Prenume" htmlFor="pn"><input id="pn" type="text" placeholder="ex. Roitman Daria" className={inputCls} value={payeeName}
-              onChange={(e) => { setPayeeName(e.target.value); setVendorId(""); }} /></Field>
-            <Field label="IDNP" htmlFor="pi" hint="13 cifre" error={fieldErrors.payee_idnp}>
+            <Field
+              label={payeeType === "fizic" ? "Nume, Prenume" : "Denumire companie"}
+              htmlFor="pn"
+            >
+              <input
+                id="pn"
+                type="text"
+                placeholder={payeeType === "fizic" ? "ex. Roitman Daria" : "ex. ATIC SRL"}
+                className={inputCls}
+                value={payeeName}
+                onChange={(e) => {
+                  setPayeeName(e.target.value);
+                  setVendorId("");
+                  // Auto-detect as user types (only override if detector is confident)
+                  const detected = detectPayeeType(e.target.value);
+                  if (detected) setPayeeType(detected);
+                }}
+              />
+            </Field>
+            <Field
+              label={payeeType === "fizic" ? "IDNP" : "IDNO"}
+              htmlFor="pi"
+              hint="13 cifre"
+              error={fieldErrors.payee_idnp}
+            >
               <input id="pi" type="text" maxLength={13} placeholder="2008001007903" value={payeeIdnp}
                 className={cn(inputCls, fieldErrors.payee_idnp && "border-destructive")}
                 onChange={(e) => { setPayeeIdnp(e.target.value); setFieldErrors((p) => ({ ...p, payee_idnp: "" })); }} />
@@ -849,11 +1059,11 @@ export function ParCreateForm() {
             </Field>
             <Field label="Bancă" htmlFor="pbk"><input id="pbk" type="text" placeholder="ex. BC Moldindconbank S.A." className={inputCls} value={payeeBank} onChange={(e) => setPayeeBank(e.target.value)} /></Field>
           </div>
-          {!vendorId && payeeName.trim() && (
-            <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-              <input type="checkbox" checked={saveVendor} onChange={(e) => setSaveVendor(e.target.checked)} className="accent-primary h-4 w-4" />
-              Salvează acest beneficiar pentru reutilizare
-            </label>
+          {!vendorId && payeeName.trim() && payeeIban.trim() && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" aria-hidden />
+              Beneficiarul cu IBAN se salvează automat în registru pentru reutilizare.
+            </p>
           )}
           <p className="text-xs text-muted-foreground">Datele beneficiarului sunt confidențiale (GDPR) — vizibile doar solicitantului, aprobatorilor și finanțelor.</p>
         </Section>

@@ -547,7 +547,7 @@ finCapturesRoutes.patch(
 
 // ─── Upload helpers (shared by single POST /captures + batch POST /captures/batch) ──
 
-interface CaptureInput {
+export interface CaptureInput {
   fileName: string;
   mimeType: string;
   sizeBytes: number;
@@ -560,8 +560,9 @@ interface CaptureInput {
 }
 
 /** Derive a capture's content from one uploaded File: filename/mime/size/key + extracted text
- *  (PDF text layer, image data-URL for vision, or CSV text). Never throws on a malformed file. */
-async function deriveFileInput(file: File, tenantId: string, pastedRawText: string) {
+ *  (PDF text layer, image data-URL for vision, or CSV text). Never throws on a malformed file.
+ *  Exported for reuse in finStatement.ts (STMT-001). */
+export async function deriveFileInput(file: File, tenantId: string, pastedRawText: string) {
   const fileName = file.name;
   const mimeType = file.type || "application/octet-stream";
   const sizeBytes = file.size;
@@ -609,8 +610,9 @@ async function deriveBufferInput(buf: Buffer, fileName: string, mimeType: string
 }
 
 /** Create a capture row and run extraction (statement → transaction lines, document → AI fields).
- *  Returns the serialized capture (+ lineCount for statements). Shared source of truth. */
-async function buildCapture(
+ *  Returns the serialized capture (+ lineCount for statements). Shared source of truth.
+ *  Exported for reuse in finStatement.ts (STMT-001). */
+export async function buildCapture(
   user: { id: string; tenantId: string },
   input: CaptureInput,
 ): Promise<{ capture: ReturnType<typeof serializeCapture>; lineCount: number }> {
@@ -657,6 +659,8 @@ async function buildCapture(
             txDate: t.tx_date,
             description: t.description,
             counterparty: t.counterparty,
+            counterpartyIdno: t.counterparty_idno,
+            counterpartyIban: t.counterparty_iban,
             amountCents: t.amount_cents,
             direction: t.direction,
             currency: t.currency,

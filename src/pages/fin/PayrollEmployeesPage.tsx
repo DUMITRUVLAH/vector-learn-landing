@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback, Fragment } from "react";
 import { AppShell } from "@/components/app/AppShell";
+import { EmptyState } from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
 import {
   Users,
@@ -568,17 +569,14 @@ export function PayrollEmployeesPage() {
           </div>
         )}
 
-        {/* Empty state */}
+        {/* POLISH-003: Empty state */}
         {!loading && employees.length === 0 && (
-          <div className="text-center py-12">
-            <Users
-              className="h-10 w-10 mx-auto text-muted-foreground mb-3"
-              aria-hidden="true"
-            />
-            <p className="text-muted-foreground text-sm">
-              Niciun angajat înregistrat. Adăugați primul angajat.
-            </p>
-          </div>
+          <EmptyState
+            icon={<Users className="h-6 w-6 text-muted-foreground" />}
+            title="Niciun angajat înregistrat"
+            description="Adăugați primul angajat pentru a configura statul de plată."
+            action={{ label: "Adaugă angajat", onClick: () => setShowAdd(true) }}
+          />
         )}
 
         {/* Employees table */}

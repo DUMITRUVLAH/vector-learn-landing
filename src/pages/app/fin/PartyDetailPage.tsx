@@ -1,5 +1,5 @@
 /**
- * PARTY-003: FinDesk — /app/fin/parties/:id
+ * PARTY-003: FinDesk — /business/fin/parties/:id
  *
  * Detail page for a business partner.
  * Three tabs:
@@ -614,7 +614,7 @@ export function PartyDetailPage() {
     try {
       await deleteParty(partyId);
       showToast("Partenerul a fost arhivat.");
-      setTimeout(() => navigate("/app/fin/parties"), 1500);
+      setTimeout(() => navigate("/business/fin/parties"), 1500);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Eroare la arhivare.");
     } finally {
@@ -670,7 +670,7 @@ export function PartyDetailPage() {
     >
       {/* Breadcrumb */}
       <button
-        onClick={() => navigate("/app/fin/parties")}
+        onClick={() => navigate("/business/fin/parties")}
         className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
       >
         <ChevronLeft className="w-4 h-4" />
