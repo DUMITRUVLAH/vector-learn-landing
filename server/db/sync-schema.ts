@@ -121,6 +121,9 @@ async function main() {
     `CREATE INDEX IF NOT EXISTS "par_project_approvers_project_idx" ON "par_project_approvers" ("project_id")`,
     `CREATE INDEX IF NOT EXISTS "par_project_approvers_tenant_idx" ON "par_project_approvers" ("tenant_id")`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "par_project_approvers_project_user_uniq" ON "par_project_approvers" ("project_id","user_id")`,
+    // VM1-12: finance uploads the signed payment order; code writes kind='payment_order'.
+    // Prod migrations lag deploys (see docs/solutions prod-migration-desync), so heal the enum here too.
+    `ALTER TYPE "public"."par_attachment_kind" ADD VALUE IF NOT EXISTS 'payment_order'`,
   ];
   for (const stmt of ENSURE_STATEMENTS) {
     try {

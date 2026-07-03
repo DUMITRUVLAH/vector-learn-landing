@@ -1097,6 +1097,47 @@ function InviteSection() {
 
 // ─── Sub-tab: Members ─────────────────────────────────────────────────────────
 
+// VM1-01: group par_members by userId for display — one row per person, multiple role badges.
+interface GroupedMember {
+  userId: string;
+  userName?: string;
+  userEmail?: string;
+  roles: Array<{ id: string; role: ParMember["role"]; approvalLimitCents: number | null }>;
+}
+
+function groupMembers(members: ParMember[]): GroupedMember[] {
+  const map = new Map<string, GroupedMember>();
+  for (const m of members) {
+    const existing = map.get(m.userId);
+    const roleEntry = { id: m.id, role: m.role, approvalLimitCents: m.approvalLimitCents };
+    if (existing) {
+      existing.roles.push(roleEntry);
+    } else {
+      map.set(m.userId, {
+        userId: m.userId,
+        userName: m.userName,
+        userEmail: m.userEmail,
+        roles: [roleEntry],
+      });
+    }
+  }
+  return Array.from(map.values());
+}
+
+const ROLE_BADGE_COLORS: Record<ParMember["role"], string> = {
+  requestor: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  approver: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  finance: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  par_admin: "bg-primary/10 text-primary",
+};
+
+const ROLE_LABELS: Record<ParMember["role"], string> = {
+  requestor: "Requestor",
+  approver: "Approver",
+  finance: "Finance",
+  par_admin: "Admin",
+};
+
 /**
  * Self-service role panel. The admin is an implicit par_admin but, to appear in approval chains, they
  * need an explicit `approver` (or finance/requestor) row — and the generic "Adaugă rol" form demands a
@@ -1239,8 +1280,8 @@ function ParMembersTab() {
     }
   };
 
-  const handleRevoke = async (id: string, userName: string) => {
-    if (!confirm(`Revoce rolul pentru ${userName}?`)) return;
+  const handleRevoke = async (id: string, roleName: string, userName: string) => {
+    if (!confirm(`Revoce rolul „${roleName}" pentru ${userName}?`)) return;
     try {
       await revokeParMember(id);
       await load();
@@ -1258,6 +1299,9 @@ function ParMembersTab() {
     );
   }
 
+  // VM1-01: group by userId so one person with multiple roles shows as one row
+  const grouped = groupMembers(members);
+
   return (
     <div className="space-y-6">
       {/* Self-service: add a PAR role (e.g. Aprobator) to myself without needing my own UUID */}
@@ -1270,7 +1314,9 @@ function ParMembersTab() {
       <DelegationSection members={members} />
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Utilizatori cu roluri PAR în această organizație.</p>
+        <p className="text-sm text-muted-foreground">
+          Utilizatori cu roluri PAR ({grouped.length} persoan{grouped.length === 1 ? "ă" : "e"}, {members.length} rol{members.length === 1 ? "" : "uri"}).
+        </p>
         <button
           type="button"
           onClick={() => setShowAddForm((v) => !v)}
@@ -1360,54 +1406,75 @@ function ParMembersTab() {
         </div>
       )}
 
+      {/* VM1-01: grouped by person — one row per person, multiple role badges */}
       <div className="rounded-lg border border-border overflow-hidden">
         <table className="w-full text-sm" aria-label="Membri PAR">
           <thead className="bg-muted/50">
             <tr>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Utilizator</th>
-              <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Rol</th>
+              <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Roluri</th>
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground">Limită aprobare</th>
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground sr-only">Acțiuni</th>
             </tr>
           </thead>
           <tbody>
-            {members.length === 0 && (
+            {grouped.length === 0 && (
               <tr>
                 <td colSpan={4} className="p-6 text-center text-sm text-muted-foreground">
                   Niciun rol atribuit.
                 </td>
               </tr>
             )}
-            {members.map((m) => (
-              <tr key={m.id} className="border-t border-border">
-                <td className="p-3">
-                  <div>
-                    <p className="font-medium text-foreground">{m.userName ?? m.userId}</p>
-                    {m.userEmail && (
-                      <p className="text-xs text-muted-foreground">{m.userEmail}</p>
-                    )}
-                  </div>
-                </td>
-                <td className="p-3">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                    {m.role}
-                  </span>
-                </td>
-                <td className="p-3 text-right text-foreground">
-                  {m.approvalLimitCents != null ? formatMDL(m.approvalLimitCents) : <span className="text-muted-foreground">—</span>}
-                </td>
-                <td className="p-3 text-right">
-                  <button
-                    type="button"
-                    onClick={() => handleRevoke(m.id, m.userName ?? m.userId)}
-                    className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive min-h-[44px] min-w-[44px] flex items-center justify-center ml-auto"
-                    aria-label={`Revoce rol ${m.role} pentru ${m.userName ?? m.userId}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {grouped.map((g) => {
+              // approvalLimitCents: show the approver's limit if present, else any non-null
+              const approverRole = g.roles.find((r) => r.role === "approver");
+              const limitEntry = approverRole ?? g.roles.find((r) => r.approvalLimitCents != null);
+              const displayLimit = limitEntry?.approvalLimitCents ?? null;
+              const displayName = g.userName ?? g.userId;
+
+              return (
+                <tr key={g.userId} className="border-t border-border">
+                  <td className="p-3">
+                    <div>
+                      <p className="font-medium text-foreground">{displayName}</p>
+                      {g.userEmail && (
+                        <p className="text-xs text-muted-foreground">{g.userEmail}</p>
+                      )}
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <div className="flex flex-wrap gap-1" role="list" aria-label={`Roluri pentru ${displayName}`}>
+                      {g.roles.map((r) => (
+                        <div key={r.id} className="flex items-center gap-0.5" role="listitem">
+                          <span className={cn(
+                            "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+                            ROLE_BADGE_COLORS[r.role]
+                          )}>
+                            {ROLE_LABELS[r.role]}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRevoke(r.id, ROLE_LABELS[r.role], displayName)}
+                            className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                            aria-label={`Revoce rolul ${ROLE_LABELS[r.role]} pentru ${displayName}`}
+                          >
+                            <X className="h-3 w-3" aria-hidden />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="p-3 text-right text-foreground">
+                    {displayLimit != null
+                      ? formatMDL(displayLimit)
+                      : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="p-3 text-right">
+                    {/* No single-row revoke — individual role revoke is inline per badge */}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
