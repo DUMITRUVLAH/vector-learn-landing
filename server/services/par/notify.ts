@@ -24,10 +24,20 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { inAppNotifications } from "../../db/schema/inAppNotifications";
 import { users } from "../../db/schema/users";
-import { parMembers, parRequests, parProjects, parBudgetCodes, parVendors } from "../../db/schema/par";
+import { parMembers, parRequests, parProjects, parBudgetCodes, parVendors, parEvents } from "../../db/schema/par";
+import { appUrl } from "../../lib/par/invites";
+import { getActiveDelegatesOf } from "../../lib/par/delegations";
 import { MessagingService } from "../messaging/index";
 
 const messagingService = new MessagingService(db);
+
+/**
+ * VM1-08: absolute deep link that works from Gmail/Outlook. The SPA uses hash
+ * routing, so the path MUST be behind `/#/` — a bare relative path is a dead link.
+ */
+export function parDeepLink(parId: string): string {
+  return `${appUrl()}/#/business/par/${parId}`;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,6 +86,7 @@ async function loadParSummary(tenantId: string, parId: string): Promise<string |
         payeeName: parRequests.payeeName,
         vendorId: parRequests.vendorId,
         projectId: parRequests.projectId,
+        eventId: parRequests.eventId,
         budgetCodeId: parRequests.budgetCodeId,
       })
       .from(parRequests)
@@ -100,6 +111,16 @@ async function loadParSummary(tenantId: string, parId: string): Promise<string |
       projectName = pr?.name ?? "";
     }
 
+    // VM1-04: the event the PAR belongs to (donor reporting is per-event in NGOs).
+    let eventName = "";
+    if (p.eventId) {
+      const [ev] = await db
+        .select({ name: parEvents.name })
+        .from(parEvents)
+        .where(and(eq(parEvents.id, p.eventId), eq(parEvents.tenantId, tenantId)));
+      eventName = ev?.name ?? "";
+    }
+
     let budgetLabel = "";
     if (p.budgetCodeId) {
       const [bc] = await db
@@ -115,6 +136,7 @@ async function loadParSummary(tenantId: string, parId: string): Promise<string |
     if (payeeName) lines.push(`• Către: ${payeeName}`);
     if (reason) lines.push(`• Motiv: ${reason}`);
     if (projectName) lines.push(`• Proiect: ${projectName}`);
+    if (eventName) lines.push(`• Eveniment: ${eventName}`);
     if (budgetLabel) lines.push(`• Buget: ${budgetLabel}`);
     return lines.join("\n");
   } catch {
@@ -129,7 +151,7 @@ async function loadParSummary(tenantId: string, parId: string): Promise<string |
 async function buildApproverEmailBody(ctx: ParNotifyContext, stepLabel?: string): Promise<string> {
   const summary = await loadParSummary(ctx.tenantId, ctx.parId);
   const intro = `Cererea ${ctx.requestNo} așteaptă aprobarea ta${stepLabel ? ` (pas: ${stepLabel})` : ""}.`;
-  const link = `Deschide cererea: /business/par/${ctx.parId}`;
+  const link = `Deschide cererea: ${parDeepLink(ctx.parId)}`;
   return [intro, "", summary, summary ? "" : null, link].filter((l) => l !== null).join("\n");
 }
 
@@ -149,7 +171,15 @@ async function notifyApprovers(params: {
 
   let recipients: string[];
   if (specificUserId) {
-    recipients = [specificUserId];
+    // VM1-07: while a delegation X→Y is active, Y must be notified too — otherwise the
+    // delegate can approve but never learns a request is waiting.
+    let delegates: string[] = [];
+    try {
+      delegates = await getActiveDelegatesOf(specificUserId, ctx.tenantId);
+    } catch {
+      // best-effort — a delegation lookup failure must not kill the primary notification
+    }
+    recipients = [...new Set([specificUserId, ...delegates])];
   } else {
     const rows = await db
       .select({ userId: parMembers.userId })
@@ -233,7 +263,7 @@ async function notifyUser(params: {
       tenantId: params.tenantId,
       toAddress: userRecord.email,
       subject: params.subject,
-      body: `${params.body}\n\nView PAR: /business/par/${params.parId}`,
+      body: `${params.body}\n\nDeschide cererea: ${parDeepLink(params.parId)}`,
     });
   }
 }

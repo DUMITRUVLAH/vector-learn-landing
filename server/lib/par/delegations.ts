@@ -31,6 +31,30 @@ export async function getActiveDelegators(
   return new Set(rows.map((r) => r.fromUserId));
 }
 
+/**
+ * VM1-07: reverse lookup — the user ids currently delegated BY `fromUserId` (X→Y active now).
+ * Used to route approval emails to the delegate too, not just the (possibly absent) assignee.
+ */
+export async function getActiveDelegatesOf(
+  fromUserId: string,
+  tenantId: string,
+  now: Date = new Date()
+): Promise<string[]> {
+  const rows = await db
+    .select({ toUserId: parDelegations.toUserId })
+    .from(parDelegations)
+    .where(
+      and(
+        eq(parDelegations.tenantId, tenantId),
+        eq(parDelegations.fromUserId, fromUserId),
+        eq(parDelegations.active, true),
+        lte(parDelegations.startsAt, now),
+        gte(parDelegations.endsAt, now)
+      )
+    );
+  return [...new Set(rows.map((r) => r.toUserId))];
+}
+
 /** True if `toUserId` may act on a step assigned to `assignedUserId` (self, or via active delegation). */
 export async function canActViaDelegation(
   toUserId: string,

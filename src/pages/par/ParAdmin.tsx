@@ -58,6 +58,8 @@ import {
   type ParInvite,
   getParAudit,
   type ParAuditEntry,
+  listParEmailLog,
+  type ParEmailLogEntry,
   listParDelegations,
   createParDelegation,
   cancelParDelegation,
@@ -978,6 +980,90 @@ function AuditTab() {
             className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-40 min-h-[40px]" aria-label="Pagina următoare">
             Înainte <ChevronRight className="h-4 w-4" aria-hidden />
           </button>
+        </div>
+      )}
+
+      <EmailLogSection />
+    </div>
+  );
+}
+
+// VM1-07: outbound email log — a failed approval email must be visible, not a silent console.warn.
+function EmailLogSection() {
+  const [emails, setEmails] = useState<ParEmailLogEntry[]>([]);
+  const [failedCount, setFailedCount] = useState(0);
+  const [onlyFailed, setOnlyFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    listParEmailLog(onlyFailed)
+      .then((r) => { if (alive) { setEmails(r.emails); setFailedCount(r.failedCount); } })
+      .catch(() => { if (alive) setEmails([]); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [onlyFailed]);
+
+  return (
+    <div className="pt-4 border-t border-border space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <h3 className="text-sm font-semibold text-foreground">Emailuri PAR trimise</h3>
+        {failedCount > 0 && (
+          <span className="px-2 py-0.5 rounded-full bg-destructive/10 text-destructive text-xs font-medium">
+            {failedCount} eșuate
+          </span>
+        )}
+        <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+          <input type="checkbox" checked={onlyFailed} onChange={(e) => setOnlyFailed(e.target.checked)}
+            className="h-4 w-4 rounded border-input" />
+          Doar eșuate
+        </label>
+      </div>
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-3">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Se încarcă…
+        </div>
+      ) : emails.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-3 text-center border border-dashed border-border rounded-lg">
+          {onlyFailed ? "Niciun email eșuat." : "Niciun email PAR trimis încă."}
+        </p>
+      ) : (
+        <div className="rounded-lg border border-border overflow-x-auto">
+          <table className="w-full text-sm" aria-label="Jurnal emailuri PAR">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="text-left p-2.5 text-xs font-semibold text-muted-foreground">Data</th>
+                <th className="text-left p-2.5 text-xs font-semibold text-muted-foreground">Către</th>
+                <th className="text-left p-2.5 text-xs font-semibold text-muted-foreground hidden md:table-cell">Subiect</th>
+                <th className="text-left p-2.5 text-xs font-semibold text-muted-foreground">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {emails.map((m) => (
+                <tr key={m.id} className="border-t border-border">
+                  <td className="p-2.5 text-muted-foreground text-xs whitespace-nowrap">{auditTimeFmt(m.createdAt)}</td>
+                  <td className="p-2.5 text-foreground text-xs">{m.toAddress}</td>
+                  <td className="p-2.5 text-muted-foreground text-xs hidden md:table-cell max-w-sm truncate">{m.subject ?? "—"}</td>
+                  <td className="p-2.5">
+                    {m.status === "failed" ? (
+                      <span className="px-2 py-0.5 rounded-full bg-destructive/10 text-destructive text-xs font-medium" title={m.errorMessage ?? undefined}>
+                        Eșuat
+                      </span>
+                    ) : m.status === "sent" ? (
+                      <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 text-xs font-medium">
+                        Trimis
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground text-xs font-medium">
+                        În coadă
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

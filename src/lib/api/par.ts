@@ -950,6 +950,21 @@ export async function getParAudit(filters: ParAuditFilters = {}): Promise<{
   return api(`/api/par/audit${qs ? `?${qs}` : ""}`);
 }
 
+// VM1-07: outbound PAR email log (par_admin) — failed sends must be visible, not silent.
+export interface ParEmailLogEntry {
+  id: string;
+  toAddress: string;
+  subject: string | null;
+  status: "queued" | "sent" | "failed";
+  errorMessage: string | null;
+  sentAt: string | null;
+  failedAt: string | null;
+  createdAt: string;
+}
+export async function listParEmailLog(onlyFailed?: boolean): Promise<{ emails: ParEmailLogEntry[]; failedCount: number }> {
+  return api(`/api/par/audit/emails${onlyFailed ? "?failed=1" : ""}`);
+}
+
 export async function getParReportByDepartment(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
   const params = new URLSearchParams();
   if (filters?.period_from) params.set("from", filters.period_from);
