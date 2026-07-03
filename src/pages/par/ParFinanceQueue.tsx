@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   ClipboardList,
   User,
+  Paperclip,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
@@ -28,6 +29,7 @@ import {
   executePayment,
   uploadAttachment,
   formatMDL,
+  downloadDosar,
   type ParFinanceQueueItem,
   type Section16Payload,
   type PayPayload,
@@ -563,6 +565,19 @@ export default function ParFinanceQueue() {
                             Așteptare re-aprobare…
                           </span>
                         )}
+                        {/* VM1-12: Dosar complet PDF — visible for all statuses */}
+                        <button
+                          onClick={async () => {
+                            try { await downloadDosar(par.id, par.requestNo); }
+                            catch { /* silent — user can retry */ }
+                          }}
+                          aria-label={`Descarcă dosarul complet PDF pentru ${par.requestNo}`}
+                          title="Descarcă dosarul complet (PDF)"
+                          className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-border bg-background text-xs text-foreground hover:bg-accent transition-colors whitespace-nowrap"
+                        >
+                          <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+                          Dosar PDF
+                        </button>
                       </div>
                     </td>
                   </tr>

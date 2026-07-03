@@ -65,6 +65,7 @@ export const parAttachmentKindEnum = pgEnum("par_attachment_kind", [
   "quotation",
   "invoice",
   "par_pdf",
+  "payment_order",
   "other",
 ]);
 

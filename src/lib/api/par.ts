@@ -25,6 +25,7 @@ export type ParAttachmentKind =
   | "quotation"
   | "invoice"
   | "par_pdf"
+  | "payment_order"
   | "other";
 
 export interface ParRequest {
@@ -505,6 +506,32 @@ export async function listAttachments(parId: string): Promise<{ items: ParAttach
 
 export async function deleteAttachment(parId: string, attId: string): Promise<{ deleted: boolean }> {
   return api(`/api/par/${parId}/attachments/${attId}`, { method: "DELETE" });
+}
+
+// ─── VM1-12: Dosar complet PDF ───────────────────────────────────────────────
+
+/**
+ * Triggers download of the combined dosar PDF (PAR form + all attachments).
+ * The server endpoint returns a binary PDF.
+ */
+export async function downloadDosar(parId: string, requestNo?: string | null): Promise<void> {
+  const resp = await fetch(`/api/par/${parId}/dosar`, {
+    credentials: "include",
+  });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => "");
+    throw new Error(`Dosar: ${resp.status} ${body}`);
+  }
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const fileSafe = (requestNo ?? `PAR-${parId.slice(0, 8)}`).replace(/[^\w-]+/g, "_");
+  a.download = `Dosar_PAR_${fileSafe}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ─── PAR-112/113: Finance queue + section 16 + payment execution ─────────────
