@@ -20,6 +20,7 @@ import { finParties } from "../db/schema/finParties";
 import { finAgreements, finAgreementServices } from "../db/schema/finAgreements";
 import { finInvoices } from "../db/schema/finInvoices";
 import { finEinvoices, finSfsSettings } from "../db/schema/finEinvoices";
+import { finOrgProfile } from "../db/schema/finCore";
 import { eq } from "drizzle-orm";
 
 let testDb: ReturnType<typeof drizzle<typeof schema>>;
@@ -99,6 +100,8 @@ beforeAll(async () => {
   await testDb.insert(users).values({ tenantId, email: "a@a.md", passwordHash: "x", name: "A", role: "admin" });
   // SFS mock settings so the e-Factura submit path runs without real credentials.
   await testDb.insert(finSfsSettings).values({ tenantId, idno: "1024600035737", bankAccount: "MD87AG000000022516065719", environment: "mock" });
+  // Org profile — the client email must be signed with the REAL legal name, not "Furnizor IDNO x".
+  await testDb.insert(finOrgProfile).values({ tenantId, legalName: "VECTOR ACADEMY S.R.L." });
 }, 120_000);
 
 beforeEach(() => { sentEmails.length = 0; });
@@ -131,6 +134,8 @@ describe("AUTOBILL: happy path — generate + e-Factura + email", () => {
     expect(sentEmails[0].attachments?.[0].filename).toContain(".pdf");
     expect(sentEmails[0].attachments?.[0].content.subarray(0, 4).toString()).toBe("%PDF");
     expect(outcome.email?.ok).toBe(true);
+    // Signed with the company's REAL legal name (from fin_org_profile), not a synthetic label
+    expect(sentEmails[0].subject).toContain("VECTOR ACADEMY S.R.L.");
 
     // nextBillDate advanced +1 month; contract stamped
     const svc = await testDb.select().from(finAgreementServices).where(eq(finAgreementServices.agreementId, agreementId));

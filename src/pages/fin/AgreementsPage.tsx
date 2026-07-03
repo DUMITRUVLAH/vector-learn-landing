@@ -6,7 +6,7 @@
  * WCAG AA: touch targets ≥44px, sr-only labels, keyboard navigation.
  */
 import { useEffect, useState, useCallback } from "react";
-import { Plus, FileText } from "lucide-react";
+import { Plus, FileText, PlayCircle, Loader2 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { EmptyState } from "@/components/EmptyState";
 import { AgreementTable } from "@/components/fin/AgreementTable";
@@ -24,6 +24,32 @@ interface Party {
   id: string;
   name: string;
 }
+
+// AUTOBILL: shape of POST /api/fin/cron/run-now (tenant-scoped billing run)
+interface RunNowOutcome {
+  agreementId: string;
+  agreementTitle: string;
+  status: "billed" | "skipped" | "error";
+  einvoice?: { ok: boolean; reason?: string };
+  email?: { ok: boolean; reason?: string; to?: string };
+  reason?: string;
+}
+interface RunNowSummary {
+  ok: boolean;
+  processed: number;
+  billed: number;
+  skipped: number;
+  errors: number;
+  outcomes: RunNowOutcome[];
+}
+
+const SKIP_LABEL: Record<string, string> = {
+  buyer_idno_missing: "clientul nu are IDNO",
+  buyer_iban_missing: "clientul nu are IBAN",
+  buyer_email_missing: "clientul nu are email",
+  sfs_not_configured: "SFS neconfigurat",
+  no_due_services_or_already_billed: "nimic scadent / deja facturat luna asta",
+};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -78,21 +104,100 @@ export function AgreementsPage() {
     await fetchAgreements();
   }, [fetchAgreements]);
 
+  // AUTOBILL: manual "run billing now" for THIS tenant, with a visible summary.
+  const [running, setRunning] = useState(false);
+  const [runSummary, setRunSummary] = useState<RunNowSummary | null>(null);
+  const hasAutoContracts = agreements.some((a) => a.autoBilling && a.status === "active");
+  const handleRunNow = useCallback(async () => {
+    setRunning(true);
+    setRunSummary(null);
+    try {
+      const res = await api<RunNowSummary>("/api/fin/cron/run-now", { method: "POST" });
+      setRunSummary(res);
+      await fetchAgreements(); // refresh autoBilledAt stamps
+    } catch {
+      setRunSummary({ ok: false, processed: 0, billed: 0, skipped: 0, errors: 1, outcomes: [] });
+    } finally {
+      setRunning(false);
+    }
+  }, [fetchAgreements]);
+
   return (
     <AppShell
       pageTitle="Contracte"
       pageDescription="Gestiunea contractelor comerciale și a serviciilor recurente"
       actions={
-        <button
-          onClick={() => setShowCreate(true)}
-          aria-label="Creează contract nou"
-          className="flex min-h-[40px] items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          <Plus className="h-4 w-4" aria-hidden />
-          Contract nou
-        </button>
+        <div className="flex items-center gap-2">
+          {hasAutoContracts && (
+            <button
+              onClick={() => void handleRunNow()}
+              disabled={running}
+              aria-label="Rulează facturarea automată acum"
+              title="Emite acum facturile scadente pentru contractele cu facturare automată (e-Factura + email)"
+              className="flex min-h-[40px] items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            >
+              {running ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <PlayCircle className="h-4 w-4" aria-hidden />}
+              {running ? "Se facturează..." : "Rulează facturarea"}
+            </button>
+          )}
+          <button
+            onClick={() => setShowCreate(true)}
+            aria-label="Creează contract nou"
+            className="flex min-h-[40px] items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            Contract nou
+          </button>
+        </div>
       }
     >
+      {/* AUTOBILL: run summary — what got billed / skipped and WHY */}
+      {runSummary && (
+        <div
+          role="status"
+          className="mb-4 rounded-lg border border-border bg-card p-4 text-sm"
+        >
+          <div className="flex items-center justify-between">
+            <p className="font-medium text-foreground">
+              {runSummary.ok
+                ? `Facturare rulată: ${runSummary.billed} emise, ${runSummary.skipped} sărite, ${runSummary.errors} erori`
+                : "Eroare la rularea facturării. Încearcă din nou."}
+            </p>
+            <button
+              onClick={() => setRunSummary(null)}
+              aria-label="Închide rezumatul"
+              className="text-xs text-muted-foreground underline hover:text-foreground"
+            >
+              Închide
+            </button>
+          </div>
+          {runSummary.outcomes.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {runSummary.outcomes.map((o) => (
+                <li key={o.agreementId} className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">{o.agreementTitle}</span>
+                  {": "}
+                  {o.status === "billed" ? (
+                    <>
+                      factură emisă
+                      {o.einvoice && ` · e-Factura ${o.einvoice.ok ? "OK" : `sărită (${SKIP_LABEL[o.einvoice.reason ?? ""] ?? o.einvoice.reason})`}`}
+                      {o.email && ` · email ${o.email.ok ? `trimis (${o.email.to})` : `sărit (${SKIP_LABEL[o.email.reason ?? ""] ?? o.email.reason})`}`}
+                    </>
+                  ) : (
+                    `${o.status === "skipped" ? "sărit" : "eroare"} — ${SKIP_LABEL[o.reason ?? ""] ?? o.reason ?? ""}`
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {runSummary.ok && runSummary.processed === 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Niciun contract cu facturare automată nu are servicii scadente azi.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* POLISH-003: Empty state when no agreements exist */}
       {!loading && agreements.length === 0 ? (
         <EmptyState
