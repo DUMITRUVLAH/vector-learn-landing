@@ -9,6 +9,7 @@ import { Hono } from "hono";
 import { and, eq, gte, lte, desc, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { parAudit, parRequests } from "../db/schema/par";
+import { messages } from "../db/schema/messages";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
@@ -79,4 +80,51 @@ parAuditRoutes.get("/", async (c) => {
     pageSize: PAGE_SIZE,
     totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
   });
+});
+
+/**
+ * VM1-07: GET /api/par/audit/emails — the last outbound PAR emails with delivery status,
+ * so a failed send is visible to par_admin instead of dying silently in a console.warn.
+ * Filters on subject "[PAR]" (the prefix every PAR notification uses).
+ */
+parAuditRoutes.get("/emails", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const onlyFailed = c.req.query("failed") === "1";
+
+  const conditions = [
+    eq(messages.tenantId, tenantId),
+    eq(messages.channel, "email"),
+    sql`${messages.subject} LIKE '[PAR]%'`,
+  ];
+  if (onlyFailed) conditions.push(eq(messages.status, "failed"));
+
+  const rows = await db
+    .select({
+      id: messages.id,
+      toAddress: messages.toAddress,
+      subject: messages.subject,
+      status: messages.status,
+      errorMessage: messages.errorMessage,
+      sentAt: messages.sentAt,
+      failedAt: messages.failedAt,
+      createdAt: messages.createdAt,
+    })
+    .from(messages)
+    .where(and(...conditions))
+    .orderBy(desc(messages.createdAt))
+    .limit(50);
+
+  const [failedRow] = await db
+    .select({ failed: sql<number>`cast(count(*) as int)` })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.tenantId, tenantId),
+        eq(messages.channel, "email"),
+        eq(messages.status, "failed"),
+        sql`${messages.subject} LIKE '[PAR]%'`
+      )
+    );
+
+  return c.json({ emails: rows, failedCount: Number(failedRow?.failed ?? 0) });
 });

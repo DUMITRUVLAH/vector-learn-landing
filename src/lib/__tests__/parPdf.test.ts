@@ -201,6 +201,18 @@ describe("buildParHtml() — T-PAR-114-1 [blocant]", () => {
     expect(html).toContain("PAR-2026-0001");
   });
 
+  // VM1-04: donors report per-event — the event name must reach the printed form.
+  it("renders the event name next to the project when eventName is set", () => {
+    const html = buildParHtml(makePar({ projectName: "Proiect Educație", eventName: "Tabăra de vară 2026" }));
+    expect(html).toContain("Proiect Educație · Tabăra de vară 2026");
+  });
+
+  it("renders only the project when no event is linked", () => {
+    const html = buildParHtml(makePar({ projectName: "Proiect Educație", eventName: null }));
+    expect(html).toContain("Proiect Educație");
+    expect(html).not.toContain("Proiect Educație ·");
+  });
+
   it("contains help link text (section header area)", () => {
     const html = buildParHtml(par);
     expect(html).toContain("Instructions for completing this form may be found");

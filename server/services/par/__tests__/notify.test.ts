@@ -39,6 +39,9 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn((...args: unknown[]) => args),
   eq: vi.fn((a: unknown, b: unknown) => `${String(a)}=${String(b)}`),
   inArray: vi.fn((a: unknown, b: unknown) => `${String(a)}_in_${JSON.stringify(b)}`),
+  // VM1-07: delegations lookup uses date-range operators.
+  gte: vi.fn((a: unknown, b: unknown) => `${String(a)}>=${String(b)}`),
+  lte: vi.fn((a: unknown, b: unknown) => `${String(a)}<=${String(b)}`),
 }));
 
 import {
@@ -87,18 +90,56 @@ describe("PAR-111 notifySubmitted (T-PAR-111-1)", () => {
     expect(insertArg.payload.body).toContain("așteaptă aprobarea");
   });
 
-  it("body contains link to /app/par/:id", async () => {
+  it("in-app body contains link to /business/par/:id (the real route, not the dead /app/par prefix)", async () => {
     await notifySubmitted(ctx, "user-approver-1");
 
     const insertArg = mockValues.mock.calls[0][0] as {
       payload: { body: string };
     };
-    expect(insertArg.payload.body).toContain(`/app/par/${ctx.parId}`);
+    expect(insertArg.payload.body).toContain(`/business/par/${ctx.parId}`);
   });
 
   it("does not throw when approverUserId is null (role-based routing)", async () => {
     // select returns [] (no approvers) — should still not throw
     await expect(notifySubmitted(ctx, null)).resolves.not.toThrow();
+  });
+
+  // VM1-07: while a delegation approver→delegate is active, the delegate is notified too.
+  it("notifies the active delegate of the assigned approver as well", async () => {
+    mockSelectChainWhere
+      .mockResolvedValueOnce([]) // loadParSummary (parRequests) — runs first
+      .mockResolvedValueOnce([{ toUserId: "user-delegate-9" }]) // parDelegations lookup
+      .mockResolvedValue([]); // users lookups → no email, in-app only
+
+    await notifySubmitted(ctx, "user-approver-1");
+
+    const recipients = mockValues.mock.calls.map(
+      (c) => (c[0] as { recipientUserId: string }).recipientUserId
+    );
+    expect(recipients).toContain("user-approver-1");
+    expect(recipients).toContain("user-delegate-9");
+  });
+});
+
+// ─── VM1-08: email deep link must be absolute (usable from Gmail/Outlook) ─────
+
+describe("VM1-08 parDeepLink", () => {
+  it("builds an absolute hash-routed URL from APP_URL", async () => {
+    const { parDeepLink } = await import("../notify");
+    const prev = process.env.APP_URL;
+    process.env.APP_URL = "https://app.example.md";
+    try {
+      expect(parDeepLink("par-42")).toBe("https://app.example.md/#/business/par/par-42");
+    } finally {
+      if (prev === undefined) delete process.env.APP_URL;
+      else process.env.APP_URL = prev;
+    }
+  });
+
+  it("never emits a bare relative path (dead link in email clients)", async () => {
+    const { parDeepLink } = await import("../notify");
+    expect(parDeepLink("x").startsWith("/")).toBe(false);
+    expect(parDeepLink("x")).toContain("/#/business/par/x");
   });
 });
 

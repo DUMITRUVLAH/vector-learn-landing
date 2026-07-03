@@ -24,6 +24,7 @@ import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
 import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
 import { BusinessDashboardPage } from "./pages/business/BusinessDashboardPage";
 import { BusinessGuardPage } from "./components/business/BusinessGuardPage";
+import { ParGuardPage } from "./components/par/ParGuardPage";
 // SHELL-503: PAR invite acceptance (public — no auth guard)
 import { InvitePage } from "./pages/business/InvitePage";
 import { WelcomePage } from "./pages/business/WelcomePage";
@@ -204,16 +205,17 @@ function Routes() {
   if (path.startsWith("/business/fin/company")) return <BusinessGuardPage><FinCompany /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/")) return <BusinessGuardPage><FinHome /></BusinessGuardPage>;
 
-  // PAR routes under /business/par/*
-  if (path.startsWith("/business/par/onboarding")) return <BusinessGuardPage><ParOnboarding /></BusinessGuardPage>;
-  if (path.startsWith("/business/par/new")) return <BusinessGuardPage><ParCreateForm /></BusinessGuardPage>;
-  if (path.startsWith("/business/par/inbox")) return <BusinessGuardPage><ParInbox /></BusinessGuardPage>;
-  if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParFinanceQueue /></BusinessGuardPage>;
-  if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParAdminPage /></BusinessGuardPage>;
-  if (path.startsWith("/business/par/folders")) return <BusinessGuardPage><ParFolders /></BusinessGuardPage>;
-  if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParReports /></BusinessGuardPage>;
-  if (path.match(/^\/business\/par\/[^/]+$/)) return <BusinessGuardPage><ParDetailPage /></BusinessGuardPage>;
-  if (path.startsWith("/business/par")) return <BusinessGuardPage><ParDashboard /></BusinessGuardPage>;
+  // PAR routes under /business/par/* — ParGuardPage (VM1-01 Decizia 9) hides the whole
+  // module from users with zero PAR roles, even on direct URL access.
+  if (path.startsWith("/business/par/onboarding")) return <BusinessGuardPage><ParGuardPage><ParOnboarding /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/new")) return <BusinessGuardPage><ParGuardPage><ParCreateForm /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/inbox")) return <BusinessGuardPage><ParGuardPage><ParInbox /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParGuardPage><ParFinanceQueue /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParGuardPage><ParAdminPage /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/folders")) return <BusinessGuardPage><ParGuardPage><ParFolders /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParGuardPage><ParReports /></ParGuardPage></BusinessGuardPage>;
+  if (path.match(/^\/business\/par\/[^/]+$/)) return <BusinessGuardPage><ParGuardPage><ParDetailPage /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par")) return <BusinessGuardPage><ParGuardPage><ParDashboard /></ParGuardPage></BusinessGuardPage>;
 
   // DOCMERGE-001/002/003/004: Document Merge — more specific routes first
   if (path.startsWith("/business/docmerge/wizard")) return <BusinessGuardPage><DocMergeWizardPage /></BusinessGuardPage>;

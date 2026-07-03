@@ -157,6 +157,8 @@ export function buildParHtml(par: ParDetail): string {
   const requestedBy = req.requestedByName || req.requestedByUserId || "";
   const department = req.departmentName || req.departmentId || "";
   const project = req.projectName || req.projectId || "";
+  // VM1-04: donors report per-event — show the event next to the project on the printed form.
+  const projectWithEvent = [project, req.eventName].filter(Boolean).join(" · ");
   const budgetCode =
     req.budgetCodeLabel ||
     [req.budgetCodeId, req.budgetCodeNote].filter(Boolean).join(" — ") ||
@@ -213,7 +215,7 @@ export function buildParHtml(par: ParDetail): string {
         </td>
         <td style="border:1px solid ${BORDER};padding:5px 10px;vertical-align:top;width:50%;">
           ${field(5, "Date Items/Services Needed", fmtDate(req.dateNeeded))}
-          ${field(6, "Requested For/Deliver To", esc(project))}
+          ${field(6, "Requested For/Deliver To", esc(projectWithEvent))}
           <div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;">
             <span style="font-size:10.5px;font-weight:700;color:${INK};white-space:nowrap;">${num(7)} Budget code:</span>
             <span style="flex:1;border-bottom:1px solid ${RULE};font-size:11px;color:${FIELD};min-height:15px;padding:0 4px 1px;">${esc(budgetCode) || "&nbsp;"}</span>

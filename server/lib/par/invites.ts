@@ -36,7 +36,10 @@ export async function sendInviteEmail(params: {
 }): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return false;
-  const from = process.env.RESEND_FROM ?? "Vector Finance <onboarding@resend.dev>";
+  // Same verified sender as the rest of the app (EMAIL_FROM). onboarding@resend.dev is a
+  // sandbox address Resend only delivers to the account owner — it must stay a last resort.
+  const from =
+    process.env.EMAIL_FROM ?? process.env.RESEND_FROM ?? "Vector Finance <onboarding@resend.dev>";
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -54,8 +57,14 @@ export async function sendInviteEmail(params: {
 <p>Linkul expiră în 7 zile.</p>`,
       }),
     });
+    if (!res.ok) {
+      // VM1-07: a silent false here cost us the whole invite-email feature in prod — log WHY.
+      const detail = await res.text().catch(() => "");
+      console.error(`[par-invite] Resend send failed (${res.status}) to="${params.to}": ${detail.slice(0, 300)}`);
+    }
     return res.ok;
-  } catch {
+  } catch (err) {
+    console.error(`[par-invite] Resend send error to="${params.to}":`, err instanceof Error ? err.message : err);
     return false;
   }
 }
