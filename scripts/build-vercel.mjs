@@ -44,9 +44,12 @@ await build({
     // never required at runtime on the fallback path (the import throws before resolution).
     "playwright",
     "chromium-bidi",
-    // exceljs is used only by the PAR Excel export (server/routes/parReports.ts). It pulls in
-    // optional native/stream deps esbuild struggles to bundle; mark external so it resolves at runtime.
-    "exceljs",
+    // NOTE: exceljs USED to be external here — that was a latent prod bug. The Build Output
+    // API .func directory ships ONLY the bundled index.mjs (no node_modules), so an external
+    // package can NEVER "resolve at runtime": `await import("exceljs")` threw "Cannot find
+    // package 'exceljs'" → 500 on every .xlsx upload (statement import + PAR export). esbuild
+    // bundles exceljs fine (verified: build OK, loads a real workbook), so we bundle it now.
+    // Do NOT re-add exceljs (or any package request-path code imports) to this list.
   ],
   // Provide a CJS require for any externalized require() calls in the ESM output.
   banner: {
@@ -68,6 +71,9 @@ writeFileSync(
 );
 
 // 3. Routing: /api/* → the function; everything else → static (SPA index for unknown paths)
+// NOTE: the AUTOBILL daily cron is triggered by a GitHub Action (.github/workflows/autobill-cron.yml)
+// hitting /api/fin/cron/run-recurring — NOT a Vercel Cron. A `crons` entry here failed the deploy
+// at the "Deploying outputs" step (account/plan cron validation), so we schedule externally.
 writeFileSync(
   `${OUT}/config.json`,
   JSON.stringify(

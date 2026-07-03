@@ -1,5 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark, Building2, Briefcase, RefreshCw, FileSpreadsheet } from "lucide-react";
+import { Users, Calendar, GraduationCap, CreditCard, LogOut, LayoutDashboard, TrendingUp, Zap, BarChart3, DollarSign, Sun, ListChecks, Shield, FileText, MessageSquare, Receipt, BookOpen, School, ClipboardList, Award, Baby, Syringe, MessageCircle, ShieldCheck, AlertTriangle, Medal, Landmark, Building2, Briefcase, RefreshCw, FileSpreadsheet, Search } from "lucide-react";
+import { CommandPalette } from "@/components/CommandPalette";
+import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { Logo } from "@/components/Logo";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { NotificationBell } from "@/components/app/NotificationBell";
@@ -195,6 +197,8 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
   const { path, navigate } = useRouter();
   /** CRM-120: Today action counter for nav badge */
   const [todayCount, setTodayCount] = useState<number | null>(null);
+  /** POLISH-001: Command palette (Cmd+K / Ctrl+K) */
+  const cmdPalette = useCommandPalette();
 
   /**
    * Context-aware nav: under /business/* this is the Business Suite (FinDesk+PAR+ITPark),
@@ -281,10 +285,10 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
             <Link
               to="/business/dashboard"
               className="flex items-center gap-2 font-display font-bold text-base select-none"
-              aria-label="Business Suite — acasă"
+              aria-label="FinFlow — acasă"
             >
               <Briefcase className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />
-              <span className="hidden sm:inline text-foreground">Business Suite</span>
+              <span className="hidden sm:inline text-foreground">FinFlow</span>
               {bizData?.tenant?.name && (
                 <>
                   <span className="hidden sm:inline text-xs text-muted-foreground">/</span>
@@ -326,6 +330,18 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
               </>
             ) : !isBusiness && data ? (
               <>
+                {/* POLISH-001: Cmd+K quick-search trigger */}
+                <button
+                  type="button"
+                  onClick={cmdPalette.open}
+                  aria-label="Caută rapid (Cmd+K)"
+                  title="Caută rapid (Cmd+K)"
+                  className="hidden md:flex touch-target items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Caută…</span>
+                  <kbd className="ml-1 font-mono text-[10px] opacity-60">⌘K</kbd>
+                </button>
                 {/* BRANCH-702: Branch switcher */}
                 <BranchSwitcher />
                 <div className="text-right hidden sm:block">
@@ -401,10 +417,10 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
             <a
               href="#/business"
               className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              aria-label="Deschide Business Suite (FinDesk, PAR, ITPark)"
+              aria-label="Deschide FinFlow (PAR, ITPark)"
             >
               <Briefcase className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span>Business Suite</span>
+              <span>FinFlow</span>
             </a>
           </div>
         </aside>
@@ -428,6 +444,9 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
           </div>
         </main>
       </div>
+
+      {/* POLISH-001: Command palette — rendered outside scroll context, z-50 overlay */}
+      <CommandPalette isOpen={cmdPalette.isOpen} onClose={cmdPalette.close} />
 
       <nav className="md:hidden border-t border-border bg-card sticky bottom-0 z-20" aria-label="Navigare mobilă">
         <div className="grid grid-cols-5 overflow-x-auto">

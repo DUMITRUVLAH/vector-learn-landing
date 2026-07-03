@@ -11,6 +11,7 @@
  */
 import { useEffect, useState, useCallback } from "react";
 import { getParMe } from "@/lib/api/par";
+import { cachedOnce } from "@/lib/sessionCache";
 
 type ParRolesStatus = "loading" | "resolved";
 
@@ -18,6 +19,10 @@ export interface UseParRolesResult {
   status: ParRolesStatus;
   roles: string[];
 }
+
+// Session cache: the shell remounts on every navigation, so without this the roles were
+// re-fetched (and flashed "loading") on each click. cachedOnce makes remounts instant.
+const parMeCached = () => cachedOnce("par-me", getParMe);
 
 export function useParRoles(): UseParRolesResult {
   const [state, setState] = useState<UseParRolesResult>({
@@ -27,7 +32,7 @@ export function useParRoles(): UseParRolesResult {
 
   const fetchRoles = useCallback(async () => {
     try {
-      const { roles } = await getParMe();
+      const { roles } = await parMeCached();
       setState({ status: "resolved", roles });
     } catch {
       // 401, 403, network error, or any other failure → treat as no PAR roles.

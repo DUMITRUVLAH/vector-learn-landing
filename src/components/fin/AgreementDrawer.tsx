@@ -21,11 +21,13 @@ import {
   addAgreementService,
   deleteAgreementService,
   cancelAgreement,
+  updateAgreement,
   type Agreement,
   type AgreementService,
   type BillingType,
   type RecurrencePeriod,
 } from "@/lib/api/finAgreements";
+import { getParty } from "@/lib/api/finParties";
 import { ApiError } from "@/lib/api";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -225,6 +227,42 @@ export function AgreementDrawer({
   const [confirmCancel, setConfirmCancel] = useState(false);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
 
+  // AUTOBILL: per-contract auto-billing toggle + client readiness (needs IDNO + IBAN + email).
+  const [autoBilling, setAutoBilling] = useState<boolean>(agreement.autoBilling ?? false);
+  const [savingAuto, setSavingAuto] = useState(false);
+  const [missing, setMissing] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!agreement.partyId) {
+      setMissing(["client"]);
+      return;
+    }
+    void getParty(agreement.partyId)
+      .then((res) => {
+        if (cancelled) return;
+        const m: string[] = [];
+        if (!res.data.idno) m.push("IDNO");
+        if (!res.data.iban) m.push("IBAN");
+        if (!res.data.email) m.push("email");
+        setMissing(m);
+      })
+      .catch(() => { if (!cancelled) setMissing([]); });
+    return () => { cancelled = true; };
+  }, [agreement.partyId]);
+
+  const handleToggleAuto = async (next: boolean) => {
+    setSavingAuto(true);
+    setAutoBilling(next); // optimistic
+    try {
+      await updateAgreement(agreement.id, { autoBilling: next });
+    } catch {
+      setAutoBilling(!next); // revert on failure
+    } finally {
+      setSavingAuto(false);
+    }
+  };
+
   // Focus the close button on open
   useEffect(() => {
     closeBtnRef.current?.focus();
@@ -356,6 +394,53 @@ export function AgreementDrawer({
               </div>
             )}
           </div>
+
+          {/* AUTOBILL: automatic monthly billing toggle */}
+          {agreement.status !== "cancelled" && (
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">Facturare automată lunară</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Zilnic, sistemul emite factura pentru serviciile scadente, o trimite la
+                    e-Factura (SFS) și expediază PDF-ul pe emailul clientului — fără click-uri.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoBilling}
+                  aria-label="Activează facturarea automată"
+                  disabled={savingAuto}
+                  onClick={() => void handleToggleAuto(!autoBilling)}
+                  className={cn(
+                    "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50",
+                    autoBilling ? "bg-primary" : "bg-muted",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-5 w-5 transform rounded-full bg-background shadow transition-transform",
+                      autoBilling ? "translate-x-5" : "translate-x-0.5",
+                    )}
+                  />
+                </button>
+              </div>
+              {autoBilling && missing.length > 0 && (
+                <p className="mt-2 flex items-start gap-1.5 text-xs text-yellow-700 dark:text-yellow-400" role="alert">
+                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                  {missing.includes("client")
+                    ? "Contractul nu are un client asociat — atașează unul ca facturarea automată să funcționeze."
+                    : `Clientul nu are ${missing.join(", ")} — completează în fișa clientului, altfel factura nu poate fi trimisă automat.`}
+                </p>
+              )}
+              {agreement.autoBilledAt && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Ultima procesare automată: {new Date(agreement.autoBilledAt).toLocaleString("ro-MD")}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Services section */}
           <div>

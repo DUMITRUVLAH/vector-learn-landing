@@ -32,6 +32,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
 import { users } from "./users";
+import { finInvoices } from "./finInvoices";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -320,6 +321,12 @@ export const finCaptureLines = pgTable(
     /** Vendor/counterparty the AI inferred from the description (e.g. "Meta / Facebook Ads"). */
     counterparty: varchar("counterparty", { length: 300 }),
 
+    /** STMT-005: partner fiscal code (IDNO/IDNP) from the statement — the e-Factura buyer. */
+    counterpartyIdno: varchar("counterparty_idno", { length: 13 }),
+
+    /** STMT-005: partner bank account (IBAN or internal account number) from the statement. */
+    counterpartyIban: varchar("counterparty_iban", { length: 34 }),
+
     /** Amount in the account currency, minor units (cents). Always positive. */
     amountCents: integer("amount_cents").notNull().default(0),
 
@@ -352,6 +359,11 @@ export const finCaptureLines = pgTable(
 
     /** Matcher confidence in basis points (0..10000). 10000 = manual link. */
     matchScoreBp: integer("match_score_bp").notNull().default(0),
+
+    /** STMT-003: fin_invoice created when submitting this line to e-Factura SFS. */
+    linkedFinInvoiceId: uuid("linked_fin_invoice_id").references(() => finInvoices.id, {
+      onDelete: "set null",
+    }),
 
     /** Reviewer who confirmed/overrode this line. */
     reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),

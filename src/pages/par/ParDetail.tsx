@@ -57,6 +57,7 @@ import {
   issuePurchaseOrder,
   getParMe,
   formatMDL,
+  downloadDosar,
   type ParDetail as ParDetailType,
   type ParRequest,
   type ParLineItem,
@@ -288,6 +289,47 @@ function PdfDownloadButton({ par, onAttached }: PdfButtonProps) {
         {status === "generating" ? "Se generează PDF..." : status === "done" ? "PDF descărcat" : "Download PDF"}
       </button>
       {status === "error" && errMsg && <p role="alert" className="text-xs text-destructive">{errMsg}</p>}
+    </div>
+  );
+}
+
+// ─── VM1-12: Dosar complet PDF button ────────────────────────────────────────
+
+function DosarButton({ par }: { par: ParDetailType }) {
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  const handleDownload = async () => {
+    if (status === "loading") return;
+    setStatus("loading");
+    setErrMsg(null);
+    try {
+      await downloadDosar(par.id, par.requestNo);
+      setStatus("idle");
+    } catch (e: unknown) {
+      setStatus("error");
+      setErrMsg(e instanceof Error ? e.message : "Eroare la generarea dosarului");
+      setTimeout(() => setStatus("idle"), 5000);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <button
+        type="button"
+        onClick={handleDownload}
+        disabled={status === "loading"}
+        aria-label="Descarcă dosarul complet ca PDF (formular + atașamente)"
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted transition-colors min-h-[44px] disabled:opacity-60"
+      >
+        {status === "loading"
+          ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          : <Paperclip className="h-4 w-4" aria-hidden />}
+        {status === "loading" ? "Se generează dosarul..." : "Descarcă dosarul complet (PDF)"}
+      </button>
+      {status === "error" && errMsg && (
+        <p role="alert" className="text-xs text-destructive">{errMsg}</p>
+      )}
     </div>
   );
 }
@@ -602,6 +644,33 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
 
 let navigate: (path: string) => void = () => {};
 
+/**
+ * Open/download a PAR attachment. Attachments are stored as `data:` URLs (base64). Chrome BLOCKS
+ * top-level navigation to data: URLs, so a plain `<a href="data:…" target="_blank">` does nothing
+ * ("când apas nu se descarcă"). Convert the data URL to a Blob object URL and trigger a real download
+ * with the original filename. Real http(s) URLs just open in a new tab.
+ */
+async function openParAttachment(fileUrl: string, fileName: string): Promise<void> {
+  try {
+    if (!fileUrl) return;
+    if (fileUrl.startsWith("data:")) {
+      const blob = await (await fetch(fileUrl)).blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName || "atasament";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } else {
+      window.open(fileUrl, "_blank", "noopener,noreferrer");
+    }
+  } catch {
+    /* non-blocking — nothing we can do if the blob conversion fails */
+  }
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ParDetailPage() {
@@ -610,7 +679,10 @@ export function ParDetailPage() {
   const { path } = router;
   const { data: session } = useSession();
   const orgName = session?.tenant.name ?? "Organizație";
-  const id = path.replace(/^\/app\/par\//, "").split("/")[0];
+  // Route-agnostic: the PAR detail lives at /business/par/:id (legacy /app/par/:id is redirected to it
+  // by App.tsx). Match the segment AFTER "/par/" so either prefix works — a hardcoded "/app/par/" strip
+  // left id="" on the real /business/par/ path → every just-created PAR 404'd.
+  const id = path.match(/\/par\/([^/]+)/)?.[1] ?? "";
 
   const [par, setPar] = useState<ParDetailType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -693,7 +765,7 @@ export function ParDetailPage() {
             </div>
             <p className="text-sm text-muted-foreground mt-1">
               {PURPOSE_LABEL[par.purpose] ?? par.purpose}
-              {par.projectId ? ` · ${par.projectId}` : ""}
+              {par.projectName ? ` · ${par.projectName}` : ""}
               {` · Creat ${fmtDate(par.createdAt)}`}
             </p>
           </div>
@@ -701,6 +773,7 @@ export function ParDetailPage() {
             <DuplicateButton parId={par.id} onNavigate={router.navigate} />
             <PoButton par={par} orgName={orgName} />
             <PdfDownloadButton par={par} onAttached={load} />
+            <DosarButton par={par} />
           </div>
         </div>
 
@@ -718,18 +791,18 @@ export function ParDetailPage() {
         <Section num="1–7" title="Informații cerere">
           <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
             <Field label="1. Data cererii" value={fmtDate(par.dateOfRequest)} />
-            <Field label="2. Solicitat de" value={par.requestedByUserId} />
+            <Field label="2. Solicitat de" value={par.requestedByName ?? "—"} />
             <Field label="3. Titlu / Cod" value={par.requestorTitle} />
-            <Field label="4. Departament" value={par.departmentId} />
+            <Field label="4. Departament" value={par.departmentName ?? "—"} />
             <Field label="5. Data necesară" value={fmtDate(par.dateNeeded)} />
-            <Field label="6. Pentru / Livrare la" value={par.projectId} />
+            <Field label="6. Pentru / Livrare la" value={par.projectName ?? "—"} />
             {/* VM1-04: show event if set */}
-            {(par as ParRequest & { eventId?: string | null }).eventId && (
-              <Field label="6b. Eveniment" value={(par as ParRequest & { eventId?: string | null }).eventId} />
+            {(par as ParDetailType & { eventName?: string | null }).eventName && (
+              <Field label="6b. Eveniment" value={(par as ParDetailType & { eventName?: string | null }).eventName} />
             )}
             <Field
               label="7. Cod bugetar"
-              value={[par.budgetCodeId, par.budgetCodeNote].filter(Boolean).join(" — ")}
+              value={[par.budgetCodeLabel, par.budgetCodeNote].filter(Boolean).join(" — ") || "—"}
             />
           </dl>
         </Section>
@@ -842,13 +915,41 @@ export function ParDetailPage() {
               {par.attachments.map((att) => (
                 <li key={att.id} className="flex items-center gap-2 text-sm">
                   <Paperclip className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" aria-hidden />
-                  <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate" aria-label={`Deschide ${att.fileName}`}>
+                  <button type="button" onClick={() => openParAttachment(att.fileUrl, att.fileName)} className="text-primary hover:underline truncate text-left" aria-label={`Descarcă ${att.fileName}`}>
                     {att.fileName}
-                  </a>
+                  </button>
                   {att.kind === "par_pdf" && <span className="text-xs text-muted-foreground">(PDF generat)</span>}
+                  {att.kind === "payment_order" && <span className="text-xs text-muted-foreground">(Ordin de plată)</span>}
                 </li>
               ))}
             </ul>
+          )}
+          {/* VM1-12: Upload ordin de plată — visible for finance/admin once PAR is paid */}
+          {currentRoles && (currentRoles.includes("finance") || currentRoles.includes("par_admin")) && par.status === "paid" && (
+            <div className="mt-3 pt-3 border-t border-border">
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Încarc ordin de plată (post-plată)</label>
+              <input
+                type="file"
+                accept=".pdf"
+                aria-label="Selectează ordinul de plată (PDF)"
+                className="text-xs text-foreground file:mr-2 file:py-1 file:px-2 file:rounded file:border file:border-border file:bg-muted file:text-xs file:cursor-pointer"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = async (ev) => {
+                    const dataUrl = ev.target?.result as string;
+                    try {
+                      await uploadAttachment(par.id, { file_name: file.name, file_url: dataUrl, mime: file.type, kind: "payment_order" });
+                      load();
+                    } catch {
+                      // ignore — user can retry
+                    }
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </div>
           )}
         </Section>
 

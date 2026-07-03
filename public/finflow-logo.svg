@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" width="400" height="280">
+  <rect width="400" height="280" fill="#1a1aff"/>
+  <!-- Top-left bracket corner -->
+  <rect x="60" y="30" width="12" height="60" fill="white"/>
+  <rect x="60" y="30" width="60" height="12" fill="white"/>
+  <!-- Top-right bracket corner -->
+  <rect x="328" y="30" width="12" height="60" fill="white"/>
+  <rect x="280" y="30" width="60" height="12" fill="white"/>
+  <!-- Bottom-right bracket corner -->
+  <rect x="328" y="190" width="12" height="60" fill="white"/>
+  <rect x="280" y="238" width="60" height="12" fill="white"/>
+  <!-- Bottom-left bracket corner (missing in logo — only 3 corners) -->
+  <!-- Text: FIN -->
+  <text x="72" y="160" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="84" fill="white" letter-spacing="-2">FIN</text>
+  <!-- Text: FLOW -->
+  <text x="72" y="238" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="84" fill="white" letter-spacing="-2">FLOW</text>
+</svg>

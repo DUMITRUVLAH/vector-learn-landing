@@ -25,6 +25,7 @@ export type ParAttachmentKind =
   | "quotation"
   | "invoice"
   | "par_pdf"
+  | "payment_order"
   | "other";
 
 export interface ParRequest {
@@ -48,6 +49,8 @@ export interface ParRequest {
   payeeIdnp: string | null;
   payeeIban: string | null;
   payeeBank: string | null;
+  /** Feature 1: "fizic" (persoană fizică) | "juridic" (persoană juridică). Null = unset/legacy. */
+  payeeType?: "fizic" | "juridic" | null;
   attachmentsPresent: boolean;
   attachmentsNote: string | null;
   currency: string;
@@ -99,6 +102,7 @@ export interface ParDetail extends ParRequest {
   requestedByName?: string | null;
   departmentName?: string | null;
   projectName?: string | null;
+  eventName?: string | null;
   budgetCodeLabel?: string | null;
   receivedByName?: string | null;
   assignedToName?: string | null;
@@ -119,10 +123,12 @@ export interface ParApproval {
   createdAt: string;
 }
 
-/** PAR-108: inbox item (PAR + active step info) */
+/** PAR-108: inbox item (PAR + active step info + resolved display names) */
 export interface ParInboxItem extends ParRequest {
   my_step: number | null;
   my_step_label: string | null;
+  projectName?: string | null;
+  requestedByName?: string | null;
 }
 
 export interface ParPayment {
@@ -139,17 +145,22 @@ export interface ParPayment {
 
 // Config entities
 export interface ParDepartment { id: string; name: string; active: boolean; }
-export interface ParProject { id: string; name: string; donor: string | null; active: boolean; }
+export interface ParProject { id: string; name: string; donor: string | null; active: boolean; approverUserIds?: string[]; }
 export interface ParBudgetCode { id: string; code: string; name: string; active: boolean; }
 /** VM1-04: Event — sub-entity of a project */
 export interface ParEvent {
   id: string;
   tenantId: string;
   projectId: string | null;
+  /** Feature 2: resolved project name (from list join) */
+  projectName?: string | null;
   name: string;
   startsAt: string | null;
   endsAt: string | null;
   active: boolean;
+  /** Feature 2: who created this event */
+  createdByUserId?: string | null;
+  createdByName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -179,6 +190,8 @@ export interface UpdateParPayload extends CreateParPayload {
   payee_idnp?: string | null;
   payee_iban?: string | null;
   payee_bank?: string | null;
+  /** Feature 1: persoană fizică sau juridică */
+  payee_type?: "fizic" | "juridic" | null;
   attachments_present?: boolean;
   attachments_note?: string | null;
   // VM1-03: RON removed from supported currencies.
@@ -495,6 +508,32 @@ export async function deleteAttachment(parId: string, attId: string): Promise<{ 
   return api(`/api/par/${parId}/attachments/${attId}`, { method: "DELETE" });
 }
 
+// ─── VM1-12: Dosar complet PDF ───────────────────────────────────────────────
+
+/**
+ * Triggers download of the combined dosar PDF (PAR form + all attachments).
+ * The server endpoint returns a binary PDF.
+ */
+export async function downloadDosar(parId: string, requestNo?: string | null): Promise<void> {
+  const resp = await fetch(`/api/par/${parId}/dosar`, {
+    credentials: "include",
+  });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => "");
+    throw new Error(`Dosar: ${resp.status} ${body}`);
+  }
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const fileSafe = (requestNo ?? `PAR-${parId.slice(0, 8)}`).replace(/[^\w-]+/g, "_");
+  a.download = `Dosar_PAR_${fileSafe}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ─── PAR-112/113: Finance queue + section 16 + payment execution ─────────────
 
 export interface ParPaymentRecord {
@@ -517,6 +556,9 @@ export interface ParPaymentRecord {
 export interface ParFinanceQueueItem extends ParRequest {
   above_micro_threshold: boolean;
   payment: ParPaymentRecord | null;
+  requestedByName?: string | null;
+  projectName?: string | null;
+  approverNames?: string[];
 }
 
 export async function getFinanceQueue(): Promise<{ items: ParFinanceQueueItem[]; total: number }> {
@@ -542,7 +584,7 @@ export async function submitSection16(
 export interface PayPayload {
   actual_amount_cents: number;
   payment_date: string; // ISO date or datetime
-  payment_ref: string;
+  payment_ref?: string | null; // optional (owner: not required)
   proof_url?: string | null;
 }
 
@@ -588,6 +630,14 @@ export async function listDepartments(): Promise<{ items: ParDepartment[] }> {
 export async function listProjects(): Promise<{ items: ParProject[] }> {
   return api<{ items?: ParProject[]; projects?: ParProject[] }>("/api/par/projects")
     .then((r) => ({ items: (r as { items?: ParProject[]; projects?: ParProject[] }).items ?? (r as { items?: ParProject[]; projects?: ParProject[] }).projects ?? [] }));
+}
+
+/** Replace a project's designated approver list (par_admin). Empty = unrestricted (any approver). */
+export async function setProjectApprovers(projectId: string, userIds: string[]): Promise<{ ok: boolean; approverUserIds: string[] }> {
+  return api<{ ok: boolean; approverUserIds: string[] }>(`/api/par/projects/${projectId}/approvers`, {
+    method: "PUT",
+    body: JSON.stringify({ userIds }),
+  });
 }
 
 export async function listBudgetCodes(): Promise<{ items: ParBudgetCode[] }> {
@@ -916,6 +966,15 @@ export async function getParReportByProject(filters?: ParReportFilters): Promise
   return api(`/api/par/reports/by-project${qs ? `?${qs}` : ""}`);
 }
 
+/** Feature 2: spend per event (calls existing /api/par/reports/by-event) */
+export async function getParReportByEvent(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
+  const params = new URLSearchParams();
+  if (filters?.period_from) params.set("from", filters.period_from);
+  if (filters?.period_to) params.set("to", filters.period_to);
+  const qs = params.toString();
+  return api(`/api/par/reports/by-event${qs ? `?${qs}` : ""}`);
+}
+
 export async function getParReportByChargeTo(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
   const params = new URLSearchParams();
   if (filters?.period_from) params.set("from", filters.period_from);
@@ -1201,18 +1260,43 @@ export interface ParPrefillField {
   low_confidence?: boolean;
 }
 
+/** A payee candidate offered to the user when the document is ambiguous. */
+export interface ParPrefillCandidate {
+  name: string;
+  idno: string | null;
+  iban: string | null;
+  /** true if a non-MD but ISO-13616-valid IBAN → UI shows "verificați (IBAN non-MD)" */
+  ibanForeign?: boolean;
+  bank: string | null;
+  payeeType: "fizic" | "juridic" | null;
+}
+
 export interface ParPrefillResult {
   payeeName: ParPrefillField;
+  /** payee fiscal id (IDNO/IDNP) — pre-routed on the server */
+  payeeIdno: ParPrefillField;
   totalCents: ParPrefillField;
   currency: ParPrefillField;
   payeeIban: ParPrefillField;
   endUse: ParPrefillField;
+  /** Feature 3 (PAR-F3): bank name extracted separately from beneficiary */
+  payeeBank: ParPrefillField;
+  /** persoană fizică vs juridică (auto-detected; UI can override) */
+  payeeType: { value: "fizic" | "juridic" | null; confidence: number };
   documentClass: {
     value: string | null;
     confidence: number;
     reason?: string;
     not_financial?: boolean;
   };
+  /** true when 2+ equally-plausible payees → UI must ask "Care companie e beneficiarul plății?" */
+  needsClarification: boolean;
+  /** the candidate payees to choose from (empty when resolved) */
+  candidates: ParPrefillCandidate[];
+  /** the full party list the extractor found (debug / advanced UI) */
+  parties?: Array<{ name: string; role: string; idno: string | null; iban: string | null }>;
+  /** line items / services to pre-fill the "Articole" section (unit price in cents) */
+  lineItems?: Array<{ description: string; quantity: number; unit: string | null; unitPriceCents: number }>;
   isStub: boolean;
 }
 

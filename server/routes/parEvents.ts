@@ -12,7 +12,8 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { and, eq, asc } from "drizzle-orm";
 import { db } from "../db/client";
-import { parEvents } from "../db/schema/par";
+import { parEvents, parProjects } from "../db/schema/par";
+import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
@@ -37,17 +38,36 @@ const updateSchema = createSchema.partial().extend({
 
 // ─── GET /api/par/events ─────────────────────────────────────────────────────
 
-/** List events for tenant. Optional ?project_id= filter. All roles can read. */
+/** List events for tenant. Optional ?project_id= filter. All roles can read.
+ * Feature 2: joins users (creator name) + projects (project name) for display. */
 parEventsRoutes.get("/", async (c) => {
   const tenantId = c.get("user").tenantId;
   const projectId = c.req.query("project_id");
+  // ?include_inactive=1 allows admin views to see soft-deleted events
+  const includeInactive = c.req.query("include_inactive") === "1";
 
-  const conditions = [eq(parEvents.tenantId, tenantId), eq(parEvents.active, true)];
+  const conditions = [eq(parEvents.tenantId, tenantId)];
+  if (!includeInactive) conditions.push(eq(parEvents.active, true));
   if (projectId) conditions.push(eq(parEvents.projectId, projectId));
 
   const rows = await db
-    .select()
+    .select({
+      id: parEvents.id,
+      tenantId: parEvents.tenantId,
+      projectId: parEvents.projectId,
+      projectName: parProjects.name,
+      name: parEvents.name,
+      startsAt: parEvents.startsAt,
+      endsAt: parEvents.endsAt,
+      active: parEvents.active,
+      createdByUserId: parEvents.createdByUserId,
+      createdByName: users.name,
+      createdAt: parEvents.createdAt,
+      updatedAt: parEvents.updatedAt,
+    })
     .from(parEvents)
+    .leftJoin(parProjects, eq(parProjects.id, parEvents.projectId))
+    .leftJoin(users, eq(users.id, parEvents.createdByUserId))
     .where(and(...conditions))
     .orderBy(asc(parEvents.name));
 
@@ -58,7 +78,8 @@ parEventsRoutes.get("/", async (c) => {
 // ─── POST /api/par/events ─────────────────────────────────────────────────────
 
 parEventsRoutes.post("/", requirePARRole("par_admin"), async (c) => {
-  const tenantId = c.get("user").tenantId;
+  const currentUser = c.get("user");
+  const tenantId = currentUser.tenantId;
   const body = createSchema.parse(await c.req.json());
 
   const [created] = await db
@@ -69,6 +90,8 @@ parEventsRoutes.post("/", requirePARRole("par_admin"), async (c) => {
       projectId: body.project_id ?? null,
       startsAt: body.starts_at ? new Date(body.starts_at) : null,
       endsAt: body.ends_at ? new Date(body.ends_at) : null,
+      // Feature 2: track who created the event
+      createdByUserId: currentUser.id,
     })
     .returning();
 

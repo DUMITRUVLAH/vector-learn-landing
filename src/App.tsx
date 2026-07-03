@@ -30,6 +30,7 @@ import { WelcomePage } from "./pages/business/WelcomePage";
 
 // FinDesk pages under /business/fin/*
 import { FinHome } from "./pages/fin/FinHome";
+import { FinCompany } from "./pages/fin/FinCompany";
 import { FinOnboarding } from "./pages/fin/FinOnboarding";
 import { FinAiAuditPage } from "./pages/fin/FinAiAuditPage";
 import { FinSecuritySettingsPage } from "./pages/fin/FinSecuritySettingsPage";
@@ -65,6 +66,11 @@ import { FinInsightsPage } from "./pages/finance/FinInsightsPage";
 
 import { lazy, Suspense, useState, useEffect as _useEffect } from "react";
 import { getParMe } from "./lib/api/par";
+
+// STMT-001..004: Statement pages
+const StatementUploadPage = lazy(() => import("./pages/fin/StatementUploadPage"));
+const StatementReviewPage = lazy(() => import("./pages/fin/StatementReviewPage"));
+const StatementHistoryPage = lazy(() => import("./pages/fin/StatementHistoryPage"));
 
 const BankLinkPage = lazy(() => import("./pages/fin/BankLinkPage"));
 const BankLinkImportPage = lazy(() => import("./pages/fin/BankLinkImportPage"));
@@ -163,10 +169,25 @@ function Routes() {
     if (capMatch) return <BusinessGuardPage><CapturePage captureId={capMatch[1]} /></BusinessGuardPage>;
   }
   if (path.startsWith("/business/fin/captures")) return <BusinessGuardPage><CapturesListPage /></BusinessGuardPage>;
+
+  // STMT-001..004: Statement routes — most-specific prefix first
+  if (path.startsWith("/business/fin/statement/upload"))
+    return <BusinessGuardPage><Suspense fallback={null}><StatementUploadPage /></Suspense></BusinessGuardPage>;
+  {
+    const stmtMatch = path.match(/^\/business\/fin\/statement\/([^/?]+)/);
+    if (stmtMatch)
+      return <BusinessGuardPage><Suspense fallback={null}><StatementReviewPage captureId={stmtMatch[1]} /></Suspense></BusinessGuardPage>;
+  }
+  if (path.startsWith("/business/fin/statement"))
+    return <BusinessGuardPage><Suspense fallback={null}><StatementHistoryPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/reconcile")) return <BusinessGuardPage><ReconcilePage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/payments")) return <BusinessGuardPage><Suspense fallback={null}><FinPaymentsPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/calendar")) return <BusinessGuardPage><Suspense fallback={null}><FinCalendarPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/banklink")) return <BusinessGuardPage><Suspense fallback={null}><BankLinkPage /></Suspense></BusinessGuardPage>;
+  // AUTOBILL: the exact detail route MUST be matched before the startsWith list route below,
+  // otherwise /business/fin/parties/:id renders the LIST (the detail route further down was
+  // dead code) and clicking a partner appeared to "throw".
+  if (path.match(/^\/business\/fin\/parties\/[^/]+$/)) return <BusinessGuardPage><PartyDetailPage /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/parties")) return <BusinessGuardPage><PartiesPage /></BusinessGuardPage>;
   // FIX-502: /business/fin/payroll/runs/:id must be matched before the list route
   if (path.match(/^\/business\/fin\/payroll\/runs\/[^/]+/)) return <BusinessGuardPage><PayrollRunDetailPage /></BusinessGuardPage>;
@@ -180,6 +201,7 @@ function Routes() {
   if (path.startsWith("/business/fin/mass")) return <BusinessGuardPage><Suspense fallback={null}><FinMassPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/tax")) return <BusinessGuardPage><Suspense fallback={null}><TaxPage /></Suspense></BusinessGuardPage>;
   if (path.startsWith("/business/fin/onboarding")) return <BusinessGuardPage><FinOnboarding /></BusinessGuardPage>;
+  if (path.startsWith("/business/fin/company")) return <BusinessGuardPage><FinCompany /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/")) return <BusinessGuardPage><FinHome /></BusinessGuardPage>;
 
   // PAR routes under /business/par/*
@@ -210,8 +232,7 @@ function Routes() {
   }
   if (path.startsWith("/business/conturi-plata")) return <BusinessGuardPage><PaymentAccountsPage /></BusinessGuardPage>;
 
-  // Parties detail
-  if (path.match(/^\/business\/fin\/parties\/[^/]+$/)) return <BusinessGuardPage><PartyDetailPage /></BusinessGuardPage>;
+  // (Parties detail is matched above, before the /business/fin/parties list route.)
 
   // Fallback: orice altceva → /business
   return <RedirectToBusiness />;

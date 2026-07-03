@@ -20,6 +20,9 @@ export interface Agreement {
   endDate: string | null;
   currency: string;
   notes: string | null;
+  /** AUTOBILL: contract opted into the daily auto-billing cron (generate → e-Factura → email). */
+  autoBilling?: boolean;
+  autoBilledAt?: string | null;
   createdAt: string;
   updatedAt: string;
   /** Joined from fin_parties — may be present depending on query */
@@ -93,6 +96,7 @@ export function updateAgreement(
     endDate: string | null;
     currency: string;
     notes: string | null;
+    autoBilling: boolean;
   }>
 ): Promise<{ data: Agreement }> {
   return api<{ data: Agreement }>(`/api/fin/agreements/${id}`, {

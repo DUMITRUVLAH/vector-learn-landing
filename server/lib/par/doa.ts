@@ -6,7 +6,7 @@
  * Used by PAR-107 (routing engine) at submit time.
  */
 import { db } from "../../db/client";
-import { parDoaMatrix } from "../../db/schema/par";
+import { parDoaMatrix, parRequests, parApprovals } from "../../db/schema/par";
 import { and, eq, or, isNull, lte, gte } from "drizzle-orm";
 
 export interface ApprovalStep {
@@ -75,8 +75,18 @@ export async function resolveApprovalChain(
   });
 
   if (matching.length === 0) {
-    // No matrix rules match — no approval needed (edge case; admin should always seed defaults)
-    return [];
+    // No DOA rule matches → DON'T leave the PAR with zero approval steps (that made it status
+    // "pending_approval" with nobody assigned → stuck forever, invisible in every inbox). Fall back
+    // to ONE role-based approval step: approverUserId=null means "any approver/par_admin can decide",
+    // so the request is always approvable. Admins should still seed a real DOA matrix; this is the net.
+    return [
+      {
+        step: 1,
+        approverRoleLabel: "Aprobator",
+        approverUserId: null,
+        approverParRole: "approver",
+      },
+    ];
   }
 
   // Group by step; within each step pick the most-specific row
@@ -110,4 +120,40 @@ export async function resolveApprovalChain(
     }));
 
   return steps;
+}
+
+/**
+ * Self-heal for PARs that got stuck "pending_approval" with ZERO approval steps (submitted before the
+ * empty-chain fallback existed → status set but no step inserted → invisible in every inbox, never
+ * approvable). For each such PAR in the tenant, insert one role-based fallback approval step so an
+ * approver/par_admin can finally decide it. Idempotent: only touches PARs that have NO step ≥ 1 yet.
+ * Returns how many PARs it healed. Called lazily when an approver opens the inbox.
+ */
+export async function backfillStuckApprovalChains(tenantId: string): Promise<number> {
+  const candidates = await db
+    .select({ id: parRequests.id })
+    .from(parRequests)
+    .where(and(eq(parRequests.tenantId, tenantId), eq(parRequests.status, "pending_approval")));
+  if (candidates.length === 0) return 0;
+
+  let healed = 0;
+  for (const par of candidates) {
+    const steps = await db
+      .select({ step: parApprovals.step })
+      .from(parApprovals)
+      .where(and(eq(parApprovals.parId, par.id), eq(parApprovals.tenantId, tenantId)));
+    // A real chain has at least one step ≥ 1 (step 0 is just the requestor's submit signature).
+    if (steps.some((s) => s.step >= 1)) continue;
+    await db.insert(parApprovals).values({
+      tenantId,
+      parId: par.id,
+      step: 1,
+      approverUserId: null,
+      approverRoleLabel: "Aprobator",
+      decision: "pending",
+      locked: false,
+    });
+    healed++;
+  }
+  return healed;
 }

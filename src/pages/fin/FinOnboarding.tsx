@@ -84,7 +84,7 @@ const STEPS: {
       "Completează datele fiscale (IDNO, regim TVA, adresă) și creează prima serie de facturare.",
     icon: Building2,
     ctaLabel: "Deschide profilul firmei",
-    ctaHref: "/app/fin/company",
+    ctaHref: "/business/fin/company",
     nextStep: "parties",
     available: true,
   },

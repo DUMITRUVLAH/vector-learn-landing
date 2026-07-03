@@ -78,7 +78,7 @@ sidebar-ul pe Business, dar header-ul rămâne pe `useSession()` (CRM); `Busines
 | Phase | ID | Title | Status | Spec |
 |-------|----|-------|--------|------|
 | SHELL | `SPLIT-401` | Toate paginile `/business/*` rămân în shell-ul Business Suite (chrome unificat: logo, header din sesiunea Business, logout business) | done ✅ | [SPLIT-401](specs/SPLIT-401-business-shell-unification.md) · [PR #184](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/184) |
-| SHELL | `SPLIT-402` | **Bug-ul persistă** — un SINGUR shell pe `/business/*`: toate paginile FinDesk (~32) trec de pe `AppShell` pe `BusinessShell` (sidebar identic peste tot) + scoate „Demo Lingua School" din header | pending | [SPLIT-402](specs/SPLIT-402-business-shell-convergence.md) |
+| SHELL | `SPLIT-402` | **Bug-ul persistă** — un SINGUR shell pe `/business/*`: toate paginile FinDesk (~32) trec de pe `AppShell` pe `BusinessShell` (sidebar identic peste tot) + scoate „Demo Lingua School" din header | done ✅ | [SPLIT-402](specs/SPLIT-402-business-shell-convergence.md) · [PR #217](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/217) |
 
 > ⚠️ SPLIT-401 a corectat doar `FinLayout` + header-ul din `AppShell`. Bug-ul persistă: `/business/fin/banklink`
 > (și ~32 pagini FinDesk) folosesc încă `AppShell` cu alt sidebar (`BUSINESS_NAV_GROUPS`) decât Dashboard-ul
@@ -382,9 +382,9 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 
 | ID | Priority | Title | Status | Spec |
 |----|----------|-------|--------|------|
-| POLISH-001 | high | Global quick search + command palette (Cmd+K) | pending | [spec](specs/POLISH-001-nav-quick-search.md) |
-| POLISH-002 | high | Dashboard widget customization | pending | [spec](specs/POLISH-002-dashboard-widgets.md) |
-| POLISH-003 | normal | Empty states cu CTA pentru paginile cheie | pending | [spec](specs/POLISH-003-empty-states.md) |
+| POLISH-001 | high | Global quick search + command palette (Cmd+K) | done ✅ | [spec](specs/POLISH-001-nav-quick-search.md) · [PR #128](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/128) |
+| POLISH-002 | high | Dashboard widget customization | done ✅ | [spec](specs/POLISH-002-dashboard-widgets.md) · [PR #128](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/128) |
+| POLISH-003 | normal | Empty states cu CTA pentru paginile cheie | done ✅ | [spec](specs/POLISH-003-empty-states.md) · [PR #128](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/128) |
 
 ## Milestone: DOCMERGE faza-1 — Document Merge / Mass-PDF (NEW, added 2026-06-17 on owner request)
 

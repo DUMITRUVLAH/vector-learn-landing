@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { AppShell } from "@/components/app/AppShell";
+import { EmptyState } from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
 import {
   Users,
@@ -19,7 +20,6 @@ import {
   AlertCircle,
   Plus,
   RefreshCw,
-  ChevronRight,
   ExternalLink,
   Banknote,
 } from "lucide-react";
@@ -312,24 +312,14 @@ export function PayrollFINPage() {
           </div>
         )}
 
-        {/* Runs list */}
+        {/* POLISH-003: Empty state */}
         {!loading && runs.length === 0 && (
-          <div className="text-center py-12">
-            <Users
-              className="h-10 w-10 mx-auto text-muted-foreground mb-3"
-              aria-hidden="true"
-            />
-            <p className="text-muted-foreground text-sm">
-              Niciun rulaj de salarizare. Creați primul rulaj.
-            </p>
-            <a
-              href="#/business/fin/payroll/employees"
-              className="mt-3 inline-flex items-center gap-1 text-sm text-primary hover:underline"
-            >
-              Adăugați angajați mai întâi
-              <ChevronRight className="h-3 w-3" aria-hidden="true" />
-            </a>
-          </div>
+          <EmptyState
+            icon={<Users className="h-6 w-6 text-muted-foreground" />}
+            title="Niciun rulaj de salarizare"
+            description="Creați primul rulaj de salarizare pentru angajații dvs."
+            action={{ label: "Creează rulaj", onClick: () => setShowCreate(true) }}
+          />
         )}
 
         {runs.length > 0 && (
