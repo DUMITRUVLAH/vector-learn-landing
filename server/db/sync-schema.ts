@@ -93,6 +93,13 @@ async function main() {
   const ENSURE_COLUMN_STMTS: string[] = [
     `ALTER TABLE fin_capture_lines ADD COLUMN IF NOT EXISTS linked_fin_invoice_id uuid REFERENCES fin_invoices(id) ON DELETE SET NULL`,
     `CREATE INDEX IF NOT EXISTS fin_cap_lines_linked_inv_idx ON fin_capture_lines(linked_fin_invoice_id)`,
+    // AUTOBILL: on prod the auto_billing column was created by THIS self-heal (nullable, no
+    // default) because drizzle's migration tracking is desynced and 0132 never applied. NULL
+    // behaves like false everywhere, but enforce the schema contract: backfill + default +
+    // NOT NULL. Idempotent; migration 0133 does the same for fresh DBs.
+    `UPDATE fin_agreements SET auto_billing = false WHERE auto_billing IS NULL`,
+    `ALTER TABLE fin_agreements ALTER COLUMN auto_billing SET DEFAULT false`,
+    `ALTER TABLE fin_agreements ALTER COLUMN auto_billing SET NOT NULL`,
   ];
   for (const stmt of ENSURE_COLUMN_STMTS) {
     try {
