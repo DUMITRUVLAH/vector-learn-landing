@@ -25,6 +25,8 @@ export interface BoardTask {
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** TB-005: id-urile etichetelor atașate (populat de GET /api/board/tasks). */
+  labelIds?: string[];
 }
 
 export interface TaskFilters {

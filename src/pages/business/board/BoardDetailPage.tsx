@@ -9,11 +9,12 @@ import { useState, useEffect, useCallback } from "react";
 import { Loader2, AlertCircle, Table2, KanbanSquare, Calendar, BarChart3, Package } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter, Link } from "@/router/HashRouter";
-import { getBoard, type Board, type BoardList } from "@/lib/api/board";
+import { getBoard, type Board, type BoardList, type BoardLabel } from "@/lib/api/board";
 import { listTasks, patchTask, createTask, archiveTask, moveTask, type BoardTask, type TaskPatch } from "@/lib/api/boardTasks";
 import { BoardTableView } from "@/components/business/board/BoardTableView";
 import { BoardKanbanView } from "@/components/business/board/BoardKanbanView";
 import { BoardCalendarView } from "@/components/business/board/BoardCalendarView";
+import { TaskDetailDialog } from "@/components/business/board/TaskDetailDialog";
 import { applyOptimisticMove } from "@/lib/board/optimisticMove";
 import { cn } from "@/lib/utils";
 
@@ -34,10 +35,13 @@ export function BoardDetailPage() {
 
   const [board, setBoard] = useState<Board | null>(null);
   const [lists, setLists] = useState<BoardList[]>([]);
+  const [labels, setLabels] = useState<BoardLabel[]>([]);
   const [tasks, setTasks] = useState<BoardTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<BoardView>("table");
+  /** TB-005: cardul deschis în dialogul de detalii. */
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
   const load = useCallback(
     async (opts: { silent?: boolean } = {}) => {
@@ -51,6 +55,7 @@ export function BoardDetailPage() {
         ]);
         setBoard(boardRes.board);
         setLists(boardRes.lists);
+        setLabels(boardRes.labels);
         setTasks(tasksRes.tasks);
       } catch {
         setError("Eroare la încărcarea boardului. Încearcă din nou.");
@@ -196,9 +201,23 @@ export function BoardDetailPage() {
             />
           )}
           {view === "kanban" && (
-            <BoardKanbanView lists={lists} tasks={tasks} onMove={handleMove} />
+            <BoardKanbanView
+              lists={lists}
+              labels={labels}
+              tasks={tasks}
+              onMove={handleMove}
+              onCardClick={setOpenTaskId}
+            />
           )}
-          {view === "calendar" && <BoardCalendarView tasks={tasks} onPatch={handlePatch} />}
+          {view === "calendar" && (
+            <BoardCalendarView tasks={tasks} onPatch={handlePatch} onCardClick={setOpenTaskId} />
+          )}
+          <TaskDetailDialog
+            taskId={openTaskId}
+            boardLabels={labels}
+            onClose={() => setOpenTaskId(null)}
+            onChanged={() => void load({ silent: true })}
+          />
         </>
       ) : null}
     </BusinessShell>

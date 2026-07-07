@@ -13,7 +13,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, asc, isNull, isNotNull } from "drizzle-orm";
+import { and, eq, asc, isNull, isNotNull, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   tasks,
@@ -90,7 +90,26 @@ boardTasksRoutes.get("/", async (c) => {
     .from(tasks)
     .where(and(...conditions))
     .orderBy(asc(tasks.position), asc(tasks.createdAt));
-  return c.json({ tasks: rows });
+  // TB-005: chips de etichete pe carduri — atașăm labelIds per task (o singură
+  // interogare pe join-table, grupare în aplicație; culorile vin din board.labels).
+  const labelIdsByTask = new Map<string, string[]>();
+  if (rows.length > 0) {
+    const links = await db
+      .select({ taskId: taskLabels.taskId, labelId: taskLabels.labelId })
+      .from(taskLabels)
+      .where(
+        and(
+          eq(taskLabels.tenantId, tenantId),
+          inArray(taskLabels.taskId, rows.map((r) => r.id))
+        )
+      );
+    for (const l of links) {
+      const arr = labelIdsByTask.get(l.taskId);
+      if (arr) arr.push(l.labelId);
+      else labelIdsByTask.set(l.taskId, [l.labelId]);
+    }
+  }
+  return c.json({ tasks: rows.map((r) => ({ ...r, labelIds: labelIdsByTask.get(r.id) ?? [] })) });
 });
 
 boardTasksRoutes.get("/:id", parUuidGuard("id"), async (c) => {

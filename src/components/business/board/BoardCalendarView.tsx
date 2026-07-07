@@ -24,9 +24,11 @@ const WEEKDAYS = ["Lu", "Ma", "Mi", "Jo", "Vi", "Sâ", "Du"];
 interface BoardCalendarViewProps {
   tasks: BoardTask[];
   onPatch: (taskId: string, patch: TaskPatch) => Promise<void>;
+  /** TB-005: click pe chip → deschide dialogul de detalii al cardului. */
+  onCardClick?: (taskId: string) => void;
 }
 
-export function BoardCalendarView({ tasks, onPatch }: BoardCalendarViewProps) {
+export function BoardCalendarView({ tasks, onPatch, onCardClick }: BoardCalendarViewProps) {
   const today = todayIso();
   const [year, setYear] = useState(() => Number(today.slice(0, 4)));
   const [month, setMonth] = useState(() => Number(today.slice(5, 7)));
@@ -65,6 +67,7 @@ export function BoardCalendarView({ tasks, onPatch }: BoardCalendarViewProps) {
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("text/plain", t.id);
       }}
+      onClick={() => onCardClick?.(t.id)}
       title={t.title}
       className={cn(
         "block w-full truncate rounded px-1.5 py-0.5 text-left text-xs font-medium cursor-grab active:cursor-grabbing",
