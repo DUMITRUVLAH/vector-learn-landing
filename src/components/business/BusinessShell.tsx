@@ -135,6 +135,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Boarduri", href: "/business/board", icon: KanbanSquare },
       { label: "Produse", href: "/business/board/products", icon: Package },
       { label: "Șabloane", href: "/business/board/templates", icon: ListChecks },
+      { label: "Prezentare", href: "/business/board/overview", icon: BarChart3 },
     ],
   },
 ];

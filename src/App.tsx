@@ -24,6 +24,7 @@ import { BoardProductsPage } from "./pages/business/board/BoardProductsPage";
 import { BoardListPage } from "./pages/business/board/BoardListPage";
 import { BoardDetailPage } from "./pages/business/board/BoardDetailPage";
 import { BoardTemplatesPage } from "./pages/business/board/BoardTemplatesPage";
+import { BoardOverviewPage } from "./pages/business/board/BoardOverviewPage";
 
 // Business / FinDesk routes
 import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
@@ -230,6 +231,7 @@ function Routes() {
 
   // TB-001: TaskBoard — more specific routes first; detaliul se potrivește pe UUID
   // (route-agnostic: BoardDetailPage își extrage singur id-ul din path, nu prin strip de prefix).
+  if (path.startsWith("/business/board/overview")) return <BusinessGuardPage><BoardOverviewPage /></BusinessGuardPage>;
   if (path.startsWith("/business/board/templates")) return <BusinessGuardPage><BoardTemplatesPage /></BusinessGuardPage>;
   if (path.startsWith("/business/board/products")) return <BusinessGuardPage><BoardProductsPage /></BusinessGuardPage>;
   if (path.match(/^\/business\/board\/[0-9a-f]{8}-[0-9a-f-]{27,}/i)) return <BusinessGuardPage><BoardDetailPage /></BusinessGuardPage>;

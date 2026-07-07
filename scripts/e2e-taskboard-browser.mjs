@@ -184,11 +184,15 @@ check(
   "TB-004 UI confirmă generarea a 5 taskuri"
 );
 
-// Starea reală: taskurile generate există, cu proveniență și termen calculat.
+// Starea reală: taskurile generate din ȘABLONUL SEEDAT există, cu proveniență și
+// termen calculat. Filtrat pe id-ul șablonului — alte rulări (ex. e2e-ul API pe
+// același DB) pot avea propriile generări; nu ne uităm la ele.
 const genCheck = await page.evaluate(async () => {
+  const tpls = await (await fetch("/api/board/templates", { credentials: "include" })).json();
+  const seeded = tpls.templates.find((t) => t.name === "Lansare curs standard");
   const r = await fetch("/api/board/tasks", { credentials: "include" });
   const j = await r.json();
-  const gen = j.tasks.filter((t) => t.sourceTemplateId);
+  const gen = j.tasks.filter((t) => t.sourceTemplateId === seeded?.id);
   return { count: gen.length, withDue: gen.filter((t) => t.dueDate).length };
 });
 check(genCheck.count === 5, `TB-004 API: ${genCheck.count}/5 taskuri generate cu proveniență`);
@@ -235,6 +239,40 @@ const detailState = await page.evaluate(async () => {
 check(
   detailState.checklist >= 1 && detailState.comments >= 1,
   `TB-005 API confirmă checklist=${detailState.checklist}, comments=${detailState.comments}`
+);
+
+// ── TB-006: Prezentare manager — pagina standalone + tab-ul din board ────────
+await page.goto(`${BASE}/#/business/board/overview`, { waitUntil: "networkidle" });
+await page.waitForTimeout(2000);
+check(
+  (await page.locator("svg.recharts-surface").count()) >= 1,
+  "TB-006 graficul stacked se randează pe pagina Prezentare"
+);
+check(
+  (await page.getByText("Curs Cybersecurity — ediția toamnă").count()) >= 1,
+  "TB-006 produsul seedat apare în prezentare"
+);
+// Tabelul cu valori exacte (table view — cerința de accesibilitate a graficului).
+const overviewCells = await page.locator("table tbody tr").count();
+check(overviewCells >= 1, `TB-006 tabelul de valori exacte are ${overviewCells} rând(uri)`);
+// Contorul real de pe server se reflectă în tabel: done ≥ 1 (din seed + drag-ul Kanban de mai sus).
+const ovState = await page.evaluate(async () => {
+  const r = await fetch("/api/board/overview", { credentials: "include" });
+  const j = await r.json();
+  return j.overview.reduce((s, o) => s + o.done, 0);
+});
+check(ovState >= 1, `TB-006 API: done total=${ovState} (≥1 după drag-ul în „Gata”)`);
+
+// Tab-ul Prezentare din board (scoped pe produs).
+await page.goto(`${BASE}/#/business/board`, { waitUntil: "networkidle" });
+await page.waitForTimeout(1000);
+await page.getByText("Lansare Cybersecurity toamnă").first().click();
+await page.waitForTimeout(1200);
+await page.getByRole("button", { name: /Prezentare/ }).click();
+await page.waitForTimeout(1500);
+check(
+  (await page.locator("svg.recharts-surface").count()) >= 1,
+  "TB-006 tab-ul Prezentare din board randează graficul"
 );
 
 check(errors.length === 0, errors.length === 0 ? "zero erori JS" : `erori JS: ${errors.join(" | ")}`);
