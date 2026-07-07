@@ -28,6 +28,16 @@ export function AddTasksBulkModal({ open, boardId, onClose, onCreated }: AddTask
     }
   }, [open]);
 
+  // Escape închide modalul (convenția dialogurilor din repo — vezi CreateAgreementDialog).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const titles = text

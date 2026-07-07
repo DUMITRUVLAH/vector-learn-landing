@@ -10,15 +10,17 @@ import { Loader2, AlertCircle, Table2, KanbanSquare, Calendar, BarChart3, Packag
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter, Link } from "@/router/HashRouter";
 import { getBoard, type Board, type BoardList } from "@/lib/api/board";
-import { listTasks, patchTask, createTask, archiveTask, type BoardTask, type TaskPatch } from "@/lib/api/boardTasks";
+import { listTasks, patchTask, createTask, archiveTask, moveTask, type BoardTask, type TaskPatch } from "@/lib/api/boardTasks";
 import { BoardTableView } from "@/components/business/board/BoardTableView";
+import { BoardKanbanView } from "@/components/business/board/BoardKanbanView";
+import { applyOptimisticMove } from "@/lib/board/optimisticMove";
 import { cn } from "@/lib/utils";
 
 type BoardView = "table" | "kanban" | "calendar" | "overview";
 
 const VIEW_TABS: { key: BoardView; label: string; icon: typeof Table2; ready: boolean }[] = [
   { key: "table", label: "Tabel", icon: Table2, ready: true },
-  { key: "kanban", label: "Kanban", icon: KanbanSquare, ready: false },
+  { key: "kanban", label: "Kanban", icon: KanbanSquare, ready: true },
   { key: "calendar", label: "Calendar", icon: Calendar, ready: false },
   { key: "overview", label: "Prezentare", icon: BarChart3, ready: false },
 ];
@@ -95,6 +97,21 @@ export function BoardDetailPage() {
       }
     },
     [load]
+  );
+
+  /** TB-002: mutarea Kanban — optimist local (aceeași logică de sync ca serverul), apoi API. */
+  const handleMove = useCallback(
+    async (taskId: string, listId: string | null, position: number) => {
+      setTasks((prev) => applyOptimisticMove(prev, taskId, listId, position, lists));
+      try {
+        await moveTask(taskId, { listId, position });
+      } catch {
+        setError("Nu am putut muta taskul — reîncarc datele.");
+      } finally {
+        void load({ silent: true });
+      }
+    },
+    [lists, load]
   );
 
   if (!boardId) {
@@ -176,6 +193,9 @@ export function BoardDetailPage() {
               onArchive={handleArchive}
               onRefresh={() => load({ silent: true })}
             />
+          )}
+          {view === "kanban" && (
+            <BoardKanbanView lists={lists} tasks={tasks} onMove={handleMove} />
           )}
         </>
       ) : null}

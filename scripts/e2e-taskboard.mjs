@@ -230,6 +230,53 @@ async function main() {
     eq(r.status, 404, "PATCH non-uuid");
   });
 
+  await T("TB-002 reordonare ÎN coloană: poziție fracționată între doi vecini", async () => {
+    // Două taskuri în Backlog; al treilea inserat între ele primește media pozițiilor.
+    const r1 = await call(admin, "POST", "/api/board/tasks", { boardId, title: "R1", listId: backlogList.id, position: 1000 });
+    const r2 = await call(admin, "POST", "/api/board/tasks", { boardId, title: "R2", listId: backlogList.id, position: 2000 });
+    const r3 = await call(admin, "POST", "/api/board/tasks", { boardId, title: "R3", listId: backlogList.id, position: 3000 });
+    eq(r3.status, 201, "create R3");
+    const mv = await call(admin, "POST", `/api/board/tasks/${r3.json.id}/move`, {
+      listId: backlogList.id,
+      position: (1000 + 2000) / 2,
+    });
+    eq(mv.status, 200, "move status");
+    eq(mv.json.task.position, 1500, "fractional position");
+    // Ordinea rezultată: R1(1000) < R3(1500) < R2(2000).
+    const list = await call(admin, "GET", `/api/board/tasks?boardId=${boardId}`);
+    const inBacklog = list.json.tasks
+      .filter((t) => t.listId === backlogList.id && ["R1", "R2", "R3"].includes(t.title))
+      .sort((a, b) => a.position - b.position)
+      .map((t) => t.title);
+    eq(JSON.stringify(inBacklog), JSON.stringify(["R1", "R3", "R2"]), "order after reorder");
+    void r1; void r2;
+  });
+
+  await T("TB-002 garda de rebalans: gap sub 0.0001 → server renumerotează", async () => {
+    // Înjumătățim poziția până sub MIN_GAP față de vecinul de jos → rebalanced:true.
+    const tgt = await call(admin, "POST", "/api/board/tasks", { boardId, title: "RB", listId: backlogList.id, position: 4000 });
+    let pos = 1000; // sub R1(1000): halving spre 0 → gap față de 0... folosim între R1 și R3.
+    let rebalanced = false;
+    let lo = 1000, hi = 1500; // între R1 și R3
+    for (let i = 0; i < 40 && !rebalanced; i++) {
+      pos = (lo + hi) / 2;
+      const mv = await call(admin, "POST", `/api/board/tasks/${tgt.json.id}/move`, { listId: backlogList.id, position: pos });
+      eq(mv.status, 200, `move #${i}`);
+      rebalanced = mv.json.rebalanced === true;
+      hi = pos; // strângem spre lo → gap-ul scade exponențial
+    }
+    assert(rebalanced, "rebalance never triggered after 40 halvings");
+    // După rebalans, pozițiile sunt re-spațiate (multipli de 1024) și ordinea e păstrată.
+    const list = await call(admin, "GET", `/api/board/tasks?boardId=${boardId}`);
+    const positions = list.json.tasks
+      .filter((t) => t.listId === backlogList.id)
+      .map((t) => t.position)
+      .sort((a, b) => a - b);
+    for (let i = 1; i < positions.length; i++) {
+      assert(positions[i] - positions[i - 1] >= 1, "positions not re-spaced after rebalance");
+    }
+  });
+
   await T("anonim: /api/board/* → 401", async () => {
     const anon = await request.newContext({ baseURL: BASE });
     const r = await call(anon, "GET", "/api/board/products");
