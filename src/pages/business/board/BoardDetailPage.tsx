@@ -13,6 +13,7 @@ import { getBoard, type Board, type BoardList } from "@/lib/api/board";
 import { listTasks, patchTask, createTask, archiveTask, moveTask, type BoardTask, type TaskPatch } from "@/lib/api/boardTasks";
 import { BoardTableView } from "@/components/business/board/BoardTableView";
 import { BoardKanbanView } from "@/components/business/board/BoardKanbanView";
+import { BoardCalendarView } from "@/components/business/board/BoardCalendarView";
 import { applyOptimisticMove } from "@/lib/board/optimisticMove";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +22,7 @@ type BoardView = "table" | "kanban" | "calendar" | "overview";
 const VIEW_TABS: { key: BoardView; label: string; icon: typeof Table2; ready: boolean }[] = [
   { key: "table", label: "Tabel", icon: Table2, ready: true },
   { key: "kanban", label: "Kanban", icon: KanbanSquare, ready: true },
-  { key: "calendar", label: "Calendar", icon: Calendar, ready: false },
+  { key: "calendar", label: "Calendar", icon: Calendar, ready: true },
   { key: "overview", label: "Prezentare", icon: BarChart3, ready: false },
 ];
 
@@ -197,6 +198,7 @@ export function BoardDetailPage() {
           {view === "kanban" && (
             <BoardKanbanView lists={lists} tasks={tasks} onMove={handleMove} />
           )}
+          {view === "calendar" && <BoardCalendarView tasks={tasks} onPatch={handlePatch} />}
         </>
       ) : null}
     </BusinessShell>
