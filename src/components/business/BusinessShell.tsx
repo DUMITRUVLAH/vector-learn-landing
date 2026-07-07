@@ -35,6 +35,8 @@ import {
   ArrowLeft,
   FolderOpen,
   ChevronDown,
+  KanbanSquare,
+  Package,
 } from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
@@ -123,6 +125,16 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Documente în masă", href: "/business/docmerge/wizard", icon: Wand2 },
       { label: "Templates", href: "/business/docmerge", icon: FileText },
       { label: "Import Excel", href: "/business/docmerge/job", icon: FileSpreadsheet },
+    ],
+  },
+  {
+    // TB-001: TaskBoard — planificare taskuri per produs/curs (Tabel → Kanban → Calendar).
+    // „Șabloane" se adaugă în Faza 4 (ruta nu există încă — nu punem link-uri moarte).
+    section: "Planificare — Task Board",
+    prefix: "/business/board",
+    items: [
+      { label: "Boarduri", href: "/business/board", icon: KanbanSquare },
+      { label: "Produse", href: "/business/board/products", icon: Package },
     ],
   },
 ];
@@ -471,12 +483,20 @@ export function BusinessShell({
           const canApprove = parRoles.some((r) => ["approver", "par_admin"].includes(r));
           const canAnalyse = parRoles.some((r) => ["approver", "finance", "par_admin"].includes(r));
           const isParAdmin = parRoles.includes("par_admin");
+          // TB-001: tab-uri dedicate când ești în modulul Task Board
+          const isBoardModule = path.startsWith("/business/board");
           const mobileItems = isParModule
             ? [
                 { label: "Cereri", href: "/business/par", icon: ClipboardList },
                 ...(canApprove ? [{ label: "Aprobări", href: "/business/par/inbox", icon: ShieldCheck }] : []),
                 ...(canAnalyse ? [{ label: "Rapoarte", href: "/business/par/reports", icon: BarChart3 }] : []),
                 ...(isParAdmin ? [{ label: "Admin", href: "/business/par/admin", icon: Settings }] : []),
+              ]
+            : isBoardModule
+            ? [
+                { label: "Boarduri", href: "/business/board", icon: KanbanSquare },
+                { label: "Produse", href: "/business/board/products", icon: Package },
+                { label: "Dashboard", href: "/business/dashboard", icon: LayoutDashboard },
               ]
             : [
                 { label: "Dashboard", href: "/business/dashboard", icon: LayoutDashboard },

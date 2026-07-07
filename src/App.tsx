@@ -19,6 +19,11 @@ import { DocMergeTemplatesPage } from "./pages/business/docmerge/DocMergeTemplat
 import { DocMergeJobPage } from "./pages/business/docmerge/DocMergeJobPage";
 import { DocMergeWizardPage } from "./pages/business/docmerge/DocMergeWizardPage";
 
+// TaskBoard module routes (TB-001)
+import { BoardProductsPage } from "./pages/business/board/BoardProductsPage";
+import { BoardListPage } from "./pages/business/board/BoardListPage";
+import { BoardDetailPage } from "./pages/business/board/BoardDetailPage";
+
 // Business / FinDesk routes
 import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
 import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
@@ -221,6 +226,12 @@ function Routes() {
   if (path.startsWith("/business/docmerge/wizard")) return <BusinessGuardPage><DocMergeWizardPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge")) return <BusinessGuardPage><DocMergeTemplatesPage /></BusinessGuardPage>;
+
+  // TB-001: TaskBoard — more specific routes first; detaliul se potrivește pe UUID
+  // (route-agnostic: BoardDetailPage își extrage singur id-ul din path, nu prin strip de prefix).
+  if (path.startsWith("/business/board/products")) return <BusinessGuardPage><BoardProductsPage /></BusinessGuardPage>;
+  if (path.match(/^\/business\/board\/[0-9a-f]{8}-[0-9a-f-]{27,}/i)) return <BusinessGuardPage><BoardDetailPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/board")) return <BusinessGuardPage><BoardListPage /></BusinessGuardPage>;
 
   // Payment accounts (cont de plată) — business module, canonical under /business/conturi-plata.
   // SHELL-501: redirect legacy /app/conturi-plata/* so it renders BusinessShell, not the CRM shell.
