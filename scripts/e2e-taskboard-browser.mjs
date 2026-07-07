@@ -194,6 +194,49 @@ const genCheck = await page.evaluate(async () => {
 check(genCheck.count === 5, `TB-004 API: ${genCheck.count}/5 taskuri generate cu proveniență`);
 check(genCheck.withDue === 5, "TB-004 API: toate au dueDate calculat din ancorele produsului");
 
+// ── TB-005: dialogul cardului — deschidere din Kanban + checklist + comentariu ─
+await page.goto(`${BASE}/#/business/board`, { waitUntil: "networkidle" });
+await page.waitForTimeout(1200);
+await page.getByText("Lansare Cybersecurity toamnă").first().click();
+await page.waitForTimeout(1500);
+await page.getByRole("button", { name: /Kanban/ }).click();
+await page.waitForTimeout(800);
+await page.locator("div[role='listitem']", { hasText: "Programa detaliată pe module" }).first().click();
+await page.waitForTimeout(1500);
+check(
+  (await page.locator("[role='dialog']").count()) === 1,
+  "TB-005 click pe card deschide dialogul de detalii"
+);
+// Adaugă element în checklist (acțiunea, nu afordanța).
+await page.fill("#tb-new-check", "Verificat în browser");
+await page.press("#tb-new-check", "Enter");
+await page.waitForTimeout(1200);
+check(
+  (await page.getByText("Verificat în browser").count()) > 0,
+  "TB-005 checklist: elementul adăugat apare"
+);
+// Comentariu.
+await page.fill("#tb-new-comment", "Comentariu e2e");
+await page.getByRole("button", { name: "Trimite" }).click();
+await page.waitForTimeout(1200);
+check(
+  (await page.getByText("Comentariu e2e").count()) > 0,
+  "TB-005 comentariul apare cu autor"
+);
+// Starea reală de pe server.
+const detailState = await page.evaluate(async () => {
+  const r = await fetch("/api/board/tasks", { credentials: "include" });
+  const j = await r.json();
+  const t = j.tasks.find((x) => x.title === "Programa detaliată pe module");
+  const d = await fetch(`/api/board/tasks/${t.id}`, { credentials: "include" });
+  const dj = await d.json();
+  return { checklist: dj.checklist.length, comments: dj.comments.length };
+});
+check(
+  detailState.checklist >= 1 && detailState.comments >= 1,
+  `TB-005 API confirmă checklist=${detailState.checklist}, comments=${detailState.comments}`
+);
+
 check(errors.length === 0, errors.length === 0 ? "zero erori JS" : `erori JS: ${errors.join(" | ")}`);
 await browser.close();
 console.log(ok ? "\n✅ e2e-taskboard-browser: all clean" : "\n❌ e2e-taskboard-browser: failures above");

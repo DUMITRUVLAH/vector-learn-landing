@@ -343,6 +343,75 @@ async function main() {
     eq(after.json.items.length, 2, "items after delete");
   });
 
+  await T("TB-005 etichete: create + toggle on/off + labelIds în lista de taskuri", async () => {
+    const label = await call(admin, "POST", "/api/board/labels", {
+      boardId,
+      name: "Prioritar",
+      colorToken: "warning",
+    });
+    eq(label.status, 201, "create label");
+    const t = bulkTasks[2];
+    const on = await call(admin, "POST", "/api/board/labels/toggle", { taskId: t.id, labelId: label.json.id });
+    eq(on.json.attached, true, "attach");
+    // Lista de taskuri poartă labelIds (chips pe carduri).
+    const list = await call(admin, "GET", `/api/board/tasks?boardId=${boardId}`);
+    const withLabel = list.json.tasks.find((x) => x.id === t.id);
+    assert(withLabel.labelIds.includes(label.json.id), "labelIds in list");
+    // Toggle a doua oară → detașare.
+    const off = await call(admin, "POST", "/api/board/labels/toggle", { taskId: t.id, labelId: label.json.id });
+    eq(off.json.attached, false, "detach");
+  });
+
+  await T("TB-005 checklist: add + done + delete (acțiunea completă)", async () => {
+    const t = bulkTasks[2];
+    const a = await call(admin, "POST", "/api/board/checklists", { taskId: t.id, text: "Pasul 1" });
+    eq(a.status, 201, "add");
+    const b = await call(admin, "POST", "/api/board/checklists", { taskId: t.id, text: "Pasul 2" });
+    const done = await call(admin, "PATCH", `/api/board/checklists/${a.json.id}`, { done: true });
+    eq(done.json.done, true, "done");
+    const del = await call(admin, "DELETE", `/api/board/checklists/${b.json.id}`);
+    eq(del.status, 200, "delete");
+    const detail = await call(admin, "GET", `/api/board/tasks/${t.id}`);
+    eq(detail.json.checklist.length, 1, "checklist in detail");
+    eq(detail.json.checklist[0].done, true, "state persisted");
+  });
+
+  await T("TB-005 comentarii: add cu autor din sesiune; alt autor nu poate șterge", async () => {
+    const t = bulkTasks[2];
+    const cm = await call(admin, "POST", "/api/board/comments", { taskId: t.id, body: "Notă de la admin" });
+    eq(cm.status, 201, "add");
+    assert(cm.json.authorName, "authorName");
+    // Alt user al ACELUIAȘI tenant (approver) nu poate șterge comentariul altcuiva.
+    const approver = await login("approver@atic.demo.io");
+    const stranger = await call(approver, "DELETE", `/api/board/comments/${cm.json.id}`);
+    eq(stranger.status, 404, "non-author delete blocked");
+    await approver.dispose();
+    // Autorul poate.
+    const own = await call(admin, "DELETE", `/api/board/comments/${cm.json.id}`);
+    eq(own.status, 200, "author delete");
+  });
+
+  await T("TB-005 atașamente: add metadata (URL valid) + reject URL invalid + delete", async () => {
+    const t = bulkTasks[2];
+    const bad = await call(admin, "POST", "/api/board/attachments", {
+      taskId: t.id,
+      filename: "Brief.pdf",
+      url: "not-a-url",
+    });
+    eq(bad.status, 400, "invalid url rejected");
+    const a = await call(admin, "POST", "/api/board/attachments", {
+      taskId: t.id,
+      filename: "Brief.pdf",
+      url: "https://example.com/brief.pdf",
+      sizeBytes: 12345,
+    });
+    eq(a.status, 201, "add");
+    const detail = await call(admin, "GET", `/api/board/tasks/${t.id}`);
+    eq(detail.json.attachments.length, 1, "in detail");
+    const del = await call(admin, "DELETE", `/api/board/attachments/${a.json.id}`);
+    eq(del.status, 200, "delete");
+  });
+
   await T("anonim: /api/board/* → 401", async () => {
     const anon = await request.newContext({ baseURL: BASE });
     const r = await call(anon, "GET", "/api/board/products");

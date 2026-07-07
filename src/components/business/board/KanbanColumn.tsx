@@ -4,6 +4,7 @@
  */
 import { useState } from "react";
 import type { BoardTask } from "@/lib/api/boardTasks";
+import type { BoardLabel } from "@/lib/api/board";
 import { TaskCard } from "./TaskCard";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +14,7 @@ interface KanbanColumnProps {
   wipLimit: number | null;
   isDoneList: boolean;
   tasks: BoardTask[];
+  labelById?: Map<string, BoardLabel>;
   draggingTaskId: string | null;
   onDragStart: (taskId: string) => void;
   onDragEnd: () => void;
@@ -27,6 +29,7 @@ export function KanbanColumn({
   wipLimit,
   isDoneList,
   tasks,
+  labelById,
   draggingTaskId,
   onDragStart,
   onDragEnd,
@@ -82,6 +85,7 @@ export function KanbanColumn({
           <TaskCard
             key={t.id}
             task={t}
+            labelById={labelById}
             isDragging={draggingTaskId === t.id}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}

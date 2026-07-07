@@ -5,6 +5,7 @@
  */
 import { CalendarDays, User } from "lucide-react";
 import type { BoardTask } from "@/lib/api/boardTasks";
+import type { BoardLabel } from "@/lib/api/board";
 import { isOverdue, formatDateRo } from "@/lib/board/dates";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,8 @@ const PRIORITY_ACCENT: Record<BoardTask["priority"], string> = {
 
 interface TaskCardProps {
   task: BoardTask;
+  /** TB-005: etichetele boardului, indexate după id — pentru chips. */
+  labelById?: Map<string, BoardLabel>;
   onDragStart: (taskId: string) => void;
   onDragEnd: () => void;
   /** (taskId tras — citit din dataTransfer, nu din state) → inserare înaintea acestui card. */
@@ -25,7 +28,10 @@ interface TaskCardProps {
   isDragging: boolean;
 }
 
-export function TaskCard({ task, onDragStart, onDragEnd, onDropBefore, onClick, isDragging }: TaskCardProps) {
+export function TaskCard({ task, labelById, onDragStart, onDragEnd, onDropBefore, onClick, isDragging }: TaskCardProps) {
+  const cardLabels = (task.labelIds ?? [])
+    .map((id) => labelById?.get(id))
+    .filter((l): l is BoardLabel => Boolean(l));
   const overdue = isOverdue(task.dueDate, task.status);
   return (
     <div
@@ -61,6 +67,18 @@ export function TaskCard({ task, onDragStart, onDragEnd, onDropBefore, onClick, 
         task.status === "done" && "opacity-70"
       )}
     >
+      {cardLabels.length > 0 && (
+        <div className="mb-1.5 flex flex-wrap gap-1">
+          {cardLabels.map((l) => (
+            <span
+              key={l.id}
+              className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground"
+            >
+              {l.name}
+            </span>
+          ))}
+        </div>
+      )}
       <p
         className={cn(
           "text-sm font-medium text-foreground leading-snug",

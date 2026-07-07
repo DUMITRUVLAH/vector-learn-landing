@@ -103,6 +103,10 @@ import { boardListsRoutes } from "./routes/boardLists";
 import { boardTasksRoutes } from "./routes/boardTasks";
 import { boardOverviewRoutes } from "./routes/boardOverview";
 import { boardTemplatesRoutes } from "./routes/boardTemplates";
+import { boardLabelsRoutes } from "./routes/boardLabels";
+import { boardChecklistsRoutes } from "./routes/boardChecklists";
+import { boardCommentsRoutes } from "./routes/boardComments";
+import { boardAttachmentsRoutes } from "./routes/boardAttachments";
 
 export const app = new Hono();
 
@@ -233,6 +237,10 @@ app.route("/api/board/lists", boardListsRoutes);
 app.route("/api/board/tasks", boardTasksRoutes);
 app.route("/api/board/overview", boardOverviewRoutes);
 app.route("/api/board/templates", boardTemplatesRoutes);
+app.route("/api/board/labels", boardLabelsRoutes);
+app.route("/api/board/checklists", boardChecklistsRoutes);
+app.route("/api/board/comments", boardCommentsRoutes);
+app.route("/api/board/attachments", boardAttachmentsRoutes);
 
 app.get("/api/health", async (c) => {
   try {

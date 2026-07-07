@@ -8,19 +8,21 @@
  */
 import { useState, useMemo, useCallback } from "react";
 import type { BoardTask } from "@/lib/api/boardTasks";
-import type { BoardList } from "@/lib/api/board";
+import type { BoardList, BoardLabel } from "@/lib/api/board";
 import { dropPosition } from "@/lib/board/optimisticMove";
 import { KanbanColumn } from "./KanbanColumn";
 
 interface BoardKanbanViewProps {
   lists: BoardList[];
+  labels?: BoardLabel[];
   tasks: BoardTask[];
   onMove: (taskId: string, listId: string | null, position: number) => Promise<void>;
   onCardClick?: (taskId: string) => void;
 }
 
-export function BoardKanbanView({ lists, tasks, onMove, onCardClick }: BoardKanbanViewProps) {
+export function BoardKanbanView({ lists, labels, tasks, onMove, onCardClick }: BoardKanbanViewProps) {
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const labelById = useMemo(() => new Map((labels ?? []).map((l) => [l.id, l])), [labels]);
 
   const byList = useMemo(() => {
     const m = new Map<string | null, BoardTask[]>();
@@ -62,6 +64,7 @@ export function BoardKanbanView({ lists, tasks, onMove, onCardClick }: BoardKanb
           wipLimit={null}
           isDoneList={false}
           tasks={unassigned}
+          labelById={labelById}
           draggingTaskId={draggingTaskId}
           onDragStart={setDraggingTaskId}
           onDragEnd={handleDragEnd}
@@ -77,6 +80,7 @@ export function BoardKanbanView({ lists, tasks, onMove, onCardClick }: BoardKanb
           wipLimit={l.wipLimit}
           isDoneList={l.isDoneList}
           tasks={byList.get(l.id) ?? []}
+          labelById={labelById}
           draggingTaskId={draggingTaskId}
           onDragStart={setDraggingTaskId}
           onDragEnd={handleDragEnd}
