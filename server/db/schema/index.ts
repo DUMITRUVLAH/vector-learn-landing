@@ -64,3 +64,5 @@ export * from "./templates";
 export * from "./promoCodes";
 // Document Merge module (DOCMERGE-001)
 export * from "./docmergeTemplates";
+// TaskBoard module (TB-001) — Trello-analog cu planificare per produs
+export * from "./taskboard";

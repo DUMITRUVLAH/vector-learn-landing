@@ -124,6 +124,158 @@ async function main() {
     // VM1-12: finance uploads the signed payment order; code writes kind='payment_order'.
     // Prod migrations lag deploys (see docs/solutions prod-migration-desync), so heal the enum here too.
     `ALTER TYPE "public"."par_attachment_kind" ADD VALUE IF NOT EXISTS 'payment_order'`,
+    // TB-001: TaskBoard tables. Prod migration tracking is desynced (migrations don't
+    // apply), so every new table MUST also ship here or its routes 500 with
+    // "relation does not exist" until the migration lands. Order matters (FKs).
+    `CREATE TABLE IF NOT EXISTS "board_products" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "name" varchar(200) NOT NULL,
+      "kind" varchar(32) DEFAULT 'course' NOT NULL,
+      "course_id" uuid REFERENCES "courses"("id") ON DELETE set null,
+      "start_date" date,
+      "end_date" date,
+      "status" varchar(16) DEFAULT 'active' NOT NULL,
+      "color_token" varchar(32),
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "board_products_tenant_idx" ON "board_products" ("tenant_id")`,
+    `CREATE INDEX IF NOT EXISTS "board_products_status_idx" ON "board_products" ("tenant_id","status")`,
+    `CREATE INDEX IF NOT EXISTS "board_products_course_idx" ON "board_products" ("course_id")`,
+    `CREATE TABLE IF NOT EXISTS "boards" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "product_id" uuid REFERENCES "board_products"("id") ON DELETE cascade,
+      "name" varchar(200) NOT NULL,
+      "description" varchar(1000),
+      "archived_at" timestamp with time zone,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "boards_tenant_idx" ON "boards" ("tenant_id")`,
+    `CREATE INDEX IF NOT EXISTS "boards_product_idx" ON "boards" ("tenant_id","product_id")`,
+    `CREATE TABLE IF NOT EXISTS "board_lists" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "board_id" uuid NOT NULL REFERENCES "boards"("id") ON DELETE cascade,
+      "name" varchar(120) NOT NULL,
+      "position" double precision NOT NULL,
+      "wip_limit" integer,
+      "is_done_list" boolean DEFAULT false NOT NULL,
+      "color_token" varchar(32),
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "board_lists_tenant_idx" ON "board_lists" ("tenant_id")`,
+    `CREATE INDEX IF NOT EXISTS "board_lists_board_pos_idx" ON "board_lists" ("board_id","position")`,
+    `CREATE TABLE IF NOT EXISTS "board_task_templates" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "name" varchar(200) NOT NULL,
+      "description" varchar(1000),
+      "product_kind" varchar(32),
+      "archived_at" timestamp with time zone,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "board_task_templates_tenant_idx" ON "board_task_templates" ("tenant_id")`,
+    `CREATE TABLE IF NOT EXISTS "board_task_template_items" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "template_id" uuid NOT NULL REFERENCES "board_task_templates"("id") ON DELETE cascade,
+      "title" varchar(300) NOT NULL,
+      "description" text,
+      "assignee_role" varchar(48),
+      "default_priority" varchar(16) DEFAULT 'normal' NOT NULL,
+      "offset_anchor" varchar(12) DEFAULT 'start' NOT NULL,
+      "offset_days" integer DEFAULT 0 NOT NULL,
+      "default_list_name" varchar(120),
+      "position" double precision NOT NULL,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "board_tpl_items_template_pos_idx" ON "board_task_template_items" ("template_id","position")`,
+    `CREATE TABLE IF NOT EXISTS "tasks" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "board_id" uuid NOT NULL REFERENCES "boards"("id") ON DELETE cascade,
+      "list_id" uuid REFERENCES "board_lists"("id") ON DELETE set null,
+      "product_id" uuid REFERENCES "board_products"("id") ON DELETE set null,
+      "title" varchar(300) NOT NULL,
+      "description" text,
+      "position" double precision DEFAULT 0 NOT NULL,
+      "status" varchar(24) DEFAULT 'todo' NOT NULL,
+      "priority" varchar(16) DEFAULT 'normal' NOT NULL,
+      "assignee_user_id" uuid REFERENCES "users"("id") ON DELETE set null,
+      "assignee_role" varchar(48),
+      "start_date" date,
+      "due_date" date,
+      "completed_at" timestamp with time zone,
+      "template_item_id" uuid REFERENCES "board_task_template_items"("id") ON DELETE set null,
+      "source_template_id" uuid,
+      "archived_at" timestamp with time zone,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "tasks_tenant_idx" ON "tasks" ("tenant_id")`,
+    `CREATE INDEX IF NOT EXISTS "tasks_board_list_pos_idx" ON "tasks" ("board_id","list_id","position")`,
+    `CREATE INDEX IF NOT EXISTS "tasks_product_idx" ON "tasks" ("tenant_id","product_id")`,
+    `CREATE INDEX IF NOT EXISTS "tasks_due_date_idx" ON "tasks" ("tenant_id","due_date")`,
+    `CREATE INDEX IF NOT EXISTS "tasks_assignee_idx" ON "tasks" ("tenant_id","assignee_user_id")`,
+    `CREATE INDEX IF NOT EXISTS "tasks_status_idx" ON "tasks" ("tenant_id","status")`,
+    `CREATE TABLE IF NOT EXISTS "board_labels" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "board_id" uuid NOT NULL REFERENCES "boards"("id") ON DELETE cascade,
+      "name" varchar(80) NOT NULL,
+      "color_token" varchar(32) DEFAULT 'muted' NOT NULL,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "board_labels_board_idx" ON "board_labels" ("board_id")`,
+    `CREATE INDEX IF NOT EXISTS "board_labels_tenant_idx" ON "board_labels" ("tenant_id")`,
+    `CREATE TABLE IF NOT EXISTS "task_labels" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "task_id" uuid NOT NULL REFERENCES "tasks"("id") ON DELETE cascade,
+      "label_id" uuid NOT NULL REFERENCES "board_labels"("id") ON DELETE cascade,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "task_labels_task_idx" ON "task_labels" ("task_id")`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "task_labels_task_label_uniq" ON "task_labels" ("task_id","label_id")`,
+    `CREATE TABLE IF NOT EXISTS "task_checklist_items" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "task_id" uuid NOT NULL REFERENCES "tasks"("id") ON DELETE cascade,
+      "text" varchar(500) NOT NULL,
+      "done" boolean DEFAULT false NOT NULL,
+      "position" double precision NOT NULL,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "task_checklist_task_pos_idx" ON "task_checklist_items" ("task_id","position")`,
+    `CREATE TABLE IF NOT EXISTS "task_comments" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "task_id" uuid NOT NULL REFERENCES "tasks"("id") ON DELETE cascade,
+      "user_id" uuid REFERENCES "users"("id") ON DELETE set null,
+      "body" text NOT NULL,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "task_comments_task_created_idx" ON "task_comments" ("task_id","created_at")`,
+    `CREATE TABLE IF NOT EXISTS "task_attachments" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "task_id" uuid NOT NULL REFERENCES "tasks"("id") ON DELETE cascade,
+      "filename" varchar(300) NOT NULL,
+      "url" varchar(1000) NOT NULL,
+      "size_bytes" integer,
+      "uploaded_by_user_id" uuid REFERENCES "users"("id") ON DELETE set null,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "task_attachments_task_idx" ON "task_attachments" ("task_id")`,
   ];
   for (const stmt of ENSURE_STATEMENTS) {
     try {

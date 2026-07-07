@@ -42,6 +42,9 @@ const ROUTES = [
   "/#/business/fin/banklink",
   "/#/business/fin/itpark",
   "/#/business/par",
+  // TB-001: TaskBoard
+  "/#/business/board",
+  "/#/business/board/products",
 ];
 
 const ERR_PATTERNS = [

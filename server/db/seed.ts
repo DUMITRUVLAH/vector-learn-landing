@@ -9,6 +9,14 @@ import {
   parBudgetCodes,
   parDoaMatrix,
 } from "./schema/par";
+import {
+  boardProducts,
+  boards,
+  boardLists,
+  tasks,
+  boardTaskTemplates,
+  boardTaskTemplateItems,
+} from "./schema/taskboard";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 
@@ -228,6 +236,80 @@ async function seed() {
       { tenantId: parTenant.id, minAmountCents: 10000001, maxAmountCents: null, step: 2, approverRoleLabel: "Finance / Program Director", approverUserId: parFinance.id },
       { tenantId: parTenant.id, minAmountCents: 10000001, maxAmountCents: null, step: 3, approverRoleLabel: "Executive Director", approverUserId: parAdmin.id },
     ]);
+
+    // ── TB-001: TaskBoard demo — produs + board + liste + taskuri + șablon ──────
+    // Pe tenantul business (TaskBoard trăiește sub /business/board/*). Fără courseId:
+    // cursurile seedate aparțin tenantului learn — un FK cross-tenant ar fi greșit.
+    const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
+    const inDays = (n: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() + n);
+      return fmtDate(d);
+    };
+    const [tbProduct] = await db
+      .insert(boardProducts)
+      .values({
+        tenantId: parTenant.id,
+        name: "Curs Cybersecurity — ediția toamnă",
+        kind: "course",
+        startDate: inDays(30),
+        endDate: inDays(120),
+        colorToken: "primary",
+      })
+      .returning();
+
+    const [tbBoard] = await db
+      .insert(boards)
+      .values({
+        tenantId: parTenant.id,
+        productId: tbProduct.id,
+        name: "Lansare Cybersecurity toamnă",
+        description: "Planificarea lansării ediției de toamnă",
+      })
+      .returning();
+
+    const [tbBacklog, tbInLucru, tbReview, tbGata] = await db
+      .insert(boardLists)
+      .values([
+        { tenantId: parTenant.id, boardId: tbBoard.id, name: "Backlog", position: 1024 },
+        { tenantId: parTenant.id, boardId: tbBoard.id, name: "În lucru", position: 2048 },
+        { tenantId: parTenant.id, boardId: tbBoard.id, name: "Review", position: 3072 },
+        { tenantId: parTenant.id, boardId: tbBoard.id, name: "Gata", position: 4096, isDoneList: true },
+      ])
+      .returning();
+
+    await db.insert(tasks).values([
+      // Plan-first: 2 taskuri fără listă (backlog de planificare), din care 1 cu termen (Calendar demo)
+      { tenantId: parTenant.id, boardId: tbBoard.id, productId: tbProduct.id, title: "Definește oferta early-bird", position: 1024 },
+      { tenantId: parTenant.id, boardId: tbBoard.id, productId: tbProduct.id, title: "Confirmă trainerii invitați", dueDate: inDays(10), position: 2048 },
+      // Distribuite pe coloane
+      { tenantId: parTenant.id, boardId: tbBoard.id, productId: tbProduct.id, listId: tbBacklog.id, title: "Landing page ediția toamnă", assigneeRole: "marketing", dueDate: inDays(14), position: 1024 },
+      { tenantId: parTenant.id, boardId: tbBoard.id, productId: tbProduct.id, listId: tbBacklog.id, title: "Setează campania Meta Ads", assigneeRole: "marketing", dueDate: inDays(16), priority: "high", position: 2048 },
+      { tenantId: parTenant.id, boardId: tbBoard.id, productId: tbProduct.id, listId: tbInLucru.id, title: "Programa detaliată pe module", assigneeRole: "content", status: "in_progress", assigneeUserId: parRequestor.id, dueDate: inDays(7), position: 1024 },
+      { tenantId: parTenant.id, boardId: tbBoard.id, productId: tbProduct.id, listId: tbInLucru.id, title: "Contract sală + echipamente", assigneeRole: "ops", status: "in_progress", dueDate: inDays(21), position: 2048 },
+      { tenantId: parTenant.id, boardId: tbBoard.id, productId: tbProduct.id, listId: tbReview.id, title: "Email de anunț către absolvenți", assigneeRole: "marketing", status: "in_progress", assigneeUserId: parAdmin.id, dueDate: inDays(5), position: 1024 },
+      { tenantId: parTenant.id, boardId: tbBoard.id, productId: tbProduct.id, listId: tbGata.id, title: "Buget aprobat pentru ediție", status: "done", completedAt: new Date(), position: 1024 },
+    ]);
+
+    const [tbTemplate] = await db
+      .insert(boardTaskTemplates)
+      .values({
+        tenantId: parTenant.id,
+        name: "Lansare curs standard",
+        description: "Setul standard de taskuri pentru lansarea unei ediții de curs",
+        productKind: "course",
+      })
+      .returning();
+
+    await db.insert(boardTaskTemplateItems).values([
+      { tenantId: parTenant.id, templateId: tbTemplate.id, title: "Anunț public + landing page", assigneeRole: "marketing", offsetAnchor: "start", offsetDays: -30, defaultListName: "Backlog", position: 1024 },
+      { tenantId: parTenant.id, templateId: tbTemplate.id, title: "Campanie ads pornită", assigneeRole: "marketing", offsetAnchor: "start", offsetDays: -14, defaultListName: "Backlog", defaultPriority: "high", position: 2048 },
+      { tenantId: parTenant.id, templateId: tbTemplate.id, title: "Confirmări participanți + facturi", assigneeRole: "sales", offsetAnchor: "start", offsetDays: -7, defaultListName: "Backlog", position: 3072 },
+      { tenantId: parTenant.id, templateId: tbTemplate.id, title: "Kit de bun venit trimis", assigneeRole: "ops", offsetAnchor: "start", offsetDays: -1, defaultListName: "Backlog", position: 4096 },
+      { tenantId: parTenant.id, templateId: tbTemplate.id, title: "Feedback inițial colectat", assigneeRole: "content", offsetAnchor: "start", offsetDays: 7, defaultListName: "Backlog", position: 5120 },
+    ]);
+    void tbReview;
+    console.log(`✅ TaskBoard demo: 1 produs, 1 board, 4 liste, 8 taskuri, 1 șablon (5 iteme)`);
 
     console.log(`✅ PAR demo tenant created: ATIC — Digital Safeguard`);
     console.log(`   PAR admin: ${parAdmin.email}`);

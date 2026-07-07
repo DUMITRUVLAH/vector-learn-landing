@@ -96,6 +96,13 @@ import { finCronRoutes } from "./routes/finCron";
 // DOCMERGE module (DOCMERGE-001)
 import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
 
+// TaskBoard (TB-001) — Trello-analog cu planificare per produs
+import { boardProductsRoutes } from "./routes/boardProducts";
+import { boardsRoutes } from "./routes/boards";
+import { boardListsRoutes } from "./routes/boardLists";
+import { boardTasksRoutes } from "./routes/boardTasks";
+import { boardOverviewRoutes } from "./routes/boardOverview";
+
 export const app = new Hono();
 
 app.onError((err, c) => {
@@ -217,6 +224,13 @@ app.route("/api/par", parAttachmentsRoutes);
 
 // DOCMERGE-001: Document Merge templates
 app.route("/api/docmerge", docmergeTemplatesRoutes);
+
+// TB-001: TaskBoard — Trello-analog cu planificare per produs
+app.route("/api/board/products", boardProductsRoutes);
+app.route("/api/board/boards", boardsRoutes);
+app.route("/api/board/lists", boardListsRoutes);
+app.route("/api/board/tasks", boardTasksRoutes);
+app.route("/api/board/overview", boardOverviewRoutes);
 
 app.get("/api/health", async (c) => {
   try {
