@@ -158,6 +158,42 @@ const scheduled = await page.evaluate(async () => {
 });
 check(scheduled === todayIsoStr, `TB-003 drag-to-schedule: API confirmă dueDate=${todayIsoStr}`);
 
+// ── TB-004: Șabloane — editor + generare din UI (acțiunea completă) ──────────
+await page.goto(`${BASE}/#/business/board/templates`, { waitUntil: "networkidle" });
+await page.waitForTimeout(1500);
+check(
+  (await page.getByText("Lansare curs standard").count()) > 0,
+  "TB-004 șablonul seedat apare în listă"
+);
+// Țintește CARDUL șablonului seedat (nu .first() — pot exista șabloane din alte rulări).
+await page
+  .locator("li", { hasText: "Lansare curs standard" })
+  .getByRole("button", { name: "Deschide editorul" })
+  .click();
+await page.waitForTimeout(1500);
+const tplRows = await page.locator("tbody tr").count();
+check(tplRows === 5, `TB-004 editorul arată ${tplRows} rânduri (5 seedate)`);
+
+// Generează pe boardul seedat, din UI.
+await page.getByRole("button", { name: /Generează pe board/ }).click();
+await page.waitForTimeout(800);
+await page.getByRole("button", { name: /Generează 5 taskuri/ }).click();
+await page.waitForTimeout(2000);
+check(
+  (await page.getByText(/Generate: 5 taskuri/).count()) > 0,
+  "TB-004 UI confirmă generarea a 5 taskuri"
+);
+
+// Starea reală: taskurile generate există, cu proveniență și termen calculat.
+const genCheck = await page.evaluate(async () => {
+  const r = await fetch("/api/board/tasks", { credentials: "include" });
+  const j = await r.json();
+  const gen = j.tasks.filter((t) => t.sourceTemplateId);
+  return { count: gen.length, withDue: gen.filter((t) => t.dueDate).length };
+});
+check(genCheck.count === 5, `TB-004 API: ${genCheck.count}/5 taskuri generate cu proveniență`);
+check(genCheck.withDue === 5, "TB-004 API: toate au dueDate calculat din ancorele produsului");
+
 check(errors.length === 0, errors.length === 0 ? "zero erori JS" : `erori JS: ${errors.join(" | ")}`);
 await browser.close();
 console.log(ok ? "\n✅ e2e-taskboard-browser: all clean" : "\n❌ e2e-taskboard-browser: failures above");

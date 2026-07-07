@@ -77,7 +77,7 @@ const inDays = (nDays) => {
 async function main() {
   const admin = await login(ADMIN);
 
-  let productId, boardId, lists, doneList, backlogList;
+  let productId, boardId, lists, doneList, backlogList, templateId;
   let bulkTasks = [];
 
   await T("POST /api/board/products creează produs cu startDate", async () => {
@@ -275,6 +275,72 @@ async function main() {
     for (let i = 1; i < positions.length; i++) {
       assert(positions[i] - positions[i - 1] >= 1, "positions not re-spaced after rebalance");
     }
+  });
+
+  await T("TB-004 șablon: creare cu 3 iteme + GET cu itemCount", async () => {
+    const r = await call(admin, "POST", "/api/board/templates", {
+      name: `E2E Șablon ${Date.now()}`,
+      productKind: "course",
+      items: [
+        { title: "Anunț public", assigneeRole: "marketing", offsetDays: -30, defaultListName: "Backlog" },
+        { title: "Confirmări participanți", assigneeRole: "sales", offsetDays: -7, defaultListName: "backlog" },
+        { title: "Feedback final", offsetAnchor: "end", offsetDays: 3, defaultListName: "Gata" },
+      ],
+    });
+    eq(r.status, 201, "create status");
+    eq(r.json.items.length, 3, "items");
+    templateId = r.json.template.id;
+    const list = await call(admin, "GET", "/api/board/templates");
+    const row = list.json.templates.find((t) => t.id === templateId);
+    eq(row.itemCount, 3, "itemCount");
+  });
+
+  await T("TB-004 GENERARE: dueDate = ancora produsului + offset (acțiunea reală)", async () => {
+    const r = await call(admin, "POST", `/api/board/templates/${templateId}/generate`, { boardId });
+    eq(r.status, 200, "status");
+    eq(r.json.createdCount, 3, "created");
+    eq(r.json.unscheduledCount, 0, "unscheduled");
+    const byTitle = Object.fromEntries(r.json.tasks.map((t) => [t.title, t]));
+    // Produsul e2e: start=inDays(30), end=inDays(120).
+    eq(byTitle["Anunț public"].dueDate, inDays(30 - 30), "start-30");
+    eq(byTitle["Confirmări participanți"].dueDate, inDays(30 - 7), "start-7");
+    eq(byTitle["Feedback final"].dueDate, inDays(120 + 3), "end+3");
+    // Listele țintă: match case-insensitive („backlog" → Backlog), „Gata" → done list.
+    eq(byTitle["Anunț public"].listId, backlogList.id, "listă Backlog");
+    eq(byTitle["Confirmări participanți"].listId, backlogList.id, "listă backlog (case-insens)");
+    eq(byTitle["Feedback final"].listId, doneList.id, "listă Gata");
+    // Proveniența e trasabilă.
+    eq(byTitle["Anunț public"].sourceTemplateId, templateId, "sourceTemplateId");
+    assert(byTitle["Anunț public"].templateItemId, "templateItemId set");
+  });
+
+  await T("TB-004 idempotență: regenerarea sare rândurile deja generate", async () => {
+    const r = await call(admin, "POST", `/api/board/templates/${templateId}/generate`, { boardId });
+    eq(r.status, 200, "status");
+    eq(r.json.createdCount, 0, "created on re-run");
+    eq(r.json.skippedCount, 3, "skipped");
+    // Forțarea duplicării e explicită.
+    const forced = await call(
+      admin,
+      "POST",
+      `/api/board/templates/${templateId}/generate?skipExisting=false`,
+      { boardId }
+    );
+    eq(forced.json.createdCount, 3, "forced duplicates");
+  });
+
+  await T("TB-004 CRUD iteme: PATCH offset + DELETE rând", async () => {
+    const tpl = await call(admin, "GET", `/api/board/templates/${templateId}`);
+    const item = tpl.json.items[0];
+    const patched = await call(admin, "PATCH", `/api/board/templates/${templateId}/items/${item.id}`, {
+      offsetDays: -45,
+    });
+    eq(patched.status, 200, "patch status");
+    eq(patched.json.offsetDays, -45, "offsetDays");
+    const del = await call(admin, "DELETE", `/api/board/templates/${templateId}/items/${item.id}`);
+    eq(del.status, 200, "delete status");
+    const after = await call(admin, "GET", `/api/board/templates/${templateId}`);
+    eq(after.json.items.length, 2, "items after delete");
   });
 
   await T("anonim: /api/board/* → 401", async () => {
