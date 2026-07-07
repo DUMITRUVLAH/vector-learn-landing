@@ -129,12 +129,12 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     // TB-001: TaskBoard — planificare taskuri per produs/curs (Tabel → Kanban → Calendar).
-    // „Șabloane" se adaugă în Faza 4 (ruta nu există încă — nu punem link-uri moarte).
     section: "Planificare — Task Board",
     prefix: "/business/board",
     items: [
       { label: "Boarduri", href: "/business/board", icon: KanbanSquare },
       { label: "Produse", href: "/business/board/products", icon: Package },
+      { label: "Șabloane", href: "/business/board/templates", icon: ListChecks },
     ],
   },
 ];
