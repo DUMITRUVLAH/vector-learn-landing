@@ -118,6 +118,46 @@ const doneTitles = await page.evaluate(async () => {
 });
 check(doneTitles.includes(CARD_TITLE), "TB-002 API confirmă status=done (sync listă↔status)");
 
+// ── TB-003: Calendar — grilă, chips pe zile, drag-to-schedule din rail ───────
+await page.getByRole("button", { name: /Calendar/ }).click();
+await page.waitForTimeout(1000);
+check(
+  (await page.locator("div[data-iso]").count()) === 42,
+  "TB-003 grila lunară are 42 de celule"
+);
+check(
+  (await page.locator("aside[aria-label='Taskuri fără termen']").count()) === 1,
+  "TB-003 rail-ul „Fără termen” apare"
+);
+// Taskul seedat cu termen ("Confirmă trainerii invitați", +10 zile) e pe grilă.
+check(
+  (await page
+    .locator("div[data-iso] button", { hasText: "Confirmă trainerii invitați" })
+    .count()) >= 1,
+  "TB-003 taskul cu termen apare în ziua lui pe grilă"
+);
+
+// Drag-to-schedule: "Definește oferta early-bird" (fără termen) → celula de azi.
+const todayIsoStr = new Date().toISOString().slice(0, 10);
+await page.evaluate(({ title, iso }) => {
+  const chip = [...document.querySelectorAll("aside button")].find((el) =>
+    el.textContent.includes(title)
+  );
+  const cell = document.querySelector(`div[data-iso="${iso}"]`);
+  const dt = new DataTransfer();
+  chip.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: dt }));
+  cell.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
+  cell.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
+}, { title: "Definește oferta early-bird", iso: todayIsoStr });
+await page.waitForTimeout(1500);
+
+const scheduled = await page.evaluate(async () => {
+  const r = await fetch("/api/board/tasks", { credentials: "include" });
+  const j = await r.json();
+  return j.tasks.find((t) => t.title === "Definește oferta early-bird")?.dueDate ?? null;
+});
+check(scheduled === todayIsoStr, `TB-003 drag-to-schedule: API confirmă dueDate=${todayIsoStr}`);
+
 check(errors.length === 0, errors.length === 0 ? "zero erori JS" : `erori JS: ${errors.join(" | ")}`);
 await browser.close();
 console.log(ok ? "\n✅ e2e-taskboard-browser: all clean" : "\n❌ e2e-taskboard-browser: failures above");
