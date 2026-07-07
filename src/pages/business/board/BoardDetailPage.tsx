@@ -15,6 +15,8 @@ import { BoardTableView } from "@/components/business/board/BoardTableView";
 import { BoardKanbanView } from "@/components/business/board/BoardKanbanView";
 import { BoardCalendarView } from "@/components/business/board/BoardCalendarView";
 import { TaskDetailDialog } from "@/components/business/board/TaskDetailDialog";
+import { BoardOverview } from "@/components/business/board/BoardOverview";
+import { getBoardOverview, type ProductOverview } from "@/lib/api/boardOverview";
 import { applyOptimisticMove } from "@/lib/board/optimisticMove";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +26,7 @@ const VIEW_TABS: { key: BoardView; label: string; icon: typeof Table2; ready: bo
   { key: "table", label: "Tabel", icon: Table2, ready: true },
   { key: "kanban", label: "Kanban", icon: KanbanSquare, ready: true },
   { key: "calendar", label: "Calendar", icon: Calendar, ready: true },
-  { key: "overview", label: "Prezentare", icon: BarChart3, ready: false },
+  { key: "overview", label: "Prezentare", icon: BarChart3, ready: true },
 ];
 
 const UUID_IN_PATH = /\/board\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
@@ -42,6 +44,8 @@ export function BoardDetailPage() {
   const [view, setView] = useState<BoardView>("table");
   /** TB-005: cardul deschis în dialogul de detalii. */
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  /** TB-006: datele tab-ului Prezentare (scoped pe produsul boardului, dacă are). */
+  const [overview, setOverview] = useState<ProductOverview[] | null>(null);
 
   const load = useCallback(
     async (opts: { silent?: boolean } = {}) => {
@@ -69,6 +73,22 @@ export function BoardDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // TB-006: încarcă prezentarea când tab-ul devine activ (scoped pe produsul boardului).
+  useEffect(() => {
+    if (view !== "overview" || !board) return;
+    let cancelled = false;
+    getBoardOverview(board.productId ?? undefined)
+      .then((res) => {
+        if (!cancelled) setOverview(res.overview);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Eroare la încărcarea prezentării.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, board, tasks]);
 
   /** Editare inline optimistă: update local imediat, PATCH pe server, re-sync silent. */
   const handlePatch = useCallback(
@@ -212,6 +232,14 @@ export function BoardDetailPage() {
           {view === "calendar" && (
             <BoardCalendarView tasks={tasks} onPatch={handlePatch} onCardClick={setOpenTaskId} />
           )}
+          {view === "overview" &&
+            (overview === null ? (
+              <div className="flex items-center justify-center py-16 text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin" aria-label="Se încarcă" />
+              </div>
+            ) : (
+              <BoardOverview overview={overview} />
+            ))}
           <TaskDetailDialog
             taskId={openTaskId}
             boardLabels={labels}
