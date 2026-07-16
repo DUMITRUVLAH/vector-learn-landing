@@ -64,6 +64,7 @@ import {
   PAR_STATUS_LABELS,
 } from "@/lib/api/par";
 import { downloadParPdf } from "@/lib/parPdf";
+import { openParAttachment } from "@/lib/parFiles";
 import { cn } from "@/lib/utils";
 
 // ─── Label helpers ─────────────────────────────────────────────────────────────
@@ -644,32 +645,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
 
 let navigate: (path: string) => void = () => {};
 
-/**
- * Open/download a PAR attachment. Attachments are stored as `data:` URLs (base64). Chrome BLOCKS
- * top-level navigation to data: URLs, so a plain `<a href="data:…" target="_blank">` does nothing
- * ("când apas nu se descarcă"). Convert the data URL to a Blob object URL and trigger a real download
- * with the original filename. Real http(s) URLs just open in a new tab.
- */
-async function openParAttachment(fileUrl: string, fileName: string): Promise<void> {
-  try {
-    if (!fileUrl) return;
-    if (fileUrl.startsWith("data:")) {
-      const blob = await (await fetch(fileUrl)).blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName || "atasament";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    } else {
-      window.open(fileUrl, "_blank", "noopener,noreferrer");
-    }
-  } catch {
-    /* non-blocking — nothing we can do if the blob conversion fails */
-  }
-}
+// VM3-01: openParAttachment moved to src/lib/parFiles.ts (shared with ParFinanceQueue).
 
 // ─── Main component ───────────────────────────────────────────────────────────
 

@@ -14,10 +14,13 @@ import type { ParFinanceQueueItem } from "@/lib/api/par";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+// VM3-01: stable navigate spy so tests can assert the requestNo → detail navigation.
+const navigateMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/router/HashRouter", () => ({
   useRouter: () => ({
-    path: "/app/par/finance",
-    navigate: vi.fn(),
+    path: "/business/par/finance",
+    navigate: navigateMock,
   }),
 }));
 
@@ -199,5 +202,120 @@ describe("ParFinanceQueue", () => {
     reloadBtn.click();
 
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+  });
+});
+
+// ─── VM3-01: coloanele contabilului (IDNO/IBAN/destinație/budget line), copiere,
+//     link PAR, documente, date aprobare ─────────────────────────────────────────
+
+describe("ParFinanceQueue — VM3-01 (feedback Violeta)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    navigateMock.mockClear();
+  });
+
+  const vm3Item = () =>
+    makeFinanceItem({
+      budgetCodeLabel: "OPS-2026-07 — Operațiuni iulie",
+      approverDecisions: [
+        { name: "Ion Aprobatorul", step: 1, decidedAt: "2026-07-13T11:15:00Z" },
+        { name: "Oana Directoarea", step: 2, decidedAt: "2026-07-14T10:30:00Z" },
+      ],
+      attachmentsMeta: [
+        { id: "att-1", fileName: "factura-42.pdf", kind: "invoice" },
+        { id: "att-2", fileName: "contract-42.pdf", kind: "contract" },
+      ],
+    });
+
+  it("[blocant] afișează IDNO, IBAN, destinația plății și budget line în coloane separate", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: [vm3Item()], total: 1 });
+
+    render(<ParFinanceQueue />);
+
+    await waitFor(() => {
+      expect(screen.getByText("2008001007903")).toBeInTheDocument(); // IDNO
+    });
+    expect(screen.getByText("MD48ML000002259A19498121")).toBeInTheDocument(); // IBAN
+    expect(screen.getByText("Group consulting")).toBeInTheDocument(); // destinația (endUse)
+    expect(screen.getByText("OPS-2026-07 — Operațiuni iulie")).toBeInTheDocument(); // budget line
+    // Header-ele coloanelor noi
+    expect(screen.getByRole("columnheader", { name: "IDNO" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "IBAN" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Destinația plății" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Budget line" })).toBeInTheDocument();
+  });
+
+  it("[blocant] butonul de copiere pune valoarea BRUTĂ în clipboard (suma fără formatare)", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: [vm3Item()], total: 1 });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    render(<ParFinanceQueue />);
+
+    const copyAmountBtn = await screen.findByRole("button", { name: "Copiază suma" });
+    copyAmountBtn.click();
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("7000.00"));
+
+    const copyIbanBtn = screen.getByRole("button", { name: "Copiază IBAN" });
+    copyIbanBtn.click();
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("MD48ML000002259A19498121"));
+  });
+
+  it("[blocant] click pe nr. PAR deschide detaliul cererii", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: [vm3Item()], total: 1 });
+
+    render(<ParFinanceQueue />);
+
+    const link = await screen.findByRole("button", { name: /deschide cererea PAR-2026-0001/i });
+    link.click();
+    expect(navigateMock).toHaveBeenCalledWith("/business/par/par-fin-001");
+  });
+
+  it("[blocant] aprobatorii apar cu DATA deciziei (audit)", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: [vm3Item()], total: 1 });
+
+    render(<ParFinanceQueue />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Ion Aprobatorul")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Oana Directoarea")).toBeInTheDocument();
+    // datele formatate ro-MD (dd.mm.yyyy)
+    expect(screen.getByText(/13\.07\.2026/)).toBeInTheDocument();
+    expect(screen.getByText(/14\.07\.2026/)).toBeInTheDocument();
+  });
+
+  it("[blocant] butonul Documente deschide modalul și listează fișierele (fetch on demand)", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: [vm3Item()], total: 1 });
+    const listSpy = vi.spyOn(parApi, "listAttachments").mockResolvedValue({
+      items: [
+        { id: "att-1", fileName: "factura-42.pdf", kind: "invoice", uploadedBy: null, createdAt: "", fileUrl: "data:application/pdf;base64,x" },
+        { id: "att-2", fileName: "contract-42.pdf", kind: "contract", uploadedBy: null, createdAt: "", fileUrl: "data:application/pdf;base64,y" },
+      ],
+    });
+
+    render(<ParFinanceQueue />);
+
+    const docBtn = await screen.findByRole("button", { name: /vezi 2 documente/i });
+    docBtn.click();
+
+    await waitFor(() => expect(listSpy).toHaveBeenCalledWith("par-fin-001"));
+    await waitFor(() => {
+      expect(screen.getByText("factura-42.pdf")).toBeInTheDocument();
+    });
+    expect(screen.getByText("contract-42.pdf")).toBeInTheDocument();
+    expect(screen.getByText("Factură")).toBeInTheDocument(); // eticheta kind
+  });
+
+  it("fără documente → celula arată — și nu există buton de modal", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [makeFinanceItem({ attachmentsMeta: [] })],
+      total: 1,
+    });
+
+    render(<ParFinanceQueue />);
+
+    await screen.findByText("PAR-2026-0001");
+    expect(screen.queryByRole("button", { name: /vezi .* documente/i })).not.toBeInTheDocument();
   });
 });

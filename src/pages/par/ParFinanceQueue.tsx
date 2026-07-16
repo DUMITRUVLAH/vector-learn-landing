@@ -20,6 +20,10 @@ import {
   ClipboardList,
   User,
   Paperclip,
+  Copy,
+  Check,
+  FileText,
+  X,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
@@ -28,12 +32,17 @@ import {
   submitSection16,
   executePayment,
   uploadAttachment,
+  listAttachments,
   formatMDL,
+  formatCurrency,
   downloadDosar,
   type ParFinanceQueueItem,
+  type ParAttachment,
   type Section16Payload,
   type PayPayload,
 } from "@/lib/api/par";
+import { openParAttachment } from "@/lib/parFiles";
+import { useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
 
 // ─── Section-16 modal ─────────────────────────────────────────────────────────
@@ -397,14 +406,181 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
   );
 }
 
+// ─── VM3-01: copy-to-clipboard cell ──────────────────────────────────────────
+// Violeta (finance): "se poți face copie de aici în bancă direct. Nu mai bat eu pe tastat."
+// Display text stays selectable; the button copies the RAW value (e.g. "7000.00", the full IBAN)
+// so it can be pasted straight into internet banking / 1C.
+
+interface CopyValueProps {
+  display: string;
+  copyValue?: string;
+  label: string; // for aria-label: "Copiază IBAN"
+  mono?: boolean;
+  maxWidthClass?: string;
+}
+
+function CopyValue({ display, copyValue, label, mono, maxWidthClass }: CopyValueProps) {
+  const [copied, setCopied] = useState(false);
+  const value = copyValue ?? display;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable (http/permissions) — text stays selectable as fallback */
+    }
+  };
+
+  if (!display) return <span className="text-muted-foreground">—</span>;
+
+  return (
+    <span className="inline-flex items-center gap-1 max-w-full">
+      <span
+        className={cn("select-text truncate", mono && "font-mono", maxWidthClass)}
+        title={display}
+      >
+        {display}
+      </span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        aria-label={copied ? `${label} copiat` : label}
+        title={label}
+        className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
+      </button>
+    </span>
+  );
+}
+
+// ─── VM3-01: attachments modal (fetch on demand) ─────────────────────────────
+// The queue list carries only attachment METADATA; file bodies (data-URLs) are fetched
+// when the modal opens, via the existing GET /api/par/:id/attachments.
+
+// Same labels as server-side kindLabel() in server/routes/par.ts (dosar separators).
+const ATTACHMENT_KIND_LABELS: Record<string, string> = {
+  par_pdf: "Formularul PAR",
+  contract: "Contract",
+  act_of_receipt: "Act de recepție",
+  quotation: "Ofertă / Deviz",
+  invoice: "Factură",
+  payment_order: "Ordin de plată",
+  other: "Altele",
+};
+
+interface AttachmentsModalProps {
+  par: ParFinanceQueueItem;
+  onClose: () => void;
+}
+
+function AttachmentsModal({ par, onClose }: AttachmentsModalProps) {
+  const [items, setItems] = useState<ParAttachment[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listAttachments(par.id)
+      .then((r) => { if (!cancelled) setItems(r.items); })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Eroare la încărcarea documentelor");
+      });
+    return () => { cancelled = true; };
+  }, [par.id]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="att-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+    >
+      <div className="bg-card border border-border rounded-lg shadow-lg p-6 w-full max-w-lg space-y-4 max-h-[80vh] overflow-y-auto">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 id="att-title" className="text-lg font-semibold text-card-foreground">
+              Documente atașate
+            </h2>
+            <p className="text-sm text-muted-foreground">{par.requestNo} · {par.payeeName ?? "—"}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Închide"
+            className="p-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        {error && (
+          <div role="alert" className="flex items-center gap-2 text-destructive text-sm">
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {error}
+          </div>
+        )}
+
+        {!error && items === null && (
+          <div className="flex items-center justify-center py-8" role="status" aria-label="Se încarcă documentele...">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
+          </div>
+        )}
+
+        {!error && items !== null && items.length === 0 && (
+          <p className="text-sm text-muted-foreground py-4">Niciun document atașat la această cerere.</p>
+        )}
+
+        {!error && items !== null && items.length > 0 && (
+          <ul className="divide-y divide-border">
+            {items.map((att) => (
+              <li key={att.id} className="py-2.5 flex items-center gap-3">
+                <FileText className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                <div className="flex-1 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => void openParAttachment(att.fileUrl, att.fileName)}
+                    className="text-sm text-primary hover:underline truncate block max-w-full text-left"
+                    aria-label={`Descarcă ${att.fileName}`}
+                  >
+                    {att.fileName}
+                  </button>
+                  <span className="text-xs text-muted-foreground">
+                    {ATTACHMENT_KIND_LABELS[att.kind] ?? att.kind}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+/** VM3-01: "cine a aprobat și la ce dată" — short ro-MD date for the queue. */
+function fmtShortDate(iso: string | Date | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
 export default function ParFinanceQueue() {
+  const { navigate } = useRouter();
   const [items, setItems] = useState<ParFinanceQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [s16Par, setS16Par] = useState<ParFinanceQueueItem | null>(null);
   const [payPar, setPayPar] = useState<ParFinanceQueueItem | null>(null);
+  const [attPar, setAttPar] = useState<ParFinanceQueueItem | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -422,12 +598,6 @@ export default function ParFinanceQueue() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  const statusLabel: Record<string, string> = {
-    approved: "Aprobat — de primit",
-    in_finance: "La finanțe",
-    reapproval_required: "Re-aprobare necesară",
-  };
 
   return (
     <AppShell pageTitle="Coadă finanțe" pageDescription="PAR-uri aprobate — plată internă">
@@ -474,21 +644,26 @@ export default function ParFinanceQueue() {
           </div>
         )}
 
-        {/* Queue table */}
+        {/* Queue table — VM3-01: coloanele cerute de finance (IDNO / IBAN / sumă / destinație /
+            budget line), text copiabil, nr. PAR clickabil, aprobatori cu data deciziei. */}
         {!loading && !error && items.length > 0 && (
-          <div className="rounded-lg border border-border overflow-hidden">
-            <table className="w-full text-sm" role="table" aria-label="Coadă finanțe">
+          <div className="rounded-lg border border-border overflow-x-auto">
+            <table className="w-full text-sm min-w-[1280px]" role="table" aria-label="Coadă finanțe">
               <thead>
                 <tr className="bg-muted/50 border-b border-border">
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nr.</th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Beneficiar</th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Proiect</th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Solicitant</th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Aprobat de</th>
-                  <th className="text-right px-4 py-3 font-medium text-muted-foreground">Estimat</th>
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Secț. 16</th>
-                  <th className="text-right px-4 py-3 font-medium text-muted-foreground">Acțiuni</th>
+                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">Nr.</th>
+                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">Status</th>
+                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">Beneficiar</th>
+                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">IDNO</th>
+                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">IBAN</th>
+                  <th className="text-right px-3 py-3 font-medium text-muted-foreground">Suma</th>
+                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">Destinația plății</th>
+                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">Proiect</th>
+                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">Budget line</th>
+                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">Aprobat de</th>
+                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">Secț. 16</th>
+                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">Documente</th>
+                  <th className="text-right px-3 py-3 font-medium text-muted-foreground">Acțiuni</th>
                 </tr>
               </thead>
               <tbody>
@@ -500,8 +675,18 @@ export default function ParFinanceQueue() {
                       idx % 2 === 0 ? "bg-background" : "bg-muted/10"
                     )}
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-foreground">{par.requestNo}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
+                      {/* VM3-01: deschide PAR-ul direct din coadă ("tu nu poți să deschizi aici") */}
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/business/par/${par.id}`)}
+                        className="font-mono text-xs text-primary hover:underline whitespace-nowrap"
+                        aria-label={`Deschide cererea ${par.requestNo}`}
+                      >
+                        {par.requestNo}
+                      </button>
+                    </td>
+                    <td className="px-3 py-3">
                       <div className="flex flex-col gap-1">
                         <ParStatusChip status={par.status} />
                         {par.status === "reapproval_required" && (
@@ -516,22 +701,71 @@ export default function ParFinanceQueue() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-foreground text-xs max-w-[160px] truncate" title={par.payeeName ?? ""}>
-                      {par.payeeName ?? "—"}
+                    <td className="px-3 py-3 text-foreground text-xs">
+                      <CopyValue
+                        display={par.payeeName ?? ""}
+                        label="Copiază beneficiarul"
+                        maxWidthClass="max-w-[150px]"
+                      />
                     </td>
-                    <td className="px-4 py-3 text-foreground text-xs max-w-[140px] truncate" title={par.projectName ?? ""}>
+                    <td className="px-3 py-3 text-foreground text-xs">
+                      <CopyValue display={par.payeeIdnp ?? ""} label="Copiază IDNO" mono />
+                    </td>
+                    <td className="px-3 py-3 text-foreground text-xs">
+                      <CopyValue
+                        display={par.payeeIban ?? ""}
+                        label="Copiază IBAN"
+                        mono
+                        maxWidthClass="max-w-[190px]"
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono text-foreground whitespace-nowrap">
+                      <CopyValue
+                        display={
+                          par.currency && par.currency !== "MDL"
+                            ? formatCurrency(par.totalEstimatedCents, par.currency)
+                            : formatMDL(par.totalEstimatedCents)
+                        }
+                        copyValue={(par.totalEstimatedCents / 100).toFixed(2)}
+                        label="Copiază suma"
+                        mono
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-foreground text-xs">
+                      <CopyValue
+                        display={par.endUse ?? ""}
+                        label="Copiază destinația plății"
+                        maxWidthClass="max-w-[200px]"
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-foreground text-xs max-w-[130px] truncate" title={par.projectName ?? ""}>
                       {par.projectName ?? "—"}
                     </td>
-                    <td className="px-4 py-3 text-foreground text-xs">
-                      {par.requestedByName ?? "—"}
+                    <td className="px-3 py-3 text-foreground text-xs">
+                      <CopyValue
+                        display={par.budgetCodeLabel ?? (par.payment?.parBl || "")}
+                        label="Copiază budget line"
+                        maxWidthClass="max-w-[150px]"
+                      />
                     </td>
-                    <td className="px-4 py-3 text-foreground text-xs max-w-[160px] truncate" title={(par.approverNames ?? []).join(", ")}>
-                      {par.approverNames && par.approverNames.length > 0 ? par.approverNames.join(", ") : "—"}
+                    <td className="px-3 py-3 text-foreground text-xs">
+                      {/* VM3-01: audit — "două persoane au aprobat la ce dată" */}
+                      {par.approverDecisions && par.approverDecisions.length > 0 ? (
+                        <ul className="space-y-0.5">
+                          {par.approverDecisions.map((d) => (
+                            <li key={`${par.id}-step-${d.step}`} className="whitespace-nowrap">
+                              <span className="text-foreground">{d.name}</span>
+                              {d.decidedAt && (
+                                <span className="text-muted-foreground"> · {fmtShortDate(d.decidedAt)}</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-foreground">
-                      {formatMDL(par.totalEstimatedCents)}
-                    </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       {par.payment ? (
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <CheckCircle2 className="h-3.5 w-3.5 text-green-500" aria-hidden="true" />
@@ -551,7 +785,23 @@ export default function ParFinanceQueue() {
                         <span className="text-xs text-muted-foreground italic">Necompletat</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
+                      {/* VM3-01: documentele atașate, vizibile din coadă (nu doar Dosarul PDF) */}
+                      {par.attachmentsMeta && par.attachmentsMeta.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setAttPar(par)}
+                          aria-label={`Vezi ${par.attachmentsMeta.length} documente pentru ${par.requestNo}`}
+                          className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-input bg-background text-xs text-foreground hover:bg-accent transition-colors whitespace-nowrap"
+                        >
+                          <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                          {par.attachmentsMeta.length} doc.
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
                       <div className="flex items-center gap-2 justify-end flex-wrap">
                         {/* Section 16 button — available on approved / in_finance */}
                         {["approved", "in_finance"].includes(par.status) && (
@@ -625,6 +875,12 @@ export default function ParFinanceQueue() {
             par={payPar}
             onClose={() => setPayPar(null)}
             onPaid={() => void load()}
+          />
+        )}
+        {attPar && (
+          <AttachmentsModal
+            par={attPar}
+            onClose={() => setAttPar(null)}
           />
         )}
       </div>
