@@ -1,10 +1,10 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "STMT-004",
+  "last_completed": "VM3-03",
   "iterations": 180,
   "last_run_at": "2026-06-28T00:00:00Z",
-  "milestone_status": "VIOLETA: VM1-01..13 done (PRs #204-#216). Polish run 2026-06-28: VM1-12 dosar PDF #214, VM1-01 multi-role #215, VM1-05 vendor-saved indicator #216.",
+  "milestone_status": "VIOLETA: VM1 done (#204-#216). VM3 (feedback 2026-07-16) done — PR #262. VM2: 20 pending.",
   "active_milestone": "VIOLETA",
   "items": {
     "SPLIT-401": {
@@ -4671,7 +4671,7 @@
       "title": "Stare configurare ghidată (health check)"
     },
     "VM3-01": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/VM3-catalog.md",
@@ -4679,10 +4679,11 @@
       "phase": "VM3",
       "depends_on": [],
       "priority": "high",
-      "title": "Coada finanțe: coloane copiabile IDNO/IBAN/destinație/budget line + link PAR + documente + date aprobare"
+      "title": "Coada finanțe: coloane copiabile IDNO/IBAN/destinație/budget line + link PAR + documente + date aprobare",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/262"
     },
     "VM3-02": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/VM3-catalog.md",
@@ -4690,10 +4691,11 @@
       "phase": "VM3",
       "depends_on": [],
       "priority": "high",
-      "title": "Fișa aprobărilor (cine+când) ca primă pagină în dosarul PDF"
+      "title": "Fișa aprobărilor (cine+când) ca primă pagină în dosarul PDF",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/262"
     },
     "VM3-03": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/specs/VM3-catalog.md",
@@ -4701,7 +4703,8 @@
       "phase": "VM3",
       "depends_on": [],
       "priority": "medium",
-      "title": "Formular creare: data necesară +10 zile, UM bucăți, hint evenimente"
+      "title": "Formular creare: data necesară +10 zile, UM bucăți, hint evenimente",
+      "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/262"
     }
   }
 }

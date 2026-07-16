@@ -471,9 +471,9 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 
 | ID | Priority | Title | Status | Spec |
 |----|----------|-------|--------|------|
-| VM3-01 | high | Coada finanțe: coloane IDNO/IBAN/destinație/budget line copiabile + link PAR + documente + date aprobare | pending | [catalog](specs/VM3-catalog.md) |
-| VM3-02 | high | Fișa aprobărilor (cine+când) ca primă pagină în dosarul PDF | pending | [catalog](specs/VM3-catalog.md) |
-| VM3-03 | medium | Formular creare: data necesară +10 zile, UM „bucăți", hint evenimente | pending | [catalog](specs/VM3-catalog.md) |
+| VM3-01 | high | Coada finanțe: coloane IDNO/IBAN/destinație/budget line copiabile + link PAR + documente + date aprobare | done | [catalog](specs/VM3-catalog.md) · [PR #262](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/262) |
+| VM3-02 | high | Fișa aprobărilor (cine+când) ca primă pagină în dosarul PDF | done | [catalog](specs/VM3-catalog.md) · [PR #262](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/262) |
+| VM3-03 | medium | Formular creare: data necesară +10 zile, UM „bucăți", hint evenimente | done | [catalog](specs/VM3-catalog.md) · [PR #262](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/262) |
 
 ---
 
