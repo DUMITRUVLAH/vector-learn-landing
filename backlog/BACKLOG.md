@@ -428,3 +428,69 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | VM1-10 | medium | Foldere PAR — Proiect → status (dep. VM1-04) | done | [spec](specs/VM1-10-folders-project-status.md) · [PR #210](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/210) |
 | VM1-11 | medium | Foldere ierarhice per proiect (vederea Proiect→status) | done | ParFolders.tsx — verified on front-end 2026-06-28 |
 | VM1-12 | high | Dosar complet PDF (PAR+atașamente+ordin de plată) | done | [spec](specs/VM1-12-dosar-pdf.md) · [PR #214](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/214) |
+
+
+---
+
+## Milestone VM2 — 20 funcționalități noi PAR (cerute 2026-07-03)
+
+> Sursă: owner — „adaugă 20 de funcționalități utile care ușurează munca". Catalog complet cu
+> AC per item: [`specs/VM2-catalog.md`](specs/VM2-catalog.md). Faze: A=quick wins requestor,
+> B=aprobare fără frecare, C=finance, D=control/audit. O fază = un branch = un PR (§0.2).
+
+| ID | Priority | Title | Status | Spec |
+|----|----------|-------|--------|------|
+| VM2-01 | high | Duplică PAR (clone as draft) | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-02 | high | Timeline vizual pe detaliul PAR | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-03 | high | Căutare globală + filtre combinate | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-04 | high | Export Excel al listelor filtrate | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-05 | medium | Reminder + escaladare aprobare întârziată | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-06 | medium | Digest zilnic pentru aprobatori | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-07 | low | Aprobare direct din email (link semnat) | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-08 | medium | Inbox aprobare optimizat mobil | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-09 | medium | Ordin de plată generat automat (PDF) | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-10 | medium | Export fișier plăți în lot pentru bancă | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-11 | medium | Reconciliere: plătit din extras bancar | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-12 | high | Buget vs cheltuit la creare + plafon | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-13 | medium | Raport donator per proiect/eveniment | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-14 | high | Out-of-office: delegare self-service | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-15 | high | Clopoțel notificări in-app + necitite | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-16 | medium | Retragere cerere + re-deschidere ciornă | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-17 | medium | 4-eyes obligatoriu peste prag (anti-fraudă) | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-18 | low | Ștampilă PLĂTIT + QR pe dosar | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-19 | low | Arhivare an fiscal (snapshot imuabil) | pending | [catalog](specs/VM2-catalog.md) |
+| VM2-20 | medium | Stare configurare ghidată (health check) | pending | [catalog](specs/VM2-catalog.md) |
+
+---
+
+## Milestone VM3 — Feedback Violeta round 2 (conversație audio 2026-07-16)
+
+> Sursă: transcrierea conversației owner ↔ Violeta (contabila care plătește). Gap-uri verificate
+> în cod; ce exista deja (duplicare, șabloane, DOA N pași, import Excel) NU se re-construiește.
+> Catalog cu AC per item: [`specs/VM3-catalog.md`](specs/VM3-catalog.md). O fază = un PR (§0.2).
+
+| ID | Priority | Title | Status | Spec |
+|----|----------|-------|--------|------|
+| VM3-01 | high | Coada finanțe: coloane IDNO/IBAN/destinație/budget line copiabile + link PAR + documente + date aprobare | done | [catalog](specs/VM3-catalog.md) · [PR #262](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/262) |
+| VM3-02 | high | Fișa aprobărilor (cine+când) ca primă pagină în dosarul PDF | done | [catalog](specs/VM3-catalog.md) · [PR #262](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/262) |
+| VM3-03 | medium | Formular creare: data necesară +10 zile, UM „bucăți", hint evenimente | done | [catalog](specs/VM3-catalog.md) · [PR #262](https://github.com/DUMITRUVLAH/vector-learn-landing/pull/262) |
+
+---
+
+## Milestone VICU — AI Coworker (Telegram + crm-vector) — CONCEPT, adăugat 2026-07-16
+
+> **Colegul AI al echipei Vector Academy** (v2): bot Telegram bidirecțional (owner 1:1 + grupul
+> echipei) integrat în crm-vector, cu context din TaskBoard + CRM/vânzări + Meta Ads (Windsor) +
+> ședințe (audio RO) + Zoom. O singură persoană digitală cu memorie despre oameni, ritualuri
+> (briefing done-first, retro async), accountability blând, verdicte pe campanii, antrenor de
+> delegare pentru owner; învață din feedback (prompt versionat, aprobat de owner). v2 e ancorat
+> în inventarul real crm-vector (strategy_kpis, sales×marketing_costs, analyze-team-workload,
+> zoom_recordings, tasks-mcp — există deja) + cercetare de piață AI-coworker (2026-07-16).
+>
+> Concept: [`vicu/VICU-CORE.md`](vicu/VICU-CORE.md) · Backlog complet (33 item-uri, 8 faze +
+> trasabilitate la briefing): [`vicu/VICU-BACKLOG.md`](vicu/VICU-BACKLOG.md).
+>
+> ⚠️ **Implementarea țintește repo-ul crm-vector** (Lovable/Supabase, regula §0.0) — item-urile
+> NU intră în STATE.json-ul acestui repo și NU se construiesc de autopilotul de aici. Pilot ales
+> de owner: **Faza 1 — igiena taskurilor** (digest zilnic + motiv obligatoriu la mutarea
+> termenelor). Build-ul pornește doar la semnalul owner-ului.

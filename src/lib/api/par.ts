@@ -553,12 +553,29 @@ export interface ParPaymentRecord {
   updatedAt: string;
 }
 
+/** VM3-01: one approver's signed decision, shown in the finance queue for audit. */
+export interface ParApproverDecision {
+  name: string;
+  step: number;
+  decidedAt: string | null;
+}
+
+/** VM3-01: attachment metadata in the queue list (content fetched on demand). */
+export interface ParAttachmentMeta {
+  id: string;
+  fileName: string;
+  kind: ParAttachmentKind;
+}
+
 export interface ParFinanceQueueItem extends ParRequest {
   above_micro_threshold: boolean;
   payment: ParPaymentRecord | null;
   requestedByName?: string | null;
   projectName?: string | null;
   approverNames?: string[];
+  approverDecisions?: ParApproverDecision[];
+  budgetCodeLabel?: string | null;
+  attachmentsMeta?: ParAttachmentMeta[];
 }
 
 export async function getFinanceQueue(): Promise<{ items: ParFinanceQueueItem[]; total: number }> {
@@ -1051,6 +1068,21 @@ export function formatMDL(cents: number): string {
     currency: "MDL",
     minimumFractionDigits: 2,
   }).format(amount);
+}
+
+/** VM3-01: format minor units in the PAR's own currency (MDL/EUR/USD), e.g. 700000+"EUR" → "7.000,00 EUR". */
+export function formatCurrency(cents: number, currency: string): string {
+  const amount = cents / 100;
+  try {
+    return new Intl.NumberFormat("ro-MD", {
+      style: "currency",
+      currency: currency || "MDL",
+      minimumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    // Unknown/invalid currency code — fall back to a plain number + code suffix.
+    return `${amount.toFixed(2)} ${currency}`;
+  }
 }
 
 /** PAR status colors — semantic tokens only */

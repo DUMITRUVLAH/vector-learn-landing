@@ -16,6 +16,7 @@ import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import { detectPayeeType, type PayeeType } from "@/lib/par/payeeTypeDetector";
+import { plusDays } from "@/lib/par/dates";
 import { isValidMoldovaIBAN } from "@/lib/par/ibanCheck";
 import type { ParPayeeCandidate } from "@/lib/par/parCandidateTypes";
 import { QuotesSection } from "@/components/par/QuotesSection";
@@ -64,6 +65,9 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 const today = () => new Date().toISOString().slice(0, 10);
+
+/** VM3-03: sugestii pentru unitatea de măsură (Violeta: „adăugăm bucăți… servicii"). Text liber. */
+const UNIT_SUGGESTIONS = ["bucăți", "servicii", "ore", "zile", "sesiuni", "persoane", "luni", "km", "set"];
 
 // VF-203: format minor units in a given currency (MDL uses the existing "L" symbol via formatMDL).
 function fmtMoney(cents: number, currency: string): string {
@@ -141,7 +145,11 @@ export function ParCreateForm() {
   const [dateOfRequest, setDateOfRequest] = useState(today());
   const [requestorTitle, setRequestorTitle] = useState("");
   const [departmentId, setDepartmentId] = useState("");
-  const [dateNeeded, setDateNeeded] = useState("");
+  // VM3-03 (Violeta): "aici ar trebui automat să pună data necesară peste 10 zile" —
+  // prefilled to request date + 10 days; recalculated when the request date changes,
+  // UNLESS the user edited it manually (touched flag stops the auto-sync).
+  const [dateNeeded, setDateNeeded] = useState(() => plusDays(today(), 10));
+  const [dateNeededTouched, setDateNeededTouched] = useState(false);
   const [projectId, setProjectId] = useState("");
   const [eventId, setEventId] = useState(""); // VM1-04
   const [budgetCodeId, setBudgetCodeId] = useState("");
@@ -613,7 +621,17 @@ export function ParCreateForm() {
         <Section n="1–7" title="Antet">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Data cererii" htmlFor="dor" required>
-              <input id="dor" type="date" className={inputCls} value={dateOfRequest} onChange={(e) => setDateOfRequest(e.target.value)} />
+              <input
+                id="dor"
+                type="date"
+                className={inputCls}
+                value={dateOfRequest}
+                onChange={(e) => {
+                  setDateOfRequest(e.target.value);
+                  // VM3-03: keep "data necesară" = cerere + 10 zile until the user edits it manually
+                  if (!dateNeededTouched && e.target.value) setDateNeeded(plusDays(e.target.value, 10));
+                }}
+              />
             </Field>
             <Field label="Scop" htmlFor="purpose" hint="Obținere oferte pornește fluxul de achiziție (RFQ).">
               <select id="purpose" className={inputCls} value={purpose}
@@ -635,8 +653,15 @@ export function ParCreateForm() {
                 {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </Field>
-            <Field label="Data necesară" htmlFor="dn" hint="Opțional">
-              <input id="dn" type="date" className={inputCls} value={dateNeeded} min={dateOfRequest} onChange={(e) => setDateNeeded(e.target.value)} />
+            <Field label="Data necesară" htmlFor="dn" hint="Estimativ — data cererii + 10 zile. Ajustează dacă e nevoie.">
+              <input
+                id="dn"
+                type="date"
+                className={inputCls}
+                value={dateNeeded}
+                min={dateOfRequest}
+                onChange={(e) => { setDateNeeded(e.target.value); setDateNeededTouched(true); }}
+              />
             </Field>
             <Field label="Proiect / Program" htmlFor="proj">
               <select id="proj" className={inputCls} value={projectId}
@@ -646,23 +671,46 @@ export function ParCreateForm() {
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
-            {/* VM1-04: Event — filtered by selected project */}
+            {/* VM1-04: Event — filtered by selected project.
+                VM3-03: când proiectul selectat NU are evenimente, câmpul nu mai dispare mut
+                („el a dispărut… n-are evenimente") — arătăm un hint + link spre Admin. */}
             {(() => {
               const filteredEvents = projectId
                 ? events.filter((ev) => ev.projectId === projectId)
                 : events;
-              return filteredEvents.length > 0 ? (
-                <Field label="Eveniment" htmlFor="evtId">
-                  <select id="evtId" className={inputCls} value={eventId}
-                    onChange={(e) => setEventId(e.target.value)}
-                    aria-label="Eveniment">
-                    <option value="">— Selectează —</option>
-                    {filteredEvents.map((ev) => (
-                      <option key={ev.id} value={ev.id}>{ev.name}</option>
-                    ))}
-                  </select>
-                </Field>
-              ) : null;
+              if (filteredEvents.length > 0) {
+                return (
+                  <Field label="Eveniment" htmlFor="evtId">
+                    <select id="evtId" className={inputCls} value={eventId}
+                      onChange={(e) => setEventId(e.target.value)}
+                      aria-label="Eveniment">
+                      <option value="">— Selectează —</option>
+                      {filteredEvents.map((ev) => (
+                        <option key={ev.id} value={ev.id}>{ev.name}</option>
+                      ))}
+                    </select>
+                  </Field>
+                );
+              }
+              if (projectId) {
+                // No <label>: there's no form control here, just an informational hint.
+                return (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-sm font-medium text-foreground">Eveniment</span>
+                    <p className="text-xs text-muted-foreground py-2.5">
+                      Niciun eveniment pentru acest proiect.{" "}
+                      {isAdmin ? (
+                        <a href="#/business/par/admin" className="text-primary hover:underline">
+                          Adaugă în Admin → Evenimente
+                        </a>
+                      ) : (
+                        <>Project managerul le adaugă în Administrare → Evenimente.</>
+                      )}
+                    </p>
+                  </div>
+                );
+              }
+              return null;
             })()}
             <Field label="Cod bugetar" htmlFor="bc">
               <select id="bc" className={inputCls} value={budgetCodeId} onChange={(e) => setBudgetCodeId(e.target.value)} aria-label="Cod bugetar">
@@ -747,7 +795,13 @@ export function ParCreateForm() {
             </Field>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:max-w-md">
               <Field label="Cant." htmlFor="nlQty"><input id="nlQty" type="number" min="1" className={inputCls} value={nlQty} onChange={(e) => setNlQty(e.target.value)} /></Field>
-              <Field label="UM" htmlFor="nlUnit"><input id="nlUnit" type="text" placeholder="sesie" className={inputCls} value={nlUnit} onChange={(e) => setNlUnit(e.target.value)} /></Field>
+              <Field label="UM" htmlFor="nlUnit">
+                {/* VM3-03: sugestii de unități (bucăți, servicii, …) — rămâne text liber */}
+                <input id="nlUnit" type="text" placeholder="bucăți" list="um-suggestions" className={inputCls} value={nlUnit} onChange={(e) => setNlUnit(e.target.value)} />
+                <datalist id="um-suggestions">
+                  {UNIT_SUGGESTIONS.map((u) => <option key={u} value={u} />)}
+                </datalist>
+              </Field>
               {/* Price is entered in the PAR's selected currency — keep the label in sync so the
                   user doesn't type MDL amounts while the request is in EUR/USD. */}
               <Field label={`Preț/u (${currency})`} htmlFor="nlPrice"><input id="nlPrice" type="number" min="0" placeholder="7000" className={inputCls} value={nlPrice}

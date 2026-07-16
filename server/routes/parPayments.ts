@@ -24,6 +24,8 @@ import {
   parApprovals,
   parVendors,
   parProjects,
+  parBudgetCodes,
+  parAttachments,
 } from "../db/schema/par";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -184,9 +186,10 @@ parPaymentsRoutes.get("/finance", async (c) => {
   }
 
   // Resolve display names (finance needs: who requested, which project, who approved).
+  // VM3-01: decidedAt is included so the queue can show WHEN each approver signed (audit ask).
   const approvalRows = parIds.length
     ? await db
-        .select({ parId: parApprovals.parId, step: parApprovals.step, decision: parApprovals.decision, approverUserId: parApprovals.approverUserId })
+        .select({ parId: parApprovals.parId, step: parApprovals.step, decision: parApprovals.decision, approverUserId: parApprovals.approverUserId, decidedAt: parApprovals.decidedAt })
         .from(parApprovals)
         .where(and(eq(parApprovals.tenantId, tenantId), inArray(parApprovals.parId, parIds)))
     : [];
@@ -214,6 +217,39 @@ parPaymentsRoutes.get("/finance", async (c) => {
         .map((a) => userName(a.approverUserId))
         .filter((n): n is string => !!n),
     )];
+  // VM3-01: approvers WITH decision dates — Violeta (finance/audit) needs "cine a aprobat și la ce dată"
+  // visible in the queue, not buried in the audit log.
+  const approverDecisionsFor = (parId: string) =>
+    approvalRows
+      .filter((a) => a.parId === parId && a.step >= 1 && a.decision === "approved" && a.approverUserId)
+      .sort((a, b) => a.step - b.step)
+      .map((a) => ({ name: userName(a.approverUserId), step: a.step, decidedAt: a.decidedAt }))
+      .filter((d): d is { name: string; step: number; decidedAt: Date | null } => !!d.name);
+
+  // VM3-01: budget code labels (Violeta: "și budget line să se vadă")
+  const budgetCodeIds = [...new Set(queue.map((p) => p.budgetCodeId).filter((v): v is string => !!v))];
+  const budgetRows = budgetCodeIds.length
+    ? await db.select({ id: parBudgetCodes.id, code: parBudgetCodes.code, name: parBudgetCodes.name })
+        .from(parBudgetCodes)
+        .where(and(eq(parBudgetCodes.tenantId, tenantId), inArray(parBudgetCodes.id, budgetCodeIds)))
+    : [];
+  const budgetLabel = (id: string | null) => {
+    if (!id) return null;
+    const b = budgetRows.find((r) => r.id === id);
+    return b ? `${b.code} — ${b.name}` : null;
+  };
+
+  // VM3-01: attachment METADATA only (id/fileName/kind) — the file bodies are data-URLs and would
+  // bloat the list response; the UI fetches content on demand via GET /api/par/:id/attachments.
+  const attachmentRows = parIds.length
+    ? await db.select({ id: parAttachments.id, parId: parAttachments.parId, fileName: parAttachments.fileName, kind: parAttachments.kind })
+        .from(parAttachments)
+        .where(and(eq(parAttachments.tenantId, tenantId), inArray(parAttachments.parId, parIds)))
+    : [];
+  const attachmentsFor = (parId: string) =>
+    attachmentRows
+      .filter((a) => a.parId === parId)
+      .map(({ id, fileName, kind }) => ({ id, fileName, kind }));
 
   const items = queue.map((p) => ({
     ...p,
@@ -222,6 +258,9 @@ parPaymentsRoutes.get("/finance", async (c) => {
     requestedByName: userName(p.requestedByUserId),
     projectName: projName(p.projectId),
     approverNames: approversFor(p.id),
+    approverDecisions: approverDecisionsFor(p.id),
+    budgetCodeLabel: budgetLabel(p.budgetCodeId),
+    attachmentsMeta: attachmentsFor(p.id),
   }));
 
   return c.json({ items, total: items.length });

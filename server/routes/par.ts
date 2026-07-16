@@ -46,6 +46,8 @@ import { isValidMoldovaIBAN, isValidIDNP } from "../lib/par/validators";
 import { recalcParTotal } from "../lib/par/totals";
 import { submitPAR, buildBodyForHash } from "../lib/par/submit";
 import { verifyParBodyHash } from "../lib/par/integrity";
+import { buildApprovalSheetLines, type SheetLine } from "../lib/par/approvalSheet";
+import { winAnsiSafe } from "../lib/par/pdfText";
 
 export const parRoutes = new Hono<{ Variables: AuthVariables }>();
 parRoutes.use("*", requireAuth);
@@ -1322,6 +1324,78 @@ parRoutes.get("/:id/dosar", async (c) => {
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
 
+  // ── VM3-02: data for the "Fișa aprobărilor" cover page (generated live at download) ──
+  const sheetApprovalRows = await db
+    .select()
+    .from(parApprovals)
+    .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)))
+    .orderBy(asc(parApprovals.step));
+  const sheetUserIds = [
+    ...new Set(
+      [par.requestedByUserId, ...sheetApprovalRows.map((a) => a.approverUserId)].filter(
+        (v): v is string => !!v
+      )
+    ),
+  ];
+  const sheetUserRows = sheetUserIds.length
+    ? await db
+        .select({ id: users.id, name: users.name })
+        .from(users)
+        .where(and(eq(users.tenantId, tenantId), inArray(users.id, sheetUserIds)))
+    : [];
+  const sheetUserName = (id: string | null) =>
+    (id && sheetUserRows.find((u) => u.id === id)?.name) || null;
+  const [sheetProj] = par.projectId
+    ? await db
+        .select({ name: parProjects.name })
+        .from(parProjects)
+        .where(and(eq(parProjects.tenantId, tenantId), eq(parProjects.id, par.projectId)))
+    : [];
+  const sheetEvId = (par as { eventId?: string | null }).eventId ?? null;
+  const [sheetEvt] = sheetEvId
+    ? await db
+        .select({ name: parEvents.name })
+        .from(parEvents)
+        .where(and(eq(parEvents.tenantId, tenantId), eq(parEvents.id, sheetEvId)))
+    : [];
+  const [sheetBc] = par.budgetCodeId
+    ? await db
+        .select({ code: parBudgetCodes.code, name: parBudgetCodes.name })
+        .from(parBudgetCodes)
+        .where(and(eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.id, par.budgetCodeId)))
+    : [];
+
+  const sheetLines = buildApprovalSheetLines(
+    {
+      requestNo: par.requestNo,
+      dateOfRequest: par.dateOfRequest,
+      status: par.status,
+      requestedByName: sheetUserName(par.requestedByUserId),
+      payeeName: par.payeeName,
+      payeeIdnp: par.payeeIdnp,
+      payeeIban: par.payeeIban,
+      payeeBank: par.payeeBank,
+      currency: par.currency,
+      totalEstimatedCents: par.totalEstimatedCents,
+      totalMdlCents: (par as { totalMdlCents?: number | null }).totalMdlCents ?? null,
+      projectName: sheetProj?.name ?? null,
+      eventName: sheetEvt?.name ?? null,
+      budgetCodeLabel: sheetBc ? [sheetBc.code, sheetBc.name].filter(Boolean).join(" — ") : null,
+      endUse: par.endUse,
+      approvedAt: par.approvedAt,
+      paidAt: par.paidAt,
+      approvals: sheetApprovalRows.map((a) => ({
+        step: a.step,
+        approverRoleLabel: a.approverRoleLabel,
+        name: a.signatureName ?? sheetUserName(a.approverUserId),
+        decision: a.decision,
+        decidedAt: a.decidedAt,
+        comment: a.comment,
+      })),
+    },
+    new Date()
+  );
+
   // ── Dynamic import of pdf-lib (NEVER top-level — exceljs outage lesson) ──
   const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
 
@@ -1329,11 +1403,14 @@ parRoutes.get("/:id/dosar", async (c) => {
   const helvetica = await dosar.embedFont(StandardFonts.Helvetica);
   const helveticaBold = await dosar.embedFont(StandardFonts.HelveticaBold);
 
-  // Helper: add a separator page with centred title
+  // Helper: add a separator page with centred title.
+  // Titles/subtitles go through winAnsiSafe(): the standard Helvetica font THROWS on ă/ș/ț
+  // (WinAnsi/cp1252), which used to 500 the whole dosar for kinds like "Factură" /
+  // "Ordin de plată" / "Act de recepție". Regression: par-finance-queue.routes.test.ts.
   const addSeparator = async (title: string, subtitle?: string) => {
     const page = dosar.addPage([595, 842]); // A4 portrait in points
     const { width, height } = page.getSize();
-    page.drawText(title, {
+    page.drawText(winAnsiSafe(title), {
       x: 50,
       y: height / 2 + 20,
       size: 18,
@@ -1342,7 +1419,7 @@ parRoutes.get("/:id/dosar", async (c) => {
       maxWidth: width - 100,
     });
     if (subtitle) {
-      page.drawText(subtitle, {
+      page.drawText(winAnsiSafe(subtitle), {
         x: 50,
         y: height / 2 - 10,
         size: 12,
@@ -1353,7 +1430,57 @@ parRoutes.get("/:id/dosar", async (c) => {
     }
   };
 
-  // If no attachments at all, add an informational page
+  // ── VM3-02: draw the approval sheet as the FIRST page(s) of the dosar ──
+  {
+    const pageWidth = 595;
+    const pageHeight = 842;
+    const marginX = 50;
+    const maxTextWidth = pageWidth - marginX * 2;
+    let page = dosar.addPage([pageWidth, pageHeight]);
+    let y = pageHeight - 60;
+
+    // Manual word-wrap: measure with the actual font so wrapped lines advance the cursor.
+    const wrapLine = (line: SheetLine): string[] => {
+      const size = line.size ?? 10;
+      const font = line.bold ? helveticaBold : helvetica;
+      const words = line.text.split(" ");
+      const rows: string[] = [];
+      let current = "";
+      for (const w of words) {
+        const candidate = current ? `${current} ${w}` : w;
+        if (font.widthOfTextAtSize(candidate, size) <= maxTextWidth) {
+          current = candidate;
+        } else {
+          if (current) rows.push(current);
+          current = w;
+        }
+      }
+      if (current) rows.push(current);
+      return rows.length > 0 ? rows : [""];
+    };
+
+    for (const line of sheetLines) {
+      const size = line.size ?? 10;
+      const font = line.bold ? helveticaBold : helvetica;
+      if (line.gapBefore) y -= line.gapBefore;
+      for (const row of wrapLine(line)) {
+        if (y < 60) {
+          page = dosar.addPage([pageWidth, pageHeight]);
+          y = pageHeight - 60;
+        }
+        page.drawText(row, {
+          x: marginX,
+          y,
+          size,
+          font,
+          color: rgb(0.1, 0.1, 0.1),
+        });
+        y -= size + 5;
+      }
+    }
+  }
+
+  // If no attachments at all, add an informational page (the approval sheet above still ships)
   if (attachments.length === 0) {
     await addSeparator(
       `Dosar PAR — ${par.requestNo ?? "fără număr"}`,

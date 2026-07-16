@@ -155,8 +155,10 @@ describe("PAR-106: Role-aware sections (T-PAR-106-3)", () => {
       total: 1,
     });
     render(<ParDashboard />);
-    await screen.findByText("În așteptarea aprobării mele");
-    expect(screen.getByText("În așteptarea aprobării mele")).toBeInTheDocument();
+    // Titlul secțiunii a fost redenumit în componentă („În proces de aprobare");
+    // asertarea veche („În așteptarea aprobării mele") rămăsese stale → test roșu pe main.
+    await screen.findByText("În proces de aprobare");
+    expect(screen.getByText("În proces de aprobare")).toBeInTheDocument();
   });
 
   it("T-PAR-106-3 [normal] shows finance section when in_finance PAR exists", async () => {
