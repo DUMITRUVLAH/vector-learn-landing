@@ -180,6 +180,17 @@
 
 ---
 
+### PARQA-025 — Role management UX (din cele 100 scenarii pe roluri)  🟠
+- **Scope:** (a) **user-picker** după nume/email la „Adaugă rol" în loc de UUID brut (`ParAdmin.tsx:1431`)
+  — reutilizează `GET /api/users/tenant-members`; (b) **search** în lista de membri; (c) **atribuire după
+  email** (rezolvă email→userId); (d) invitații/atribuiri **în masă** (CSV/multi); (e) **help/tooltip**
+  cu ce poate fiecare rol; (f) claritate **par_admin implicit vs explicit** (badge „din rol tenant") +
+  guard să nu revoci ultimul admin.
+- **Accept:** un admin adaugă rol unui coleg căutându-l după nume (fără să-i știe UUID-ul); nu poate
+  rămâne tenant fără niciun admin.
+- **Test blocant:** UI e2e — deschide „Adaugă rol", caută după nume, selectează, atribuie → membrul are rolul.
+- Efort: M. Sursă: `PAR-100-ROLES-SCENARIOS.md` §D (#22, #30, #31, #77, #78, #82, #83, #87).
+
 ## Teste de regresie de adăugat (indiferent de item — locked-in per §3.5.1quater)
 Extinde `scripts/e2e-par-100.mjs` (sau un `e2e-par-qa.mjs` nou) cu cele 7 scenarii-acțiune din
 `PAR-QA-FINDINGS.md` §„Lacune de testare" — fiecare INVOCĂ endpoint-ul/acțiunea și aserează
