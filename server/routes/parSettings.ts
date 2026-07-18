@@ -73,16 +73,18 @@ parSettingsRoutes.patch(
         .returning();
       return c.json(row);
     } else {
+      // PARQA-012: spread the whole body over the defaults so EVERY provided field persists on the
+      // first insert. The previous hand-listed value set silently dropped onboardingComplete,
+      // enforceThreeWayMatch (and any future field) — a new tenant's first PATCH that set only one
+      // of those created the row without it (insert-branch drift vs the update branch).
       const [row] = await db
         .insert(parSettings)
         .values({
           tenantId,
-          microPurchaseThresholdCents: body.microPurchaseThresholdCents ?? 1000000,
-          defaultCurrency: body.defaultCurrency ?? "MDL",
-          orgLegalName: body.orgLegalName ?? null,
-          orgLogoUrl: body.orgLogoUrl ?? null,
-          pdfHelpUrl: body.pdfHelpUrl ?? null,
-          requestNoPrefix: body.requestNoPrefix ?? "PAR",
+          microPurchaseThresholdCents: 1000000,
+          defaultCurrency: "MDL",
+          requestNoPrefix: "PAR",
+          ...body,
         })
         .returning();
       return c.json(row, 201);
