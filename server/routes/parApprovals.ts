@@ -41,6 +41,7 @@ import {
 } from "../lib/par/projectApprovers";
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { getActiveDelegators } from "../lib/par/delegations";
+import { blocksOnApprovalLimit } from "../lib/par/approvalLimit";
 import {
   notifyStepAdvanced,
   notifyFullyApprovedToFinance,
@@ -209,6 +210,41 @@ async function approveParStep(
         ok: false, status: 409,
         error: "integrity_violation: PAR body hash mismatch — body was modified after submit",
         extra: { detail: integrityCheck.detail },
+      };
+    }
+  }
+
+  // PARQA-008: enforce the approver's DOA ceiling (par_members.approval_limit_cents). A role-based
+  // approver whose personal limit is below the PAR's MDL-equivalent total may not be the FINAL
+  // signature — they cannot single-handedly authorize an amount above their ceiling; it must
+  // escalate to a higher-authority step. Intermediate steps are fine (a higher approver follows).
+  // par_admin (explicit, or an implicit tenant admin/manager) is the escalation authority and is
+  // never limited. Uses totalMdlCents (the DOA/limit currency) with a fallback for MDL PARs.
+  const isFinalApproval = !approvalSteps.find(
+    (s) => s.step > activeStep.step && s.decision === "pending" && s.locked === true
+  );
+  const isParAdmin = roles.includes("par_admin");
+  if (isFinalApproval && !isParAdmin) {
+    const [approverRow] = await db
+      .select({ limit: parMembers.approvalLimitCents })
+      .from(parMembers)
+      .where(
+        and(
+          eq(parMembers.tenantId, tenantId),
+          eq(parMembers.userId, userId),
+          eq(parMembers.role, "approver")
+        )
+      );
+    const limitCents = approverRow?.limit ?? null;
+    const amountMdlCents = par.totalMdlCents ?? par.totalEstimatedCents;
+    if (blocksOnApprovalLimit({ isFinalApproval, isParAdmin, approverLimitCents: limitCents, amountMdlCents })) {
+      await writeAudit({
+        tenantId, parId, actorUserId: userId, event: "approval_limit_exceeded",
+        detail: `Final approval blocked: PAR total ${amountMdlCents} MDL cents exceeds approver limit ${limitCents} cents.`,
+      });
+      return {
+        ok: false, status: 403, error: "over_approval_limit",
+        extra: { limit_cents: limitCents, amount_mdl_cents: amountMdlCents },
       };
     }
   }
