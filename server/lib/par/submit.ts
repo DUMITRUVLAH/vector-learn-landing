@@ -231,6 +231,8 @@ export async function submitPAR(params: {
       parId,
       step: step.step,
       approverUserId: step.approverUserId ?? null,
+      // PARQA-007: persist the DOA role so a role-specific step is restricted to that role at approve time.
+      approverParRole: step.approverParRole ?? null,
       approverRoleLabel: step.approverRoleLabel,
       decision: "pending",
       locked: i > 0, // step 1 (i=0) is active; steps 2+ (i>0) are locked

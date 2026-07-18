@@ -939,6 +939,13 @@
       "when": 1751600001000,
       "tag": "0134_par_payment_order_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1751600002000,
+      "tag": "0135_par_approvals_approver_role",
+      "breakpoints": true
     }
   ]
 }

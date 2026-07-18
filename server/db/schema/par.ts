@@ -420,6 +420,9 @@ export const parApprovals = pgTable(
     approverUserId: uuid("approver_user_id").references(() => users.id, { onDelete: "set null" }),
     /** e.g. "DOA Holder / Supervisor", "Executive Director" */
     approverRoleLabel: varchar("approver_role_label", { length: 200 }),
+    /** PARQA-007: the DOA par_role required to decide this step (e.g. "finance"). Null = any approver.
+     * Carried from the DOA matrix at submit so a role-specific step is actually restricted to that role. */
+    approverParRole: varchar("approver_par_role", { length: 50 }),
     decision: parDecisionEnum("decision").notNull().default("pending"),
     /**
      * PAR-107/PAR-109: true = step cannot be decided yet (prior step not approved).
