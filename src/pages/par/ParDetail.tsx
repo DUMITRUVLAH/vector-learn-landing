@@ -53,6 +53,7 @@ import {
   submitPar,
   reapproveOverage,
   duplicatePar,
+  reopenPar,
   getPurchaseOrder,
   issuePurchaseOrder,
   getParMe,
@@ -429,6 +430,23 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
         >
           {busy === "submit" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCw className="h-4 w-4" aria-hidden />}
           Re-trimite
+        </button>
+      );
+    }
+    // PARQA-011: a rejected PAR is terminal for approvers — but the author can reopen it into an
+    // editable draft (data preserved) to fix what was flagged and resubmit.
+    if (status === "rejected") {
+      actions.push(
+        <button
+          key="reopen"
+          type="button"
+          disabled={!!busy}
+          onClick={() => do_("reopen", () => reopenPar(par.id))}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px] disabled:opacity-60"
+          aria-label="Reia cererea respinsă ca ciornă editabilă"
+        >
+          {busy === "reopen" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCw className="h-4 w-4" aria-hidden />}
+          Reia cererea
         </button>
       );
     }

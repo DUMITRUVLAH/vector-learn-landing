@@ -1268,6 +1268,55 @@ async function computeOverBudget(
   return { over: usedCents > allocatedCents, overByCents: usedCents - allocatedCents, allocatedCents, usedCents };
 }
 
+// ─── POST /api/par/:id/reopen — PARQA-011: recover a rejected PAR ─────────────
+// A rejected PAR is otherwise terminal (the reject handler in parApprovals.ts calls it that).
+// This gives the AUTHOR a recovery path: reopen the rejected request into an editable draft —
+// SAME request number, all header/lines/payee preserved — so they can fix what the approver
+// flagged and resubmit, instead of losing the request or hand-recreating it. The now-stale
+// approval chain is cleared (submitPAR rebuilds it fresh from the current DOA matrix); the
+// rejection itself stays recorded in par_audit for traceability.
+parRoutes.post("/:id/reopen", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+
+  // Only the author may reopen — same authority rule as submit/cancel.
+  if (par.requestedByUserId !== user.id) {
+    return c.json({ error: "forbidden: only the author can reopen this PAR" }, 403);
+  }
+  // Only a rejected PAR is reopenable; anything else is already live or editable.
+  if (par.status !== "rejected") {
+    return c.json(
+      { error: `conflict: only a rejected PAR can be reopened (status is '${par.status}')` },
+      409
+    );
+  }
+
+  // Clear the stale approval rows — a fresh chain is generated on the next submit.
+  await db
+    .delete(parApprovals)
+    .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)));
+
+  const [reopened] = await db
+    .update(parRequests)
+    .set({ status: "draft", bodyHash: null, submittedAt: null, approvedAt: null, updatedAt: new Date() })
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
+    .returning();
+
+  await writeAudit({
+    tenantId,
+    parId,
+    actorUserId: user.id,
+    event: "reopened",
+    detail: `PAR ${par.requestNo} reopened from 'rejected' → 'draft' for revision`,
+  });
+
+  return c.json({ ...reopened, chain_status: "reopened" });
+});
+
 // ─── GET /api/par/:id/dosar ─────────────────────────────────────────────────
 // VM1-12: Combined dosar PDF — PAR form pages + supporting attachments + payment order.
 // Uses pdf-lib via DYNAMIC import() only (never top-level — exceljs/PAR-port lesson).

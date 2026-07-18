@@ -210,6 +210,11 @@ export async function duplicatePar(id: string): Promise<{ par: ParRequest }> {
   return api<{ par: ParRequest }>(`/api/par/${id}/duplicate`, { method: "POST" });
 }
 
+/** PARQA-011: reopen a rejected PAR into an editable draft (author only). */
+export async function reopenPar(id: string): Promise<ParRequest & { chain_status?: string }> {
+  return api<ParRequest & { chain_status?: string }>(`/api/par/${id}/reopen`, { method: "POST" });
+}
+
 // VF-104: comments
 export interface ParComment {
   id: string;
@@ -578,7 +583,12 @@ export interface ParFinanceQueueItem extends ParRequest {
   attachmentsMeta?: ParAttachmentMeta[];
 }
 
-export async function getFinanceQueue(): Promise<{ items: ParFinanceQueueItem[]; total: number }> {
+export async function getFinanceQueue(): Promise<{
+  items: ParFinanceQueueItem[];
+  total: number;
+  /** PARQA-014: false = 3-way match control is OFF (finance pays without PO/receipt verification). */
+  threeWayMatchEnforced?: boolean;
+}> {
   return api("/api/par/finance");
 }
 
