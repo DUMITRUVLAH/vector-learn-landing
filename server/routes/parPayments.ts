@@ -157,10 +157,18 @@ parPaymentsRoutes.get("/finance", async (c) => {
   if (!canView) return c.json({ error: "forbidden: finance or par_admin role required" }, 403);
 
   const [settings] = await db
-    .select({ threshold: parSettings.microPurchaseThresholdCents, currency: parSettings.defaultCurrency })
+    .select({
+      threshold: parSettings.microPurchaseThresholdCents,
+      currency: parSettings.defaultCurrency,
+      enforceMatch: parSettings.enforceThreeWayMatch,
+    })
     .from(parSettings)
     .where(eq(parSettings.tenantId, tenantId));
   const threshold = settings?.threshold ?? 1000000;
+  // PARQA-014: surface whether the 3-way match control is active. When OFF (the default),
+  // finance is paying without PO/receipt/amount verification — the UI shows a clear warning
+  // so nobody assumes a control that isn't running. Default false = no behavior change.
+  const threeWayMatchEnforced = settings?.enforceMatch ?? false;
 
   // Only execute_payment PARs in the relevant statuses
   const queue = await db
@@ -263,7 +271,7 @@ parPaymentsRoutes.get("/finance", async (c) => {
     attachmentsMeta: attachmentsFor(p.id),
   }));
 
-  return c.json({ items, total: items.length });
+  return c.json({ items, total: items.length, threeWayMatchEnforced });
 });
 
 // ─── POST /api/par/:id/finance ────────────────────────────────────────────────
