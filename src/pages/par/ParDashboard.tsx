@@ -19,6 +19,7 @@ import {
   listPar,
   getParInbox,
   getParMe,
+  getParSettings,
   getBudgetCodesUsage,
   listEvents,
   listProjects,
@@ -156,6 +157,13 @@ export function ParDashboard() {
       .then((r) => {
         const elevated = r.roles.includes("finance") || r.roles.includes("par_admin");
         setIsFinance(elevated);
+        if (r.roles.includes("par_admin")) {
+          // PARQA-013: a brand-new org lands on an empty dashboard. Send the admin to the onboarding
+          // wizard once — until they finish or "Sari peste" it (both set onboardingComplete=true).
+          getParSettings()
+            .then((s) => { if (!s.onboardingComplete) navigate("/business/par/onboarding"); })
+            .catch(() => { /* non-blocking */ });
+        }
         if (elevated) {
           getBudgetCodesUsage()
             .then((u) => {
