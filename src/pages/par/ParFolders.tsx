@@ -261,7 +261,9 @@ export function ParFolders() {
 
   /** Navigate to dashboard pre-filtered by projectId + statuses */
   const goToDashboard = (projectId: string | null, statuses?: string[]) => {
+    sessionStorage.setItem("par:returnTo", "/business/par/folders");
     const params = new URLSearchParams();
+    params.set("from", "folders");
     if (projectId) params.set("project_id", projectId);
     if (statuses && statuses.length === 1) params.set("status", statuses[0]);
     navigate(`/business/par${params.toString() ? `?${params.toString()}` : ""}`);
@@ -344,6 +346,16 @@ export function ParFolders() {
                       <Folder className="h-5 w-5 text-primary/60 flex-shrink-0" aria-hidden />
                     )}
                     <span className="flex-1 font-medium text-foreground">{folder.projectName}</span>
+                    <span className="hidden md:flex items-center gap-1.5">
+                      {folder.buckets.map((bucket) => (
+                        <span key={bucket.status} className={cn(
+                          "rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums",
+                          bucket.status === "pending_approval" && "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                          bucket.status === "approved_in_finance" && "bg-blue-500/10 text-blue-700 dark:text-blue-300",
+                          bucket.status === "paid" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                        )}>{bucket.label}: {bucket.count}</span>
+                      ))}
+                    </span>
                     <span className="text-xs text-muted-foreground tabular-nums hidden sm:inline">
                       {formatMDL(folder.totalMdlCents)}
                     </span>

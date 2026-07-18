@@ -6,7 +6,7 @@ import { eq, and, gt, isNull } from "drizzle-orm";
 import { randomBytes, createHash } from "node:crypto";
 import { db } from "../db/client";
 import { tenants, users, sessions, passwordResetTokens, twoFactorSettings, finMembers } from "../db/schema";
-import { parInvites, parMembers } from "../db/schema/par";
+import { parInvites, parMembers, parPayerMembers, parPayerModules, parPayers } from "../db/schema/par";
 import { hashPassword, verifyPassword } from "../auth/password";
 import { createSession, revokeSession, SESSION_COOKIE } from "../auth/session";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -22,6 +22,7 @@ import {
   fetchUserInfo,
 } from "../auth/google";
 import { hashInviteToken } from "../lib/par/invites";
+import { grantInvitePayerScope } from "../lib/par/inviteScope";
 import { encrypt, decrypt } from "../lib/crypto";
 
 const signupSchema = z.object({
@@ -581,6 +582,7 @@ authRoutes.post("/accept-invite", zValidator("json", acceptInviteSchema), async 
           role: invite.parRole,
         });
       }
+      await grantInvitePayerScope(tx, invite, targetUser.id);
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "";
@@ -832,6 +834,7 @@ authRoutes.get("/google/callback", async (c) => {
               role: resolvedInvite!.parRole,
             });
           }
+          await grantInvitePayerScope(tx, resolvedInvite!, user!.id);
         });
       } catch (err: unknown) {
         // Silently ignore a race on the token — user is still authenticated.
@@ -936,6 +939,7 @@ authRoutes.get("/google/callback", async (c) => {
             userId: created.id,
             role: resolvedInvite!.parRole,
           });
+          await grantInvitePayerScope(tx, resolvedInvite!, created.id);
         });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "";
@@ -1027,6 +1031,16 @@ authRoutes.post("/google/create-workspace", zValidator("json", createWorkspaceSc
       avatarUrl: pending.picture,
     })
     .returning();
+  const [payer] = await db.insert(parPayers).values({
+    tenantId: tenant.id,
+    name: baseName,
+    legalName: baseName,
+  }).returning();
+  await db.insert(parPayerModules).values([
+    { tenantId: tenant.id, payerId: payer.id, moduleKey: "findesk", enabled: true, updatedByUserId: created.id },
+    { tenantId: tenant.id, payerId: payer.id, moduleKey: "par", enabled: false, updatedByUserId: created.id },
+  ]);
+  await db.insert(parPayerMembers).values({ tenantId: tenant.id, payerId: payer.id, userId: created.id });
   // Workspace creator is the FinDesk owner too (else GET /api/fin/members/me 403s → "Acces
   // restricționat"). Best-effort: never fail workspace creation if the FinDesk table is absent.
   try {
@@ -1117,6 +1131,7 @@ authRoutes.post("/google/join", zValidator("json", joinWithInviteSchema), async 
       if (!member) {
         await tx.insert(parMembers).values({ tenantId: invite.tenantId, userId: joinedUser.id, role: invite.parRole });
       }
+      await grantInvitePayerScope(tx, invite, joinedUser.id);
     });
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "INVITE_ALREADY_CONSUMED") {

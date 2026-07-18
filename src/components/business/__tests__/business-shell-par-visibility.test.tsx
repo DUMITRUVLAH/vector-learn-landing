@@ -7,7 +7,7 @@
  * T-VM1-01-4 [normal]: 401 from /api/par/me → behaves as roles=[]
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { useParRoles } from "@/hooks/useParRoles";
 import { BusinessShell } from "@/components/business/BusinessShell";
 
@@ -101,12 +101,18 @@ describe("T-VM1-01-2 [blocant] PAR and other sections visible when roles present
     });
   });
 
-  it("ITPark section always visible regardless of PAR roles", async () => {
+  // ITPark is reached through the always-present, collapsible "FinDesk — Finanțe"
+  // section (nav item "Rezidenți ITPark") — there is no standalone ITPark section in
+  // the business shell (a dedicated ITPark section only appears on /business/fin/itpark
+  // routes). This asserts ITPark stays reachable regardless of PAR roles.
+  it("ITPark reachable via the always-present FinDesk section regardless of PAR roles", async () => {
     mockUseParRoles.mockReturnValue({ status: "resolved", roles: [] });
     renderShell();
 
+    const finDeskToggle = await screen.findByText("FinDesk — Finanțe");
+    fireEvent.click(finDeskToggle); // expand the collapsible section
     await waitFor(() => {
-      expect(screen.getByText("ITPark — Rezidenți")).toBeInTheDocument();
+      expect(screen.getByText("Rezidenți ITPark")).toBeInTheDocument();
     });
   });
 });

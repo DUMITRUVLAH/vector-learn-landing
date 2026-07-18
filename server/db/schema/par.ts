@@ -112,6 +112,88 @@ export const parDepartments = pgTable(
   })
 );
 
+/** A legal entity that pays for PARs. A tenant/workspace can contain several payers. */
+export const parPayers = pgTable(
+  "par_payers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 300 }).notNull(),
+    legalName: varchar("legal_name", { length: 300 }),
+    idno: varchar("idno", { length: 32 }),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ tenantIdx: index("par_payers_tenant_idx").on(t.tenantId) })
+);
+
+/** Internal platform operators; membership is provisioned directly, never self-assigned by clients. */
+export const platformAdmins = pgTable(
+  "platform_admins",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ userUniq: uniqueIndex("platform_admins_user_uniq").on(t.userId) })
+);
+
+/** Product entitlement for one legal organization/payer. */
+export const parPayerModules = pgTable(
+  "par_payer_modules",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    payerId: uuid("payer_id").notNull().references(() => parPayers.id, { onDelete: "cascade" }),
+    moduleKey: varchar("module_key", { length: 50 }).notNull(),
+    enabled: boolean("enabled").notNull().default(false),
+    updatedByUserId: uuid("updated_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    payerIdx: index("par_payer_modules_payer_idx").on(t.payerId),
+    uniq: uniqueIndex("par_payer_modules_payer_key_uniq").on(t.payerId, t.moduleKey),
+  })
+);
+
+/** Payer-level membership grants access to every current and future project of one legal entity. */
+export const parPayerMembers = pgTable(
+  "par_payer_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    payerId: uuid("payer_id").notNull().references(() => parPayers.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    payerIdx: index("par_payer_members_payer_idx").on(t.payerId),
+    userIdx: index("par_payer_members_user_idx").on(t.tenantId, t.userId),
+    uniq: uniqueIndex("par_payer_members_payer_user_uniq").on(t.payerId, t.userId),
+  })
+);
+
+/** Default PAR identity data, editable by a PAR admin and copied to every new request. */
+export const parMemberProfiles = pgTable(
+  "par_member_profiles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    departmentId: uuid("department_id").references(() => parDepartments.id, { onDelete: "set null" }),
+    jobTitle: varchar("job_title", { length: 300 }),
+    staffCode: varchar("staff_code", { length: 100 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_member_profiles_tenant_idx").on(t.tenantId),
+    userUniq: uniqueIndex("par_member_profiles_tenant_user_uniq").on(t.tenantId, t.userId),
+  })
+);
+
 /** Projects / Programs (section 6 — "Requested For / Deliver To") */
 export const parProjects = pgTable(
   "par_projects",
@@ -120,6 +202,7 @@ export const parProjects = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
+    payerId: uuid("payer_id").references(() => parPayers.id, { onDelete: "set null" }),
     name: varchar("name", { length: 200 }).notNull(),
     donor: varchar("donor", { length: 200 }),
     active: boolean("active").notNull().default(true),
@@ -128,6 +211,24 @@ export const parProjects = pgTable(
   },
   (t) => ({
     tenantIdx: index("par_projects_tenant_idx").on(t.tenantId),
+    payerIdx: index("par_projects_payer_idx").on(t.payerId),
+  })
+);
+
+/** Project membership controls what a non-admin PAR user can discover and work on. */
+export const parProjectMembers = pgTable(
+  "par_project_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").notNull().references(() => parProjects.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    projectIdx: index("par_project_members_project_idx").on(t.projectId),
+    userIdx: index("par_project_members_user_idx").on(t.tenantId, t.userId),
+    uniq: uniqueIndex("par_project_members_project_user_uniq").on(t.projectId, t.userId),
   })
 );
 
@@ -167,6 +268,8 @@ export const parBudgetCodes = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
+    payerId: uuid("payer_id").references(() => parPayers.id, { onDelete: "set null" }),
+    projectId: uuid("project_id").references(() => parProjects.id, { onDelete: "set null" }),
     code: varchar("code", { length: 50 }).notNull(),
     name: varchar("name", { length: 200 }).notNull(),
     active: boolean("active").notNull().default(true),
@@ -177,6 +280,8 @@ export const parBudgetCodes = pgTable(
   },
   (t) => ({
     tenantIdx: index("par_budget_codes_tenant_idx").on(t.tenantId),
+    payerIdx: index("par_budget_codes_payer_idx").on(t.payerId),
+    projectIdx: index("par_budget_codes_project_idx").on(t.projectId),
   })
 );
 
@@ -223,6 +328,14 @@ export const parVendors = pgTable(
     /** IBAN: Moldova format MD + 22 chars */
     iban: varchar("iban", { length: 34 }),
     bank: varchar("bank", { length: 300 }),
+    bicSwift: varchar("bic_swift", { length: 32 }),
+    bankAccount: varchar("bank_account", { length: 100 }),
+    bankAccountCurrency: varchar("bank_account_currency", { length: 3 }),
+    legalAddress: text("legal_address"),
+    contactName: varchar("contact_name", { length: 300 }),
+    contactPhone: varchar("contact_phone", { length: 100 }),
+    contactEmail: varchar("contact_email", { length: 255 }),
+    administratorName: varchar("administrator_name", { length: 300 }),
     notes: text("notes"),
     active: boolean("active").notNull().default(true),
     /** Vendor compliance — Feature 1 (contafirm.md registry) */
@@ -279,6 +392,10 @@ export const parDoaMatrix = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
+    payerId: uuid("payer_id").references(() => parPayers.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").references(() => parProjects.id, { onDelete: "cascade" }),
+    /** sequential = one active level at a time; parallel = every row at this step must approve. */
+    approvalMode: varchar("approval_mode", { length: 20 }).notNull().default("sequential"),
     /** null = applies to any charge_to */
     chargeTo: parChargeToEnum("charge_to"),
     /** null = applies to any department */
@@ -310,6 +427,7 @@ export const parRequests = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
+    payerId: uuid("payer_id").references(() => parPayers.id, { onDelete: "set null" }),
     /** Human-readable sequential ID per tenant, e.g. "PAR-2026-0001" */
     requestNo: varchar("request_no", { length: 50 }).notNull(),
     /** Section 1 */
@@ -320,6 +438,8 @@ export const parRequests = pgTable(
       .references(() => users.id, { onDelete: "restrict" }),
     /** Section 3 — job title snapshot at time of request */
     requestorTitle: varchar("requestor_title", { length: 300 }),
+    /** Staff/position code snapshot, populated from par_member_profiles. */
+    requestorCode: varchar("requestor_code", { length: 100 }),
     /** Section 4 */
     departmentId: uuid("department_id").references(() => parDepartments.id, { onDelete: "set null" }),
     /** Section 5 — optional delivery date */
@@ -372,6 +492,7 @@ export const parRequests = pgTable(
   },
   (t) => ({
     tenantIdx: index("par_requests_tenant_idx").on(t.tenantId),
+    payerIdx: index("par_requests_payer_idx").on(t.payerId),
     statusIdx: index("par_requests_status_idx").on(t.status),
     requestedByIdx: index("par_requests_requested_by_idx").on(t.requestedByUserId),
   })
@@ -461,6 +582,8 @@ export const parAttachments = pgTable(
     fileUrl: text("file_url").notNull(),
     fileName: varchar("file_name", { length: 500 }).notNull(),
     kind: parAttachmentKindEnum("kind").notNull().default("other"),
+    /** Latest non-blocking AI consistency analysis (JSON). */
+    analysis: text("analysis"),
     uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -564,6 +687,8 @@ export const parInvites = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     email: varchar("email", { length: 255 }).notNull(),
     parRole: parRoleEnum("par_role").notNull(),
+    /** JSON string[] of payer ids selected by the inviter; null keeps legacy all-payer behavior. */
+    payerScope: text("payer_scope"),
     /** sha256(token) — the plaintext token lives only in the invite URL. */
     tokenHash: varchar("token_hash", { length: 64 }).notNull(),
     invitedByUserId: uuid("invited_by_user_id").references(() => users.id, { onDelete: "set null" }),
@@ -753,6 +878,7 @@ export type ParProject = typeof parProjects.$inferSelect;
 export type ParVendor = typeof parVendors.$inferSelect;
 export type ParSettings = typeof parSettings.$inferSelect;
 export type ParMember = typeof parMembers.$inferSelect;
+export type ParPayerMember = typeof parPayerMembers.$inferSelect;
 export type ParAudit = typeof parAudit.$inferSelect;
 export type ParTemplate = typeof parTemplates.$inferSelect;
 export type NewParTemplate = typeof parTemplates.$inferInsert;

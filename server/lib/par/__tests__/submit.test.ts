@@ -8,7 +8,12 @@
  *   T-PAR-107-5 [blocant] body hash computed + saved
  *   T-PAR-107-6 [normal] submit incomplete PAR (no lines) → validation errors
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// This suite exercises only pure validation/hash helpers. Mock the DB module before importing
+// submit.ts so Vitest workers never boot an embedded Postgres instance for unit-only assertions.
+vi.mock("../../../db/client", () => ({ db: {} }));
+
 import { validateParForSubmit, type SubmitValidationError } from "../submit";
 import { computeParBodyHash, verifyParBodyHash, type ParBodyForHash } from "../integrity";
 import type { ParRequest, ParLineItem } from "../../db/schema/par";

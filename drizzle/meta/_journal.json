@@ -946,6 +946,13 @@
       "when": 1751600002000,
       "tag": "0135_par_approvals_approver_role",
       "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1784383200000,
+      "tag": "0136_par_payers_profiles_scope",
+      "breakpoints": true
     }
   ]
 }

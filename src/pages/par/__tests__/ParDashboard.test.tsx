@@ -25,13 +25,17 @@ vi.mock("@/components/app/AppShell", () => ({
   ),
 }));
 
-const makeRequest = (overrides: Partial<ParRequest & { above_micro_threshold: boolean }> = {}) => ({
+const makeRequest = (
+  overrides: Partial<ParRequest & { above_micro_threshold: boolean }> = {},
+): ParRequest & { above_micro_threshold: boolean } => ({
   id: `par-${Math.random().toString(36).slice(2)}`,
   tenantId: "tenant-1",
   requestNo: "PAR-2026-0001",
   dateOfRequest: new Date().toISOString(),
   requestedByUserId: "user-1",
+  payerId: null,
   requestorTitle: null,
+  requestorCode: null,
   departmentId: null,
   dateNeeded: null,
   projectId: null,
@@ -111,7 +115,7 @@ describe("PAR-106: Status filter (T-PAR-106-2)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(parApi, "listPar").mockImplementation(async (filters) => {
-      if (filters.status === "draft") {
+      if (filters?.status === "draft") {
         return {
           requests: [makeRequest({ status: "draft", requestNo: "PAR-2026-0001" })],
           total: 1,
@@ -190,9 +194,10 @@ describe("PAR-106: A11y (no hardcoded hex)", () => {
       resolve(process.cwd(), "src/pages/par/ParDashboard.tsx"),
       "utf-8"
     );
-    const inCode = (content.match(/className="[^"]*#[0-9A-Fa-f]{6}[^"]*"/g) ?? []).concat(
-      content.match(/style=\{[^}]*#[0-9A-Fa-f]{6}[^}]*\}/g) ?? []
-    );
+    const inCode = [
+      ...(content.match(/className="[^"]*#[0-9A-Fa-f]{6}[^"]*"/g) ?? []),
+      ...(content.match(/style=\{[^}]*#[0-9A-Fa-f]{6}[^}]*\}/g) ?? []),
+    ];
     expect(inCode.length).toBe(0);
   });
 

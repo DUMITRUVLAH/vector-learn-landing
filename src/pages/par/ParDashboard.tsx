@@ -94,6 +94,11 @@ export function ParDashboard() {
   const { navigate } = useRouter();
   const { t } = useT();
 
+  useEffect(() => {
+    const params = new URLSearchParams((window.location.hash.split("?")[1] ?? ""));
+    if (params.get("from") !== "folders") sessionStorage.removeItem("par:returnTo");
+  }, []);
+
   const [requests, setRequests] = useState<(ParRequest & { above_micro_threshold: boolean })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -490,8 +495,22 @@ export function ParDashboard() {
         {!loading && !error && (
           <div className="space-y-6">
             {/* My Requests */}
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Cererile mele">
+              <button type="button" role="tab" aria-selected={statusFilter === ""} onClick={() => setStatusFilter("")}
+                className={cn("rounded-full px-3 py-1.5 text-sm font-medium", statusFilter === "" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground")}>
+                Toate cererile
+              </button>
+              <button type="button" role="tab" aria-selected={statusFilter === "draft"} onClick={() => setStatusFilter("draft")}
+                className={cn("rounded-full px-3 py-1.5 text-sm font-medium", statusFilter === "draft" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground")}>
+                Ciorne
+              </button>
+              <button type="button" role="tab" aria-selected={statusFilter === "changes_requested"} onClick={() => setStatusFilter("changes_requested")}
+                className={cn("rounded-full px-3 py-1.5 text-sm font-medium", statusFilter === "changes_requested" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground")}>
+                Întoarse pentru modificări
+              </button>
+            </div>
             <Section
-              title="Cererile mele"
+              title={statusFilter === "draft" ? "Ciornele mele" : statusFilter === "changes_requested" ? "Cereri întoarse pentru modificări" : "Cererile mele"}
               count={myRequests.length}
               requests={myRequests}
               onRowClick={(id) => navigate(`/business/par/${id}`)}

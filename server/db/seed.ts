@@ -8,6 +8,12 @@ import {
   parProjects,
   parBudgetCodes,
   parDoaMatrix,
+  parPayers,
+  parPayerModules,
+  parPayerMembers,
+  parProjectMembers,
+  parMemberProfiles,
+  platformAdmins,
 } from "./schema/par";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
@@ -170,6 +176,19 @@ async function seed() {
       ])
       .returning();
 
+    const [parPayer] = await db.insert(parPayers).values({
+      tenantId: parTenant.id,
+      name: "ATIC",
+      legalName: "Asociația pentru Tehnologie și Internet din Moldova",
+    }).returning();
+    // Demo-only platform operator. Production platform administrators are provisioned
+    // explicitly in platform_admins and remain separate from every tenant's PAR roles.
+    await db.insert(platformAdmins).values({ userId: parAdmin.id });
+    await db.insert(parPayerModules).values([
+      { tenantId: parTenant.id, payerId: parPayer.id, moduleKey: "par", enabled: true, updatedByUserId: parAdmin.id },
+      { tenantId: parTenant.id, payerId: parPayer.id, moduleKey: "findesk", enabled: true, updatedByUserId: parAdmin.id },
+    ]);
+
     // PAR role assignments
     await db.insert(parMembers).values([
       { tenantId: parTenant.id, userId: parAdmin.id, role: "par_admin" },
@@ -191,7 +210,7 @@ async function seed() {
       .returning();
 
     // Departments
-    const [deptAtic] = await db
+    const [deptAtic, deptFinance, deptProcurement] = await db
       .insert(parDepartments)
       .values([
         { tenantId: parTenant.id, name: "ATIC" },
@@ -201,16 +220,31 @@ async function seed() {
       .returning();
 
     // Projects
-    await db.insert(parProjects).values([
-      { tenantId: parTenant.id, name: "Digital Safeguard", donor: "USAID" },
-      { tenantId: parTenant.id, name: "CyberSkills Moldova", donor: "EU Delegation" },
-    ]);
+    const projectRows = await db.insert(parProjects).values([
+      { tenantId: parTenant.id, payerId: parPayer.id, name: "Digital Safeguard", donor: "USAID" },
+      { tenantId: parTenant.id, payerId: parPayer.id, name: "CyberSkills Moldova", donor: "EU Delegation" },
+    ]).returning();
 
     // Budget codes
     await db.insert(parBudgetCodes).values([
-      { tenantId: parTenant.id, code: "M13", name: "Procurement — Monthly budget" },
-      { tenantId: parTenant.id, code: "DS-2026-OPS", name: "Digital Safeguard Operations 2026" },
-      { tenantId: parTenant.id, code: "DS-2026-PROG", name: "Digital Safeguard Program 2026" },
+      { tenantId: parTenant.id, payerId: parPayer.id, code: "M13", name: "Procurement — Monthly budget" },
+      { tenantId: parTenant.id, payerId: parPayer.id, projectId: projectRows[0].id, code: "DS-2026-OPS", name: "Digital Safeguard Operations 2026" },
+      { tenantId: parTenant.id, payerId: parPayer.id, projectId: projectRows[0].id, code: "DS-2026-PROG", name: "Digital Safeguard Program 2026" },
+    ]);
+
+    const payerWideUsers = [parAdmin, parApprover, parFinance];
+    await db.insert(parPayerMembers).values(payerWideUsers.map((user) => ({ tenantId: parTenant.id, payerId: parPayer.id, userId: user.id })));
+    await db.insert(parProjectMembers).values([
+      ...payerWideUsers.flatMap((user) => projectRows.map((project) => ({ tenantId: parTenant.id, projectId: project.id, userId: user.id }))),
+      // Acceptance fixture: the requestor has exactly one eligible project, so the create form
+      // must select it automatically and never expose CyberSkills Moldova.
+      { tenantId: parTenant.id, projectId: projectRows[0].id, userId: parRequestor.id },
+    ]);
+    await db.insert(parMemberProfiles).values([
+      { tenantId: parTenant.id, userId: parAdmin.id, departmentId: deptAtic.id, jobTitle: "Administrator", staffCode: "ADM-01" },
+      { tenantId: parTenant.id, userId: parApprover.id, departmentId: deptAtic.id, jobTitle: "Aprobator", staffCode: "APR-01" },
+      { tenantId: parTenant.id, userId: parFinance.id, departmentId: deptFinance.id, jobTitle: "Finance", staffCode: "FIN-01" },
+      { tenantId: parTenant.id, userId: parRequestor.id, departmentId: deptProcurement.id, jobTitle: "Solicitant", staffCode: "REQ-01" },
     ]);
 
     // Default DOA matrix (CORE §3):

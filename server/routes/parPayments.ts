@@ -35,6 +35,7 @@ import { notifyPaid } from "../services/par/notify";
 import { applyTenRule } from "../lib/par/payment";
 import { evaluateMatch } from "../lib/par/threeWayMatch";
 import { findVendorByIban, shouldAutoSaveVendor } from "../lib/par/vendorAutoSave";
+import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 
 export const parPaymentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parPaymentsRoutes.use("*", requireAuth);
@@ -171,7 +172,7 @@ parPaymentsRoutes.get("/finance", async (c) => {
   const threeWayMatchEnforced = settings?.enforceMatch ?? false;
 
   // Only execute_payment PARs in the relevant statuses
-  const queue = await db
+  const rawQueue = await db
     .select()
     .from(parRequests)
     .where(
@@ -181,6 +182,12 @@ parPaymentsRoutes.get("/finance", async (c) => {
         inArray(parRequests.status, ["approved", "in_finance", "reapproval_required"])
       )
     );
+  const [projectScope, payerScope] = await Promise.all([
+    accessibleProjectIds(user.id, tenantId, user.role), accessiblePayerIds(user.id, tenantId, user.role),
+  ]);
+  const queue = rawQueue.filter((par) => par.projectId
+    ? projectScope === null || projectScope.includes(par.projectId)
+    : !!par.payerId && (payerScope === null || payerScope.includes(par.payerId)));
 
   // Attach existing par_payments section-16 data
   const parIds = queue.map((p) => p.id);
@@ -298,6 +305,10 @@ parPaymentsRoutes.post(
       .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
     if (!par) return c.json({ error: "not_found" }, 404);
 
+    if (par.projectId ? !(await mayAccessProject(user.id, tenantId, par.projectId, user.role)) : !(await mayAccessPayer(user.id, tenantId, par.payerId, user.role))) {
+      return c.json({ error: "not_found" }, 404);
+    }
+
     if (par.purpose !== "execute_payment") {
       return c.json(
         { error: "conflict: only execute_payment PARs can enter finance queue" },
@@ -395,6 +406,10 @@ parPaymentsRoutes.post(
       .from(parRequests)
       .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
     if (!par) return c.json({ error: "not_found" }, 404);
+
+    if (par.projectId ? !(await mayAccessProject(user.id, tenantId, par.projectId, user.role)) : !(await mayAccessPayer(user.id, tenantId, par.payerId, user.role))) {
+      return c.json({ error: "not_found" }, 404);
+    }
 
     // Accept in_finance (normal path) OR reapproval_required after overage_reapproved=true
     if (!["in_finance", "reapproval_required"].includes(par.status)) {
@@ -574,10 +589,13 @@ parPaymentsRoutes.get("/:id/match", async (c) => {
   if (!UUID_RE.test(parId)) return c.json({ error: "not_found" }, 404);
 
   const [par] = await db
-    .select({ requestedByUserId: parRequests.requestedByUserId })
+    .select({ requestedByUserId: parRequests.requestedByUserId, projectId: parRequests.projectId, payerId: parRequests.payerId })
     .from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
   if (!par) return c.json({ error: "not_found" }, 404);
+  if (par.projectId ? !(await mayAccessProject(user.id, tenantId, par.projectId, user.role)) : !(await mayAccessPayer(user.id, tenantId, par.payerId, user.role))) {
+    return c.json({ error: "not_found" }, 404);
+  }
   const roles = await getUserPARRoles(user.id, tenantId);
   const canSee = par.requestedByUserId === user.id || roles.some((r) => ["approver", "finance", "par_admin"].includes(r));
   if (!canSee) return c.json({ error: "not_found" }, 404);

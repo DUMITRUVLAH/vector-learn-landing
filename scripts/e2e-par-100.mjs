@@ -232,6 +232,18 @@ async function main() {
   await T("POST projects requestor → 403 (admin-only create)", async () => {
     eq((await POST("requestor", "/api/par/projects", { name: "nope" })).status, 403, "status");
   });
+  // PAR modernization (migration 0136): the seeded requestor is scoped to the "Digital Safeguard"
+  // project only, but this suite has admin create fresh config ("Proiect E2E", "E2E-001") that the
+  // requestor then uses. Grant the requestor payer-wide scope on payer A so those admin-created
+  // projects/codes are in-scope (the new per-user payer/project scope otherwise correctly 403s an
+  // unassigned project — see scripts/e2e-par-scope.mjs for the isolation coverage).
+  await T("setup: grant requestor payer-wide scope on payer A (to use admin-created config)", async () => {
+    const payerA = (await GET("admin", "/api/par/payers")).json.payers.find((p) => p.name === "ATIC");
+    assert(payerA, "payer A present");
+    const requestorMember = (await GET("admin", "/api/par/members")).json.members.find((m) => m.userEmail === USERS.requestor);
+    assert(requestorMember, "requestor member found");
+    eq((await PUT("admin", `/api/par/profiles/${requestorMember.userId}/payers`, { payer_ids: [payerA.id] })).status, 200, "grant payer-wide scope");
+  });
 
   // ═══ BLOC 4 — Events VM1-04 (27–32) ═══
   await T("POST events admin (under project) → 201", async () => {
@@ -249,8 +261,11 @@ async function main() {
   await T("PUT events/:id admin (rename) → 200", async () => {
     eq((await PUT("admin", `/api/par/events/${eventId}`, { name: "Eveniment E2E (redenumit)" })).status, 200, "status");
   });
-  await T("POST events requestor → 403", async () => {
-    eq((await POST("requestor", "/api/par/events", { name: "x", project_id: projectId })).status, 403, "status");
+  await T("POST events requestor (scoped to the project) → 201 (MOD-06 creare directă)", async () => {
+    // The requestor now has payer-wide scope on payer A, so this project is in-scope. Event creation
+    // is a requestor feature (parEvents POST allows the requestor role, gated by project scope).
+    const r = await POST("requestor", "/api/par/events", { name: "Eveniment Requestor", project_id: projectId });
+    assert(r.status === 201 || r.status === 200, `status ${r.status}`);
   });
   await T("GET reports/by-event approver → 200", async () => {
     eq((await GET("approver", "/api/par/reports/by-event")).status, 200, "status");
@@ -611,7 +626,9 @@ async function main() {
 
   // ═══ BLOC 11 — Invites SHELL-503 (90–92) ═══
   await T("POST invites admin → 201 inviteUrl + token", async () => {
-    const r = await POST("admin", "/api/par/invites", { email: "newuser+e2e@example.com", par_role: "requestor" });
+    // MOD-14: invites now carry a required payer scope (payer_ids) applied on accept.
+    const payerA = (await GET("admin", "/api/par/payers")).json.payers.find((p) => p.name === "ATIC");
+    const r = await POST("admin", "/api/par/invites", { email: "newuser+e2e@example.com", par_role: "requestor", payer_ids: [payerA.id] });
     assert(r.status === 201 || r.status === 200, `status ${r.status}`);
     inviteId = r.json.id;
     const url = r.json.inviteUrl ?? "";

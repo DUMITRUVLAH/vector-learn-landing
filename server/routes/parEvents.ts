@@ -2,7 +2,7 @@
  * VM1-04: PAR Events — sub-entities of projects (Proiect → Eveniment → Cerere).
  *
  * GET    /api/par/events                — list events (tenant-scoped, optional ?project_id=)
- * POST   /api/par/events                — create event (par_admin only)
+ * POST   /api/par/events                — create event (PAR role + project access)
  * PUT    /api/par/events/:id            — update event (par_admin only)
  * DELETE /api/par/events/:id            — deactivate event (par_admin only, soft-delete via active=false)
  *
@@ -10,13 +10,15 @@
  */
 import { Hono } from "hono";
 import { z } from "zod";
-import { and, eq, asc } from "drizzle-orm";
+import { and, eq, asc, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { parEvents, parProjects } from "../db/schema/par";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
+import { accessibleProjectIds, mayAccessProject } from "../lib/par/projectScope";
+import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
 
 export const parEventsRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -49,6 +51,15 @@ parEventsRoutes.get("/", async (c) => {
   const conditions = [eq(parEvents.tenantId, tenantId)];
   if (!includeInactive) conditions.push(eq(parEvents.active, true));
   if (projectId) conditions.push(eq(parEvents.projectId, projectId));
+  const user = c.get("user");
+  const entitledPayers = await enabledPayerIds(tenantId, "par");
+  if (!entitledPayers.length) return c.json({ events: [] });
+  conditions.push(inArray(parProjects.payerId, entitledPayers));
+  const scope = await accessibleProjectIds(user.id, tenantId, user.role);
+  if (scope !== null) {
+    if (!scope.length) return c.json({ events: [] });
+    conditions.push(inArray(parEvents.projectId, scope));
+  }
 
   const rows = await db
     .select({
@@ -77,10 +88,19 @@ parEventsRoutes.get("/", async (c) => {
 
 // ─── POST /api/par/events ─────────────────────────────────────────────────────
 
-parEventsRoutes.post("/", requirePARRole("par_admin"), async (c) => {
+parEventsRoutes.post("/", requirePARRole("requestor", "approver", "finance", "par_admin"), async (c) => {
   const currentUser = c.get("user");
   const tenantId = currentUser.tenantId;
   const body = createSchema.parse(await c.req.json());
+  if (!(await mayAccessProject(currentUser.id, tenantId, body.project_id, currentUser.role))) {
+    return c.json({ error: "forbidden_project" }, 403);
+  }
+  if (body.project_id) {
+    const [project] = await db.select({ id: parProjects.id }).from(parProjects).where(and(
+      eq(parProjects.id, body.project_id), eq(parProjects.tenantId, tenantId), eq(parProjects.active, true),
+    ));
+    if (!project) return c.json({ error: "project_not_found" }, 404);
+  }
 
   const [created] = await db
     .insert(parEvents)
@@ -101,9 +121,28 @@ parEventsRoutes.post("/", requirePARRole("par_admin"), async (c) => {
 // ─── PUT /api/par/events/:id ──────────────────────────────────────────────────
 
 parEventsRoutes.put("/:id", requirePARRole("par_admin"), async (c) => {
-  const tenantId = c.get("user").tenantId;
+  const user = c.get("user");
+  const tenantId = user.tenantId;
   const id = c.req.param("id");
   const body = updateSchema.parse(await c.req.json());
+
+  // Scope (PARQA): a payer-scoped par_admin may only touch events in their project scope, and a
+  // reassigned project must exist in the tenant AND be in scope — POST enforces this, PUT must too.
+  const [existing] = await db.select({ projectId: parEvents.projectId }).from(parEvents)
+    .where(and(eq(parEvents.id, id), eq(parEvents.tenantId, tenantId)));
+  if (!existing) return c.json({ error: "Not found" }, 404);
+  if (!(await mayAccessProject(user.id, tenantId, existing.projectId, user.role))) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  if (body.project_id !== undefined && body.project_id !== null) {
+    const [project] = await db.select({ id: parProjects.id }).from(parProjects).where(and(
+      eq(parProjects.id, body.project_id), eq(parProjects.tenantId, tenantId), eq(parProjects.active, true),
+    ));
+    if (!project) return c.json({ error: "project_not_found" }, 404);
+    if (!(await mayAccessProject(user.id, tenantId, body.project_id, user.role))) {
+      return c.json({ error: "forbidden_project" }, 403);
+    }
+  }
 
   const updateData: Partial<typeof parEvents.$inferInsert> = { updatedAt: new Date() };
   if (body.name !== undefined) updateData.name = body.name;
@@ -125,8 +164,17 @@ parEventsRoutes.put("/:id", requirePARRole("par_admin"), async (c) => {
 // ─── DELETE /api/par/events/:id — soft-delete via active=false ───────────────
 
 parEventsRoutes.delete("/:id", requirePARRole("par_admin"), async (c) => {
-  const tenantId = c.get("user").tenantId;
+  const user = c.get("user");
+  const tenantId = user.tenantId;
   const id = c.req.param("id");
+
+  // Scope (PARQA): a payer-scoped par_admin may only deactivate events in their project scope.
+  const [existing] = await db.select({ projectId: parEvents.projectId }).from(parEvents)
+    .where(and(eq(parEvents.id, id), eq(parEvents.tenantId, tenantId)));
+  if (!existing) return c.json({ error: "Not found" }, 404);
+  if (!(await mayAccessProject(user.id, tenantId, existing.projectId, user.role))) {
+    return c.json({ error: "Not found" }, 404);
+  }
 
   const [updated] = await db
     .update(parEvents)

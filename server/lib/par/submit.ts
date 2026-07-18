@@ -159,6 +159,8 @@ export async function submitPAR(params: {
     totalCents: totalMdlCents,
     chargeTo: par.chargeTo ?? undefined,
     departmentId: par.departmentId ?? undefined,
+    payerId: par.payerId ?? undefined,
+    projectId: par.projectId ?? undefined,
   });
 
   // Self-approval prevention: if the requestor (actorUserId) appears in a step as the specific
@@ -235,7 +237,7 @@ export async function submitPAR(params: {
       approverParRole: step.approverParRole ?? null,
       approverRoleLabel: step.approverRoleLabel,
       decision: "pending",
-      locked: i > 0, // step 1 (i=0) is active; steps 2+ (i>0) are locked
+      locked: step.step > Math.min(...sanitizedChain.map((s) => s.step)),
     });
   }
 

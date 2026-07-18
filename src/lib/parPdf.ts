@@ -153,15 +153,19 @@ export function buildParHtml(par: ParDetail): string {
   const items: ParLineItem[] = par.line_items ?? [];
   const approvals: ParApproval[] = par.approvals ?? [];
 
-  // Prefer server-resolved display names; fall back to the raw *Id only when no name resolved.
-  const requestedBy = req.requestedByName || req.requestedByUserId || "";
-  const department = req.departmentName || req.departmentId || "";
-  const project = req.projectName || req.projectId || "";
+  // Presentation must never expose database UUIDs. The API resolves these names
+  // for a PAR detail; if a legacy/deleted relation cannot be resolved, leave the
+  // printed value blank rather than showing an implementation identifier.
+  const requestedBy = req.requestedByName || "";
+  const department = req.departmentName || "";
+  const project = req.projectName || "";
+  const requestorIdentity = req.requestorCode && req.requestorTitle?.includes(req.requestorCode)
+    ? req.requestorTitle
+    : [req.requestorTitle, req.requestorCode].filter(Boolean).join(" · ");
   // VM1-04: donors report per-event — show the event next to the project on the printed form.
   const projectWithEvent = [project, req.eventName].filter(Boolean).join(" · ");
   const budgetCode =
-    req.budgetCodeLabel ||
-    [req.budgetCodeId, req.budgetCodeNote].filter(Boolean).join(" — ") ||
+    req.budgetCodeLabel || req.budgetCodeNote ||
     "";
 
   // Requestor approval = step 0 (the submit signature, section 14)
@@ -189,8 +193,8 @@ export function buildParHtml(par: ParDetail): string {
 
   // Section 16 — payment data
   const pmt = par.payment;
-  const receivedBy = req.receivedByName || pmt?.receivedByUserId || "";
-  const assignedTo = req.assignedToName || pmt?.assignedToUserId || "";
+  const receivedBy = req.receivedByName || "";
+  const assignedTo = req.assignedToName || "";
 
   return `
 <div style="width:794px;box-sizing:border-box;background:#ffffff;font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;color:${INK};padding:28px 30px;">
@@ -210,7 +214,7 @@ export function buildParHtml(par: ParDetail): string {
         <td style="border:1px solid ${BORDER};padding:5px 10px;vertical-align:top;width:50%;">
           ${field(1, "Date of Request", fmtDate(req.dateOfRequest))}
           ${field(2, "Requested By", esc(requestedBy))}
-          ${field(3, "Title of Requestor/Code", esc(req.requestorTitle))}
+          ${field(3, "Title of Requestor/Code", esc(requestorIdentity))}
           ${field(4, "Department", esc(department))}
         </td>
         <td style="border:1px solid ${BORDER};padding:5px 10px;vertical-align:top;width:50%;">

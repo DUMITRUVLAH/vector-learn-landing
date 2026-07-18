@@ -16,10 +16,15 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { parRequests, parAttachments } from "../db/schema/par";
+import { parRequests, parAttachments, parAudit } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
+import { extractPdfText } from "../lib/ai/pdfText";
+import { extractParParties } from "../lib/ai/parExtractor";
+import { choosePayee } from "../lib/par/choosePayee";
+import { randomUUID } from "node:crypto";
+import { mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 
 export const parAttachmentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parAttachmentsRoutes.use("*", requireAuth);
@@ -82,6 +87,7 @@ const parAttachmentKindValues = [
   "quotation",
   "invoice",
   "par_pdf",
+  "payment_order",
   "other",
 ] as const;
 
@@ -97,6 +103,18 @@ const uploadAttachmentSchema = z.object({
 /** Editable statuses — same as in par.ts */
 const EDITABLE_STATUSES = ["draft", "changes_requested"] as const;
 
+async function hasScopedDossierAccess(
+  user: { id: string; tenantId: string; role: string },
+  par: { requestedByUserId: string; projectId: string | null; payerId: string | null },
+): Promise<boolean> {
+  if (par.requestedByUserId === user.id) return true;
+  const roles = await getUserPARRoles(user.id, user.tenantId, user.role);
+  if (!roles.some((role) => ["approver", "finance", "par_admin"].includes(role))) return false;
+  return par.projectId
+    ? mayAccessProject(user.id, user.tenantId, par.projectId, user.role)
+    : mayAccessPayer(user.id, user.tenantId, par.payerId, user.role);
+}
+
 // ─── GET /:parId/attachments ──────────────────────────────────────────────────
 
 parAttachmentsRoutes.get("/:parId/attachments", async (c) => {
@@ -106,20 +124,13 @@ parAttachmentsRoutes.get("/:parId/attachments", async (c) => {
 
   // Verify PAR exists and belongs to tenant
   const [par] = await db
-    .select({ id: parRequests.id, requestedByUserId: parRequests.requestedByUserId })
+    .select({ id: parRequests.id, requestedByUserId: parRequests.requestedByUserId, projectId: parRequests.projectId, payerId: parRequests.payerId })
     .from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
 
   if (!par) return c.json({ error: "not_found" }, 404);
 
-  const roles = await getUserPARRoles(user.id, tenantId);
-  const hasElevatedRole = roles.some((r) =>
-    ["approver", "finance", "par_admin"].includes(r)
-  );
-
-  if (!hasElevatedRole && par.requestedByUserId !== user.id) {
-    return c.json({ error: "not_found" }, 404);
-  }
+  if (!(await hasScopedDossierAccess(user, par))) return c.json({ error: "not_found" }, 404);
 
   const items = await db
     .select({
@@ -130,11 +141,104 @@ parAttachmentsRoutes.get("/:parId/attachments", async (c) => {
       createdAt: parAttachments.createdAt,
       // Note: fileUrl intentionally included for download
       fileUrl: parAttachments.fileUrl,
+      analysis: parAttachments.analysis,
     })
     .from(parAttachments)
     .where(and(eq(parAttachments.parId, parId), eq(parAttachments.tenantId, tenantId)));
 
   return c.json({ items });
+});
+
+type ReconcileCheck = { field: string; expected: string | number | null; found: string | number | null; matches: boolean | null };
+const norm = (value: string | null | undefined) => (value ?? "").replace(/\s/g, "").toLocaleLowerCase("ro");
+
+async function analyzeAttachmentAgainstPar(
+  par: typeof parRequests.$inferSelect,
+  attachment: typeof parAttachments.$inferSelect,
+  actorUserId: string,
+) {
+  const match = attachment.fileUrl.match(/^data:([^;]+);base64,(.*)$/s);
+  if (!match) throw new Error("analysis_unavailable");
+  const mime = match[1];
+  const buffer = Buffer.from(match[2], "base64");
+  let rawText = "";
+  let imageDataUrl: string | undefined;
+  if (mime === "application/pdf") rawText = await extractPdfText(buffer).catch(() => "");
+  else if (mime.startsWith("image/")) imageDataUrl = attachment.fileUrl;
+  else rawText = buffer.toString("utf8");
+  const extraction = await extractParParties(rawText, {
+    imageDataUrl, tenantId: par.tenantId, userId: actorUserId, prefillId: randomUUID(),
+  });
+  const choice = choosePayee(extraction, null);
+  const payee = choice.payee;
+  const checks: ReconcileCheck[] = [
+    { field: "sumă", expected: par.totalEstimatedCents, found: choice.amountCents, matches: choice.amountCents == null ? null : choice.amountCents === par.totalEstimatedCents },
+    { field: "valută", expected: par.currency, found: choice.currency, matches: !choice.currency ? null : choice.currency === par.currency },
+    { field: "beneficiar", expected: par.payeeName, found: payee?.name ?? null, matches: !payee?.name || !par.payeeName ? null : norm(payee.name) === norm(par.payeeName) },
+    { field: "IDNO/IDNP", expected: par.payeeIdnp, found: payee?.idno ?? null, matches: !payee?.idno || !par.payeeIdnp ? null : norm(payee.idno) === norm(par.payeeIdnp) },
+    { field: "IBAN", expected: par.payeeIban, found: payee?.iban ?? null, matches: !payee?.iban || !par.payeeIban ? null : norm(payee.iban) === norm(par.payeeIban) },
+    { field: "bancă", expected: par.payeeBank, found: payee?.bank ?? null, matches: !payee?.bank || !par.payeeBank ? null : norm(payee.bank) === norm(par.payeeBank) },
+  ];
+  const warnings = checks.filter((check) => check.matches === false).length;
+  const analysis = { status: warnings ? "warning" : "match", warnings, checks, analyzedAt: new Date().toISOString() };
+  await db.transaction(async (tx) => {
+    await tx.update(parAttachments).set({ analysis: JSON.stringify(analysis), updatedAt: new Date() })
+      .where(and(eq(parAttachments.id, attachment.id), eq(parAttachments.tenantId, par.tenantId)));
+    await tx.insert(parAudit).values({
+      tenantId: par.tenantId,
+      parId: par.id,
+      actorUserId,
+      event: warnings ? "document_reconciliation_warning" : "document_reconciliation_match",
+      detail: JSON.stringify({ attachmentId: attachment.id, fileName: attachment.fileName, warnings, checks }),
+    });
+  });
+  return analysis;
+}
+
+/** Analyze one uploaded document and compare its financial identity against the current PAR. */
+parAttachmentsRoutes.post("/:parId/attachments/:attId/reconcile", async (c) => {
+  const { parId, attId } = c.req.param();
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const [par] = await db.select().from(parRequests).where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+  if (!par) return c.json({ error: "not_found" }, 404);
+  if (!(await hasScopedDossierAccess(user, par))) return c.json({ error: "not_found" }, 404);
+  const [attachment] = await db.select().from(parAttachments).where(and(
+    eq(parAttachments.id, attId), eq(parAttachments.parId, parId), eq(parAttachments.tenantId, tenantId),
+  ));
+  if (!attachment) return c.json({ error: "not_found" }, 404);
+  try {
+    return c.json({ analysis: await analyzeAttachmentAgainstPar(par, attachment, user.id) });
+  } catch {
+    return c.json({ error: "analysis_unavailable" }, 422);
+  }
+});
+
+// Browser-safe inline preview. This avoids top-level data: navigation (blocked by Chrome) and keeps
+// authorization on the server. PDF and images render directly; office files keep their real name.
+parAttachmentsRoutes.get("/:parId/attachments/:attId/preview", async (c) => {
+  const { parId, attId } = c.req.param();
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const [par] = await db.select({ requestedByUserId: parRequests.requestedByUserId, projectId: parRequests.projectId, payerId: parRequests.payerId }).from(parRequests)
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+  if (!par) return c.json({ error: "not_found" }, 404);
+  if (!(await hasScopedDossierAccess(user, par))) return c.json({ error: "not_found" }, 404);
+
+  const [attachment] = await db.select().from(parAttachments).where(and(
+    eq(parAttachments.id, attId), eq(parAttachments.parId, parId), eq(parAttachments.tenantId, tenantId),
+  ));
+  if (!attachment) return c.json({ error: "not_found" }, 404);
+  if (/^https?:\/\//i.test(attachment.fileUrl)) return c.redirect(attachment.fileUrl);
+  const match = attachment.fileUrl.match(/^data:([^;]+);base64,(.*)$/s);
+  if (!match) return c.json({ error: "preview_unavailable" }, 422);
+  const bytes = Buffer.from(match[2], "base64");
+  const safeName = attachment.fileName.replace(/[\r\n"]/g, "_");
+  c.header("Content-Type", match[1]);
+  c.header("Content-Disposition", `inline; filename="${safeName}"`);
+  c.header("Cache-Control", "private, max-age=60");
+  c.header("X-Content-Type-Options", "nosniff");
+  return c.body(bytes);
 });
 
 // ─── POST /:parId/attachments ─────────────────────────────────────────────────
@@ -155,6 +259,7 @@ parAttachmentsRoutes.post(
       .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
 
     if (!par) return c.json({ error: "not_found" }, 404);
+    if (!(await hasScopedDossierAccess(user, par))) return c.json({ error: "not_found" }, 404);
 
     // Permission: the author may attach while the PAR is editable (draft/changes_requested). ADDITIONALLY,
     // finance/par_admin may attach the payment-confirmation doc to the dossier at the finance stage
@@ -225,7 +330,14 @@ parAttachmentsRoutes.post(
       })
       .returning();
 
-    return c.json(attachment, 201);
+    // Reconciliation is best-effort: an unavailable AI provider must never make a valid
+    // document upload fail. When it succeeds, the response already carries the comparison.
+    try {
+      const analysis = await analyzeAttachmentAgainstPar(par, attachment, user.id);
+      return c.json({ ...attachment, analysis: JSON.stringify(analysis) }, 201);
+    } catch {
+      return c.json(attachment, 201);
+    }
   }
 );
 
@@ -243,6 +355,7 @@ parAttachmentsRoutes.delete("/:parId/attachments/:attId", async (c) => {
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
 
   if (!par) return c.json({ error: "not_found" }, 404);
+  if (!(await hasScopedDossierAccess(user, par))) return c.json({ error: "not_found" }, 404);
 
   // Load the attachment first so we can check who uploaded it.
   const [att] = await db

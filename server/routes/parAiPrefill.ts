@@ -42,6 +42,9 @@ export interface ParPrefillCandidate {
   iban: string | null;
   ibanForeign?: boolean;
   bank: string | null;
+  bic?: string | null;
+  legalAddress?: string | null;
+  administratorName?: string | null;
   payeeType: "fizic" | "juridic" | null;
 }
 
@@ -54,6 +57,9 @@ export interface ParPrefillResult {
   payeeIban: ParPrefillField;
   /** bank name */
   payeeBank: ParPrefillField;
+  payeeBic: ParPrefillField;
+  payeeLegalAddress: ParPrefillField;
+  payeeAdministrator: ParPrefillField;
   /** persoană fizică vs juridică (auto-detected; UI can override) */
   payeeType: { value: "fizic" | "juridic" | null; confidence: number };
   /** payment total (cents) */
@@ -175,6 +181,9 @@ parAiPrefillRoutes.post(
       payeeIdno: field(payee?.idno ?? "", payee?.idno ? 0.85 : 0, choice.lowConfidence.idno),
       payeeIban: field(payee?.iban ?? "", payee?.iban ? 0.85 : 0, choice.lowConfidence.iban),
       payeeBank: field(payee?.bank ?? "", payee?.bank ? 0.8 : 0, choice.lowConfidence.bank),
+      payeeBic: field(payee?.bic ?? "", payee?.bic ? 0.8 : 0),
+      payeeLegalAddress: field(payee?.legalAddress ?? "", payee?.legalAddress ? 0.75 : 0),
+      payeeAdministrator: field(payee?.administratorName ?? "", payee?.administratorName ? 0.75 : 0),
       payeeType: {
         value: payee?.payeeType ?? null,
         confidence: payee?.payeeType ? 0.8 : 0,
@@ -195,6 +204,9 @@ parAiPrefillRoutes.post(
         iban: cand.iban,
         ...(cand.ibanForeign ? { ibanForeign: true } : {}),
         bank: cand.bank,
+        bic: cand.bic,
+        legalAddress: cand.legalAddress,
+        administratorName: cand.administratorName,
         payeeType: cand.payeeType,
       })),
       parties: extraction.parties.map((p) => ({

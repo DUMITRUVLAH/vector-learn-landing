@@ -34,7 +34,9 @@ export interface ParRequest {
   requestNo: string;
   dateOfRequest: string;
   requestedByUserId: string;
+  payerId: string | null;
   requestorTitle: string | null;
+  requestorCode: string | null;
   departmentId: string | null;
   dateNeeded: string | null;
   projectId: string | null;
@@ -91,6 +93,7 @@ export interface ParAttachment {
   uploadedBy: string | null;
   createdAt: string;
   fileUrl: string;
+  analysis?: string | null;
 }
 
 export interface ParDetail extends ParRequest {
@@ -101,6 +104,7 @@ export interface ParDetail extends ParRequest {
   /** Resolved display names for the PDF/print form (UUIDs stay in the *Id fields). */
   requestedByName?: string | null;
   departmentName?: string | null;
+  payerName?: string | null;
   projectName?: string | null;
   eventName?: string | null;
   budgetCodeLabel?: string | null;
@@ -129,6 +133,7 @@ export interface ParInboxItem extends ParRequest {
   my_step_label: string | null;
   projectName?: string | null;
   requestedByName?: string | null;
+  attachments?: Array<{ id: string; fileName: string; kind: string }>;
 }
 
 export interface ParPayment {
@@ -145,8 +150,9 @@ export interface ParPayment {
 
 // Config entities
 export interface ParDepartment { id: string; name: string; active: boolean; }
-export interface ParProject { id: string; name: string; donor: string | null; active: boolean; approverUserIds?: string[]; }
-export interface ParBudgetCode { id: string; code: string; name: string; active: boolean; }
+export interface ParPayer { id: string; name: string; legalName: string | null; idno: string | null; active: boolean; }
+export interface ParProject { id: string; payerId: string | null; name: string; donor: string | null; active: boolean; approverUserIds?: string[]; }
+export interface ParBudgetCode { id: string; payerId: string | null; projectId: string | null; code: string; name: string; active: boolean; allocatedCents?: number; }
 /** VM1-04: Event — sub-entity of a project */
 export interface ParEvent {
   id: string;
@@ -164,14 +170,21 @@ export interface ParEvent {
   createdAt: string;
   updatedAt: string;
 }
-export interface ParVendor { id: string; name: string; idnp: string | null; iban: string | null; bank: string | null; active: boolean; }
+export interface ParVendor {
+  id: string; name: string; idnp: string | null; iban: string | null; bank: string | null; active: boolean;
+  bicSwift?: string | null; bankAccount?: string | null; bankAccountCurrency?: string | null;
+  legalAddress?: string | null; contactName?: string | null; contactPhone?: string | null;
+  contactEmail?: string | null; administratorName?: string | null;
+}
 
 // ─── PAR CRUD ─────────────────────────────────────────────────────────────────
 
 export interface CreateParPayload {
   date_of_request?: string;
   requestor_title?: string | null;
+  requestor_code?: string | null;
   department_id?: string | null;
+  payer_id?: string | null;
   date_needed?: string | null;
   project_id?: string | null;
   /** VM1-04: optional event (sub-entity of project) */
@@ -513,6 +526,16 @@ export async function deleteAttachment(parId: string, attId: string): Promise<{ 
   return api(`/api/par/${parId}/attachments/${attId}`, { method: "DELETE" });
 }
 
+export interface ParAttachmentAnalysis {
+  status: "match" | "warning";
+  warnings: number;
+  analyzedAt: string;
+  checks: Array<{ field: string; expected: string | number | null; found: string | number | null; matches: boolean | null }>;
+}
+export async function reconcileAttachment(parId: string, attId: string): Promise<{ analysis: ParAttachmentAnalysis }> {
+  return api(`/api/par/${parId}/attachments/${attId}/reconcile`, { method: "POST" });
+}
+
 // ─── VM1-12: Dosar complet PDF ───────────────────────────────────────────────
 
 /**
@@ -654,8 +677,25 @@ export async function listDepartments(): Promise<{ items: ParDepartment[] }> {
     .then((r) => ({ items: (r as { items?: ParDepartment[]; departments?: ParDepartment[] }).items ?? (r as { items?: ParDepartment[]; departments?: ParDepartment[] }).departments ?? [] }));
 }
 
-export async function listProjects(): Promise<{ items: ParProject[] }> {
-  return api<{ items?: ParProject[]; projects?: ParProject[] }>("/api/par/projects")
+export async function listPayers(): Promise<{ items: ParPayer[] }> {
+  return api<{ payers: ParPayer[] }>("/api/par/payers").then((r) => ({ items: r.payers ?? [] }));
+}
+
+export async function createPayer(payload: { name: string; legal_name?: string | null; idno?: string | null }): Promise<ParPayer> {
+  return api("/api/par/payers", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function updatePayer(id: string, payload: Partial<{ name: string; legal_name: string | null; idno: string | null; active: boolean }>): Promise<ParPayer> {
+  return api(`/api/par/payers/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export async function deletePayer(id: string): Promise<ParPayer> {
+  return updatePayer(id, { active: false });
+}
+
+export async function listProjects(payerId?: string | null): Promise<{ items: ParProject[] }> {
+  const qs = payerId ? `?payer_id=${encodeURIComponent(payerId)}` : "";
+  return api<{ items?: ParProject[]; projects?: ParProject[] }>(`/api/par/projects${qs}`)
     .then((r) => ({ items: (r as { items?: ParProject[]; projects?: ParProject[] }).items ?? (r as { items?: ParProject[]; projects?: ParProject[] }).projects ?? [] }));
 }
 
@@ -667,14 +707,38 @@ export async function setProjectApprovers(projectId: string, userIds: string[]):
   });
 }
 
-export async function listBudgetCodes(): Promise<{ items: ParBudgetCode[] }> {
-  return api<{ items?: ParBudgetCode[]; budgetCodes?: ParBudgetCode[] }>("/api/par/budget-codes")
+export async function listBudgetCodes(filters: { payerId?: string | null; projectId?: string | null } = {}): Promise<{ items: ParBudgetCode[] }> {
+  const params = new URLSearchParams();
+  if (filters.payerId) params.set("payer_id", filters.payerId);
+  if (filters.projectId) params.set("project_id", filters.projectId);
+  const qs = params.toString() ? `?${params}` : "";
+  return api<{ items?: ParBudgetCode[]; budgetCodes?: ParBudgetCode[] }>(`/api/par/budget-codes${qs}`)
     .then((r) => ({ items: (r as { items?: ParBudgetCode[]; budgetCodes?: ParBudgetCode[] }).items ?? (r as { items?: ParBudgetCode[]; budgetCodes?: ParBudgetCode[] }).budgetCodes ?? [] }));
 }
 
-export async function listVendors(): Promise<{ items: ParVendor[] }> {
-  return api<{ items?: ParVendor[]; vendors?: ParVendor[] }>("/api/par/vendors")
+export async function listVendors(q?: string): Promise<{ items: ParVendor[] }> {
+  const qs = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+  return api<{ items?: ParVendor[]; vendors?: ParVendor[] }>(`/api/par/vendors${qs}`)
     .then((r) => ({ items: (r as { items?: ParVendor[]; vendors?: ParVendor[] }).items ?? (r as { items?: ParVendor[]; vendors?: ParVendor[] }).vendors ?? [] }));
+}
+
+export interface ParMemberProfile {
+  id: string; userId: string; departmentId: string | null; jobTitle: string | null; staffCode: string | null;
+}
+export async function getMyParProfile(): Promise<{ profile: ParMemberProfile | null; projectIds: string[]; payerIds: string[] }> {
+  return api("/api/par/profiles/me");
+}
+export async function getParMemberProfile(userId: string): Promise<{ profile: ParMemberProfile | null; projectIds: string[]; payerIds: string[] }> {
+  return api(`/api/par/profiles/${userId}`);
+}
+export async function updateParMemberProfile(userId: string, payload: { department_id?: string | null; job_title?: string | null; staff_code?: string | null }): Promise<ParMemberProfile> {
+  return api(`/api/par/profiles/${userId}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+export async function setParMemberProjects(userId: string, projectIds: string[]): Promise<{ ok: boolean; projectIds: string[] }> {
+  return api(`/api/par/profiles/${userId}/projects`, { method: "PUT", body: JSON.stringify({ project_ids: projectIds }) });
+}
+export async function setParMemberPayers(userId: string, payerIds: string[]): Promise<{ ok: boolean; payerIds: string[] }> {
+  return api(`/api/par/profiles/${userId}/payers`, { method: "PUT", body: JSON.stringify({ payer_ids: payerIds }) });
 }
 
 // ─── VM1-04: Events (sub-entity of project) ──────────────────────────────────
@@ -721,6 +785,9 @@ export interface ParDoaRow {
   tenantId: string;
   chargeTo: "operations" | "program" | "other" | null;
   departmentId: string | null;
+  payerId: string | null;
+  projectId: string | null;
+  approvalMode: "sequential" | "parallel";
   minAmountCents: number;
   maxAmountCents: number | null;
   step: number;
@@ -802,6 +869,7 @@ export interface ParInvite {
   id: string;
   email: string;
   parRole: ParRole;
+  payerIds: string[];
   expiresAt: string;
   createdAt: string;
 }
@@ -810,8 +878,8 @@ export async function listParInvites(): Promise<{ invites: ParInvite[] }> {
   return api("/api/par/invites");
 }
 
-export async function createParInvite(payload: { email: string; par_role: ParRole }): Promise<{
-  id: string; email: string; parRole: ParRole; inviteUrl: string; emailed: boolean;
+export async function createParInvite(payload: { email: string; par_role: ParRole; payer_ids: string[] }): Promise<{
+  id: string; email: string; parRole: ParRole; payerIds: string[]; inviteUrl: string; emailed: boolean;
 }> {
   return api("/api/par/invites", { method: "POST", body: JSON.stringify(payload) });
 }
@@ -844,30 +912,40 @@ export async function deleteDepartment(id: string): Promise<{ ok: boolean }> {
   return api(`/api/par/departments/${id}`, { method: "DELETE" });
 }
 
-export async function createProject(payload: { name: string; donor?: string | null }): Promise<ParProject> {
+export async function createProject(payload: { name: string; donor?: string | null; payer_id?: string | null }): Promise<ParProject> {
   return api("/api/par/projects", { method: "POST", body: JSON.stringify(payload) });
 }
-export async function updateProject(id: string, payload: Partial<{ name: string; donor?: string | null; active: boolean }>): Promise<ParProject> {
+export async function updateProject(id: string, payload: Partial<{ name: string; donor?: string | null; payer_id?: string | null; active: boolean }>): Promise<ParProject> {
   return api(`/api/par/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 export async function deleteProject(id: string): Promise<{ ok: boolean }> {
   return api(`/api/par/projects/${id}`, { method: "DELETE" });
 }
 
-export async function createBudgetCode(payload: { code: string; name: string }): Promise<ParBudgetCode> {
+export async function createBudgetCode(payload: { code: string; name: string; payer_id?: string | null; project_id?: string | null; allocatedCents?: number }): Promise<ParBudgetCode> {
   return api("/api/par/budget-codes", { method: "POST", body: JSON.stringify(payload) });
 }
-export async function updateBudgetCode(id: string, payload: Partial<{ code: string; name: string; active: boolean }>): Promise<ParBudgetCode> {
+export async function updateBudgetCode(id: string, payload: Partial<{ code: string; name: string; payer_id?: string | null; project_id?: string | null; allocatedCents: number; active: boolean }>): Promise<ParBudgetCode> {
   return api(`/api/par/budget-codes/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 export async function deleteBudgetCode(id: string): Promise<{ ok: boolean }> {
   return api(`/api/par/budget-codes/${id}`, { method: "DELETE" });
 }
 
-export async function createVendor(payload: { name: string; idnp?: string | null; iban?: string | null; bank?: string | null }): Promise<ParVendor> {
+export async function createVendor(payload: {
+  name: string; idnp?: string | null; iban?: string | null; bank?: string | null;
+  bic_swift?: string | null; bank_account?: string | null; bank_account_currency?: string | null;
+  legal_address?: string | null; contact_name?: string | null; contact_phone?: string | null;
+  contact_email?: string | null; administrator_name?: string | null;
+}): Promise<ParVendor> {
   return api("/api/par/vendors", { method: "POST", body: JSON.stringify(payload) });
 }
-export async function updateVendor(id: string, payload: Partial<{ name: string; idnp?: string | null; iban?: string | null; bank?: string | null; active: boolean }>): Promise<ParVendor> {
+export async function updateVendor(id: string, payload: Partial<{
+  name: string; idnp?: string | null; iban?: string | null; bank?: string | null; active: boolean;
+  bic_swift?: string | null; bank_account?: string | null; bank_account_currency?: string | null;
+  legal_address?: string | null; contact_name?: string | null; contact_phone?: string | null;
+  contact_email?: string | null; administrator_name?: string | null;
+}>): Promise<ParVendor> {
   return api(`/api/par/vendors/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 export async function deleteVendor(id: string): Promise<{ ok: boolean }> {
@@ -886,6 +964,10 @@ export interface ParSpendByItem {
   id: string | null;
   totalCents: number;
   count: number;
+  allocatedCents?: number;
+  committedCents?: number;
+  paidCents?: number;
+  availableCents?: number;
 }
 
 export interface ParAgingItem {
@@ -948,12 +1030,20 @@ export interface ParAuditEntry {
   actorName: string | null;
   parId: string;
   requestNo: string | null;
+  payerId?: string | null; payerName?: string | null;
+  projectId?: string | null; projectName?: string | null;
+  eventId?: string | null; eventName?: string | null;
+  parStatus?: ParStatus | null;
 }
 
 export interface ParAuditFilters {
   par_id?: string;
   actor_user_id?: string;
   event?: string;
+  payer_id?: string;
+  project_id?: string;
+  event_id?: string;
+  status?: string;
   date_from?: string;
   date_to?: string;
   page?: number;
@@ -970,6 +1060,10 @@ export async function getParAudit(filters: ParAuditFilters = {}): Promise<{
   if (filters.par_id) params.set("par_id", filters.par_id);
   if (filters.actor_user_id) params.set("actor_user_id", filters.actor_user_id);
   if (filters.event) params.set("event", filters.event);
+  if (filters.payer_id) params.set("payer_id", filters.payer_id);
+  if (filters.project_id) params.set("project_id", filters.project_id);
+  if (filters.event_id) params.set("event_id", filters.event_id);
+  if (filters.status) params.set("status", filters.status);
   if (filters.date_from) params.set("date_from", filters.date_from);
   if (filters.date_to) params.set("date_to", filters.date_to);
   if (filters.page) params.set("page", String(filters.page));
@@ -1006,6 +1100,14 @@ export async function getParReportByProject(filters?: ParReportFilters): Promise
   if (filters?.period_to) params.set("to", filters.period_to);
   const qs = params.toString();
   return api(`/api/par/reports/by-project${qs ? `?${qs}` : ""}`);
+}
+
+export async function getParReportByPayer(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
+  const params = new URLSearchParams();
+  if (filters?.period_from) params.set("from", filters.period_from);
+  if (filters?.period_to) params.set("to", filters.period_to);
+  const qs = params.toString();
+  return api(`/api/par/reports/by-payer${qs ? `?${qs}` : ""}`);
 }
 
 /** PARQA-019: spend per payee/beneficiary */
@@ -1288,6 +1390,7 @@ export interface ParConfigImportRowError {
 }
 
 export interface ParConfigImportResult {
+  payers: { created: number; updated: number; errors: ParConfigImportRowError[] };
   projects: { created: number; updated: number; errors: ParConfigImportRowError[] };
   departments: { created: number; updated: number; errors: ParConfigImportRowError[] };
   budgetCodes: { created: number; updated: number; errors: ParConfigImportRowError[] };
@@ -1334,6 +1437,9 @@ export interface ParPrefillCandidate {
   /** true if a non-MD but ISO-13616-valid IBAN → UI shows "verificați (IBAN non-MD)" */
   ibanForeign?: boolean;
   bank: string | null;
+  bic?: string | null;
+  legalAddress?: string | null;
+  administratorName?: string | null;
   payeeType: "fizic" | "juridic" | null;
 }
 
@@ -1347,6 +1453,9 @@ export interface ParPrefillResult {
   endUse: ParPrefillField;
   /** Feature 3 (PAR-F3): bank name extracted separately from beneficiary */
   payeeBank: ParPrefillField;
+  payeeBic: ParPrefillField;
+  payeeLegalAddress: ParPrefillField;
+  payeeAdministrator: ParPrefillField;
   /** persoană fizică vs juridică (auto-detected; UI can override) */
   payeeType: { value: "fizic" | "juridic" | null; confidence: number };
   documentClass: {

@@ -63,6 +63,8 @@ import { parMeRoutes } from "./routes/parMe";
 // VM1-13: AI prefill for PAR form fields
 import { parAiPrefillRoutes } from "./routes/parAiPrefill";
 import { parMembersRoutes } from "./routes/parMembers";
+import { parPayersRoutes } from "./routes/parPayers";
+import { parProfilesRoutes } from "./routes/parProfiles";
 import { parDoaRoutes } from "./routes/parDoa";
 import { parBudgetCodesRoutes } from "./routes/parBudgetCodes";
 import { parDepartmentsRoutes } from "./routes/parDepartments";
@@ -86,6 +88,9 @@ import { parReceiptsRoutes } from "./routes/parReceipts";
 
 // VM1-02: PAR config import (projects/departments/budget codes from Excel)
 import { parConfigImportRoutes } from "./routes/parConfigImport";
+import { platformAdminRoutes } from "./routes/platformAdmin";
+import { requireAuth } from "./middleware/requireAuth";
+import { requireModuleEntitlement } from "./middleware/requireModuleEntitlement";
 
 // STMT module (STMT-001..004): Statement upload → review → e-Factura → history
 import { finStatementRoutes } from "./routes/finStatement";
@@ -176,25 +181,33 @@ app.route("/api/fin/ai-audit", finAiAuditRoutes);
 app.route("/api/fin/gdpr", finGdprRoutes);
 app.route("/api/fin/data-settings", finDataSettingsRoutes);
 app.route("/api/fin/client-portal", finClientPortalRoutes);
-app.route("/api/fin/itpark/ai", itparkAiRoutes);
-app.route("/api/fin/itpark/caem", itparkCaemRoutes);
-app.route("/api/fin/itpark/calc", itparkCalcRoutes);
-app.route("/api/fin/itpark/dashboard", itparkDashboardRoutes);
-app.route("/api/fin/itpark/docs", itparkDocsRoutes);
-app.route("/api/fin/itpark/engagements", itparkEngagementsRoutes);
-app.route("/api/fin/itpark/import", itparkImportRoutes);
-app.route("/api/fin/itpark/lines", itparkLinesRoutes);
-app.route("/api/fin/itpark/settings", itparkSettingsRoutes);
+// ITPark clients and route modules use the standalone /api/itpark namespace.
+// Mounting them under /api/fin/itpark made every ITPark dashboard/list request 404.
+app.route("/api/itpark/ai", itparkAiRoutes);
+app.route("/api/itpark/caem-codes", itparkCaemRoutes);
+app.route("/api/itpark/calc", itparkCalcRoutes);
+app.route("/api/itpark/dashboard", itparkDashboardRoutes);
+app.route("/api/itpark/docs", itparkDocsRoutes);
+app.route("/api/itpark/engagements", itparkEngagementsRoutes);
+app.route("/api/itpark/import", itparkImportRoutes);
+app.route("/api/itpark/lines", itparkLinesRoutes);
+app.route("/api/itpark/settings", itparkSettingsRoutes);
 app.route("/api/fin/onboarding", finOnboardingRoutes);
 app.route("/api/fin/payment-approval", finPaymentApprovalRoutes);
 app.route("/api/fin/reconcile", finReconcileRoutes);
 app.route("/api/fin/revaluation", finRevaluationRoutes);
 
 // PAR module
+app.use("/api/par", requireAuth);
+app.use("/api/par/*", requireAuth);
+app.use("/api/par", requireModuleEntitlement("par"));
+app.use("/api/par/*", requireModuleEntitlement("par"));
 app.route("/api/par/me", parMeRoutes);
 app.route("/api/par/ai-prefill", parAiPrefillRoutes);
 app.route("/api/par/config-import", parConfigImportRoutes);
 app.route("/api/par/members", parMembersRoutes);
+app.route("/api/par/payers", parPayersRoutes);
+app.route("/api/par/profiles", parProfilesRoutes);
 app.route("/api/par/doa", parDoaRoutes);
 app.route("/api/par/budget-codes", parBudgetCodesRoutes);
 app.route("/api/par/departments", parDepartmentsRoutes);
@@ -214,6 +227,9 @@ app.route("/api/par", parPurchaseOrderRoutes);
 app.route("/api/par", parReceiptsRoutes);
 app.route("/api/par", parRoutes);
 app.route("/api/par", parAttachmentsRoutes);
+
+// Platform operations (global superadmin only)
+app.route("/api/platform", platformAdminRoutes);
 
 // DOCMERGE-001: Document Merge templates
 app.route("/api/docmerge", docmergeTemplatesRoutes);

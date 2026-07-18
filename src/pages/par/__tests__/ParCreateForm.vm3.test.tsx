@@ -110,6 +110,17 @@ describe("ParCreateForm — VM3-03 (feedback Violeta)", () => {
     vi.restoreAllMocks();
   });
 
+  it("nu creează ciornă la deschidere; Salvează ciornă o persistă explicit", async () => {
+    mockConfigApis();
+    render(<ParCreateForm />);
+    await screen.findByLabelText(/data estimativă de plată/i);
+    expect(parApi.createPar).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /salvează ciornă/i }));
+    await waitFor(() => expect(parApi.createPar).toHaveBeenCalledTimes(1));
+    await screen.findByText(/a fost salvată în Cererile mele/i);
+  });
+
   it("[blocant] data necesară e pre-completată cu data cererii + 10 zile", async () => {
     mockConfigApis();
     render(<ParCreateForm />);
@@ -176,10 +187,16 @@ describe("ParCreateForm — VM3-03 (feedback Violeta)", () => {
     expect(screen.getByText(/project managerul le adaugă/i)).toBeInTheDocument();
   });
 
-  it("proiect cu evenimente → dropdown-ul de eveniment apare (comportamentul VM1-04 păstrat)", async () => {
+  it("arată evenimente numai după selectarea proiectului și păstrează scope-ul proiectului", async () => {
     mockConfigApis({
-      projects: [{ id: "p-1", name: "Digital Safeguard", active: true }],
-      events: [{ id: "e-1", projectId: "p-1", name: "Conferința anuală", active: true }],
+      projects: [
+        { id: "p-1", name: "Digital Safeguard", active: true },
+        { id: "p-2", name: "Alt proiect", active: true },
+      ],
+      events: [
+        { id: "e-1", projectId: "p-1", name: "Conferința anuală", active: true },
+        { id: "e-2", projectId: "p-2", name: "Eveniment străin", active: true },
+      ],
     });
     render(<ParCreateForm />);
 
@@ -187,12 +204,16 @@ describe("ParCreateForm — VM3-03 (feedback Violeta)", () => {
     await waitFor(() =>
       expect(screen.getByRole("option", { name: "Digital Safeguard" })).toBeInTheDocument()
     );
+    // Nu alegem din greșeală un eveniment al altui proiect înainte de a selecta proiectul.
+    expect(screen.queryByLabelText("Eveniment")).not.toBeInTheDocument();
+
     fireEvent.change(proj, { target: { value: "p-1" } });
 
     await waitFor(() => {
       expect(screen.getByLabelText("Eveniment")).toBeInTheDocument();
     });
     expect(screen.getByRole("option", { name: "Conferința anuală" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Eveniment străin" })).not.toBeInTheDocument();
     expect(screen.queryByText(/niciun eveniment pentru acest proiect/i)).not.toBeInTheDocument();
   });
 });

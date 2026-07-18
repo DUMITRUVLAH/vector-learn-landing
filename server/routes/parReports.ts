@@ -15,7 +15,7 @@
  */
 import { Hono } from "hono";
 import { z } from "zod";
-import { and, eq, gte, lte, sql, isNotNull } from "drizzle-orm";
+import { and, eq, gte, lte, sql, isNotNull, inArray, type SQL } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   parRequests,
@@ -23,6 +23,7 @@ import {
   parBudgetCodes,
   parDepartments,
   parProjects,
+  parPayers,
   parEvents, // VM1-04
   parLineItems,
 } from "../db/schema/par";
@@ -31,19 +32,36 @@ import { tenants } from "../db/schema/tenants";
 import { buildParWorkbook } from "../lib/par/excelExport";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
+import { accessibleProjectIds } from "../lib/par/projectScope";
+import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
 
-export const parReportsRoutes = new Hono<{ Variables: AuthVariables }>();
+type ReportVariables = AuthVariables & { parReportScope: SQL };
+export const parReportsRoutes = new Hono<{ Variables: ReportVariables }>();
 
 parReportsRoutes.use("*", requireAuth);
 parReportsRoutes.use("*", requirePARRole("approver", "finance", "par_admin"));
+parReportsRoutes.use("*", async (c, next) => {
+  const user = c.get("user");
+  const payerIds = await enabledPayerIds(user.tenantId, "par");
+  const projectIds = await accessibleProjectIds(user.id, user.tenantId, user.role);
+  const conditions: SQL[] = [payerIds.length
+    ? inArray(parRequests.payerId, payerIds)
+    : eq(parRequests.id, "00000000-0000-0000-0000-000000000000")];
+  if (projectIds !== null) conditions.push(projectIds.length
+    ? inArray(parRequests.projectId, projectIds)
+    : eq(parRequests.projectId, "00000000-0000-0000-0000-000000000000"));
+  c.set("parReportScope", and(...conditions)!);
+  await next();
+});
 
 const periodSchema = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
 });
 
-function buildPeriodWhere(tenantId: string, from?: string, to?: string) {
-  const conditions = [eq(parRequests.tenantId, tenantId)];
+function buildPeriodWhere(tenantId: string, from?: string, to?: string, scope?: SQL) {
+  const conditions: SQL[] = [eq(parRequests.tenantId, tenantId)];
+  if (scope) conditions.push(scope);
   // PARQA-019: dateOfRequest is a timestamp column — drizzle needs a Date, not a "YYYY-MM-DD" string
   // (passing a string 500'd the query). This also fixes the period filter for every other report,
   // where the same helper silently broke whenever a date range was actually supplied.
@@ -67,8 +85,10 @@ parReportsRoutes.get("/by-budget", async (c) => {
       id: parRequests.budgetCodeId,
       label: parBudgetCodes.code,
       name: parBudgetCodes.name,
-      // VM1-03: use MDL-equivalent for mixed-currency aggregation
-      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+      allocatedCents: parBudgetCodes.allocatedCents,
+      committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as integer)`,
+      paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as integer)`,
+      totalCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested','paid') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as integer)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
@@ -76,16 +96,47 @@ parReportsRoutes.get("/by-budget", async (c) => {
       eq(parBudgetCodes.id, parRequests.budgetCodeId!),
       eq(parBudgetCodes.tenantId, tenantId)
     ))
-    .where(buildPeriodWhere(tenantId, from, to))
-    .groupBy(parRequests.budgetCodeId, parBudgetCodes.code, parBudgetCodes.name);
+    .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
+    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
+    .groupBy(parRequests.budgetCodeId, parBudgetCodes.code, parBudgetCodes.name, parBudgetCodes.allocatedCents);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
     id: r.id as string | null,
     label: ((r.label as string | null) ?? (r.name as string | null) ?? r.id ?? "unknown") as string,
     totalCents: Number(r.totalCents ?? 0),
+    allocatedCents: Number(r.allocatedCents ?? 0),
+    committedCents: Number(r.committedCents ?? 0),
+    paidCents: Number(r.paidCents ?? 0),
+    availableCents: Number(r.allocatedCents ?? 0) - Number(r.committedCents ?? 0) - Number(r.paidCents ?? 0),
     count: Number(r.count ?? 0),
   }));
 
+  return c.json({ items });
+});
+
+/** GET /api/par/reports/by-payer — consolidated execution per legal entity. */
+parReportsRoutes.get("/by-payer", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const { from, to } = periodSchema.parse(c.req.query());
+  const rows = await db.select({
+    id: parRequests.payerId,
+    label: parPayers.name,
+    allocatedCents: sql<number>`cast(coalesce((select sum(b.allocated_cents) from par_budget_codes b where b.tenant_id = ${tenantId} and b.payer_id = ${parRequests.payerId} and b.active = true), 0) as integer)`,
+    committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as integer)`,
+    paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as integer)`,
+    totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+    count: sql<number>`cast(count(*) as integer)`,
+  }).from(parRequests)
+    .leftJoin(parPayers, and(eq(parPayers.id, parRequests.payerId!), eq(parPayers.tenantId, tenantId)))
+    .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
+    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
+    .groupBy(parRequests.payerId, parPayers.name);
+  const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => {
+    const allocatedCents = Number(r.allocatedCents ?? 0);
+    const committedCents = Number(r.committedCents ?? 0);
+    const paidCents = Number(r.paidCents ?? 0);
+    return { id: r.id as string | null, label: String(r.label ?? "Plătitor necunoscut"), totalCents: Number(r.totalCents ?? 0), count: Number(r.count ?? 0), allocatedCents, committedCents, paidCents, availableCents: allocatedCents - committedCents - paidCents };
+  });
   return c.json({ items });
 });
 
@@ -106,7 +157,7 @@ parReportsRoutes.get("/by-department", async (c) => {
       eq(parDepartments.id, parRequests.departmentId!),
       eq(parDepartments.tenantId, tenantId)
     ))
-    .where(buildPeriodWhere(tenantId, from, to))
+    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
     .groupBy(parRequests.departmentId, parDepartments.name);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
@@ -128,6 +179,9 @@ parReportsRoutes.get("/by-project", async (c) => {
     .select({
       id: parRequests.projectId,
       label: parProjects.name,
+      allocatedCents: sql<number>`cast(coalesce((select sum(b.allocated_cents) from par_budget_codes b where b.tenant_id = ${tenantId} and b.project_id = ${parRequests.projectId} and b.active = true), 0) as integer)`,
+      committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as integer)`,
+      paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as integer)`,
       totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
@@ -136,15 +190,16 @@ parReportsRoutes.get("/by-project", async (c) => {
       eq(parProjects.id, parRequests.projectId!),
       eq(parProjects.tenantId, tenantId)
     ))
-    .where(buildPeriodWhere(tenantId, from, to))
+    .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
+    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
     .groupBy(parRequests.projectId, parProjects.name);
 
-  const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
-    id: r.id as string | null,
-    label: ((r.label as string | null) ?? r.id ?? "unknown") as string,
-    totalCents: Number(r.totalCents ?? 0),
-    count: Number(r.count ?? 0),
-  }));
+  const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => {
+    const allocatedCents = Number(r.allocatedCents ?? 0);
+    const committedCents = Number(r.committedCents ?? 0);
+    const paidCents = Number(r.paidCents ?? 0);
+    return { id: r.id as string | null, label: String(r.label ?? r.id ?? "unknown"), totalCents: Number(r.totalCents ?? 0), count: Number(r.count ?? 0), allocatedCents, committedCents, paidCents, availableCents: allocatedCents - committedCents - paidCents };
+  });
 
   return c.json({ items });
 });
@@ -158,6 +213,9 @@ parReportsRoutes.get("/by-event", async (c) => {
     .select({
       id: parRequests.eventId,
       label: parEvents.name,
+      allocatedCents: sql<number>`cast(0 as integer)`,
+      committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as integer)`,
+      paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as integer)`,
       totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
@@ -166,15 +224,15 @@ parReportsRoutes.get("/by-event", async (c) => {
       eq(parEvents.id, parRequests.eventId!),
       eq(parEvents.tenantId, tenantId)
     ))
-    .where(and(buildPeriodWhere(tenantId, from, to), isNotNull(parRequests.eventId)))
+    .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
+    .where(and(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")), isNotNull(parRequests.eventId)))
     .groupBy(parRequests.eventId, parEvents.name);
 
-  const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
-    id: r.id as string | null,
-    label: ((r.label as string | null) ?? "Eveniment necunoscut") as string,
-    totalCents: Number(r.totalCents ?? 0),
-    count: Number(r.count ?? 0),
-  }));
+  const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => {
+    const committedCents = Number(r.committedCents ?? 0);
+    const paidCents = Number(r.paidCents ?? 0);
+    return { id: r.id as string | null, label: String(r.label ?? "Eveniment necunoscut"), totalCents: Number(r.totalCents ?? 0), count: Number(r.count ?? 0), allocatedCents: 0, committedCents, paidCents, availableCents: -committedCents - paidCents };
+  });
 
   return c.json({ items });
 });
@@ -191,7 +249,7 @@ parReportsRoutes.get("/by-charge-to", async (c) => {
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
-    .where(buildPeriodWhere(tenantId, from, to))
+    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
     .groupBy(parRequests.chargeTo);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
@@ -219,7 +277,7 @@ parReportsRoutes.get("/by-vendor", async (c) => {
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
-    .where(and(buildPeriodWhere(tenantId, from, to), isNotNull(parRequests.payeeName)))
+    .where(and(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")), isNotNull(parRequests.payeeName)))
     .groupBy(parRequests.payeeName);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
@@ -245,7 +303,7 @@ parReportsRoutes.get("/currency-breakdown", async (c) => {
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
-    .where(buildPeriodWhere(tenantId, from, to))
+    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
     .groupBy(parRequests.currency);
 
   const data = Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? [];
@@ -277,7 +335,7 @@ parReportsRoutes.get("/aging", async (c) => {
       `,
     })
     .from(parRequests)
-    .where(buildPeriodWhere(tenantId, from, to))
+    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
     .groupBy(parRequests.status);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
@@ -315,7 +373,7 @@ parReportsRoutes.get("/cycle-time", async (c) => {
     })
     .from(parRequests)
     .where(and(
-      buildPeriodWhere(tenantId, from, to),
+      buildPeriodWhere(tenantId, from, to, c.get("parReportScope")),
       isNotNull(parRequests.submittedAt)
     ));
 
@@ -346,7 +404,7 @@ parReportsRoutes.get("/export.csv", async (c) => {
       paidAt: parRequests.paidAt,
     })
     .from(parRequests)
-    .where(buildPeriodWhere(tenantId, from, to))
+    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
     .orderBy(parRequests.dateOfRequest);
 
   const data = Array.isArray(rows) ? rows : (rows as { rows?: typeof rows }).rows ?? [];
@@ -401,7 +459,7 @@ parReportsRoutes.get("/export.xlsx", async (c) => {
     .leftJoin(parDepartments, eq(parDepartments.id, parRequests.departmentId))
     .leftJoin(parProjects, eq(parProjects.id, parRequests.projectId))
     .leftJoin(parBudgetCodes, eq(parBudgetCodes.id, parRequests.budgetCodeId))
-    .where(buildPeriodWhere(tenantId, from, to))
+    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
     .orderBy(parRequests.dateOfRequest);
 
   const pars = Array.isArray(parRows) ? parRows : (parRows as { rows?: typeof parRows }).rows ?? [];
@@ -420,7 +478,7 @@ parReportsRoutes.get("/export.xlsx", async (c) => {
     })
     .from(parLineItems)
     .innerJoin(parRequests, eq(parRequests.id, parLineItems.parId))
-    .where(buildPeriodWhere(tenantId, from, to))
+    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
     .orderBy(parRequests.requestNo, parLineItems.position);
 
   const lines = Array.isArray(lineRows) ? lineRows : (lineRows as { rows?: typeof lineRows }).rows ?? [];

@@ -21,11 +21,21 @@
  */
 import { Hono } from "hono";
 import type ExcelJS from "exceljs";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { parProjects, parDepartments, parBudgetCodes } from "../db/schema/par";
+import { parProjects, parDepartments, parBudgetCodes, parPayers, parPayerModules } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
+import { mayAccessPayer } from "../lib/par/projectScope";
+
+/** Context threaded into the upsert helpers so each row honours the caller's scope (PARQA). */
+interface ImportCtx {
+  tenantId: string;
+  userId: string;
+  role: string;
+  /** Only a workspace admin/manager may create NEW payers (mirrors POST /api/par/payers). */
+  canManagePayers: boolean;
+}
 
 export const parConfigImportRoutes = new Hono<{ Variables: AuthVariables }>();
 parConfigImportRoutes.use("*", requireAuth);
@@ -44,6 +54,7 @@ interface RowError {
 }
 
 interface ImportResult {
+  payers: { created: number; updated: number; errors: RowError[] };
   projects: { created: number; updated: number; errors: RowError[] };
   departments: { created: number; updated: number; errors: RowError[] };
   budgetCodes: { created: number; updated: number; errors: RowError[] };
@@ -66,11 +77,21 @@ parConfigImportRoutes.get(
     const wb = new ExcelJSRuntime.Workbook();
     wb.creator = "Vector Learn — PAR";
 
-    // Sheet 1: Projects
+    // Sheet 1: Payers / legal entities
+    const ws0 = wb.addWorksheet("Plătitori");
+    ws0.columns = [
+      { header: "Denumire plătitor *", key: "name", width: 35 },
+      { header: "Denumire juridică", key: "legalName", width: 35 },
+      { header: "IDNO", key: "idno", width: 20 },
+    ];
+    ws0.getRow(1).font = { bold: true };
+
+    // Sheet 2: Projects
     const ws1 = wb.addWorksheet("Proiecte");
     ws1.columns = [
       { header: "Denumire proiect *", key: "name", width: 35 },
       { header: "Donor / Finanțator", key: "donor", width: 25 },
+      { header: "Plătitor / Organizație *", key: "payer", width: 35 },
     ];
     ws1.getRow(1).font = { bold: true };
 
@@ -87,6 +108,8 @@ parConfigImportRoutes.get(
       { header: "Cod buget *", key: "code", width: 20 },
       { header: "Denumire *", key: "name", width: 35 },
       { header: "Suma alocată (MDL)", key: "allocated", width: 22 },
+      { header: "Plătitor / Organizație *", key: "payer", width: 35 },
+      { header: "Proiect (opțional)", key: "project", width: 35 },
     ];
     ws3.getRow(1).font = { bold: true };
 
@@ -107,7 +130,14 @@ parConfigImportRoutes.post(
   "/",
   requirePARRole("par_admin"),
   async (c) => {
-    const tenantId = c.get("user").tenantId;
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const ctx: ImportCtx = {
+      tenantId,
+      userId: user.id,
+      role: user.role,
+      canManagePayers: user.role === "admin" || user.role === "manager",
+    };
 
     let formData: FormData;
     try {
@@ -142,16 +172,19 @@ parConfigImportRoutes.post(
     }
 
     // Parse sheets by name or position
+    const payerRows = parseSheet(wb, "Plătitori", -1);
     const projectRows = parseSheet(wb, "Proiecte", 0);
     const deptRows = parseSheet(wb, "Departamente", 1);
     const budgetRows = parseSheet(wb, "Coduri buget", 2);
 
     // Process each category
-    const projectResult = await upsertProjects(tenantId, projectRows);
+    const payerResult = await upsertPayers(ctx, payerRows);
+    const projectResult = await upsertProjects(ctx, projectRows);
     const deptResult = await upsertDepartments(tenantId, deptRows);
-    const budgetResult = await upsertBudgetCodes(tenantId, budgetRows);
+    const budgetResult = await upsertBudgetCodes(ctx, budgetRows);
 
     const result: ImportResult = {
+      payers: payerResult,
       projects: projectResult,
       departments: deptResult,
       budgetCodes: budgetResult,
@@ -172,7 +205,7 @@ function parseSheet(
   name: string,
   fallbackIndex: number
 ): ImportRow[] {
-  const ws = wb.getWorksheet(name) ?? wb.worksheets[fallbackIndex];
+  const ws = wb.getWorksheet(name) ?? (fallbackIndex >= 0 ? wb.worksheets[fallbackIndex] : undefined);
   if (!ws) return [];
 
   const allRows: ExcelJS.Row[] = [];
@@ -275,10 +308,47 @@ function getField(data: Record<string, string>, ...keys: string[]): string {
 
 // ─── Upsert functions ─────────────────────────────────────────────────────────
 
+async function upsertPayers(ctx: ImportCtx, rows: ImportRow[]): Promise<{ created: number; updated: number; errors: RowError[] }> {
+  const { tenantId } = ctx;
+  let created = 0; let updated = 0; const errors: RowError[] = [];
+  for (const { row, data } of rows) {
+    const name = getField(data, "Denumire plătitor", "Plătitor / Organizație", "name");
+    const legalName = getField(data, "Denumire juridică", "legalName");
+    const idno = getField(data, "IDNO", "idno");
+    if (!name) { errors.push({ row, column: "Denumire plătitor", message: "Câmpul 'Denumire plătitor' este obligatoriu." }); continue; }
+    const [existing] = await db.select({ id: parPayers.id }).from(parPayers).where(and(eq(parPayers.tenantId, tenantId), eq(parPayers.name, name)));
+    if (existing) {
+      // PARQA: only touch payers the caller may access.
+      if (!(await mayAccessPayer(ctx.userId, tenantId, existing.id, ctx.role))) {
+        errors.push({ row, column: "Denumire plătitor", message: `Nu ai acces la plătitorul '${name}'.` }); continue;
+      }
+      await db.update(parPayers).set({ legalName: legalName || null, idno: idno || null, active: true, updatedAt: new Date() }).where(eq(parPayers.id, existing.id));
+      updated++;
+    } else {
+      // PARQA: creating a NEW legal entity is a workspace-admin action (mirrors POST /api/par/payers).
+      if (!ctx.canManagePayers) {
+        errors.push({ row, column: "Denumire plătitor", message: "Doar un administrator de workspace poate crea plătitori noi." }); continue;
+      }
+      const [payer] = await db.insert(parPayers).values({ tenantId, name, legalName: legalName || null, idno: idno || null }).returning();
+      await db.insert(parPayerModules).values({ tenantId, payerId: payer.id, moduleKey: "par", enabled: true });
+      created++;
+    }
+  }
+  return { created, updated, errors };
+}
+
+async function resolvePayer(tenantId: string, name: string) {
+  const conditions = [eq(parPayers.tenantId, tenantId), eq(parPayers.active, true)];
+  if (name) conditions.push(eq(parPayers.name, name));
+  const [payer] = await db.select({ id: parPayers.id }).from(parPayers).where(and(...conditions)).orderBy(asc(parPayers.createdAt)).limit(1);
+  return payer ?? null;
+}
+
 async function upsertProjects(
-  tenantId: string,
+  ctx: ImportCtx,
   rows: ImportRow[]
 ): Promise<{ created: number; updated: number; errors: RowError[] }> {
+  const { tenantId } = ctx;
   let created = 0;
   let updated = 0;
   const errors: RowError[] = [];
@@ -286,26 +356,30 @@ async function upsertProjects(
   for (const { row, data } of rows) {
     const name = getField(data, "Denumire proiect", "name");
     const donor = getField(data, "Donor / Finanțator", "donor", "Donor");
+    const payerName = getField(data, "Plătitor / Organizație", "Plătitor", "payer");
 
     if (!name) {
       errors.push({ row, column: "Denumire proiect", message: "Câmpul 'Denumire proiect' este obligatoriu." });
       continue;
     }
+    const payer = await resolvePayer(tenantId, payerName);
+    if (!payer) { errors.push({ row, column: "Plătitor / Organizație", message: payerName ? `Plătitorul '${payerName}' nu există.` : "Nu există un plătitor implicit. Adaugă foaia 'Plătitori'." }); continue; }
+    if (!(await mayAccessPayer(ctx.userId, tenantId, payer.id, ctx.role))) { errors.push({ row, column: "Plătitor / Organizație", message: `Nu ai acces la plătitorul '${payerName}'.` }); continue; }
 
     // Upsert by name within tenant
     const [existing] = await db
       .select({ id: parProjects.id })
       .from(parProjects)
-      .where(and(eq(parProjects.tenantId, tenantId), eq(parProjects.name, name)));
+      .where(and(eq(parProjects.tenantId, tenantId), eq(parProjects.payerId, payer.id), eq(parProjects.name, name)));
 
     if (existing) {
       await db
         .update(parProjects)
-        .set({ donor: donor || null, active: true, updatedAt: new Date() })
+        .set({ donor: donor || null, payerId: payer.id, active: true, updatedAt: new Date() })
         .where(and(eq(parProjects.id, existing.id), eq(parProjects.tenantId, tenantId)));
       updated++;
     } else {
-      await db.insert(parProjects).values({ tenantId, name, donor: donor || null });
+      await db.insert(parProjects).values({ tenantId, name, donor: donor || null, payerId: payer.id });
       created++;
     }
   }
@@ -350,9 +424,10 @@ async function upsertDepartments(
 }
 
 async function upsertBudgetCodes(
-  tenantId: string,
+  ctx: ImportCtx,
   rows: ImportRow[]
 ): Promise<{ created: number; updated: number; errors: RowError[] }> {
+  const { tenantId } = ctx;
   let created = 0;
   let updated = 0;
   const errors: RowError[] = [];
@@ -361,6 +436,8 @@ async function upsertBudgetCodes(
     const code = getField(data, "Cod buget", "code");
     const name = getField(data, "Denumire", "name");
     const allocatedRaw = getField(data, "Suma alocată (MDL)", "Suma alocata (MDL)", "suma", "allocated");
+    const payerName = getField(data, "Plătitor / Organizație", "Plătitor", "payer");
+    const projectName = getField(data, "Proiect (opțional)", "Proiect", "project");
 
     if (!code) {
       errors.push({ row, column: "Cod buget", message: "Câmpul 'Cod buget' este obligatoriu." });
@@ -369,6 +446,17 @@ async function upsertBudgetCodes(
     if (!name) {
       errors.push({ row, column: "Denumire", message: "Câmpul 'Denumire' este obligatoriu." });
       continue;
+    }
+    const payer = await resolvePayer(tenantId, payerName);
+    if (!payer) { errors.push({ row, column: "Plătitor / Organizație", message: payerName ? `Plătitorul '${payerName}' nu există.` : "Nu există un plătitor implicit." }); continue; }
+    if (!(await mayAccessPayer(ctx.userId, tenantId, payer.id, ctx.role))) { errors.push({ row, column: "Plătitor / Organizație", message: `Nu ai acces la plătitorul '${payerName}'.` }); continue; }
+    let projectId: string | null = null;
+    if (projectName) {
+      const [project] = await db.select({ id: parProjects.id }).from(parProjects).where(and(
+        eq(parProjects.tenantId, tenantId), eq(parProjects.payerId, payer.id), eq(parProjects.name, projectName),
+      ));
+      if (!project) { errors.push({ row, column: "Proiect", message: `Proiectul '${projectName}' nu există la plătitorul selectat.` }); continue; }
+      projectId = project.id;
     }
 
     // Parse optional sum (MDL → cents).
@@ -386,16 +474,16 @@ async function upsertBudgetCodes(
     const [existing] = await db
       .select({ id: parBudgetCodes.id })
       .from(parBudgetCodes)
-      .where(and(eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.code, code)));
+      .where(and(eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.payerId, payer.id), eq(parBudgetCodes.code, code)));
 
     if (existing) {
       await db
         .update(parBudgetCodes)
-        .set({ name, allocatedCents, active: true, updatedAt: new Date() })
+        .set({ name, payerId: payer.id, projectId, allocatedCents, active: true, updatedAt: new Date() })
         .where(and(eq(parBudgetCodes.id, existing.id), eq(parBudgetCodes.tenantId, tenantId)));
       updated++;
     } else {
-      await db.insert(parBudgetCodes).values({ tenantId, code, name, allocatedCents, active: true });
+      await db.insert(parBudgetCodes).values({ tenantId, payerId: payer.id, projectId, code, name, allocatedCents, active: true });
       created++;
     }
   }

@@ -22,6 +22,8 @@ export interface ResolveApprovalChainParams {
   totalCents: number;
   chargeTo?: "operations" | "program" | "other" | null;
   departmentId?: string | null;
+  payerId?: string | null;
+  projectId?: string | null;
 }
 
 /**
@@ -40,7 +42,7 @@ export interface ResolveApprovalChainParams {
 export async function resolveApprovalChain(
   params: ResolveApprovalChainParams
 ): Promise<ApprovalStep[]> {
-  const { tenantId, totalCents, chargeTo, departmentId } = params;
+  const { tenantId, totalCents, chargeTo, departmentId, payerId, projectId } = params;
 
   // Fetch all active matrix rows for this tenant
   const rows = await db
@@ -70,6 +72,8 @@ export async function resolveApprovalChain(
     const deptMatch =
       row.departmentId === null || row.departmentId === undefined || row.departmentId === departmentId;
     if (!deptMatch) return false;
+    if (row.payerId && row.payerId !== payerId) return false;
+    if (row.projectId && row.projectId !== projectId) return false;
 
     return true;
   });
@@ -91,33 +95,28 @@ export async function resolveApprovalChain(
 
   // Group by step; within each step pick the most-specific row
   // (specific charge_to > null; specific deptId > null)
-  const byStep = new Map<number, typeof matching[number]>();
+  const byStep = new Map<number, typeof matching>();
 
   for (const row of matching) {
-    const existing = byStep.get(row.step);
-    if (!existing) {
-      byStep.set(row.step, row);
-      continue;
-    }
-    // Prefer more-specific rows (non-null charge_to or department)
-    const rowSpecificity =
-      (row.chargeTo !== null ? 1 : 0) + (row.departmentId !== null ? 1 : 0);
-    const existingSpecificity =
-      (existing.chargeTo !== null ? 1 : 0) + (existing.departmentId !== null ? 1 : 0);
-    if (rowSpecificity > existingSpecificity) {
-      byStep.set(row.step, row);
-    }
+    byStep.set(row.step, [...(byStep.get(row.step) ?? []), row]);
   }
 
   // Convert to ordered ApprovalStep array
   const steps: ApprovalStep[] = Array.from(byStep.entries())
     .sort(([a], [b]) => a - b)
-    .map(([, row]) => ({
-      step: row.step,
-      approverRoleLabel: row.approverRoleLabel,
-      approverUserId: row.approverUserId ?? null,
-      approverParRole: row.approverParRole ?? null,
-    }));
+    .flatMap(([, group]) => {
+      const specificity = (row: typeof group[number]) =>
+        (row.chargeTo ? 1 : 0) + (row.departmentId ? 1 : 0) + (row.payerId ? 2 : 0) + (row.projectId ? 4 : 0);
+      const max = Math.max(...group.map(specificity));
+      const candidates = group.filter((row) => specificity(row) === max);
+      const selected = candidates.some((row) => row.approvalMode === "parallel")
+        ? candidates.filter((row) => row.approvalMode === "parallel")
+        : [candidates[0]];
+      return selected.map((row) => ({
+        step: row.step, approverRoleLabel: row.approverRoleLabel,
+        approverUserId: row.approverUserId ?? null, approverParRole: row.approverParRole ?? null,
+      }));
+    });
 
   return steps;
 }

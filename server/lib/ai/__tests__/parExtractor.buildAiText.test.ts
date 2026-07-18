@@ -1,8 +1,12 @@
+// @vitest-environment node
 /**
  * Regression: a long (multi-page) contract must NOT lose its requisites. The IBAN / cod fiscal /
  * "DATELE JURIDICE" block often sits on page 5-9, far past a naïve slice(0, N) — so the AI never saw
  * the IBAN and the form filled name+amount but no IBAN (owner-reported, BNS Power BI contract).
  * buildAiText keeps the head PLUS windows around the requisite anchors anywhere in the document.
+ *
+ * Runs in the `node` env (directive above): importing parExtractor transitively constructs the PGlite
+ * client; under jsdom pglite's wasm loader rejects with ERR_INVALID_URL_SCHEME after the test (exit≠0).
  */
 import { describe, it, expect } from "vitest";
 import { buildAiText } from "../parExtractor";

@@ -74,7 +74,9 @@ const mockPar: ParDetail = {
   requestNo: "PAR-2026-0001",
   dateOfRequest: "2026-06-10",
   requestedByUserId: "user-requestor",
-  requestorTitle: "Procurement Specialist / M13",
+  payerId: null,
+  requestorTitle: "Procurement Specialist",
+  requestorCode: "M13",
   departmentId: "dept-1",
   dateNeeded: "2026-06-15",
   projectId: "proj-1",
@@ -100,6 +102,10 @@ const mockPar: ParDetail = {
   cancelledAt: null,
   createdAt: "2026-06-10",
   updatedAt: "2026-06-10",
+  requestedByName: "Cristina Sîrbu",
+  departmentName: "Achiziții",
+  payerName: "ATIC",
+  projectName: "Digital Safeguard",
   line_items: [
     {
       id: "li-1",
@@ -220,6 +226,18 @@ describe("ParDetailPage — PAR-118", () => {
     await waitFor(() => {
       expect(screen.getByText("Finanțe (uz intern)")).toBeDefined();
     }, { timeout: 5000 });
+  });
+
+  it("arată nume rezolvate și snapshot-ul Funcție / Cod, nu identificatori tehnici", async () => {
+    const { default: ParDetailPage } = await import("../ParDetail");
+    render(<ParDetailPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Cristina Sîrbu")).toBeInTheDocument();
+      expect(screen.getByText("ATIC")).toBeInTheDocument();
+      expect(screen.getByText("Procurement Specialist · M13")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("user-requestor")).not.toBeInTheDocument();
   });
 
   it("T-PAR-118-2 [normal] requestor can cancel; cannot approve", async () => {

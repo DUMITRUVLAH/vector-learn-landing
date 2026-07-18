@@ -52,6 +52,10 @@ import {
   assignParMember,
   revokeParMember,
   getParMe,
+  getParMemberProfile,
+  updateParMemberProfile,
+  setParMemberProjects,
+  setParMemberPayers,
   listParInvites,
   createParInvite,
   revokeParInvite,
@@ -65,6 +69,10 @@ import {
   cancelParDelegation,
   type ParDelegation,
   listDepartments,
+  listPayers,
+  createPayer,
+  updatePayer,
+  deletePayer,
   listProjects,
   listBudgetCodes,
   getBudgetCodesUsage,
@@ -98,6 +106,7 @@ import {
   type ParSettings,
   type ParDepartment,
   type ParProject,
+  type ParPayer,
   type ParBudgetCode,
   type ParVendor,
   type ParEvent,
@@ -174,6 +183,9 @@ interface DoaEditorProps {
 
 function DoaMatrixEditor({ departments }: DoaEditorProps) {
   const [rows, setRows] = useState<ParDoaRow[]>([]);
+  const [payers, setPayers] = useState<ParPayer[]>([]);
+  const [projects, setProjects] = useState<ParProject[]>([]);
+  const [members, setMembers] = useState<ParMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -182,6 +194,9 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
   const emptyForm = (): Partial<ParDoaRow> => ({
     chargeTo: null,
     departmentId: null,
+    payerId: null,
+    projectId: null,
+    approvalMode: "sequential",
     minAmountCents: 0,
     maxAmountCents: null,
     step: 1,
@@ -206,6 +221,17 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
   };
 
   useEffect(() => { load(); }, []); // eslint-disable-line
+  useEffect(() => {
+    Promise.all([
+      Promise.resolve().then(() => listPayers()).catch(() => ({ items: [] })),
+      listProjects(),
+      listParMembers(),
+    ]).then(([pa, pr, me]) => {
+      setPayers(pa.items);
+      setProjects(pr.items);
+      setMembers(me.members);
+    }).catch(() => { /* amount-only rules remain editable */ });
+  }, []);
 
   const startEdit = (row: ParDoaRow) => {
     setEditingId(row.id);
@@ -233,6 +259,9 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
         await createParDoaRow({
           chargeTo: (form.chargeTo as "operations" | "program" | "other") ?? null,
           departmentId: form.departmentId ?? null,
+          payerId: form.payerId ?? null,
+          projectId: form.projectId ?? null,
+          approvalMode: form.approvalMode ?? "sequential",
           minAmountCents: form.minAmountCents ?? 0,
           maxAmountCents: form.maxAmountCents ?? null,
           step: form.step ?? 1,
@@ -245,6 +274,9 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
         await updateParDoaRow(editingId, {
           chargeTo: (form.chargeTo as "operations" | "program" | "other") ?? null,
           departmentId: form.departmentId ?? null,
+          payerId: form.payerId ?? null,
+          projectId: form.projectId ?? null,
+          approvalMode: form.approvalMode ?? "sequential",
           minAmountCents: form.minAmountCents ?? 0,
           maxAmountCents: form.maxAmountCents ?? null,
           step: form.step ?? 1,
@@ -312,6 +344,9 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
           form={form}
           onChange={setForm}
           departments={departments}
+          payers={payers}
+          projects={projects}
+          members={members}
           onSave={save}
           onCancel={cancel}
         />
@@ -324,6 +359,7 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
             <tr>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Charge To</th>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Departament</th>
+              <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Plătitor / proiect</th>
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground">Min (MDL)</th>
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground">Max (MDL)</th>
               <th className="text-center p-3 text-xs font-semibold text-muted-foreground">Pas</th>
@@ -335,7 +371,7 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
           <tbody>
             {rows.length === 0 && !adding && (
               <tr>
-                <td colSpan={8} className="p-6 text-center text-sm text-muted-foreground">
+                <td colSpan={9} className="p-6 text-center text-sm text-muted-foreground">
                   Niciun rând definit. Adaugă primul rând DOA.
                 </td>
               </tr>
@@ -343,11 +379,14 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
             {rows.map((row) => (
               <tr key={row.id} className={cn("border-t border-border", isEditing(row.id) && "bg-muted/30")}>
                 {isEditing(row.id) ? (
-                  <td colSpan={8} className="p-3">
+                  <td colSpan={9} className="p-3">
                     <DoaRowForm
                       form={form}
                       onChange={setForm}
                       departments={departments}
+                      payers={payers}
+                      projects={projects}
+                      members={members}
                       onSave={save}
                       onCancel={cancel}
                     />
@@ -361,12 +400,22 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
                         : <span className="text-muted-foreground">Orice</span>
                       }
                     </td>
+                    <td className="p-3 text-foreground text-xs">
+                      <div>{row.payerId ? payers.find((p) => p.id === row.payerId)?.name ?? row.payerId : "Orice plătitor"}</div>
+                      <div className="text-muted-foreground">{row.projectId ? projects.find((p) => p.id === row.projectId)?.name ?? row.projectId : "Orice proiect"}</div>
+                    </td>
                     <td className="p-3 text-right text-foreground">{centsToMDL(row.minAmountCents)}</td>
                     <td className="p-3 text-right text-foreground">
                       {row.maxAmountCents != null ? centsToMDL(row.maxAmountCents) : <span className="text-muted-foreground">∞</span>}
                     </td>
                     <td className="p-3 text-center text-foreground">{row.step}</td>
-                    <td className="p-3 text-foreground">{row.approverRoleLabel}</td>
+                    <td className="p-3 text-foreground">
+                      <div>{row.approverRoleLabel}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {row.approvalMode === "parallel" ? "Paralel" : "Secvențial"}
+                        {row.approverUserId ? ` · ${members.find((m) => m.userId === row.approverUserId)?.userName ?? row.approverUserId}` : ""}
+                      </div>
+                    </td>
                     <td className="p-3 text-center">
                       <span className={cn(
                         "inline-block w-2 h-2 rounded-full",
@@ -408,11 +457,14 @@ interface DoaRowFormProps {
   form: Partial<ParDoaRow>;
   onChange: (f: Partial<ParDoaRow>) => void;
   departments: ParDepartment[];
+  payers: ParPayer[];
+  projects: ParProject[];
+  members: ParMember[];
   onSave: () => void;
   onCancel: () => void;
 }
 
-function DoaRowForm({ form, onChange, departments, onSave, onCancel }: DoaRowFormProps) {
+function DoaRowForm({ form, onChange, departments, payers, projects, members, onSave, onCancel }: DoaRowFormProps) {
   const set = (key: keyof ParDoaRow, val: unknown) =>
     onChange({ ...form, [key]: val });
 
@@ -429,6 +481,38 @@ function DoaRowForm({ form, onChange, departments, onSave, onCancel }: DoaRowFor
           {CHARGE_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-muted-foreground block mb-1">Plătitor (opțional)</label>
+        <select value={form.payerId ?? ""} onChange={(e) => onChange({ ...form, payerId: e.target.value || null, projectId: null })} className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Plătitor DOA">
+          <option value="">Orice plătitor</option>
+          {payers.map((payer) => <option key={payer.id} value={payer.id}>{payer.name}</option>)}
+        </select>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-muted-foreground block mb-1">Proiect (opțional)</label>
+        <select value={form.projectId ?? ""} onChange={(e) => set("projectId", e.target.value || null)} className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Proiect DOA">
+          <option value="">Orice proiect</option>
+          {projects.filter((project) => !form.payerId || project.payerId === form.payerId).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+        </select>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-muted-foreground block mb-1">Mod aprobare</label>
+        <select value={form.approvalMode ?? "sequential"} onChange={(e) => set("approvalMode", e.target.value)} className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Mod aprobare">
+          <option value="sequential">Secvențial</option>
+          <option value="parallel">Paralel — toți aprobă</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-muted-foreground block mb-1">Persoană aprobatoare (opțional)</label>
+        <select value={form.approverUserId ?? ""} onChange={(e) => set("approverUserId", e.target.value || null)} className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Persoană aprobatoare">
+          <option value="">După rol</option>
+          {members.map((member) => <option key={`${member.userId}-${member.role}`} value={member.userId}>{member.userName ?? member.userEmail ?? member.userId} · {member.role}</option>)}
         </select>
       </div>
 
@@ -866,12 +950,32 @@ function AuditTab() {
   const [eventFilter, setEventFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [payerFilter, setPayerFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [parEventFilter, setParEventFilter] = useState("");
+  const [actorFilter, setActorFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [payers, setPayers] = useState<Array<{ id: string; name: string }>>([]);
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; payerId: string | null }>>([]);
+  const [events, setEvents] = useState<Array<{ id: string; name: string; projectId: string | null }>>([]);
+  const [members, setMembers] = useState<Array<{ userId: string; userName?: string | null }>>([]);
+
+  useEffect(() => {
+    Promise.all([listPayers(), listProjects(), listEvents(), listParMembers()]).then(([pa, pr, ev, me]) => {
+      setPayers(pa.items); setProjects(pr.items); setEvents(ev.events); setMembers(me.members);
+    }).catch(() => { /* filter labels are optional */ });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const r = await getParAudit({
         event: eventFilter || undefined,
+        payer_id: payerFilter || undefined,
+        project_id: projectFilter || undefined,
+        event_id: parEventFilter || undefined,
+        actor_user_id: actorFilter || undefined,
+        status: statusFilter || undefined,
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
         page,
@@ -884,11 +988,22 @@ function AuditTab() {
     } finally {
       setLoading(false);
     }
-  }, [eventFilter, dateFrom, dateTo, page]);
+  }, [eventFilter, payerFilter, projectFilter, parEventFilter, actorFilter, statusFilter, dateFrom, dateTo, page]);
 
   useEffect(() => { load(); }, [load]);
   // Reset to page 1 when filters change.
-  useEffect(() => { setPage(1); }, [eventFilter, dateFrom, dateTo]);
+  useEffect(() => { setPage(1); }, [eventFilter, payerFilter, projectFilter, parEventFilter, actorFilter, statusFilter, dateFrom, dateTo]);
+
+  const exportParams = new URLSearchParams();
+  if (eventFilter) exportParams.set("event", eventFilter);
+  if (payerFilter) exportParams.set("payer_id", payerFilter);
+  if (projectFilter) exportParams.set("project_id", projectFilter);
+  if (parEventFilter) exportParams.set("event_id", parEventFilter);
+  if (actorFilter) exportParams.set("actor_user_id", actorFilter);
+  if (statusFilter) exportParams.set("status", statusFilter);
+  if (dateFrom) exportParams.set("date_from", dateFrom);
+  if (dateTo) exportParams.set("date_to", dateTo);
+  const exportQuery = exportParams.toString() ? `?${exportParams}` : "";
 
   const exportCsv = () => {
     const header = "data,eveniment,actor,cerere,detaliu\n";
@@ -917,6 +1032,11 @@ function AuditTab() {
             {AUDIT_EVENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
+        <select value={payerFilter} onChange={(e) => { setPayerFilter(e.target.value); setProjectFilter(""); }} aria-label="Filtru plătitor" className="h-10 rounded-md border border-input bg-background px-2 text-sm"><option value="">Toți plătitorii</option>{payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+        <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} aria-label="Filtru proiect" className="h-10 rounded-md border border-input bg-background px-2 text-sm"><option value="">Toate proiectele</option>{projects.filter((p) => !payerFilter || p.payerId === payerFilter).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+        <select value={parEventFilter} onChange={(e) => setParEventFilter(e.target.value)} aria-label="Filtru eveniment PAR" className="h-10 rounded-md border border-input bg-background px-2 text-sm"><option value="">Toate evenimentele PAR</option>{events.filter((ev) => !projectFilter || ev.projectId === projectFilter).map((ev) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}</select>
+        <select value={actorFilter} onChange={(e) => setActorFilter(e.target.value)} aria-label="Filtru persoană" className="h-10 rounded-md border border-input bg-background px-2 text-sm"><option value="">Toate persoanele</option>{members.map((m) => <option key={m.userId} value={m.userId}>{m.userName ?? m.userId}</option>)}</select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filtru statut PAR" className="h-10 rounded-md border border-input bg-background px-2 text-sm"><option value="">Toate statusurile</option>{["draft","pending_approval","changes_requested","rejected","approved","in_finance","reapproval_required","paid","cancelled"].map((s) => <option key={s} value={s}>{s}</option>)}</select>
         <div>
           <label htmlFor="audit-from" className="text-xs font-medium text-muted-foreground block mb-1">De la</label>
           <input id="audit-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
@@ -931,6 +1051,8 @@ function AuditTab() {
           className="inline-flex items-center gap-1.5 h-10 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted disabled:opacity-50 min-h-[40px]">
           Export CSV
         </button>
+        <a href={`/api/par/audit/export.xlsx${exportQuery}`} download="par-audit.xlsx" className="inline-flex items-center h-10 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted">Export Excel</a>
+        <a href={`/api/par/audit/export.pdf${exportQuery}`} download="par-audit.pdf" className="inline-flex items-center h-10 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted">Export PDF</a>
         <span className="text-xs text-muted-foreground ml-auto">{total} {total === 1 ? "intrare" : "intrări"}</span>
       </div>
 
@@ -1076,10 +1198,11 @@ const INVITE_ROLE_LABELS: Record<string, string> = {
   requestor: "Solicitant", approver: "Aprobator", finance: "Finanțe", par_admin: "Administrator",
 };
 
-function InviteSection() {
+function InviteSection({ payers }: { payers: ParPayer[] }) {
   const [invites, setInvites] = useState<ParInvite[]>([]);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"requestor" | "approver" | "finance" | "par_admin">("requestor");
+  const [payerIds, setPayerIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUrl, setLastUrl] = useState<string | null>(null);
@@ -1089,12 +1212,13 @@ function InviteSection() {
     try { const { invites: i } = await listParInvites(); setInvites(i); } catch { /* ignore */ }
   };
   useEffect(() => { load(); }, []); // eslint-disable-line
+  useEffect(() => { if (payers.length === 1) setPayerIds([payers[0].id]); }, [payers]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null); setBusy(true); setLastUrl(null);
     try {
-      const r = await createParInvite({ email: email.trim(), par_role: role });
+      const r = await createParInvite({ email: email.trim(), par_role: role, payer_ids: payerIds });
       setLastUrl(r.inviteUrl);
       setEmail("");
       await load();
@@ -1124,7 +1248,8 @@ function InviteSection() {
         Trimite o invitație pe email. Dacă serviciul de email nu e configurat, copiază linkul și trimite-l manual.
       </p>
 
-      <form onSubmit={submit} className="flex flex-col sm:flex-row gap-2">
+      <form onSubmit={submit} className="space-y-3">
+        <div className="flex flex-col sm:flex-row gap-2">
         <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
           placeholder="email@exemplu.md" aria-label="Email invitat"
           className="vf-input flex-1" />
@@ -1135,11 +1260,21 @@ function InviteSection() {
           <option value="finance">Finanțe</option>
           <option value="par_admin">Administrator</option>
         </select>
-        <button type="submit" disabled={busy}
+        <button type="submit" disabled={busy || payerIds.length === 0}
           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 min-h-[44px]">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
           Invită
         </button>
+        </div>
+        <fieldset>
+          <legend className="mb-2 text-xs font-medium text-muted-foreground">Organizații accesibile *</legend>
+          <div className="flex flex-wrap gap-2">
+            {payers.map((payer) => <label key={payer.id} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+              <input type="checkbox" checked={payerIds.includes(payer.id)} onChange={() => setPayerIds((current) => current.includes(payer.id) ? current.filter((id) => id !== payer.id) : [...current, payer.id])} />
+              {payer.name}
+            </label>)}
+          </div>
+        </fieldset>
       </form>
 
       {error && (
@@ -1168,6 +1303,7 @@ function InviteSection() {
               <span className="truncate">
                 <span className="text-foreground">{inv.email}</span>
                 <span className="text-muted-foreground"> · {INVITE_ROLE_LABELS[inv.parRole] ?? inv.parRole}</span>
+                <span className="block text-xs text-muted-foreground">{(inv.payerIds ?? []).map((id) => payers.find((payer) => payer.id === id)?.name ?? id).join(", ") || "Toate organizațiile (invitație veche)"}</span>
               </span>
               <button type="button" onClick={() => revoke(inv.id)} aria-label={`Revocă invitația pentru ${inv.email}`}
                 className="inline-flex items-center text-muted-foreground hover:text-destructive transition-colors flex-shrink-0">
@@ -1315,6 +1451,127 @@ function MyRolesPanel({ onChanged }: { onChanged: () => void }) {
   );
 }
 
+function MemberAccessEditor({
+  userId,
+  displayName,
+  projects,
+  payers,
+  departments,
+  onClose,
+}: {
+  userId: string;
+  displayName: string;
+  projects: ParProject[];
+  payers: ParPayer[];
+  departments: ParDepartment[];
+  onClose: () => void;
+}) {
+  const [projectIds, setProjectIds] = useState<string[]>([]);
+  const [payerIds, setPayerIds] = useState<string[]>([]);
+  const [departmentId, setDepartmentId] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [staffCode, setStaffCode] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    getParMemberProfile(userId).then(({ profile, projectIds: assigned, payerIds: assignedPayers = [] }) => {
+      setProjectIds(assigned);
+      setPayerIds(assignedPayers);
+      setDepartmentId(profile?.departmentId ?? "");
+      setJobTitle(profile?.jobTitle ?? "");
+      setStaffCode(profile?.staffCode ?? "");
+    }).catch(() => setMessage("Nu am putut încărca profilul."))
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  const toggleProject = (id: string) => setProjectIds((current) =>
+    current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
+  );
+  const togglePayer = (id: string) => setPayerIds((current) =>
+    current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
+  );
+  const save = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      await Promise.all([
+        updateParMemberProfile(userId, {
+          department_id: departmentId || null,
+          job_title: jobTitle.trim() || null,
+          staff_code: staffCode.trim() || null,
+        }),
+        setParMemberProjects(userId, projectIds),
+        setParMemberPayers(userId, payerIds),
+      ]);
+      setMessage("Profilul și accesul la organizații/proiecte au fost salvate.");
+    } catch {
+      setMessage("Nu am putut salva profilul și accesul.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Profil și acces — {displayName}</h3>
+          <p className="text-xs text-muted-foreground">O organizație bifată oferă acces la toate proiectele ei, inclusiv cele create ulterior. Proiectele bifate separat oferă acces punctual.</p>
+        </div>
+        <button type="button" onClick={onClose} className="p-2 text-muted-foreground hover:text-foreground" aria-label="Închide editorul"><X className="h-4 w-4" aria-hidden /></button>
+      </div>
+      {loading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Se încarcă" /> : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label className="text-xs font-medium text-muted-foreground">Departament
+              <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className="vf-input mt-1"><option value="">Fără implicit</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+            </label>
+            <label className="text-xs font-medium text-muted-foreground">Funcție
+              <input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} className="vf-input mt-1" placeholder="ex. Coordonator proiect" />
+            </label>
+            <label className="text-xs font-medium text-muted-foreground">Cod personal
+              <input value={staffCode} onChange={(e) => setStaffCode(e.target.value)} className="vf-input mt-1" placeholder="ex. FIN-024" />
+            </label>
+          </div>
+          <fieldset>
+            <legend className="text-xs font-medium text-muted-foreground mb-2">Plătitori / organizații accesibile</legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {payers.map((payer) => (
+                <label key={payer.id} className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm">
+                  <input type="checkbox" checked={payerIds.includes(payer.id)} onChange={() => togglePayer(payer.id)} className="h-4 w-4" />
+                  <span>{payer.name}</span>
+                </label>
+              ))}
+              {payers.length === 0 && <span className="text-sm text-muted-foreground">Nu există organizații active.</span>}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend className="text-xs font-medium text-muted-foreground mb-2">Proiecte suplimentare accesibile</legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto">
+              {projects.map((project) => (
+                <label key={project.id} className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm">
+                  <input type="checkbox" checked={projectIds.includes(project.id)} onChange={() => toggleProject(project.id)} className="h-4 w-4" />
+                  <span>{project.name}<span className="ml-1 text-xs text-muted-foreground">· {payers.find((payer) => payer.id === project.payerId)?.name ?? "Fără plătitor"}</span></span>
+                </label>
+              ))}
+              {projects.length === 0 && <span className="text-sm text-muted-foreground">Nu există proiecte active.</span>}
+            </div>
+          </fieldset>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={save} disabled={saving} className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}Salvează profil și acces
+            </button>
+            {message && <span className="text-sm text-muted-foreground" role="status">{message}</span>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ParMembersTab() {
   const [members, setMembers] = useState<ParMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1323,9 +1580,14 @@ function ParMembersTab() {
     userId: string;
     role: string;
     approvalLimitCents: string;
-  }>({ userId: "", role: "requestor", approvalLimitCents: "" });
+    payerIds: string[];
+  }>({ userId: "", role: "requestor", approvalLimitCents: "", payerIds: [] });
   const [adding, setAdding] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [accessUserId, setAccessUserId] = useState<string | null>(null);
+  const [projects, setProjects] = useState<ParProject[]>([]);
+  const [departments, setDepartments] = useState<ParDepartment[]>([]);
+  const [payers, setPayers] = useState<ParPayer[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -1340,6 +1602,16 @@ function ParMembersTab() {
   };
 
   useEffect(() => { load(); }, []); // eslint-disable-line
+  useEffect(() => {
+    Promise.all([listProjects(), listDepartments(), listPayers()]).then(([p, d, payerRows]) => {
+      setProjects(p.items);
+      setDepartments(d.items ?? []);
+      setPayers(payerRows.items ?? []);
+    }).catch(() => { /* editor will show empty reference lists */ });
+  }, []);
+  useEffect(() => {
+    if (payers.length === 1) setAddForm((form) => ({ ...form, payerIds: form.payerIds.length ? form.payerIds : [payers[0].id] }));
+  }, [payers]);
 
   const handleAdd = async () => {
     if (!addForm.userId.trim()) {
@@ -1356,7 +1628,8 @@ function ParMembersTab() {
           ? mdlToCents(addForm.approvalLimitCents)
           : null,
       });
-      setAddForm({ userId: "", role: "requestor", approvalLimitCents: "" });
+      await setParMemberPayers(addForm.userId.trim(), addForm.payerIds);
+      setAddForm({ userId: "", role: "requestor", approvalLimitCents: "", payerIds: payers.length === 1 ? [payers[0].id] : [] });
       setShowAddForm(false);
       await load();
     } catch {
@@ -1394,7 +1667,7 @@ function ParMembersTab() {
       <MyRolesPanel onChanged={load} />
 
       {/* VF-004: invite by email */}
-      <InviteSection />
+      <InviteSection payers={payers} />
 
       {/* VF-302: approver delegation */}
       <DelegationSection members={members} />
@@ -1468,11 +1741,20 @@ function ParMembersTab() {
               aria-label="Limită aprobare MDL"
             />
           </div>
+          <fieldset className="sm:col-span-3">
+            <legend className="mb-2 text-xs font-medium text-muted-foreground">Plătitori / organizații accesibile *</legend>
+            <div className="flex flex-wrap gap-2">
+              {payers.map((payer) => <label key={payer.id} className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm">
+                <input type="checkbox" checked={addForm.payerIds.includes(payer.id)} onChange={() => setAddForm((form) => ({ ...form, payerIds: form.payerIds.includes(payer.id) ? form.payerIds.filter((id) => id !== payer.id) : [...form.payerIds, payer.id] }))} />
+                {payer.name}
+              </label>)}
+            </div>
+          </fieldset>
           <div className="col-span-1 sm:col-span-3 flex gap-2">
             <button
               type="button"
               onClick={handleAdd}
-              disabled={adding}
+              disabled={adding || addForm.payerIds.length === 0}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px]"
               aria-label="Salvează rol"
             >
@@ -1492,6 +1774,11 @@ function ParMembersTab() {
         </div>
       )}
 
+      {accessUserId && (() => {
+        const person = grouped.find((entry) => entry.userId === accessUserId);
+        return person ? <MemberAccessEditor userId={person.userId} displayName={person.userName ?? person.userId} projects={projects} payers={payers} departments={departments} onClose={() => setAccessUserId(null)} /> : null;
+      })()}
+
       {/* VM1-01: grouped by person — one row per person, multiple role badges */}
       <div className="rounded-lg border border-border overflow-hidden">
         <table className="w-full text-sm" aria-label="Membri PAR">
@@ -1500,7 +1787,7 @@ function ParMembersTab() {
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Utilizator</th>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Roluri</th>
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground">Limită aprobare</th>
-              <th className="text-right p-3 text-xs font-semibold text-muted-foreground sr-only">Acțiuni</th>
+              <th className="text-right p-3 text-xs font-semibold text-muted-foreground">Acces</th>
             </tr>
           </thead>
           <tbody>
@@ -1556,7 +1843,9 @@ function ParMembersTab() {
                       : <span className="text-muted-foreground">—</span>}
                   </td>
                   <td className="p-3 text-right">
-                    {/* No single-row revoke — individual role revoke is inline per badge */}
+                    <button type="button" onClick={() => setAccessUserId(g.userId)} className="rounded-md border border-input px-2.5 py-1.5 text-xs hover:bg-muted">
+                      Profil și acces
+                    </button>
                   </td>
                 </tr>
               );
@@ -1570,11 +1859,12 @@ function ParMembersTab() {
 
 // ─── Sub-tab: Reference Data ──────────────────────────────────────────────────
 
-type RefSection = "budgetCodes" | "departments" | "projects" | "events" | "vendors";
+type RefSection = "payers" | "budgetCodes" | "departments" | "projects" | "events" | "vendors";
 
 function ParReferenceData() {
   const [section, setSection] = useState<RefSection>("budgetCodes");
   const [departments, setDepartments] = useState<ParDepartment[]>([]);
+  const [payers, setPayers] = useState<ParPayer[]>([]);
   const [projects, setProjects] = useState<ParProject[]>([]);
   const [events, setEvents] = useState<ParEvent[]>([]); // VM1-04
   const [budgetCodes, setBudgetCodes] = useState<ParBudgetCode[]>([]);
@@ -1591,13 +1881,15 @@ function ParReferenceData() {
   const load = async () => {
     setLoading(true);
     try {
-      const [depts, projs, evts, codes, vends] = await Promise.all([
+      const [payerRows, depts, projs, evts, codes, vends] = await Promise.all([
+        listPayers(),
         listDepartments(),
         listProjects(),
         listEvents(), // VM1-04
         listBudgetCodes(),
         listVendors(),
       ]);
+      setPayers(payerRows.items ?? []);
       setDepartments(depts.items ?? []);
       setProjects(projs.items ?? []);
       setEvents(evts.events ?? []); // VM1-04
@@ -1643,11 +1935,12 @@ function ParReferenceData() {
   }
 
   const sectionLabels: Record<RefSection, string> = {
+    payers: "Plătitori / Organizații",
     budgetCodes: "Coduri bugetare",
     departments: "Departamente",
     projects: "Proiecte/Programe",
     events: "Evenimente", // VM1-04
-    vendors: "Furnizori/Plătitori",
+    vendors: "Beneficiari / Furnizori",
   };
 
   return (
@@ -1695,6 +1988,15 @@ function ParReferenceData() {
           onChange={handleImportFile}
         />
       </div>
+      <details className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm">
+        <summary className="cursor-pointer font-medium text-foreground">Cum se face importul Excel</summary>
+        <div className="mt-2 space-y-1 text-muted-foreground">
+          <p>1. Descarcă template-ul și păstrează denumirile foilor și coloanelor.</p>
+          <p>2. Completează proiectele, departamentele și codurile bugetare. Sumele acceptă atât formatul MD/EU (<span className="font-mono">12 500,50</span>), cât și formatul internațional (<span className="font-mono">12500.50</span>).</p>
+          <p>3. Încarcă fișierul. Elementele existente sunt actualizate, iar rezultatul arată separat fiecare rând invalid, coloană lipsă sau duplicat.</p>
+          <p>Importul nu oprește tot fișierul la prima eroare: rândurile valide sunt procesate, iar erorile rămân vizibile pentru corectare.</p>
+        </div>
+      </details>
 
       {/* Import error */}
       {importError && (
@@ -1708,9 +2010,9 @@ function ParReferenceData() {
       {importResult && (
         <div className="rounded-lg border border-border bg-card p-3 space-y-2 text-sm">
           <p className="font-medium text-foreground">Rezultat import:</p>
-          {(["projects", "departments", "budgetCodes"] as const).map((key) => {
+          {(["payers", "projects", "departments", "budgetCodes"] as const).map((key) => {
             const cat = importResult[key];
-            const label = key === "projects" ? "Proiecte" : key === "departments" ? "Departamente" : "Coduri buget";
+            const label = key === "payers" ? "Plătitori" : key === "projects" ? "Proiecte" : key === "departments" ? "Departamente" : "Coduri buget";
             return (
               <div key={key} className="space-y-1">
                 <p className="text-muted-foreground">
@@ -1752,13 +2054,45 @@ function ParReferenceData() {
         ))}
       </div>
 
+      {section === "payers" && (
+        <SimpleRefTable
+          title="Plătitori / Organizații"
+          items={payers}
+          columns={[
+            { label: "Denumire scurtă", key: "name" as const },
+            { label: "Denumire juridică", key: "legalName" as const },
+            { label: "IDNO", key: "idno" as const },
+          ]}
+          onAdd={(payload) => createPayer({
+            name: payload.name,
+            legal_name: payload.legalName || null,
+            idno: payload.idno || null,
+          }).then(load)}
+          onEdit={(id, payload) => updatePayer(id, {
+            name: payload.name,
+            legal_name: payload.legalName || null,
+            idno: payload.idno || null,
+          }).then(load)}
+          onDelete={(id) => deletePayer(id).then(() => load())}
+          addFields={[
+            { id: "name", label: "Denumire scurtă", placeholder: "ex. Compania Grup SRL", required: true },
+            { id: "legalName", label: "Denumire juridică", placeholder: "Denumirea din acte" },
+            { id: "idno", label: "IDNO", placeholder: "ex. 1012600000000" },
+          ]}
+        />
+      )}
+
       {section === "budgetCodes" && (
         <BudgetCodesTable
           items={budgetCodes}
+          payers={payers}
+          projects={projects}
           onAdd={(payload) =>
             createBudgetCode({
               code: payload.code ?? "",
               name: payload.name ?? "",
+              payer_id: String(payload.payer_id || "") || null,
+              project_id: String(payload.project_id || "") || null,
               allocatedCents: payload.allocatedCents ?? 0,
             } as { code: string; name: string; allocatedCents?: number }).then(load)
           }
@@ -1766,6 +2100,8 @@ function ParReferenceData() {
             updateBudgetCode(id, {
               code: payload.code,
               name: payload.name,
+              payer_id: String(payload.payer_id || "") || null,
+              project_id: String(payload.project_id || "") || null,
               allocatedCents: payload.allocatedCents,
             } as Partial<{ code: string; name: string; allocatedCents: number }>).then(load)
           }
@@ -1793,13 +2129,15 @@ function ParReferenceData() {
             columns={[
               { label: "Denumire", key: "name" as const },
               { label: "Donor", key: "donor" as const },
+              { label: "Plătitor", key: "payerId" as const, format: (value) => payers.find((p) => p.id === value)?.name ?? "—" },
             ]}
-            onAdd={(payload) => createProject(payload as { name: string; donor?: string }).then(load)}
-            onEdit={(id, payload) => updateProject(id, payload as Partial<{ name: string; donor?: string }>).then(load)}
+            onAdd={(payload) => createProject({ name: payload.name, donor: payload.donor || null, payer_id: payload.payerId || null }).then(load)}
+            onEdit={(id, payload) => updateProject(id, { name: payload.name, donor: payload.donor || null, payer_id: payload.payerId || null }).then(load)}
             onDelete={(id) => deleteProject(id).then(load)}
             addFields={[
-              { id: "name", label: "Denumire", placeholder: "ex. Digital Safeguard" },
+              { id: "name", label: "Denumire", placeholder: "ex. Digital Safeguard", required: true },
               { id: "donor", label: "Donor (opțional)", placeholder: "ex. USAID" },
+              { id: "payerId", label: "Plătitor / Organizație", required: true, options: payers.map((p) => ({ value: p.id, label: p.name })) },
             ]}
           />
           <ProjectApproversSection projects={projects} onReload={load} />
@@ -2179,16 +2517,18 @@ function BudgetProgress({ usage }: { usage?: BudgetCodeUsage }) {
 
 interface BudgetCodesTableProps {
   items: BudgetCodeItem[];
+  payers: ParPayer[];
+  projects: ParProject[];
   onAdd: (payload: Record<string, string | number | undefined>) => Promise<void>;
   onEdit: (id: string, payload: Record<string, string | number | undefined>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
-function BudgetCodesTable({ items, onAdd, onEdit, onDelete }: BudgetCodesTableProps) {
+function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: BudgetCodesTableProps) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<{ code: string; name: string; allocatedMDL: string }>({
-    code: "", name: "", allocatedMDL: "",
+  const [form, setForm] = useState<{ code: string; name: string; allocatedMDL: string; payerId: string; projectId: string }>({
+    code: "", name: "", allocatedMDL: "", payerId: payers.length === 1 ? payers[0].id : "", projectId: "",
   });
   const [saving, setSaving] = useState(false);
   // VF-202: usage per code (progress bars). Reloads when the list changes.
@@ -2200,7 +2540,7 @@ function BudgetCodesTable({ items, onAdd, onEdit, onDelete }: BudgetCodesTablePr
   }, [items]);
 
   const startAdd = () => {
-    setForm({ code: "", name: "", allocatedMDL: "" });
+    setForm({ code: "", name: "", allocatedMDL: "", payerId: payers.length === 1 ? payers[0].id : "", projectId: "" });
     setShowForm(true);
     setEditingId(null);
   };
@@ -2210,12 +2550,14 @@ function BudgetCodesTable({ items, onAdd, onEdit, onDelete }: BudgetCodesTablePr
       code: item.code,
       name: item.name,
       allocatedMDL: item.allocatedCents ? String((item.allocatedCents / 100).toFixed(0)) : "",
+      payerId: item.payerId ?? "",
+      projectId: item.projectId ?? "",
     });
     setEditingId(item.id);
     setShowForm(false);
   };
 
-  const cancel = () => { setShowForm(false); setEditingId(null); setForm({ code: "", name: "", allocatedMDL: "" }); };
+  const cancel = () => { setShowForm(false); setEditingId(null); setForm({ code: "", name: "", allocatedMDL: "", payerId: payers.length === 1 ? payers[0].id : "", projectId: "" }); };
 
   const handleSave = async () => {
     setSaving(true);
@@ -2224,9 +2566,9 @@ function BudgetCodesTable({ items, onAdd, onEdit, onDelete }: BudgetCodesTablePr
       : 0;
     try {
       if (editingId) {
-        await onEdit(editingId, { code: form.code, name: form.name, allocatedCents });
+        await onEdit(editingId, { code: form.code, name: form.name, allocatedCents, payer_id: form.payerId, project_id: form.projectId || undefined });
       } else {
-        await onAdd({ code: form.code, name: form.name, allocatedCents });
+        await onAdd({ code: form.code, name: form.name, allocatedCents, payer_id: form.payerId, project_id: form.projectId || undefined });
       }
       cancel();
     } finally {
@@ -2235,7 +2577,7 @@ function BudgetCodesTable({ items, onAdd, onEdit, onDelete }: BudgetCodesTablePr
   };
 
   const renderForm = (inline?: boolean) => (
-    <div className={cn("grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5", inline && "mt-2")}>
+    <div className={cn("grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5", inline && "mt-2")}>
       <div>
         <label htmlFor="bc-code" className="text-xs font-medium text-muted-foreground block mb-1">Cod</label>
         <input id="bc-code" type="text" value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
@@ -2252,8 +2594,24 @@ function BudgetCodesTable({ items, onAdd, onEdit, onDelete }: BudgetCodesTablePr
           onChange={(e) => setForm((f) => ({ ...f, allocatedMDL: e.target.value }))}
           placeholder="ex. 50000" className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Alocare MDL" />
       </div>
-      <div className="col-span-1 sm:col-span-3 flex gap-2">
-        <button type="button" onClick={handleSave} disabled={saving}
+      <div>
+        <label htmlFor="bc-payer" className="text-xs font-medium text-muted-foreground block mb-1">Plătitor / Organizație</label>
+        <select id="bc-payer" value={form.payerId} required onChange={(e) => setForm((f) => ({ ...f, payerId: e.target.value, projectId: "" }))}
+          className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]">
+          <option value="">— Selectează —</option>
+          {payers.map((payer) => <option key={payer.id} value={payer.id}>{payer.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <label htmlFor="bc-project" className="text-xs font-medium text-muted-foreground block mb-1">Proiect (opțional)</label>
+        <select id="bc-project" value={form.projectId} onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}
+          className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]">
+          <option value="">Toate proiectele plătitorului</option>
+          {projects.filter((project) => !form.payerId || project.payerId === form.payerId).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+        </select>
+      </div>
+      <div className="col-span-1 sm:col-span-2 lg:col-span-5 flex gap-2">
+        <button type="button" onClick={handleSave} disabled={saving || !form.code.trim() || !form.name.trim() || !form.payerId}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px]">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}Salvează
         </button>
@@ -2282,22 +2640,27 @@ function BudgetCodesTable({ items, onAdd, onEdit, onDelete }: BudgetCodesTablePr
             <tr>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Cod</th>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Denumire</th>
+              <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Scope</th>
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground">Alocare (MDL)</th>
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground sr-only">Acțiuni</th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 && (
-              <tr><td colSpan={4} className="p-6 text-center text-sm text-muted-foreground">Niciun cod bugetar.</td></tr>
+              <tr><td colSpan={5} className="p-6 text-center text-sm text-muted-foreground">Niciun cod bugetar.</td></tr>
             )}
             {items.map((item) => (
               <tr key={item.id} className="border-t border-border">
                 {editingId === item.id ? (
-                  <td colSpan={4} className="p-0">{renderForm(true)}</td>
+                  <td colSpan={5} className="p-0">{renderForm(true)}</td>
                 ) : (
                   <>
                     <td className="p-3 text-foreground font-mono text-xs">{item.code}</td>
                     <td className="p-3 text-foreground">{item.name}</td>
+                    <td className="p-3 text-foreground text-xs">
+                      <span className="block">{payers.find((payer) => payer.id === item.payerId)?.name ?? "—"}</span>
+                      <span className="text-muted-foreground">{item.projectId ? projects.find((project) => project.id === item.projectId)?.name ?? "Proiect necunoscut" : "Toate proiectele"}</span>
+                    </td>
                     <td className="p-3 text-right text-foreground align-top">
                       {item.allocatedCents ? formatMDL(item.allocatedCents) : <span className="text-muted-foreground">Fără plafon</span>}
                       <BudgetProgress usage={usage[item.id]} />
@@ -2344,7 +2707,8 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
   // Pre-fill vendor form from registry pick
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<Record<string, string>>({ name: "", idnp: "", iban: "", bank: "" });
+  const emptyVendorForm = () => ({ name: "", idnp: "", iban: "", bank: "", bic_swift: "", legal_address: "", administrator_name: "", contact_name: "", contact_phone: "", contact_email: "" });
+  const [form, setForm] = useState<Record<string, string>>(emptyVendorForm());
   const [saving, setSaving] = useState(false);
 
   const doSearch = useCallback((q: string) => {
@@ -2364,23 +2728,23 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
   };
 
   const onRegistryPick = (co: RegistryCompany) => {
-    setForm((f) => ({ ...f, name: co.name, idnp: co.idno ?? "" }));
+    setForm((f) => ({ ...f, name: co.name, idnp: co.idno ?? "", legal_address: co.address ?? "" }));
     setRegistryQuery("");
     setRegistryResults([]);
     setShowForm(true);
   };
 
-  const startAdd = () => { setForm({ name: "", idnp: "", iban: "", bank: "" }); setShowForm(true); setEditingId(null); };
-  const startEdit = (v: ParVendor) => { setForm({ name: v.name, idnp: v.idnp ?? "", iban: v.iban ?? "", bank: v.bank ?? "" }); setEditingId(v.id); setShowForm(false); };
-  const cancel = () => { setShowForm(false); setEditingId(null); setForm({ name: "", idnp: "", iban: "", bank: "" }); };
+  const startAdd = () => { setForm(emptyVendorForm()); setShowForm(true); setEditingId(null); };
+  const startEdit = (v: ParVendor) => { setForm({ ...emptyVendorForm(), name: v.name, idnp: v.idnp ?? "", iban: v.iban ?? "", bank: v.bank ?? "", bic_swift: v.bicSwift ?? "", legal_address: v.legalAddress ?? "", administrator_name: v.administratorName ?? "", contact_name: v.contactName ?? "", contact_phone: v.contactPhone ?? "", contact_email: v.contactEmail ?? "" }); setEditingId(v.id); setShowForm(false); };
+  const cancel = () => { setShowForm(false); setEditingId(null); setForm(emptyVendorForm()); };
 
   const handleSave = async () => {
     setSaving(true);
     try {
       if (editingId) {
-        await updateVendor(editingId, { name: form.name, idnp: form.idnp || null, iban: form.iban || null, bank: form.bank || null });
+        await updateVendor(editingId, { name: form.name, idnp: form.idnp || null, iban: form.iban || null, bank: form.bank || null, bic_swift: form.bic_swift || null, legal_address: form.legal_address || null, administrator_name: form.administrator_name || null, contact_name: form.contact_name || null, contact_phone: form.contact_phone || null, contact_email: form.contact_email || null });
       } else {
-        await createVendor({ name: form.name, idnp: form.idnp || null, iban: form.iban || null, bank: form.bank || null });
+        await createVendor({ name: form.name, idnp: form.idnp || null, iban: form.iban || null, bank: form.bank || null, bic_swift: form.bic_swift || null, legal_address: form.legal_address || null, administrator_name: form.administrator_name || null, contact_name: form.contact_name || null, contact_phone: form.contact_phone || null, contact_email: form.contact_email || null });
       }
       await onReload();
       cancel();
@@ -2396,6 +2760,12 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
         { id: "idnp", label: "IDNP (13 cifre)", placeholder: "2008001007903" },
         { id: "iban", label: "IBAN", placeholder: "MD48ML000002259A19498121" },
         { id: "bank", label: "Bancă", placeholder: 'BC "Moldindconbank" S.A.' },
+        { id: "bic_swift", label: "BIC / SWIFT", placeholder: "MOLDMD2X" },
+        { id: "administrator_name", label: "Administrator / reprezentant", placeholder: "Prenume Nume" },
+        { id: "legal_address", label: "Adresă juridică", placeholder: "Localitate, stradă, număr" },
+        { id: "contact_name", label: "Persoană de contact", placeholder: "Prenume Nume" },
+        { id: "contact_phone", label: "Telefon", placeholder: "+373…" },
+        { id: "contact_email", label: "Email", placeholder: "office@companie.md" },
       ] as { id: string; label: string; placeholder: string }[]).map((field) => (
         <div key={field.id}>
           <label htmlFor={`vnd-${field.id}`} className="text-xs font-medium text-muted-foreground block mb-1">{field.label}</label>
@@ -2510,11 +2880,11 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
 interface SimpleRefTableProps<T extends { id: string; active?: boolean }> {
   title: string;
   items: T[];
-  columns: { label: string; key: keyof T }[];
+  columns: { label: string; key: keyof T; format?: (value: string, item: T) => string }[];
   onAdd: (payload: Record<string, string>) => Promise<void>;
   onEdit: (id: string, payload: Record<string, string>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
-  addFields: { id: string; label: string; placeholder?: string }[];
+  addFields: { id: string; label: string; placeholder?: string; required?: boolean; options?: { value: string; label: string }[] }[];
 }
 
 function SimpleRefTable<T extends { id: string; active?: boolean; name?: string }>({
@@ -2534,7 +2904,9 @@ function SimpleRefTable<T extends { id: string; active?: boolean; name?: string 
   const initForm = (item?: T) => {
     const f: Record<string, string> = {};
     addFields.forEach((field) => {
-      f[field.id] = (item ? String((item as Record<string, unknown>)[field.id] ?? "") : "");
+      f[field.id] = item
+        ? String((item as Record<string, unknown>)[field.id] ?? "")
+        : field.options?.length === 1 ? field.options[0].value : "";
     });
     setForm(f);
   };
@@ -2583,22 +2955,24 @@ function SimpleRefTable<T extends { id: string; active?: boolean; name?: string 
           <label htmlFor={`ref-${field.id}`} className="text-xs font-medium text-muted-foreground block mb-1">
             {field.label}
           </label>
-          <input
-            id={`ref-${field.id}`}
-            type="text"
-            value={form[field.id] ?? ""}
-            onChange={(e) => setForm((f) => ({ ...f, [field.id]: e.target.value }))}
-            placeholder={field.placeholder}
-            className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]"
-            aria-label={field.label}
-          />
+          {field.options ? (
+            <select id={`ref-${field.id}`} value={form[field.id] ?? ""} onChange={(e) => setForm((f) => ({ ...f, [field.id]: e.target.value }))}
+              className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label={field.label}>
+              <option value="">— Selectează —</option>
+              {field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          ) : (
+            <input id={`ref-${field.id}`} type="text" value={form[field.id] ?? ""}
+              onChange={(e) => setForm((f) => ({ ...f, [field.id]: e.target.value }))} placeholder={field.placeholder}
+              className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label={field.label} />
+          )}
         </div>
       ))}
       <div className="col-span-1 sm:col-span-2 flex gap-2">
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || addFields.some((field) => field.required && !form[field.id]?.trim())}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px]"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}
@@ -2659,7 +3033,9 @@ function SimpleRefTable<T extends { id: string; active?: boolean; name?: string 
                   <td key={col.label} className="p-3 text-foreground">
                     {editingId === item.id && col === columns[0]
                       ? null
-                      : String((item as Record<string, unknown>)[col.key as string] ?? "—")}
+                      : col.format
+                        ? col.format(String((item as Record<string, unknown>)[col.key as string] ?? ""), item)
+                        : String((item as Record<string, unknown>)[col.key as string] ?? "—")}
                   </td>
                 ))}
                 {editingId === item.id ? (

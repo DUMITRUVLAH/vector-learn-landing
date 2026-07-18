@@ -23,6 +23,7 @@ import { DocMergeWizardPage } from "./pages/business/docmerge/DocMergeWizardPage
 import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
 import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
 import { BusinessDashboardPage } from "./pages/business/BusinessDashboardPage";
+import { PlatformAdminPage } from "./pages/business/PlatformAdminPage";
 import { BusinessGuardPage } from "./components/business/BusinessGuardPage";
 import { ParGuardPage } from "./components/par/ParGuardPage";
 // SHELL-503: PAR invite acceptance (public — no auth guard)
@@ -204,6 +205,8 @@ function Routes() {
   if (path.startsWith("/business/fin/onboarding")) return <BusinessGuardPage><FinOnboarding /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/company")) return <BusinessGuardPage><FinCompany /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/")) return <BusinessGuardPage><FinHome /></BusinessGuardPage>;
+
+  if (path.startsWith("/business/platform-admin")) return <BusinessGuardPage><PlatformAdminPage /></BusinessGuardPage>;
 
   // PAR routes under /business/par/* — ParGuardPage (VM1-01 Decizia 9) hides the whole
   // module from users with zero PAR roles, even on direct URL access.

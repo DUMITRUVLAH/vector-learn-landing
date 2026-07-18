@@ -8,9 +8,13 @@
  *
  * Used by ParDetail (secțiunea Atașamente) and ParFinanceQueue (butonul Documente).
  */
-export async function openParAttachment(fileUrl: string, fileName: string): Promise<void> {
+export async function openParAttachment(fileUrl: string, fileName: string, parId?: string, attachmentId?: string): Promise<void> {
   try {
     if (!fileUrl) return;
+    if (parId && attachmentId) {
+      window.open(`/api/par/${parId}/attachments/${attachmentId}/preview`, "_blank", "noopener,noreferrer");
+      return;
+    }
     if (fileUrl.startsWith("data:")) {
       const blob = await (await fetch(fileUrl)).blob();
       const url = URL.createObjectURL(blob);

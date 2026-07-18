@@ -3,7 +3,11 @@
  * project with no designated approvers, is approvable by ANY approver. A restricted project only its
  * designated approvers. (Backs the inbox filter + the approve permission in parApprovals.ts.)
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// projectAllowsApprover is pure; the DB import exists only for sibling lookup helpers.
+vi.mock("../../../db/client", () => ({ db: {} }));
+
 import { projectAllowsApprover } from "../projectApprovers";
 
 describe("projectAllowsApprover", () => {

@@ -198,12 +198,14 @@ describe("T-VM1-02-2 [blocant] Missing required fields produce row errors", () =
 });
 
 describe("T-VM1-02-3 [blocant] Route is mounted in app.ts", () => {
+  // 30s: importing the route module transitively cold-loads db/client→PGlite wasm under vitest's
+  // SSR transform, which can exceed the 5s default under suite concurrency. Real import is sub-second.
   it("parConfigImportRoutes is exported from the route file", async () => {
     // Import the route file — if it has a top-level exceljs import, this would fail
     const mod = await import("../../routes/parConfigImport");
     expect(mod.parConfigImportRoutes).toBeDefined();
     expect(typeof mod.parConfigImportRoutes.fetch).toBe("function");
-  });
+  }, 60000);
 });
 
 describe("T-VM1-02-4 [normal] Upsert logic (dedup by code)", () => {

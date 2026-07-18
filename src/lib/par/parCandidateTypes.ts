@@ -13,5 +13,8 @@ export interface ParPayeeCandidate {
   /** true if a non-MD but ISO-13616-valid IBAN → UI shows "verificați (IBAN non-MD)". */
   ibanForeign?: boolean;
   bank: string | null;
+  bic?: string | null;
+  legalAddress?: string | null;
+  administratorName?: string | null;
   payeeType: "fizic" | "juridic" | null;
 }

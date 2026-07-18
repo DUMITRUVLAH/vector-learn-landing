@@ -8,12 +8,14 @@
  * Design system: Vector 365 tokens only, light + dark, WCAG AA
  */
 import { useState, useEffect, useCallback } from "react";
-import { CheckCircle, XCircle, MessageSquare, Loader2, Inbox, AlertCircle, RefreshCcw, X } from "lucide-react";
+import { CheckCircle, XCircle, MessageSquare, Loader2, Inbox, AlertCircle, RefreshCcw, X, FileText } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { useRouter } from "@/router/HashRouter";
 import {
   getParInbox,
+  listPayers,
+  listEvents,
   approvePar,
   bulkApprovePar,
   rejectPar,
@@ -373,6 +375,16 @@ export default function ParInbox() {
 
   // Excel-style table: filter by project + sort by any column.
   const [projectFilter, setProjectFilter] = useState("");
+  const [payerFilter, setPayerFilter] = useState("");
+  const [eventFilter, setEventFilter] = useState("");
+  const [requestorFilter, setRequestorFilter] = useState("");
+  const [beneficiaryFilter, setBeneficiaryFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [minTotal, setMinTotal] = useState("");
+  const [maxTotal, setMaxTotal] = useState("");
+  const [payerOptions, setPayerOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [eventOptions, setEventOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [sort, setSort] = useState<{ key: InboxSortKey; dir: "asc" | "desc" }>({ key: "submittedAt", dir: "desc" });
   const toggleSort = (key: InboxSortKey) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "submittedAt" || key === "totalEstimatedCents" ? "desc" : "asc" }));
@@ -406,6 +418,13 @@ export default function ParInbox() {
   useEffect(() => {
     loadInbox();
   }, [loadInbox]);
+
+  useEffect(() => {
+    Promise.all([listPayers(), listEvents()]).then(([p, e]) => {
+      setPayerOptions(p.items);
+      setEventOptions(e.events);
+    }).catch(() => { /* filters remain usable without reference labels */ });
+  }, []);
 
   const handleAction = (par: ParInboxItem, type: DecisionType) => {
     setModalTarget({ par, type });
@@ -488,7 +507,19 @@ export default function ParInbox() {
 
         {!loading && !error && items.length > 0 && (() => {
           const projectOptions = [...new Set(items.map((i) => i.projectName).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, "ro"));
-          const rows = sortFilterInbox(items, projectFilter, sort);
+          const rows = sortFilterInbox(items, projectFilter, sort).filter((item) => {
+            const submitted = item.submittedAt ? new Date(item.submittedAt) : null;
+            const min = minTotal ? Number(minTotal) * 100 : null;
+            const max = maxTotal ? Number(maxTotal) * 100 : null;
+            return (!payerFilter || item.payerId === payerFilter)
+              && (!eventFilter || item.eventId === eventFilter)
+              && (!requestorFilter || (item.requestedByName ?? "").toLocaleLowerCase("ro").includes(requestorFilter.toLocaleLowerCase("ro")))
+              && (!beneficiaryFilter || (item.payeeName ?? "").toLocaleLowerCase("ro").includes(beneficiaryFilter.toLocaleLowerCase("ro")))
+              && (!dateFrom || !!submitted && submitted >= new Date(dateFrom))
+              && (!dateTo || !!submitted && submitted <= new Date(`${dateTo}T23:59:59`))
+              && (min == null || item.totalEstimatedCents >= min)
+              && (max == null || item.totalEstimatedCents <= max);
+          });
           const arrow = (key: InboxSortKey) => (sort.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
           const Th = ({ k, label, align = "left" }: { k: InboxSortKey; label: string; align?: "left" | "right" }) => (
             <th className={cn("px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap", align === "right" ? "text-right" : "text-left")}>
@@ -500,8 +531,8 @@ export default function ParInbox() {
           return (
             <>
               {/* Filter bar */}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+              <div className="rounded-lg border border-border bg-card p-3 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm text-muted-foreground">
                     {rows.length} din {items.length} {items.length === 1 ? "cerere" : "cereri"}
                   </p>
@@ -514,6 +545,18 @@ export default function ParInbox() {
                     <option value="">Toate proiectele</option>
                     {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
+                  <select value={payerFilter} onChange={(e) => setPayerFilter(e.target.value)} aria-label="Filtrează după plătitor" className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px]">
+                    <option value="">Toți plătitorii</option>{payerOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  <select value={eventFilter} onChange={(e) => setEventFilter(e.target.value)} aria-label="Filtrează după eveniment" className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px]">
+                    <option value="">Toate evenimentele</option>{eventOptions.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                  <input value={requestorFilter} onChange={(e) => setRequestorFilter(e.target.value)} placeholder="Solicitant…" aria-label="Filtrează după solicitant" className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px] w-36" />
+                  <input value={beneficiaryFilter} onChange={(e) => setBeneficiaryFilter(e.target.value)} placeholder="Beneficiar…" aria-label="Filtrează după beneficiar" className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px] w-36" />
+                  <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="Depus de la" className="rounded-md border border-input bg-background px-2 py-1.5 text-sm min-h-[36px]" />
+                  <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Depus până la" className="rounded-md border border-input bg-background px-2 py-1.5 text-sm min-h-[36px]" />
+                  <input type="number" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="Min. MDL" aria-label="Sumă minimă" className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px] w-28" />
+                  <input type="number" value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="Max. MDL" aria-label="Sumă maximă" className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px] w-28" />
                 </div>
                 {selectedIds.size > 0 && (
                   <button type="button" onClick={() => setBulkOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 min-h-[36px]">
@@ -536,6 +579,7 @@ export default function ParInbox() {
                       <Th k="requestedByName" label="Solicitat de" />
                       <th className="px-3 py-2.5 font-medium text-muted-foreground text-left">Scop</th>
                       <th className="px-3 py-2.5 font-medium text-muted-foreground text-left">Servicii / descriere</th>
+                      <th className="px-3 py-2.5 font-medium text-muted-foreground text-left">Documente</th>
                       <Th k="totalEstimatedCents" label="Sumă" align="right" />
                       <Th k="submittedAt" label="Depus" />
                       <th className="px-3 py-2.5 font-medium text-muted-foreground text-right">Acțiuni</th>
@@ -560,6 +604,24 @@ export default function ParInbox() {
                         <td className="px-3 py-2 align-middle max-w-[160px] truncate text-foreground" title={item.requestedByName ?? ""}>{item.requestedByName ?? "—"}</td>
                         <td className="px-3 py-2 align-middle text-muted-foreground text-xs whitespace-nowrap">{PURPOSE_LABEL[item.purpose] ?? item.purpose}</td>
                         <td className="px-3 py-2 align-middle text-foreground text-xs min-w-[220px] max-w-[360px]"><span className="line-clamp-2" title={item.endUse ?? ""}>{item.endUse || "—"}</span></td>
+                        <td className="px-3 py-2 align-middle min-w-[180px] max-w-[260px]">
+                          {item.attachments?.length ? (
+                            <div className="flex flex-col items-start gap-1">
+                              {item.attachments.map((attachment) => (
+                                <button
+                                  key={attachment.id}
+                                  type="button"
+                                  onClick={() => window.open(`/api/par/${item.id}/attachments/${attachment.id}/preview`, "_blank", "noopener,noreferrer")}
+                                  className="inline-flex max-w-full items-center gap-1 text-xs text-primary hover:underline"
+                                  title={`Deschide ${attachment.fileName} în browser`}
+                                >
+                                  <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                  <span className="truncate">{attachment.fileName}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : <span className="text-muted-foreground">—</span>}
+                        </td>
                         <td className="px-3 py-2 align-middle text-right font-mono text-foreground whitespace-nowrap">{formatMDL(item.totalEstimatedCents)}</td>
                         <td className="px-3 py-2 align-middle text-muted-foreground text-xs whitespace-nowrap">
                           {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" }) : "—"}

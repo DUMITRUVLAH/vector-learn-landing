@@ -545,7 +545,7 @@ function AttachmentsModal({ par, onClose }: AttachmentsModalProps) {
                 <div className="flex-1 min-w-0">
                   <button
                     type="button"
-                    onClick={() => void openParAttachment(att.fileUrl, att.fileName)}
+                    onClick={() => void openParAttachment(att.fileUrl, att.fileName, par.id, att.id)}
                     className="text-sm text-primary hover:underline truncate block max-w-full text-left"
                     aria-label={`Descarcă ${att.fileName}`}
                   >
@@ -584,6 +584,13 @@ export default function ParFinanceQueue() {
   const [s16Par, setS16Par] = useState<ParFinanceQueueItem | null>(null);
   const [payPar, setPayPar] = useState<ParFinanceQueueItem | null>(null);
   const [attPar, setAttPar] = useState<ParFinanceQueueItem | null>(null);
+  const [filterQ, setFilterQ] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [minTotal, setMinTotal] = useState("");
+  const [maxTotal, setMaxTotal] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -602,6 +609,18 @@ export default function ParFinanceQueue() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const filteredItems = items.filter((par) => {
+    const haystack = `${par.requestNo} ${par.payeeName ?? ""} ${par.payeeIdnp ?? ""} ${par.payeeIban ?? ""} ${par.projectName ?? ""} ${par.endUse ?? ""}`.toLocaleLowerCase("ro");
+    const created = new Date(par.submittedAt ?? par.createdAt);
+    return (!filterQ.trim() || haystack.includes(filterQ.trim().toLocaleLowerCase("ro")))
+      && (!projectFilter || par.projectName === projectFilter)
+      && (!statusFilter || par.status === statusFilter)
+      && (!dateFrom || created >= new Date(dateFrom))
+      && (!dateTo || created <= new Date(`${dateTo}T23:59:59`))
+      && (!minTotal || par.totalEstimatedCents >= Number(minTotal) * 100)
+      && (!maxTotal || par.totalEstimatedCents <= Number(maxTotal) * 100);
+  });
 
   return (
     <AppShell pageTitle="Coadă finanțe" pageDescription="PAR-uri aprobate — plată internă">
@@ -641,6 +660,18 @@ export default function ParFinanceQueue() {
                 a bloca plata când documentele nu se potrivesc.
               </p>
             </div>
+          </div>
+        )}
+
+        {!loading && !error && items.length > 0 && (
+          <div className="rounded-lg border border-border bg-card p-3 flex flex-wrap gap-2">
+            <input value={filterQ} onChange={(e) => setFilterQ(e.target.value)} placeholder="Caută PAR, beneficiar, IBAN…" aria-label="Caută în coada finanțe" className="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[40px] min-w-[240px]" />
+            <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} aria-label="Filtru proiect" className="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[40px]"><option value="">Toate proiectele</option>{[...new Set(items.map((i) => i.projectName).filter(Boolean))].map((p) => <option key={p!} value={p!}>{p}</option>)}</select>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filtru statut" className="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[40px]"><option value="">Toate statusurile</option><option value="approved">Aprobate</option><option value="in_finance">În finanțe</option><option value="reapproval_required">Reaprobare</option></select>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="De la" className="rounded-md border border-input bg-background px-2 py-2 text-sm min-h-[40px]" />
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Până la" className="rounded-md border border-input bg-background px-2 py-2 text-sm min-h-[40px]" />
+            <input type="number" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="Min. MDL" aria-label="Sumă minimă" className="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[40px] w-28" />
+            <input type="number" value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="Max. MDL" aria-label="Sumă maximă" className="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[40px] w-28" />
           </div>
         )}
 
@@ -691,7 +722,7 @@ export default function ParFinanceQueue() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((par, idx) => (
+                {filteredItems.map((par, idx) => (
                   <tr
                     key={par.id}
                     className={cn(

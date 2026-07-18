@@ -43,6 +43,7 @@ import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { useParRoles } from "@/hooks/useParRoles";
 import { getParInbox, getFinanceQueue } from "@/lib/api/par";
 import { NotificationBell } from "@/components/app/NotificationBell";
+import { api } from "@/lib/api";
 
 interface BusinessShellProps {
   children: ReactNode;
@@ -319,6 +320,10 @@ export function BusinessShell({
   // VM1-01: fetch PAR roles to gate the PAR navigation section.
   const { roles: parRoles, status: parRolesStatus } = useParRoles();
   const hasPar = parRolesStatus === "resolved" && parRoles.length >= 1;
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  useEffect(() => {
+    api("/api/platform/organizations").then(() => setIsPlatformAdmin(true)).catch(() => setIsPlatformAdmin(false));
+  }, []);
 
   // Notification badges
   const canApproveNav = parRoles.some((r) => ["approver", "par_admin"].includes(r));
@@ -343,9 +348,12 @@ export function BusinessShell({
   // SPLIT-501: inside PAR module → focused PAR-only sidebar.
   const isParModule = path.startsWith("/business/par");
 
+  const availableGroups: NavGroup[] = isPlatformAdmin
+    ? [...NAV_GROUPS, { section: "Platformă", prefix: "/business/platform-admin", items: [{ label: "Superadmin module", href: "/business/platform-admin", icon: ShieldCheck }] }]
+    : NAV_GROUPS;
   const baseGroups = isParModule
     ? PAR_NAV_GROUPS
-    : NAV_GROUPS.filter((g) => {
+    : availableGroups.filter((g) => {
         if (g.section === "PAR — Cereri de plată") return hasPar;
         // DocMerge apare în sidebar doar când ești pe rutele DocMerge
         if (g.section === "Document Merge") return path.startsWith("/business/docmerge");

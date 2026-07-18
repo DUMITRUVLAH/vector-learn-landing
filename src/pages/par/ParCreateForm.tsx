@@ -25,13 +25,15 @@ import {
   createPar, getPar, updatePar, submitPar,
   addLineItem, deleteLineItem,
   uploadAttachment, deleteAttachment,
-  listDepartments, listProjects, listEvents, listBudgetCodes, listVendors, createVendor,
+  reconcileAttachment,
+  listDepartments, listPayers, listProjects, listEvents, listBudgetCodes, listVendors, createVendor,
+  getMyParProfile, createEvent, createBudgetCode,
   searchRegistryCompanies, getBudgetCodeBalance,
   listParTemplates, saveParTemplate, instantiateParTemplate,
   prefillParFromDocument,
   formatMDL,
   type ParRequest, type ParLineItem, type ParAttachment,
-  type ParDepartment, type ParProject, type ParEvent, type ParBudgetCode, type ParVendor,
+  type ParDepartment, type ParPayer, type ParProject, type ParEvent, type ParBudgetCode, type ParVendor,
   type ParPurpose, type ParChargeTo, type ParAttachmentKind,
   type RegistryCompany, type BudgetCodeBalance, type ParTemplate,
   type ParPrefillResult,
@@ -74,6 +76,11 @@ function fmtMoney(cents: number, currency: string): string {
   if (currency === "MDL") return formatMDL(cents);
   const v = (cents / 100).toLocaleString("ro-MD", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${v} ${currency}`;
+}
+
+function attachmentAnalysis(raw: string | null | undefined): null | { status: "match" | "warning"; warnings: number; checks: Array<{ field: string; matches: boolean | null }> } {
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
 }
 
 function Field({ label, htmlFor, required, hint, error, children }: {
@@ -125,6 +132,7 @@ export function ParCreateForm() {
   const [aboveThreshold, setAboveThreshold] = useState(false);
 
   const [departments, setDepartments] = useState<ParDepartment[]>([]);
+  const [payers, setPayers] = useState<ParPayer[]>([]);
   const [projects, setProjects] = useState<ParProject[]>([]);
   const [events, setEvents] = useState<ParEvent[]>([]);
   const [budgetCodes, setBudgetCodes] = useState<ParBudgetCode[]>([]);
@@ -151,7 +159,9 @@ export function ParCreateForm() {
   // Header (1–7)
   const [dateOfRequest, setDateOfRequest] = useState(today());
   const [requestorTitle, setRequestorTitle] = useState("");
+  const [requestorCode, setRequestorCode] = useState("");
   const [departmentId, setDepartmentId] = useState("");
+  const [payerId, setPayerId] = useState("");
   // VM3-03 (Violeta): "aici ar trebui automat să pună data necesară peste 10 zile" —
   // prefilled to request date + 10 days; recalculated when the request date changes,
   // UNLESS the user edited it manually (touched flag stops the auto-sync).
@@ -175,6 +185,9 @@ export function ParCreateForm() {
   const [payeeIdnp, setPayeeIdnp] = useState("");
   const [payeeIban, setPayeeIban] = useState("");
   const [payeeBank, setPayeeBank] = useState("");
+  const [payeeBic, setPayeeBic] = useState("");
+  const [payeeLegalAddress, setPayeeLegalAddress] = useState("");
+  const [payeeAdministrator, setPayeeAdministrator] = useState("");
   // Feature 1: persoană fizică vs juridică toggle
   const [payeeType, setPayeeType] = useState<PayeeType>("juridic");
   // Attachments (13)
@@ -182,6 +195,12 @@ export function ParCreateForm() {
   const [attachmentsNote, setAttachmentsNote] = useState("");
   const [uploadKind, setUploadKind] = useState<ParAttachmentKind>("contract");
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [draftSavedMessage, setDraftSavedMessage] = useState<string | null>(null);
+  const [eventSearch, setEventSearch] = useState("");
+  const [newEventName, setNewEventName] = useState("");
+  const [budgetSearch, setBudgetSearch] = useState("");
+  const [newBudgetCode, setNewBudgetCode] = useState("");
+  const [vendorSearch, setVendorSearch] = useState("");
 
   // New line-item draft row
   const [nlDesc, setNlDesc] = useState("");
@@ -204,23 +223,42 @@ export function ParCreateForm() {
   const [busy, setBusy] = useState(false);
   const summaryRef = useRef<HTMLDivElement>(null);
 
-  // Load config + create the draft up-front (so line items / attachments work immediately).
+  // Load config. A new PAR is persisted only when the user explicitly saves, adds persisted
+  // content, uploads a document, or submits; simply opening the page no longer creates ghost drafts.
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const [depts, projs, evts, codes, vends, tmplRes] = await Promise.all([
-          listDepartments(), listProjects(), listEvents(),
-          listBudgetCodes(), listVendors(),
+          listDepartments(), listProjects(), listEvents(), listBudgetCodes(), listVendors(),
           listParTemplates().catch(() => ({ templates: [] })),
+        ]);
+        const [payerRes, profileRes] = await Promise.all([
+          Promise.resolve().then(() => listPayers()).catch(() => ({ items: [] })),
+          Promise.resolve().then(() => getMyParProfile()).catch(() => ({ profile: null, projectIds: [] })),
         ]);
         if (!alive) return;
         setDepartments(depts.items.filter((d) => d.active));
-        setProjects(projs.items.filter((p) => p.active));
+        const activePayers = payerRes.items.filter((p) => p.active);
+        const activeProjects = projs.items.filter((p) => p.active);
+        setPayers(activePayers);
+        setProjects(activeProjects);
         setEvents(evts.events.filter((e) => e.active));
         setBudgetCodes(codes.items.filter((c) => c.active));
         setVendors(vends.items.filter((v) => v.active));
         setTemplates(tmplRes.templates ?? []);
+        if (!editId) {
+          if (activePayers.length === 1) setPayerId(activePayers[0].id);
+          if (activeProjects.length === 1) {
+            setProjectId(activeProjects[0].id);
+            if (activeProjects[0].payerId) setPayerId(activeProjects[0].payerId);
+          }
+          if (profileRes.profile) {
+            setDepartmentId(profileRes.profile.departmentId ?? "");
+            setRequestorTitle(profileRes.profile.jobTitle ?? "");
+            setRequestorCode(profileRes.profile.staffCode ?? "");
+          }
+        }
       } catch { /* config load is non-blocking */ }
       try {
         if (editId) {
@@ -238,6 +276,8 @@ export function ParCreateForm() {
           setAttachments(existing.attachments ?? []);
           if (existing.dateOfRequest) setDateOfRequest(existing.dateOfRequest.slice(0, 10));
           setRequestorTitle(existing.requestorTitle ?? "");
+          setRequestorCode(existing.requestorCode ?? "");
+          setPayerId(existing.payerId ?? "");
           setDepartmentId(existing.departmentId ?? "");
           if (existing.dateNeeded) { setDateNeeded(existing.dateNeeded.slice(0, 10)); setDateNeededTouched(true); }
           setProjectId(existing.projectId ?? "");
@@ -255,14 +295,6 @@ export function ParCreateForm() {
           setPayeeType((existing.payeeType as PayeeType | null) ?? "juridic");
           setAttachmentsPresent(!!existing.attachmentsPresent);
           setAttachmentsNote(existing.attachmentsNote ?? "");
-        } else {
-          const created = await createPar({
-            date_of_request: new Date(dateOfRequest).toISOString(),
-            purpose, charge_to: chargeTo,
-          });
-          if (!alive) return;
-          setParId(created.id);
-          setPar(created);
         }
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : editId ? "Eroare la încărcarea ciornei" : "Eroare la crearea ciornei");
@@ -276,6 +308,8 @@ export function ParCreateForm() {
     await updatePar(id, {
       date_of_request: new Date(dateOfRequest).toISOString(),
       requestor_title: requestorTitle || null,
+      requestor_code: requestorCode || null,
+      payer_id: payerId || null,
       department_id: departmentId || null,
       date_needed: dateNeeded ? new Date(dateNeeded).toISOString() : null,
       project_id: projectId || null,
@@ -291,9 +325,32 @@ export function ParCreateForm() {
       attachments_present: attachmentsPresent, attachments_note: attachmentsNote || null,
       currency,
     });
-  }, [dateOfRequest, requestorTitle, departmentId, dateNeeded, projectId, eventId, budgetCodeId,
+  }, [dateOfRequest, requestorTitle, requestorCode, payerId, departmentId, dateNeeded, projectId, eventId, budgetCodeId,
       budgetCodeNote, purpose, chargeTo, endUse, vendorId, payeeName,
       payeeIdnp, payeeIban, payeeBank, payeeType, attachmentsPresent, attachmentsNote, currency]);
+
+  const ensureDraft = useCallback(async (): Promise<string> => {
+    if (parId) return parId;
+    const created = await createPar({
+      date_of_request: new Date(dateOfRequest).toISOString(),
+      requestor_title: requestorTitle || null,
+      requestor_code: requestorCode || null,
+      department_id: departmentId || null,
+      payer_id: payerId || null,
+      date_needed: dateNeeded ? new Date(dateNeeded).toISOString() : null,
+      project_id: projectId || null,
+      event_id: eventId || null,
+      budget_code_id: budgetCodeId || null,
+      budget_code_note: budgetCodeNote || null,
+      purpose,
+      charge_to: chargeTo,
+    });
+    setParId(created.id);
+    setPar(created);
+    await patchHeader(created.id);
+    return created.id;
+  }, [parId, dateOfRequest, requestorTitle, requestorCode, departmentId, payerId, dateNeeded,
+    projectId, eventId, budgetCodeId, budgetCodeNote, purpose, chargeTo, patchHeader]);
 
   // Feature 2: fetch budget balance when a budget code is selected
   useEffect(() => {
@@ -304,6 +361,23 @@ export function ParCreateForm() {
       .catch(() => setBudgetBalance(null))
       .finally(() => setBudgetBalanceLoading(false));
   }, [budgetCodeId]);
+
+  // Keep the budget selection inside the selected payer/project scope and remove one
+  // unnecessary click when that scope has exactly one eligible code.
+  useEffect(() => {
+    if (!payerId) {
+      if (budgetCodeId) setBudgetCodeId("");
+      return;
+    }
+    const eligible = budgetCodes.filter((code) =>
+      code.payerId === payerId && (!code.projectId || (!!projectId && code.projectId === projectId))
+    );
+    if (budgetCodeId && !eligible.some((code) => code.id === budgetCodeId)) {
+      setBudgetCodeId(eligible.length === 1 ? eligible[0].id : "");
+    } else if (!budgetCodeId && eligible.length === 1) {
+      setBudgetCodeId(eligible[0].id);
+    }
+  }, [payerId, projectId, budgetCodes, budgetCodeId]);
 
   // Feature 1: Registry company search (debounced 400ms)
   const doRegistrySearch = useCallback((q: string) => {
@@ -342,6 +416,7 @@ export function ParCreateForm() {
     setPayeeCandidates([]);
     setAiPrefilling(true);
     try {
+      await ensureDraft();
       const result = await prefillParFromDocument(file);
       setAiPrefillResult(result);
 
@@ -391,6 +466,9 @@ export function ParCreateForm() {
     if (result.payeeIdno?.value) setPayeeIdnp(String(result.payeeIdno.value));
     // Feature 3 (PAR-F3): bank name.
     if (result.payeeBank?.value) setPayeeBank(String(result.payeeBank.value));
+    if (result.payeeBic?.value) setPayeeBic(String(result.payeeBic.value));
+    if (result.payeeLegalAddress?.value) setPayeeLegalAddress(String(result.payeeLegalAddress.value));
+    if (result.payeeAdministrator?.value) setPayeeAdministrator(String(result.payeeAdministrator.value));
     // IBAN — defensive: only fill a structurally valid MD IBAN even though the server validated it.
     if (result.payeeIban.value) {
       const ibanRaw = String(result.payeeIban.value).replace(/\s/g, "").toUpperCase();
@@ -404,12 +482,13 @@ export function ParCreateForm() {
    * Each item is persisted via addLineItem so the server recomputes the PAR total + threshold.
    */
   const applyLineItems = async (items: NonNullable<ParPrefillResult["lineItems"]>) => {
-    if (!parId || items.length === 0 || lineItems.length > 0) return;
+    if (items.length === 0 || lineItems.length > 0) return;
+    const draftId = await ensureDraft();
     for (const it of items) {
       const desc = it.description.trim();
       if (!desc) continue;
       try {
-        const res = await addLineItem(parId, {
+        const res = await addLineItem(draftId, {
           description: desc,
           quantity: Math.max(1, Math.round(it.quantity) || 1),
           unit: it.unit?.trim() || null,
@@ -436,6 +515,9 @@ export function ParCreateForm() {
     setPayeeType(c.payeeType ?? detectPayeeType(c.name) ?? "juridic");
     setPayeeIdnp(c.idno ?? "");
     setPayeeBank(c.bank ?? "");
+    setPayeeBic(c.bic ?? "");
+    setPayeeLegalAddress(c.legalAddress ?? "");
+    setPayeeAdministrator(c.administratorName ?? "");
     // Defensive IBAN guard — leave empty (→ "⚠ de verificat") if it isn't a valid MD IBAN.
     if (c.iban && isValidMoldovaIBAN(c.iban)) {
       setPayeeIban(c.iban.replace(/\s/g, "").toUpperCase());
@@ -479,7 +561,6 @@ export function ParCreateForm() {
   };
 
   const addLine = async () => {
-    if (!parId) return;
     const qty = parseInt(nlQty, 10);
     // Preț/u is entered in MDL (major units) → convert to cents. Accept "2000", "2000.50", "2000,50".
     const priceMajor = parseFloat(nlPrice.replace(/\s/g, "").replace(",", "."));
@@ -489,7 +570,8 @@ export function ParCreateForm() {
     const price = Math.round(priceMajor * 100);
     setLineError(null); setAddingLine(true);
     try {
-      const res = await addLineItem(parId, {
+      const draftId = await ensureDraft();
+      const res = await addLineItem(draftId, {
         description: nlDesc.trim(), quantity: qty, unit: nlUnit.trim() || null, unit_price_cents: price,
       });
       setLineItems((p) => [...p, res.line_item]);
@@ -513,7 +595,7 @@ export function ParCreateForm() {
   };
 
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!parId || !e.target.files?.length) return;
+    if (!e.target.files?.length) return;
     // VM1-06: accept multiple files in one go (max 10 attachments per PAR).
     const MAX_ATTACHMENTS = 10;
     const ALLOWED = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
@@ -526,15 +608,19 @@ export function ParCreateForm() {
     }
     setUploadingFile(true);
     try {
+      const draftId = await ensureDraft();
       for (const file of picked) {
         if (slots <= 0) break;
         if (!ALLOWED.includes(file.type)) { setError(`${file.name}: tip neacceptat (PDF, PNG, JPEG).`); continue; }
         if (file.size > 10 * 1024 * 1024) { setError(`${file.name}: depășește 10 MB.`); continue; }
         const dataUrl = await fileToDataUrl(file);
-        const att = await uploadAttachment(parId, {
+        const att = await uploadAttachment(draftId, {
           file_name: file.name, file_url: dataUrl, mime: file.type, kind: uploadKind, size_bytes: file.size,
         });
         setAttachments((p) => [...p, att]);
+        reconcileAttachment(draftId, att.id)
+          .then(({ analysis }) => setAttachments((prev) => prev.map((item) => item.id === att.id ? { ...item, analysis: JSON.stringify(analysis) } : item)))
+          .catch(() => { /* advisory analysis must never block upload */ });
         setAttachmentsPresent(true);
         slots--;
       }
@@ -551,10 +637,34 @@ export function ParCreateForm() {
       setPayeeIdnp(v.idnp ?? "");
       setPayeeIban(v.iban ?? "");
       setPayeeBank(v.bank ?? "");
+      setPayeeBic(v.bicSwift ?? "");
+      setPayeeLegalAddress(v.legalAddress ?? "");
+      setPayeeAdministrator(v.administratorName ?? "");
       // Feature 1: auto-detect from vendor name
       const detected = detectPayeeType(v.name);
       if (detected) setPayeeType(detected);
     }
+  };
+
+  const addQuickEvent = async () => {
+    if (!projectId || !newEventName.trim()) return;
+    try {
+      const created = await createEvent({ name: newEventName.trim(), project_id: projectId });
+      setEvents((prev) => [...prev, created]);
+      setEventId(created.id);
+      setNewEventName("");
+    } catch (e) { setError(e instanceof Error ? e.message : "Evenimentul nu a putut fi adăugat"); }
+  };
+
+  const addQuickBudgetCode = async () => {
+    const code = newBudgetCode.trim();
+    if (!payerId || !code) return;
+    try {
+      const created = await createBudgetCode({ code, name: code, payer_id: payerId, project_id: projectId || null });
+      setBudgetCodes((prev) => [...prev, created]);
+      setBudgetCodeId(created.id);
+      setNewBudgetCode("");
+    } catch (e) { setError(e instanceof Error ? e.message : "Codul bugetar nu a putut fi adăugat"); }
   };
 
   /** Client pre-validation → friendly field errors. Returns true if OK. */
@@ -578,20 +688,25 @@ export function ParCreateForm() {
   }
 
   const saveDraft = async () => {
-    if (!parId) return;
     setBusy(true); setError(null);
-    try { await patchHeader(parId); const fresh = await updatePar(parId, {}); setPar(fresh); }
+    try {
+      const draftId = await ensureDraft();
+      await patchHeader(draftId);
+      const fresh = await updatePar(draftId, {});
+      setPar(fresh);
+      setDraftSavedMessage(`Ciorna ${fresh.requestNo} a fost salvată în Cererile mele → Ciorne.`);
+    }
     catch (e) { setError(e instanceof Error ? e.message : "Eroare la salvare"); }
     finally { setBusy(false); }
   };
 
   const submit = async () => {
-    if (!parId) return;
     setError(null); setFieldErrors({});
     if (!clientValidate()) return;
     setBusy(true);
     try {
-      await patchHeader(parId);
+      const draftId = await ensureDraft();
+      await patchHeader(draftId);
       // VM1-05: auto-save EVERY inline beneficiary that has a (valid) IBAN to the registry for
       // reuse — manual or AI-filled, no checkbox needed. The server dedups by IBAN, so re-saving
       // the same beneficiary just links to the existing entry. Non-blocking.
@@ -602,10 +717,13 @@ export function ParCreateForm() {
             idnp: payeeIdnp || null,
             iban: payeeIban.trim().toUpperCase(),
             bank: payeeBank || null,
+            bic_swift: payeeBic || null,
+            legal_address: payeeLegalAddress || null,
+            administrator_name: payeeAdministrator || null,
           });
         } catch { /* non-blocking — don't fail submit if vendor save fails */ }
       }
-      const submitted = await submitPar(parId);
+      const submitted = await submitPar(draftId);
       navigate(`/business/par/${submitted.id}`);
     } catch (e) {
       if (e instanceof ApiError && e.details.length) {
@@ -633,7 +751,7 @@ export function ParCreateForm() {
 
   return (
     <AppShell>
-      <div className="max-w-3xl mx-auto px-4 py-6 pb-28 space-y-4">
+      <div className="max-w-4xl mx-auto px-4 py-5 pb-28 space-y-3">
         <div className="flex items-center gap-3">
           <FileText className="h-6 w-6 text-primary flex-shrink-0" aria-hidden />
           <div>
@@ -656,11 +774,19 @@ export function ParCreateForm() {
               )}
             </div>
           )}
+          {draftSavedMessage && (
+            <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+              <span>{draftSavedMessage}</span>
+              <button type="button" onClick={() => navigate("/business/par?status=draft")} className="rounded-md border border-emerald-600/30 px-3 py-1.5 font-medium hover:bg-emerald-500/10">
+                Deschide ciornele
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 1–7 Header */}
         <Section n="1–7" title="Antet">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Data cererii" htmlFor="dor" required>
               <input
                 id="dor"
@@ -685,8 +811,11 @@ export function ParCreateForm() {
             <Field label="Solicitant (nume)" htmlFor="rn">
               <input id="rn" type="text" className={inputCls} value={requestorName} disabled aria-label="Numele solicitantului (din cont)" />
             </Field>
-            <Field label="Funcție / Cod" htmlFor="rt">
-              <input id="rt" type="text" placeholder="ex. Procurement Specialist / M13" className={inputCls} value={requestorTitle} onChange={(e) => setRequestorTitle(e.target.value)} />
+            <Field label="Funcție" htmlFor="rt">
+              <input id="rt" type="text" placeholder="ex. Procurement Specialist" className={inputCls} value={requestorTitle} onChange={(e) => setRequestorTitle(e.target.value)} />
+            </Field>
+            <Field label="Cod persoană" htmlFor="rcode">
+              <input id="rcode" type="text" placeholder="ex. M13" className={inputCls} value={requestorCode} onChange={(e) => setRequestorCode(e.target.value)} />
             </Field>
             <Field label="Departament" htmlFor="dep">
               <select id="dep" className={inputCls} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} aria-label="Departament">
@@ -694,7 +823,7 @@ export function ParCreateForm() {
                 {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </Field>
-            <Field label="Data necesară" htmlFor="dn" hint="Estimativ — data cererii + 10 zile. Ajustează dacă e nevoie.">
+            <Field label="Data estimativă de plată (data necesară)" htmlFor="dn" hint="Implicit: data cererii + 10 zile. Ajustează dacă e nevoie.">
               <input
                 id="dn"
                 type="date"
@@ -704,24 +833,40 @@ export function ParCreateForm() {
                 onChange={(e) => { setDateNeeded(e.target.value); setDateNeededTouched(true); }}
               />
             </Field>
+            <Field label="Plătitor / Organizație" htmlFor="payer">
+              <select id="payer" className={inputCls} value={payerId} onChange={(e) => {
+                const next = e.target.value;
+                setPayerId(next); setEventId(""); setBudgetCodeId("");
+                const eligible = projects.filter((p) => !next || p.payerId === next);
+                setProjectId(eligible.length === 1 ? eligible[0].id : "");
+              }}>
+                <option value="">— Selectează —</option>
+                {payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Field>
             <Field label="Proiect / Program" htmlFor="proj">
               <select id="proj" className={inputCls} value={projectId}
-                onChange={(e) => { setProjectId(e.target.value); setEventId(""); }}
+                onChange={(e) => {
+                  const next = e.target.value; setProjectId(next); setEventId(""); setBudgetCodeId("");
+                  const selected = projects.find((p) => p.id === next); if (selected?.payerId) setPayerId(selected.payerId);
+                }}
                 aria-label="Proiect">
                 <option value="">— Selectează —</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {projects.filter((p) => !payerId || p.payerId === payerId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
             {/* VM1-04: Event — filtered by selected project.
                 VM3-03: când proiectul selectat NU are evenimente, câmpul nu mai dispare mut
                 („el a dispărut… n-are evenimente") — arătăm un hint + link spre Admin. */}
             {(() => {
-              const filteredEvents = projectId
-                ? events.filter((ev) => ev.projectId === projectId)
-                : events;
+              // Events belong to a project. Do not expose events from other projects
+              // before the requester establishes the financial context.
+              const filteredEvents = (projectId ? events.filter((ev) => ev.projectId === projectId) : [])
+                .filter((ev) => !eventSearch.trim() || ev.name.toLocaleLowerCase("ro").includes(eventSearch.trim().toLocaleLowerCase("ro")));
               if (filteredEvents.length > 0) {
                 return (
                   <Field label="Eveniment" htmlFor="evtId">
+                    <input className={inputCls} value={eventSearch} onChange={(e) => setEventSearch(e.target.value)} placeholder="Caută eveniment…" aria-label="Caută eveniment" />
                     <select id="evtId" className={inputCls} value={eventId}
                       onChange={(e) => setEventId(e.target.value)}
                       aria-label="Eveniment">
@@ -730,6 +875,10 @@ export function ParCreateForm() {
                         <option key={ev.id} value={ev.id}>{ev.name}</option>
                       ))}
                     </select>
+                    <div className="flex gap-2">
+                      <input className={inputCls} value={newEventName} onChange={(e) => setNewEventName(e.target.value)} placeholder="Eveniment nou" aria-label="Denumire eveniment nou" />
+                      <button type="button" onClick={addQuickEvent} className="px-3 rounded-md border border-input hover:bg-muted" aria-label="Adaugă eveniment"><Plus className="h-4 w-4" /></button>
+                    </div>
                   </Field>
                 );
               }
@@ -738,26 +887,26 @@ export function ParCreateForm() {
                 return (
                   <div className="flex flex-col gap-1.5">
                     <span className="text-sm font-medium text-foreground">Eveniment</span>
-                    <p className="text-xs text-muted-foreground py-2.5">
-                      Niciun eveniment pentru acest proiect.{" "}
-                      {isAdmin ? (
-                        <a href="#/business/par/admin" className="text-primary hover:underline">
-                          Adaugă în Admin → Evenimente
-                        </a>
-                      ) : (
-                        <>Project managerul le adaugă în Administrare → Evenimente.</>
-                      )}
-                    </p>
+                    <div className="flex gap-2">
+                      <input className={inputCls} value={newEventName} onChange={(e) => setNewEventName(e.target.value)} placeholder="Adaugă direct un eveniment" aria-label="Denumire eveniment nou" />
+                      <button type="button" onClick={addQuickEvent} className="px-3 rounded-md border border-input hover:bg-muted"><Plus className="h-4 w-4" /></button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Niciun eveniment pentru acest proiect. Îl poți adăuga direct aici sau project managerul le adaugă în administrare.</p>
                   </div>
                 );
               }
               return null;
             })()}
             <Field label="Cod bugetar" htmlFor="bc">
+              <input className={inputCls} value={budgetSearch} onChange={(e) => setBudgetSearch(e.target.value)} placeholder="Caută după cod sau denumire…" aria-label="Caută cod bugetar" />
               <select id="bc" className={inputCls} value={budgetCodeId} onChange={(e) => setBudgetCodeId(e.target.value)} aria-label="Cod bugetar">
                 <option value="">— Selectează —</option>
-                {budgetCodes.map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
+                {budgetCodes.filter((b) => !!payerId && b.payerId === payerId && (!b.projectId || (!!projectId && b.projectId === projectId)) && (!budgetSearch.trim() || `${b.code} ${b.name}`.toLocaleLowerCase("ro").includes(budgetSearch.trim().toLocaleLowerCase("ro")))).map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
               </select>
+              {payerId && <div className="flex gap-2">
+                <input className={inputCls} value={newBudgetCode} onChange={(e) => setNewBudgetCode(e.target.value)} placeholder="Cod bugetar nou" aria-label="Cod bugetar nou" />
+                <button type="button" onClick={addQuickBudgetCode} className="px-3 rounded-md border border-input hover:bg-muted"><Plus className="h-4 w-4" /></button>
+              </div>}
               {/* Feature 2: budget balance */}
               {budgetCodeId && (
                 budgetBalanceLoading ? (
@@ -816,7 +965,7 @@ export function ParCreateForm() {
                       <td className="py-2 pr-3 text-right font-medium">{(li.lineTotalCents / 100).toFixed(2)}</td>
                       <td className="py-2">
                         <button type="button" aria-label={`Șterge rândul ${li.position}`} onClick={() => removeLine(li.id)}
-                          className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
+                          className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors touch-target flex items-center justify-center">
                           <Trash2 className="h-4 w-4" aria-hidden />
                         </button>
                       </td>
@@ -894,9 +1043,9 @@ export function ParCreateForm() {
         {/* 11 End-use */}
         <Section n="11" title="Descrierea utilizării finale (End-use)">
           <Field label="Descriere" htmlFor="endUse" required={purpose === "execute_payment"} error={fieldErrors.end_use}>
-            <textarea id="endUse" rows={7}
+            <textarea id="endUse" rows={4}
               placeholder="Descrie detaliat serviciile/bunurile primite — ex. „Servicii de consultanță psihologică de grup, organizate în cadrul proiectului Digital Safeguard, cu durata de 120–180 min, pe platforma Zoom, pentru beneficiarii proiectului.”"
-              className="min-h-[150px] rounded-md border border-input bg-background px-3 py-2.5 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-full resize-y"
+              className="min-h-[100px] rounded-md border border-input bg-background px-3 py-2.5 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-full resize-y"
               value={endUse} onChange={(e) => { setEndUse(e.target.value); setFieldErrors((p) => ({ ...p, end_use: "" })); }} />
           </Field>
         </Section>
@@ -941,10 +1090,10 @@ export function ParCreateForm() {
             <button
               type="button"
               onClick={() => aiPrefillFileRef.current?.click()}
-              disabled={aiPrefilling || !parId}
+              disabled={aiPrefilling}
               className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors min-h-[44px] disabled:opacity-50"
               aria-label="Completează automat din document"
-              title={!parId ? "Salvează cererea mai întâi" : "Încarcă un document pentru a extrage câmpurile automat"}
+              title="Încarcă un document pentru a extrage câmpurile automat"
             >
               {aiPrefilling ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -1111,13 +1260,14 @@ export function ParCreateForm() {
 
           {vendors.length > 0 && (
             <Field label="Beneficiar salvat" htmlFor="vsel" hint="Alege un beneficiar din registru sau introdu manual mai jos">
+              <input className={inputCls} value={vendorSearch} onChange={(e) => setVendorSearch(e.target.value)} placeholder="Caută după nume, IDNO/IDNP sau IBAN…" aria-label="Caută beneficiar salvat" />
               <select id="vsel" className={inputCls} value={vendorId} onChange={onVendorSelect} aria-label="Beneficiar salvat">
                 <option value="">— Introducere manuală —</option>
-                {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                {vendors.filter((v) => !vendorSearch.trim() || `${v.name} ${v.idnp ?? ""} ${v.iban ?? ""}`.toLocaleLowerCase("ro").includes(vendorSearch.trim().toLocaleLowerCase("ro"))).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
               </select>
             </Field>
           )}
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
             <Field
               label={payeeType === "fizic" ? "Nume, Prenume" : "Denumire companie"}
               htmlFor="pn"
@@ -1153,6 +1303,9 @@ export function ParCreateForm() {
                 onChange={(e) => { setPayeeIban(e.target.value.toUpperCase()); setFieldErrors((p) => ({ ...p, payee_iban: "" })); }} />
             </Field>
             <Field label="Bancă" htmlFor="pbk"><input id="pbk" type="text" placeholder="ex. BC Moldindconbank S.A." className={inputCls} value={payeeBank} onChange={(e) => setPayeeBank(e.target.value)} /></Field>
+            <Field label="BIC / SWIFT" htmlFor="pbic"><input id="pbic" type="text" placeholder="ex. MOLDMD2X" className={inputCls} value={payeeBic} onChange={(e) => setPayeeBic(e.target.value.toUpperCase())} /></Field>
+            <Field label="Administrator / reprezentant" htmlFor="padmin"><input id="padmin" type="text" placeholder="Prenume Nume" className={inputCls} value={payeeAdministrator} onChange={(e) => setPayeeAdministrator(e.target.value)} /></Field>
+            <Field label="Adresă juridică" htmlFor="paddr"><input id="paddr" type="text" placeholder="Localitate, stradă, număr" className={inputCls} value={payeeLegalAddress} onChange={(e) => setPayeeLegalAddress(e.target.value)} /></Field>
           </div>
           {!vendorId && payeeName.trim() && payeeIban.trim() && (
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1173,31 +1326,36 @@ export function ParCreateForm() {
             </Field>
             <label className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium cursor-pointer hover:bg-secondary/80 transition-colors min-h-[44px]",
-              (uploadingFile || !parId || attachments.length >= 10) && "opacity-50 cursor-not-allowed"
+              (uploadingFile || attachments.length >= 10) && "opacity-50 cursor-not-allowed"
             )}>
               {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
               <span>Încarcă fișiere</span>
-              <input type="file" multiple className="sr-only" accept=".pdf,.png,.jpg,.jpeg" onChange={onUpload} disabled={uploadingFile || !parId || attachments.length >= 10} aria-label="Alege fișierele" />
+              <input type="file" multiple className="sr-only" accept=".pdf,.png,.jpg,.jpeg" onChange={onUpload} disabled={uploadingFile || attachments.length >= 10} aria-label="Alege fișierele" />
             </label>
             <span className="text-xs text-muted-foreground">PDF, PNG, JPEG — max 10 MB · {attachments.length}/10 fișiere</span>
           </div>
           {attachments.length > 0 && (
             <ul className="space-y-2" aria-label="Fișiere atașate">
-              {attachments.map((a) => (
+              {attachments.map((a) => {
+                const analysis = attachmentAnalysis(a.analysis);
+                return (
                 <li key={a.id} className="flex items-center justify-between gap-2 p-3 rounded-lg bg-muted">
                   <span className="flex items-center gap-2 min-w-0">
                     <Paperclip className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-hidden />
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-foreground truncate">{a.fileName}</span>
                       <span className="block text-xs text-muted-foreground">{ATTACHMENT_KIND_LABELS[a.kind]}</span>
+                      {analysis && <span className={cn("block text-xs font-medium", analysis.status === "match" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")}>
+                        {analysis.status === "match" ? "AI: rechizite și sumă concordante" : `AI: ${analysis.warnings} neconcordanțe — ${analysis.checks.filter((c) => c.matches === false).map((c) => c.field).join(", ")}`}
+                      </span>}
                     </span>
                   </span>
                   <button type="button" aria-label={`Șterge ${a.fileName}`} onClick={async () => { if (parId) { try { await deleteAttachment(parId, a.id); setAttachments((p) => p.filter((x) => x.id !== a.id)); } catch { /* */ } } }}
-                    className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0">
+                    className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors touch-target flex items-center justify-center flex-shrink-0">
                     <X className="h-4 w-4" aria-hidden />
                   </button>
                 </li>
-              ))}
+              );})}
             </ul>
           )}
           <Field label="Descriere atașamente (opțional)" htmlFor="anote">
@@ -1208,7 +1366,7 @@ export function ParCreateForm() {
 
       {/* Sticky action bar */}
       <div className="fixed bottom-0 inset-x-0 z-20 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="max-w-3xl mx-auto px-4 py-3 space-y-2">
+        <div className="max-w-4xl mx-auto px-4 py-3 space-y-2">
           {/* Feature 2: non-blocking budget overage warning */}
           {budgetOverageWarn && (
             <div role="status" className="flex items-center gap-2 p-2 rounded-md bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300 text-xs">
@@ -1277,7 +1435,7 @@ export function ParCreateForm() {
                   </button>
                 )
               )}
-              <button type="button" onClick={saveDraft} disabled={busy || !parId}
+              <button type="button" onClick={saveDraft} disabled={busy}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors min-h-[44px]">
                 <Save className="h-4 w-4" aria-hidden />Salvează ciornă
               </button>

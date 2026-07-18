@@ -10,9 +10,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, gt, isNull, desc } from "drizzle-orm";
+import { and, eq, gt, isNull, desc, inArray } from "drizzle-orm";
 import { db } from "../db/client";
-import { parInvites, parSettings } from "../db/schema/par";
+import { parInvites, parPayers, parSettings } from "../db/schema/par";
 import { users } from "../db/schema";
 import { tenants } from "../db/schema/tenants";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -34,14 +34,20 @@ parInvitesRoutes.use("/:id", parUuidGuard("id"));
 const inviteSchema = z.object({
   email: z.string().email().max(255),
   par_role: z.enum(["requestor", "approver", "finance", "par_admin"]),
+  payer_ids: z.array(z.string().uuid()).min(1).max(100),
 });
 
 /** POST /api/par/invites — create an invitation */
 parInvitesRoutes.post("/", requirePARRole("par_admin"), zValidator("json", inviteSchema), async (c) => {
   const user = c.get("user");
   const tenantId = user.tenantId;
-  const { email, par_role } = c.req.valid("json");
+  const { email, par_role, payer_ids } = c.req.valid("json");
   const normalizedEmail = email.toLowerCase();
+  const payerIds = [...new Set(payer_ids)];
+  const validPayers = await db.select({ id: parPayers.id }).from(parPayers).where(and(
+    eq(parPayers.tenantId, tenantId), inArray(parPayers.id, payerIds), eq(parPayers.active, true),
+  ));
+  if (validPayers.length !== payerIds.length) return c.json({ error: "invalid_payer_scope" }, 400);
 
   // If a user with this email is already a member of this tenant, no invite needed.
   const existingUser = await db.query.users.findFirst({
@@ -69,6 +75,7 @@ parInvitesRoutes.post("/", requirePARRole("par_admin"), zValidator("json", invit
       tenantId,
       email: normalizedEmail,
       parRole: par_role,
+      payerScope: JSON.stringify(payerIds),
       tokenHash: hashInviteToken(token),
       invitedByUserId: user.id,
       expiresAt: new Date(Date.now() + INVITE_TTL_MS),
@@ -79,7 +86,7 @@ parInvitesRoutes.post("/", requirePARRole("par_admin"), zValidator("json", invit
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
   const emailed = await sendInviteEmail({ to: normalizedEmail, orgName: tenant?.name ?? "organizație", url });
 
-  return c.json({ id: invite.id, email: invite.email, parRole: invite.parRole, inviteUrl: url, emailed }, 201);
+  return c.json({ id: invite.id, email: invite.email, parRole: invite.parRole, payerIds, inviteUrl: url, emailed }, 201);
 });
 
 /** GET /api/par/invites — list pending invites */
@@ -90,6 +97,7 @@ parInvitesRoutes.get("/", requirePARRole("par_admin"), async (c) => {
       id: parInvites.id,
       email: parInvites.email,
       parRole: parInvites.parRole,
+      payerScope: parInvites.payerScope,
       expiresAt: parInvites.expiresAt,
       createdAt: parInvites.createdAt,
     })
@@ -102,7 +110,11 @@ parInvitesRoutes.get("/", requirePARRole("par_admin"), async (c) => {
       )
     )
     .orderBy(desc(parInvites.createdAt));
-  return c.json({ invites: rows });
+  return c.json({ invites: rows.map((row) => ({
+    ...row,
+    payerIds: (() => { try { return JSON.parse(row.payerScope ?? "[]"); } catch { return []; } })(),
+    payerScope: undefined,
+  })) });
 });
 
 /** DELETE /api/par/invites/:id — revoke a pending invite */

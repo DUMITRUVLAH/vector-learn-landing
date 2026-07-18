@@ -34,6 +34,8 @@ export interface ParExtractedParty {
   bank?: string | null;
   /** SWIFT/BIC if printed. */
   bic?: string | null;
+  legalAddress?: string | null;
+  administratorName?: string | null;
   /** "Cod TVA"/VAT — captured ONLY to keep it OUT of idno; never used as id. */
   vatCode?: string | null;
   /** true if the doc labels this party with an explicit PAYER word (Plătitor/Ordonator/Заказчик/Bill To). */
@@ -84,6 +86,9 @@ export interface PayeeCandidate {
   /** true if non-MD but ISO-13616 valid → UI shows "verificați (IBAN non-MD)". */
   ibanForeign?: boolean;
   bank: string | null;
+  bic?: string | null;
+  legalAddress?: string | null;
+  administratorName?: string | null;
   payeeType: "fizic" | "juridic" | null;
 }
 

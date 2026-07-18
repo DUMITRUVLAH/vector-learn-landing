@@ -105,11 +105,15 @@ describe("T-VM1-13-1 [blocant] Extracted fields map to PAR fields correctly", ()
 });
 
 describe("T-VM1-13-2 [blocant] Route is exported from parAiPrefill.ts", () => {
+  // 30s timeout: the assertion is trivial, but the dynamic import pulls in the full
+  // route graph (db/client → PGlite wasm, pdfText → pdfjs). The real import is ~800ms
+  // (measured via tsx), yet vitest's first cold SSR-transform of that graph can exceed
+  // the 5s default under suite concurrency, flaking this [blocant] route-mount smoke.
   it("parAiPrefillRoutes is exported and has a fetch method", async () => {
     const mod = await import("../../routes/parAiPrefill");
     expect(mod.parAiPrefillRoutes).toBeDefined();
     expect(typeof mod.parAiPrefillRoutes.fetch).toBe("function");
-  });
+  }, 60000);
 });
 
 describe("T-VM1-13-3 [normal] confidence < 0.7 → low_confidence: true", () => {

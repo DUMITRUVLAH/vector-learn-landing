@@ -27,6 +27,7 @@ import {
   parMembers,
   parSettings,
   parProjects,
+  parAttachments,
 } from "../db/schema/par";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -42,6 +43,8 @@ import {
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { getActiveDelegators } from "../lib/par/delegations";
 import { blocksOnApprovalLimit } from "../lib/par/approvalLimit";
+import { approvalProgressAfterDecision } from "../lib/par/approvalProgress";
+import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import {
   notifyStepAdvanced,
   notifyFullyApprovedToFinance,
@@ -141,6 +144,7 @@ type ApproveResult =
 async function approveParStep(
   userId: string,
   tenantId: string,
+  tenantRole: string,
   parId: string,
   body: { comment?: string | null; signatureName?: string | null }
 ): Promise<ApproveResult> {
@@ -162,6 +166,10 @@ async function approveParStep(
     .from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
   if (!par) return { ok: false, status: 404, error: "not_found" };
+  const inScope = par.projectId
+    ? await mayAccessProject(userId, tenantId, par.projectId, tenantRole)
+    : await mayAccessPayer(userId, tenantId, par.payerId, tenantRole);
+  if (!inScope) return { ok: false, status: 404, error: "not_found" };
 
   // PARQA-003: segregation of duties — a user can NEVER approve their own PAR, even if they also
   // hold approver/par_admin (incl. the implicit par_admin from tenant admin/manager). The DOA
@@ -239,9 +247,8 @@ async function approveParStep(
   // escalate to a higher-authority step. Intermediate steps are fine (a higher approver follows).
   // par_admin (explicit, or an implicit tenant admin/manager) is the escalation authority and is
   // never limited. Uses totalMdlCents (the DOA/limit currency) with a fallback for MDL PARs.
-  const isFinalApproval = !approvalSteps.find(
-    (s) => s.step > activeStep.step && s.decision === "pending" && s.locked === true
-  );
+  const progress = approvalProgressAfterDecision(approvalSteps, activeStep.id);
+  const isFinalApproval = progress.state === "complete";
   const isParAdmin = roles.includes("par_admin");
   if (isFinalApproval && !isParAdmin) {
     const [approverRow] = await db
@@ -290,28 +297,64 @@ async function approveParStep(
     detail: `Step ${activeStep.step} (${activeStep.approverRoleLabel}) approved${viaDelegation ? ` — prin delegare de la ${activeStep.approverUserId}` : ""}`,
   });
 
-  const nextStep = approvalSteps.find(
-    (s) => s.step > activeStep.step && s.decision === "pending" && s.locked === true
-  );
+  // A parallel level advances only after every approver on that level has decided.
+  if (progress.state === "awaiting_parallel") {
+    const [refreshed] = await db
+      .select()
+      .from(parRequests)
+      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+    return {
+      ok: true,
+      status: refreshed.status,
+      body: {
+        ...refreshed,
+        chain_status: "awaiting_parallel_approvals",
+        current_step: activeStep.step,
+        approvals_remaining: progress.remainingIds.length,
+      },
+    };
+  }
 
-  if (nextStep) {
+  const nextStepNumber = progress.state === "advance" ? progress.nextStep : null;
+  const nextSteps = progress.state === "advance"
+    ? approvalSteps.filter((step) => progress.unlockIds.includes(step.id))
+    : [];
+
+  if (nextSteps.length > 0) {
     await db
       .update(parApprovals)
       .set({ locked: false, updatedAt: new Date() })
-      .where(and(eq(parApprovals.id, nextStep.id), eq(parApprovals.tenantId, tenantId)));
-    await writeAudit({ tenantId, parId, actorUserId: userId, event: "step_unlocked", detail: `Step ${nextStep.step} (${nextStep.approverRoleLabel}) unlocked for approval` });
-    await notifyStepAdvanced(
+      .where(and(
+        eq(parApprovals.parId, parId),
+        eq(parApprovals.tenantId, tenantId),
+        eq(parApprovals.step, nextStepNumber!),
+        eq(parApprovals.decision, "pending")
+      ));
+    await writeAudit({
+      tenantId,
+      parId,
+      actorUserId: userId,
+      event: "step_unlocked",
+      detail: `Step ${nextStepNumber} unlocked for ${nextSteps.length} approver(s)`,
+    });
+    await Promise.all(nextSteps.map((nextStep) => notifyStepAdvanced(
       { tenantId, parId, requestNo: par.requestNo },
       nextStep.approverUserId ?? null,
       nextStep.approverRoleLabel ?? `Step ${nextStep.step}`
-    );
+    )));
     const [refreshed] = await db
       .select()
       .from(parRequests)
       .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
     return {
       ok: true, status: refreshed.status,
-      body: { ...refreshed, chain_status: "advanced", next_step: nextStep.step, next_step_label: nextStep.approverRoleLabel },
+      body: {
+        ...refreshed,
+        chain_status: "advanced",
+        next_step: nextStepNumber,
+        next_step_label: nextSteps.length === 1 ? nextSteps[0].approverRoleLabel : "Aprobare paralelă",
+        next_approvers: nextSteps.length,
+      },
     };
   }
 
@@ -390,21 +433,29 @@ parApprovalsRoutes.get("/inbox", async (c) => {
   // PAR's project (projects with no designated approvers stay open to any approver).
   const projectApproverMap = await getProjectApproverMap(tenantId);
   const stepParIds = [...new Set(pendingSteps.map((s) => s.parId))];
-  const projectByPar = new Map<string, string | null>();
+  const scopeByPar = new Map<string, { projectId: string | null; payerId: string | null }>();
   if (stepParIds.length > 0) {
     const projRows = await db
-      .select({ id: parRequests.id, projectId: parRequests.projectId })
+      .select({ id: parRequests.id, projectId: parRequests.projectId, payerId: parRequests.payerId })
       .from(parRequests)
       .where(and(eq(parRequests.tenantId, tenantId), inArray(parRequests.id, stepParIds)));
-    for (const r of projRows) projectByPar.set(r.id, r.projectId ?? null);
+    for (const r of projRows) scopeByPar.set(r.id, { projectId: r.projectId ?? null, payerId: r.payerId ?? null });
   }
+  const [accessibleProjects, accessiblePayers] = await Promise.all([
+    accessibleProjectIds(user.id, tenantId, user.role), accessiblePayerIds(user.id, tenantId, user.role),
+  ]);
 
   // Filter to steps the current user can decide
   const mySteps = pendingSteps.filter((s) => {
+    const parScope = scopeByPar.get(s.parId);
+    const allowedByMembership = parScope?.projectId
+      ? accessibleProjects === null || accessibleProjects.includes(parScope.projectId)
+      : !!parScope?.payerId && (accessiblePayers === null || accessiblePayers.includes(parScope.payerId));
+    if (!allowedByMembership) return false;
     if (s.approverUserId === user.id) return true; // explicit assignment → bypasses project scoping
     // Role-based: any approver/par_admin can decide, IF allowed on this PAR's project.
     if (s.approverUserId === null && isApprover) {
-      return projectAllowsApprover(projectByPar.get(s.parId), user.id, projectApproverMap.get(projectByPar.get(s.parId) ?? ""));
+      return projectAllowsApprover(parScope?.projectId, user.id, projectApproverMap.get(parScope?.projectId ?? ""));
     }
     // VF-302: a step assigned to a delegator (X→me active) is mine to decide.
     if (s.approverUserId != null && delegators.has(s.approverUserId)) return true;
@@ -451,6 +502,17 @@ parApprovalsRoutes.get("/inbox", async (c) => {
     : [];
   const projName = (id: string | null) => (id && projRows.find((r) => r.id === id)?.name) || null;
   const reqName = (id: string | null) => (id && userRows.find((r) => r.id === id)?.name) || null;
+  const attachmentRows = parIds.length
+    ? await db.select({
+        id: parAttachments.id,
+        parId: parAttachments.parId,
+        fileName: parAttachments.fileName,
+        kind: parAttachments.kind,
+      }).from(parAttachments).where(and(
+        eq(parAttachments.tenantId, tenantId),
+        inArray(parAttachments.parId, parIds),
+      ))
+    : [];
 
   const inbox = inboxPars.map((p) => {
     const myStep = mySteps.find((s) => s.parId === p.id);
@@ -461,6 +523,9 @@ parApprovalsRoutes.get("/inbox", async (c) => {
       my_step_label: myStep?.approverRoleLabel ?? null,
       projectName: projName(p.projectId),
       requestedByName: reqName(p.requestedByUserId),
+      attachments: attachmentRows
+        .filter((attachment) => attachment.parId === p.id)
+        .map(({ parId: _parId, ...attachment }) => attachment),
     };
   });
 
@@ -478,7 +543,7 @@ parApprovalsRoutes.post(
     const parId = c.req.param("id");
     const body = c.req.valid("json");
 
-    const result = await approveParStep(user.id, tenantId, parId, body);
+    const result = await approveParStep(user.id, tenantId, user.role, parId, body);
     if (!result.ok) return c.json({ error: result.error, ...result.extra }, result.status as 400);
     return c.json(result.body);
   }
@@ -500,7 +565,7 @@ parApprovalsRoutes.post("/bulk-approve", zValidator("json", bulkApproveSchema), 
 
   const results = [];
   for (const parId of [...new Set(par_ids)]) {
-    const r = await approveParStep(user.id, tenantId, parId, { comment, signatureName });
+    const r = await approveParStep(user.id, tenantId, user.role, parId, { comment, signatureName });
     results.push(
       r.ok
         ? { id: parId, ok: true, status: r.status }
@@ -537,6 +602,9 @@ parApprovalsRoutes.post(
       .from(parRequests)
       .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
     if (!par) return c.json({ error: "not_found" }, 404);
+    if (par.projectId ? !(await mayAccessProject(user.id, tenantId, par.projectId, user.role)) : !(await mayAccessPayer(user.id, tenantId, par.payerId, user.role))) {
+      return c.json({ error: "not_found" }, 404);
+    }
 
     if (par.status !== "pending_approval") {
       return c.json({ error: `conflict: PAR status is '${par.status}'` }, 409);
@@ -641,6 +709,9 @@ parApprovalsRoutes.post(
       .from(parRequests)
       .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
     if (!par) return c.json({ error: "not_found" }, 404);
+    if (par.projectId ? !(await mayAccessProject(user.id, tenantId, par.projectId, user.role)) : !(await mayAccessPayer(user.id, tenantId, par.payerId, user.role))) {
+      return c.json({ error: "not_found" }, 404);
+    }
 
     if (par.status !== "pending_approval") {
       return c.json({ error: `conflict: PAR status is '${par.status}'` }, 409);
@@ -728,6 +799,9 @@ parApprovalsRoutes.post("/:id/reapprove", async (c) => {
     .from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
   if (!par) return c.json({ error: "not_found" }, 404);
+  if (par.projectId ? !(await mayAccessProject(user.id, tenantId, par.projectId, user.role)) : !(await mayAccessPayer(user.id, tenantId, par.payerId, user.role))) {
+    return c.json({ error: "not_found" }, 404);
+  }
 
   if (par.status !== "reapproval_required") {
     return c.json(

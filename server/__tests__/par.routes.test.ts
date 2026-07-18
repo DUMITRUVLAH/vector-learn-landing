@@ -6,10 +6,15 @@
  *
  * Tests: T-PAR-101-1..6, T-PAR-102-1..5, T-PAR-103-1..5
  */
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { generateRequestNo } from "../lib/par/requestNo";
 import { recalcParTotal } from "../lib/par/totals";
 import { isValidMoldovaIBAN, isValidIDNP } from "../lib/par/validators";
+
+// This file contains structural/unit checks only; no handler talks to the database.
+// Mocking the client prevents `import("../routes/par")` from starting an isolated PGlite
+// instance, which otherwise competes with integration tests running in another worker.
+vi.mock("../db/client", () => ({ db: {} }));
 
 // ─── Unit tests for request number generator ─────────────────────────────────
 
@@ -197,11 +202,14 @@ describe("PAR-103: IBAN / IDNP validation (T-PAR-103-1, T-PAR-103-2)", () => {
 // ─── Route structure tests ───────────────────────────────────────────────────
 
 describe("PAR-101: Route structure (T-PAR-101-1 structural)", () => {
+  // 30s: par.ts is a large route module; its first cold vitest SSR-transform (transitively
+  // db/client→PGlite wasm) can exceed the 5s default under suite concurrency. The real import
+  // is sub-second; this is transform cost, not slow logic.
   it("par.ts exports parRoutes", async () => {
     const mod = await import("../routes/par");
     expect(mod.parRoutes).toBeDefined();
     expect(typeof mod.parRoutes.fetch).toBe("function"); // Hono apps expose .fetch
-  });
+  }, 60000);
 
   it("app.ts mounts parRoutes at /api/par", async () => {
     const source = await import("fs");
@@ -224,6 +232,19 @@ describe("PAR-101: Route structure (T-PAR-101-1 structural)", () => {
     // Both import and mount must be present
     expect(appContent).toContain('from "./routes/par"');
     expect(appContent).toContain('app.route("/api/par", parRoutes)');
+  });
+
+  it("rejects project-scoped events and budget codes when no matching project is selected", async () => {
+    const source = await import("fs");
+    const path = await import("path");
+    const routeContent = source.readFileSync(
+      path.resolve(__dirname, "../routes/par.ts"),
+      "utf-8"
+    );
+    // `projectId` must be compared directly — guarding it with `&& projectId`
+    // would allow an event/code from another project on a payer-only PAR.
+    expect(routeContent).toContain('event?.projectId && event.projectId !== projectId');
+    expect(routeContent).toContain('budgetCode?.projectId && budgetCode.projectId !== projectId');
   });
 });
 

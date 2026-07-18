@@ -121,6 +121,73 @@ async function main() {
     `CREATE INDEX IF NOT EXISTS "par_project_approvers_project_idx" ON "par_project_approvers" ("project_id")`,
     `CREATE INDEX IF NOT EXISTS "par_project_approvers_tenant_idx" ON "par_project_approvers" ("tenant_id")`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "par_project_approvers_project_user_uniq" ON "par_project_approvers" ("project_id","user_id")`,
+    // PAR-MOD-03/04/16 (migration 0136): the payer hierarchy + scope + platform-admin tables are
+    // queried on EVERY /api/par request (requireModuleEntitlement reads platform_admins +
+    // par_payer_modules, with no try/catch). Prod does NOT auto-apply drizzle migrations
+    // (prod-migration-tracking-desynced), so without this heal the whole PAR module 500s with
+    // "relation par_payer_modules does not exist" until 0136 lands. par_payers MUST be created
+    // first (the others FK to it). Idempotent CREATE … IF NOT EXISTS, one statement per call.
+    `CREATE TABLE IF NOT EXISTS "par_payers" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "name" varchar(300) NOT NULL,
+      "legal_name" varchar(300),
+      "idno" varchar(32),
+      "active" boolean NOT NULL DEFAULT true,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "par_payers_tenant_idx" ON "par_payers" ("tenant_id")`,
+    `CREATE TABLE IF NOT EXISTS "platform_admins" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      CONSTRAINT "platform_admins_user_uniq" UNIQUE("user_id")
+    )`,
+    `CREATE TABLE IF NOT EXISTS "par_payer_modules" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "payer_id" uuid NOT NULL REFERENCES "par_payers"("id") ON DELETE cascade,
+      "module_key" varchar(50) NOT NULL,
+      "enabled" boolean NOT NULL DEFAULT false,
+      "updated_by_user_id" uuid REFERENCES "users"("id") ON DELETE set null,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+      CONSTRAINT "par_payer_modules_payer_key_uniq" UNIQUE("payer_id", "module_key")
+    )`,
+    `CREATE INDEX IF NOT EXISTS "par_payer_modules_payer_idx" ON "par_payer_modules" ("payer_id")`,
+    `CREATE TABLE IF NOT EXISTS "par_payer_members" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "payer_id" uuid NOT NULL REFERENCES "par_payers"("id") ON DELETE cascade,
+      "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      CONSTRAINT "par_payer_members_payer_user_uniq" UNIQUE("payer_id", "user_id")
+    )`,
+    `CREATE INDEX IF NOT EXISTS "par_payer_members_payer_idx" ON "par_payer_members" ("payer_id")`,
+    `CREATE INDEX IF NOT EXISTS "par_payer_members_user_idx" ON "par_payer_members" ("tenant_id", "user_id")`,
+    `CREATE TABLE IF NOT EXISTS "par_member_profiles" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+      "department_id" uuid REFERENCES "par_departments"("id") ON DELETE set null,
+      "job_title" varchar(300),
+      "staff_code" varchar(100),
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+      CONSTRAINT "par_member_profiles_tenant_user_uniq" UNIQUE("tenant_id", "user_id")
+    )`,
+    `CREATE INDEX IF NOT EXISTS "par_member_profiles_tenant_idx" ON "par_member_profiles" ("tenant_id")`,
+    `CREATE TABLE IF NOT EXISTS "par_project_members" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "project_id" uuid NOT NULL REFERENCES "par_projects"("id") ON DELETE cascade,
+      "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE cascade,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      CONSTRAINT "par_project_members_project_user_uniq" UNIQUE("project_id", "user_id")
+    )`,
+    `CREATE INDEX IF NOT EXISTS "par_project_members_project_idx" ON "par_project_members" ("project_id")`,
+    `CREATE INDEX IF NOT EXISTS "par_project_members_user_idx" ON "par_project_members" ("tenant_id", "user_id")`,
     // VM1-12: finance uploads the signed payment order; code writes kind='payment_order'.
     // Prod migrations lag deploys (see docs/solutions prod-migration-desync), so heal the enum here too.
     `ALTER TYPE "public"."par_attachment_kind" ADD VALUE IF NOT EXISTS 'payment_order'`,

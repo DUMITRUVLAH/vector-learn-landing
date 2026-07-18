@@ -26,6 +26,7 @@ import {
   getParReportByBudget,
   getParReportByDepartment,
   getParReportByProject,
+  getParReportByPayer,
   getParReportByVendor,
   getParReportByChargeTo,
   getParReportAging,
@@ -147,6 +148,18 @@ function SpendChart({ title, items, loading }: SpendChartProps) {
   );
 }
 
+function BudgetExecutionTable({ items }: { items: ParSpendByItem[] }) {
+  if (!items.some((item) => item.allocatedCents !== undefined)) return null;
+  return (
+    <div className="mt-4 overflow-x-auto rounded-lg border border-border">
+      <table className="w-full text-sm" aria-label="Execuție bugetară pe cod">
+        <thead className="bg-muted/50"><tr><th className="p-3 text-left">Cod bugetar</th><th className="p-3 text-right">Alocat</th><th className="p-3 text-right">Angajat</th><th className="p-3 text-right">Plătit efectiv</th><th className="p-3 text-right">Disponibil</th></tr></thead>
+        <tbody>{items.map((item) => <tr key={item.id ?? item.label} className="border-t border-border"><td className="p-3 font-medium text-foreground">{item.label}</td><td className="p-3 text-right">{formatMDL(item.allocatedCents ?? 0)}</td><td className="p-3 text-right">{formatMDL(item.committedCents ?? 0)}</td><td className="p-3 text-right">{formatMDL(item.paidCents ?? 0)}</td><td className={`p-3 text-right font-medium ${(item.availableCents ?? 0) < 0 ? "text-destructive" : "text-foreground"}`}>{formatMDL(item.availableCents ?? 0)}</td></tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+
 interface AgingTableProps {
   items: ParAgingItem[];
   loading: boolean;
@@ -210,9 +223,10 @@ function AgingTable({ items, loading }: AgingTableProps) {
 export function ParReports() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [tab, setTab] = useState<"budget" | "department" | "project" | "vendor" | "event" | "charge">("budget");
+  const [tab, setTab] = useState<"payer" | "budget" | "department" | "project" | "vendor" | "event" | "charge">("budget");
 
   const [byBudget, setByBudget] = useState<ParSpendByItem[]>([]);
+  const [byPayer, setByPayer] = useState<ParSpendByItem[]>([]);
   const [byDept, setByDept] = useState<ParSpendByItem[]>([]);
   const [byProject, setByProject] = useState<ParSpendByItem[]>([]);
   const [byVendor, setByVendor] = useState<ParSpendByItem[]>([]); // PARQA-019
@@ -226,6 +240,7 @@ export function ParReports() {
   const [loadingCharts, setLoadingCharts] = useState(false);
   const [loadingAging, setLoadingAging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [presetApplyKey, setPresetApplyKey] = useState(0);
 
   const filters = { period_from: fromDate || undefined, period_to: toDate || undefined };
 
@@ -237,7 +252,8 @@ export function ParReports() {
         filters.period_from ? `from=${encodeURIComponent(filters.period_from)}` : "",
         filters.period_to ? `to=${encodeURIComponent(filters.period_to)}` : "",
       ].filter(Boolean).join("&");
-      const [b, d, p, v, evts, ch, cb] = await Promise.all([
+      const [payerRows, b, d, p, v, evts, ch, cb] = await Promise.all([
+        getParReportByPayer(filters),
         getParReportByBudget(filters),
         getParReportByDepartment(filters),
         getParReportByProject(filters),
@@ -246,6 +262,7 @@ export function ParReports() {
         getParReportByChargeTo(filters),
         getParReportCurrencyBreakdown(filters),
       ]);
+      setByPayer(payerRows.items ?? []);
       setByBudget(b.items ?? []);
       setByDept(d.items ?? []);
       setByProject(p.items ?? []);
@@ -281,6 +298,23 @@ export function ParReports() {
     loadCharts();
     loadAging();
   }, []); // eslint-disable-line
+
+  useEffect(() => {
+    if (presetApplyKey > 0) loadCharts();
+  }, [presetApplyKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const applyPreset = (preset: "month" | "quarter" | "year" | "30" | "90") => {
+    const end = new Date();
+    const start = new Date(end);
+    if (preset === "month") start.setDate(1);
+    if (preset === "quarter") { start.setMonth(Math.floor(start.getMonth() / 3) * 3, 1); }
+    if (preset === "year") { start.setMonth(0, 1); }
+    if (preset === "30") start.setDate(start.getDate() - 29);
+    if (preset === "90") start.setDate(start.getDate() - 89);
+    setFromDate(start.toISOString().slice(0, 10));
+    setToDate(end.toISOString().slice(0, 10));
+    setPresetApplyKey((v) => v + 1);
+  };
 
   const handleApply = () => {
     loadCharts();
@@ -327,6 +361,11 @@ export function ParReports() {
 
         {/* Period filter */}
         <div className="flex flex-wrap items-end gap-3 p-4 rounded-lg border border-border bg-card">
+          <div className="flex flex-wrap gap-1.5 basis-full" aria-label="Perioade prestabilite">
+            {([['month', 'Luna curentă'], ['quarter', 'Trimestrul curent'], ['year', 'Anul curent'], ['30', 'Ultimele 30 zile'], ['90', 'Ultimele 90 zile']] as const).map(([key, label]) => (
+              <button key={key} type="button" onClick={() => applyPreset(key)} className="rounded-full border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted">{label}</button>
+            ))}
+          </div>
           <div>
             <label htmlFor="par-report-from" className="text-xs font-medium text-muted-foreground block mb-1">De la</label>
             <input
@@ -392,6 +431,7 @@ export function ParReports() {
         <div>
           <div className="flex flex-wrap gap-1 mb-4" role="tablist" aria-label="Cheltuieli per categorie">
             {[
+              { id: "payer" as const, label: "Plătitor" },
               { id: "budget" as const, label: "Cod bugetar" },
               { id: "department" as const, label: "Departament" },
               { id: "project" as const, label: "Proiect" },
@@ -417,20 +457,24 @@ export function ParReports() {
             ))}
           </div>
 
+          {tab === "payer" && (
+            <><SpendChart title="Execuție pe plătitor / organizație" items={byPayer} loading={loadingCharts} /><BudgetExecutionTable items={byPayer} /></>
+          )}
+
           {tab === "budget" && (
-            <SpendChart title="Cheltuieli pe cod bugetar" items={byBudget} loading={loadingCharts} />
+            <><SpendChart title="Execuție pe cod bugetar" items={byBudget} loading={loadingCharts} /><BudgetExecutionTable items={byBudget} /></>
           )}
           {tab === "department" && (
             <SpendChart title="Cheltuieli pe departament" items={byDept} loading={loadingCharts} />
           )}
           {tab === "project" && (
-            <SpendChart title="Cheltuieli pe proiect/program" items={byProject} loading={loadingCharts} />
+            <><SpendChart title="Cheltuieli pe proiect/program" items={byProject} loading={loadingCharts} /><BudgetExecutionTable items={byProject} /></>
           )}
           {tab === "vendor" && (
             <SpendChart title="Cheltuieli pe beneficiar" items={byVendor} loading={loadingCharts} />
           )}
           {tab === "event" && (
-            <SpendChart title="Cheltuieli pe eveniment" items={byEvent} loading={loadingCharts} />
+            <><SpendChart title="Cheltuieli pe eveniment" items={byEvent} loading={loadingCharts} /><BudgetExecutionTable items={byEvent} /></>
           )}
           {tab === "charge" && (
             <SpendChart title="Cheltuieli pe Charge To" items={byCharge} loading={loadingCharts} />

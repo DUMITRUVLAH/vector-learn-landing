@@ -19,7 +19,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, ilike, desc, asc, inArray, or, gte, lte, sql } from "drizzle-orm";
+import { and, eq, ilike, desc, asc, inArray, isNull, or, gte, lte, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   parRequests,
@@ -36,6 +36,8 @@ import {
   parEvents,
   parComments,
   parQuotes,
+  parPayers,
+  parMemberProfiles,
 } from "../db/schema/par";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -48,6 +50,8 @@ import { submitPAR, buildBodyForHash } from "../lib/par/submit";
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { buildApprovalSheetLines, type SheetLine } from "../lib/par/approvalSheet";
 import { winAnsiSafe } from "../lib/par/pdfText";
+import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
+import { enabledPayerIds, hasPayerModuleEntitlement } from "../middleware/requireModuleEntitlement";
 
 export const parRoutes = new Hono<{ Variables: AuthVariables }>();
 parRoutes.use("*", requireAuth);
@@ -64,7 +68,9 @@ const parChargeToValues = ["operations", "program", "other"] as const;
 const createParSchema = z.object({
   date_of_request: z.string().datetime().optional(),
   requestor_title: z.string().max(300).optional().nullable(),
+  requestor_code: z.string().max(100).optional().nullable(),
   department_id: z.string().uuid().optional().nullable(),
+  payer_id: z.string().uuid().optional().nullable(),
   date_needed: z.string().datetime().optional().nullable(),
   project_id: z.string().uuid().optional().nullable(),
   // VM1-04: optional event (sub-entity of project)
@@ -79,7 +85,9 @@ const createParSchema = z.object({
 const updateParSchema = z.object({
   date_of_request: z.string().datetime().optional(),
   requestor_title: z.string().max(300).optional().nullable(),
+  requestor_code: z.string().max(100).optional().nullable(),
   department_id: z.string().uuid().optional().nullable(),
+  payer_id: z.string().uuid().optional().nullable(),
   date_needed: z.string().datetime().optional().nullable(),
   project_id: z.string().uuid().optional().nullable(),
   // VM1-04: optional event (sub-entity of project)
@@ -156,6 +164,37 @@ async function writeAudit(params: {
   });
 }
 
+async function validateScopeSelection(params: {
+  tenantId: string;
+  payerId: string | null;
+  projectId: string | null;
+  eventId: string | null;
+  budgetCodeId: string | null;
+}): Promise<string | null> {
+  const { tenantId, payerId, projectId, eventId, budgetCodeId } = params;
+  const [payer, project, event, budgetCode] = await Promise.all([
+    payerId ? db.select({ id: parPayers.id }).from(parPayers).where(and(eq(parPayers.id, payerId), eq(parPayers.tenantId, tenantId), eq(parPayers.active, true))).then((rows) => rows[0]) : null,
+    projectId ? db.select({ id: parProjects.id, payerId: parProjects.payerId }).from(parProjects).where(and(eq(parProjects.id, projectId), eq(parProjects.tenantId, tenantId), eq(parProjects.active, true))).then((rows) => rows[0]) : null,
+    eventId ? db.select({ id: parEvents.id, projectId: parEvents.projectId }).from(parEvents).where(and(eq(parEvents.id, eventId), eq(parEvents.tenantId, tenantId), eq(parEvents.active, true))).then((rows) => rows[0]) : null,
+    budgetCodeId ? db.select({ id: parBudgetCodes.id, payerId: parBudgetCodes.payerId, projectId: parBudgetCodes.projectId }).from(parBudgetCodes).where(and(eq(parBudgetCodes.id, budgetCodeId), eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.active, true))).then((rows) => rows[0]) : null,
+  ]);
+  if (payerId && !payer) return "payer_not_found";
+  if (projectId && !project) return "project_not_found";
+  if (project?.payerId && payerId && project.payerId !== payerId) return "project_not_in_payer";
+  if (eventId && !event) return "event_not_found";
+  // An event with a project may only be used on that exact project. Checking the
+  // equality even when `projectId` is null prevents a crafted API call from
+  // attaching an event from another project to a payer-only PAR.
+  if (event?.projectId && event.projectId !== projectId) return "event_not_in_project";
+  if (budgetCodeId && !budgetCode) return "budget_code_not_found";
+  if (budgetCode?.payerId && payerId && budgetCode.payerId !== payerId) return "budget_code_not_in_payer";
+  // Payer-wide codes (`projectId === null`) remain valid for any project of the
+  // payer; a project-specific code must match exactly, including rejecting a
+  // payer-only request.
+  if (budgetCode?.projectId && budgetCode.projectId !== projectId) return "budget_code_not_in_project";
+  return null;
+}
+
 // ─── POST /api/par — create draft ───────────────────────────────────────────
 
 parRoutes.post(
@@ -165,6 +204,36 @@ parRoutes.post(
     const user = c.get("user");
     const body = c.req.valid("json");
     const tenantId = user.tenantId;
+
+    if (!(await mayAccessProject(user.id, tenantId, body.project_id, user.role))) {
+      return c.json({ error: "forbidden_project" }, 403);
+    }
+
+    const [profile] = await db
+      .select()
+      .from(parMemberProfiles)
+      .where(and(eq(parMemberProfiles.tenantId, tenantId), eq(parMemberProfiles.userId, user.id)));
+    const [selectedProject] = body.project_id ? await db.select({ payerId: parProjects.payerId }).from(parProjects)
+      .where(and(eq(parProjects.id, body.project_id), eq(parProjects.tenantId, tenantId))) : [];
+    const [defaultPayer] = body.payer_id || selectedProject?.payerId ? [] : await db
+      .select({ id: parPayers.id }).from(parPayers)
+      .where(and(eq(parPayers.tenantId, tenantId), eq(parPayers.active, true)))
+      .orderBy(asc(parPayers.createdAt)).limit(1);
+    const payerId = body.payer_id ?? selectedProject?.payerId ?? defaultPayer?.id ?? null;
+    if (!(await mayAccessPayer(user.id, tenantId, payerId, user.role))) {
+      return c.json({ error: "forbidden_payer" }, 403);
+    }
+    const selectionError = await validateScopeSelection({
+      tenantId,
+      payerId,
+      projectId: body.project_id ?? null,
+      eventId: body.event_id ?? null,
+      budgetCodeId: body.budget_code_id ?? null,
+    });
+    if (selectionError) return c.json({ error: selectionError }, 400);
+    if (!(await hasPayerModuleEntitlement(user.id, tenantId, payerId, "par"))) {
+      return c.json({ error: "module_disabled", module: "par" }, 403);
+    }
 
     // Validate date_needed >= date_of_request (PAR-101 §AC)
     const dateOfRequest = body.date_of_request
@@ -190,8 +259,10 @@ parRoutes.post(
         requestNo,
         dateOfRequest,
         requestedByUserId: user.id,
-        requestorTitle: body.requestor_title ?? null,
-        departmentId: body.department_id ?? null,
+        payerId,
+        requestorTitle: body.requestor_title ?? profile?.jobTitle ?? null,
+        requestorCode: body.requestor_code ?? profile?.staffCode ?? null,
+        departmentId: body.department_id ?? profile?.departmentId ?? null,
         dateNeeded: body.date_needed ? new Date(body.date_needed) : null,
         projectId: body.project_id ?? null,
         eventId: body.event_id ?? null,
@@ -235,6 +306,12 @@ parRoutes.post("/:id/duplicate", async (c) => {
   if (!hasElevatedRole && source.requestedByUserId !== user.id) {
     return c.json({ error: "not_found" }, 404);
   }
+  const sourceInScope = source.projectId
+    ? await mayAccessProject(user.id, tenantId, source.projectId, user.role)
+    : await mayAccessPayer(user.id, tenantId, source.payerId, user.role);
+  if (!sourceInScope || !(await hasPayerModuleEntitlement(user.id, tenantId, source.payerId, "par"))) {
+    return c.json({ error: "not_found" }, 404);
+  }
   const canSeePayee = source.requestedByUserId === user.id || hasElevatedRole;
 
   const requestNo = await generateRequestNo(tenantId);
@@ -245,10 +322,13 @@ parRoutes.post("/:id/duplicate", async (c) => {
       requestNo,
       dateOfRequest: new Date(),
       requestedByUserId: user.id, // duplicator owns the copy
+      payerId: source.payerId,
       requestorTitle: source.requestorTitle,
+      requestorCode: source.requestorCode,
       departmentId: source.departmentId,
       dateNeeded: null, // not copied
       projectId: source.projectId,
+      eventId: source.eventId,
       budgetCodeId: source.budgetCodeId,
       budgetCodeNote: source.budgetCodeNote,
       purpose: source.purpose,
@@ -558,6 +638,7 @@ parRoutes.get("/", async (c) => {
   const status = c.req.query("status");
   const purpose = c.req.query("purpose");
   const projectId = c.req.query("project_id");
+  const payerId = c.req.query("payer_id");
   const eventId = c.req.query("event_id"); // VM1-04
   const q = c.req.query("q");
   // VF-105: date range (on dateOfRequest) + total range (cents)
@@ -568,13 +649,43 @@ parRoutes.get("/", async (c) => {
 
   // Build conditions
   const conditions = [eq(parRequests.tenantId, tenantId)];
+  const entitledPayers = await enabledPayerIds(tenantId, "par");
+  if (entitledPayers.length === 0) return c.json({ requests: [], total: 0 });
+  conditions.push(inArray(parRequests.payerId, entitledPayers));
 
-  // Requestors see only their own PARs (unless they also have approver/finance/admin role)
+  // Requestors see only their own PARs (unless they also have approver/finance/admin role).
+  // Everyone, including an elevated role, is constrained to the payer/project assignment;
+  // otherwise a guessed UUID could bypass the workspace's membership boundary.
   const hasElevatedRole = roles.some((r) =>
     ["approver", "finance", "par_admin"].includes(r)
   );
   if (!hasElevatedRole) {
     conditions.push(eq(parRequests.requestedByUserId, user.id));
+  }
+  // Everyone — including a PAR-role par_admin — is constrained to their granted payer/project
+  // scope; only a WORKSPACE admin/manager is unrestricted (accessible*Ids returns null for them).
+  // A par_admin invited scoped to one payer is workspace-role "teacher", so exempting par_admin
+  // here previously leaked every other payer's PARs (payee IBAN/IDNP) — GET /api/par/:id already
+  // scopes par_admin, so the list must match it. (PARQA scope-isolation gate.)
+  {
+    const [scopedProjects, scopedPayers] = await Promise.all([
+      accessibleProjectIds(user.id, tenantId, user.role),
+      accessiblePayerIds(user.id, tenantId, user.role),
+    ]);
+    if (scopedProjects !== null && scopedPayers !== null) {
+      const scopedRequest = or(
+        ...(scopedProjects.length ? [inArray(parRequests.projectId, scopedProjects)] : []),
+        ...(scopedPayers.length
+          ? [and(isNull(parRequests.projectId), inArray(parRequests.payerId, scopedPayers))]
+          : []),
+      );
+      if (scopedRequest) {
+        conditions.push(scopedRequest);
+      } else {
+        // Keep the SQL portable while expressing an empty scope without a raw FALSE literal.
+        conditions.push(eq(parRequests.id, "00000000-0000-0000-0000-000000000000"));
+      }
+    }
   }
 
   if (status && parStatusValues.includes(status as typeof parStatusValues[number])) {
@@ -586,6 +697,7 @@ parRoutes.get("/", async (c) => {
   if (projectId) {
     conditions.push(eq(parRequests.projectId, projectId));
   }
+  if (payerId) conditions.push(eq(parRequests.payerId, payerId));
   if (eventId) { // VM1-04
     conditions.push(eq(parRequests.eventId, eventId));
   }
@@ -677,6 +789,12 @@ parRoutes.get("/:id", async (c) => {
 
   // Requestors can only see their own PARs (unless elevated role)
   if (!hasElevatedRole && par.requestedByUserId !== user.id) {
+    return c.json({ error: "not_found" }, 404);
+  }
+  const inScope = par.projectId
+    ? await mayAccessProject(user.id, tenantId, par.projectId, user.role)
+    : await mayAccessPayer(user.id, tenantId, par.payerId, user.role);
+  if (!inScope || !(await hasPayerModuleEntitlement(user.id, tenantId, par.payerId, "par"))) {
     return c.json({ error: "not_found" }, 404);
   }
 
@@ -775,6 +893,13 @@ parRoutes.get("/:id", async (c) => {
         .where(and(eq(parProjects.tenantId, tenantId), eq(parProjects.id, par.projectId)))
     : [];
 
+  const [payer] = par.payerId
+    ? await db
+        .select({ name: parPayers.name })
+        .from(parPayers)
+        .where(and(eq(parPayers.tenantId, tenantId), eq(parPayers.id, par.payerId)))
+    : [];
+
   const [bc] = par.budgetCodeId
     ? await db
         .select({ code: parBudgetCodes.code, name: parBudgetCodes.name })
@@ -800,6 +925,7 @@ parRoutes.get("/:id", async (c) => {
     // Resolved display names (UUIDs stay in the *Id fields above)
     requestedByName: userName(par.requestedByUserId),
     departmentName: dept?.name ?? null,
+    payerName: payer?.name ?? null,
     projectName: proj?.name ?? null,
     eventName: evt?.name ?? null,
     budgetCodeLabel: bc ? [bc.code, bc.name].filter(Boolean).join(" — ") : null,
@@ -833,6 +959,24 @@ parRoutes.patch(
         { error: `forbidden: PAR status '${par.status}' is not editable` },
         403
       );
+    }
+    if (body.project_id !== undefined && !(await mayAccessProject(user.id, tenantId, body.project_id, user.role))) {
+      return c.json({ error: "forbidden_project" }, 403);
+    }
+    const selectedPayerId = body.payer_id !== undefined ? body.payer_id : par.payerId;
+    if (!(await mayAccessPayer(user.id, tenantId, selectedPayerId, user.role))) {
+      return c.json({ error: "forbidden_payer" }, 403);
+    }
+    const selectionError = await validateScopeSelection({
+      tenantId,
+      payerId: selectedPayerId,
+      projectId: body.project_id !== undefined ? body.project_id : par.projectId,
+      eventId: body.event_id !== undefined ? body.event_id : par.eventId,
+      budgetCodeId: body.budget_code_id !== undefined ? body.budget_code_id : par.budgetCodeId,
+    });
+    if (selectionError) return c.json({ error: selectionError }, 400);
+    if (!(await hasPayerModuleEntitlement(user.id, tenantId, selectedPayerId, "par"))) {
+      return c.json({ error: "module_disabled", module: "par" }, 403);
     }
 
     // Validate date_needed
@@ -904,6 +1048,10 @@ parRoutes.patch(
       updateData.dateOfRequest = new Date(body.date_of_request);
     if (body.requestor_title !== undefined)
       updateData.requestorTitle = body.requestor_title;
+    if (body.requestor_code !== undefined)
+      updateData.requestorCode = body.requestor_code;
+    if (body.payer_id !== undefined)
+      updateData.payerId = body.payer_id;
     if (body.department_id !== undefined)
       updateData.departmentId = body.department_id;
     if (body.date_needed !== undefined)

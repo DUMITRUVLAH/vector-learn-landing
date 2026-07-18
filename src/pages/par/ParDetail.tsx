@@ -62,6 +62,7 @@ import {
   type ParDetail as ParDetailType,
   type ParRequest,
   type ParLineItem,
+  type ParAttachmentAnalysis,
   PAR_STATUS_LABELS,
 } from "@/lib/api/par";
 import { downloadParPdf } from "@/lib/parPdf";
@@ -87,6 +88,16 @@ function fmtDate(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function parseAttachmentAnalysis(raw: string | null | undefined): ParAttachmentAnalysis | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as ParAttachmentAnalysis;
+    return value && (value.status === "match" || value.status === "warning") && Array.isArray(value.checks) ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 // VF-203: format minor units in the PAR's currency (MDL keeps the "L" symbol).
@@ -694,6 +705,9 @@ export function ParDetailPage() {
   // by App.tsx). Match the segment AFTER "/par/" so either prefix works — a hardcoded "/app/par/" strip
   // left id="" on the real /business/par/ path → every just-created PAR 404'd.
   const id = path.match(/\/par\/([^/]+)/)?.[1] ?? "";
+  const backTarget = typeof sessionStorage !== "undefined"
+    ? sessionStorage.getItem("par:returnTo") ?? "/business/par"
+    : "/business/par";
 
   const [par, setPar] = useState<ParDetailType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -742,7 +756,7 @@ export function ParDetailPage() {
             <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
             <span>{error ?? "Cererea nu a fost găsită."}</span>
           </div>
-          <button type="button" onClick={() => router.navigate("/business/par")} className="mt-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button type="button" onClick={() => router.navigate(backTarget)} className="mt-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Înapoi la lista PAR
           </button>
@@ -752,6 +766,9 @@ export function ParDetailPage() {
   }
 
   const approvals = [...(par.approvals ?? [])].sort((a, b) => a.step - b.step);
+  const requestorIdentity = par.requestorCode && par.requestorTitle?.includes(par.requestorCode)
+    ? par.requestorTitle
+    : [par.requestorTitle, par.requestorCode].filter(Boolean).join(" · ");
 
   return (
     <AppShell pageTitle={`PAR ${par.requestNo}`}>
@@ -762,12 +779,12 @@ export function ParDetailPage() {
           <div>
             <button
               type="button"
-              onClick={() => router.navigate("/business/par")}
+              onClick={() => router.navigate(backTarget)}
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
               aria-label="Înapoi la lista PAR"
             >
               <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-              Lista PAR
+              {backTarget.includes("/folders") ? "Foldere PAR" : "Lista PAR"}
             </button>
             <div className="flex items-center gap-3 flex-wrap">
               <FileText className="h-5 w-5 text-primary flex-shrink-0" aria-hidden />
@@ -803,9 +820,10 @@ export function ParDetailPage() {
           <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
             <Field label="1. Data cererii" value={fmtDate(par.dateOfRequest)} />
             <Field label="2. Solicitat de" value={par.requestedByName ?? "—"} />
-            <Field label="3. Titlu / Cod" value={par.requestorTitle} />
+            <Field label="3. Funcție / Cod" value={requestorIdentity || "—"} />
             <Field label="4. Departament" value={par.departmentName ?? "—"} />
-            <Field label="5. Data necesară" value={fmtDate(par.dateNeeded)} />
+            <Field label="5. Data estimativă de plată" value={fmtDate(par.dateNeeded)} />
+            <Field label="Plătitor / Organizație" value={par.payerName ?? "—"} />
             <Field label="6. Pentru / Livrare la" value={par.projectName ?? "—"} />
             {/* VM1-04: show event if set */}
             {(par as ParDetailType & { eventName?: string | null }).eventName && (
@@ -923,16 +941,38 @@ export function ParDetailPage() {
           )}
           {(par.attachments ?? []).length > 0 && (
             <ul className="mt-3 space-y-1.5" aria-label="Fișiere atașate">
-              {par.attachments.map((att) => (
-                <li key={att.id} className="flex items-center gap-2 text-sm">
-                  <Paperclip className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" aria-hidden />
-                  <button type="button" onClick={() => openParAttachment(att.fileUrl, att.fileName)} className="text-primary hover:underline truncate text-left" aria-label={`Descarcă ${att.fileName}`}>
-                    {att.fileName}
-                  </button>
-                  {att.kind === "par_pdf" && <span className="text-xs text-muted-foreground">(PDF generat)</span>}
-                  {att.kind === "payment_order" && <span className="text-xs text-muted-foreground">(Ordin de plată)</span>}
-                </li>
-              ))}
+              {par.attachments.map((att) => {
+                const analysis = parseAttachmentAnalysis(att.analysis);
+                return (
+                  <li key={att.id} className="rounded-md border border-border p-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" aria-hidden />
+                      <button type="button" onClick={() => openParAttachment(att.fileUrl, att.fileName, par.id, att.id)} className="max-w-full truncate text-left text-primary hover:underline" aria-label={`Deschide ${att.fileName} în browser`}>
+                        {att.fileName}
+                      </button>
+                      {att.kind === "par_pdf" && <span className="text-xs text-muted-foreground">(PDF generat)</span>}
+                      {att.kind === "payment_order" && <span className="text-xs text-muted-foreground">(Ordin de plată)</span>}
+                      {analysis && (
+                        <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", analysis.status === "match" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300")}>
+                          {analysis.status === "match" ? "Concordant" : `${analysis.warnings} diferențe`}
+                        </span>
+                      )}
+                    </div>
+                    {analysis && (
+                      <details className="mt-2 pl-5 text-xs">
+                        <summary className="cursor-pointer text-muted-foreground">Vezi verificarea AI</summary>
+                        <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+                          {analysis.checks.map((check) => (
+                            <li key={check.field} className={cn("rounded px-2 py-1", check.matches === false ? "bg-amber-500/10 text-amber-800 dark:text-amber-300" : "bg-muted text-muted-foreground")}>
+                              <span className="font-medium">{check.field}:</span> document {String(check.found ?? "nedetectat")} · PAR {String(check.expected ?? "nesetat")}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
           {/* VM1-12: Upload ordin de plată — visible for finance/admin once PAR is paid */}

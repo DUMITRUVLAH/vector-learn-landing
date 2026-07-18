@@ -200,6 +200,9 @@ function stripInternal(c: InternalCandidate): PayeeCandidate {
     iban: c.iban,
     ...(c.ibanForeign ? { ibanForeign: true } : {}),
     bank: c.bank,
+    bic: c.bic,
+    legalAddress: c.legalAddress,
+    administratorName: c.administratorName,
     payeeType: c.payeeType,
   };
 }
@@ -261,6 +264,9 @@ export function choosePayee(
       iban: r.iban,
       ibanForeign: r.ibanForeign,
       bank: p.bank ?? null,
+      bic: p.bic ?? null,
+      legalAddress: p.legalAddress ?? null,
+      administratorName: p.administratorName ?? null,
       payeeType: detectPayeeType(name),
       _role: p.role,
       _ibanLowConf: r.ibanLowConf,

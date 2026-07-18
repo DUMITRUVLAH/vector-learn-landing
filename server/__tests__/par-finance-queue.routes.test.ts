@@ -27,6 +27,8 @@ import {
   parAttachments,
   parBudgetCodes,
   parMembers,
+  parPayerModules,
+  parPayers,
   parProjects,
 } from "../db/schema/par";
 
@@ -37,6 +39,8 @@ let userId: string; // finance user (the caller)
 let approver1Id: string;
 let approver2Id: string;
 let parId: string;
+let payerId: string;
+let callerTenantRole = "manager";
 
 vi.mock("../db/client", () => ({
   get db() {
@@ -48,7 +52,7 @@ vi.mock("../db/client", () => ({
 // Inject the test user directly — auth mechanics are covered elsewhere.
 vi.mock("../middleware/requireAuth", () => ({
   requireAuth: async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
-    c.set("user", { id: userId, tenantId, role: "manager", email: "finance@vector.md" });
+    c.set("user", { id: userId, tenantId, role: callerTenantRole, email: "finance@vector.md" });
     await next();
   },
 }));
@@ -109,6 +113,18 @@ beforeAll(async () => {
     .returning();
   tenantId = tenant.id;
 
+  const [payer] = await testDb
+    .insert(parPayers)
+    .values({ tenantId, name: "ATIC Test" })
+    .returning();
+  payerId = payer.id;
+  await testDb.insert(parPayerModules).values({
+    tenantId,
+    payerId,
+    moduleKey: "par",
+    enabled: true,
+  });
+
   const mkUser = async (email: string, name: string) => {
     const [u] = await testDb
       .insert(users)
@@ -128,11 +144,11 @@ beforeAll(async () => {
 
   const [proj] = await testDb
     .insert(parProjects)
-    .values({ tenantId, name: "Digital Safeguard" })
+    .values({ tenantId, payerId, name: "Digital Safeguard" })
     .returning();
   const [bc] = await testDb
     .insert(parBudgetCodes)
-    .values({ tenantId, code: "OPS-2026-07", name: "Operațiuni iulie" })
+    .values({ tenantId, payerId, code: "OPS-2026-07", name: "Operațiuni iulie" })
     .returning();
 
   const [par] = await testDb
@@ -144,6 +160,7 @@ beforeAll(async () => {
       purpose: "execute_payment",
       chargeTo: "program",
       status: "approved",
+      payerId,
       projectId: proj.id,
       budgetCodeId: bc.id,
       endUse: "Servicii de consultanță psihologică de grup pe Zoom",
@@ -252,6 +269,33 @@ describe("VM3-01: GET /api/par/finance — coloanele contabilului", () => {
 
     // Câmpul istoric rămâne (nume fără dată)
     expect(item.approverNames).toContain("Ion Aprobatorul");
+  });
+});
+
+describe("PAR workspace scope", () => {
+  it("[blocant] an elevated PAR role cannot read a project outside its membership", async () => {
+    callerTenantRole = "teacher";
+    try {
+      const res = await app.request(`/api/par/${parId}`);
+      expect(res.status).toBe(404);
+    } finally {
+      callerTenantRole = "manager";
+    }
+  });
+
+  it("[blocant] cannot create a PAR under an explicitly chosen payer outside membership", async () => {
+    callerTenantRole = "teacher";
+    try {
+      const res = await app.request("/api/par", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ payer_id: payerId }),
+      });
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).toBe("forbidden_payer");
+    } finally {
+      callerTenantRole = "manager";
+    }
   });
 });
 

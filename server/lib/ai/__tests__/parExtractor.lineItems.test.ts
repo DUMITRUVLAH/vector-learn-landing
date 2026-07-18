@@ -1,8 +1,14 @@
+// @vitest-environment node
 /**
  * Line items: the AI returns a `line_items` array (description / quantity / unit / unit_price in MAJOR
  * units). normalizeParExtraction must convert unit_price → CENTS (×100, same as the total amount),
  * default a missing quantity to 1, drop empty-description rows, and tolerate string prices ("4 000",
  * "10500,50"). Owner asked to pre-fill the "Articole" section, not just the total.
+ *
+ * Runs in the `node` env (directive above): importing parExtractor transitively constructs the PGlite
+ * client; under the default jsdom env pglite's wasm/fsBundle loader rejects with ERR_INVALID_URL_SCHEME
+ * (readFile on a non-file URL) after the test, making the run exit non-zero. node uses pglite's file
+ * loader (matches production) and is the correct env for server-side code anyway.
  */
 import { describe, it, expect } from "vitest";
 import { normalizeParExtraction } from "../parExtractor";

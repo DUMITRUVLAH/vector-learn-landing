@@ -88,7 +88,7 @@ describe("ParFinanceQueue", () => {
     render(<ParFinanceQueue />);
 
     await waitFor(() => {
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(screen.queryByRole("status", { name: "Se încarcă..." })).not.toBeInTheDocument();
     });
 
     expect(screen.getByTestId("app-shell")).toBeInTheDocument();

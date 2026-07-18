@@ -87,6 +87,8 @@ REGULI ABSOLUTE:
      pune-l în idno, NU în iban.
    - bank: numele băncii părții (ex. "BC Victoriabank S.A.", "Maib").
    - bic: codul SWIFT/BIC dacă există.
+   - legalAddress: adresa juridică / sediul părții dacă există.
+   - administratorName: administratorul, directorul sau reprezentantul legal al părții dacă este menționat.
 3b. line_items: lista ARTICOLELOR/serviciilor din document (din tabelul de produse/servicii/devizul de
    cost — "Denumire", "Serviciu", "Items/Services", "Descriere"). Fiecare cu: description (denumirea
    serviciului/produsului, scurtă), quantity (cantitatea ca NUMĂR întreg, implicit 1), unit (unitatea de
@@ -115,6 +117,7 @@ Returnează DOAR JSON:
     { "name": "...", "role": "executor|provider|client|bank|unknown",
       "idno": "..." sau null, "vatCode": "..." sau null,
       "iban": "..." sau null, "bank": "..." sau null, "bic": "..." sau null,
+      "legalAddress": "..." sau null, "administratorName": "..." sau null,
       "confidence": 0.0 }
   ],
   "amount": { "value": 0.0 sau null, "confidence": 0.0 },
@@ -168,6 +171,8 @@ export function normalizeParExtraction(json: Record<string, unknown>): ParPartie
       iban: asStringOrNull(p.iban),
       bank: asStringOrNull(p.bank),
       bic: asStringOrNull(p.bic),
+      legalAddress: asStringOrNull(p.legalAddress),
+      administratorName: asStringOrNull(p.administratorName),
       vatCode: asStringOrNull(p.vatCode),
     });
   }

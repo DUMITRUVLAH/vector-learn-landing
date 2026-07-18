@@ -80,7 +80,9 @@ function makePar(overrides: Partial<ParDetail> = {}): ParDetail {
     requestNo: "PAR-2026-0001",
     dateOfRequest: "2026-06-10T00:00:00Z",
     requestedByUserId: "Sirbu Cristina",
+    payerId: null,
     requestorTitle: "Procurement Specialist / M13",
+    requestorCode: "M13",
     departmentId: "ATIC",
     dateNeeded: null,
     projectId: "Digital Safeguard",
@@ -173,6 +175,10 @@ function makePar(overrides: Partial<ParDetail> = {}): ParDetail {
       paymentDate: "2026-06-11T10:00:00Z",
       paymentRef: "REF-2026-001",
     },
+    requestedByName: "Sirbu Cristina",
+    departmentName: "ATIC",
+    payerName: "ATIC",
+    projectName: "Digital Safeguard",
   };
   return { ...base, ...overrides };
 }
@@ -235,6 +241,27 @@ describe("buildParHtml() — T-PAR-114-1 [blocant]", () => {
     expect(html).toContain("Procurement Specialist / M13");
     expect(html).toContain("ATIC");
     expect(html).toContain("Digital Safeguard");
+  });
+
+  it("prints the requestor's function and personal code from their PAR snapshot", () => {
+    const html = buildParHtml(makePar({ requestorTitle: "Procurement Specialist", requestorCode: "M13" }));
+    expect(html).toContain("Procurement Specialist · M13");
+  });
+
+  it("never prints raw relationship UUIDs when a display name is unavailable", () => {
+    const rawUuid = "5bfefe33-5cf3-427f-9671-0e91c43eec61";
+    const html = buildParHtml(makePar({
+      requestedByUserId: rawUuid,
+      departmentId: rawUuid,
+      projectId: rawUuid,
+      budgetCodeId: rawUuid,
+      requestedByName: null,
+      departmentName: null,
+      projectName: null,
+      budgetCodeLabel: null,
+      budgetCodeNote: null,
+    }));
+    expect(html).not.toContain(rawUuid);
   });
 
   it("marks Purpose = execute_payment with X (section 8)", () => {
