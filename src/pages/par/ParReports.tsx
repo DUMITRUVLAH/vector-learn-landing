@@ -26,6 +26,7 @@ import {
   getParReportByBudget,
   getParReportByDepartment,
   getParReportByProject,
+  getParReportByVendor,
   getParReportByChargeTo,
   getParReportAging,
   getParReportCycleTime,
@@ -209,11 +210,12 @@ function AgingTable({ items, loading }: AgingTableProps) {
 export function ParReports() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [tab, setTab] = useState<"budget" | "department" | "project" | "event" | "charge">("budget");
+  const [tab, setTab] = useState<"budget" | "department" | "project" | "vendor" | "event" | "charge">("budget");
 
   const [byBudget, setByBudget] = useState<ParSpendByItem[]>([]);
   const [byDept, setByDept] = useState<ParSpendByItem[]>([]);
   const [byProject, setByProject] = useState<ParSpendByItem[]>([]);
+  const [byVendor, setByVendor] = useState<ParSpendByItem[]>([]); // PARQA-019
   const [byEvent, setByEvent] = useState<ParSpendByItem[]>([]); // VM1-04
   const [byCharge, setByCharge] = useState<ParSpendByItem[]>([]);
   const [aging, setAging] = useState<ParAgingItem[]>([]);
@@ -235,10 +237,11 @@ export function ParReports() {
         filters.period_from ? `from=${encodeURIComponent(filters.period_from)}` : "",
         filters.period_to ? `to=${encodeURIComponent(filters.period_to)}` : "",
       ].filter(Boolean).join("&");
-      const [b, d, p, evts, ch, cb] = await Promise.all([
+      const [b, d, p, v, evts, ch, cb] = await Promise.all([
         getParReportByBudget(filters),
         getParReportByDepartment(filters),
         getParReportByProject(filters),
+        getParReportByVendor(filters), // PARQA-019
         api<{ items: ParSpendByItem[] }>(`/api/par/reports/by-event${qs ? `?${qs}` : ""}`),
         getParReportByChargeTo(filters),
         getParReportCurrencyBreakdown(filters),
@@ -246,6 +249,7 @@ export function ParReports() {
       setByBudget(b.items ?? []);
       setByDept(d.items ?? []);
       setByProject(p.items ?? []);
+      setByVendor(v.items ?? []); // PARQA-019
       setByEvent(evts.items ?? []); // VM1-04
       setByCharge(ch.items ?? []);
       setCurrencyBreakdown(cb.byCurrency ?? []);
@@ -391,6 +395,7 @@ export function ParReports() {
               { id: "budget" as const, label: "Cod bugetar" },
               { id: "department" as const, label: "Departament" },
               { id: "project" as const, label: "Proiect" },
+              { id: "vendor" as const, label: "Beneficiar" },
               { id: "event" as const, label: "Eveniment" },
               { id: "charge" as const, label: "Charge To" },
             ].map((t) => (
@@ -420,6 +425,9 @@ export function ParReports() {
           )}
           {tab === "project" && (
             <SpendChart title="Cheltuieli pe proiect/program" items={byProject} loading={loadingCharts} />
+          )}
+          {tab === "vendor" && (
+            <SpendChart title="Cheltuieli pe beneficiar" items={byVendor} loading={loadingCharts} />
           )}
           {tab === "event" && (
             <SpendChart title="Cheltuieli pe eveniment" items={byEvent} loading={loadingCharts} />
