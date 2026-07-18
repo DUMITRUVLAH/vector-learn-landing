@@ -470,8 +470,10 @@ parApprovalsRoutes.post(
 
     const roles = await getUserPARRoles(user.id, tenantId);
     const canApprove = roles.includes("approver") || roles.includes("par_admin");
-    // VF-002: allow generic approvers OR users explicitly assigned to a pending step.
-    if (!(await canActOnApproval(user.id, tenantId, parId, canApprove))) {
+    // PARQA-010: reject must honor the SAME authority as approve — explicit assignment OR an active
+    // delegation (before, a delegatee who could approve a step couldn't reject it).
+    const delegators = await getActiveDelegators(user.id, tenantId);
+    if (!(await canActOnApproval(user.id, tenantId, parId, canApprove)) && !(await hasDelegatedPendingStep(user.id, tenantId, parId, delegators))) {
       return c.json({ error: "forbidden: approver role required" }, 403);
     }
 
@@ -492,20 +494,21 @@ parApprovalsRoutes.post(
       .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)))
       .orderBy(asc(parApprovals.step));
 
+    // PARQA-010: project-scoping applies to reject too — an approver not designated for this PAR's
+    // project can no longer reject it (before, scoping was only enforced on approve/inbox).
+    const designated = par.projectId ? await getDesignatedApprovers(tenantId, par.projectId) : new Set<string>();
+    const allowedOnProject = projectAllowsApprover(par.projectId, user.id, designated);
+    const stepMatches = (s: typeof approvalSteps[number]) =>
+      s.approverUserId === user.id ||
+      (s.approverUserId === null && canApprove && allowedOnProject) ||
+      (s.approverUserId != null && delegators.has(s.approverUserId));
+
     const lockedStepForUserReject = approvalSteps.find(
-      (s) =>
-        s.step > 0 &&
-        s.decision === "pending" &&
-        s.locked === true &&
-        (s.approverUserId === user.id || (s.approverUserId === null && canApprove))
+      (s) => s.step > 0 && s.decision === "pending" && s.locked === true && stepMatches(s)
     );
 
     const activeStep = approvalSteps.find(
-      (s) =>
-        s.step > 0 &&
-        s.decision === "pending" &&
-        s.locked === false &&
-        (s.approverUserId === user.id || (s.approverUserId === null && canApprove))
+      (s) => s.step > 0 && s.decision === "pending" && s.locked === false && stepMatches(s)
     );
 
     if (!activeStep) {
@@ -571,7 +574,12 @@ parApprovalsRoutes.post(
 
     const roles = await getUserPARRoles(user.id, tenantId);
     const canApprove = roles.includes("approver") || roles.includes("par_admin");
-    if (!canApprove) return c.json({ error: "forbidden: approver role required" }, 403);
+    // PARQA-010: request-changes now honors explicit assignment + active delegation (before it
+    // required the generic approver role and ignored both assignment and delegation).
+    const delegators = await getActiveDelegators(user.id, tenantId);
+    if (!(await canActOnApproval(user.id, tenantId, parId, canApprove)) && !(await hasDelegatedPendingStep(user.id, tenantId, parId, delegators))) {
+      return c.json({ error: "forbidden: approver role required" }, 403);
+    }
 
     const [par] = await db
       .select()
@@ -589,12 +597,16 @@ parApprovalsRoutes.post(
       .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)))
       .orderBy(asc(parApprovals.step));
 
+    // PARQA-010: same project-scoping + delegation matching as approve/reject.
+    const designated = par.projectId ? await getDesignatedApprovers(tenantId, par.projectId) : new Set<string>();
+    const allowedOnProject = projectAllowsApprover(par.projectId, user.id, designated);
+    const stepMatches = (s: typeof approvalSteps[number]) =>
+      s.approverUserId === user.id ||
+      (s.approverUserId === null && canApprove && allowedOnProject) ||
+      (s.approverUserId != null && delegators.has(s.approverUserId));
+
     const activeStep = approvalSteps.find(
-      (s) =>
-        s.step > 0 &&
-        s.decision === "pending" &&
-        s.locked === false &&
-        (s.approverUserId === user.id || (s.approverUserId === null && canApprove))
+      (s) => s.step > 0 && s.decision === "pending" && s.locked === false && stepMatches(s)
     );
 
     if (!activeStep) {
