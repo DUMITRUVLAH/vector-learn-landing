@@ -55,6 +55,10 @@ parVendorsRoutes.get("/", async (c) => {
 /** POST */
 parVendorsRoutes.post(
   "/",
+  // PARQA-005 (GDPR): the vendor registry holds IDNP + IBAN. Writing requires a PAR role — a
+  // requestor legitimately adds a payee inline while creating a PAR, so all four roles are allowed,
+  // but a tenant user with NO PAR role (e.g. an invited "teacher" account) cannot write bank data.
+  requirePARRole("requestor", "approver", "finance", "par_admin"),
   zValidator("json", vendorSchema),
   async (c) => {
     const tenantId = c.get("user").tenantId;
@@ -109,6 +113,10 @@ parVendorsRoutes.post(
 /** PATCH /:id */
 parVendorsRoutes.patch(
   "/:id",
+  // PARQA-005 (GDPR/fraud): editing an existing beneficiary's bank details (IBAN/IDNP) is the sharp
+  // risk — changing an IBAN redirects money. Restrict to par_admin (matches DELETE). Only the admin
+  // Vendors UI calls this; the requestor create flow always POSTs (dedup backfills, never PATCHes).
+  requirePARRole("par_admin"),
   zValidator("json", vendorSchema.partial()),
   async (c) => {
     const tenantId = c.get("user").tenantId;
