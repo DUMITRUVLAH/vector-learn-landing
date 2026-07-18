@@ -143,6 +143,8 @@ async function writeAudit(params: {
   actorUserId: string;
   event: string;
   detail?: string;
+  /** PARQA-022: structured before/after JSON for "edited" events (the timeline renders it). */
+  diff?: string;
 }) {
   await db.insert(parAudit).values({
     tenantId: params.tenantId,
@@ -150,6 +152,7 @@ async function writeAudit(params: {
     actorUserId: params.actorUserId,
     event: params.event,
     detail: params.detail ?? null,
+    diff: params.diff ?? null,
   });
 }
 
@@ -949,20 +952,37 @@ parRoutes.patch(
         updateData.payeeBank = vendorSnapshot.payeeBank;
     }
 
+    // PARQA-022: build a structured before/after diff so par_audit.diff is actually populated (the
+    // timeline renders it; production never wrote it before). Only genuinely-changed fields; payee
+    // bank data is redacted so the audit log doesn't duplicate GDPR data.
+    const REDACT = new Set(["payeeIban", "payeeIdnp"]);
+    const parRec = par as unknown as Record<string, unknown>;
+    const norm = (v: unknown) => (v instanceof Date ? v.toISOString() : v ?? null);
+    const diffObj: Record<string, { from: unknown; to: unknown }> = {};
+    for (const key of Object.keys(updateData)) {
+      if (key === "updatedAt") continue;
+      const before = norm(parRec[key]);
+      const after = norm(updateData[key]);
+      if (before === after) continue;
+      diffObj[key] = REDACT.has(key)
+        ? { from: parRec[key] ? "***" : null, to: updateData[key] ? "***" : null }
+        : { from: before, to: after };
+    }
+
     const [updated] = await db
       .update(parRequests)
       .set(updateData)
       .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
       .returning();
 
+    const changedFields = Object.keys(diffObj);
     await writeAudit({
       tenantId,
       parId,
       actorUserId: user.id,
       event: "edited",
-      detail: `Updated fields: ${Object.keys(updateData)
-        .filter((k) => k !== "updatedAt")
-        .join(", ")}`,
+      detail: `Updated fields: ${changedFields.join(", ") || "(fără schimbări)"}`,
+      diff: changedFields.length ? JSON.stringify(diffObj) : undefined,
     });
 
     // Get micro-purchase threshold for flag

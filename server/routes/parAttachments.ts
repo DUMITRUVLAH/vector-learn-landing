@@ -37,6 +37,39 @@ const ALLOWED_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ];
 
+// PARQA-021: the data-URL MIME prefix is CLIENT-controlled, so an attacker can label arbitrary bytes
+// "data:application/pdf;base64,…". Verify the actual decoded bytes match the claimed type via magic
+// numbers (file signatures). Returns true if the content plausibly matches an allowed type.
+function magicBytesMatch(dataUrl: string, mime: string): boolean {
+  const m = dataUrl.match(/^data:[^;]*;base64,(.*)$/s);
+  if (!m) return false;
+  let b: Buffer;
+  try {
+    b = Buffer.from(m[1].slice(0, 32), "base64"); // ~24 bytes — enough for every signature below
+  } catch {
+    return false;
+  }
+  if (b.length < 4) return false;
+  const at = (...sig: number[]) => sig.every((v, i) => b[i] === v);
+  switch (mime) {
+    case "application/pdf":
+      return at(0x25, 0x50, 0x44, 0x46); // %PDF
+    case "image/png":
+      return at(0x89, 0x50, 0x4e, 0x47); // \x89PNG
+    case "image/jpeg":
+    case "image/jpg":
+      return at(0xff, 0xd8, 0xff); // JPEG SOI
+    case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+      return at(0x50, 0x4b, 0x03, 0x04) || at(0x50, 0x4b, 0x05, 0x06); // ZIP container (docx/xlsx)
+    case "application/msword":
+    case "application/vnd.ms-excel":
+      return at(0xd0, 0xcf, 0x11, 0xe0); // OLE2 compound (legacy .doc/.xls)
+    default:
+      return false;
+  }
+}
+
 // Max file size: 10 MB → ~13.4M base64 chars
 const MAX_FILE_URL_LEN = 15_000_000;
 const MAX_FILE_NAME_LEN = 500;
@@ -169,6 +202,17 @@ parAttachmentsRoutes.post(
       );
     }
 
+    // PARQA-021: the declared MIME is client-controlled — reject if the real bytes don't match it.
+    if (!magicBytesMatch(body.file_url, effectiveMime)) {
+      return c.json(
+        {
+          error: "file_content_mismatch",
+          detail: "Conținutul fișierului nu corespunde tipului declarat.",
+        },
+        400
+      );
+    }
+
     const [attachment] = await db
       .insert(parAttachments)
       .values({
@@ -200,12 +244,34 @@ parAttachmentsRoutes.delete("/:parId/attachments/:attId", async (c) => {
 
   if (!par) return c.json({ error: "not_found" }, 404);
 
-  // Only author can delete attachments; only in editable statuses
-  if (par.requestedByUserId !== user.id) {
-    return c.json({ error: "forbidden: only the author can delete attachments" }, 403);
-  }
-  if (!EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number])) {
-    return c.json({ error: `forbidden: PAR status '${par.status}' is not editable` }, 403);
+  // Load the attachment first so we can check who uploaded it.
+  const [att] = await db
+    .select({ id: parAttachments.id, uploadedBy: parAttachments.uploadedBy })
+    .from(parAttachments)
+    .where(
+      and(
+        eq(parAttachments.id, attId),
+        eq(parAttachments.parId, parId),
+        eq(parAttachments.tenantId, tenantId)
+      )
+    );
+  if (!att) return c.json({ error: "not_found" }, 404);
+
+  const roles = await getUserPARRoles(user.id, tenantId);
+  const isFinance = roles.includes("finance") || roles.includes("par_admin");
+  const FINANCE_STAGE_STATUSES = ["approved", "in_finance", "reapproval_required", "paid"];
+
+  // The author may delete their own attachments while the PAR is editable.
+  const authorCanDelete =
+    par.requestedByUserId === user.id &&
+    EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number]);
+  // PARQA-021: finance/par_admin may delete an attachment THEY uploaded at the finance stage (e.g. a
+  // wrong payment proof). Before, an uploader had no way to remove their own mistaken upload.
+  const financeCanDelete =
+    isFinance && att.uploadedBy === user.id && FINANCE_STAGE_STATUSES.includes(par.status);
+
+  if (!authorCanDelete && !financeCanDelete) {
+    return c.json({ error: "forbidden: not allowed to delete this attachment" }, 403);
   }
 
   const deleted = await db
