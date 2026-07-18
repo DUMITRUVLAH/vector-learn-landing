@@ -402,6 +402,23 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
 
   // ─── Requestor actions ──────────────────────────────────────────────────────
   if (isRequestor || isAdmin) {
+    // PARQA-001: edit an editable PAR (draft or changes_requested) — reopens it in the form so the
+    // requestor can actually change fields/line-items (esp. after "Cere modificări"), then re-submit.
+    if (status === "draft" || status === "changes_requested") {
+      actions.push(
+        <button
+          key="edit"
+          type="button"
+          disabled={!!busy}
+          onClick={() => navigate(`/business/par/${par.id}/edit`)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted min-h-[44px] disabled:opacity-60"
+          aria-label="Editează cererea"
+        >
+          <Edit2 className="h-4 w-4" aria-hidden />
+          Editează
+        </button>
+      );
+    }
     if (status === "draft") {
       actions.push(
         <button
