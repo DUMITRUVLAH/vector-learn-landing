@@ -144,12 +144,15 @@ async function approveParStep(
   body: { comment?: string | null; signatureName?: string | null }
 ): Promise<ApproveResult> {
   const roles = await getUserPARRoles(userId, tenantId);
-  const canApprove = roles.includes("approver") || roles.includes("par_admin");
+  const isAdmin = roles.includes("par_admin");
+  const isApprover = roles.includes("approver") || isAdmin;
   // VF-302: principals who delegated their approval authority to this user (active now).
   const delegators = await getActiveDelegators(userId, tenantId);
-  // VF-002: allow generic approvers OR users explicitly assigned to a pending step.
-  // VF-302: also allow if a delegator (X→userId active) is assigned to a pending step here.
-  if (!(await canActOnApproval(userId, tenantId, parId, canApprove)) && !(await hasDelegatedPendingStep(userId, tenantId, parId, delegators))) {
+  // PARQA-007: coarse gate — block only users with NO par role and no delegation. The real per-step
+  // authorization (explicit assignment / role+project-scope / delegation / DOA required-role) is done
+  // by stepMatches below, which now also enforces a step's required par_role. (A pinned non-approver
+  // is always a par_members row, so they still have a role and pass here — VF-002 preserved.)
+  if (roles.length === 0 && delegators.size === 0) {
     return { ok: false, status: 403, error: "forbidden: approver role required" };
   }
 
@@ -174,11 +177,19 @@ async function approveParStep(
   const designated = par.projectId ? await getDesignatedApprovers(tenantId, par.projectId) : new Set<string>();
   const allowedOnProject = projectAllowsApprover(par.projectId, userId, designated);
 
-  // VF-302: a step matches the user if assigned to them, role-routed (unassigned + can approve +
-  // allowed on the project), OR assigned to someone who delegated to them.
+  // PARQA-007: a role-based step may require a SPECIFIC par_role (e.g. "finance"). It's decidable only
+  // by a user holding that role (par_admin overrides; null/"approver" = the generic approver role).
+  const canDecideRoleStep = (required: string | null) => {
+    if (isAdmin) return true;
+    if (!required || required === "approver") return isApprover;
+    return roles.includes(required);
+  };
+
+  // A step matches the user if assigned to them, role-routed (unassigned + can decide the required
+  // role + allowed on the project), OR assigned to someone who delegated to them.
   const stepMatches = (s: typeof approvalSteps[number]) =>
     s.approverUserId === userId ||
-    (s.approverUserId === null && canApprove && allowedOnProject) ||
+    (s.approverUserId === null && allowedOnProject && canDecideRoleStep(s.approverParRole)) ||
     (s.approverUserId != null && delegators.has(s.approverUserId));
 
   const lockedStepForUser = approvalSteps.find(
