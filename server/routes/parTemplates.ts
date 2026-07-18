@@ -21,12 +21,16 @@ import {
   parAudit,
 } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requirePARRole, getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { generateRequestNo } from "../lib/par/requestNo";
 import { recalcParTotal } from "../lib/par/totals";
 
 export const parTemplatesRoutes = new Hono<{ Variables: AuthVariables }>();
 parTemplatesRoutes.use("*", requireAuth);
+// PARQA-006: templates embed payee IBAN/IDNP in their snapshot — restrict the whole surface to
+// users who hold a PAR role. A no-role tenant user must not list, instantiate, or delete them.
+parTemplatesRoutes.use("*", requirePARRole("requestor", "approver", "finance", "par_admin"));
 parTemplatesRoutes.use("/:id", parUuidGuard("id"));
 parTemplatesRoutes.use("/:id/:action/*", parUuidGuard("id"));
 
@@ -229,7 +233,20 @@ parTemplatesRoutes.get("/", async (c) => {
 /** DELETE /api/par/templates/:id */
 parTemplatesRoutes.delete("/:id", async (c) => {
   const tenantId = c.get("user").tenantId;
+  const userId = c.get("user").id;
   const id = c.req.param("id");
+
+  // PARQA-006: only the creator or a par_admin may delete a template. Templates are per-tenant, but
+  // hard-deleting another user's template (which may embed their payee data) must not be allowed.
+  const [tmpl] = await db
+    .select({ createdByUserId: parTemplates.createdByUserId })
+    .from(parTemplates)
+    .where(and(eq(parTemplates.id, id), eq(parTemplates.tenantId, tenantId)));
+  if (!tmpl) return c.json({ error: "not_found" }, 404);
+  const roles = await getUserPARRoles(userId, tenantId);
+  if (tmpl.createdByUserId !== userId && !roles.includes("par_admin")) {
+    return c.json({ error: "forbidden" }, 403);
+  }
 
   const [deleted] = await db
     .delete(parTemplates)
