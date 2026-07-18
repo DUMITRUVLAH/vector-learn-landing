@@ -31,9 +31,13 @@ export async function getUnreadCount(): Promise<{ count: number }> {
   return api<{ count: number }>("/api/notifications/unread-count");
 }
 
-/** Returns last 20 notifications (read + unread) for the current user. */
-export async function listNotifications(): Promise<{ items: InAppNotification[] }> {
-  return api<{ items: InAppNotification[] }>("/api/notifications");
+/**
+ * Returns last 20 notifications (rich shape) + total unread count for the current user.
+ * PARQA-002: the server now maps raw rows into the AppNotification shape the NotificationBell
+ * renders, so this returns NotificationsResponse (items + unreadCount), not raw payload rows.
+ */
+export async function listNotifications(): Promise<NotificationsResponse> {
+  return api<NotificationsResponse>("/api/notifications");
 }
 
 /** Marks all unread notifications as read. */
