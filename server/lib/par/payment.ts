@@ -14,12 +14,18 @@
  */
 
 export interface TenRuleInput {
-  /** Actual amount the vendor is being paid (minor units, e.g. cents/bani) */
+  /** Actual amount the vendor is being paid (minor units, e.g. cents/bani) — in the PAR's currency */
   actualAmountCents: number;
-  /** Total estimated cost from section 10 line items (minor units) */
+  /** Total estimated cost from section 10 line items (minor units) — in the PAR's currency */
   totalEstimatedCents: number;
-  /** Micro-purchase threshold from par_settings (minor units) */
+  /** Micro-purchase threshold from par_settings (minor units) — always in MDL */
   microPurchaseThresholdCents: number;
+  /**
+   * PARQA-017: the MDL-equivalent of the estimated total, used ONLY for the threshold comparison
+   * (the threshold is denominated in MDL). Defaults to totalEstimatedCents so MDL PARs are unchanged.
+   * The overage comparison stays in the PAR's own currency (actual vs total), which is already correct.
+   */
+  thresholdBasisCents?: number;
 }
 
 export interface TenRuleResult {
@@ -45,14 +51,18 @@ export interface TenRuleResult {
  */
 export function applyTenRule(input: TenRuleInput): TenRuleResult {
   const { actualAmountCents, totalEstimatedCents, microPurchaseThresholdCents } = input;
+  // PARQA-017: compare the MDL-equivalent against the MDL threshold. For a EUR/USD PAR,
+  // totalEstimatedCents is in EUR/USD-cents while the threshold is MDL-cents — comparing them
+  // directly mis-fired the reapproval gate. thresholdBasisCents carries the frozen MDL total.
+  const thresholdBasisCents = input.thresholdBasisCents ?? totalEstimatedCents;
 
-  // Compute max allowed using integer arithmetic:
+  // Compute max allowed using integer arithmetic (same currency as `actual`):
   //   maxAllowed = floor(totalEstimatedCents * 110 / 100)
   // Multiply first, then integer-divide to avoid float drift.
   const maxAllowedCents = Math.floor((totalEstimatedCents * 110) / 100);
 
   const overageDetected = actualAmountCents > maxAllowedCents;
-  const aboveThreshold = totalEstimatedCents > microPurchaseThresholdCents;
+  const aboveThreshold = thresholdBasisCents > microPurchaseThresholdCents;
 
   // needsReapproval: BOTH conditions must hold simultaneously
   const needsReapproval = overageDetected && aboveThreshold;
