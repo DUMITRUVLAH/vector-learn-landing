@@ -23,6 +23,8 @@ import {
   getBudgetCodesUsage,
   listEvents,
   listProjects,
+  listDepartments,
+  listBudgetCodes,
   formatMDL,
   type ParRequest,
   type ParStatus,
@@ -158,10 +160,19 @@ export function ParDashboard() {
         const elevated = r.roles.includes("finance") || r.roles.includes("par_admin");
         setIsFinance(elevated);
         if (r.roles.includes("par_admin")) {
-          // PARQA-013: a brand-new org lands on an empty dashboard. Send the admin to the onboarding
-          // wizard once — until they finish or "Sari peste" it (both set onboardingComplete=true).
+          // PARQA-013: send the admin to the onboarding wizard ONLY for a genuinely new/empty org
+          // (no departments AND no budget codes yet) whose onboarding isn't done — never bounce an
+          // already-configured tenant whose onboardingComplete flag was simply never set.
           getParSettings()
-            .then((s) => { if (!s.onboardingComplete) navigate("/business/par/onboarding"); })
+            .then(async (s) => {
+              if (s.onboardingComplete) return;
+              const [depts, codes] = await Promise.all([
+                listDepartments().catch(() => ({ items: [] })),
+                listBudgetCodes().catch(() => ({ items: [] })),
+              ]);
+              const empty = (depts.items?.length ?? 0) === 0 && (codes.items?.length ?? 0) === 0;
+              if (empty) navigate("/business/par/onboarding");
+            })
             .catch(() => { /* non-blocking */ });
         }
         if (elevated) {
