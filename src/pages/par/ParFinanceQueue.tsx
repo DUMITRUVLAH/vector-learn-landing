@@ -24,6 +24,7 @@ import {
   Check,
   FileText,
   X,
+  ShieldAlert,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
@@ -578,6 +579,8 @@ export default function ParFinanceQueue() {
   const [items, setItems] = useState<ParFinanceQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // PARQA-014: whether the 3-way match control is enforced for this tenant (default OFF).
+  const [threeWayMatchEnforced, setThreeWayMatchEnforced] = useState<boolean>(true);
   const [s16Par, setS16Par] = useState<ParFinanceQueueItem | null>(null);
   const [payPar, setPayPar] = useState<ParFinanceQueueItem | null>(null);
   const [attPar, setAttPar] = useState<ParFinanceQueueItem | null>(null);
@@ -588,6 +591,7 @@ export default function ParFinanceQueue() {
     try {
       const data = await getFinanceQueue();
       setItems(data.items);
+      setThreeWayMatchEnforced(data.threeWayMatchEnforced ?? false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Eroare la încărcarea cozii");
     } finally {
@@ -619,6 +623,26 @@ export default function ParFinanceQueue() {
             Reîncarcă
           </button>
         </div>
+
+        {/* PARQA-014: 3-way match control disabled — finance is paying without PO/receipt/amount
+            verification. Make the missing control impossible to miss so nobody assumes it's running.
+            Toggle it on in Admin → Setări PAR ("Aplică 3-way match"). */}
+        {!loading && !error && !threeWayMatchEnforced && (
+          <div
+            role="status"
+            className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-amber-800 dark:text-amber-300"
+          >
+            <ShieldAlert className="h-5 w-5 shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="text-sm">
+              <p className="font-medium">Control 3-way match dezactivat</p>
+              <p className="text-amber-700 dark:text-amber-400 mt-0.5">
+                Plățile se pot înregistra fără verificarea automată comandă (PO) + recepție + sumă.
+                Activează controlul din <span className="font-medium">Admin → Setări PAR</span> pentru
+                a bloca plata când documentele nu se potrivesc.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Loading */}
         {loading && (
