@@ -214,6 +214,8 @@ function Routes() {
   if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParGuardPage><ParAdminPage /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/folders")) return <BusinessGuardPage><ParGuardPage><ParFolders /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParGuardPage><ParReports /></ParGuardPage></BusinessGuardPage>;
+  // PARQA-001: edit an existing draft / changes_requested PAR (ParCreateForm loads it by :id).
+  if (path.match(/^\/business\/par\/[^/]+\/edit$/)) return <BusinessGuardPage><ParGuardPage><ParCreateForm /></ParGuardPage></BusinessGuardPage>;
   if (path.match(/^\/business\/par\/[^/]+$/)) return <BusinessGuardPage><ParGuardPage><ParDetailPage /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par")) return <BusinessGuardPage><ParGuardPage><ParDashboard /></ParGuardPage></BusinessGuardPage>;
 

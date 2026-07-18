@@ -1307,8 +1307,12 @@ parRoutes.get("/:id/dosar", async (c) => {
   if (!par) return c.json({ error: "not_found" }, 404);
 
   const roles = await getUserPARRoles(user.id, tenantId);
-  const hasAnyRole = roles.length > 0;
-  if (!hasAnyRole && par.requestedByUserId !== user.id) {
+  // PARQA-004 (GDPR): the dosar bundles the approval sheet + attachments, which include payee
+  // IBAN/IDNP and bank documents. Mirror GET /:id visibility — only the author or an elevated role
+  // (approver/finance/par_admin) may download it. A plain requestor viewing someone else's PAR (or
+  // any non-elevated role) is forbidden, matching the payee-nulling rule of GET /:id (par.ts:711).
+  const hasElevatedRole = roles.some((r) => ["approver", "finance", "par_admin"].includes(r));
+  if (!hasElevatedRole && par.requestedByUserId !== user.id) {
     return c.json({ error: "forbidden" }, 403);
   }
 

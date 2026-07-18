@@ -57,8 +57,9 @@ export function NotificationBell({ onUnreadChange }: NotificationBellProps) {
     try {
       const res = await listNotifications();
       setItems(res.items);
-      setUnreadCount(res.unreadCount);
-      onUnreadChange?.(res.unreadCount);
+      const unread = res.unreadCount ?? 0;
+      setUnreadCount(unread);
+      onUnreadChange?.(unread);
     } catch {
       // Silently ignore — notifications are best-effort
     } finally {

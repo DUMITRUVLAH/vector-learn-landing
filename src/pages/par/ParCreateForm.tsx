@@ -22,7 +22,7 @@ import type { ParPayeeCandidate } from "@/lib/par/parCandidateTypes";
 import { QuotesSection } from "@/components/par/QuotesSection";
 import { ApiError } from "@/lib/api";
 import {
-  createPar, updatePar, submitPar,
+  createPar, getPar, updatePar, submitPar,
   addLineItem, deleteLineItem,
   uploadAttachment, deleteAttachment,
   listDepartments, listProjects, listEvents, listBudgetCodes, listVendors, createVendor,
@@ -109,6 +109,13 @@ function Section({ id, n, title, children }: { id?: string; n: string; title: st
 export function ParCreateForm() {
   const { data: session } = useSession();
   const { navigate } = useRouter();
+  // PARQA-001: when mounted on /business/par/:id/edit, load & edit that existing draft /
+  // changes_requested PAR instead of creating a brand-new one. Computed once at mount.
+  const [editId] = useState<string | null>(() => {
+    const p = window.location.hash.replace(/^#/, "");
+    const m = p.match(/^\/business\/par\/([^/]+)\/edit$/);
+    return m ? m[1] : null;
+  });
 
   const [parId, setParId] = useState<string | null>(null);
   const [par, setPar] = useState<ParRequest | null>(null);
@@ -216,15 +223,49 @@ export function ParCreateForm() {
         setTemplates(tmplRes.templates ?? []);
       } catch { /* config load is non-blocking */ }
       try {
-        const created = await createPar({
-          date_of_request: new Date(dateOfRequest).toISOString(),
-          purpose, charge_to: chargeTo,
-        });
-        if (!alive) return;
-        setParId(created.id);
-        setPar(created);
+        if (editId) {
+          // PARQA-001: load an existing editable PAR into the form (draft or changes_requested).
+          const existing = await getPar(editId);
+          if (!alive) return;
+          if (existing.status !== "draft" && existing.status !== "changes_requested") {
+            // Not editable — bounce to the read-only detail page (submitted/approved/paid/etc).
+            navigate(`/business/par/${existing.id}`);
+            return;
+          }
+          setParId(existing.id);
+          setPar(existing);
+          setLineItems(existing.line_items ?? []);
+          setAttachments(existing.attachments ?? []);
+          if (existing.dateOfRequest) setDateOfRequest(existing.dateOfRequest.slice(0, 10));
+          setRequestorTitle(existing.requestorTitle ?? "");
+          setDepartmentId(existing.departmentId ?? "");
+          if (existing.dateNeeded) { setDateNeeded(existing.dateNeeded.slice(0, 10)); setDateNeededTouched(true); }
+          setProjectId(existing.projectId ?? "");
+          setEventId(existing.eventId ?? "");
+          setBudgetCodeId(existing.budgetCodeId ?? "");
+          setBudgetCodeNote(existing.budgetCodeNote ?? "");
+          setPurpose(existing.purpose);
+          setCurrency((["MDL", "EUR", "USD"].includes(existing.currency) ? existing.currency : "MDL") as "MDL" | "EUR" | "USD");
+          setEndUse(existing.endUse ?? "");
+          setVendorId(existing.vendorId ?? "");
+          setPayeeName(existing.payeeName ?? "");
+          setPayeeIdnp(existing.payeeIdnp ?? "");
+          setPayeeIban(existing.payeeIban ?? "");
+          setPayeeBank(existing.payeeBank ?? "");
+          setPayeeType((existing.payeeType as PayeeType | null) ?? "juridic");
+          setAttachmentsPresent(!!existing.attachmentsPresent);
+          setAttachmentsNote(existing.attachmentsNote ?? "");
+        } else {
+          const created = await createPar({
+            date_of_request: new Date(dateOfRequest).toISOString(),
+            purpose, charge_to: chargeTo,
+          });
+          if (!alive) return;
+          setParId(created.id);
+          setPar(created);
+        }
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : "Eroare la crearea ciornei");
+        if (alive) setError(e instanceof Error ? e.message : editId ? "Eroare la încărcarea ciornei" : "Eroare la crearea ciornei");
       }
     })();
     return () => { alive = false; };
@@ -596,7 +637,7 @@ export function ParCreateForm() {
         <div className="flex items-center gap-3">
           <FileText className="h-6 w-6 text-primary flex-shrink-0" aria-hidden />
           <div>
-            <h1 className="text-xl font-semibold text-foreground">Cerere nouă de plată (PAR)</h1>
+            <h1 className="text-xl font-semibold text-foreground">{editId ? "Editează cererea de plată (PAR)" : "Cerere nouă de plată (PAR)"}</h1>
             <p className="text-sm text-muted-foreground">{par?.requestNo ? `Număr: ${par.requestNo}` : "Ciornă nouă"}</p>
           </div>
         </div>

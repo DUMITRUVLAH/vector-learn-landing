@@ -159,6 +159,14 @@ async function approveParStep(
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
   if (!par) return { ok: false, status: 404, error: "not_found" };
 
+  // PARQA-003: segregation of duties — a user can NEVER approve their own PAR, even if they also
+  // hold approver/par_admin (incl. the implicit par_admin from tenant admin/manager). The DOA
+  // self-approval skip at submit only de-assigns a *pinned* step; a role-based step would otherwise
+  // still match a requestor who is also an approver. This is the hard SoD gate.
+  if (par.requestedByUserId === userId) {
+    return { ok: false, status: 403, error: "forbidden: cannot approve your own PAR (self-approval)" };
+  }
+
   if (par.status !== "pending_approval") {
     return { ok: false, status: 409, error: `conflict: PAR status is '${par.status}', cannot approve` };
   }
