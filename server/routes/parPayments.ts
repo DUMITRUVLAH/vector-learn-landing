@@ -433,6 +433,9 @@ parPaymentsRoutes.post(
       actualAmountCents: body.actual_amount_cents,
       totalEstimatedCents: par.totalEstimatedCents,
       microPurchaseThresholdCents: threshold,
+      // PARQA-017: the threshold is in MDL — compare against the frozen MDL-equivalent for non-MDL
+      // PARs (falls back to the native total for MDL PARs, where they're equal).
+      thresholdBasisCents: par.totalMdlCents ?? par.totalEstimatedCents,
     });
 
     const now = new Date();

@@ -212,3 +212,38 @@ describe("PAR-113 state machine transitions", () => {
     expect(reapproveTransition("reapproval_required")).toBe("in_finance");
   });
 });
+
+describe("PARQA-017 — threshold uses the MDL basis for non-MDL PARs", () => {
+  it("EUR PAR: native total below MDL threshold but MDL-equiv above → overage triggers reapproval", () => {
+    const result = applyTenRule({
+      actualAmountCents: 40_000, // 400 EUR paid (>10% over 300 EUR estimated)
+      totalEstimatedCents: 30_000, // 300 EUR (EUR-cents) — numerically BELOW the 5000 MDL threshold
+      microPurchaseThresholdCents: THRESHOLD, // 5000 MDL
+      thresholdBasisCents: 600_000, // 300 EUR ≈ 6000 MDL → above threshold
+    });
+    expect(result.aboveThreshold).toBe(true);
+    expect(result.overageDetected).toBe(true);
+    expect(result.needsReapproval).toBe(true);
+  });
+
+  it("without thresholdBasisCents falls back to the native total (MDL PARs unchanged)", () => {
+    const result = applyTenRule({
+      actualAmountCents: 800_000,
+      totalEstimatedCents: 700_000,
+      microPurchaseThresholdCents: THRESHOLD,
+    });
+    expect(result.needsReapproval).toBe(true); // identical to the pre-PARQA-017 behavior
+  });
+
+  it("overage check stays in the PAR's own currency (actual vs total), not the MDL basis", () => {
+    const result = applyTenRule({
+      actualAmountCents: 31_000, // 310 EUR — within +10% of 300 EUR (floor(30_000*1.1)=33_000)
+      totalEstimatedCents: 30_000,
+      microPurchaseThresholdCents: THRESHOLD,
+      thresholdBasisCents: 600_000, // above threshold in MDL, but no overage → no reapproval
+    });
+    expect(result.aboveThreshold).toBe(true);
+    expect(result.overageDetected).toBe(false);
+    expect(result.needsReapproval).toBe(false);
+  });
+});

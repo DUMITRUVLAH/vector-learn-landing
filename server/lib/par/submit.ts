@@ -138,9 +138,18 @@ export async function submitPAR(params: {
       exchangeRate = conv.rate;
       totalMdlCents = conv.mdlCents;
     } catch {
-      // FX unavailable → fall back to treating the nominal amount as MDL for routing.
-      // Better to route than to block the submit; the rate stays null (UI shows "—").
-      totalMdlCents = par.totalEstimatedCents;
+      // PARQA-018: FX unavailable — do NOT route a EUR/USD amount as if it were MDL. That
+      // under-approves ~20× (1 EUR ≈ 20 MDL) and could skip senior approvers, letting a large
+      // payment through at a low authority band. Block with a clear, retryable error instead so the
+      // PAR is never routed at the wrong DOA band. FX outages are rare and transient.
+      return {
+        ok: false,
+        code: "validation_errors",
+        errors: [{
+          field: "currency",
+          message: "Rata de schimb valutar (BNM) e indisponibilă momentan — reîncearcă trimiterea în câteva minute.",
+        }],
+      };
     }
   }
 

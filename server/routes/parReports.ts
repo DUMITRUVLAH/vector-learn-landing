@@ -44,8 +44,13 @@ const periodSchema = z.object({
 
 function buildPeriodWhere(tenantId: string, from?: string, to?: string) {
   const conditions = [eq(parRequests.tenantId, tenantId)];
-  if (from) conditions.push(gte(parRequests.dateOfRequest, from));
-  if (to) conditions.push(lte(parRequests.dateOfRequest, to));
+  // PARQA-019: dateOfRequest is a timestamp column — drizzle needs a Date, not a "YYYY-MM-DD" string
+  // (passing a string 500'd the query). This also fixes the period filter for every other report,
+  // where the same helper silently broke whenever a date range was actually supplied.
+  const fromDate = from ? new Date(from) : null;
+  const toDate = to ? new Date(to) : null;
+  if (fromDate && !isNaN(fromDate.getTime())) conditions.push(gte(parRequests.dateOfRequest, fromDate));
+  if (toDate && !isNaN(toDate.getTime())) conditions.push(lte(parRequests.dateOfRequest, toDate));
   return and(...conditions);
 }
 
@@ -199,6 +204,34 @@ parReportsRoutes.get("/by-charge-to", async (c) => {
   return c.json({ items });
 });
 
+/** GET /api/par/reports/by-vendor — PARQA-019: spend per payee/beneficiary (MDL totals).
+ * Groups by the snapshotted payeeName (populated for both inline payees and picked vendors), so
+ * "how much did we pay Vendor X" is answerable. Gated to approver/finance/par_admin (payee names
+ * are GDPR-sensitive; this router already requires an elevated role). */
+parReportsRoutes.get("/by-vendor", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const { from, to } = periodSchema.parse(c.req.query());
+
+  const rows = await db
+    .select({
+      label: parRequests.payeeName,
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+      count: sql<number>`cast(count(*) as integer)`,
+    })
+    .from(parRequests)
+    .where(and(buildPeriodWhere(tenantId, from, to), isNotNull(parRequests.payeeName)))
+    .groupBy(parRequests.payeeName);
+
+  const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
+    id: (r.label as string | null) ?? null,
+    label: ((r.label as string | null) ?? "Beneficiar necunoscut") as string,
+    totalCents: Number(r.totalCents ?? 0),
+    count: Number(r.count ?? 0),
+  }));
+
+  return c.json({ items });
+});
+
 /** GET /api/par/reports/currency-breakdown — VM1-03: per-currency native totals + aggregated MDL total */
 parReportsRoutes.get("/currency-breakdown", async (c) => {
   const tenantId = c.get("user").tenantId;
@@ -230,6 +263,7 @@ parReportsRoutes.get("/currency-breakdown", async (c) => {
 /** GET /api/par/reports/aging — count/sum per status + avg age — VM1-03: MDL totals */
 parReportsRoutes.get("/aging", async (c) => {
   const tenantId = c.get("user").tenantId;
+  const { from, to } = periodSchema.parse(c.req.query()); // PARQA-019: honor the period filter
 
   const rows = await db
     .select({
@@ -243,7 +277,7 @@ parReportsRoutes.get("/aging", async (c) => {
       `,
     })
     .from(parRequests)
-    .where(eq(parRequests.tenantId, tenantId))
+    .where(buildPeriodWhere(tenantId, from, to))
     .groupBy(parRequests.status);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
@@ -259,6 +293,7 @@ parReportsRoutes.get("/aging", async (c) => {
 /** GET /api/par/reports/cycle-time — avg submit→approved and submit→paid */
 parReportsRoutes.get("/cycle-time", async (c) => {
   const tenantId = c.get("user").tenantId;
+  const { from, to } = periodSchema.parse(c.req.query()); // PARQA-019: honor the period filter
 
   const rows = await db
     .select({
@@ -280,7 +315,7 @@ parReportsRoutes.get("/cycle-time", async (c) => {
     })
     .from(parRequests)
     .where(and(
-      eq(parRequests.tenantId, tenantId),
+      buildPeriodWhere(tenantId, from, to),
       isNotNull(parRequests.submittedAt)
     ));
 

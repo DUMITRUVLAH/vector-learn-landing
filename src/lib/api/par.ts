@@ -998,6 +998,15 @@ export async function getParReportByProject(filters?: ParReportFilters): Promise
   return api(`/api/par/reports/by-project${qs ? `?${qs}` : ""}`);
 }
 
+/** PARQA-019: spend per payee/beneficiary */
+export async function getParReportByVendor(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
+  const params = new URLSearchParams();
+  if (filters?.period_from) params.set("from", filters.period_from);
+  if (filters?.period_to) params.set("to", filters.period_to);
+  const qs = params.toString();
+  return api(`/api/par/reports/by-vendor${qs ? `?${qs}` : ""}`);
+}
+
 /** Feature 2: spend per event (calls existing /api/par/reports/by-event) */
 export async function getParReportByEvent(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
   const params = new URLSearchParams();
