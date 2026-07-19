@@ -22,6 +22,9 @@ import { DocMergeWizardPage } from "./pages/business/docmerge/DocMergeWizardPage
 // Business / FinDesk routes
 import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
 import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
+import { BusinessSignupPage } from "./pages/business/BusinessSignupPage";
+import { ForgotPasswordPage } from "./pages/business/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/business/ResetPasswordPage";
 import { BusinessDashboardPage } from "./pages/business/BusinessDashboardPage";
 import { PlatformAdminPage } from "./pages/business/PlatformAdminPage";
 import { BusinessGuardPage } from "./components/business/BusinessGuardPage";
@@ -143,9 +146,12 @@ function Routes() {
   // short-lived pending-identity cookie set by the Google callback, not on a session).
   if (path.startsWith("/business/welcome")) return <WelcomePage />;
 
-  // Business landing + login
+  // Business landing + login + account lifecycle (all PUBLIC — no session required)
   if (path === "/business" || path === "/business/") return <BusinessLandingPage />;
   if (path.startsWith("/business/login")) return <BusinessLoginPage />;
+  if (path.startsWith("/business/signup")) return <BusinessSignupPage />;
+  if (path.startsWith("/business/forgot")) return <ForgotPasswordPage />;
+  if (path.startsWith("/business/reset")) return <ResetPasswordPage />;
   if (path.startsWith("/business/dashboard")) return <BusinessDashboardPage />;
 
   // FinDesk routes under /business/fin/*

@@ -16,7 +16,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { tenants, users } from "../db/schema";
-import { verifyPassword } from "../auth/password";
+import { verifyPassword, hashPassword } from "../auth/password";
 import { createSession, revokeSession, getSessionUser, SESSION_COOKIE } from "../auth/session";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
@@ -24,6 +24,23 @@ const loginSchema = z.object({
   email: z.string().email().max(255),
   password: z.string().min(1).max(200),
 });
+
+const signupSchema = z.object({
+  tenantName: z.string().min(2).max(200),
+  name: z.string().min(2).max(200),
+  email: z.string().email().max(255),
+  password: z.string().min(8).max(200),
+});
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 64);
+}
 
 const SECURE_COOKIES = process.env.NODE_ENV === "production";
 
@@ -38,6 +55,50 @@ function setSessionCookie(c: Parameters<typeof setCookie>[0], token: string, exp
 }
 
 export const businessAuthRoutes = new Hono<{ Variables: AuthVariables }>();
+
+/**
+ * POST /api/business/auth/signup — self-serve: create a brand-new BUSINESS workspace (appKind
+ * "business") with the signer as its admin, then log them in. Distinct from /api/auth/signup,
+ * which mints a "learn" tenant. The new admin gets implicit par_admin, so they land in onboarding.
+ */
+businessAuthRoutes.post("/auth/signup", zValidator("json", signupSchema), async (c) => {
+  const body = c.req.valid("json");
+
+  const existing = await db.query.users.findFirst({ where: eq(users.email, body.email) });
+  if (existing) return c.json({ error: "email_taken" }, 409);
+
+  let slug = slugify(body.tenantName) || "org";
+  let attempt = 0;
+  while (await db.query.tenants.findFirst({ where: eq(tenants.slug, slug) })) {
+    attempt += 1;
+    slug = `${slugify(body.tenantName) || "org"}-${attempt}`;
+    if (attempt > 50) return c.json({ error: "slug_collision" }, 500);
+  }
+
+  const [tenant] = await db
+    .insert(tenants)
+    .values({ name: body.tenantName, slug, plan: "starter", appKind: "business" })
+    .returning();
+
+  const passwordHash = await hashPassword(body.password);
+  const [user] = await db
+    .insert(users)
+    .values({ tenantId: tenant.id, email: body.email, passwordHash, name: body.name, role: "admin" })
+    .returning();
+
+  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? null;
+  const userAgent = c.req.header("user-agent") ?? null;
+  const { token, expiresAt } = await createSession(user.id, {
+    ipAddress: ipAddress ?? undefined,
+    userAgent: userAgent ?? undefined,
+  });
+  setSessionCookie(c, token, expiresAt);
+
+  return c.json({
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, plan: tenant.plan, appKind: tenant.appKind },
+  });
+});
 
 /**
  * POST /api/business/auth/login

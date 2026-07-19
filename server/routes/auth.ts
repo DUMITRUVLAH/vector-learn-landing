@@ -27,6 +27,7 @@ import {
 } from "../auth/google";
 import { hashInviteToken } from "../lib/par/invites";
 import { grantInvitePayerScope } from "../lib/par/inviteScope";
+import { sendPasswordResetEmail, passwordResetUrl } from "../lib/auth/accountEmails";
 import { encrypt, decrypt } from "../lib/crypto";
 
 const signupSchema = z.object({
@@ -235,12 +236,13 @@ authRoutes.post("/forgot-password", zValidator("json", forgotPasswordSchema), as
 
   await db.insert(passwordResetTokens).values({ userId: user.id, tokenHash, expiresAt });
 
-  const appUrl = process.env.APP_URL ?? "http://localhost:5173";
-  const resetLink = `${appUrl}/#/app/reset?token=${rawToken}`;
+  const resetLink = passwordResetUrl(rawToken);
 
-  // In production, plug in a real email provider (Resend/Postmark).
-  // For now the link is written to stdout (non-sensitive in dev; reset tokens expire in 1h).
-  if (process.env.NODE_ENV !== "production") {
+  // Send the real email via Resend (no-op if RESEND_API_KEY is unset). Never throws — a failed
+  // send must not turn into a 500 that reveals the account exists.
+  await sendPasswordResetEmail({ to: email, url: resetLink });
+  // Dev convenience: also echo the link to stdout when email isn't configured locally.
+  if (process.env.NODE_ENV !== "production" && !process.env.RESEND_API_KEY) {
     process.stdout.write(`[AUTH-001] Reset link for ${email}: ${resetLink}\n`);
   }
 
