@@ -90,8 +90,10 @@ function Field({ label, htmlFor, required, hint, error, children }: {
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={htmlFor} className="text-sm font-medium text-foreground">
-        {label}{required && <span className="text-destructive ml-1" aria-hidden>*</span>}
+      {/* Reserve up to 2 label lines and bottom-align, so inputs on the same grid row line up
+          even when a neighbouring label wraps (e.g. „Data estimativă de plată (data necesară)"). */}
+      <label htmlFor={htmlFor} className="flex items-end min-h-[2.5rem] text-sm font-medium leading-snug text-foreground">
+        <span>{label}{required && <span className="text-destructive ml-1" aria-hidden>*</span>}</span>
       </label>
       {children}
       {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
