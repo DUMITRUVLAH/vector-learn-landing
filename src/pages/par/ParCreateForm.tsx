@@ -10,7 +10,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   FileText, Loader2, Plus, Trash2, Upload, X, AlertCircle, CheckCircle2, Paperclip, Save,
-  Search, Building2, BookmarkPlus, BookOpen, Sparkles, Info,
+  Search, Building2, BookmarkPlus, BookOpen, Sparkles, Info, Pencil,
+  ClipboardList, ListChecks, AlignLeft, Wallet, ChevronDown,
+  type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
@@ -102,14 +104,81 @@ function Field({ label, htmlFor, required, hint, error, children }: {
   );
 }
 
-function Section({ id, n, title, children }: { id?: string; n: string; title: string; children: React.ReactNode }) {
+/** A titled row-group inside a Section. Keeps related fields visually together on one line
+ *  ("Titlu / celule de completat"), so the form reads as a few labelled blocks, not a wall of inputs. */
+function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <section id={id} className="rounded-xl border border-border bg-card p-4 space-y-3 scroll-mt-24">
-      <h2 className="text-sm font-semibold text-foreground">
-        <span className="text-muted-foreground font-normal mr-1.5">{n}</span>{title}
-      </h2>
+    <div className="space-y-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+/** One choice in the beneficiary "how do you want to add the payee?" picker. */
+function PayeeMethodButton({ icon: Icon, label, active, onClick }: {
+  icon: LucideIcon; label: string; active: boolean; onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "flex-1 min-w-[130px] flex flex-col items-center justify-center gap-1.5 rounded-lg border px-3 py-3 text-xs font-medium text-center transition-colors min-h-[68px]",
+        active
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-border bg-background text-foreground hover:bg-muted"
+      )}
+    >
+      <Icon className="h-5 w-5 flex-shrink-0" aria-hidden />
+      {label}
+    </button>
+  );
+}
+
+function Section({ id, n, title, icon: Icon, hint, children }: {
+  id?: string; n: string; title: string; icon: LucideIcon; hint?: string; children: React.ReactNode;
+}) {
+  return (
+    <section id={id} className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-3 scroll-mt-24">
+      <div className="flex items-center gap-3">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
+          <Icon className="h-4 w-4" aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            {title}
+            <span className="text-[10px] font-normal text-muted-foreground/70 tabular-nums" aria-hidden>§{n}</span>
+          </h2>
+          {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+        </div>
+      </div>
       {children}
     </section>
+  );
+}
+
+/** Progressive disclosure: a styled native <details>. Children stay mounted (form state + tests
+ *  intact) but are visually collapsed until opened; the user can toggle freely. When `forceOpen`
+ *  flips true (e.g. AI/vendor pre-fills a hidden field) the panel auto-expands so the value shows. */
+function Collapsible({ summary, forceOpen = false, children }: {
+  summary: string; forceOpen?: boolean; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => { if (forceOpen) setOpen(true); }, [forceOpen]);
+  return (
+    <details
+      open={open}
+      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+      className="group rounded-lg border border-border bg-muted/20 [&[open]]:bg-transparent"
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-foreground select-none hover:bg-muted/40 min-h-[44px]">
+        <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden />
+        {summary}
+      </summary>
+      <div className="px-3 pb-3 pt-1">{children}</div>
+    </details>
   );
 }
 
@@ -190,6 +259,9 @@ export function ParCreateForm() {
   const [payeeAdministrator, setPayeeAdministrator] = useState("");
   // Feature 1: persoană fizică vs juridică toggle
   const [payeeType, setPayeeType] = useState<PayeeType>("juridic");
+  // Beneficiary UX: pick ONE way to add the payee (manual / company registry / AI document / saved),
+  // so the section isn't a wall of four tools stacked at once. `null` = show only the picker.
+  const [payeeMethod, setPayeeMethod] = useState<"manual" | "registry" | "ai" | "saved" | null>(null);
   // Attachments (13)
   const [attachmentsPresent, setAttachmentsPresent] = useState(false);
   const [attachmentsNote, setAttachmentsNote] = useState("");
@@ -293,6 +365,8 @@ export function ParCreateForm() {
           setPayeeIban(existing.payeeIban ?? "");
           setPayeeBank(existing.payeeBank ?? "");
           setPayeeType((existing.payeeType as PayeeType | null) ?? "juridic");
+          // Reveal the payee fields on edit when the draft already has a beneficiary.
+          if (existing.vendorId || existing.payeeName || existing.payeeIban) setPayeeMethod("manual");
           setAttachmentsPresent(!!existing.attachmentsPresent);
           setAttachmentsNote(existing.attachmentsNote ?? "");
         }
@@ -785,161 +859,182 @@ export function ParCreateForm() {
         </div>
 
         {/* 1–7 Header */}
-        <Section n="1–7" title="Antet">
-          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Data cererii" htmlFor="dor" required>
-              <input
-                id="dor"
-                type="date"
-                className={inputCls}
-                value={dateOfRequest}
-                onChange={(e) => {
-                  setDateOfRequest(e.target.value);
-                  // VM3-03: keep "data necesară" = cerere + 10 zile until the user edits it manually
-                  if (!dateNeededTouched && e.target.value) setDateNeeded(plusDays(e.target.value, 10));
-                }}
-              />
-            </Field>
-            <Field label="Scop" htmlFor="purpose" hint="Obținere oferte pornește fluxul de achiziție (RFQ).">
-              <select id="purpose" className={inputCls} value={purpose}
-                onChange={(e) => setPurpose(e.target.value as ParPurpose)} aria-label="Scopul cererii">
-                <option value="execute_payment">Executare plată</option>
-                <option value="obtain_quotations">Obținere oferte</option>
-                <option value="provide_estimate">Estimare cost</option>
-              </select>
-            </Field>
-            <Field label="Solicitant (nume)" htmlFor="rn">
-              <input id="rn" type="text" className={inputCls} value={requestorName} disabled aria-label="Numele solicitantului (din cont)" />
-            </Field>
-            <Field label="Funcție" htmlFor="rt">
-              <input id="rt" type="text" placeholder="ex. Procurement Specialist" className={inputCls} value={requestorTitle} onChange={(e) => setRequestorTitle(e.target.value)} />
-            </Field>
-            <Field label="Cod persoană" htmlFor="rcode">
-              <input id="rcode" type="text" placeholder="ex. M13" className={inputCls} value={requestorCode} onChange={(e) => setRequestorCode(e.target.value)} />
-            </Field>
-            <Field label="Departament" htmlFor="dep">
-              <select id="dep" className={inputCls} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} aria-label="Departament">
-                <option value="">— Selectează —</option>
-                {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Data estimativă de plată (data necesară)" htmlFor="dn" hint="Implicit: data cererii + 10 zile. Ajustează dacă e nevoie.">
-              <input
-                id="dn"
-                type="date"
-                className={inputCls}
-                value={dateNeeded}
-                min={dateOfRequest}
-                onChange={(e) => { setDateNeeded(e.target.value); setDateNeededTouched(true); }}
-              />
-            </Field>
-            <Field label="Plătitor / Organizație" htmlFor="payer">
-              <select id="payer" className={inputCls} value={payerId} onChange={(e) => {
-                const next = e.target.value;
-                setPayerId(next); setEventId(""); setBudgetCodeId("");
-                const eligible = projects.filter((p) => !next || p.payerId === next);
-                setProjectId(eligible.length === 1 ? eligible[0].id : "");
-              }}>
-                <option value="">— Selectează —</option>
-                {payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Proiect / Program" htmlFor="proj">
-              <select id="proj" className={inputCls} value={projectId}
-                onChange={(e) => {
-                  const next = e.target.value; setProjectId(next); setEventId(""); setBudgetCodeId("");
-                  const selected = projects.find((p) => p.id === next); if (selected?.payerId) setPayerId(selected.payerId);
-                }}
-                aria-label="Proiect">
-                <option value="">— Selectează —</option>
-                {projects.filter((p) => !payerId || p.payerId === payerId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </Field>
-            {/* VM1-04: Event — filtered by selected project.
-                VM3-03: când proiectul selectat NU are evenimente, câmpul nu mai dispare mut
-                („el a dispărut… n-are evenimente") — arătăm un hint + link spre Admin. */}
-            {(() => {
-              // Events belong to a project. Do not expose events from other projects
-              // before the requester establishes the financial context.
-              const filteredEvents = (projectId ? events.filter((ev) => ev.projectId === projectId) : [])
-                .filter((ev) => !eventSearch.trim() || ev.name.toLocaleLowerCase("ro").includes(eventSearch.trim().toLocaleLowerCase("ro")));
-              if (filteredEvents.length > 0) {
-                return (
-                  <Field label="Eveniment" htmlFor="evtId">
-                    <input className={inputCls} value={eventSearch} onChange={(e) => setEventSearch(e.target.value)} placeholder="Caută eveniment…" aria-label="Caută eveniment" />
-                    <select id="evtId" className={inputCls} value={eventId}
-                      onChange={(e) => setEventId(e.target.value)}
-                      aria-label="Eveniment">
-                      <option value="">— Selectează —</option>
-                      {filteredEvents.map((ev) => (
-                        <option key={ev.id} value={ev.id}>{ev.name}</option>
-                      ))}
-                    </select>
-                    <div className="flex gap-2">
-                      <input className={inputCls} value={newEventName} onChange={(e) => setNewEventName(e.target.value)} placeholder="Eveniment nou" aria-label="Denumire eveniment nou" />
-                      <button type="button" onClick={addQuickEvent} className="px-3 rounded-md border border-input hover:bg-muted" aria-label="Adaugă eveniment"><Plus className="h-4 w-4" /></button>
+        <Section n="1–7" title="Detalii cerere" icon={ClipboardList} hint="Cine cere, pentru ce proiect și din ce buget.">
+          {/* Când & scop — datele legate stau împreună (data cererii + data necesară) pe același rând. */}
+          <FieldGroup label="Când & scop">
+            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Data cererii" htmlFor="dor" required>
+                <input
+                  id="dor"
+                  type="date"
+                  className={inputCls}
+                  value={dateOfRequest}
+                  onChange={(e) => {
+                    setDateOfRequest(e.target.value);
+                    // VM3-03: keep "data necesară" = cerere + 10 zile until the user edits it manually
+                    if (!dateNeededTouched && e.target.value) setDateNeeded(plusDays(e.target.value, 10));
+                  }}
+                />
+              </Field>
+              <Field label="Data estimativă de plată (data necesară)" htmlFor="dn" hint="Implicit: data cererii + 10 zile. Ajustează dacă e nevoie.">
+                <input
+                  id="dn"
+                  type="date"
+                  className={inputCls}
+                  value={dateNeeded}
+                  min={dateOfRequest}
+                  onChange={(e) => { setDateNeeded(e.target.value); setDateNeededTouched(true); }}
+                />
+              </Field>
+              <Field label="Scop" htmlFor="purpose" hint="Obținere oferte pornește fluxul de achiziție (RFQ).">
+                <select id="purpose" className={inputCls} value={purpose}
+                  onChange={(e) => setPurpose(e.target.value as ParPurpose)} aria-label="Scopul cererii">
+                  <option value="execute_payment">Executare plată</option>
+                  <option value="obtain_quotations">Obținere oferte</option>
+                  <option value="provide_estimate">Estimare cost</option>
+                </select>
+              </Field>
+            </div>
+          </FieldGroup>
+
+          {/* Cine solicită — pe un singur rând: nume, funcție, cod persoană, departament. */}
+          <FieldGroup label="Cine solicită">
+            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Solicitant (nume)" htmlFor="rn">
+                <input id="rn" type="text" className={inputCls} value={requestorName} disabled aria-label="Numele solicitantului (din cont)" />
+              </Field>
+              <Field label="Funcție" htmlFor="rt">
+                <input id="rt" type="text" placeholder="ex. Procurement Specialist" className={inputCls} value={requestorTitle} onChange={(e) => setRequestorTitle(e.target.value)} />
+              </Field>
+              <Field label="Cod persoană" htmlFor="rcode">
+                <input id="rcode" type="text" placeholder="ex. M13" className={inputCls} value={requestorCode} onChange={(e) => setRequestorCode(e.target.value)} />
+              </Field>
+              <Field label="Departament" htmlFor="dep">
+                <select id="dep" className={inputCls} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} aria-label="Departament">
+                  <option value="">— Selectează —</option>
+                  {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </Field>
+            </div>
+          </FieldGroup>
+
+          {/* Plătitor & proiect — organizația împreună cu proiectul și evenimentul. */}
+          <FieldGroup label="Plătitor & proiect">
+            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Plătitor / Organizație" htmlFor="payer">
+                <select id="payer" className={inputCls} value={payerId} onChange={(e) => {
+                  const next = e.target.value;
+                  setPayerId(next); setEventId(""); setBudgetCodeId("");
+                  const eligible = projects.filter((p) => !next || p.payerId === next);
+                  setProjectId(eligible.length === 1 ? eligible[0].id : "");
+                }}>
+                  <option value="">— Selectează —</option>
+                  {payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Proiect / Program" htmlFor="proj">
+                <select id="proj" className={inputCls} value={projectId}
+                  onChange={(e) => {
+                    const next = e.target.value; setProjectId(next); setEventId(""); setBudgetCodeId("");
+                    const selected = projects.find((p) => p.id === next); if (selected?.payerId) setPayerId(selected.payerId);
+                  }}
+                  aria-label="Proiect">
+                  <option value="">— Selectează —</option>
+                  {projects.filter((p) => !payerId || p.payerId === payerId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </Field>
+              {/* VM1-04: Event — filtered by selected project.
+                  VM3-03: când proiectul selectat NU are evenimente, câmpul nu mai dispare mut
+                  („el a dispărut… n-are evenimente") — arătăm un hint + link spre Admin. */}
+              {(() => {
+                // Events belong to a project. Do not expose events from other projects
+                // before the requester establishes the financial context.
+                const filteredEvents = (projectId ? events.filter((ev) => ev.projectId === projectId) : [])
+                  .filter((ev) => !eventSearch.trim() || ev.name.toLocaleLowerCase("ro").includes(eventSearch.trim().toLocaleLowerCase("ro")));
+                if (filteredEvents.length > 0) {
+                  return (
+                    <Field label="Eveniment" htmlFor="evtId">
+                      <input className={inputCls} value={eventSearch} onChange={(e) => setEventSearch(e.target.value)} placeholder="Caută eveniment…" aria-label="Caută eveniment" />
+                      <select id="evtId" className={inputCls} value={eventId}
+                        onChange={(e) => setEventId(e.target.value)}
+                        aria-label="Eveniment">
+                        <option value="">— Selectează —</option>
+                        {filteredEvents.map((ev) => (
+                          <option key={ev.id} value={ev.id}>{ev.name}</option>
+                        ))}
+                      </select>
+                      <div className="flex gap-2">
+                        <input className={inputCls} value={newEventName} onChange={(e) => setNewEventName(e.target.value)} placeholder="Eveniment nou" aria-label="Denumire eveniment nou" />
+                        <button type="button" onClick={addQuickEvent} className="px-3 rounded-md border border-input hover:bg-muted" aria-label="Adaugă eveniment"><Plus className="h-4 w-4" /></button>
+                      </div>
+                    </Field>
+                  );
+                }
+                if (projectId) {
+                  // No <label>: there's no form control here, just an informational hint.
+                  return (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium text-foreground">Eveniment</span>
+                      <div className="flex gap-2">
+                        <input className={inputCls} value={newEventName} onChange={(e) => setNewEventName(e.target.value)} placeholder="Adaugă direct un eveniment" aria-label="Denumire eveniment nou" />
+                        <button type="button" onClick={addQuickEvent} className="px-3 rounded-md border border-input hover:bg-muted"><Plus className="h-4 w-4" /></button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Niciun eveniment pentru acest proiect. Îl poți adăuga direct aici sau project managerul le adaugă în administrare.</p>
                     </div>
-                  </Field>
-                );
-              }
-              if (projectId) {
-                // No <label>: there's no form control here, just an informational hint.
-                return (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-sm font-medium text-foreground">Eveniment</span>
-                    <div className="flex gap-2">
-                      <input className={inputCls} value={newEventName} onChange={(e) => setNewEventName(e.target.value)} placeholder="Adaugă direct un eveniment" aria-label="Denumire eveniment nou" />
-                      <button type="button" onClick={addQuickEvent} className="px-3 rounded-md border border-input hover:bg-muted"><Plus className="h-4 w-4" /></button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">Niciun eveniment pentru acest proiect. Îl poți adăuga direct aici sau project managerul le adaugă în administrare.</p>
-                  </div>
-                );
-              }
-              return null;
-            })()}
-            <Field label="Cod bugetar" htmlFor="bc">
-              <input className={inputCls} value={budgetSearch} onChange={(e) => setBudgetSearch(e.target.value)} placeholder="Caută după cod sau denumire…" aria-label="Caută cod bugetar" />
-              <select id="bc" className={inputCls} value={budgetCodeId} onChange={(e) => setBudgetCodeId(e.target.value)} aria-label="Cod bugetar">
-                <option value="">— Selectează —</option>
-                {budgetCodes.filter((b) => !!payerId && b.payerId === payerId && (!b.projectId || (!!projectId && b.projectId === projectId)) && (!budgetSearch.trim() || `${b.code} ${b.name}`.toLocaleLowerCase("ro").includes(budgetSearch.trim().toLocaleLowerCase("ro")))).map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
-              </select>
-              {payerId && <div className="flex gap-2">
-                <input className={inputCls} value={newBudgetCode} onChange={(e) => setNewBudgetCode(e.target.value)} placeholder="Cod bugetar nou" aria-label="Cod bugetar nou" />
-                <button type="button" onClick={addQuickBudgetCode} className="px-3 rounded-md border border-input hover:bg-muted"><Plus className="h-4 w-4" /></button>
-              </div>}
-              {/* Feature 2: budget balance */}
-              {budgetCodeId && (
-                budgetBalanceLoading ? (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden />Se calculează soldul...
-                  </span>
-                ) : budgetBalance ? (
-                  <span className={cn(
-                    "text-xs font-medium flex items-center gap-1",
-                    budgetBalance.availableCents <= 0 && budgetBalance.allocatedCents > 0
-                      ? "text-destructive"
-                      : "text-emerald-600 dark:text-emerald-400"
-                  )}>
-                    {budgetBalance.allocatedCents > 0
-                      ? `Disponibil: ${formatMDL(budgetBalance.availableCents)} din ${formatMDL(budgetBalance.allocatedCents)}`
-                      : "Fără plafon alocat"}
-                  </span>
-                ) : null
-              )}
-              {isAdmin && (
-                <a href="#/business/par/admin" className="text-xs text-primary hover:underline w-fit">
-                  Gestionează codurile / departamentele / proiectele în Admin →
-                </a>
-              )}
-            </Field>
-            <Field label="Notă cod bugetar" htmlFor="bcn">
-              <input id="bcn" type="text" placeholder="ex. conform planificării lunare" className={inputCls} value={budgetCodeNote} onChange={(e) => setBudgetCodeNote(e.target.value)} />
-            </Field>
-          </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+          </FieldGroup>
+
+          {/* Buget — codul bugetar cu nota lui. */}
+          <FieldGroup label="Buget">
+            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Cod bugetar" htmlFor="bc">
+                <input className={inputCls} value={budgetSearch} onChange={(e) => setBudgetSearch(e.target.value)} placeholder="Caută după cod sau denumire…" aria-label="Caută cod bugetar" />
+                <select id="bc" className={inputCls} value={budgetCodeId} onChange={(e) => setBudgetCodeId(e.target.value)} aria-label="Cod bugetar">
+                  <option value="">— Selectează —</option>
+                  {budgetCodes.filter((b) => !!payerId && b.payerId === payerId && (!b.projectId || (!!projectId && b.projectId === projectId)) && (!budgetSearch.trim() || `${b.code} ${b.name}`.toLocaleLowerCase("ro").includes(budgetSearch.trim().toLocaleLowerCase("ro")))).map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
+                </select>
+                {payerId && <div className="flex gap-2">
+                  <input className={inputCls} value={newBudgetCode} onChange={(e) => setNewBudgetCode(e.target.value)} placeholder="Cod bugetar nou" aria-label="Cod bugetar nou" />
+                  <button type="button" onClick={addQuickBudgetCode} className="px-3 rounded-md border border-input hover:bg-muted"><Plus className="h-4 w-4" /></button>
+                </div>}
+                {/* Feature 2: budget balance */}
+                {budgetCodeId && (
+                  budgetBalanceLoading ? (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />Se calculează soldul...
+                    </span>
+                  ) : budgetBalance ? (
+                    <span className={cn(
+                      "text-xs font-medium flex items-center gap-1",
+                      budgetBalance.availableCents <= 0 && budgetBalance.allocatedCents > 0
+                        ? "text-destructive"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    )}>
+                      {budgetBalance.allocatedCents > 0
+                        ? `Disponibil: ${formatMDL(budgetBalance.availableCents)} din ${formatMDL(budgetBalance.allocatedCents)}`
+                        : "Fără plafon alocat"}
+                    </span>
+                  ) : null
+                )}
+                {isAdmin && (
+                  <a href="#/business/par/admin" className="text-xs text-primary hover:underline w-fit">
+                    Gestionează codurile / departamentele / proiectele în Admin →
+                  </a>
+                )}
+              </Field>
+              <Field label="Notă cod bugetar" htmlFor="bcn">
+                <input id="bcn" type="text" placeholder="ex. conform planificării lunare" className={inputCls} value={budgetCodeNote} onChange={(e) => setBudgetCodeNote(e.target.value)} />
+              </Field>
+            </div>
+          </FieldGroup>
         </Section>
 
         {/* 10 Line items */}
-        <Section id="sec-lines" n="10" title="Articole / Servicii solicitate">
+        <Section id="sec-lines" n="10" title="Articole și servicii" icon={ListChecks}>
           {fieldErrors.line_items && (
             <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="h-3 w-3" aria-hidden />{fieldErrors.line_items}</p>
           )}
@@ -998,7 +1093,9 @@ export function ParCreateForm() {
                 onChange={(e) => setNlPrice(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLine()} /></Field>
             </div>
             {lineError && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="h-3 w-3" aria-hidden />{lineError}</p>}
-            <button type="button" onClick={addLine} disabled={addingLine || !parId}
+            {/* No `!parId` gate: addLine() creates the draft on first use, so the button must be
+                clickable from the very first article (fixes „nu se face albastru" on a fresh form). */}
+            <button type="button" onClick={addLine} disabled={addingLine}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[44px]">
               {addingLine ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}Adaugă articol
             </button>
@@ -1013,7 +1110,7 @@ export function ParCreateForm() {
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as typeof currency)}
                 aria-label="Monedă"
-                className="rounded-md border border-input bg-background text-xs px-2 py-1 min-h-[36px]"
+                className="rounded-md border border-input bg-background text-xs px-2 py-1 min-h-[44px]"
               >
                 <option value="MDL">MDL</option>
                 <option value="EUR">EUR</option>
@@ -1041,7 +1138,7 @@ export function ParCreateForm() {
         )}
 
         {/* 11 End-use */}
-        <Section n="11" title="Descrierea utilizării finale (End-use)">
+        <Section n="11" title="Utilizare finală" icon={AlignLeft} hint="Descrie pe scurt ce s-a livrat sau prestat.">
           <Field label="Descriere" htmlFor="endUse" required={purpose === "execute_payment"} error={fieldErrors.end_use}>
             <textarea id="endUse" rows={4}
               placeholder="Descrie detaliat serviciile/bunurile primite — ex. „Servicii de consultanță psihologică de grup, organizate în cadrul proiectului Digital Safeguard, cu durata de 120–180 min, pe platforma Zoom, pentru beneficiarii proiectului.”"
@@ -1051,18 +1148,18 @@ export function ParCreateForm() {
         </Section>
 
         {/* 12 Payee */}
-        <Section n="12" title="Beneficiar plată (Payee)">
+        <Section n="12" title="Beneficiar plată" icon={Wallet}>
           {fieldErrors.payee && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="h-3 w-3" aria-hidden />{fieldErrors.payee}</p>}
 
-          {/* Feature 1: Tip beneficiar toggle */}
-          <div className="flex items-center gap-2 mb-3" role="group" aria-label="Tip beneficiar">
+          {/* Pas 1: Tip beneficiar (fizic / juridic) — se alege întâi. */}
+          <div className="flex items-center gap-2" role="group" aria-label="Tip beneficiar">
             <span className="text-sm font-medium text-foreground">Tip beneficiar:</span>
             <button
               type="button"
-              onClick={() => setPayeeType("fizic")}
+              onClick={() => { setPayeeType("fizic"); if (payeeMethod === "registry") setPayeeMethod("manual"); }}
               aria-pressed={payeeType === "fizic"}
               className={cn(
-                "px-3 py-1.5 rounded-l-md border text-sm font-medium transition-colors min-h-[36px]",
+                "px-3 py-1.5 rounded-l-md border text-sm font-medium transition-colors min-h-[44px]",
                 payeeType === "fizic"
                   ? "bg-primary text-primary-foreground border-primary"
                   : "bg-background text-foreground border-border hover:bg-muted"
@@ -1075,7 +1172,7 @@ export function ParCreateForm() {
               onClick={() => setPayeeType("juridic")}
               aria-pressed={payeeType === "juridic"}
               className={cn(
-                "px-3 py-1.5 rounded-r-md border-t border-b border-r text-sm font-medium transition-colors min-h-[36px]",
+                "px-3 py-1.5 rounded-r-md border-t border-b border-r text-sm font-medium transition-colors min-h-[44px]",
                 payeeType === "juridic"
                   ? "bg-primary text-primary-foreground border-primary"
                   : "bg-background text-foreground border-border hover:bg-muted"
@@ -1085,26 +1182,46 @@ export function ParCreateForm() {
             </button>
           </div>
 
-          {/* VM1-13: AI Prefill — upload document to auto-fill payee/IBAN/scope */}
-          <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-border mb-2">
-            <button
-              type="button"
-              onClick={() => aiPrefillFileRef.current?.click()}
-              disabled={aiPrefilling}
-              className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors min-h-[44px] disabled:opacity-50"
-              aria-label="Completează automat din document"
-              title="Încarcă un document pentru a extrage câmpurile automat"
-            >
-              {aiPrefilling ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : (
-                <Sparkles className="h-4 w-4" aria-hidden />
+          {/* Pas 2: cum adaugi beneficiarul — alege UNA din metode, ca să nu apară toate tool-urile deodată. */}
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Cum adaugi beneficiarul?</p>
+            <div className="flex flex-wrap gap-2">
+              <PayeeMethodButton icon={Pencil} label="Introdu manual" active={payeeMethod === "manual"} onClick={() => setPayeeMethod("manual")} />
+              {payeeType === "juridic" && (
+                <PayeeMethodButton icon={Building2} label="Caută companie" active={payeeMethod === "registry"} onClick={() => setPayeeMethod("registry")} />
               )}
-              {aiPrefilling ? "Se analizează..." : "Completează automat din document"}
-            </button>
-            <span className="text-xs text-muted-foreground">
-              AI extrage beneficiarul, IBAN-ul și scopul dintr-o factură/contract. Tu confirmi.
-            </span>
+              <PayeeMethodButton icon={Sparkles} label="Din document (AI)" active={payeeMethod === "ai"} onClick={() => setPayeeMethod("ai")} />
+              <PayeeMethodButton icon={BookOpen} label="Beneficiar salvat" active={payeeMethod === "saved"} onClick={() => setPayeeMethod("saved")} />
+            </div>
+          </div>
+
+          {/* Metoda: completează din document cu AI. O factură/contract umple beneficiar, IBAN, sumă și articole. */}
+          {payeeMethod === "ai" && (
+          <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4 flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Sparkles className="h-4 w-4 text-primary flex-shrink-0" aria-hidden />
+              Ai o factură sau un contract? Completează automat.
+            </div>
+            <p className="text-xs text-muted-foreground">
+              AI extrage beneficiarul, IBAN-ul, suma și articolele dintr-un document. Tu verifici și confirmi.
+            </p>
+            <div>
+              <button
+                type="button"
+                onClick={() => aiPrefillFileRef.current?.click()}
+                disabled={aiPrefilling}
+                className="inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors min-h-[44px] disabled:opacity-50"
+                aria-label="Completează automat din document"
+                title="Încarcă un document pentru a extrage câmpurile automat"
+              >
+                {aiPrefilling ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Upload className="h-4 w-4" aria-hidden />
+                )}
+                {aiPrefilling ? "Se analizează..." : "Încarcă document"}
+              </button>
+            </div>
             <input
               ref={aiPrefillFileRef}
               type="file"
@@ -1114,10 +1231,11 @@ export function ParCreateForm() {
               onChange={handleAiPrefillFile}
             />
           </div>
+          )}
 
           {/* AI prefill error */}
           {aiPrefillError && (
-            <div role="alert" className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm mb-2">
+            <div role="alert" className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
               <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
               <span>{aiPrefillError}</span>
             </div>
@@ -1125,7 +1243,7 @@ export function ParCreateForm() {
 
           {/* AI prefill result panel */}
           {aiPrefillResult && (
-            <div className="rounded-lg border border-border bg-muted/30 p-3 mb-3 space-y-1.5 text-sm">
+            <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-1.5 text-sm">
               <div className="flex items-center gap-1.5 font-medium text-foreground">
                 <Sparkles className="h-4 w-4 text-primary" aria-hidden />
                 Câmpuri propuse de AI {aiPrefillResult.isStub && <span className="text-xs text-muted-foreground font-normal">(demo)</span>}
@@ -1173,7 +1291,7 @@ export function ParCreateForm() {
             <div
               role="radiogroup"
               aria-label="Care companie e beneficiarul plății?"
-              className="rounded-lg border border-primary/40 bg-primary/5 p-3 mb-3 space-y-2"
+              className="rounded-lg border border-primary/40 bg-primary/5 p-3 space-y-2"
             >
               <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
                 <Sparkles className="h-4 w-4 text-primary" aria-hidden />
@@ -1211,8 +1329,8 @@ export function ParCreateForm() {
             </div>
           )}
 
-          {/* Feature 1: Registry search — only for juridic (companies) */}
-          {payeeType === "juridic" && <Field label="Caută companie (contafirm.md)" htmlFor="reg-q" hint="Introdu cel puțin 2 caractere — caută după nume sau IDNO">
+          {/* Metoda: caută companie în registru — doar pentru juridic (companii). */}
+          {payeeMethod === "registry" && payeeType === "juridic" && <Field label="Caută companie (contafirm.md)" htmlFor="reg-q" hint="Introdu cel puțin 2 caractere — caută după nume sau IDNO">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden />
               <input
@@ -1258,66 +1376,96 @@ export function ParCreateForm() {
             )}
           </Field>}
 
-          {vendors.length > 0 && (
-            <Field label="Beneficiar salvat" htmlFor="vsel" hint="Alege un beneficiar din registru sau introdu manual mai jos">
-              <input className={inputCls} value={vendorSearch} onChange={(e) => setVendorSearch(e.target.value)} placeholder="Caută după nume, IDNO/IDNP sau IBAN…" aria-label="Caută beneficiar salvat" />
-              <select id="vsel" className={inputCls} value={vendorId} onChange={onVendorSelect} aria-label="Beneficiar salvat">
-                <option value="">— Introducere manuală —</option>
-                {vendors.filter((v) => !vendorSearch.trim() || `${v.name} ${v.idnp ?? ""} ${v.iban ?? ""}`.toLocaleLowerCase("ro").includes(vendorSearch.trim().toLocaleLowerCase("ro"))).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
-            </Field>
+          {/* Metoda: alege dintr-un beneficiar deja salvat. */}
+          {payeeMethod === "saved" && (
+            vendors.length > 0 ? (
+              <Field label="Beneficiar salvat" htmlFor="vsel" hint="Alege un beneficiar din registru sau introdu manual mai jos">
+                <input className={inputCls} value={vendorSearch} onChange={(e) => setVendorSearch(e.target.value)} placeholder="Caută după nume, IDNO/IDNP sau IBAN…" aria-label="Caută beneficiar salvat" />
+                <select id="vsel" className={inputCls} value={vendorId} onChange={onVendorSelect} aria-label="Beneficiar salvat">
+                  <option value="">— Introducere manuală —</option>
+                  {vendors.filter((v) => !vendorSearch.trim() || `${v.name} ${v.idnp ?? ""} ${v.iban ?? ""}`.toLocaleLowerCase("ro").includes(vendorSearch.trim().toLocaleLowerCase("ro"))).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+              </Field>
+            ) : (
+              <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border p-3">
+                Nu ai încă beneficiari salvați. Introdu manual sau completează din document — beneficiarii cu IBAN se salvează automat pentru data viitoare.
+              </p>
+            )
           )}
-          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Field
-              label={payeeType === "fizic" ? "Nume, Prenume" : "Denumire companie"}
-              htmlFor="pn"
-            >
-              <input
-                id="pn"
-                type="text"
-                placeholder={payeeType === "fizic" ? "ex. Roitman Daria" : "ex. ATIC SRL"}
-                className={inputCls}
-                value={payeeName}
-                onChange={(e) => {
-                  setPayeeName(e.target.value);
-                  setVendorId("");
-                  // Auto-detect as user types (only override if detector is confident)
-                  const detected = detectPayeeType(e.target.value);
-                  if (detected) setPayeeType(detected);
-                }}
-              />
-            </Field>
-            <Field
-              label={payeeType === "fizic" ? "IDNP" : "IDNO"}
-              htmlFor="pi"
-              hint="13 cifre"
-              error={fieldErrors.payee_idnp}
-            >
-              <input id="pi" type="text" maxLength={13} placeholder="2008001007903" value={payeeIdnp}
-                className={cn(inputCls, fieldErrors.payee_idnp && "border-destructive")}
-                onChange={(e) => { setPayeeIdnp(e.target.value); setFieldErrors((p) => ({ ...p, payee_idnp: "" })); }} />
-            </Field>
-            <Field label="IBAN" htmlFor="pb" hint="MD + 2 cifre + 20 caractere" error={fieldErrors.payee_iban}>
-              <input id="pb" type="text" maxLength={34} placeholder="MD48ML000002259A19498121" value={payeeIban}
-                className={cn(inputCls, fieldErrors.payee_iban && "border-destructive")}
-                onChange={(e) => { setPayeeIban(e.target.value.toUpperCase()); setFieldErrors((p) => ({ ...p, payee_iban: "" })); }} />
-            </Field>
-            <Field label="Bancă" htmlFor="pbk"><input id="pbk" type="text" placeholder="ex. BC Moldindconbank S.A." className={inputCls} value={payeeBank} onChange={(e) => setPayeeBank(e.target.value)} /></Field>
-            <Field label="BIC / SWIFT" htmlFor="pbic"><input id="pbic" type="text" placeholder="ex. MOLDMD2X" className={inputCls} value={payeeBic} onChange={(e) => setPayeeBic(e.target.value.toUpperCase())} /></Field>
-            <Field label="Administrator / reprezentant" htmlFor="padmin"><input id="padmin" type="text" placeholder="Prenume Nume" className={inputCls} value={payeeAdministrator} onChange={(e) => setPayeeAdministrator(e.target.value)} /></Field>
-            <Field label="Adresă juridică" htmlFor="paddr"><input id="paddr" type="text" placeholder="Localitate, stradă, număr" className={inputCls} value={payeeLegalAddress} onChange={(e) => setPayeeLegalAddress(e.target.value)} /></Field>
-          </div>
-          {!vendorId && payeeName.trim() && payeeIban.trim() && (
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" aria-hidden />
-              Beneficiarul cu IBAN se salvează automat în registru pentru reutilizare.
-            </p>
+
+          {/* Câmpurile beneficiarului — apar după ce alegi o metodă (sau când există deja date). */}
+          {payeeMethod !== null || payeeName.trim() || payeeIban.trim() || vendorId ? (
+            <>
+              <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                <Field
+                  label={payeeType === "fizic" ? "Nume, Prenume" : "Denumire companie"}
+                  htmlFor="pn"
+                  required={purpose === "execute_payment" && !vendorId}
+                >
+                  <input
+                    id="pn"
+                    type="text"
+                    aria-required={purpose === "execute_payment" && !vendorId ? true : undefined}
+                    placeholder={payeeType === "fizic" ? "ex. Roitman Daria" : "ex. ATIC SRL"}
+                    className={inputCls}
+                    value={payeeName}
+                    onChange={(e) => {
+                      setPayeeName(e.target.value);
+                      setVendorId("");
+                      // Auto-detect as user types (only override if detector is confident)
+                      const detected = detectPayeeType(e.target.value);
+                      if (detected) setPayeeType(detected);
+                    }}
+                  />
+                </Field>
+                <Field
+                  label={payeeType === "fizic" ? "IDNP" : "IDNO"}
+                  htmlFor="pi"
+                  hint="13 cifre"
+                  error={fieldErrors.payee_idnp}
+                >
+                  <input id="pi" type="text" maxLength={13} placeholder="2008001007903" value={payeeIdnp}
+                    className={cn(inputCls, fieldErrors.payee_idnp && "border-destructive")}
+                    onChange={(e) => { setPayeeIdnp(e.target.value); setFieldErrors((p) => ({ ...p, payee_idnp: "" })); }} />
+                </Field>
+                <Field label="IBAN" htmlFor="pb" hint="MD + 2 cifre + 20 caractere" error={fieldErrors.payee_iban} required={purpose === "execute_payment" && !vendorId}>
+                  <div className="relative">
+                    <input id="pb" type="text" maxLength={34} placeholder="MD48ML000002259A19498121" value={payeeIban}
+                      aria-required={purpose === "execute_payment" && !vendorId ? true : undefined}
+                      className={cn(inputCls, "pr-9", fieldErrors.payee_iban && "border-destructive")}
+                      onChange={(e) => { setPayeeIban(e.target.value.toUpperCase()); setFieldErrors((p) => ({ ...p, payee_iban: "" })); }} />
+                    {isValidMoldovaIBAN(payeeIban) && (
+                      <CheckCircle2 className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-success" aria-label="IBAN valid" />
+                    )}
+                  </div>
+                </Field>
+              </div>
+              <Collapsible
+                summary="Detalii bancă & reprezentant (opțional)"
+                forceOpen={!!(payeeBank.trim() || payeeBic.trim() || payeeAdministrator.trim() || payeeLegalAddress.trim())}
+              >
+                <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <Field label="Bancă" htmlFor="pbk"><input id="pbk" type="text" placeholder="ex. BC Moldindconbank S.A." className={inputCls} value={payeeBank} onChange={(e) => setPayeeBank(e.target.value)} /></Field>
+                  <Field label="BIC / SWIFT" htmlFor="pbic"><input id="pbic" type="text" placeholder="ex. MOLDMD2X" className={inputCls} value={payeeBic} onChange={(e) => setPayeeBic(e.target.value.toUpperCase())} /></Field>
+                  <Field label="Administrator / reprezentant" htmlFor="padmin"><input id="padmin" type="text" placeholder="Prenume Nume" className={inputCls} value={payeeAdministrator} onChange={(e) => setPayeeAdministrator(e.target.value)} /></Field>
+                  <Field label="Adresă juridică" htmlFor="paddr"><input id="paddr" type="text" placeholder="Localitate, stradă, număr" className={inputCls} value={payeeLegalAddress} onChange={(e) => setPayeeLegalAddress(e.target.value)} /></Field>
+                </div>
+              </Collapsible>
+              {!vendorId && payeeName.trim() && payeeIban.trim() && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" aria-hidden />
+                  Beneficiarul cu IBAN se salvează automat în registru pentru reutilizare.
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">Alege o metodă de mai sus pentru a completa datele beneficiarului.</p>
           )}
           <p className="text-xs text-muted-foreground">Datele beneficiarului sunt confidențiale (GDPR) — vizibile doar solicitantului, aprobatorilor și finanțelor.</p>
         </Section>
 
         {/* 13 Attachments */}
-        <Section n="13" title="Atașamente">
+        <Section n="13" title="Documente" icon={Paperclip}>
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Tip document" htmlFor="uk">
               <select id="uk" className={inputCls} value={uploadKind} onChange={(e) => setUploadKind(e.target.value as ParAttachmentKind)} aria-label="Tip document">
@@ -1375,9 +1523,9 @@ export function ParCreateForm() {
             </div>
           )}
           <div className="flex items-center justify-between gap-3">
-            <div className="text-sm">
-              <span className="text-muted-foreground">Total estimat: </span>
-              <span className={cn("font-semibold", aboveThreshold ? "text-orange-600 dark:text-orange-400" : "text-foreground")}>{formatMDL(totalCents)}</span>
+            <div className="leading-tight flex-shrink-0">
+              <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">Total estimat</span>
+              <span className={cn("text-base font-bold tabular-nums", aboveThreshold ? "text-orange-600 dark:text-orange-400" : "text-foreground")}>{fmtMoney(totalCents, currency)}</span>
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-end">
               {/* Feature 3: Templates */}
@@ -1387,7 +1535,7 @@ export function ParCreateForm() {
                     disabled={busy}
                     aria-label="Pornește din șablon"
                     aria-expanded={showTemplates}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors min-h-[44px]">
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 transition-colors min-h-[44px]">
                     <BookOpen className="h-4 w-4" aria-hidden />Șabloane
                   </button>
                   {showTemplates && (
@@ -1413,16 +1561,16 @@ export function ParCreateForm() {
                 showSaveTemplate ? (
                   <div className="flex items-center gap-1">
                     <input type="text" value={templateName} onChange={(e) => setTemplateName(e.target.value)}
-                      placeholder="Nume șablon" className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring w-36"
+                      placeholder="Nume șablon" className="h-11 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring w-36"
                       aria-label="Numele șablonului" onKeyDown={(e) => e.key === "Enter" && onSaveTemplate()} />
                     <button type="button" onClick={onSaveTemplate} disabled={savingTemplate || !templateName.trim()}
-                      className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 disabled:opacity-50 transition-colors min-h-[36px]"
+                      className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 disabled:opacity-50 transition-colors min-h-[44px]"
                       aria-label="Confirmă salvarea șablonului">
                       {savingTemplate ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />}
                       OK
                     </button>
                     <button type="button" onClick={() => { setShowSaveTemplate(false); setTemplateName(""); }}
-                      className="flex items-center px-2 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:bg-muted min-h-[36px]"
+                      className="flex items-center px-2 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:bg-muted min-h-[44px]"
                       aria-label="Anulează salvarea șablonului">
                       <X className="h-3.5 w-3.5" aria-hidden />
                     </button>
@@ -1430,7 +1578,7 @@ export function ParCreateForm() {
                 ) : (
                   <button type="button" onClick={() => setShowSaveTemplate(true)} disabled={busy}
                     aria-label="Salvează ca șablon"
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors min-h-[44px]">
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 transition-colors min-h-[44px]">
                     <BookmarkPlus className="h-4 w-4" aria-hidden />Salvează ca șablon
                   </button>
                 )
@@ -1440,7 +1588,7 @@ export function ParCreateForm() {
                 <Save className="h-4 w-4" aria-hidden />Salvează ciornă
               </button>
               <button type="button" onClick={submit} disabled={busy || !parId} aria-label="Trimite cererea pentru aprobare"
-                className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[44px]">
+                className="flex items-center gap-2 px-6 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold shadow-sm hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[44px]">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}Trimite pentru aprobare
               </button>
             </div>

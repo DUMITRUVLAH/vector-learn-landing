@@ -33,6 +33,8 @@ export function BusinessLoginPage() {
       google_failed: "Conectarea cu Google a eșuat. Încercați din nou peste câteva momente.",
       google_email_unverified:
         "Adresa de email Google nu este verificată. Verificați-o în contul Google și reîncercați.",
+      account_in_other_workspace:
+        "Contul tău Google are deja un workspace cu date. Invitația e pentru altă organizație — cere administratorului să te invite cu un alt email, sau golește workspace-ul curent înainte de a accepta.",
     };
     setError(messages[err] ?? `Eroare la conectarea cu Google (${err}).`);
   }, []);

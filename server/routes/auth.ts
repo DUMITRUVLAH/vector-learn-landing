@@ -2,11 +2,15 @@ import { Hono } from "hono";
 import { setCookie, deleteCookie, getCookie } from "hono/cookie";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq, and, gt, isNull } from "drizzle-orm";
+import { eq, and, gt, isNull, count } from "drizzle-orm";
 import { randomBytes, createHash } from "node:crypto";
 import { db } from "../db/client";
 import { tenants, users, sessions, passwordResetTokens, twoFactorSettings, finMembers } from "../db/schema";
-import { parInvites, parMembers, parPayerMembers, parPayerModules, parPayers } from "../db/schema/par";
+// SHELL-505 disposability guard: every OTHER per-tenant content table co-hosted in this DB, so we can
+// prove an old workspace is a truly-empty auto-created shell before re-homing its sole user away.
+import { finInvoices, finCaptures, finExpenses } from "../db/schema";
+import { invoices, payments, students, leads, courses, docmergeTemplates, itparkEngagements } from "../db/schema";
+import { parInvites, parMembers, parPayerMembers, parProjectMembers, parPayers, parProjects, parVendors, parPayerModules, parRequests } from "../db/schema/par";
 import { hashPassword, verifyPassword } from "../auth/password";
 import { createSession, revokeSession, SESSION_COOKIE } from "../auth/session";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -673,6 +677,121 @@ function appUrl(): string {
   return process.env.APP_URL ?? "http://localhost:5173";
 }
 
+/**
+ * SHELL-505: an existing Google account (already on its own tenant) accepting a PAR invite to a
+ * DIFFERENT tenant. This is the #1 reason "invitations don't work": under the single-tenant model
+ * the Google callback used to find the existing account, see the invite was for another workspace,
+ * and silently log the user back into their own — dropping the invite. Someone who ever signed into
+ * the app with Google before their invite (auto-creating an empty workspace) could then NEVER accept.
+ *
+ * We RE-HOME the account to the inviting tenant, but ONLY if the old workspace is safely disposable:
+ * the user is its SOLE member AND it holds ZERO content across EVERY per-tenant module. This DB
+ * co-hosts multiple products (PAR, FinDesk fin_*, the CRM students/leads/payments/courses, ITPARK,
+ * docmerge) all keyed by tenants.id — so "no PAR requests" is NOT enough: moving the sole user away
+ * from a tenant that holds FinDesk invoices / CRM data / PAR config would orphan that data
+ * irreversibly on a tenant nobody can log into. If ANY content exists, we refuse the auto-move
+ * (return null) and the caller shows a clear screen — never silently orphaning real data.
+ *
+ * The emptiness check runs INSIDE the transaction (a consistent snapshot with the mutation) so a
+ * concurrent write on the old tenant can't race an outside-tx read into a stale "disposable" verdict.
+ *
+ * Returns the re-homed user row (now on the inviting tenant, with the invited PAR role + payer
+ * scope granted and the invite consumed) on success, or null when the move was refused.
+ * Throws "INVITE_ALREADY_CONSUMED" if the token was claimed concurrently.
+ */
+export async function rehomeGoogleUserToInvite(
+  user: typeof users.$inferSelect,
+  invite: typeof parInvites.$inferSelect,
+): Promise<typeof users.$inferSelect | null> {
+  const oldTenantId = user.tenantId;
+  let rehomed!: typeof users.$inferSelect;
+  try {
+    await db.transaction(async (tx) => {
+      // ── Disposability guard (in-tx, consistent snapshot) ──────────────────────────────────────
+      // Sole user AND zero rows in every per-tenant content table → a genuinely empty auto-created
+      // shell. Checked sequentially with an early exit so an already-active workspace bails fast.
+      // NOTE: when a NEW per-tenant content module is added to this DB, add its table here too, or a
+      // populated workspace in that module could again be wrongly judged disposable.
+      const [{ n: userCount }] = await tx.select({ n: count() }).from(users).where(eq(users.tenantId, oldTenantId));
+      if (userCount > 1) throw new Error("NOT_DISPOSABLE");
+      const emptinessProbes: Array<() => Promise<number>> = [
+        () => tx.select({ n: count() }).from(parRequests).where(eq(parRequests.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(parPayers).where(eq(parPayers.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(parProjects).where(eq(parProjects.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(parVendors).where(eq(parVendors.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(finInvoices).where(eq(finInvoices.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(finCaptures).where(eq(finCaptures.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(finExpenses).where(eq(finExpenses.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(invoices).where(eq(invoices.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(payments).where(eq(payments.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(students).where(eq(students.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(leads).where(eq(leads.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(courses).where(eq(courses.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(docmergeTemplates).where(eq(docmergeTemplates.tenantId, oldTenantId)).then((r) => r[0].n),
+        () => tx.select({ n: count() }).from(itparkEngagements).where(eq(itparkEngagements.tenantId, oldTenantId)).then((r) => r[0].n),
+      ];
+      for (const probe of emptinessProbes) {
+        if ((await probe()) > 0) throw new Error("NOT_DISPOSABLE"); // has real data → rollback, refuse move
+      }
+
+      // Claim the invite (idempotent guard against a concurrent accept).
+      const claimed = await tx
+        .update(parInvites)
+        .set({ acceptedAt: new Date() })
+        .where(and(eq(parInvites.id, invite.id), isNull(parInvites.acceptedAt)))
+        .returning({ id: parInvites.id });
+      if (claimed.length === 0) throw new Error("INVITE_ALREADY_CONSUMED");
+
+      const dest = await tx.query.users.findFirst({
+        where: and(eq(users.tenantId, invite.tenantId), eq(users.email, user.email)),
+      });
+      if (dest) {
+        // A row already exists on the inviting tenant (e.g. a prior password-accept). Move the Google
+        // identity onto it and free it from the old row (google_id is globally unique). The old row is
+        // left on the now-empty shell tenant; harmless (un-loginable, on a tenant with no data). We do
+        // NOT hard-delete it — that would risk an FK violation mid-login, a worse failure than cruft.
+        await tx.update(users).set({ googleId: null, updatedAt: new Date() }).where(eq(users.id, user.id));
+        await tx.update(users)
+          .set({ googleId: user.googleId, authProvider: "google", updatedAt: new Date() })
+          .where(eq(users.id, dest.id));
+        rehomed = { ...dest, googleId: user.googleId, authProvider: "google" };
+      } else {
+        // Move the whole account row to the inviting tenant (keeps id + google_id → no unique clash).
+        const [moved] = await tx
+          .update(users)
+          .set({ tenantId: invite.tenantId, role: "teacher", updatedAt: new Date() })
+          .where(eq(users.id, user.id))
+          .returning();
+        rehomed = moved;
+      }
+
+      // Drop any PAR scope grants left on the OLD (abandoned) tenant for BOTH the departing identity
+      // and the destination row — tenant-scoped, harmless, but keep the empty shell clean.
+      for (const uid of [user.id, rehomed.id]) {
+        await tx.delete(parPayerMembers).where(and(eq(parPayerMembers.tenantId, oldTenantId), eq(parPayerMembers.userId, uid)));
+        await tx.delete(parProjectMembers).where(and(eq(parProjectMembers.tenantId, oldTenantId), eq(parProjectMembers.userId, uid)));
+      }
+
+      const existingMember = await tx.query.parMembers.findFirst({
+        where: and(
+          eq(parMembers.tenantId, invite.tenantId),
+          eq(parMembers.userId, rehomed.id),
+          eq(parMembers.role, invite.parRole),
+        ),
+      });
+      if (!existingMember) {
+        await tx.insert(parMembers).values({ tenantId: invite.tenantId, userId: rehomed.id, role: invite.parRole });
+      }
+      await grantInvitePayerScope(tx, invite, rehomed.id);
+    });
+  } catch (err: unknown) {
+    // Old workspace is not a disposable shell → refuse the auto-move; caller shows a clear screen.
+    if (err instanceof Error && err.message === "NOT_DISPOSABLE") return null;
+    throw err; // INVITE_ALREADY_CONSUMED (and anything unexpected) propagate to the caller
+  }
+  return rehomed;
+}
+
 // GET /api/auth/google — start the flow: mint state + PKCE, then redirect.
 // SHELL-503: accept optional ?invite=<token> — stash it in a short-lived cookie
 // so the callback can link the new user to the inviting tenant instead of
@@ -841,8 +960,25 @@ authRoutes.get("/google/callback", async (c) => {
         const msg = err instanceof Error ? err.message : "";
         if (msg !== "INVITE_ALREADY_CONSUMED") throw err;
       }
+    } else {
+      // SHELL-505: existing account on a DIFFERENT tenant. Re-home it to the inviting workspace if
+      // the current one is disposable (empty auto-created workspace); otherwise send the user to a
+      // clear "email already in use" screen instead of silently logging them into the wrong one.
+      try {
+        const rehomed = await rehomeGoogleUserToInvite(user, resolvedInvite);
+        if (rehomed) {
+          const { token, expiresAt } = await createSession(rehomed.id, { ipAddress, userAgent });
+          setSessionCookie(c, token, expiresAt);
+          return c.redirect(`${appUrl()}/#/business/par`);
+        }
+        // Old workspace has real data → do not auto-move; explain the conflict on the login screen.
+        return fail("account_in_other_workspace");
+      } catch (err: unknown) {
+        // Token consumed concurrently → fall through to a normal login (user is authenticated).
+        const msg = err instanceof Error ? err.message : "";
+        if (msg !== "INVITE_ALREADY_CONSUMED") throw err;
+      }
     }
-    // Different tenant: single-tenant model — skip role-linking, proceed with normal login.
   }
 
   // This is the Business Suite repo, so anyone who reaches here via Google must
