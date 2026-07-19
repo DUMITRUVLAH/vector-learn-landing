@@ -210,13 +210,13 @@ function Routes() {
 
   // PAR routes under /business/par/* — ParGuardPage (VM1-01 Decizia 9) hides the whole
   // module from users with zero PAR roles, even on direct URL access.
-  if (path.startsWith("/business/par/onboarding")) return <BusinessGuardPage><ParGuardPage><ParOnboarding /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/onboarding")) return <BusinessGuardPage><ParGuardPage requiredRoles={["par_admin"]}><ParOnboarding /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/new")) return <BusinessGuardPage><ParGuardPage><ParCreateForm /></ParGuardPage></BusinessGuardPage>;
-  if (path.startsWith("/business/par/inbox")) return <BusinessGuardPage><ParGuardPage><ParInbox /></ParGuardPage></BusinessGuardPage>;
-  if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParGuardPage><ParFinanceQueue /></ParGuardPage></BusinessGuardPage>;
-  if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParGuardPage><ParAdminPage /></ParGuardPage></BusinessGuardPage>;
-  if (path.startsWith("/business/par/folders")) return <BusinessGuardPage><ParGuardPage><ParFolders /></ParGuardPage></BusinessGuardPage>;
-  if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParGuardPage><ParReports /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/inbox")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "par_admin"]}><ParInbox /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParGuardPage requiredRoles={["finance", "par_admin"]}><ParFinanceQueue /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParGuardPage requiredRoles={["par_admin"]}><ParAdminPage /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/folders")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "finance", "par_admin"]}><ParFolders /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "finance", "par_admin"]}><ParReports /></ParGuardPage></BusinessGuardPage>;
   // PARQA-001: edit an existing draft / changes_requested PAR (ParCreateForm loads it by :id).
   if (path.match(/^\/business\/par\/[^/]+\/edit$/)) return <BusinessGuardPage><ParGuardPage><ParCreateForm /></ParGuardPage></BusinessGuardPage>;
   if (path.match(/^\/business\/par\/[^/]+$/)) return <BusinessGuardPage><ParGuardPage><ParDetailPage /></ParGuardPage></BusinessGuardPage>;
