@@ -23,8 +23,8 @@ import { drizzle } from "drizzle-orm/pglite";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as schema from "../db/schema/index";
-import { parInvites, parMembers } from "../db/schema/par";
-import { tenants, users } from "../db/schema";
+import { parInvites, parMembers, parPayers, parPayerModules, parPayerMembers } from "../db/schema/par";
+import { tenants, users, leads } from "../db/schema";
 import { hashInviteToken, generateInviteToken, INVITE_TTL_MS } from "../lib/par/invites";
 import { and, eq } from "drizzle-orm";
 
@@ -76,7 +76,7 @@ vi.mock("../auth/password", () => ({
 }));
 
 // Import authRoutes AFTER the mocks above are registered.
-import { authRoutes } from "../routes/auth";
+import { authRoutes, rehomeGoogleUserToInvite } from "../routes/auth";
 import { Hono } from "hono";
 
 // Build a minimal Hono app with just the auth routes.
@@ -425,6 +425,108 @@ describe("SHELL-503 accept-invite route (password path)", () => {
 
     // Clean up
     await testDb.delete(users).where(eq(users.id, userOnOther.id));
+  });
+});
+
+// ─── (g/h) SHELL-505: re-home an existing Google user who already has a workspace ─────────────
+// The #1 "invitations don't work": a Google account that already owns its own (empty) workspace
+// used to be silently logged back into it, dropping the invite. rehomeGoogleUserToInvite moves a
+// DISPOSABLE account to the inviting tenant, and refuses (null) when the old workspace has data.
+
+describe("SHELL-505 rehome existing Google user to invite tenant", () => {
+  it("(g) disposable old workspace → account re-homed with invited role + payer scope; invite consumed", async () => {
+    // A payer on the inviting tenant with the 'par' module on, so payer scope can be granted.
+    const [payer] = await testDb.insert(parPayers).values({ tenantId, name: "Payer G" }).returning();
+    await testDb.insert(parPayerModules).values({ tenantId, payerId: payer.id, moduleKey: "par", enabled: true });
+
+    // The invitee already has a Google account = the SOLE user of their own empty workspace.
+    const [ownTenant] = await testDb.insert(tenants)
+      .values({ name: "Own WS G", slug: "own-ws-g", plan: "starter", appKind: "business" }).returning();
+    const [ghost] = await testDb.insert(users).values({
+      tenantId: ownTenant.id, email: "rehome-g@example.com", passwordHash: null, name: "Rehome G",
+      role: "admin", authProvider: "google", googleId: "google-sub-rehome-g",
+    }).returning();
+
+    const token = generateInviteToken();
+    const [invite] = await testDb.insert(parInvites).values({
+      tenantId, email: "rehome-g@example.com", parRole: "requestor", tokenHash: hashInviteToken(token),
+      invitedByUserId: adminUserId, expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+      payerScope: JSON.stringify([payer.id]),
+    }).returning();
+
+    const rehomed = await rehomeGoogleUserToInvite(ghost, invite);
+    expect(rehomed).not.toBeNull();
+    expect(rehomed!.tenantId).toBe(tenantId);              // moved to the inviting tenant
+    expect(rehomed!.googleId).toBe("google-sub-rehome-g"); // Google identity preserved
+
+    const member = await testDb.query.parMembers.findFirst({
+      where: and(eq(parMembers.tenantId, tenantId), eq(parMembers.userId, rehomed!.id), eq(parMembers.role, "requestor")),
+    });
+    expect(member).toBeDefined();
+
+    const scope = await testDb.query.parPayerMembers.findFirst({
+      where: and(eq(parPayerMembers.tenantId, tenantId), eq(parPayerMembers.userId, rehomed!.id), eq(parPayerMembers.payerId, payer.id)),
+    });
+    expect(scope).toBeDefined();
+
+    const inv = await testDb.query.parInvites.findFirst({ where: eq(parInvites.id, invite.id) });
+    expect(inv!.acceptedAt).not.toBeNull();
+  });
+
+  it("(h) old workspace has other members → auto-move REFUSED (null), invite untouched, user stays", async () => {
+    const [ownTenant] = await testDb.insert(tenants)
+      .values({ name: "Own WS H", slug: "own-ws-h", plan: "starter", appKind: "business" }).returning();
+    const [ghost] = await testDb.insert(users).values({
+      tenantId: ownTenant.id, email: "rehome-h@example.com", passwordHash: null, name: "Rehome H",
+      role: "admin", authProvider: "google", googleId: "google-sub-rehome-h",
+    }).returning();
+    // A second member makes the old workspace non-disposable.
+    await testDb.insert(users).values({
+      tenantId: ownTenant.id, email: "colleague-h@example.com", passwordHash: MOCK_CORRECT_HASH, name: "Colleague", role: "teacher",
+    });
+
+    const token = generateInviteToken();
+    const [invite] = await testDb.insert(parInvites).values({
+      tenantId, email: "rehome-h@example.com", parRole: "approver", tokenHash: hashInviteToken(token),
+      invitedByUserId: adminUserId, expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+    }).returning();
+
+    const rehomed = await rehomeGoogleUserToInvite(ghost, invite);
+    expect(rehomed).toBeNull(); // refused — old workspace has real content
+
+    const still = await testDb.query.users.findFirst({ where: eq(users.id, ghost.id) });
+    expect(still!.tenantId).toBe(ownTenant.id); // NOT moved
+    const inv = await testDb.query.parInvites.findFirst({ where: eq(parInvites.id, invite.id) });
+    expect(inv!.acceptedAt).toBeNull(); // NOT consumed
+  });
+
+  it("(i) old workspace has NON-PAR content (a CRM lead) but zero par_requests → auto-move REFUSED (null)", async () => {
+    // Regression for the SHELL-505 data-loss blocker: the disposability guard used to count only
+    // users + par_requests, so a workspace holding FinDesk/CRM/ITPARK data with zero PAR requests was
+    // wrongly judged "disposable" and its sole user moved away — orphaning that data irreversibly on a
+    // tenant nobody could log into. The guard now refuses the move if ANY per-tenant module has content.
+    const [ownTenant] = await testDb.insert(tenants)
+      .values({ name: "Own WS I", slug: "own-ws-i", plan: "starter", appKind: "business" }).returning();
+    const [ghost] = await testDb.insert(users).values({
+      tenantId: ownTenant.id, email: "rehome-i@example.com", passwordHash: null, name: "Rehome I",
+      role: "admin", authProvider: "google", googleId: "google-sub-rehome-i",
+    }).returning();
+    // Real non-PAR content on the old workspace (a CRM lead) — and ZERO par_requests.
+    await testDb.insert(leads).values({ tenantId: ownTenant.id, fullName: "Client Lead I" });
+
+    const token = generateInviteToken();
+    const [invite] = await testDb.insert(parInvites).values({
+      tenantId, email: "rehome-i@example.com", parRole: "requestor", tokenHash: hashInviteToken(token),
+      invitedByUserId: adminUserId, expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+    }).returning();
+
+    const rehomed = await rehomeGoogleUserToInvite(ghost, invite);
+    expect(rehomed).toBeNull(); // refused — old workspace holds real (non-PAR) data
+
+    const still = await testDb.query.users.findFirst({ where: eq(users.id, ghost.id) });
+    expect(still!.tenantId).toBe(ownTenant.id); // NOT moved
+    const inv = await testDb.query.parInvites.findFirst({ where: eq(parInvites.id, invite.id) });
+    expect(inv!.acceptedAt).toBeNull(); // NOT consumed (guard threw before claiming)
   });
 });
 
