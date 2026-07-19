@@ -16,8 +16,8 @@ import * as path from "node:path";
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import * as schema from "../db/schema/index";
-import { tenants, users, passwordResetTokens } from "../db/schema";
-import { parInvites, parMembers } from "../db/schema/par";
+import { tenants, users, passwordResetTokens, finMembers } from "../db/schema";
+import { parInvites, parMembers, parPayers } from "../db/schema/par";
 
 let pglite: PGlite;
 let testDb: ReturnType<typeof drizzle<typeof schema>>;
@@ -93,10 +93,22 @@ describe("business self-signup", () => {
     const u = await testDb.query.users.findFirst({ where: eq(users.email, "ana@acme.io") });
     expect(u?.role).toBe("admin");
     expect(u?.tenantId).toBe(json.tenant.id);
+    // Finding #1: the new admin must be bootstrapped for FinDesk (fin_members owner) + PAR (payer),
+    // else FinDesk 403s ("Acces restricționat").
+    const fm = await testDb.query.finMembers.findFirst({ where: and(eq(finMembers.tenantId, json.tenant.id), eq(finMembers.userId, u!.id)) });
+    expect(fm?.role).toBe("owner");
+    const payer = await testDb.query.parPayers.findFirst({ where: eq(parPayers.tenantId, json.tenant.id) });
+    expect(payer).toBeTruthy();
   });
 
   it("rejects a duplicate email with 409", async () => {
     const res = await postJson("/api/business/auth/signup", { tenantName: "Dup Org", name: "Dup", email: "ana@acme.io", password: "password123" });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("email_taken");
+  });
+
+  it("rejects a case-different duplicate email — one email = one workspace (Finding #3)", async () => {
+    const res = await postJson("/api/business/auth/signup", { tenantName: "Case Org", name: "Case", email: "ANA@Acme.io", password: "password123" });
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe("email_taken");
   });
@@ -127,6 +139,14 @@ describe("forgot + reset password", () => {
 
   it("reset-password rejects an invalid token with 400", async () => {
     const res = await postJson("/api/auth/reset-password", { token: "not-a-real-token", newPassword: "whatever12" });
+    expect(res.status).toBe(400);
+  });
+
+  it("reset-password rejects a token for a soft-deleted account (Finding #6)", async () => {
+    const [victim] = await testDb.insert(users).values({ tenantId, email: "gone@ong.io", passwordHash: "$mock$x", name: "Gone", role: "teacher", deletedAt: new Date() } as never).returning();
+    const raw = "reset-for-deleted-user";
+    await testDb.insert(passwordResetTokens).values({ userId: victim.id, tokenHash: createHash("sha256").update(raw).digest("hex"), expiresAt: new Date(Date.now() + 3_600_000) });
+    const res = await postJson("/api/auth/reset-password", { token: raw, newPassword: "shouldnotwork9" });
     expect(res.status).toBe(400);
   });
 });

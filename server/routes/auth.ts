@@ -238,9 +238,10 @@ authRoutes.post("/forgot-password", zValidator("json", forgotPasswordSchema), as
 
   const resetLink = passwordResetUrl(rawToken);
 
-  // Send the real email via Resend (no-op if RESEND_API_KEY is unset). Never throws — a failed
-  // send must not turn into a 500 that reveals the account exists.
-  await sendPasswordResetEmail({ to: email, url: resetLink });
+  // Fire-and-forget the send: do NOT await the Resend round-trip on the request path. Awaiting it
+  // only for existing emails would make responses measurably slower for real accounts than for the
+  // early-return "unknown email" branch — a timing oracle that defeats the always-200 design.
+  void sendPasswordResetEmail({ to: email, url: resetLink }).catch(() => { /* never surfaced */ });
   // Dev convenience: also echo the link to stdout when email isn't configured locally.
   if (process.env.NODE_ENV !== "production" && !process.env.RESEND_API_KEY) {
     process.stdout.write(`[AUTH-001] Reset link for ${email}: ${resetLink}\n`);
@@ -264,6 +265,13 @@ authRoutes.post("/reset-password", zValidator("json", resetPasswordSchema), asyn
   });
 
   if (!record) {
+    return c.json({ error: "invalid_or_expired_token" }, 400);
+  }
+
+  // A valid token must not resurrect a soft-deleted / disabled account (reset was requested, then
+  // the account was deleted or an admin disabled it while the 1h token was still live).
+  const targetUser = await db.query.users.findFirst({ where: eq(users.id, record.userId) });
+  if (!targetUser || targetUser.deletedAt || targetUser.isActive === false) {
     return c.json({ error: "invalid_or_expired_token" }, 400);
   }
 
@@ -1132,12 +1140,15 @@ authRoutes.get("/google/pending", async (c) => {
   const pending = readPendingGoogle(c);
   if (!pending) return c.json({ error: "no_pending_identity" }, 401);
   let matchedInvite: { orgName: string; role: string } | null = null;
+  // Deterministic order (newest first) so the invite SHOWN here is the same one accept-matched-invite
+  // consumes when the email has more than one pending invite — no bait-and-switch of org/role.
   const invite = await db.query.parInvites.findFirst({
     where: and(
       eq(parInvites.email, pending.email.toLowerCase()),
       isNull(parInvites.acceptedAt),
       gt(parInvites.expiresAt, new Date())
     ),
+    orderBy: (t, { desc }) => desc(t.expiresAt),
   });
   if (invite) {
     const t = await db.query.tenants.findFirst({ where: eq(tenants.id, invite.tenantId) });
@@ -1308,12 +1319,14 @@ authRoutes.post("/google/accept-matched-invite", async (c) => {
   const pending = readPendingGoogle(c);
   if (!pending) return c.json({ error: "no_pending_identity" }, 401);
 
+  // Same deterministic order as GET /google/pending so we consume exactly the invite that was shown.
   const invite = await db.query.parInvites.findFirst({
     where: and(
       eq(parInvites.email, pending.email.toLowerCase()),
       isNull(parInvites.acceptedAt),
       gt(parInvites.expiresAt, new Date())
     ),
+    orderBy: (t, { desc }) => desc(t.expiresAt),
   });
   if (!invite) return c.json({ error: "invite_not_found" }, 404);
 

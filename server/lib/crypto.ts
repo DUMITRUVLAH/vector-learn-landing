@@ -12,9 +12,20 @@ import { randomBytes, createCipheriv, createDecipheriv, createHash } from "node:
 
 const ALG = "aes-256-gcm" as const;
 const IV_LEN = 12; // GCM nonce
+const DEV_KEY = "dev-key-do-not-use-in-production-32";
+
+// Loud, non-fatal alarm: with a default key in prod, every secret at rest AND the Google
+// pending-identity cookie are forgeable. We warn (not throw) so a missing key never bricks the
+// deploy — but this MUST be fixed by setting ENCRYPTION_KEY in the environment.
+if (process.env.NODE_ENV === "production" && !process.env.ENCRYPTION_KEY) {
+  console.error(
+    "[crypto] SECURITY: ENCRYPTION_KEY is unset in production — using an insecure shared default key. " +
+      "Set ENCRYPTION_KEY now: secrets at rest and the Google pending-identity cookie are forgeable until you do."
+  );
+}
 
 function getKey(): Buffer {
-  const raw = process.env.ENCRYPTION_KEY ?? "dev-key-do-not-use-in-production-32";
+  const raw = process.env.ENCRYPTION_KEY ?? DEV_KEY;
   return createHash("sha256").update(raw).digest(); // 32 bytes for AES-256
 }
 

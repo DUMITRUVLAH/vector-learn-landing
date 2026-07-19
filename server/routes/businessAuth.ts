@@ -10,14 +10,15 @@
  *   GET  /api/business/auth/me      — current user info (business)
  */
 import { Hono } from "hono";
-import { setCookie, deleteCookie, getCookie } from "hono/cookie";
+import { setCookie, deleteCookie } from "hono/cookie";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { tenants, users } from "../db/schema";
+import { tenants, users, finMembers } from "../db/schema";
+import { parPayers, parPayerModules, parPayerMembers } from "../db/schema/par";
 import { verifyPassword, hashPassword } from "../auth/password";
-import { createSession, revokeSession, getSessionUser, SESSION_COOKIE } from "../auth/session";
+import { createSession, revokeSession, SESSION_COOKIE } from "../auth/session";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 
 const loginSchema = z.object({
@@ -63,8 +64,11 @@ export const businessAuthRoutes = new Hono<{ Variables: AuthVariables }>();
  */
 businessAuthRoutes.post("/auth/signup", zValidator("json", signupSchema), async (c) => {
   const body = c.req.valid("json");
+  // Store + look up emails lowercased (matches the invite/Google convention) so "Bob@x" and
+  // "bob@x" can't create two separate workspaces for the same person.
+  const email = body.email.trim().toLowerCase();
 
-  const existing = await db.query.users.findFirst({ where: eq(users.email, body.email) });
+  const existing = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (existing) return c.json({ error: "email_taken" }, 409);
 
   let slug = slugify(body.tenantName) || "org";
@@ -75,16 +79,37 @@ businessAuthRoutes.post("/auth/signup", zValidator("json", signupSchema), async 
     if (attempt > 50) return c.json({ error: "slug_collision" }, 500);
   }
 
-  const [tenant] = await db
-    .insert(tenants)
-    .values({ name: body.tenantName, slug, plan: "starter", appKind: "business" })
-    .returning();
-
   const passwordHash = await hashPassword(body.password);
-  const [user] = await db
-    .insert(users)
-    .values({ tenantId: tenant.id, email: body.email, passwordHash, name: body.name, role: "admin" })
-    .returning();
+
+  // One transaction: a partial workspace (tenant with no owner/payer) is never left behind.
+  // Bootstrap mirrors /api/auth/google/create-workspace so the new admin can actually use FinDesk
+  // (GET /api/fin/members/me needs a fin_members row) and PAR (payer + payer membership).
+  const { tenant, user } = await db.transaction(async (tx) => {
+    const [t] = await tx
+      .insert(tenants)
+      .values({ name: body.tenantName, slug, plan: "starter", appKind: "business" })
+      .returning();
+    const [u] = await tx
+      .insert(users)
+      .values({ tenantId: t.id, email, passwordHash, name: body.name, role: "admin" })
+      .returning();
+    const [payer] = await tx
+      .insert(parPayers)
+      .values({ tenantId: t.id, name: body.tenantName, legalName: body.tenantName })
+      .returning();
+    await tx.insert(parPayerModules).values([
+      { tenantId: t.id, payerId: payer.id, moduleKey: "findesk", enabled: true, updatedByUserId: u.id },
+      { tenantId: t.id, payerId: payer.id, moduleKey: "par", enabled: false, updatedByUserId: u.id },
+    ]);
+    await tx.insert(parPayerMembers).values({ tenantId: t.id, payerId: payer.id, userId: u.id });
+    // Workspace creator is the FinDesk owner too; best-effort so a missing table never fails signup.
+    try {
+      await tx.insert(finMembers).values({ tenantId: t.id, userId: u.id, role: "owner" });
+    } catch (e) {
+      console.warn("[business/signup] fin_members owner insert skipped:", e instanceof Error ? e.message : e);
+    }
+    return { tenant: t, user: u };
+  });
 
   const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? null;
   const userAgent = c.req.header("user-agent") ?? null;
