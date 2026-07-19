@@ -34,6 +34,7 @@ vi.mock("@/lib/api/par", () => ({
     requestNoPrefix: "PAR",
   }),
   updateParSettings: vi.fn().mockResolvedValue({}),
+  listPayers: vi.fn().mockResolvedValue({ items: [] }),
   listParMembers: vi.fn().mockResolvedValue({ members: [] }),
   assignParMember: vi.fn().mockResolvedValue({}),
   revokeParMember: vi.fn().mockResolvedValue({ ok: true }),
@@ -87,35 +88,30 @@ describe("ParAdmin — PAR-116", () => {
     expect(screen.getByText(/doar administratorilor PAR/i)).toBeDefined();
   });
 
-  // T-PAR-116-1 continued — Approval tab loads and "Adaugă aprobator" button is present
-  it("Approval tab shows Add button and table", async () => {
+  // T-PAR-116-1 continued — Approval tab: "Adaugă regulă" opens the simplified rule builder
+  it("Approval tab: Add opens the simplified rule builder (scope + approvers)", async () => {
     const { listParDoaMatrix } = await import("@/lib/api/par");
     (listParDoaMatrix as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [] });
 
     render(<ParAdmin isAdmin={true} />);
 
-    // Wait for approval tab content to load
     await waitFor(() => {
       expect(screen.getByText("Aprobare")).toBeDefined();
     });
 
-    // Click the Approval tab (it's default)
     const doaTab = screen.getByRole("tab", { name: /Aprobare/i });
     fireEvent.click(doaTab);
 
-    // Plain-language guide is present so admins understand multi-approver setup.
-    await waitFor(() => {
-      expect(screen.getByText(/Cum cer 2 \(sau mai mulți\) aprobatori/i)).toBeDefined();
-    });
-
-    const addBtn = screen.getByLabelText("Adaugă aprobator");
+    // Empty state + the new "Adaugă regulă" button (not per-approver rows).
+    const addBtn = await screen.findByLabelText("Adaugă regulă de aprobare");
     fireEvent.click(addBtn);
 
-    // Redesigned form: clear "Pasul" field + reframed parallel option instead of raw "Pas/Mod".
+    // Simplified builder: scope (org/project) + an "add approver" picker, no raw step/mode fields.
     await waitFor(() => {
-      expect(screen.getByLabelText("Pasul de aprobare")).toBeDefined();
-      expect(screen.getByText("Toți trebuie să aprobe (în paralel)")).toBeDefined();
+      expect(screen.getByLabelText("Plătitor regulă de aprobare")).toBeDefined();
+      expect(screen.getByLabelText("Adaugă aprobator")).toBeDefined();
     });
+    expect(screen.queryByLabelText("Pasul de aprobare")).toBeNull();
   });
 
   // T-PAR-116-3 [normal] Settings tab — modify threshold, save calls updateParSettings
