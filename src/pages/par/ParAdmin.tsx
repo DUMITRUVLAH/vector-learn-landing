@@ -1206,6 +1206,7 @@ function InviteSection({ payers }: { payers: ParPayer[] }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUrl, setLastUrl] = useState<string | null>(null);
+  const [lastEmailed, setLastEmailed] = useState<boolean | null>(null);
   const [copied, setCopied] = useState(false);
 
   const load = async () => {
@@ -1216,10 +1217,11 @@ function InviteSection({ payers }: { payers: ParPayer[] }) {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null); setBusy(true); setLastUrl(null);
+    setError(null); setBusy(true); setLastUrl(null); setLastEmailed(null);
     try {
       const r = await createParInvite({ email: email.trim(), par_role: role, payer_ids: payerIds });
       setLastUrl(r.inviteUrl);
+      setLastEmailed(r.emailed);
       setEmail("");
       await load();
     } catch (err) {
@@ -1284,14 +1286,25 @@ function InviteSection({ payers }: { payers: ParPayer[] }) {
       )}
 
       {lastUrl && (
-        <div className="flex items-center gap-2 p-2.5 rounded-md bg-primary/5 border border-primary/20 text-sm">
-          <span className="text-muted-foreground flex-shrink-0">Link:</span>
-          <code className="flex-1 truncate text-xs text-foreground">{lastUrl}</code>
-          <button type="button" onClick={() => copy(lastUrl)} aria-label="Copiază linkul"
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted transition-colors flex-shrink-0">
-            {copied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
-            {copied ? "Copiat" : "Copiază"}
-          </button>
+        <div className="space-y-1.5">
+          {lastEmailed === false && (
+            <div role="status" className="flex items-start gap-2 p-2.5 rounded-md bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-px" aria-hidden />
+              <span>Emailul <strong>nu s-a trimis</strong> (serviciul de email nu e configurat). Copiază linkul de mai jos și trimite-l manual persoanei invitate — trebuie să-l deschidă și să apese «Continuă cu Google».</span>
+            </div>
+          )}
+          {lastEmailed === true && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Check className="h-3.5 w-3.5 text-primary" aria-hidden /> Email de invitație trimis. Link de rezervă:</p>
+          )}
+          <div className="flex items-center gap-2 p-2.5 rounded-md bg-primary/5 border border-primary/20 text-sm">
+            <span className="text-muted-foreground flex-shrink-0">Link:</span>
+            <code className="flex-1 truncate text-xs text-foreground">{lastUrl}</code>
+            <button type="button" onClick={() => copy(lastUrl)} aria-label="Copiază linkul"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted transition-colors flex-shrink-0">
+              {copied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
+              {copied ? "Copiat" : "Copiază"}
+            </button>
+          </div>
         </div>
       )}
 
