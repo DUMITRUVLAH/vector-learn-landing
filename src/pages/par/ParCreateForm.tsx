@@ -104,14 +104,14 @@ function Field({ label, htmlFor, required, hint, error, children }: {
   );
 }
 
-/** A titled row-group inside a Section. Keeps related fields visually together on one line
- *  ("Titlu / celule de completat"), so the form reads as a few labelled blocks, not a wall of inputs. */
+/** A titled sub-section inside a Section. Each related group (dates, requestor, payer…) gets its
+ *  own bordered panel so the big card reads as a few clear blocks, easier to interpret. */
 function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-2">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">{label}</p>
+    <section className="rounded-lg border border-border bg-muted/20 p-3 sm:p-4 space-y-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</h3>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -162,10 +162,10 @@ function Section({ id, n, title, icon: Icon, hint, children }: {
 /** Progressive disclosure: a styled native <details>. Children stay mounted (form state + tests
  *  intact) but are visually collapsed until opened; the user can toggle freely. When `forceOpen`
  *  flips true (e.g. AI/vendor pre-fills a hidden field) the panel auto-expands so the value shows. */
-function Collapsible({ summary, forceOpen = false, children }: {
-  summary: string; forceOpen?: boolean; children: React.ReactNode;
+function Collapsible({ summary, forceOpen = false, defaultOpen = false, children }: {
+  summary: string; forceOpen?: boolean; defaultOpen?: boolean; children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   useEffect(() => { if (forceOpen) setOpen(true); }, [forceOpen]);
   return (
     <details
@@ -1441,7 +1441,8 @@ export function ParCreateForm() {
                 </Field>
               </div>
               <Collapsible
-                summary="Detalii bancă & reprezentant (opțional)"
+                summary="Detalii bancă & reprezentant"
+                defaultOpen
                 forceOpen={!!(payeeBank.trim() || payeeBic.trim() || payeeAdministrator.trim() || payeeLegalAddress.trim())}
               >
                 <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
