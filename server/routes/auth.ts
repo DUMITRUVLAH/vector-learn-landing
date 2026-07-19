@@ -27,6 +27,7 @@ import {
 } from "../auth/google";
 import { hashInviteToken } from "../lib/par/invites";
 import { grantInvitePayerScope } from "../lib/par/inviteScope";
+import { sendPasswordResetEmail, passwordResetUrl } from "../lib/auth/accountEmails";
 import { encrypt, decrypt } from "../lib/crypto";
 
 const signupSchema = z.object({
@@ -235,12 +236,14 @@ authRoutes.post("/forgot-password", zValidator("json", forgotPasswordSchema), as
 
   await db.insert(passwordResetTokens).values({ userId: user.id, tokenHash, expiresAt });
 
-  const appUrl = process.env.APP_URL ?? "http://localhost:5173";
-  const resetLink = `${appUrl}/#/app/reset?token=${rawToken}`;
+  const resetLink = passwordResetUrl(rawToken);
 
-  // In production, plug in a real email provider (Resend/Postmark).
-  // For now the link is written to stdout (non-sensitive in dev; reset tokens expire in 1h).
-  if (process.env.NODE_ENV !== "production") {
+  // Fire-and-forget the send: do NOT await the Resend round-trip on the request path. Awaiting it
+  // only for existing emails would make responses measurably slower for real accounts than for the
+  // early-return "unknown email" branch — a timing oracle that defeats the always-200 design.
+  void sendPasswordResetEmail({ to: email, url: resetLink }).catch(() => { /* never surfaced */ });
+  // Dev convenience: also echo the link to stdout when email isn't configured locally.
+  if (process.env.NODE_ENV !== "production" && !process.env.RESEND_API_KEY) {
     process.stdout.write(`[AUTH-001] Reset link for ${email}: ${resetLink}\n`);
   }
 
@@ -262,6 +265,13 @@ authRoutes.post("/reset-password", zValidator("json", resetPasswordSchema), asyn
   });
 
   if (!record) {
+    return c.json({ error: "invalid_or_expired_token" }, 400);
+  }
+
+  // A valid token must not resurrect a soft-deleted / disabled account (reset was requested, then
+  // the account was deleted or an admin disabled it while the 1h token was still live).
+  const targetUser = await db.query.users.findFirst({ where: eq(users.id, record.userId) });
+  if (!targetUser || targetUser.deletedAt || targetUser.isActive === false) {
     return c.json({ error: "invalid_or_expired_token" }, 400);
   }
 
@@ -1123,11 +1133,28 @@ authRoutes.get("/google/callback", async (c) => {
 // The /business/welcome screen reads these. All three rely on the encrypted G_PENDING_COOKIE
 // holding the Google-verified identity; without it they 401 (the user must (re)authenticate).
 
-/** GET /api/auth/google/pending — identity to greet the user on the choice screen (or 401). */
+/** GET /api/auth/google/pending — identity to greet the user on the choice screen (or 401).
+ *  Also surfaces a pending invite that matches this VERIFIED Google email, so the user can join
+ *  in one click without the emailed link/token. Returns org+role only (never the token). */
 authRoutes.get("/google/pending", async (c) => {
   const pending = readPendingGoogle(c);
   if (!pending) return c.json({ error: "no_pending_identity" }, 401);
-  return c.json({ email: pending.email, name: pending.name });
+  let matchedInvite: { orgName: string; role: string } | null = null;
+  // Deterministic order (newest first) so the invite SHOWN here is the same one accept-matched-invite
+  // consumes when the email has more than one pending invite — no bait-and-switch of org/role.
+  const invite = await db.query.parInvites.findFirst({
+    where: and(
+      eq(parInvites.email, pending.email.toLowerCase()),
+      isNull(parInvites.acceptedAt),
+      gt(parInvites.expiresAt, new Date())
+    ),
+    orderBy: (t, { desc }) => desc(t.expiresAt),
+  });
+  if (invite) {
+    const t = await db.query.tenants.findFirst({ where: eq(tenants.id, invite.tenantId) });
+    matchedInvite = { orgName: t?.name ?? "organizație", role: invite.parRole };
+  }
+  return c.json({ email: pending.email, name: pending.name, matchedInvite });
 });
 
 const createWorkspaceSchema = z.object({ name: z.string().min(2).max(200).optional() });
@@ -1237,6 +1264,97 @@ authRoutes.post("/google/join", zValidator("json", joinWithInviteSchema), async 
       if (existing) {
         joinedUser = existing;
         // Link googleId if this account was created by password and is now using Google.
+        if (!existing.googleId) {
+          await tx.update(users).set({ googleId: pending.sub, authProvider: "google" }).where(eq(users.id, existing.id));
+        }
+      } else {
+        const [u] = await tx
+          .insert(users)
+          .values({
+            tenantId: invite.tenantId,
+            email: pending.email.toLowerCase(),
+            passwordHash: null,
+            name: pending.name,
+            role: "teacher", // NON-privileged; PAR access is via par_members, not users.role
+            googleId: pending.sub,
+            authProvider: "google",
+            avatarUrl: pending.picture,
+          })
+          .returning();
+        joinedUser = u;
+      }
+
+      const member = await tx.query.parMembers.findFirst({
+        where: and(
+          eq(parMembers.tenantId, invite.tenantId),
+          eq(parMembers.userId, joinedUser.id),
+          eq(parMembers.role, invite.parRole)
+        ),
+      });
+      if (!member) {
+        await tx.insert(parMembers).values({ tenantId: invite.tenantId, userId: joinedUser.id, role: invite.parRole });
+      }
+      await grantInvitePayerScope(tx, invite, joinedUser.id);
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message === "INVITE_ALREADY_CONSUMED") {
+      return c.json({ error: "invite_not_found" }, 404);
+    }
+    throw err;
+  }
+
+  deleteCookie(c, G_PENDING_COOKIE, { path: "/api/auth/google" });
+  const { token: sessionToken, expiresAt } = await createSession(joinedUser.id, { ipAddress, userAgent });
+  setSessionCookie(c, sessionToken, expiresAt);
+  return c.json({ ok: true, redirect: "/#/business/par" });
+});
+
+/**
+ * POST /api/auth/google/accept-matched-invite — one-click join for an invitee who signed in with
+ * Google (no emailed link needed). Resolves the pending invite by the VERIFIED Google email held in
+ * the pending cookie (set only after Google's email_verified check), so no token is ever passed in.
+ * Same join semantics as /google/join, minus the pasted token.
+ */
+authRoutes.post("/google/accept-matched-invite", async (c) => {
+  const pending = readPendingGoogle(c);
+  if (!pending) return c.json({ error: "no_pending_identity" }, 401);
+
+  // Same deterministic order as GET /google/pending so we consume exactly the invite that was shown.
+  const invite = await db.query.parInvites.findFirst({
+    where: and(
+      eq(parInvites.email, pending.email.toLowerCase()),
+      isNull(parInvites.acceptedAt),
+      gt(parInvites.expiresAt, new Date())
+    ),
+    orderBy: (t, { desc }) => desc(t.expiresAt),
+  });
+  if (!invite) return c.json({ error: "invite_not_found" }, 404);
+
+  const inviteTenant = await db.query.tenants.findFirst({ where: eq(tenants.id, invite.tenantId) });
+  if (!inviteTenant) return c.json({ error: "invite_not_found" }, 404);
+  if (inviteTenant.appKind !== "business") {
+    await db.update(tenants).set({ appKind: "business", updatedAt: new Date() }).where(eq(tenants.id, inviteTenant.id));
+  }
+
+  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? undefined;
+  const userAgent = c.req.header("user-agent") ?? undefined;
+
+  type UserRowM = typeof users.$inferSelect;
+  let joinedUser!: UserRowM;
+  try {
+    await db.transaction(async (tx) => {
+      const claimed = await tx
+        .update(parInvites)
+        .set({ acceptedAt: new Date() })
+        .where(and(eq(parInvites.id, invite.id), isNull(parInvites.acceptedAt)))
+        .returning({ id: parInvites.id });
+      if (claimed.length === 0) throw new Error("INVITE_ALREADY_CONSUMED");
+
+      const existing = await tx.query.users.findFirst({
+        where: and(eq(users.tenantId, invite.tenantId), eq(users.email, pending.email.toLowerCase())),
+      });
+      if (existing) {
+        joinedUser = existing;
         if (!existing.googleId) {
           await tx.update(users).set({ googleId: pending.sub, authProvider: "google" }).where(eq(users.id, existing.id));
         }

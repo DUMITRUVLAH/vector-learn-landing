@@ -54,7 +54,7 @@ export function BusinessLoginPage() {
         if (err.code === "invalid_credentials") {
           setError("Email sau parolă incorectă.");
         } else if (err.code === "wrong_app") {
-          setError("Acest cont nu are acces la Business Suite. Folosiți /app/login pentru CRM Educațional.");
+          setError("Acest cont nu are acces la FinFlow (Business Suite).");
         } else if (err.code === "account_disabled") {
           setError("Contul este dezactivat. Contactați administratorul.");
         } else {
@@ -141,6 +141,26 @@ export function BusinessLoginPage() {
           </svg>
           Conectare cu Google
         </a>
+
+        <div className="pt-1 text-center text-sm text-muted-foreground space-y-1.5">
+          <button
+            type="button"
+            onClick={() => navigate("/business/forgot")}
+            className="text-primary hover:underline font-medium"
+          >
+            Ai uitat parola?
+          </button>
+          <p>
+            Nu ai cont?{" "}
+            <button
+              type="button"
+              onClick={() => navigate("/business/signup")}
+              className="text-primary hover:underline font-medium"
+            >
+              Creează un workspace nou
+            </button>
+          </p>
+        </div>
       </form>
     </AuthLayout>
   );

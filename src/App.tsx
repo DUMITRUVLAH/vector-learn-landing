@@ -22,6 +22,9 @@ import { DocMergeWizardPage } from "./pages/business/docmerge/DocMergeWizardPage
 // Business / FinDesk routes
 import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
 import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
+import { BusinessSignupPage } from "./pages/business/BusinessSignupPage";
+import { ForgotPasswordPage } from "./pages/business/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/business/ResetPasswordPage";
 import { BusinessDashboardPage } from "./pages/business/BusinessDashboardPage";
 import { PlatformAdminPage } from "./pages/business/PlatformAdminPage";
 import { BusinessGuardPage } from "./components/business/BusinessGuardPage";
@@ -143,9 +146,12 @@ function Routes() {
   // short-lived pending-identity cookie set by the Google callback, not on a session).
   if (path.startsWith("/business/welcome")) return <WelcomePage />;
 
-  // Business landing + login
+  // Business landing + login + account lifecycle (all PUBLIC — no session required)
   if (path === "/business" || path === "/business/") return <BusinessLandingPage />;
   if (path.startsWith("/business/login")) return <BusinessLoginPage />;
+  if (path.startsWith("/business/signup")) return <BusinessSignupPage />;
+  if (path.startsWith("/business/forgot")) return <ForgotPasswordPage />;
+  if (path.startsWith("/business/reset")) return <ResetPasswordPage />;
   if (path.startsWith("/business/dashboard")) return <BusinessDashboardPage />;
 
   // FinDesk routes under /business/fin/*
@@ -210,13 +216,13 @@ function Routes() {
 
   // PAR routes under /business/par/* — ParGuardPage (VM1-01 Decizia 9) hides the whole
   // module from users with zero PAR roles, even on direct URL access.
-  if (path.startsWith("/business/par/onboarding")) return <BusinessGuardPage><ParGuardPage><ParOnboarding /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/onboarding")) return <BusinessGuardPage><ParGuardPage requiredRoles={["par_admin"]}><ParOnboarding /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/new")) return <BusinessGuardPage><ParGuardPage><ParCreateForm /></ParGuardPage></BusinessGuardPage>;
-  if (path.startsWith("/business/par/inbox")) return <BusinessGuardPage><ParGuardPage><ParInbox /></ParGuardPage></BusinessGuardPage>;
-  if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParGuardPage><ParFinanceQueue /></ParGuardPage></BusinessGuardPage>;
-  if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParGuardPage><ParAdminPage /></ParGuardPage></BusinessGuardPage>;
-  if (path.startsWith("/business/par/folders")) return <BusinessGuardPage><ParGuardPage><ParFolders /></ParGuardPage></BusinessGuardPage>;
-  if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParGuardPage><ParReports /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/inbox")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "par_admin"]}><ParInbox /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParGuardPage requiredRoles={["finance", "par_admin"]}><ParFinanceQueue /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParGuardPage requiredRoles={["par_admin"]}><ParAdminPage /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/folders")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "finance", "par_admin"]}><ParFolders /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "finance", "par_admin"]}><ParReports /></ParGuardPage></BusinessGuardPage>;
   // PARQA-001: edit an existing draft / changes_requested PAR (ParCreateForm loads it by :id).
   if (path.match(/^\/business\/par\/[^/]+\/edit$/)) return <BusinessGuardPage><ParGuardPage><ParCreateForm /></ParGuardPage></BusinessGuardPage>;
   if (path.match(/^\/business\/par\/[^/]+$/)) return <BusinessGuardPage><ParGuardPage><ParDetailPage /></ParGuardPage></BusinessGuardPage>;

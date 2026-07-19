@@ -12,25 +12,35 @@
  * Vector 365 tokens; light + dark; WCAG AA.
  */
 import { useEffect, useState } from "react";
-import { Building2, Loader2, Mail, Users } from "lucide-react";
+import { Building2, Loader2, Mail, Users, CheckCircle2 } from "lucide-react";
 import { AuthLayout } from "@/components/app/AuthLayout";
 import { useRouter } from "@/router/HashRouter";
+
+const ROLE_LABELS: Record<string, string> = {
+  requestor: "Solicitant",
+  approver: "Aprobator",
+  finance: "Finanțe",
+  par_admin: "Administrator",
+};
 
 interface Pending {
   email: string;
   name: string;
+  matchedInvite?: { orgName: string; role: string } | null;
 }
 
-async function postJson(path: string, body: unknown): Promise<{ status: number; json: any }> {
+interface PostResult { redirect?: string; error?: string; [k: string]: unknown }
+
+async function postJson(path: string, body: unknown): Promise<{ status: number; json: PostResult | null }> {
   const r = await fetch(path, {
     method: "POST",
     headers: { "content-type": "application/json" },
     credentials: "include",
     body: JSON.stringify(body),
   });
-  let json: any = null;
+  let json: PostResult | null = null;
   try {
-    json = await r.json();
+    json = (await r.json()) as PostResult;
   } catch {
     /* ignore */
   }
@@ -68,6 +78,17 @@ export function WelcomePage() {
     if (status === 200 && json?.redirect) return go(json.redirect);
     if (status === 401) return navigate("/business/login");
     setError("Nu am putut crea workspace-ul. Încearcă din nou.");
+  };
+
+  const acceptMatched = async () => {
+    setBusy(true);
+    setError(null);
+    const { status, json } = await postJson("/api/auth/google/accept-matched-invite", {});
+    setBusy(false);
+    if (status === 200 && json?.redirect) return go(json.redirect);
+    if (status === 401) return navigate("/business/login");
+    if (status === 404) return setError("Invitația nu mai e validă (a fost folosită sau a expirat). Cere administratorului una nouă.");
+    setError("Nu am putut finaliza. Încearcă din nou.");
   };
 
   const joinWorkspace = async () => {
@@ -111,6 +132,27 @@ export function WelcomePage() {
         {error && (
           <div role="alert" className="rounded-md bg-destructive/10 border border-destructive/30 px-4 py-2.5 text-sm text-destructive">
             {error}
+          </div>
+        )}
+
+        {mode === "choose" && pending?.matchedInvite && (
+          <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 space-y-2">
+            <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0" aria-hidden="true" />
+              Ai o invitație!
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Ești invitat în <strong className="text-foreground">{pending.matchedInvite.orgName}</strong> ca{" "}
+              <strong className="text-foreground">{ROLE_LABELS[pending.matchedInvite.role] ?? pending.matchedInvite.role}</strong>.
+            </p>
+            <button
+              type="button"
+              onClick={acceptMatched}
+              disabled={busy}
+              className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors touch-target disabled:opacity-50"
+            >
+              {busy ? "Se procesează…" : `Alătură-te — ${pending.matchedInvite.orgName}`}
+            </button>
           </div>
         )}
 
