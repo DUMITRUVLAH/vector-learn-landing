@@ -28,6 +28,8 @@ import {
   X,
   AlertCircle,
   ChevronRight,
+  ChevronDown,
+  HelpCircle,
   Search,
   Building2,
   Mail,
@@ -132,7 +134,7 @@ interface TabProps {
 }
 
 const TABS: TabProps[] = [
-  { id: "doa", label: "Matrice DOA", icon: <Shield className="h-4 w-4" aria-hidden /> },
+  { id: "doa", label: "Aprobare", icon: <Shield className="h-4 w-4" aria-hidden /> },
   { id: "settings", label: "Setări", icon: <Settings className="h-4 w-4" aria-hidden /> },
   { id: "members", label: "Membri", icon: <Users className="h-4 w-4" aria-hidden /> },
   { id: "reference", label: "Date referință", icon: <BookOpen className="h-4 w-4" aria-hidden /> },
@@ -294,7 +296,7 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
   };
 
   const remove = async (id: string) => {
-    if (!confirm("Dezactivezi rândul DOA?")) return;
+    if (!confirm("Dezactivezi această regulă de aprobare?")) return;
     try {
       await deleteParDoaRow(id);
       await load();
@@ -316,20 +318,24 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Matricea definește cine aprobă la ce sumă. Rândurile sunt evaluate la submit pe baza totalului estimat.
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-sm text-muted-foreground max-w-2xl">
+          Fiecare rând adaugă <span className="font-medium text-foreground">un aprobator</span>. Ca să ceri
+          mai mulți aprobatori (ex. 2 persoane pentru un proiect), adaugă mai multe rânduri. Regulile se
+          aplică automat când cererea e trimisă, în funcție de sumă, plătitor și proiect.
         </p>
         <button
           type="button"
           onClick={startAdd}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px]"
-          aria-label="Adaugă rând DOA"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px] flex-shrink-0"
+          aria-label="Adaugă aprobator"
         >
           <Plus className="h-4 w-4" aria-hidden />
-          Adaugă rând
+          Adaugă aprobator
         </button>
       </div>
+
+      <ApprovalGuide />
 
       {error && (
         <div role="alert" className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
@@ -353,8 +359,14 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
       )}
 
       {/* Table */}
+      {rows.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Aprobatorii cu <span className="font-medium text-foreground">același pas</span> aprobă în paralel
+          (toți, în orice ordine); pași diferiți aprobă pe rând (întâi pasul 1, apoi 2).
+        </p>
+      )}
       <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full text-sm" role="grid" aria-label="Matrice DOA">
+        <table className="w-full text-sm" role="grid" aria-label="Reguli de aprobare">
           <thead className="bg-muted/50">
             <tr>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Charge To</th>
@@ -363,7 +375,7 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground">Min (MDL)</th>
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground">Max (MDL)</th>
               <th className="text-center p-3 text-xs font-semibold text-muted-foreground">Pas</th>
-              <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Rol aprobator</th>
+              <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Aprobator</th>
               <th className="text-center p-3 text-xs font-semibold text-muted-foreground">Activ</th>
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground sr-only">Acțiuni</th>
             </tr>
@@ -372,7 +384,7 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
             {rows.length === 0 && !adding && (
               <tr>
                 <td colSpan={9} className="p-6 text-center text-sm text-muted-foreground">
-                  Niciun rând definit. Adaugă primul rând DOA.
+                  Nicio regulă de aprobare definită. Apasă „Adaugă aprobator" ca să creezi prima.
                 </td>
               </tr>
             )}
@@ -410,10 +422,14 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
                     </td>
                     <td className="p-3 text-center text-foreground">{row.step}</td>
                     <td className="p-3 text-foreground">
-                      <div>{row.approverRoleLabel}</div>
+                      <div>
+                        {row.approverUserId
+                          ? members.find((m) => m.userId === row.approverUserId)?.userName ?? row.approverRoleLabel
+                          : row.approverRoleLabel}
+                      </div>
                       <div className="text-xs text-muted-foreground">
-                        {row.approvalMode === "parallel" ? "Paralel" : "Secvențial"}
-                        {row.approverUserId ? ` · ${members.find((m) => m.userId === row.approverUserId)?.userName ?? row.approverUserId}` : ""}
+                        {row.approvalMode === "parallel" ? "Toți de pe acest pas aprobă" : "Aprobator unic pe pas"}
+                        {row.approverUserId ? "" : " · după rol"}
                       </div>
                     </td>
                     <td className="p-3 text-center">
@@ -428,7 +444,7 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
                           type="button"
                           onClick={() => startEdit(row)}
                           className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          aria-label={`Editează rândul ${row.approverRoleLabel}`}
+                          aria-label={`Editează regula ${row.approverRoleLabel}`}
                         >
                           <Edit2 className="h-3.5 w-3.5" aria-hidden />
                         </button>
@@ -436,7 +452,7 @@ function DoaMatrixEditor({ departments }: DoaEditorProps) {
                           type="button"
                           onClick={() => remove(row.id)}
                           className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          aria-label={`Dezactivează rândul ${row.approverRoleLabel}`}
+                          aria-label={`Dezactivează regula ${row.approverRoleLabel}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" aria-hidden />
                         </button>
@@ -464,145 +480,156 @@ interface DoaRowFormProps {
   onCancel: () => void;
 }
 
+/** Plain-language guide: how to require 2+ approvers. Native <details>, collapsed by default. */
+function ApprovalGuide() {
+  return (
+    <details className="group rounded-lg border border-primary/20 bg-primary/5 [&[open]]:bg-primary/[0.07]">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-foreground select-none hover:bg-primary/10 min-h-[44px]">
+        <HelpCircle className="h-4 w-4 text-primary flex-shrink-0" aria-hidden />
+        Cum cer 2 (sau mai mulți) aprobatori?
+        <ChevronDown className="h-4 w-4 ml-auto text-muted-foreground transition-transform group-open:rotate-180" aria-hidden />
+      </summary>
+      <div className="px-4 pb-4 pt-1 space-y-3 text-sm text-muted-foreground">
+        <div>
+          <p className="font-medium text-foreground">Varianta A — pe rând (unul după altul)</p>
+          <p>
+            Adaugă 2 rânduri cu același plătitor/proiect. Pune{" "}
+            <span className="font-medium text-foreground">Pasul 1</span> la primul aprobator și{" "}
+            <span className="font-medium text-foreground">Pasul 2</span> la al doilea. Cererea merge întâi
+            la aprobatorul de pe pasul 1; după ce acesta aprobă, trece automat la pasul 2.
+          </p>
+        </div>
+        <div>
+          <p className="font-medium text-foreground">Varianta B — împreună (amândoi în același timp)</p>
+          <p>
+            Adaugă 2 rânduri cu <span className="font-medium text-foreground">același Pas</span> (ex.
+            amândouă Pasul 1) și alege la fiecare „Toți trebuie să aprobe". Cererea le apare ambilor
+            deodată; plata se deblochează doar după ce{" "}
+            <span className="font-medium text-foreground">amândoi</span> au aprobat.
+          </p>
+        </div>
+        <p className="text-xs">
+          Pentru un singur aprobator: un rând, Pasul 1. Ca regula să se aplice doar unui proiect sau
+          plătitor anume, alege-l mai jos; lasă pe „Orice" ca să se aplice tuturor cererilor.
+        </p>
+      </div>
+    </details>
+  );
+}
+
 function DoaRowForm({ form, onChange, departments, payers, projects, members, onSave, onCancel }: DoaRowFormProps) {
   const set = (key: keyof ParDoaRow, val: unknown) =>
     onChange({ ...form, [key]: val });
 
+  const field = "w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]";
+  const labelCls = "text-xs font-medium text-muted-foreground block mb-1";
+  const legendCls = "text-xs font-semibold uppercase tracking-wide text-foreground mb-2";
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5">
-      <div>
-        <label className="text-xs font-medium text-muted-foreground block mb-1">Charge To</label>
-        <select
-          value={form.chargeTo ?? ""}
-          onChange={(e) => set("chargeTo", e.target.value || null)}
-          className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]"
-          aria-label="Charge To"
-        >
-          {CHARGE_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </div>
+    <div className="space-y-5 p-4 rounded-lg border border-primary/30 bg-primary/5">
+      {/* ── 1. Când se aplică regula (scope) ── */}
+      <fieldset className="border-0 p-0 m-0">
+        <legend className={legendCls}>1. Când se aplică</legend>
+        <p className="text-xs text-muted-foreground mb-2">
+          Lasă pe „Orice" ce nu vrei să restricționezi. Ex: alege doar un proiect ca regula să se aplice
+          numai cererilor din acel proiect.
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div>
+            <label className={labelCls}>Plătitor</label>
+            <select value={form.payerId ?? ""} onChange={(e) => onChange({ ...form, payerId: e.target.value || null, projectId: null })} className={field} aria-label="Plătitor regulă de aprobare">
+              <option value="">Orice plătitor</option>
+              {payers.map((payer) => <option key={payer.id} value={payer.id}>{payer.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Proiect</label>
+            <select value={form.projectId ?? ""} onChange={(e) => set("projectId", e.target.value || null)} className={field} aria-label="Proiect regulă de aprobare">
+              <option value="">Orice proiect</option>
+              {projects.filter((project) => !form.payerId || project.payerId === form.payerId).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Departament</label>
+            <select value={form.departmentId ?? ""} onChange={(e) => set("departmentId", e.target.value || null)} className={field} aria-label="Departament">
+              <option value="">Orice</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Charge To</label>
+            <select value={form.chargeTo ?? ""} onChange={(e) => set("chargeTo", e.target.value || null)} className={field} aria-label="Charge To">
+              {CHARGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Sumă de la (MDL)</label>
+            <input type="number" min={0} step={100} value={(form.minAmountCents ?? 0) / 100} onChange={(e) => set("minAmountCents", Math.round(parseFloat(e.target.value || "0") * 100))} className={field} aria-label="Sumă minimă MDL" />
+          </div>
+          <div>
+            <label className={labelCls}>Până la (MDL, gol = ∞)</label>
+            <input type="number" min={0} step={100} value={form.maxAmountCents != null ? form.maxAmountCents / 100 : ""} onChange={(e) => set("maxAmountCents", e.target.value ? Math.round(parseFloat(e.target.value) * 100) : null)} className={field} placeholder="Fără limită" aria-label="Sumă maximă MDL" />
+          </div>
+        </div>
+      </fieldset>
 
-      <div>
-        <label className="text-xs font-medium text-muted-foreground block mb-1">Plătitor (opțional)</label>
-        <select value={form.payerId ?? ""} onChange={(e) => onChange({ ...form, payerId: e.target.value || null, projectId: null })} className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Plătitor DOA">
-          <option value="">Orice plătitor</option>
-          {payers.map((payer) => <option key={payer.id} value={payer.id}>{payer.name}</option>)}
-        </select>
-      </div>
+      {/* ── 2. Cine aprobă (who) ── */}
+      <fieldset className="border-0 p-0 m-0">
+        <legend className={legendCls}>2. Cine aprobă</legend>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div>
+            <label className={labelCls}>Persoană</label>
+            <select value={form.approverUserId ?? ""} onChange={(e) => set("approverUserId", e.target.value || null)} className={field} aria-label="Persoană aprobatoare">
+              <option value="">Oricine cu rolul de alături</option>
+              {members.map((member) => <option key={`${member.userId}-${member.role}`} value={member.userId}>{member.userName ?? member.userEmail ?? member.userId} · {member.role}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>…sau orice persoană cu rolul</label>
+            <select value={form.approverParRole ?? ""} onChange={(e) => set("approverParRole", e.target.value || null)} className={field} aria-label="Rol aprobator">
+              <option value="">Oricare</option>
+              {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Etichetă (apare pe cerere)</label>
+            <input type="text" value={form.approverRoleLabel ?? ""} onChange={(e) => set("approverRoleLabel", e.target.value)} placeholder="ex. Director executiv" className={field} aria-label="Etichetă rol aprobator" />
+          </div>
+        </div>
+      </fieldset>
 
-      <div>
-        <label className="text-xs font-medium text-muted-foreground block mb-1">Proiect (opțional)</label>
-        <select value={form.projectId ?? ""} onChange={(e) => set("projectId", e.target.value || null)} className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Proiect DOA">
-          <option value="">Orice proiect</option>
-          {projects.filter((project) => !form.payerId || project.payerId === form.payerId).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-        </select>
-      </div>
+      {/* ── 3. Ordinea aprobării (order) ── */}
+      <fieldset className="border-0 p-0 m-0">
+        <legend className={legendCls}>3. Ordinea aprobării</legend>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className={labelCls}>Pasul</label>
+            <input type="number" min={1} value={form.step ?? 1} onChange={(e) => set("step", parseInt(e.target.value) || 1)} className={field} aria-label="Pasul de aprobare" />
+            <p className="text-[11px] leading-tight text-muted-foreground mt-1">
+              1 = primul care aprobă. Pune 2 ca cererea să ajungă aici după ce pasul 1 aprobă.
+            </p>
+          </div>
+          <div className="sm:col-span-2">
+            <label className={labelCls}>Dacă sunt mai mulți aprobatori pe același Pas</label>
+            <select value={form.approvalMode ?? "sequential"} onChange={(e) => set("approvalMode", e.target.value)} className={field} aria-label="Mod aprobare">
+              <option value="sequential">Un aprobator e de ajuns</option>
+              <option value="parallel">Toți trebuie să aprobe (în paralel)</option>
+            </select>
+            <p className="text-[11px] leading-tight text-muted-foreground mt-1">
+              Pentru „2 persoane trebuie să aprobe împreună": adaugă 2 rânduri cu același Pas și alege
+              „Toți trebuie să aprobe" la fiecare.
+            </p>
+          </div>
+        </div>
+      </fieldset>
 
-      <div>
-        <label className="text-xs font-medium text-muted-foreground block mb-1">Mod aprobare</label>
-        <select value={form.approvalMode ?? "sequential"} onChange={(e) => set("approvalMode", e.target.value)} className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Mod aprobare">
-          <option value="sequential">Secvențial</option>
-          <option value="parallel">Paralel — toți aprobă</option>
-        </select>
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-muted-foreground block mb-1">Persoană aprobatoare (opțional)</label>
-        <select value={form.approverUserId ?? ""} onChange={(e) => set("approverUserId", e.target.value || null)} className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Persoană aprobatoare">
-          <option value="">După rol</option>
-          {members.map((member) => <option key={`${member.userId}-${member.role}`} value={member.userId}>{member.userName ?? member.userEmail ?? member.userId} · {member.role}</option>)}
-        </select>
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-muted-foreground block mb-1">Departament (opțional)</label>
-        <select
-          value={form.departmentId ?? ""}
-          onChange={(e) => set("departmentId", e.target.value || null)}
-          className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]"
-          aria-label="Departament"
-        >
-          <option value="">Orice</option>
-          {departments.map((d) => (
-            <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-muted-foreground block mb-1">Pas (1, 2, …)</label>
-        <input
-          type="number"
-          min={1}
-          value={form.step ?? 1}
-          onChange={(e) => set("step", parseInt(e.target.value) || 1)}
-          className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]"
-          aria-label="Pas aprobator"
-        />
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-muted-foreground block mb-1">Min sumă (MDL)</label>
-        <input
-          type="number"
-          min={0}
-          step={100}
-          value={(form.minAmountCents ?? 0) / 100}
-          onChange={(e) => set("minAmountCents", Math.round(parseFloat(e.target.value || "0") * 100))}
-          className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]"
-          aria-label="Sumă minimă MDL"
-        />
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-muted-foreground block mb-1">Max sumă (MDL, gol = ∞)</label>
-        <input
-          type="number"
-          min={0}
-          step={100}
-          value={form.maxAmountCents != null ? form.maxAmountCents / 100 : ""}
-          onChange={(e) => set("maxAmountCents", e.target.value ? Math.round(parseFloat(e.target.value) * 100) : null)}
-          className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]"
-          placeholder="Fără limită"
-          aria-label="Sumă maximă MDL"
-        />
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-muted-foreground block mb-1">Etichetă rol aprobator</label>
-        <input
-          type="text"
-          value={form.approverRoleLabel ?? ""}
-          onChange={(e) => set("approverRoleLabel", e.target.value)}
-          placeholder="ex. DOA Holder, Executive Director"
-          className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]"
-          aria-label="Etichetă rol aprobator"
-        />
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-muted-foreground block mb-1">Rol PAR (opțional)</label>
-        <select
-          value={form.approverParRole ?? ""}
-          onChange={(e) => set("approverParRole", e.target.value || null)}
-          className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]"
-          aria-label="Rol PAR"
-        >
-          <option value="">Oricare</option>
-          {ROLE_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="col-span-2 sm:col-span-1 flex items-end gap-2">
+      {/* Actions */}
+      <div className="flex items-center gap-2 pt-1">
         <button
           type="button"
           onClick={onSave}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px]"
-          aria-label="Salvează rând DOA"
+          aria-label="Salvează regula de aprobare"
         >
           <Check className="h-4 w-4" aria-hidden />
           Salvează
@@ -3137,7 +3164,7 @@ export function ParAdmin({ isAdmin }: ParAdminProps) {
             <h1 className="text-xl font-bold text-foreground">Administrare PAR</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            Configurați matricea DOA, setările organizației, membrii și datele de referință.
+            Configurați regulile de aprobare, setările organizației, membrii și datele de referință.
           </p>
         </div>
 

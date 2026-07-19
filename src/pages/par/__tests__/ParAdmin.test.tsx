@@ -72,7 +72,7 @@ describe("ParAdmin — PAR-116", () => {
 
     // Four tab buttons should be visible
     await waitFor(() => {
-      expect(screen.getByText("Matrice DOA")).toBeDefined();
+      expect(screen.getByText("Aprobare")).toBeDefined();
       expect(screen.getByText("Setări")).toBeDefined();
       expect(screen.getByText("Membri")).toBeDefined();
       expect(screen.getByText("Date referință")).toBeDefined();
@@ -87,24 +87,34 @@ describe("ParAdmin — PAR-116", () => {
     expect(screen.getByText(/doar administratorilor PAR/i)).toBeDefined();
   });
 
-  // T-PAR-116-1 continued — DOA tab loads and "Adaugă rând" button is present
-  it("DOA tab shows Add button and table", async () => {
+  // T-PAR-116-1 continued — Approval tab loads and "Adaugă aprobator" button is present
+  it("Approval tab shows Add button and table", async () => {
     const { listParDoaMatrix } = await import("@/lib/api/par");
     (listParDoaMatrix as ReturnType<typeof vi.fn>).mockResolvedValue({ rows: [] });
 
     render(<ParAdmin isAdmin={true} />);
 
-    // Wait for DOA tab content to load
+    // Wait for approval tab content to load
     await waitFor(() => {
-      expect(screen.getByText("Matrice DOA")).toBeDefined();
+      expect(screen.getByText("Aprobare")).toBeDefined();
     });
 
-    // Click DOA tab (it's default)
-    const doaTab = screen.getByRole("tab", { name: /Matrice DOA/i });
+    // Click the Approval tab (it's default)
+    const doaTab = screen.getByRole("tab", { name: /Aprobare/i });
     fireEvent.click(doaTab);
 
+    // Plain-language guide is present so admins understand multi-approver setup.
     await waitFor(() => {
-      expect(screen.getByLabelText("Adaugă rând DOA")).toBeDefined();
+      expect(screen.getByText(/Cum cer 2 \(sau mai mulți\) aprobatori/i)).toBeDefined();
+    });
+
+    const addBtn = screen.getByLabelText("Adaugă aprobator");
+    fireEvent.click(addBtn);
+
+    // Redesigned form: clear "Pasul" field + reframed parallel option instead of raw "Pas/Mod".
+    await waitFor(() => {
+      expect(screen.getByLabelText("Pasul de aprobare")).toBeDefined();
+      expect(screen.getByText("Toți trebuie să aprobe (în paralel)")).toBeDefined();
     });
   });
 
