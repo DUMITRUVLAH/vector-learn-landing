@@ -71,6 +71,7 @@ import { FinInsightsPage } from "./pages/finance/FinInsightsPage";
 
 import { lazy, Suspense, useState, useEffect as _useEffect } from "react";
 import { getParMe } from "./lib/api/par";
+import { CXPage } from "./pages/app/CXPage";
 
 // STMT-001..004: Statement pages
 const StatementUploadPage = lazy(() => import("./pages/fin/StatementUploadPage"));
@@ -248,6 +249,7 @@ function Routes() {
   // (Parties detail is matched above, before the /business/fin/parties list route.)
 
   // Fallback: orice altceva → /business
+  if (path.startsWith("/app/cx")) return <CXPage />;
   return <RedirectToBusiness />;
 }
 
