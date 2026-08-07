@@ -134,7 +134,10 @@ await T("detaliu: caseta de comentariu acceptă text și activează Trimite", as
 
 await T("detaliu: niciun UUID brut afișat ca nume de persoană", async () => {
   const body = await page.evaluate(() => document.body.innerText);
-  const uuid = body.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/);
+  // Scope to the page content: the notification panel is chrome, and an open
+  // panel would otherwise make this assert about a different surface.
+  const main = await page.locator("main").innerText();
+  const uuid = main.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/);
   assert(!uuid, `UUID vizibil în pagină: ${uuid?.[0]}`);
 });
 
@@ -207,6 +210,44 @@ await T("inbox: suma e vizibilă fără derulare laterală", async () => {
   assert(box && box.x + box.width <= vw, `coloana Sumă începe la ${box?.x} — în afara ecranului de ${vw}px`);
   const txt = await cell.innerText();
   assert(/\d/.test(txt), `a patra coloană nu conține o sumă: "${txt}"`);
+});
+
+await T("inbox: j/k mută cursorul pe rânduri", async () => {
+  await page.locator("h1").first().click(); // focus the page, NOT the sidebar at (5,5)
+  const first = await page.locator('tr[data-cursor="true"] td:nth-child(2)').innerText();
+  await page.keyboard.press("j");
+  await page.waitForTimeout(400);
+  const second = await page.locator('tr[data-cursor="true"] td:nth-child(2)').innerText();
+  assert(first !== second, `cursorul nu s-a mutat: rămas pe ${first}`);
+  await page.keyboard.press("k");
+  await page.waitForTimeout(400);
+  assert(await page.locator('tr[data-cursor="true"] td:nth-child(2)').innerText() === first, "k nu a revenit");
+  return `${first.trim()} → ${second.trim()}`;
+});
+
+await T("inbox: tasta 'a' deschide decizia de aprobare pentru rândul curent", async () => {
+  const num = (await page.locator('tr[data-cursor="true"] td:nth-child(2)').innerText()).trim();
+  await page.keyboard.press("a");
+  await page.waitForTimeout(800);
+  const dlg = page.locator('[role="dialog"]');
+  assert(await dlg.isVisible(), "nu s-a deschis nimic la 'a'");
+  const txt = await dlg.innerText();
+  assert(txt.includes(num), `dialogul nu e pentru rândul curent (${num}): ${txt.slice(0, 80)}`);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+});
+
+await T("inbox: tastele NU fură input-ul când scrii într-un câmp", async () => {
+  assert(!(await page.locator('[role="dialog"]').isVisible().catch(() => false)),
+    "un dialog a rămas deschis de la verificarea anterioară — Escape nu l-a închis");
+  const f = page.locator('input[aria-label="Filtrează după solicitant"]');
+  await f.fill("");
+  // "amar" contains a, m and r — all three decision shortcuts.
+  await f.pressSequentially("amar");
+  assert(await f.inputValue() === "amar", `câmpul a pierdut caractere: "${await f.inputValue()}"`);
+  assert(!(await page.locator('[role="dialog"]').isVisible().catch(() => false)), "s-a deschis un dialog în timp ce scriam");
+  await f.fill("");
+  await page.waitForTimeout(600);
 });
 
 await T("inbox: filtrul după beneficiar restrânge lista", async () => {
@@ -302,6 +343,20 @@ await T("cerere nouă: selectul de monedă comută", async () => {
   await cur.selectOption("EUR");
   assert(await cur.inputValue() === "EUR", "moneda nu s-a schimbat");
   await cur.selectOption("MDL");
+});
+
+await T("cerere nouă: contextul folosit ultima dată se pre-completează", async () => {
+  // Seed the memory the way a successful submit would, then reload the form.
+  await page.evaluate(() => localStorage.setItem("par.lastUsedContext", JSON.stringify({ currency: "EUR" })));
+  // Navigate AWAY first: re-issuing the same hash URL doesn't remount the page,
+  // so the effect that applies the remembered context would never re-run.
+  await page.goto(`${BASE}/#/business/par`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(800);
+  await page.goto(`${BASE}/#/business/par/new`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(2500);
+  const cur = await page.locator('select[aria-label="Monedă"]').inputValue();
+  assert(cur === "EUR", `moneda nu s-a pre-completat din ultima folosire: "${cur}"`);
+  await page.evaluate(() => localStorage.removeItem("par.lastUsedContext"));
 });
 
 // ── Admin (58 controls converted mechanically) ──────────────────────────────

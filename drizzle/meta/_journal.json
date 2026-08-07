@@ -953,6 +953,13 @@
       "when": 1784383200000,
       "tag": "0136_par_payers_profiles_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1786120294649,
+      "tag": "0137_par_materialize_manager_admins",
+      "breakpoints": true
     }
   ]
 }

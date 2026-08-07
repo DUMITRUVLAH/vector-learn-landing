@@ -9,6 +9,7 @@
  * CORE: backlog/par/PAR-CORE.md
  */
 import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq, asc, inArray } from "drizzle-orm";
 import { db } from "../db/client";
@@ -88,10 +89,10 @@ parEventsRoutes.get("/", async (c) => {
 
 // ─── POST /api/par/events ─────────────────────────────────────────────────────
 
-parEventsRoutes.post("/", requirePARRole("requestor", "approver", "finance", "par_admin"), async (c) => {
+parEventsRoutes.post("/", requirePARRole("requestor", "approver", "finance", "par_admin"), zValidator("json", createSchema), async (c) => {
   const currentUser = c.get("user");
   const tenantId = currentUser.tenantId;
-  const body = createSchema.parse(await c.req.json());
+  const body = c.req.valid("json");
   if (!(await mayAccessProject(currentUser.id, tenantId, body.project_id, currentUser.role))) {
     return c.json({ error: "forbidden_project" }, 403);
   }
@@ -120,11 +121,11 @@ parEventsRoutes.post("/", requirePARRole("requestor", "approver", "finance", "pa
 
 // ─── PUT /api/par/events/:id ──────────────────────────────────────────────────
 
-parEventsRoutes.put("/:id", requirePARRole("par_admin"), async (c) => {
+parEventsRoutes.put("/:id", requirePARRole("par_admin"), zValidator("json", updateSchema), async (c) => {
   const user = c.get("user");
   const tenantId = user.tenantId;
   const id = c.req.param("id");
-  const body = updateSchema.parse(await c.req.json());
+  const body = c.req.valid("json");
 
   // Scope (PARQA): a payer-scoped par_admin may only touch events in their project scope, and a
   // reassigned project must exist in the tenant AND be in scope — POST enforces this, PUT must too.

@@ -21,13 +21,20 @@ export type ParRole = "requestor" | "approver" | "finance" | "par_admin";
  *   route.use("*", requirePARRole("finance"))
  */
 /**
- * Tenant-level roles that are treated as an implicit PAR admin.
- * This solves the bootstrap chicken-and-egg: a brand-new tenant has zero
- * par_members rows, so without this nobody could ever view reports OR assign
- * the first PAR member (assigning requires par_admin). The tenant owner/admin
- * therefore gets full PAR access by default and can hand out real PAR roles.
+ * Tenant-level roles treated as an implicit PAR admin.
+ *
+ * This solves one specific bootstrap problem: a brand-new tenant has zero
+ * par_members rows, so without it nobody could ever assign the FIRST PAR member
+ * (assigning requires par_admin). One role is enough for that, and it is "admin".
+ *
+ * "manager" used to be in here too, which meant anyone made a manager for
+ * unrelated reasons could silently approve payment requests, read the audit log
+ * and grant themselves PAR roles — without appearing in the members list. In a
+ * segregation-of-duties system that is the wrong default. Existing managers were
+ * given an EXPLICIT par_admin row by migration 0137, so nobody lost access; from
+ * here on the authority is visible in the members screen and revocable there.
  */
-const IMPLICIT_PAR_ADMIN_TENANT_ROLES = ["admin", "manager"];
+export const IMPLICIT_PAR_ADMIN_TENANT_ROLES: readonly string[] = ["admin"];
 
 export function requirePARRole(
   ...roles: ParRole[]

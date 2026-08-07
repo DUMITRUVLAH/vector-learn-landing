@@ -826,7 +826,12 @@ function DelegationSection({ members }: { members: ParMember[] }) {
   const [error, setError] = useState<string | null>(null);
 
   // Only approvers/admins can be delegates.
-  const approverMembers = members.filter((m) => m.role === "approver" || m.role === "par_admin");
+  // Any member of the org can receive a delegation — the delegation is what grants
+  // approval authority for the window. Restricting the list to existing approvers
+  // made delegation impossible in a one-approver org, which is when it is needed.
+  const delegateCandidates = Array.from(
+    new Map(members.map((m) => [m.userId, m])).values(),
+  );
 
   const load = async () => {
     try { const { delegations: d } = await listParDelegations(); setDelegations(d); } catch { /* ignore */ }
@@ -866,8 +871,13 @@ function DelegationSection({ members }: { members: ParMember[] }) {
         <div className="sm:col-span-2">
           <label htmlFor="deleg-to" className="text-xs font-medium text-muted-foreground block mb-1">Către</label>
           <Select id="deleg-to" value={toUserId} onChange={(e) => setToUserId(e.target.value)} aria-label="Delegat">
-            <option value="">Alege aprobator…</option>
-            {approverMembers.map((m) => <option key={m.userId} value={m.userId}>{m.userName ?? m.userId}</option>)}
+            <option value="">Alege coleg…</option>
+            {delegateCandidates.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.userName ?? m.userId}
+                {m.role === "approver" || m.role === "par_admin" ? "" : " (primește drept de aprobare)"}
+              </option>
+            ))}
           </Select>
         </div>
         <div>
@@ -1328,14 +1338,14 @@ interface GroupedMember {
   userId: string;
   userName?: string;
   userEmail?: string;
-  roles: Array<{ id: string; role: ParMember["role"]; approvalLimitCents: number | null }>;
+  roles: Array<{ id: string; role: ParMember["role"]; approvalLimitCents: number | null; implicit?: boolean; implicitFromTenantRole?: string }>;
 }
 
 function groupMembers(members: ParMember[]): GroupedMember[] {
   const map = new Map<string, GroupedMember>();
   for (const m of members) {
     const existing = map.get(m.userId);
-    const roleEntry = { id: m.id, role: m.role, approvalLimitCents: m.approvalLimitCents };
+    const roleEntry = { id: m.id, role: m.role, approvalLimitCents: m.approvalLimitCents, implicit: m.implicit, implicitFromTenantRole: m.implicitFromTenantRole };
     if (existing) {
       existing.roles.push(roleEntry);
     } else {
@@ -1829,14 +1839,25 @@ function ParMembersTab() {
                           )}>
                             {ROLE_LABELS[r.role]}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleRevoke(r.id, ROLE_LABELS[r.role], displayName)}
-                            className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                            aria-label={`Revoce rolul ${ROLE_LABELS[r.role]} pentru ${displayName}`}
-                          >
-                            <X className="h-3 w-3" aria-hidden />
-                          </button>
+                          {r.implicit ? (
+                            /* Authority comes from the tenant role — there is no par_members
+                               row to revoke, so offering an X here would silently do nothing. */
+                            <span
+                              className="ml-1 rounded-full bg-warning/15 px-2 py-0.5 text-2xs font-medium text-warning"
+                              title={`Drepturile vin din rolul de organizație „${r.implicitFromTenantRole}". Se retrag schimbând acel rol, nu de aici.`}
+                            >
+                              implicit · {r.implicitFromTenantRole}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleRevoke(r.id, ROLE_LABELS[r.role], displayName)}
+                              className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                              aria-label={`Revoce rolul ${ROLE_LABELS[r.role]} pentru ${displayName}`}
+                            >
+                              <X className="h-3 w-3" aria-hidden />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>

@@ -52,6 +52,17 @@ export function NotificationBell({ onUnreadChange }: NotificationBellProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const { navigate } = useRouter();
 
+  /**
+   * Notification bodies are built server-side as
+   *   "PAR PAR-2026-0165 așteaptă aprobarea ta. Link: /business/par/dc90dba7-…"
+   * — the path is pasted into the sentence, so the reader gets a 36-character
+   * hex string in the middle of a notification. The row is already clickable and
+   * navigates via `notif.link`, so the trailing path adds nothing but noise.
+   * Strip it for display; the stored message is left untouched.
+   */
+  const readable = (text: string | null | undefined) =>
+    (text ?? "").replace(/\s*Link:\s*#?\/\S+\s*$/, "").trim();
+
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -197,7 +208,7 @@ export function NotificationBell({ onUnreadChange }: NotificationBellProps) {
                       "hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted transition-colors",
                       !notif.isRead && "bg-primary/5"
                     )}
-                    aria-label={notif.title + (notif.body ? `: ${notif.body}` : "")}
+                    aria-label={notif.title + (notif.body ? `: ${readable(notif.body)}` : "")}
                   >
                     <div className="flex items-start gap-2">
                       <div className="mt-0.5 shrink-0">{typeIcon(notif.type)}</div>
@@ -223,7 +234,7 @@ export function NotificationBell({ onUnreadChange }: NotificationBellProps) {
                         </div>
                         {notif.body && (
                           <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                            {notif.body}
+                            {readable(notif.body)}
                           </p>
                         )}
                       </div>

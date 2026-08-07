@@ -820,6 +820,14 @@ export interface ParMember {
   createdAt: string;
   userName?: string;
   userEmail?: string;
+  /**
+   * True when the authority comes from the TENANT role (admin/manager), not from a
+   * par_members row. Such a person can approve payments and hand out PAR roles
+   * without appearing in the member table — so the screen has to say so, and the
+   * revoke button must not pretend it can take it away.
+   */
+  implicit?: boolean;
+  implicitFromTenantRole?: string;
 }
 
 export async function listParDoaMatrix(): Promise<{ rows: ParDoaRow[] }> {
