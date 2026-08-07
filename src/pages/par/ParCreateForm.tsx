@@ -67,6 +67,37 @@ const FIELD_MESSAGES: Record<string, string> = {
 const inputCls =
   "h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/45 disabled:cursor-not-allowed disabled:opacity-50";
 
+/**
+ * The last context a request was submitted with. Kept in localStorage, per browser:
+ * it is a convenience default, never authority — the server re-checks that the user
+ * may use the project/payer it receives.
+ */
+const LAST_CONTEXT_KEY = "par.lastUsedContext";
+
+interface LastUsedContext {
+  departmentId?: string;
+  payerId?: string;
+  projectId?: string;
+  currency?: "MDL" | "EUR" | "USD";
+}
+
+function loadLastUsedContext(): LastUsedContext {
+  try {
+    const raw = localStorage.getItem(LAST_CONTEXT_KEY);
+    return raw ? (JSON.parse(raw) as LastUsedContext) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLastUsedContext(ctx: LastUsedContext): void {
+  try {
+    localStorage.setItem(LAST_CONTEXT_KEY, JSON.stringify(ctx));
+  } catch {
+    /* private mode / quota — the form just stops remembering */
+  }
+}
+
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -234,18 +265,26 @@ export function ParCreateForm() {
   const [templateName, setTemplateName] = useState("");
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
+  /**
+   * A requestor fills the same four context fields on every single request —
+   * department, payer, project, currency — and they almost never change. Remember
+   * what was used last and prefill a NEW draft with it; an existing draft always
+   * wins, so editing never gets overwritten. Everything stays editable.
+   */
+  const lastUsed = loadLastUsedContext();
+
   // Header (1–7)
   const [dateOfRequest, setDateOfRequest] = useState(today());
   const [requestorTitle, setRequestorTitle] = useState("");
   const [requestorCode, setRequestorCode] = useState("");
-  const [departmentId, setDepartmentId] = useState("");
-  const [payerId, setPayerId] = useState("");
+  const [departmentId, setDepartmentId] = useState(lastUsed.departmentId ?? "");
+  const [payerId, setPayerId] = useState(lastUsed.payerId ?? "");
   // VM3-03 (Violeta): "aici ar trebui automat să pună data necesară peste 10 zile" —
   // prefilled to request date + 10 days; recalculated when the request date changes,
   // UNLESS the user edited it manually (touched flag stops the auto-sync).
   const [dateNeeded, setDateNeeded] = useState(() => plusDays(today(), 10));
   const [dateNeededTouched, setDateNeededTouched] = useState(false);
-  const [projectId, setProjectId] = useState("");
+  const [projectId, setProjectId] = useState(lastUsed.projectId ?? "");
   const [eventId, setEventId] = useState(""); // VM1-04
   const [budgetCodeId, setBudgetCodeId] = useState("");
   const [budgetCodeNote, setBudgetCodeNote] = useState("");
@@ -254,7 +293,7 @@ export function ParCreateForm() {
   const [purpose, setPurpose] = useState<ParPurpose>("execute_payment");
   const chargeTo: ParChargeTo = "program";
   // VF-203: currency (MDL default). Editable while draft.
-  const [currency, setCurrency] = useState<"MDL" | "EUR" | "USD">("MDL");
+  const [currency, setCurrency] = useState<"MDL" | "EUR" | "USD">(lastUsed.currency ?? "MDL");
   // End-use (11)
   const [endUse, setEndUse] = useState("");
   // Payee (12)
@@ -338,6 +377,21 @@ export function ParCreateForm() {
             setDepartmentId(profileRes.profile.departmentId ?? "");
             setRequestorTitle(profileRes.profile.jobTitle ?? "");
             setRequestorCode(profileRes.profile.staffCode ?? "");
+          }
+          // Last-used context wins over the generic defaults above — it is the more
+          // specific signal ("what this person actually does"). Applied last, and only
+          // for values that still exist in the org's active reference data, so a
+          // deleted project doesn't leave the form pointing at nothing.
+          const remembered = loadLastUsedContext();
+          if (remembered.currency) setCurrency(remembered.currency);
+          if (remembered.departmentId && depts.items.some((d) => d.id === remembered.departmentId && d.active)) {
+            setDepartmentId(remembered.departmentId);
+          }
+          if (remembered.payerId && activePayers.some((pp) => pp.id === remembered.payerId)) {
+            setPayerId(remembered.payerId);
+          }
+          if (remembered.projectId && activeProjects.some((pp) => pp.id === remembered.projectId)) {
+            setProjectId(remembered.projectId);
           }
         }
       } catch { /* config load is non-blocking */ }
@@ -807,6 +861,9 @@ export function ParCreateForm() {
         } catch { /* non-blocking — don't fail submit if vendor save fails */ }
       }
       const submitted = await submitPar(draftId);
+      // Remember the context for the next request — only on a successful submit,
+      // so a half-filled abandoned draft never becomes the default.
+      saveLastUsedContext({ departmentId, payerId, projectId, currency });
       navigate(`/business/par/${submitted.id}`);
     } catch (e) {
       if (e instanceof ApiError && e.details.length) {

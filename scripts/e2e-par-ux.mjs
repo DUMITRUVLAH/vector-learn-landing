@@ -345,6 +345,20 @@ await T("cerere nouă: selectul de monedă comută", async () => {
   await cur.selectOption("MDL");
 });
 
+await T("cerere nouă: contextul folosit ultima dată se pre-completează", async () => {
+  // Seed the memory the way a successful submit would, then reload the form.
+  await page.evaluate(() => localStorage.setItem("par.lastUsedContext", JSON.stringify({ currency: "EUR" })));
+  // Navigate AWAY first: re-issuing the same hash URL doesn't remount the page,
+  // so the effect that applies the remembered context would never re-run.
+  await page.goto(`${BASE}/#/business/par`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(800);
+  await page.goto(`${BASE}/#/business/par/new`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(2500);
+  const cur = await page.locator('select[aria-label="Monedă"]').inputValue();
+  assert(cur === "EUR", `moneda nu s-a pre-completat din ultima folosire: "${cur}"`);
+  await page.evaluate(() => localStorage.removeItem("par.lastUsedContext"));
+});
+
 // ── Admin (58 controls converted mechanically) ──────────────────────────────
 await login("admin");
 await go("/#/business/par/admin");
