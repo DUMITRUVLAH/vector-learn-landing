@@ -63,6 +63,31 @@ export default {
           DEFAULT: "hsl(var(--info))",
           foreground: "hsl(var(--info-foreground))",
         },
+        // HR365: the sidebar has its own token family (white in light, page-dark in dark).
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar-background))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          primary: "hsl(var(--sidebar-primary))",
+          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
+          accent: "hsl(var(--sidebar-accent))",
+          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
+          border: "hsl(var(--sidebar-border))",
+          ring: "hsl(var(--sidebar-ring))",
+          muted: "hsl(var(--sidebar-muted))",
+        },
+      },
+      fontSize: {
+        // HR365 dense-UI sizes: sidebar rows (13px), meta rows (11px), group labels (10px).
+        nav: "0.8125rem",
+        "2xs": "0.6875rem",
+        "3xs": "0.625rem",
+      },
+      letterSpacing: {
+        // Uppercase sidebar group labels.
+        group: "0.12em",
+      },
+      width: {
+        sidebar: "var(--sidebar-width)",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -74,6 +99,7 @@ export default {
         md: "var(--shadow-md)",
         lg: "var(--shadow-lg)",
         xl: "var(--shadow-xl)",
+        primary: "var(--shadow-primary)",
       },
       keyframes: {
         "fade-in": {

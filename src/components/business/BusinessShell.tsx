@@ -1,12 +1,16 @@
 /**
- * SPLIT-101: BusinessShell — shell-ul aplicației Business Suite.
+ * SPLIT-101 / HR365-003: BusinessShell — shell-ul aplicației FinFlow.
  *
- * Echivalentul AppShell pentru Business Suite (FinDesk + PAR + ITPark).
- * Sidebar propriu cu secțiunile: Dashboard, PAR (primul), FinDesk, ITPark.
- * Guard: dacă sesiunea business lipsește → redirect la /business/login.
- * Design: Vector 365 semantic tokens, light+dark, WCAG AA.
+ * Chrome-ul canonic pentru tot ce e sub /business/* (FinDesk + PAR + ITPark +
+ * DocMerge). Guard: dacă sesiunea business lipsește → redirect la /business/login.
+ *
+ * Design: HR365 by Vector — sidebar de 260px pe suprafață proprie (`bg-sidebar`),
+ * fiecare rând cu chip pastel colorat, etichete de grup uppercase 10px, rândul
+ * activ pe primary cu halo colorat. Fără bară de titlu separată: brandul stă în
+ * sidebar, iar dreapta-sus rămâne un rând de utilitare (clopoțel + ieșire).
+ * Tokens semantice Vector 365 — zero hex în .tsx, light + dark, WCAG AA.
  */
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   LogOut,
@@ -29,12 +33,14 @@ import {
   RefreshCw,
   Calendar,
   ListChecks,
-  TrendingUp,
   ShieldCheck,
   Shield,
   ArrowLeft,
   FolderOpen,
   ChevronDown,
+  Search,
+  Menu,
+  X,
 } from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
@@ -44,6 +50,7 @@ import { useParRoles } from "@/hooks/useParRoles";
 import { getParInbox, getFinanceQueue } from "@/lib/api/par";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { api } from "@/lib/api";
+import { Avatar, PageHeader, SidebarNavItem, type ChipTone } from "@/components/ds";
 
 interface BusinessShellProps {
   children: ReactNode;
@@ -59,6 +66,8 @@ interface NavItem {
   label: string;
   href: string;
   icon: typeof LayoutDashboard;
+  /** HR365 icon-chip tint. One tone per category — never two adjacent. */
+  tone: ChipTone;
   /**
    * SHELL-502: PAR roles allowed to SEE this nav item. Undefined = any PAR member.
    */
@@ -79,41 +88,41 @@ const NAV_GROUPS: NavGroup[] = [
     section: "PAR — Cereri de plată",
     prefix: "/business/par",
     items: [
-      { label: "Cereri", href: "/business/par", icon: ClipboardList },
-      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, roles: ["approver", "par_admin"] },
-      { label: "Rapoarte PAR", href: "/business/par/reports", icon: FileText, roles: ["approver", "finance", "par_admin"] },
+      { label: "Cereri", href: "/business/par", icon: ClipboardList, tone: "indigo" },
+      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, tone: "emerald", roles: ["approver", "par_admin"] },
+      { label: "Rapoarte PAR", href: "/business/par/reports", icon: FileText, tone: "sky", roles: ["approver", "finance", "par_admin"] },
     ],
   },
   {
     section: "FinDesk — Finanțe",
     prefix: "/business/fin",
     items: [
-      { label: "Acasă FinDesk", href: "/business/fin/", icon: Home },
-      { label: "Compania mea", href: "/business/fin/company", icon: Building2 },
-      { label: "Facturi", href: "/business/fin/invoices", icon: Receipt },
-      { label: "Cont de plată", href: "/business/fin/invoices/document", icon: FileText },
-      { label: "e-Factura", href: "/business/fin/einvoices", icon: FileText },
-      { label: "Încasări", href: "/business/fin/payments", icon: CreditCard },
-      { label: "Cheltuieli", href: "/business/fin/expenses", icon: DollarSign },
-      { label: "Parteneri", href: "/business/fin/parties", icon: Users },
-      { label: "Acorduri", href: "/business/fin/agreements", icon: FileText },
-      { label: "Registru general", href: "/business/fin/ledger", icon: Landmark },
-      { label: "TVA & declarații", href: "/business/fin/tax", icon: ClipboardList },
-      { label: "Salarii", href: "/business/fin/payroll", icon: DollarSign },
-      { label: "Mijloace fixe", href: "/business/fin/assets", icon: Building2 },
-      { label: "Stocuri", href: "/business/fin/inventory", icon: BookOpen },
-      { label: "Buget", href: "/business/fin/budget", icon: BarChart3 },
-      { label: "Invoice Reporting", href: "/business/fin/captures", icon: Zap },
-      { label: "Import extras bancar", href: "/business/fin/statement/upload", icon: FileSpreadsheet },
-      { label: "Istoric extrase", href: "/business/fin/statement", icon: FileText },
-      { label: "Reconciliere & TVA import", href: "/business/fin/reconcile", icon: RefreshCw },
-      { label: "Conturi bancare", href: "/business/fin/banklink", icon: Banknote },
-      { label: "Calendar fiscal", href: "/business/fin/calendar", icon: Calendar },
-      { label: "Operațiuni în masă", href: "/business/fin/mass", icon: ListChecks },
-      { label: "Export & rapoarte", href: "/business/fin/export", icon: BarChart3 },
-      { label: "Rezidenți ITPark", href: "/business/fin/itpark", icon: Building2 },
-      { label: "Securitate", href: "/business/fin/settings/security", icon: Shield },
-      { label: "Audit AI", href: "/business/fin/settings/ai-audit", icon: Settings },
+      { label: "Acasă FinDesk", href: "/business/fin/", icon: Home, tone: "violet" },
+      { label: "Compania mea", href: "/business/fin/company", icon: Building2, tone: "indigo" },
+      { label: "Facturi", href: "/business/fin/invoices", icon: Receipt, tone: "blue" },
+      { label: "Cont de plată", href: "/business/fin/invoices/document", icon: FileText, tone: "sky" },
+      { label: "e-Factura", href: "/business/fin/einvoices", icon: FileText, tone: "teal" },
+      { label: "Încasări", href: "/business/fin/payments", icon: CreditCard, tone: "emerald" },
+      { label: "Cheltuieli", href: "/business/fin/expenses", icon: DollarSign, tone: "rose" },
+      { label: "Parteneri", href: "/business/fin/parties", icon: Users, tone: "amber" },
+      { label: "Acorduri", href: "/business/fin/agreements", icon: FileText, tone: "violet" },
+      { label: "Registru general", href: "/business/fin/ledger", icon: Landmark, tone: "indigo" },
+      { label: "TVA & declarații", href: "/business/fin/tax", icon: ClipboardList, tone: "orange" },
+      { label: "Salarii", href: "/business/fin/payroll", icon: DollarSign, tone: "emerald" },
+      { label: "Mijloace fixe", href: "/business/fin/assets", icon: Building2, tone: "teal" },
+      { label: "Stocuri", href: "/business/fin/inventory", icon: BookOpen, tone: "sky" },
+      { label: "Buget", href: "/business/fin/budget", icon: BarChart3, tone: "violet" },
+      { label: "Invoice Reporting", href: "/business/fin/captures", icon: Zap, tone: "amber" },
+      { label: "Import extras bancar", href: "/business/fin/statement/upload", icon: FileSpreadsheet, tone: "blue" },
+      { label: "Istoric extrase", href: "/business/fin/statement", icon: FileText, tone: "sky" },
+      { label: "Reconciliere & TVA import", href: "/business/fin/reconcile", icon: RefreshCw, tone: "teal" },
+      { label: "Conturi bancare", href: "/business/fin/banklink", icon: Banknote, tone: "emerald" },
+      { label: "Calendar fiscal", href: "/business/fin/calendar", icon: Calendar, tone: "orange" },
+      { label: "Operațiuni în masă", href: "/business/fin/mass", icon: ListChecks, tone: "rose" },
+      { label: "Export & rapoarte", href: "/business/fin/export", icon: BarChart3, tone: "indigo" },
+      { label: "Rezidenți ITPark", href: "/business/fin/itpark", icon: Building2, tone: "violet" },
+      { label: "Securitate", href: "/business/fin/settings/security", icon: Shield, tone: "rose" },
+      { label: "Audit AI", href: "/business/fin/settings/ai-audit", icon: Settings, tone: "amber" },
     ],
   },
   {
@@ -121,9 +130,9 @@ const NAV_GROUPS: NavGroup[] = [
     section: "Document Merge",
     prefix: "/business/docmerge",
     items: [
-      { label: "Documente în masă", href: "/business/docmerge/wizard", icon: Wand2 },
-      { label: "Templates", href: "/business/docmerge", icon: FileText },
-      { label: "Import Excel", href: "/business/docmerge/job", icon: FileSpreadsheet },
+      { label: "Documente în masă", href: "/business/docmerge/wizard", icon: Wand2, tone: "violet" },
+      { label: "Templates", href: "/business/docmerge", icon: FileText, tone: "sky" },
+      { label: "Import Excel", href: "/business/docmerge/job", icon: FileSpreadsheet, tone: "emerald" },
     ],
   },
 ];
@@ -136,24 +145,24 @@ const PAR_NAV_GROUPS: NavGroup[] = [
   {
     section: null,
     items: [
-      { label: "Cereri de plată", href: "/business/par", icon: ClipboardList },
-      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, roles: ["approver", "par_admin"] },
-      { label: "Coadă finanțe", href: "/business/par/finance", icon: Banknote, roles: ["finance", "par_admin"] },
+      { label: "Cereri de plată", href: "/business/par", icon: ClipboardList, tone: "indigo" },
+      { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, tone: "emerald", roles: ["approver", "par_admin"] },
+      { label: "Coadă finanțe", href: "/business/par/finance", icon: Banknote, tone: "amber", roles: ["finance", "par_admin"] },
     ],
   },
   {
     section: "Analiză",
     prefix: "/business/par",
     items: [
-      { label: "Foldere proiecte", href: "/business/par/folders", icon: FolderOpen, roles: ["approver", "finance", "par_admin"] },
-      { label: "Rapoarte & statistici", href: "/business/par/reports", icon: BarChart3, roles: ["approver", "finance", "par_admin"] },
+      { label: "Foldere proiecte", href: "/business/par/folders", icon: FolderOpen, tone: "teal", roles: ["approver", "finance", "par_admin"] },
+      { label: "Rapoarte & statistici", href: "/business/par/reports", icon: BarChart3, tone: "sky", roles: ["approver", "finance", "par_admin"] },
     ],
   },
   {
     section: "Administrare",
     prefix: "/business/par",
     items: [
-      { label: "Administrare PAR", href: "/business/par/admin", icon: Settings, roles: ["par_admin"] },
+      { label: "Administrare PAR", href: "/business/par/admin", icon: Settings, tone: "rose", roles: ["par_admin"] },
     ],
   },
 ];
@@ -167,55 +176,18 @@ export const NAV_GROUPS_EXPORT: NavGroup[] = NAV_GROUPS;
 const PUBLIC_PATHS = ["/business/login"];
 const PUBLIC_EXACT = ["/business"];
 
-/** Single nav link row used inside SidebarGroup. */
-function NavLink({
-  item,
-  path,
-  inboxCount,
-  financeCount,
-}: {
-  item: NavItem;
-  path: string;
-  inboxCount: number;
-  financeCount: number;
-}) {
-  const Icon = item.icon;
-  // "Cereri" root and "Acasă FinDesk" should only be active on exact match, not every sub-route.
+/** True when `path` should light up `item` — index rows match exactly, the rest by prefix. */
+function isItemActive(item: NavItem, path: string): boolean {
   const isIndexItem = item.href === "/business/par" || item.href === "/business/fin/";
-  const active = isIndexItem
-    ? path === item.href || path === item.href.replace(/\/$/, "")
-    : path.startsWith(item.href);
-  return (
-    <Link
-      to={item.href}
-      className={cn(
-        "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors min-h-[44px]",
-        active
-          ? "bg-primary/10 text-primary"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground"
-      )}
-      aria-current={active ? "page" : undefined}
-    >
-      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-      <span className="flex-1">{item.label}</span>
-      {item.href === "/business/par/inbox" && inboxCount > 0 && (
-        <span
-          className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold"
-          aria-label={`${inboxCount} cereri în așteptare`}
-        >
-          {inboxCount}
-        </span>
-      )}
-      {item.href === "/business/par/finance" && financeCount > 0 && (
-        <span
-          className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold"
-          aria-label={`${financeCount} cereri în coada de finanțe`}
-        >
-          {financeCount}
-        </span>
-      )}
-    </Link>
-  );
+  if (isIndexItem) return path === item.href || path === item.href.replace(/\/$/, "");
+  return path.startsWith(item.href);
+}
+
+/** Notification pill count for the two nav rows that carry one. */
+function badgeFor(href: string, inboxCount: number, financeCount: number): number | undefined {
+  if (href === "/business/par/inbox") return inboxCount || undefined;
+  if (href === "/business/par/finance") return financeCount || undefined;
+  return undefined;
 }
 
 // AUTOBILL/sidebar: the shell remounts on every navigation, so component state resets and the
@@ -229,11 +201,14 @@ function SidebarGroup({
   path,
   inboxCount,
   financeCount,
+  /** When the user is filtering, groups stay expanded so matches are never hidden. */
+  forceOpen,
 }: {
   group: NavGroup;
   path: string;
   inboxCount: number;
   financeCount: number;
+  forceOpen: boolean;
 }) {
   const isActive = !!group.prefix && path.startsWith(group.prefix);
   // Sections without a label are always visible (no toggle needed).
@@ -255,55 +230,173 @@ function SidebarGroup({
     if (isActive) setOpenPersisted(true);
   }, [isActive]);
 
+  const rows = group.items.map((item) => (
+    <SidebarNavItem
+      key={item.href}
+      href={item.href}
+      label={item.label}
+      tone={item.tone}
+      icon={<item.icon className="h-3.5 w-3.5" />}
+      active={isItemActive(item, path)}
+      count={badgeFor(item.href, inboxCount, financeCount)}
+    />
+  ));
+
   if (!hasHeader) {
-    // Render items directly, no toggle button.
-    return (
-      <div className="flex flex-col gap-0.5">
-        {group.items.map((item) => (
-          <NavLink
-            key={item.href}
-            item={item}
-            path={path}
-            inboxCount={inboxCount}
-            financeCount={financeCount}
-          />
-        ))}
-      </div>
-    );
+    return <div className="flex flex-col gap-0.5">{rows}</div>;
   }
 
+  const expanded = forceOpen || open;
+
   return (
-    <div className="mt-2">
+    <div>
       <button
         type="button"
-        onClick={() => setOpenPersisted(!open)}
+        onClick={() => setOpenPersisted(!expanded)}
         className={cn(
-          "w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[11px] font-semibold uppercase tracking-wider transition-colors",
+          "flex w-full items-center justify-between rounded-md px-3 py-1.5 text-3xs font-semibold uppercase tracking-group transition-colors",
           isActive
             ? "text-primary hover:bg-primary/5"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            : "text-sidebar-foreground/35 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
         )}
-        aria-expanded={open}
+        aria-expanded={expanded}
       >
         <span>{group.section}</span>
         <ChevronDown
-          className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", open && "rotate-180")}
+          className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", expanded && "rotate-180")}
           aria-hidden="true"
         />
       </button>
-      {open && (
-        <div className="mt-0.5 flex flex-col gap-0.5">
-          {group.items.map((item) => (
-            <NavLink
-              key={item.href}
-              item={item}
-              path={path}
-              inboxCount={inboxCount}
-              financeCount={financeCount}
-            />
-          ))}
+      {expanded && (
+        <div className="mt-1 flex flex-col gap-0.5">{rows}</div>
+      )}
+    </div>
+  );
+}
+
+/** The 260px sidebar body — shared by the desktop rail and the mobile drawer. */
+function SidebarBody({
+  navGroups,
+  path,
+  inboxCount,
+  financeCount,
+  isParModule,
+  userName,
+  userRole,
+  onLogout,
+  onNavigate,
+}: {
+  navGroups: NavGroup[];
+  path: string;
+  inboxCount: number;
+  financeCount: number;
+  isParModule: boolean;
+  userName: string;
+  userRole: string;
+  onLogout: () => void;
+  onNavigate?: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+
+  // Filtering keeps a group only while it still has a matching row.
+  const shownGroups = useMemo(() => {
+    if (!q) return navGroups;
+    return navGroups
+      .map((g) => ({ ...g, items: g.items.filter((i) => i.label.toLowerCase().includes(q)) }))
+      .filter((g) => g.items.length > 0);
+  }, [navGroups, q]);
+
+  return (
+    <div className="flex h-full flex-col" onClick={onNavigate}>
+      {/* Brand */}
+      <Link
+        to="/business/dashboard"
+        className="flex items-center gap-3 px-5 pb-4 pt-5 no-underline hover:no-underline"
+        aria-label="FinFlow — acasă"
+      >
+        <FinFlowMark size={36} className="shrink-0 rounded-xl shadow-sm" />
+        <span className="text-[15px] font-bold tracking-tight text-sidebar-foreground">FinFlow</span>
+      </Link>
+
+      {/* Filter */}
+      <div className="px-4 pb-2">
+        <label htmlFor="finflow-nav-search" className="sr-only">
+          Caută funcționalitate
+        </label>
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <input
+            id="finflow-nav-search"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            placeholder="Caută funcționalitate…"
+            className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+      </div>
+
+      {/* Back to modules — only inside a module */}
+      {isParModule && (
+        <div className="px-4 pb-3 pt-1">
+          <Link
+            to="/business/dashboard"
+            className="pastel-lavender flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-xs font-medium text-pastel-lavender-fg no-underline hover:no-underline"
+            aria-label="Înapoi la toate modulele"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            Înapoi la module
+          </Link>
         </div>
       )}
+
+      {/* Nav */}
+      <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-2" aria-label="Meniu FinFlow">
+        {!isParModule && (
+          <SidebarNavItem
+            href="/business/dashboard"
+            label="Dashboard"
+            tone="violet"
+            icon={<LayoutDashboard className="h-3.5 w-3.5" />}
+            active={path === "/business/dashboard" || path === "/business/dashboard/"}
+          />
+        )}
+        {shownGroups.map((group) => (
+          <SidebarGroup
+            key={group.section ?? "_"}
+            group={group}
+            path={path}
+            inboxCount={inboxCount}
+            financeCount={financeCount}
+            forceOpen={q.length > 0}
+          />
+        ))}
+        {q && shownGroups.length === 0 && (
+          <p className="px-3 py-2 text-xs text-muted-foreground">Nicio funcționalitate găsită.</p>
+        )}
+      </nav>
+
+      {/* User */}
+      <div className="flex items-center gap-3 border-t border-sidebar-border p-3">
+        <Avatar name={userName} shape="square" size="sm" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-sidebar-foreground">{userName}</p>
+          <p className="truncate text-3xs font-medium capitalize text-sidebar-foreground/40">{userRole}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onLogout}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/40 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          aria-label="Deconectare FinFlow"
+        >
+          <LogOut className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -324,6 +417,8 @@ export function BusinessShell({
   useEffect(() => {
     api("/api/platform/organizations").then(() => setIsPlatformAdmin(true)).catch(() => setIsPlatformAdmin(false));
   }, []);
+
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Notification badges
   const canApproveNav = parRoles.some((r) => ["approver", "par_admin"].includes(r));
@@ -349,7 +444,7 @@ export function BusinessShell({
   const isParModule = path.startsWith("/business/par");
 
   const availableGroups: NavGroup[] = isPlatformAdmin
-    ? [...NAV_GROUPS, { section: "Platformă", prefix: "/business/platform-admin", items: [{ label: "Superadmin module", href: "/business/platform-admin", icon: ShieldCheck }] }]
+    ? [...NAV_GROUPS, { section: "Platformă", prefix: "/business/platform-admin", items: [{ label: "Superadmin module", href: "/business/platform-admin", icon: ShieldCheck, tone: "rose" as ChipTone }] }]
     : NAV_GROUPS;
   const baseGroups = isParModule
     ? PAR_NAV_GROUPS
@@ -376,102 +471,98 @@ export function BusinessShell({
     }
   }, [session.status, path, navigate]);
 
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => { setDrawerOpen(false); }, [path]);
+
   const handleLogout = async () => {
     await session.logout();
     navigate("/business/login");
   };
 
+  const userName = session.data?.user?.name || session.data?.user?.email || "Utilizator";
+  const userRole = session.data?.user?.role || "membru";
+
+  const sidebarBody = (
+    <SidebarBody
+      navGroups={navGroups}
+      path={path}
+      inboxCount={inboxCount}
+      financeCount={financeCount}
+      isParModule={isParModule}
+      userName={userName}
+      userRole={userRole}
+      onLogout={handleLogout}
+    />
+  );
+
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      {/* Header */}
-      <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-3 shrink-0 z-20 sticky top-0">
-        <Link
-          to="/business/dashboard"
-          className="flex items-center gap-2 font-display font-bold text-base select-none"
-          aria-label="FinFlow — acasă"
-        >
-          <FinFlowMark size={28} />
-          <span className="hidden sm:inline text-foreground">FinFlow</span>
-        </Link>
-        <div className="flex-1" />
-        <NotificationBell />
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors min-h-[44px]"
-          aria-label="Deconectare FinFlow"
-        >
-          <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="hidden sm:inline">Ieșire</span>
-        </button>
-      </header>
+    <div className="flex min-h-screen bg-background text-foreground">
+      {/* Desktop sidebar */}
+      <aside
+        className="hidden w-sidebar shrink-0 border-r border-sidebar-border bg-sidebar md:sticky md:top-0 md:flex md:h-screen md:flex-col"
+        aria-label="Navigare Business Suite"
+      >
+        {sidebarBody}
+      </aside>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <aside
-          className="hidden md:flex flex-col w-56 shrink-0 border-r border-border bg-card overflow-y-auto"
-          aria-label="Navigare Business Suite"
-        >
-          <nav className="flex flex-col gap-0.5 p-3 flex-1">
-            {isParModule ? (
-              <Link
-                to="/business/dashboard"
-                className="flex items-center gap-2 rounded-md px-3 py-2 mb-1 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors min-h-[44px]"
-                aria-label="Înapoi la toate modulele"
-              >
-                <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>Toate modulele</span>
-              </Link>
-            ) : (
-              /* Dashboard standalone link — nu face parte din nicio secțiune */
-              <Link
-                to="/business/dashboard"
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors min-h-[44px] mb-1",
-                  path === "/business/dashboard" || path === "/business/dashboard/"
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                )}
-                aria-current={path.startsWith("/business/dashboard") ? "page" : undefined}
-              >
-                <LayoutDashboard className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>Dashboard</span>
-              </Link>
-            )}
-            {navGroups.map((group) => (
-              <SidebarGroup
-                key={group.section}
-                group={group}
-                path={path}
-                inboxCount={inboxCount}
-                financeCount={financeCount}
-              />
-            ))}
-          </nav>
-        </aside>
-
-        {/* Main content */}
-        <main className="flex-1 min-w-0 overflow-y-auto">
-          <div className="container mx-auto px-4 py-6 sm:py-8">
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight">
-                  {pageTitle}
-                </h1>
-                {pageDescription && (
-                  <p className="text-sm text-muted-foreground mt-1">{pageDescription}</p>
-                )}
-              </div>
-              {actions && <div className="flex items-center gap-2">{actions}</div>}
-            </div>
-            {children}
+      {/* Mobile drawer */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <button
+            type="button"
+            className="absolute inset-0 bg-foreground/60"
+            aria-label="Închide meniul"
+            onClick={() => setDrawerOpen(false)}
+          />
+          <div className="absolute inset-y-0 left-0 w-[280px] border-r border-sidebar-border bg-sidebar shadow-xl">
+            <SidebarBody
+              navGroups={navGroups}
+              path={path}
+              inboxCount={inboxCount}
+              financeCount={financeCount}
+              isParModule={isParModule}
+              userName={userName}
+              userRole={userRole}
+              onLogout={handleLogout}
+              onNavigate={() => setDrawerOpen(false)}
+            />
           </div>
-        </main>
-      </div>
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(false)}
+            className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-md bg-card text-foreground"
+            aria-label="Închide meniul"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      {/* Main */}
+      <main className="flex min-w-0 flex-1 flex-col pb-16 md:pb-0">
+        {/* Utility row — no title bar; the page owns its title (PageHeader). */}
+        <div className="flex items-center gap-2 px-5 pt-5 sm:px-8">
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
+            aria-label="Deschide meniul"
+          >
+            <Menu className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <div className="flex-1" />
+          <NotificationBell />
+        </div>
+
+        <div className="mx-auto w-full max-w-7xl px-5 pb-8 pt-2 sm:px-8">
+          <PageHeader title={pageTitle} subtitle={pageDescription} actions={actions} />
+          {children}
+        </div>
+      </main>
 
       {/* Mobile bottom nav — 4 tab-uri principale */}
       <nav
-        className="md:hidden border-t border-border bg-card sticky bottom-0 z-20"
+        className="fixed bottom-0 left-0 right-0 z-20 border-t border-sidebar-border bg-sidebar md:hidden"
         aria-label="Navigare mobilă Business Suite"
       >
         {(() => {
@@ -511,7 +602,7 @@ export function BusinessShell({
                 key={item.href}
                 to={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-1 py-2.5 text-[10px] font-semibold min-h-[44px]",
+                  "flex min-h-[44px] flex-col items-center gap-1 py-2.5 text-3xs font-semibold no-underline hover:no-underline",
                   active ? "text-primary" : "text-muted-foreground"
                 )}
                 aria-current={active ? "page" : undefined}
