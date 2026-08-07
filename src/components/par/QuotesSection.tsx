@@ -129,7 +129,7 @@ export function QuotesSection({ parId, vendors }: { parId: string; vendors: ParV
                   {q.validUntil && <span className="text-muted-foreground text-xs"> · valabil {new Date(q.validUntil).toLocaleDateString("ro-MD")}</span>}
                 </span>
                 <span className="flex items-center gap-2 flex-shrink-0">
-                  <span className={q.totalCents === lowest ? "font-semibold text-green-700 dark:text-green-400" : "text-foreground"}>
+                  <span className={q.totalCents === lowest ? "font-semibold text-success" : "text-foreground"}>
                     {fmt(q.totalCents, q.currency)}{q.totalCents === lowest && quotes.length > 1 ? " · min" : ""}
                   </span>
                   {q.selected ? (

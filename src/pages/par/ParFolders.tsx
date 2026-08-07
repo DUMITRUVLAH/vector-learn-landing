@@ -176,9 +176,9 @@ function buildFolders(
 // ─── Components ──────────────────────────────────────────────────────────────
 
 const folderStatusColor: Record<FolderStatus, string> = {
-  pending_approval: "text-yellow-600 dark:text-yellow-400",
+  pending_approval: "text-warning",
   approved_in_finance: "text-blue-600 dark:text-blue-400",
-  paid: "text-green-600 dark:text-green-400",
+  paid: "text-success",
 };
 
 function BucketRow({ bucket, onNavigate }: { bucket: FolderBucket; onNavigate: () => void }) {

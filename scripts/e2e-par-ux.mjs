@@ -270,6 +270,77 @@ await T("onboarding: 'Înapoi' revine la pasul 1", async () => {
   assert(await page.inputValue("#org-name") === "Test Org SRL", "textul introdus s-a pierdut la navigarea înapoi");
 });
 
+// ── Create form (38 controls converted mechanically — press on them) ────────
+await go("/#/business/par/new");
+
+await T("cerere nouă: selectul de scop schimbă valoarea", async () => {
+  await page.selectOption("#purpose", "obtain_quotations");
+  assert(await page.inputValue("#purpose") === "obtain_quotations", "selectul nu reține valoarea");
+  await page.selectOption("#purpose", "execute_payment");
+});
+
+await T("cerere nouă: câmpurile de text rețin ce scrii", async () => {
+  await page.fill("#rt", "Coordonator achiziții");
+  assert(await page.inputValue("#rt") === "Coordonator achiziții", "câmpul Funcție nu reține textul");
+});
+
+await T("cerere nouă: adăugarea unui articol chiar creează rândul și recalculează totalul", async () => {
+  await page.fill("#nlDesc", "Articol de verificare UX");
+  await page.fill("#nlQty", "3");
+  await page.fill("#nlPrice", "250");
+  const rowsBefore = await page.locator("table tbody tr").count();
+  await page.getByRole("button", { name: /Adaugă articol/ }).click();
+  await page.waitForTimeout(2500); // creates the draft server-side on first line
+  const rowsAfter = await page.locator("table tbody tr").count();
+  assert(rowsAfter === rowsBefore + 1, `rândul nu a fost adăugat: ${rowsBefore} → ${rowsAfter}`);
+  const total = await page.locator('span:text-is("TOTAL ESTIMAT")').first().locator("xpath=../..").innerText();
+  assert(/750/.test(total.replace(/[.\s]/g, "")), `totalul nu reflectă 3 × 250: "${total.replace(/\n/g, " ")}"`);
+});
+
+await T("cerere nouă: selectul de monedă comută", async () => {
+  const cur = page.locator('select[aria-label="Monedă"]');
+  await cur.selectOption("EUR");
+  assert(await cur.inputValue() === "EUR", "moneda nu s-a schimbat");
+  await cur.selectOption("MDL");
+});
+
+// ── Admin (58 controls converted mechanically) ──────────────────────────────
+await login("admin");
+await go("/#/business/par/admin");
+
+await T("admin: toate cele 5 taburi schimbă panoul", async () => {
+  for (const name of ["Setări", "Membri", "Date referință", "Audit", "Aprobare"]) {
+    await page.getByRole("tab", { name }).click();
+    await page.waitForTimeout(900);
+    const sel = await page.getByRole("tab", { name }).getAttribute("aria-selected");
+    assert(sel === "true", `tabul ${name} nu s-a selectat`);
+  }
+});
+
+await T("admin: Date referință — subtaburile comută secțiunea", async () => {
+  await page.getByRole("tab", { name: "Date referință" }).click();
+  await page.waitForTimeout(1000);
+  const sub = page.getByRole("tab", { name: "Departamente" });
+  if (await sub.count()) {
+    await sub.click();
+    await page.waitForTimeout(800);
+    assert(await sub.getAttribute("aria-selected") === "true", "subtabul nu s-a selectat");
+  }
+});
+
+await T("admin: Setări — comutatoarele răspund la click", async () => {
+  await page.getByRole("tab", { name: "Setări" }).click();
+  await page.waitForTimeout(1200);
+  const sw = page.locator('[role="switch"]').first();
+  if (await sw.count()) {
+    const before = await sw.getAttribute("aria-checked");
+    await sw.click();
+    await page.waitForTimeout(700);
+    assert(await sw.getAttribute("aria-checked") !== before, "comutatorul nu s-a schimbat");
+    await sw.click();
+  }
+});
+
 // ── Folders ─────────────────────────────────────────────────────────────────
 await go("/#/business/par/folders");
 

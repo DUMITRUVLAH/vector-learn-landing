@@ -454,7 +454,7 @@ function CopyValue({ display, copyValue, label, mono, maxWidthClass }: CopyValue
         className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0"
       >
         {copied ? (
-          <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+          <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
         ) : (
           <Copy className="h-3.5 w-3.5" aria-hidden="true" />
         )}

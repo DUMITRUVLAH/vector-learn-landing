@@ -97,7 +97,7 @@ const DECISION_CONFIG: Record<
     commentRequired: false,
     commentLabel: "Comentariu opțional",
     showSignature: true,
-    buttonClass: "bg-green-600 hover:bg-green-700 text-white",
+    buttonClass: "bg-success text-success-foreground hover:bg-success/90",
     icon: <CheckCircle className="h-4 w-4" aria-hidden="true" />,
   },
   reject: {
@@ -115,7 +115,7 @@ const DECISION_CONFIG: Record<
     commentRequired: true,
     commentLabel: "Ce trebuie modificat (obligatoriu)",
     showSignature: false,
-    buttonClass: "bg-orange-500 hover:bg-orange-600 text-white",
+    buttonClass: "bg-warning text-warning-foreground hover:bg-warning/90",
     icon: <MessageSquare className="h-4 w-4" aria-hidden="true" />,
   },
 };
