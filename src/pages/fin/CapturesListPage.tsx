@@ -441,16 +441,14 @@ export default function CapturesListPage() {
   }, [load]);
 
   return (
-    <AppShell pageTitle="Invoice Reporting">
-      <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
-        {/* Header */}
+    <AppShell
+      pageTitle="Invoice Reporting"
+      pageDescription="Încarcă facturi/tranzacții (CSV, PDF, poză). AI le citește și decide dacă fiecare este pentru raportare; tu confirmi sau respingi verdictul."
+    >
+      <div className="space-y-5">
+        {/* Header actions */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-foreground">Invoice Reporting</h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Încarcă facturi/tranzacții (CSV, PDF, poză). AI le citește și decide dacă fiecare
-              este <strong>pentru raportare</strong>; tu confirmi sau respingi verdictul.
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button

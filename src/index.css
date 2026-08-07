@@ -43,6 +43,31 @@
 
     --radius: 0.875rem;
 
+    /* HR365 — sidebar scope (own token family: the sidebar is white, not tinted) */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 228 76% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 228 76% 96%;
+    --sidebar-accent-foreground: 228 76% 52%;
+    --sidebar-border: 220 13% 93%;
+    --sidebar-ring: 228 76% 52%;
+    --sidebar-muted: 220 9% 46%;
+
+    /* HR365 — layout constants lifted from the shell */
+    --sidebar-width: 260px;
+    --sidebar-width-sheet: 280px;
+    --content-max: 80rem;
+
+    /* HR365 — motion */
+    --duration-fast: 150ms;
+    --duration-base: 200ms;
+    --duration-slide: 300ms;
+    --duration-fade: 400ms;
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+    --lift-hover: -2px;
+
     --pastel-mint: 158 64% 92%;
     --pastel-lavender: 250 80% 94%;
     --pastel-peach: 20 100% 93%;
@@ -67,6 +92,31 @@
     --shadow-md: 0 4px 8px -2px hsl(222 47% 11% / 0.05), 0 2px 4px -2px hsl(222 47% 11% / 0.03);
     --shadow-lg: 0 10px 20px -4px hsl(222 47% 11% / 0.06), 0 4px 8px -4px hsl(222 47% 11% / 0.03);
     --shadow-xl: 0 20px 30px -8px hsl(222 47% 11% / 0.08), 0 8px 12px -6px hsl(222 47% 11% / 0.04);
+    /* HR365 — the active sidebar row gets a colored halo instead of a neutral shadow */
+    --shadow-primary: 0 4px 8px -2px hsl(228 76% 52% / 0.2);
+
+    /* HR365 icon-chip pairs (tint behind a 14–20px glyph): sidebar rows, KPI tiles,
+       card headers. One tint per category — never two adjacent. */
+    --chip-indigo-bg: #EEF2FF;  --chip-indigo-fg: #4F46E5;
+    --chip-violet-bg: #F5F3FF;  --chip-violet-fg: #7C3AED;
+    --chip-sky-bg: #F0F9FF;     --chip-sky-fg: #0284C7;
+    --chip-emerald-bg: #ECFDF5; --chip-emerald-fg: #059669;
+    --chip-amber-bg: #FFFBEB;   --chip-amber-fg: #D97706;
+    --chip-rose-bg: #FFF1F2;    --chip-rose-fg: #E11D48;
+    --chip-blue-bg: #EFF6FF;    --chip-blue-fg: #2563EB;
+    --chip-orange-bg: #FFF7ED;  --chip-orange-fg: #EA580C;
+    --chip-teal-bg: #F0FDFA;    --chip-teal-fg: #0D9488;
+
+    /* HR365 module-launcher tones: flat saturated-100 card + matching -700 ink */
+    --module-indigo-bg: #E0E7FF;  --module-indigo-fg: #4338CA;
+    --module-violet-bg: #EDE9FE;  --module-violet-fg: #6D28D9;
+    --module-cyan-bg: #CFFAFE;    --module-cyan-fg: #155E75;
+    --module-emerald-bg: #D1FAE5; --module-emerald-fg: #047857;
+    --module-orange-bg: #FFEDD5;  --module-orange-fg: #C2410C;
+    --module-teal-bg: #CCFBF1;    --module-teal-fg: #0F766E;
+    --module-sky-bg: #E0F2FE;     --module-sky-fg: #0369A1;
+    --module-rose-bg: #FFE4E6;    --module-rose-fg: #BE123C;
+    --module-amber-bg: #FEF3C7;   --module-amber-fg: #92400E;
   }
 
   .dark {
@@ -97,6 +147,40 @@
     --pastel-rose: 340 30% 18%;
     --pastel-lemon: 50 30% 18%;
     --pastel-teal: 175 30% 18%;
+
+    /* HR365 — sidebar scope in dark: same surface as the page, not white */
+    --sidebar-background: 222 47% 6%;
+    --sidebar-foreground: 220 14% 96%;
+    --sidebar-primary: 228 76% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 40% 14%;
+    --sidebar-accent-foreground: 220 14% 96%;
+    --sidebar-border: 222 30% 16%;
+    --sidebar-ring: 228 76% 60%;
+    --sidebar-muted: 220 9% 60%;
+
+    --shadow-primary: 0 4px 8px -2px hsl(228 76% 60% / 0.35);
+
+    /* Chips in dark: deep desaturated tint + a light glyph (AA on the tint). */
+    --chip-indigo-bg: hsl(239 40% 16%);  --chip-indigo-fg: hsl(239 85% 78%);
+    --chip-violet-bg: hsl(258 40% 16%);  --chip-violet-fg: hsl(258 85% 80%);
+    --chip-sky-bg: hsl(200 40% 16%);     --chip-sky-fg: hsl(200 85% 74%);
+    --chip-emerald-bg: hsl(160 40% 14%); --chip-emerald-fg: hsl(160 70% 66%);
+    --chip-amber-bg: hsl(38 40% 16%);    --chip-amber-fg: hsl(38 90% 68%);
+    --chip-rose-bg: hsl(350 40% 16%);    --chip-rose-fg: hsl(350 85% 78%);
+    --chip-blue-bg: hsl(217 40% 16%);    --chip-blue-fg: hsl(217 90% 76%);
+    --chip-orange-bg: hsl(25 40% 16%);   --chip-orange-fg: hsl(25 90% 70%);
+    --chip-teal-bg: hsl(174 40% 14%);    --chip-teal-fg: hsl(174 70% 64%);
+
+    --module-indigo-bg: hsl(239 38% 18%);  --module-indigo-fg: hsl(239 85% 82%);
+    --module-violet-bg: hsl(258 38% 18%);  --module-violet-fg: hsl(258 85% 84%);
+    --module-cyan-bg: hsl(188 38% 16%);    --module-cyan-fg: hsl(188 75% 74%);
+    --module-emerald-bg: hsl(160 38% 15%); --module-emerald-fg: hsl(160 70% 70%);
+    --module-orange-bg: hsl(25 38% 18%);   --module-orange-fg: hsl(25 90% 74%);
+    --module-teal-bg: hsl(174 38% 15%);    --module-teal-fg: hsl(174 70% 68%);
+    --module-sky-bg: hsl(200 38% 17%);     --module-sky-fg: hsl(200 85% 78%);
+    --module-rose-bg: hsl(350 38% 18%);    --module-rose-fg: hsl(350 85% 82%);
+    --module-amber-bg: hsl(38 38% 17%);    --module-amber-fg: hsl(38 90% 72%);
 
     --pastel-mint-fg: 158 50% 75%;
     --pastel-lavender-fg: 250 50% 80%;

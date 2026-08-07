@@ -156,14 +156,8 @@ export default function BankLinkPage() {
       pageTitle="Conexiuni bancare"
       pageDescription="Import automat extrase bancare OFX/MT940 — GAP G2"
     >
-      {/* ─── Header ─────────────────────────────────────────────────── */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Conexiuni bancare</h1>
-          <p className="text-sm text-muted-foreground">
-            Import automat extrase bancare și reconciliere plăți
-          </p>
-        </div>
+      {/* ─── Header actions (title/subtitle live in the shell) ──────── */}
+      <div className="mb-6 flex flex-wrap items-center justify-end gap-3">
         <div className="flex flex-wrap gap-2">
           {unmatchedCount > 0 && (
             <Link

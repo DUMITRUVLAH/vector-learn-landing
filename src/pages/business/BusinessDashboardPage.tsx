@@ -1,5 +1,5 @@
 /**
- * SPLIT-204: Business Suite Dashboard — /business/dashboard
+ * SPLIT-204 / HR365-004: FinFlow Dashboard — /business/dashboard
  *
  * Unified KPI board: FinDesk (expenses/invoices) + PAR (pending approvals) +
  * ITPark (active residents). Each card loads independently — one failure
@@ -8,10 +8,23 @@
  * POLISH-002: Widget customization (show/hide + reorder) via DashboardCustomizer.
  * Preferences saved in localStorage under `vl_dashboard_widgets_<userId>`.
  *
- * Wrapped in BusinessShell (created in SPLIT-101).
+ * Design: HR365 — dashboard cards on `rounded-2xl` with a pastel icon chip per
+ * category, and the module launcher as flat saturated tiles.
  */
-import { useState } from "react";
-import { Landmark, ClipboardList, Building2, RefreshCw, TrendingUp, TrendingDown, Clock, ArrowRight, Settings, Receipt, Users2, BarChart3 } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import {
+  Landmark,
+  ClipboardList,
+  Building2,
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  Clock,
+  Settings,
+  Receipt,
+  Users2,
+  BarChart3,
+} from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
 import { Link } from "@/router/HashRouter";
@@ -20,68 +33,70 @@ import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { useDashboardWidgets, type WidgetId } from "@/hooks/useDashboardWidgets";
 import { formatCents } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import {
+  Button,
+  Card,
+  KpiTile,
+  ModuleCard,
+  PastelIcon,
+  type ChipTone,
+  type ModuleTone,
+} from "@/components/ds";
 
-// ─── Skeleton ────────────────────────────────────────────────────────────────
+// ─── Widget card ──────────────────────────────────────────────────────────────
 
-function KpiSkeleton() {
-  return (
-    <div className="animate-pulse space-y-2">
-      <div className="h-8 bg-muted rounded w-28" />
-      <div className="h-4 bg-muted rounded w-20" />
-    </div>
-  );
-}
-
-// ─── KPI Card ─────────────────────────────────────────────────────────────────
-
-interface KpiCardProps {
+interface WidgetCardProps {
   title: string;
   subtitle?: string;
   href: string;
-  icon: typeof Landmark;
+  icon: ReactNode;
+  tone: ChipTone;
   loading: boolean;
   error?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
-function KpiCard({ title, subtitle, href, icon: Icon, loading, error, children }: KpiCardProps) {
+/** Multi-stat widget: chip + title on top, rows underneath. */
+function WidgetCard({ title, subtitle, href, icon, tone, loading, error, children }: WidgetCardProps) {
   return (
-    <div
-      className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4"
+    <Card
+      tone="dashboard"
+      className="flex flex-col gap-4 p-5"
       aria-label={`KPI ${title}`}
       data-testid={`widget-card-${title.toLowerCase().replace(/\s/g, "-")}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className="inline-flex items-center justify-center rounded-lg bg-primary/10 p-2.5">
-            <Icon className="h-5 w-5 text-primary" aria-hidden="true" />
-          </div>
+        <div className="flex items-center gap-3">
+          <PastelIcon tone={tone} size={40}>
+            {icon}
+          </PastelIcon>
           <div>
-            <h2 className="font-semibold text-foreground text-sm leading-tight">{title}</h2>
-            {subtitle && (
-              <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
-            )}
+            <h2 className="text-sm font-semibold leading-tight text-foreground">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>}
           </div>
         </div>
         <Link
           to={href}
-          className="text-xs text-primary hover:underline shrink-0 mt-0.5"
+          className="mt-0.5 shrink-0 text-xs text-primary hover:underline"
           aria-label={`Deschide ${title}`}
         >
           Vezi tot
         </Link>
       </div>
 
-      <div className="min-h-[56px] flex items-center">
+      <div className="flex min-h-[56px] items-center">
         {loading ? (
-          <KpiSkeleton />
+          <div className="w-full animate-pulse space-y-2">
+            <div className="h-8 w-28 rounded-md bg-muted" />
+            <div className="h-4 w-20 rounded-md bg-muted" />
+          </div>
         ) : error ? (
-          <p className="text-sm text-muted-foreground italic">N/A — eroare de încărcare</p>
+          <p className="text-sm italic text-muted-foreground">N/A — eroare de încărcare</p>
         ) : (
           <div className="w-full">{children}</div>
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -95,23 +110,16 @@ interface StatRowProps {
 }
 
 function StatRow({ label, value, trend, valueClass }: StatRowProps) {
-  const TrendIcon =
-    trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : null;
+  const TrendIcon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : null;
   return (
     <div className="flex items-center justify-between gap-2 py-1">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span
-        className={cn(
-          "text-sm font-semibold tabular-nums",
-          valueClass,
-          !valueClass && "text-foreground"
-        )}
-      >
+      <span className={cn("text-sm font-semibold tabular-nums", valueClass ?? "text-foreground")}>
         {TrendIcon && (
           <TrendIcon
             className={cn(
-              "inline h-3.5 w-3.5 mr-1",
-              trend === "up" ? "text-green-500" : "text-red-500"
+              "mr-1 inline h-3.5 w-3.5",
+              trend === "up" ? "text-success" : "text-destructive",
             )}
             aria-hidden="true"
           />
@@ -122,16 +130,14 @@ function StatRow({ label, value, trend, valueClass }: StatRowProps) {
   );
 }
 
-// ─── Quick-access links ────────────────────────────────────────────────────────
+// ─── Module launcher ───────────────────────────────────────────────────────────
 
 interface ModuleTile {
   label: string;
   description: string;
   href: string;
-  icon: typeof Landmark;
-  /** Tailwind classes for the tile's tinted background + icon color (light/dark). */
-  tint: string;
-  iconClass: string;
+  icon: ReactNode;
+  tone: ModuleTone;
 }
 
 const MODULE_TILES: ModuleTile[] = [
@@ -139,25 +145,22 @@ const MODULE_TILES: ModuleTile[] = [
     label: "FinDesk",
     description: "Facturi, cheltuieli, plăți, TVA și e-Factura.",
     href: "/business/fin/",
-    icon: Landmark,
-    tint: "bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-950/60",
-    iconClass: "text-blue-600 dark:text-blue-400",
+    icon: <Landmark className="h-7 w-7" />,
+    tone: "sky",
   },
   {
     label: "PAR — Cereri de plată",
     description: "Creare, aprobări multi-nivel, finanțe și rapoarte.",
     href: "/business/par",
-    icon: ClipboardList,
-    tint: "bg-violet-50 dark:bg-violet-950/40 hover:bg-violet-100 dark:hover:bg-violet-950/60",
-    iconClass: "text-violet-600 dark:text-violet-400",
+    icon: <ClipboardList className="h-7 w-7" />,
+    tone: "violet",
   },
   {
     label: "ITPark — Rezidenți",
     description: "Contracte MITP, declarații și raportare anuală.",
     href: "/business/fin/itpark",
-    icon: Building2,
-    tint: "bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950/60",
-    iconClass: "text-emerald-600 dark:text-emerald-400",
+    icon: <Building2 className="h-7 w-7" />,
+    tone: "emerald",
   },
 ];
 
@@ -170,83 +173,128 @@ interface WidgetRenderProps {
 
 function FinDeskWidget({ loading, data }: WidgetRenderProps) {
   return (
-    <KpiCard title="FinDesk" subtitle="Finanțe" href="/business/fin/" icon={Landmark} loading={loading} error={data?.findesk === null && !loading}>
+    <WidgetCard
+      title="FinDesk"
+      subtitle="Finanțe"
+      href="/business/fin/"
+      icon={<Landmark className="h-5 w-5" />}
+      tone="sky"
+      loading={loading}
+      error={data?.findesk === null && !loading}
+    >
       {data?.findesk && (
         <>
-          <StatRow label="Cheltuieli totale" value={formatCents(data.findesk.totalExpensesCents, "MDL")} trend="down" valueClass="text-red-600 dark:text-red-400" />
-          <StatRow label="Facturi emise" value={formatCents(data.findesk.totalInvoicesCents, "MDL")} trend="up" valueClass="text-green-600 dark:text-green-400" />
-          <div className="mt-2 pt-2 border-t border-border">
-            <StatRow label="Sold net" value={formatCents(Math.abs(data.findesk.netCents), "MDL")} valueClass={data.findesk.netCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"} />
+          <StatRow label="Cheltuieli totale" value={formatCents(data.findesk.totalExpensesCents, "MDL")} trend="down" valueClass="text-destructive" />
+          <StatRow label="Facturi emise" value={formatCents(data.findesk.totalInvoicesCents, "MDL")} trend="up" valueClass="text-success" />
+          <div className="mt-2 border-t border-border pt-2">
+            <StatRow
+              label="Sold net"
+              value={formatCents(Math.abs(data.findesk.netCents), "MDL")}
+              valueClass={data.findesk.netCents >= 0 ? "text-success" : "text-destructive"}
+            />
           </div>
         </>
       )}
-    </KpiCard>
+    </WidgetCard>
   );
 }
 
 function ParWidget({ loading, data }: WidgetRenderProps) {
+  const failed = data?.par === null && !loading;
+  if (failed) {
+    return (
+      <WidgetCard
+        title="PAR"
+        subtitle="Cereri de plată"
+        href="/business/par"
+        icon={<ClipboardList className="h-5 w-5" />}
+        tone="violet"
+        loading={false}
+        error
+      >
+        {null}
+      </WidgetCard>
+    );
+  }
   return (
-    <KpiCard title="PAR" subtitle="Cereri de plată" href="/business/par" icon={ClipboardList} loading={loading} error={data?.par === null && !loading}>
-      {data?.par && (
-        <>
-          <div className="flex items-end gap-2 mb-3">
-            <span className="text-3xl font-bold text-foreground tabular-nums">{data.par.pendingCount}</span>
-            <span className="text-sm text-muted-foreground mb-0.5">cereri pending</span>
-          </div>
-          {data.par.pendingCount > 0 && (
-            <StatRow label="Valoare totală pending" value={formatCents(data.par.pendingValueCents, "MDL")} trend="neutral" />
-          )}
-          {data.par.pendingCount === 0 && (
-            <p className="text-xs text-green-600 dark:text-green-400">Nicio cerere de aprobat</p>
-          )}
-        </>
-      )}
-    </KpiCard>
+    <KpiTile
+      label="Cereri PAR în așteptare"
+      value={data?.par?.pendingCount ?? 0}
+      icon={<ClipboardList className="h-5 w-5" />}
+      tone="violet"
+      href="/business/par"
+      loading={loading}
+      hint={
+        data?.par
+          ? data.par.pendingCount > 0
+            ? `Valoare totală: ${formatCents(data.par.pendingValueCents, "MDL")}`
+            : "Nicio cerere de aprobat"
+          : undefined
+      }
+      data-testid="widget-card-par"
+    />
   );
 }
 
 function ItparkWidget({ loading, data }: WidgetRenderProps) {
+  const failed = data?.itpark === null && !loading;
+  if (failed) {
+    return (
+      <WidgetCard
+        title="ITPark"
+        subtitle="Rezidenți IT Park"
+        href="/business/fin/itpark"
+        icon={<Building2 className="h-5 w-5" />}
+        tone="emerald"
+        loading={false}
+        error
+      >
+        {null}
+      </WidgetCard>
+    );
+  }
   return (
-    <KpiCard title="ITPark" subtitle="Rezidenți IT Park" href="/business/fin/itpark" icon={Building2} loading={loading} error={data?.itpark === null && !loading}>
-      {data?.itpark && (
-        <>
-          <div className="flex items-end gap-2 mb-3">
-            <span className="text-3xl font-bold text-foreground tabular-nums">{data.itpark.activeCount}</span>
-            <span className="text-sm text-muted-foreground mb-0.5">rezidenți activi</span>
-          </div>
-          {data.itpark.inProgressCount > 0 && (
-            <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-              <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span>{data.itpark.inProgressCount} dosare în lucru</span>
-            </div>
-          )}
-        </>
-      )}
-    </KpiCard>
+    <KpiTile
+      label="Rezidenți ITPark activi"
+      value={data?.itpark?.activeCount ?? 0}
+      icon={<Building2 className="h-5 w-5" />}
+      tone="emerald"
+      href="/business/fin/itpark"
+      loading={loading}
+      hint={
+        data?.itpark && data.itpark.inProgressCount > 0 ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {data.itpark.inProgressCount} dosare în lucru
+          </span>
+        ) : undefined
+      }
+      data-testid="widget-card-itpark"
+    />
   );
 }
 
 function InvoicesWidget({ loading }: Pick<WidgetRenderProps, "loading">) {
   return (
-    <KpiCard title="Facturi luna" subtitle="Facturi emise luna curentă" href="/business/fin/invoices" icon={Receipt} loading={loading}>
+    <WidgetCard title="Facturi luna" subtitle="Facturi emise luna curentă" href="/business/fin/invoices" icon={<Receipt className="h-5 w-5" />} tone="blue" loading={loading}>
       <p className="text-sm text-muted-foreground">Disponibil în FinDesk → Facturi</p>
-    </KpiCard>
+    </WidgetCard>
   );
 }
 
 function PayrollWidget({ loading }: Pick<WidgetRenderProps, "loading">) {
   return (
-    <KpiCard title="Angajați activi" subtitle="Statul de plată" href="/business/fin/payroll" icon={Users2} loading={loading}>
+    <WidgetCard title="Angajați activi" subtitle="Statul de plată" href="/business/fin/payroll" icon={<Users2 className="h-5 w-5" />} tone="amber" loading={loading}>
       <p className="text-sm text-muted-foreground">Disponibil în FinDesk → Salarizare</p>
-    </KpiCard>
+    </WidgetCard>
   );
 }
 
 function BudgetWidget({ loading }: Pick<WidgetRenderProps, "loading">) {
   return (
-    <KpiCard title="Buget" subtitle="Planificat vs realizat" href="/business/fin/budget" icon={BarChart3} loading={loading}>
+    <WidgetCard title="Buget" subtitle="Planificat vs realizat" href="/business/fin/budget" icon={<BarChart3 className="h-5 w-5" />} tone="rose" loading={loading}>
       <p className="text-sm text-muted-foreground">Disponibil în FinDesk → Buget</p>
-    </KpiCard>
+    </WidgetCard>
   );
 }
 
@@ -268,46 +316,45 @@ export function BusinessDashboardPage() {
   const { data, loading, refetch } = useBusinessDashboard();
   const bizSession = useBusinessSession();
   const userId = bizSession.data?.user?.id ?? null;
+  const firstName = (bizSession.data?.user?.name ?? "").split(/\s+/)[0];
 
   const [customizerOpen, setCustomizerOpen] = useState(false);
   const { visibleWidgets, allWidgets, toggleWidget, moveUp, moveDown, reset } = useDashboardWidgets(userId);
 
   return (
     <BusinessShell
-      pageTitle="FinFlow"
-      pageDescription="Tablou de bord — PAR · ITPark"
+      pageTitle={firstName ? `Salut, ${firstName}` : "FinFlow"}
+      pageDescription="Tablou de bord — FinDesk · PAR · ITPark"
       actions={
-        <div className="flex items-center gap-2">
+        <>
           {/* POLISH-002: Widget customizer trigger */}
-          <button
-            type="button"
+          <Button
+            variant="outline"
             onClick={() => setCustomizerOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors min-h-[44px]"
             aria-label="Personalizează dashboard"
           >
             <Settings className="h-4 w-4" aria-hidden="true" />
             <span className="hidden sm:inline">Personalizează</span>
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="outline"
             onClick={refetch}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 min-h-[44px]"
             aria-label="Reîncarcă datele"
           >
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} aria-hidden="true" />
             <span className="hidden sm:inline">Reîncarcă</span>
-          </button>
-        </div>
+          </Button>
+        </>
       }
     >
       {/* POLISH-002: Dynamic widget grid — order and visibility from useDashboardWidgets */}
       {visibleWidgets.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8" data-testid="widget-grid">
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="widget-grid">
           {visibleWidgets.map((id) => renderWidget(id, loading, data))}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center mb-8 text-sm text-muted-foreground">
+        <div className="mb-8 rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Niciun widget vizibil.{" "}
           <button type="button" className="text-primary underline" onClick={() => setCustomizerOpen(true)}>
             Personalizează
@@ -316,37 +363,22 @@ export function BusinessDashboardPage() {
         </div>
       )}
 
-      {/* Module picker — choose a module to work in */}
+      {/* Module launcher — choose a module to work in */}
       <section aria-label="Module">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+        <h2 className="mb-3 text-3xs font-semibold uppercase tracking-group text-muted-foreground">
           Alege un modul
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {MODULE_TILES.map((tile) => {
-            const Icon = tile.icon;
-            return (
-              <Link
-                key={tile.href}
-                to={tile.href}
-                className={cn(
-                  "group flex flex-col gap-3 rounded-2xl border border-border p-5 transition-colors min-h-[44px]",
-                  tile.tint
-                )}
-                aria-label={`Deschide ${tile.label}`}
-              >
-                <Icon className={cn("h-6 w-6", tile.iconClass)} aria-hidden="true" />
-                <div>
-                  <h3 className="text-base font-semibold text-foreground">{tile.label}</h3>
-                  <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                    {tile.description}
-                  </p>
-                </div>
-                <span className="mt-auto inline-flex items-center gap-1 text-sm font-medium text-foreground group-hover:gap-2 transition-all">
-                  Deschide <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </span>
-              </Link>
-            );
-          })}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {MODULE_TILES.map((tile) => (
+            <ModuleCard
+              key={tile.href}
+              title={tile.label}
+              description={tile.description}
+              icon={tile.icon}
+              tone={tile.tone}
+              href={tile.href}
+            />
+          ))}
         </div>
       </section>
 

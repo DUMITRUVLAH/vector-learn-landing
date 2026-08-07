@@ -46,7 +46,10 @@ describe("SPLIT-402 — single business shell", () => {
     expect(within(nav).getByText("Invoice Reporting")).toBeInTheDocument();
     expect(within(nav).getByText("e-Factura")).toBeInTheDocument();
     expect(within(nav).getByText("Salarii")).toBeInTheDocument();
-    expect(within(nav).getByText("Documente în masă")).toBeInTheDocument();
+    // DocMerge is prefix-gated: it only enters the sidebar on /business/docmerge/*,
+    // so on a FinDesk path it is correctly absent here (its presence in the nav
+    // definition is pinned by the NAV_GROUPS_EXPORT test below).
+    expect(within(nav).queryByText("Documente în masă")).not.toBeInTheDocument();
   });
 
   it("does NOT leak the tenant name in the header", () => {
@@ -55,9 +58,9 @@ describe("SPLIT-402 — single business shell", () => {
         <div>content</div>
       </AppShell>,
     );
-    // BusinessShell header shows only "Business Suite", never the tenant/school name.
+    // BusinessShell brands as "FinFlow" (in the sidebar), never the tenant/school name.
     expect(screen.queryByText("Demo Lingua School")).not.toBeInTheDocument();
-    expect(screen.getByText("Business Suite")).toBeInTheDocument();
+    expect(screen.getByText("FinFlow")).toBeInTheDocument();
   });
 
   it("the single nav keeps every FinDesk module from both old menus", () => {

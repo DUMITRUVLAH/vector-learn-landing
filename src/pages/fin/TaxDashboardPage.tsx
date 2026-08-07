@@ -180,16 +180,13 @@ export function TaxDashboardPage() {
     (data?.upcoming_alerts.length ?? 0) > 0 || (data?.overdue_alerts.length ?? 0) > 0;
 
   return (
-    <AppShell pageTitle="Dashboard fiscal">
-      <div className="mx-auto max-w-4xl space-y-8 px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Dashboard fiscal</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Calendar termene, alerte scadenţe, istoric declaraţii
-            </p>
-          </div>
+    <AppShell
+      pageTitle="Dashboard fiscal"
+      pageDescription="Calendar termene, alerte scadenţe, istoric declaraţii"
+    >
+      <div className="space-y-8">
+        {/* Header actions */}
+        <div className="flex items-center justify-end gap-4">
           <button
             type="button"
             onClick={() => void load()}

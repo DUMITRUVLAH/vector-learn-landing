@@ -27,6 +27,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { Button } from "@/components/ds";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import {
   getFinanceQueue,
@@ -623,25 +624,17 @@ export default function ParFinanceQueue() {
   });
 
   return (
-    <AppShell pageTitle="Coadă finanțe" pageDescription="PAR-uri aprobate — plată internă">
-      <div className="container mx-auto px-4 py-6 max-w-7xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Coadă finanțe</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              PAR-uri aprobate de tip &ldquo;execute payment&rdquo; — secțiunea 16 + plată
-            </p>
-          </div>
-          <button
-            onClick={() => void load()}
-            aria-label="Reîncarcă lista"
-            className="flex items-center gap-2 px-3 py-2 rounded-md border border-input bg-background text-sm text-foreground hover:bg-accent transition-colors"
-          >
-            <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-            Reîncarcă
-          </button>
-        </div>
+    <AppShell
+      pageTitle="Coadă finanțe"
+      pageDescription={'PAR-uri aprobate de tip "execute payment" — secțiunea 16 + plată'}
+      actions={
+        <Button variant="outline" onClick={() => void load()} aria-label="Reîncarcă lista">
+          <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+          Reîncarcă
+        </Button>
+      }
+    >
+      <div className="space-y-6">
 
         {/* PARQA-014: 3-way match control disabled — finance is paying without PO/receipt/amount
             verification. Make the missing control impossible to miss so nobody assumes it's running.
