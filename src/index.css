@@ -209,6 +209,30 @@
   }
 }
 
+@layer components {
+  /**
+   * `vf-input` — 23 form fields across the PAR module reference this class
+   * (onboarding wizard, admin settings, quotes, receipt, comments). It was never
+   * defined anywhere, so every one of them rendered as a raw, unstyled browser
+   * control inside an otherwise styled page.
+   *
+   * This mirrors the `Input` primitive in `src/components/ds/Field.tsx` exactly.
+   * It is a stopgap: as each PAR page moves onto the DS components, its fields
+   * stop using this class. Delete it once no `.tsx` references it.
+   */
+  .vf-input {
+    @apply h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none;
+    @apply placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/45;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  textarea.vf-input {
+    @apply min-h-[80px] py-2 leading-normal;
+  }
+  select.vf-input {
+    @apply cursor-pointer;
+  }
+}
+
 @layer utilities {
   .text-gradient {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-[hsl(250,76%,52%)];
