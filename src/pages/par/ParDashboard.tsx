@@ -10,10 +10,28 @@
  * CORE: backlog/par/PAR-CORE.md §6
  * Design system: Vector 365 tokens only, light + dark, WCAG AA
  */
-import { useState, useEffect } from "react";
-import { Plus, Search, Filter, Loader2, FileText, AlertCircle, Inbox, Landmark, ArrowRight, SlidersHorizontal, X } from "lucide-react";
+import { useState, useEffect, type ReactNode } from "react";
+import { Plus, Search, Filter, Loader2, FileText, AlertCircle, Inbox, Landmark, ArrowRight, SlidersHorizontal, X, Clock } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
-import { Button } from "@/components/ds";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Input,
+  KpiTile,
+  Label,
+  Progress,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Tabs,
+  PastelIcon,
+} from "@/components/ds";
 import { useRouter } from "@/router/HashRouter";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import {
@@ -258,90 +276,76 @@ export function ParDashboard() {
         {(inboxCount > 0 || (isFinance && awaitingPayment.length > 0)) && (
           <div className="space-y-2">
             {inboxCount > 0 && (
-              <button
-                type="button"
+              <ActionRow
+                tone="amber"
+                icon={<Inbox className="h-4 w-4" />}
                 onClick={() => navigate("/business/par/inbox")}
-                className="w-full flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-left hover:bg-primary/10 transition-colors min-h-[44px]"
+                cta="Deschide inbox"
               >
-                <span className="flex items-center gap-3">
-                  <Inbox className="h-5 w-5 text-primary flex-shrink-0" aria-hidden />
-                  <span className="text-sm font-medium text-foreground">
-                    <strong>{inboxCount}</strong> {inboxCount === 1 ? "cerere așteaptă" : "cereri așteaptă"} decizia ta
-                  </span>
-                </span>
-                <span className="flex items-center gap-1 text-sm font-semibold text-primary">
-                  Deschide inbox <ArrowRight className="h-4 w-4" aria-hidden />
-                </span>
-              </button>
+                <strong>{inboxCount}</strong> {inboxCount === 1 ? "cerere așteaptă" : "cereri așteaptă"} decizia ta
+              </ActionRow>
             )}
             {isFinance && awaitingPayment.length > 0 && (
-              <button
-                type="button"
+              <ActionRow
+                tone="emerald"
+                icon={<Landmark className="h-4 w-4" />}
                 onClick={() => navigate("/business/par/finance")}
-                className="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3 text-left hover:bg-muted transition-colors min-h-[44px]"
+                cta="Deschide finanțe"
               >
-                <span className="flex items-center gap-3">
-                  <Landmark className="h-5 w-5 text-primary flex-shrink-0" aria-hidden />
-                  <span className="text-sm font-medium text-foreground">
-                    <strong>{awaitingPayment.length}</strong> {awaitingPayment.length === 1 ? "cerere e" : "cereri sunt"} la finanțe, în așteptarea plății
-                  </span>
-                </span>
-                <span className="flex items-center gap-1 text-sm font-semibold text-primary">
-                  Deschide finanțe <ArrowRight className="h-4 w-4" aria-hidden />
-                </span>
-              </button>
+                <strong>{awaitingPayment.length}</strong> {awaitingPayment.length === 1 ? "cerere e" : "cereri sunt"} la finanțe, în așteptarea plății
+              </ActionRow>
             )}
           </div>
         )}
 
         {/* Summary cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <SummaryCard label={t("dashboard.total")} value={String(requests.length)} />
-          <SummaryCard label={t("dashboard.active")} value={formatMDL(totalActive)} highlight />
-          <SummaryCard label={t("dashboard.paid")} value={formatMDL(totalPaid)} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <KpiTile label={t("dashboard.total")} value={requests.length} tone="indigo" icon={<FileText className="h-5 w-5" />} />
+          <KpiTile label={t("dashboard.active")} value={formatMDL(totalActive)} tone="amber" icon={<Clock className="h-5 w-5" />} />
+          <KpiTile label={t("dashboard.paid")} value={formatMDL(totalPaid)} tone="emerald" icon={<Landmark className="h-5 w-5" />} />
         </div>
 
         {/* VF-202: budget alerts (finance/par_admin only) */}
         {isFinance && budgetAlerts.length > 0 && (
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Landmark className="h-4 w-4 text-primary" aria-hidden />
+          <Card tone="dashboard" className="p-5">
+            <div className="mb-4 flex items-center gap-3">
+              <PastelIcon tone="rose" size={32}>
+                <Landmark className="h-4 w-4" />
+              </PastelIcon>
               <h2 className="text-sm font-semibold text-foreground">Bugete aproape de limită</h2>
             </div>
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {budgetAlerts.map((c) => {
                 const pct = c.usedPct ?? 0;
-                const bar = pct > 100 ? "bg-destructive" : "bg-yellow-500";
                 return (
                   <div key={c.id}>
-                    <div className="flex items-center justify-between text-xs mb-1">
+                    <div className="mb-1.5 flex items-center justify-between text-xs">
                       <span className="font-medium text-foreground">{c.code}</span>
-                      <span className={pct > 100 ? "text-destructive font-medium" : "text-muted-foreground"}>
+                      <span className={pct > 100 ? "font-medium text-destructive" : "text-muted-foreground"}>
                         {formatMDL(c.usedCents)} / {formatMDL(c.allocatedCents)} · {pct}%{pct > 100 ? " — depășit" : ""}
                       </span>
                     </div>
-                    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                      <div className={cn("h-full rounded-full", bar)} style={{ width: `${Math.min(pct, 100)}%` }} />
-                    </div>
+                    <Progress
+                      value={pct}
+                      height={6}
+                      tone={pct > 100 ? "destructive" : "warning"}
+                      aria-label={`Buget ${c.code}: ${pct}% utilizat`}
+                    />
                   </div>
                 );
               })}
             </div>
-          </div>
+          </Card>
         )}
 
         {/* Filters */}
         <div className="flex flex-wrap gap-3 items-center">
           {/* Search */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none"
-              aria-hidden
-            />
-            <input
+          <div className="min-w-[200px] flex-1">
+            <Input
               type="search"
               placeholder="Caută după număr..."
-              className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px]"
+              icon={<Search className="h-4 w-4" />}
               value={searchQ}
               onChange={(e) => setSearchQ(e.target.value)}
               aria-label="Caută cereri PAR după număr"
@@ -349,10 +353,10 @@ export function ParDashboard() {
           </div>
 
           {/* Status filter */}
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-hidden />
-            <select
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px]"
+          <div className="flex w-auto items-center gap-2">
+            <Filter className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            <Select
+              className="w-auto"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as ParStatus | "")}
               aria-label="Filtrează după status"
@@ -360,12 +364,12 @@ export function ParDashboard() {
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
-            </select>
+            </Select>
           </div>
 
           {/* Purpose filter */}
-          <select
-            className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px]"
+          <Select
+            className="w-auto"
             value={purposeFilter}
             onChange={(e) => setPurposeFilter(e.target.value as ParPurpose | "")}
             aria-label="Filtrează după scop"
@@ -373,12 +377,12 @@ export function ParDashboard() {
             {PURPOSE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
-          </select>
+          </Select>
 
           {/* VM1-04: Event filter (shows only when events exist) */}
           {events.length > 0 && (
-            <select
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px]"
+            <Select
+              className="w-auto"
               value={eventFilter}
               onChange={(e) => setEventFilter(e.target.value)}
               aria-label="Filtrează după eveniment"
@@ -387,69 +391,65 @@ export function ParDashboard() {
               {events.map((ev) => (
                 <option key={ev.id} value={ev.id}>{ev.name}</option>
               ))}
-            </select>
+            </Select>
           )}
 
           {/* VF-105: more filters toggle */}
-          <button
-            type="button"
+          <Button
+            variant="outline"
             onClick={() => setShowMoreFilters((v) => !v)}
             aria-expanded={showMoreFilters}
             className={cn(
-              "inline-flex items-center gap-1.5 h-10 rounded-md border px-3 text-sm min-h-[44px] transition-colors",
-              showMoreFilters || dateFrom || dateTo || minTotal || maxTotal
-                ? "border-primary text-primary bg-primary/5"
-                : "border-input text-muted-foreground hover:bg-muted"
+              (showMoreFilters || dateFrom || dateTo || minTotal || maxTotal) &&
+                "border-primary bg-primary/5 text-primary",
             )}
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden />
             Mai multe filtre
-          </button>
+          </Button>
 
           {projectFilter && (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               onClick={() => setProjectFilter("")}
-              className="inline-flex items-center gap-1.5 h-10 rounded-md px-3 text-sm bg-primary/10 text-primary hover:bg-primary/20 min-h-[44px]"
+              className="bg-primary/10 text-primary hover:bg-primary/20"
               aria-label="Elimină filtrul de proiect"
             >
               Proiect: {projectsMap[projectFilter] ?? "selectat"}
               <X className="h-4 w-4" aria-hidden />
-            </button>
+            </Button>
           )}
 
           {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="inline-flex items-center gap-1.5 h-10 rounded-md px-3 text-sm text-muted-foreground hover:text-foreground min-h-[44px]"
-            >
+            <Button variant="ghost" onClick={resetFilters} className="text-muted-foreground">
               <X className="h-4 w-4" aria-hidden />
               Resetează
-            </button>
+            </Button>
           )}
         </div>
 
         {/* VF-105: advanced filters popover */}
+        {/* The four fields here used to carry a `vf-input` class that exists in no
+            stylesheet — they rendered as raw browser inputs. Now real DS fields. */}
         {showMoreFilters && (
-          <div className="rounded-lg border border-border bg-card p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="date-from" className="block text-xs font-semibold mb-1.5 text-muted-foreground">De la data</label>
-              <input id="date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="vf-input" />
+          <Card className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="date-from">De la data</Label>
+              <Input id="date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             </div>
-            <div>
-              <label htmlFor="date-to" className="block text-xs font-semibold mb-1.5 text-muted-foreground">Până la data</label>
-              <input id="date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="vf-input" />
+            <div className="space-y-1.5">
+              <Label htmlFor="date-to">Până la data</Label>
+              <Input id="date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
-            <div>
-              <label htmlFor="min-total" className="block text-xs font-semibold mb-1.5 text-muted-foreground">Sumă minimă (MDL)</label>
-              <input id="min-total" type="number" min={0} value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="0" className="vf-input" />
+            <div className="space-y-1.5">
+              <Label htmlFor="min-total">Sumă minimă (MDL)</Label>
+              <Input id="min-total" type="number" min={0} value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="0" />
             </div>
-            <div>
-              <label htmlFor="max-total" className="block text-xs font-semibold mb-1.5 text-muted-foreground">Sumă maximă (MDL)</label>
-              <input id="max-total" type="number" min={0} value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="∞" className="vf-input" />
+            <div className="space-y-1.5">
+              <Label htmlFor="max-total">Sumă maximă (MDL)</Label>
+              <Input id="max-total" type="number" min={0} value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="∞" />
             </div>
-          </div>
+          </Card>
         )}
 
         {/* VF-105: active filter chips */}
@@ -467,13 +467,9 @@ export function ParDashboard() {
 
         {/* Error */}
         {error && (
-          <div
-            role="alert"
-            className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm"
-          >
-            <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
+          <Alert variant="destructive" icon={<AlertCircle className="h-4 w-4" />}>
             {error}
-          </div>
+          </Alert>
         )}
 
         {/* Loading */}
@@ -486,20 +482,16 @@ export function ParDashboard() {
         {!loading && !error && (
           <div className="space-y-6">
             {/* My Requests */}
-            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Cererile mele">
-              <button type="button" role="tab" aria-selected={statusFilter === ""} onClick={() => setStatusFilter("")}
-                className={cn("rounded-full px-3 py-1.5 text-sm font-medium", statusFilter === "" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground")}>
-                Toate cererile
-              </button>
-              <button type="button" role="tab" aria-selected={statusFilter === "draft"} onClick={() => setStatusFilter("draft")}
-                className={cn("rounded-full px-3 py-1.5 text-sm font-medium", statusFilter === "draft" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground")}>
-                Ciorne
-              </button>
-              <button type="button" role="tab" aria-selected={statusFilter === "changes_requested"} onClick={() => setStatusFilter("changes_requested")}
-                className={cn("rounded-full px-3 py-1.5 text-sm font-medium", statusFilter === "changes_requested" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground")}>
-                Întoarse pentru modificări
-              </button>
-            </div>
+            <Tabs
+              aria-label="Cererile mele"
+              value={statusFilter === "draft" || statusFilter === "changes_requested" ? statusFilter : "all"}
+              onChange={(v) => setStatusFilter(v === "all" ? "" : (v as ParStatus))}
+              tabs={[
+                { value: "all", label: "Toate cererile" },
+                { value: "draft", label: "Ciorne" },
+                { value: "changes_requested", label: "Întoarse pentru modificări" },
+              ]}
+            />
             <Section
               title={statusFilter === "draft" ? "Ciornele mele" : statusFilter === "changes_requested" ? "Cereri întoarse pentru modificări" : "Cererile mele"}
               count={myRequests.length}
@@ -565,79 +557,104 @@ function Section({ title, count, requests, onRowClick, emptyMessage, highlight, 
           {title}
         </h2>
         {count > 0 && (
-          <span
-            className={cn(
-              "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-              highlight
-                ? "bg-primary/10 text-primary"
-                : "bg-muted text-muted-foreground"
-            )}
-          >
-            {count}
-          </span>
+          <Badge variant={highlight ? "default" : "secondary"}>{count}</Badge>
         )}
       </div>
 
       {requests.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-4 text-center border border-dashed border-border rounded-lg">
+        <p className="rounded-lg border border-dashed border-border py-4 text-center text-sm text-muted-foreground">
           {emptyMessage}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm" role="grid" aria-label={title}>
-            <thead className="bg-muted/50">
-              <tr>
-                <th scope="col" className="text-left px-4 py-3 font-medium text-muted-foreground">Nr. cerere</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Proiect</th>
-                <th scope="col" className="text-right px-4 py-3 font-medium text-muted-foreground">Total (MDL)</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-                <th scope="col" className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Data</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {requests.map((r) => (
-                <tr
-                  key={r.id}
-                  onClick={() => onRowClick(r.id)}
-                  onKeyDown={(e) => e.key === "Enter" && onRowClick(r.id)}
-                  className="cursor-pointer hover:bg-muted/50 transition-colors focus-within:bg-muted/50"
-                  tabIndex={0}
-                  aria-label={`PAR ${r.requestNo}, ${PAR_STATUS_LABELS[r.status]}, ${formatMDL(r.totalEstimatedCents)}`}
-                  role="row"
-                >
-                  <td className="px-4 py-3 font-medium text-foreground">
-                    {r.requestNo}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
-                    {(() => {
-                      const pid = (r as ParRequest & { projectId: string | null }).projectId;
-                      return pid
-                        ? <span className="text-xs bg-muted px-2 py-0.5 rounded" title={projectsMap[pid] ?? ""}>{projectsMap[pid] ?? "Proiect"}</span>
-                        : "—";
-                    })()}
-                  </td>
-                  <td className="px-4 py-3 text-right font-medium">
-                    <span className={r.above_micro_threshold ? "text-orange-700 dark:text-orange-300" : "text-foreground"}>
-                      {formatMDL(r.totalEstimatedCents)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <ParStatusChip status={r.status} />
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs hidden md:table-cell">
-                    {new Date(r.createdAt).toLocaleDateString("ro-MD", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table aria-label={title}>
+          <TableHeader>
+            <TableRow>
+              <TableHead scope="col">Nr. cerere</TableHead>
+              <TableHead scope="col" className="hidden sm:table-cell">Proiect</TableHead>
+              <TableHead scope="col" className="text-right">Total (MDL)</TableHead>
+              <TableHead scope="col">Status</TableHead>
+              <TableHead scope="col" className="hidden md:table-cell">Data</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {requests.map((r) => (
+              <TableRow
+                key={r.id}
+                interactive
+                onClick={() => onRowClick(r.id)}
+                onKeyDown={(e) => e.key === "Enter" && onRowClick(r.id)}
+                tabIndex={0}
+                aria-label={`PAR ${r.requestNo}, ${PAR_STATUS_LABELS[r.status]}, ${formatMDL(r.totalEstimatedCents)}`}
+              >
+                <TableCell className="font-medium text-foreground">{r.requestNo}</TableCell>
+                <TableCell className="hidden text-muted-foreground sm:table-cell">
+                  {(() => {
+                    const pid = (r as ParRequest & { projectId: string | null }).projectId;
+                    return pid ? (
+                      <span className="rounded-sm bg-muted px-2 py-0.5 text-xs" title={projectsMap[pid] ?? ""}>
+                        {projectsMap[pid] ?? "Proiect"}
+                      </span>
+                    ) : (
+                      "—"
+                    );
+                  })()}
+                </TableCell>
+                <TableCell className="text-right font-medium tabular-nums">
+                  <span className={r.above_micro_threshold ? "text-warning" : "text-foreground"}>
+                    {formatMDL(r.totalEstimatedCents)}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <ParStatusChip status={r.status} />
+                </TableCell>
+                <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
+                  {new Date(r.createdAt).toLocaleDateString("ro-MD", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </section>
+  );
+}
+
+// ─── Action row ───────────────────────────────────────────────────────────────
+
+/** A "this needs you" row: pastel icon chip, sentence, arrow CTA on the right. */
+function ActionRow({
+  tone,
+  icon,
+  cta,
+  onClick,
+  children,
+}: {
+  tone: "amber" | "emerald";
+  icon: ReactNode;
+  cta: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-card px-4 py-3 text-left transition-colors hover:bg-muted/50"
+    >
+      <span className="flex items-center gap-3">
+        <PastelIcon tone={tone} size={32}>
+          {icon}
+        </PastelIcon>
+        <span className="text-sm font-medium text-foreground">{children}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-primary">
+        {cta} <ArrowRight className="h-4 w-4" aria-hidden />
+      </span>
+    </button>
   );
 }
 
@@ -652,19 +669,5 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
         <X className="h-3 w-3" aria-hidden />
       </button>
     </span>
-  );
-}
-
-function SummaryCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-1">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={cn(
-        "text-lg font-semibold",
-        highlight ? "text-primary" : "text-foreground"
-      )}>
-        {value}
-      </p>
-    </div>
   );
 }

@@ -18,6 +18,22 @@ export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 export type { CardProps } from "./Card";
 
 export { EmptyState } from "./EmptyState";
+
+export { Checkbox, Input, Label, Select, Switch, Textarea } from "./Field";
+export type {
+  CheckboxProps,
+  InputProps,
+  LabelProps,
+  SelectProps,
+  SwitchProps,
+  TextareaProps,
+} from "./Field";
+
+export { Alert, Progress, Separator, Skeleton, Tabs } from "./Feedback";
+export type { AlertProps, AlertVariant, ProgressProps, TabItem, TabsProps } from "./Feedback";
+
+export { Dialog, Sheet } from "./Overlay";
+export type { DialogProps, SheetProps } from "./Overlay";
 export type { EmptyStateProps } from "./EmptyState";
 
 export { KpiTile } from "./KpiTile";
