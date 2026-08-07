@@ -771,8 +771,10 @@ export function ParDetailPage() {
     : [par.requestorTitle, par.requestorCode].filter(Boolean).join(" · ");
 
   return (
-    <AppShell pageTitle={`PAR ${par.requestNo}`}>
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+    // pageTitle="" → the shell skips its own header: this page's header carries a
+    // back link, the status chip and four actions, which a plain title cannot.
+    <AppShell pageTitle="">
+      <div className="mx-auto max-w-4xl space-y-4">
 
         {/* Back + header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -788,7 +790,7 @@ export function ParDetailPage() {
             </button>
             <div className="flex items-center gap-3 flex-wrap">
               <FileText className="h-5 w-5 text-primary flex-shrink-0" aria-hidden />
-              <h1 className="text-xl font-bold text-foreground">{par.requestNo}</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{par.requestNo}</h1>
               <ParStatusChip status={par.status} />
             </div>
             <p className="text-sm text-muted-foreground mt-1">

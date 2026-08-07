@@ -138,35 +138,42 @@ export interface CheckboxProps {
 }
 
 export function Checkbox({ checked, onChange, label, disabled, id, className, ...rest }: CheckboxProps) {
-  const box = (
-    <span
-      className={cn(
-        // Explicit 4px: the token scale is built for cards, and `rounded-sm` (10px)
-        // on a 16px box renders as a circle — indistinguishable from a radio.
-        "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-primary text-primary-foreground transition-colors",
-        checked ? "bg-primary" : "bg-transparent",
-        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
-        className,
-      )}
-      aria-hidden="true"
-    >
-      {checked && <Check className="h-3 w-3" strokeWidth={3} />}
-    </span>
-  );
-
   return (
     <label className={cn("inline-flex items-center gap-2", disabled ? "cursor-not-allowed" : "cursor-pointer")}>
-      {/* A real checkbox carries the semantics + keyboard behaviour; the span above is the skin. */}
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="sr-only"
-        {...rest}
-      />
-      {box}
+      {/*
+        The real input is stretched over the box at opacity-0 rather than parked
+        off-screen with `sr-only`. Two things depend on it:
+          - it stays the actual click target at the box's own size, so anything
+            driving the input directly (tests, automation) can reach it;
+          - `peer-focus-visible` on the skin restores the focus ring a keyboard
+            user needs. An `sr-only` input is focusable but INVISIBLY so — you
+            tab onto the checkbox and nothing on screen moves.
+      */}
+      <span className="relative inline-flex h-4 w-4 shrink-0">
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+          className={cn("peer absolute inset-0 h-full w-full opacity-0", disabled ? "cursor-not-allowed" : "cursor-pointer")}
+          {...rest}
+        />
+        <span
+          className={cn(
+            // Explicit 4px: the token scale is built for cards, and `rounded-sm`
+            // (10px) on a 16px box renders as a circle — indistinguishable from a radio.
+            "pointer-events-none inline-flex h-4 w-4 items-center justify-center rounded-[4px] border border-primary text-primary-foreground transition-colors",
+            "peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2",
+            checked ? "bg-primary" : "bg-transparent",
+            disabled && "opacity-50",
+            className,
+          )}
+          aria-hidden="true"
+        >
+          {checked && <Check className="h-3 w-3" strokeWidth={3} />}
+        </span>
+      </span>
       {label && <span className="text-sm font-medium">{label}</span>}
     </label>
   );
