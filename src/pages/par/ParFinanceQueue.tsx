@@ -27,7 +27,20 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
-import { Button } from "@/components/ds";
+import {
+  Alert,
+  Button,
+  Card,
+  Input,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Textarea,
+} from "@/components/ds";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import {
   getFinanceQueue,
@@ -108,45 +121,42 @@ function Section16Modal({ par, onClose, onSaved }: Section16ModalProps) {
             <label htmlFor="par-bl" className="block text-sm font-medium text-foreground mb-1">
               PAR BL (budget line)
             </label>
-            <input
+            <Input
               id="par-bl"
               type="text"
               value={parBl}
               onChange={(e) => setParBl(e.target.value)}
               placeholder="ex. OPS-2026-07"
               maxLength={200}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+                          />
           </div>
 
           <div>
             <label htmlFor="received-by" className="block text-sm font-medium text-foreground mb-1">
               Received By (user ID sau nume)
             </label>
-            <input
+            <Input
               id="received-by"
               type="text"
               value={receivedBy}
               onChange={(e) => setReceivedBy(e.target.value)}
               placeholder="ID sau lăsați gol (se va folosi userul curent)"
               maxLength={200}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+                          />
           </div>
 
           <div>
             <label htmlFor="assigned-to" className="block text-sm font-medium text-foreground mb-1">
               Assigned To (user ID)
             </label>
-            <input
+            <Input
               id="assigned-to"
               type="text"
               value={assignedTo}
               onChange={(e) => setAssignedTo(e.target.value)}
               placeholder="ID utilizator responsabil"
               maxLength={200}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+                          />
           </div>
         </div>
 
@@ -301,22 +311,16 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
           </div>
         )}
         {warning && (
-          <div role="status" className="flex items-start gap-2 text-amber-700 dark:text-amber-400 text-sm bg-amber-50 dark:bg-amber-900/20 rounded px-3 py-2">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <Alert variant="warning" icon={<AlertCircle className="h-4 w-4" />}>
             {warning}
-          </div>
+          </Alert>
         )}
 
         {/* VM1-05: auto-save vendor indicator — shown briefly after successful payment */}
         {vendorAutoSaved && (
-          <div
-            role="status"
-            aria-live="polite"
-            className="flex items-center gap-2 text-green-700 dark:text-green-400 text-sm bg-green-50 dark:bg-green-900/20 rounded px-3 py-2"
-          >
-            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <Alert variant="success" icon={<CheckCircle2 className="h-4 w-4" />}>
             Prestator salvat în registru ✓
-          </div>
+          </Alert>
         )}
 
         <div className="space-y-3">
@@ -324,7 +328,7 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
             <label htmlFor="actual-amount" className="block text-sm font-medium text-foreground mb-1">
               Suma reală (MDL) <span aria-hidden="true" className="text-destructive">*</span>
             </label>
-            <input
+            <Input
               id="actual-amount"
               type="number"
               min={0}
@@ -335,8 +339,7 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
                 updateWarning(e.target.value);
               }}
               placeholder="ex. 7000"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+                          />
             <p className="text-xs text-muted-foreground mt-1">
               Pre-completat cu suma estimată ({formatMDL(par.totalEstimatedCents)}). Schimbă dacă plata reală diferă.
             </p>
@@ -346,35 +349,33 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
             <label htmlFor="payment-date" className="block text-sm font-medium text-foreground mb-1">
               Data plății <span aria-hidden="true" className="text-destructive">*</span>
             </label>
-            <input
+            <Input
               id="payment-date"
               type="date"
               value={paymentDate}
               onChange={(e) => setPaymentDate(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+                          />
           </div>
 
           <div>
             <label htmlFor="payment-ref" className="block text-sm font-medium text-foreground mb-1">
               Referință plată <span className="text-muted-foreground font-normal">(opțional)</span>
             </label>
-            <input
+            <Input
               id="payment-ref"
               type="text"
               value={paymentRef}
               onChange={(e) => setPaymentRef(e.target.value)}
               placeholder="ex. OP-2026-0047"
               maxLength={500}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+                          />
           </div>
 
           <div>
             <label htmlFor="proof-file" className="block text-sm font-medium text-foreground mb-1">
               Dovada plății (PDF, opțional)
             </label>
-            <input
+            <Input
               id="proof-file"
               type="file"
               accept="application/pdf,image/*"
@@ -640,32 +641,27 @@ export default function ParFinanceQueue() {
             verification. Make the missing control impossible to miss so nobody assumes it's running.
             Toggle it on in Admin → Setări PAR ("Aplică 3-way match"). */}
         {!loading && !error && !threeWayMatchEnforced && (
-          <div
-            role="status"
-            className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-amber-800 dark:text-amber-300"
+          <Alert
+            variant="warning"
+            icon={<ShieldAlert className="h-5 w-5" />}
+            title="Control 3-way match dezactivat"
           >
-            <ShieldAlert className="h-5 w-5 shrink-0 mt-0.5" aria-hidden="true" />
-            <div className="text-sm">
-              <p className="font-medium">Control 3-way match dezactivat</p>
-              <p className="text-amber-700 dark:text-amber-400 mt-0.5">
-                Plățile se pot înregistra fără verificarea automată comandă (PO) + recepție + sumă.
-                Activează controlul din <span className="font-medium">Admin → Setări PAR</span> pentru
-                a bloca plata când documentele nu se potrivesc.
-              </p>
-            </div>
-          </div>
+            Plățile se pot înregistra fără verificarea automată comandă (PO) + recepție + sumă.
+            Activează controlul din <span className="font-medium">Admin → Setări PAR</span> pentru
+            a bloca plata când documentele nu se potrivesc.
+          </Alert>
         )}
 
         {!loading && !error && items.length > 0 && (
-          <div className="rounded-lg border border-border bg-card p-3 flex flex-wrap gap-2">
-            <input value={filterQ} onChange={(e) => setFilterQ(e.target.value)} placeholder="Caută PAR, beneficiar, IBAN…" aria-label="Caută în coada finanțe" className="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[40px] min-w-[240px]" />
-            <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} aria-label="Filtru proiect" className="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[40px]"><option value="">Toate proiectele</option>{[...new Set(items.map((i) => i.projectName).filter(Boolean))].map((p) => <option key={p!} value={p!}>{p}</option>)}</select>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filtru statut" className="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[40px]"><option value="">Toate statusurile</option><option value="approved">Aprobate</option><option value="in_finance">În finanțe</option><option value="reapproval_required">Reaprobare</option></select>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="De la" className="rounded-md border border-input bg-background px-2 py-2 text-sm min-h-[40px]" />
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Până la" className="rounded-md border border-input bg-background px-2 py-2 text-sm min-h-[40px]" />
-            <input type="number" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="Min. MDL" aria-label="Sumă minimă" className="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[40px] w-28" />
-            <input type="number" value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="Max. MDL" aria-label="Sumă maximă" className="rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[40px] w-28" />
-          </div>
+          <Card className="flex flex-wrap gap-2 p-3">
+            <Input value={filterQ} onChange={(e) => setFilterQ(e.target.value)} placeholder="Caută PAR, beneficiar, IBAN…" aria-label="Caută în coada finanțe" className="min-w-[240px] flex-1" />
+            <Select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} aria-label="Filtru proiect" className="w-auto"><option value="">Toate proiectele</option>{[...new Set(items.map((i) => i.projectName).filter(Boolean))].map((p) => <option key={p!} value={p!}>{p}</option>)}</Select>
+            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filtru statut" className="w-auto"><option value="">Toate statusurile</option><option value="approved">Aprobate</option><option value="in_finance">În finanțe</option><option value="reapproval_required">Reaprobare</option></Select>
+            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="De la" className="w-auto" />
+            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Până la" className="w-auto" />
+            <Input type="number" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="Min. MDL" aria-label="Sumă minimă" className="w-28" />
+            <Input type="number" value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="Max. MDL" aria-label="Sumă maximă" className="w-28" />
+          </Card>
         )}
 
         {/* Loading */}
@@ -695,8 +691,7 @@ export default function ParFinanceQueue() {
         {/* Queue table — VM3-01: coloanele cerute de finance (IDNO / IBAN / sumă / destinație /
             budget line), text copiabil, nr. PAR clickabil, aprobatori cu data deciziei. */}
         {!loading && !error && items.length > 0 && (
-          <div className="rounded-lg border border-border overflow-x-auto">
-            <table className="w-full text-sm min-w-[1280px]" role="table" aria-label="Coadă finanțe">
+          <Table className="min-w-[1280px]" aria-label="Coadă finanțe">
               <thead>
                 <tr className="bg-muted/50 border-b border-border">
                   <th className="text-left px-3 py-3 font-medium text-muted-foreground">Nr.</th>
@@ -738,7 +733,7 @@ export default function ParFinanceQueue() {
                       <div className="flex flex-col gap-1">
                         <ParStatusChip status={par.status} />
                         {par.status === "reapproval_required" && (
-                          <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                          <span className="text-xs font-medium text-warning">
                             Re-aprobare necesară (&gt;10% depășire)
                           </span>
                         )}
@@ -816,7 +811,7 @@ export default function ParFinanceQueue() {
                     <td className="px-3 py-3">
                       {par.payment ? (
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" aria-hidden="true" />
+                          <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden="true" />
                           <span>
                             {par.payment.parBl ? (
                               <><ClipboardList className="inline h-3 w-3 mr-0.5" aria-hidden="true" />{par.payment.parBl}</>
@@ -884,7 +879,7 @@ export default function ParFinanceQueue() {
                           </button>
                         )}
                         {par.status === "reapproval_required" && !par.payment?.overageReapproved && (
-                          <span className="text-xs text-amber-700 dark:text-amber-400 whitespace-nowrap">
+                          <span className="whitespace-nowrap text-xs text-warning">
                             Așteptare re-aprobare…
                           </span>
                         )}
@@ -906,8 +901,7 @@ export default function ParFinanceQueue() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+          </Table>
         )}
 
         {/* Modals */}
