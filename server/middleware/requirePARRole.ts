@@ -34,7 +34,28 @@ export type ParRole = "requestor" | "approver" | "finance" | "par_admin";
  * given an EXPLICIT par_admin row by migration 0137, so nobody lost access; from
  * here on the authority is visible in the members screen and revocable there.
  */
-export const IMPLICIT_PAR_ADMIN_TENANT_ROLES: readonly string[] = ["admin"];
+export const IMPLICIT_PAR_ADMIN_TENANT_ROLES: readonly string[] = ["admin", "manager"];
+
+/*
+ * "manager" is back in this list, deliberately, after being narrowed out.
+ *
+ * The narrowing was paired with migration 0137, which first materialises each
+ * manager's authority into an explicit par_members row so nobody loses access.
+ * That safety net could not be VERIFIED against production: this project has a
+ * confirmed history of drizzle migrations not being applied there (the schema is
+ * carried by sync-schema instead), and 0137 is a DATA migration, which
+ * sync-schema does not cover. Shipping the narrowing without proof the
+ * materialisation ran risks silently revoking payment-approval rights from
+ * people relying on them today.
+ *
+ * Everything else from the audit stays: the members screen now SHOWS implicit
+ * holders with an "implicit · manager" badge, so the question "who can approve
+ * payments here?" finally has a truthful answer on screen.
+ *
+ * To finish the narrowing: confirm on production that 0137 ran (every user with
+ * users.role='manager' in a PAR-using tenant has a par_members par_admin row),
+ * then drop "manager" from this array again.
+ */
 
 export function requirePARRole(
   ...roles: ParRole[]
