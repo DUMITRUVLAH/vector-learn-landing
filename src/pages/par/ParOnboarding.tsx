@@ -12,7 +12,8 @@ import {
   Building2, Layers, Users, Loader2, ArrowRight, ArrowLeft, Check, X, Plus, SkipForward,
 } from "lucide-react";
 import { useRouter } from "@/router/HashRouter";
-import { Logo } from "@/components/Logo";
+import { Alert, Badge, Button, Card, Input, Label, PastelIcon, Progress, Select } from "@/components/ds";
+import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import {
   getParSettings, updateParSettings,
   listDepartments, createDepartment,
@@ -99,16 +100,16 @@ export function ParOnboarding() {
       {/* Header */}
       <header className="border-b border-border">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Logo />
-          <button
-            type="button"
-            onClick={skipAll}
-            disabled={finishing}
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors min-h-[44px] px-2"
-          >
+          {/* This is a FinFlow (PAR) screen — it used to render the CRM's
+              "Vector Learn" logo, which is a different product. */}
+          <span className="flex items-center gap-3">
+            <FinFlowMark size={32} className="rounded-xl" />
+            <span className="text-[15px] font-bold tracking-tight">FinFlow</span>
+          </span>
+          <Button variant="ghost" onClick={skipAll} disabled={finishing} className="text-muted-foreground">
             <SkipForward className="h-4 w-4" aria-hidden />
             Sari peste configurare
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -122,13 +123,14 @@ export function ParOnboarding() {
               </h1>
               <span className="text-sm text-muted-foreground">Pasul {step} din {TOTAL_STEPS}</span>
             </div>
-            <div className="h-2 w-full rounded-full bg-muted overflow-hidden" role="progressbar"
-                 aria-valuenow={step} aria-valuemin={1} aria-valuemax={TOTAL_STEPS}>
-              <div className="h-full bg-primary transition-all" style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
-            </div>
+            <Progress
+              value={(step / TOTAL_STEPS) * 100}
+              height={8}
+              aria-label={`Pasul ${step} din ${TOTAL_STEPS}`}
+            />
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-sm">
+          <Card tone="dashboard" className="p-6 shadow-sm sm:p-8">
             {step === 1 && (
               <StepOrg
                 orgName={orgName} setOrgName={setOrgName}
@@ -152,47 +154,33 @@ export function ParOnboarding() {
               />
             )}
 
-            {error && (
-              <div role="alert" className="mt-4 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
-                {error}
-              </div>
-            )}
+            {error && <Alert variant="destructive" className="mt-4">{error}</Alert>}
 
             {/* Nav buttons */}
             <div className="mt-8 flex items-center justify-between gap-3">
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="lg"
                 onClick={() => setStep((s) => (s > 1 ? ((s - 1) as Step) : s))}
                 disabled={step === 1 || finishing}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed min-h-[44px]"
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden />
                 Înapoi
-              </button>
+              </Button>
 
               {step < TOTAL_STEPS ? (
-                <button
-                  type="button"
-                  onClick={() => setStep((s) => ((s + 1) as Step))}
-                  disabled={finishing}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors min-h-[44px]"
-                >
+                <Button size="lg" onClick={() => setStep((s) => ((s + 1) as Step))} disabled={finishing}>
                   Continuă
                   <ArrowRight className="h-4 w-4" aria-hidden />
-                </button>
+                </Button>
               ) : (
-                <button
-                  type="button"
-                  onClick={finish}
-                  disabled={finishing}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 min-h-[44px]"
-                >
+                <Button size="lg" onClick={finish} disabled={finishing}>
                   {finishing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}
                   Finalizează
-                </button>
+                </Button>
               )}
             </div>
-          </div>
+          </Card>
         </div>
       </main>
     </div>
@@ -212,33 +200,33 @@ function StepOrg(props: {
       <SectionHeading icon={Building2} title="Despre organizație"
         subtitle="Aceste detalii apar pe formularele de plată generate." />
       <Field label="Denumirea organizației" htmlFor="org-name">
-        <input id="org-name" type="text" value={props.orgName}
+        <Input id="org-name" type="text" value={props.orgName}
           onChange={(e) => props.setOrgName(e.target.value)}
           placeholder="ex. Asociația Exemplu"
-          className="vf-input" />
+          />
       </Field>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Monedă implicită" htmlFor="currency">
-          <select id="currency" value={props.currency}
-            onChange={(e) => props.setCurrency(e.target.value)} className="vf-input">
+          <Select id="currency" value={props.currency}
+            onChange={(e) => props.setCurrency(e.target.value)}>
             <option value="MDL">MDL — Leu moldovenesc</option>
             <option value="EUR">EUR — Euro</option>
             <option value="USD">USD — Dolar american</option>
             <option value="RON">RON — Leu românesc</option>
-          </select>
+          </Select>
         </Field>
         <Field label="Prefix numerotare" htmlFor="prefix">
-          <input id="prefix" type="text" value={props.prefix}
+          <Input id="prefix" type="text" value={props.prefix}
             onChange={(e) => props.setPrefix(e.target.value.toUpperCase().slice(0, 20))}
-            placeholder="PAR" className="vf-input" />
+            placeholder="PAR" />
         </Field>
       </div>
       <Field label="Prag micro-achiziție" htmlFor="threshold"
         hint="Plățile sub acest prag necesită mai puține aprobări.">
         <div className="relative">
-          <input id="threshold" type="number" min={0} value={props.thresholdMdl}
+          <Input id="threshold" type="number" min={0} value={props.thresholdMdl}
             onChange={(e) => props.setThresholdMdl(e.target.value)}
-            className="vf-input pr-14" />
+            className="pr-14" />
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{props.currency}</span>
         </div>
       </Field>
@@ -276,18 +264,18 @@ function StepStructure(props: {
 
       {/* Departments */}
       <div>
-        <label className="block text-sm font-semibold mb-1.5">Departamente</label>
+        <Label className="mb-1.5 block">Departamente</Label>
         <div className="flex gap-2">
-          <input type="text" value={props.deptInput}
+          <Input type="text" value={props.deptInput}
             onChange={(e) => props.setDeptInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDept(); } }}
             placeholder="ex. Finanțe — apasă Enter"
             aria-label="Nume departament"
-            className="vf-input flex-1" />
-          <button type="button" onClick={addDept} aria-label="Adaugă departament"
-            className="inline-flex items-center justify-center rounded-md border border-border bg-background px-3 hover:bg-muted transition-colors min-h-[44px]">
+            className="flex-1" />
+          <Button onClick={addDept} aria-label="Adaugă departament"
+            variant="outline" size="lg" className="px-3">
             <Plus className="h-4 w-4" aria-hidden />
-          </button>
+          </Button>
         </div>
         {props.departments.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
@@ -300,22 +288,22 @@ function StepStructure(props: {
 
       {/* Budget codes */}
       <div>
-        <label className="block text-sm font-semibold mb-1.5">Coduri de buget</label>
+        <Label className="mb-1.5 block">Coduri de buget</Label>
         <div className="flex gap-2">
-          <input type="text" value={props.codeInput}
+          <Input type="text" value={props.codeInput}
             onChange={(e) => props.setCodeInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCode(); } }}
             placeholder="Cod (ex. M13)" aria-label="Cod buget"
-            className="vf-input w-32" />
-          <input type="text" value={props.codeNameInput}
+            className="w-32" />
+          <Input type="text" value={props.codeNameInput}
             onChange={(e) => props.setCodeNameInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCode(); } }}
             placeholder="Denumire (opțional)" aria-label="Denumire cod buget"
-            className="vf-input flex-1" />
-          <button type="button" onClick={addCode} aria-label="Adaugă cod buget"
-            className="inline-flex items-center justify-center rounded-md border border-border bg-background px-3 hover:bg-muted transition-colors min-h-[44px]">
+            className="flex-1" />
+          <Button onClick={addCode} aria-label="Adaugă cod buget"
+            variant="outline" size="lg" className="px-3">
             <Plus className="h-4 w-4" aria-hidden />
-          </button>
+          </Button>
         </div>
         {props.codes.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
@@ -356,9 +344,9 @@ function StepTeam(props: { departments: string[]; codes: { code: string; name: s
 function SectionHeading({ icon: Icon, title, subtitle }: { icon: typeof Building2; title: string; subtitle: string }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 flex-shrink-0">
-        <Icon className="h-5 w-5 text-primary" aria-hidden />
-      </div>
+      <PastelIcon tone="indigo" size={40}>
+        <Icon className="h-5 w-5" />
+      </PastelIcon>
       <div>
         <h2 className="font-semibold text-foreground">{title}</h2>
         <p className="text-sm text-muted-foreground">{subtitle}</p>
@@ -370,7 +358,7 @@ function SectionHeading({ icon: Icon, title, subtitle }: { icon: typeof Building
 function Field({ label, htmlFor, hint, children }: { label: string; htmlFor: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label htmlFor={htmlFor} className="block text-sm font-semibold mb-1.5">{label}</label>
+      <Label htmlFor={htmlFor} className="mb-1.5 block">{label}</Label>
       {children}
       {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
     </div>

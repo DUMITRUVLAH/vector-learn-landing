@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MessageSquare, Loader2, Send } from "lucide-react";
 import { listParComments, addParComment, type ParComment } from "@/lib/api/par";
+import { Button, Textarea } from "@/components/ds";
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -85,7 +86,7 @@ export function ParComments({ parId }: { parId: string }) {
       )}
 
       <form onSubmit={submit} className="space-y-2">
-        <textarea
+        <Textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={(e) => {
@@ -94,18 +95,14 @@ export function ParComments({ parId }: { parId: string }) {
           rows={2}
           placeholder="Scrie un comentariu… (Ctrl+Enter pentru trimitere)"
           aria-label="Comentariu nou"
-          className="vf-input resize-none"
+          className="resize-none"
         />
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={posting || !body.trim()}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 min-h-[44px]"
-          >
+          <Button type="submit" size="lg" disabled={posting || !body.trim()}>
             {posting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
             Trimite
-          </button>
+          </Button>
         </div>
       </form>
     </div>

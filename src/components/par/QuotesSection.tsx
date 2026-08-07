@@ -13,6 +13,7 @@ import {
   type ParQuote, type ParVendor,
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
+import { Alert, Button, Input, Label, Select } from "@/components/ds";
 
 function fmt(cents: number, currency: string): string {
   if (currency === "MDL") return formatMDL(cents);
@@ -74,7 +75,7 @@ export function QuotesSection({ parId, vendors }: { parId: string; vendors: ParV
         <FileText className="h-4 w-4 text-primary" aria-hidden />
         <h3 className="text-sm font-semibold text-foreground">Oferte (RFQ)</h3>
         {quotes.length > 0 && (
-          <span className={quotes.length >= 3 ? "text-xs text-green-700 dark:text-green-400" : "text-xs text-yellow-700 dark:text-yellow-400"}>
+          <span className={quotes.length >= 3 ? "text-xs font-medium text-success" : "text-xs font-medium text-warning"}>
             {quotes.length}/3 {quotes.length >= 3 ? "✓" : "(recomandat ≥3)"}
           </span>
         )}
@@ -83,38 +84,35 @@ export function QuotesSection({ parId, vendors }: { parId: string; vendors: ParV
 
       <form onSubmit={add} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
         <div className="sm:col-span-4">
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Furnizor (din listă)</label>
-          <select value={vendorId} onChange={(e) => { setVendorId(e.target.value); if (e.target.value) setVendorName(""); }}
-            aria-label="Furnizor înregistrat" className="vf-input">
+          <Label className="mb-1 block text-xs text-muted-foreground">Furnizor (din listă)</Label>
+          <Select value={vendorId} onChange={(e) => { setVendorId(e.target.value); if (e.target.value) setVendorName(""); }}
+            aria-label="Furnizor înregistrat">
             <option value="">— sau nume liber →</option>
             {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-          </select>
+          </Select>
         </div>
         <div className="sm:col-span-3">
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Nume furnizor</label>
-          <input type="text" value={vendorName} onChange={(e) => { setVendorName(e.target.value); if (e.target.value) setVendorId(""); }}
-            placeholder="ex. Darwin SRL" aria-label="Nume furnizor" className="vf-input" disabled={!!vendorId} />
+          <Label className="mb-1 block text-xs text-muted-foreground">Nume furnizor</Label>
+          <Input type="text" value={vendorName} onChange={(e) => { setVendorName(e.target.value); if (e.target.value) setVendorId(""); }}
+            placeholder="ex. Darwin SRL" aria-label="Nume furnizor" disabled={!!vendorId} />
         </div>
         <div className="sm:col-span-2">
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Sumă (MDL)</label>
-          <input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" aria-label="Sumă ofertă" className="vf-input" />
+          <Label className="mb-1 block text-xs text-muted-foreground">Sumă (MDL)</Label>
+          <Input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" aria-label="Sumă ofertă" />
         </div>
         <div className="sm:col-span-2">
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Valabil până</label>
-          <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} aria-label="Valabilitate ofertă" className="vf-input" />
+          <Label className="mb-1 block text-xs text-muted-foreground">Valabil până</Label>
+          <Input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} aria-label="Valabilitate ofertă" />
         </div>
         <div className="sm:col-span-1">
-          <button type="submit" disabled={busy} aria-label="Adaugă oferta"
-            className="inline-flex items-center justify-center w-full rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 min-h-[44px]">
+          <Button type="submit" size="lg" disabled={busy} aria-label="Adaugă oferta" className="w-full px-0">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
-          </button>
+          </Button>
         </div>
       </form>
 
       {error && (
-        <div role="alert" className="flex items-center gap-2 p-2.5 rounded-md bg-destructive/10 text-destructive text-sm">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />{error}
-        </div>
+        <Alert variant="destructive" icon={<AlertCircle className="h-4 w-4" />}>{error}</Alert>
       )}
 
       {loading ? (
