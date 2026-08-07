@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import { PackageCheck, Loader2, AlertCircle, Check } from "lucide-react";
+import { Alert, Button, Checkbox, Input, Textarea } from "@/components/ds";
 import {
   listParReceipts, addParReceipt,
   type ParReceipt, type ParLineItem,
@@ -44,39 +45,32 @@ export function ReceiptSection({ parId, lineItems }: { parId: string; lineItems:
       <div className="flex items-center gap-2">
         <PackageCheck className="h-4 w-4 text-primary" aria-hidden />
         <h2 className="text-sm font-semibold text-foreground">Recepție bunuri/servicii</h2>
-        {receipts.length > 0 && <span className="text-xs text-green-700 dark:text-green-400">{receipts.length} înregistrată/e</span>}
+        {receipts.length > 0 && <span className="text-xs font-medium text-success">{receipts.length} înregistrată/e</span>}
       </div>
 
       <div className="space-y-2">
         {lineItems.map((li) => (
           <div key={li.id} className="flex items-center justify-between gap-3 text-sm">
             <span className="text-foreground truncate">{li.description} <span className="text-muted-foreground text-xs">(comandat: {li.quantity})</span></span>
-            <input type="number" min={0} value={qty[li.id] ?? ""} onChange={(e) => setQty((q) => ({ ...q, [li.id]: e.target.value }))}
-              aria-label={`Cantitate primită pentru ${li.description}`} className="vf-input w-24 flex-shrink-0" />
+            <Input type="number" min={0} value={qty[li.id] ?? ""} onChange={(e) => setQty((q) => ({ ...q, [li.id]: e.target.value }))}
+              aria-label={`Cantitate primită pentru ${li.description}`} className="w-24 shrink-0" />
           </div>
         ))}
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-foreground">
-        <input type="checkbox" checked={complete} onChange={(e) => setComplete(e.target.checked)}
-          className="h-4 w-4 rounded border-input accent-[hsl(var(--primary))]" />
-        Recepție completă
-      </label>
+      <Checkbox checked={complete} onChange={setComplete} label="Recepție completă" />
 
-      <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Note (opțional)"
-        aria-label="Note recepție" className="vf-input resize-none" />
+      <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Note (opțional)"
+        aria-label="Note recepție" className="resize-none" />
 
       {error && (
-        <div role="alert" className="flex items-center gap-2 p-2.5 rounded-md bg-destructive/10 text-destructive text-sm">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />{error}
-        </div>
+        <Alert variant="destructive" icon={<AlertCircle className="h-4 w-4" />}>{error}</Alert>
       )}
 
-      <button type="button" onClick={submit} disabled={busy}
-        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 min-h-[44px]">
+      <Button size="lg" onClick={submit} disabled={busy}>
         {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}
         Confirmă recepția
-      </button>
+      </Button>
 
       {receipts.length > 0 && (
         <div className="space-y-1.5 pt-2 border-t border-border">

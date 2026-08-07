@@ -294,7 +294,7 @@ function PdfDownloadButton({ par, onAttached }: PdfButtonProps) {
         aria-label="Descarcă formularul PAR ca PDF"
         className={cn(
           "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px]",
-          status === "done" ? "bg-emerald-600 text-white" : "bg-primary text-primary-foreground hover:bg-primary/90",
+          status === "done" ? "bg-success text-success-foreground" : "bg-primary text-primary-foreground hover:bg-primary/90",
           status === "generating" && "opacity-70 cursor-not-allowed"
         )}
       >
@@ -509,7 +509,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
         type="button"
         disabled={!!busy}
         onClick={() => do_("approve", () => approvePar(par.id, {}))}
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 min-h-[44px] disabled:opacity-60"
+        className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-success px-4 py-2 text-sm font-medium text-success-foreground hover:bg-success/90 disabled:opacity-60"
         aria-label="Aprobă cererea"
       >
         {busy === "approve" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
@@ -535,7 +535,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
         type="button"
         disabled={!!busy}
         onClick={() => setShowChangesForm(true)}
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-500 text-amber-600 dark:text-amber-400 text-sm font-medium hover:bg-amber-50 dark:hover:bg-amber-900/20 min-h-[44px] disabled:opacity-60"
+        className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-warning px-4 py-2 text-sm font-medium text-warning hover:bg-warning/10 disabled:opacity-60"
         aria-label="Cere modificări"
       >
         <AlertCircle className="h-4 w-4" aria-hidden />
@@ -571,7 +571,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
           type="button"
           disabled={!!busy}
           onClick={() => do_("reapprove", () => reapproveOverage(par.id))}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 min-h-[44px] disabled:opacity-60"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-warning px-4 py-2 text-sm font-medium text-warning-foreground hover:bg-warning/90 disabled:opacity-60"
           aria-label="Re-aprobă suma depășită"
         >
           {busy === "reapprove" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCw className="h-4 w-4" aria-hidden />}
@@ -586,7 +586,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
           type="button"
           disabled={!!busy}
           onClick={() => navigate(`#/business/par/finance`)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 min-h-[44px]"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-success px-4 py-2 text-sm font-medium text-success-foreground hover:bg-success/90"
           aria-label="Marchează plata în coada de finanțe"
         >
           <DollarSign className="h-4 w-4" aria-hidden />
@@ -610,7 +610,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
       )}
 
       {budgetWarning && (
-        <div role="status" className="flex items-start gap-2 p-2.5 rounded bg-yellow-500/10 border border-yellow-500/30 text-yellow-800 dark:text-yellow-300 text-xs">
+        <div role="status" className="flex items-start gap-2 rounded border border-warning/30 bg-warning/10 p-2.5 text-xs text-warning">
           <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden />
           <span>{budgetWarning}</span>
         </div>
@@ -672,7 +672,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
               type="button"
               disabled={!comment.trim() || !!busy}
               onClick={() => do_("changes", () => requestParChanges(par.id, { comment: comment.trim() })).then(() => { setShowChangesForm(false); setComment(""); })}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 min-h-[44px] disabled:opacity-60"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-warning px-3 py-2 text-sm font-medium text-warning-foreground hover:bg-warning/90 disabled:opacity-60"
             >
               {busy === "changes" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
               Solicită modificări
@@ -771,8 +771,10 @@ export function ParDetailPage() {
     : [par.requestorTitle, par.requestorCode].filter(Boolean).join(" · ");
 
   return (
-    <AppShell pageTitle={`PAR ${par.requestNo}`}>
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+    // pageTitle="" → the shell skips its own header: this page's header carries a
+    // back link, the status chip and four actions, which a plain title cannot.
+    <AppShell pageTitle="">
+      <div className="mx-auto max-w-4xl space-y-4">
 
         {/* Back + header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -788,7 +790,7 @@ export function ParDetailPage() {
             </button>
             <div className="flex items-center gap-3 flex-wrap">
               <FileText className="h-5 w-5 text-primary flex-shrink-0" aria-hidden />
-              <h1 className="text-xl font-bold text-foreground">{par.requestNo}</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{par.requestNo}</h1>
               <ParStatusChip status={par.status} />
             </div>
             <p className="text-sm text-muted-foreground mt-1">
@@ -953,7 +955,7 @@ export function ParDetailPage() {
                       {att.kind === "par_pdf" && <span className="text-xs text-muted-foreground">(PDF generat)</span>}
                       {att.kind === "payment_order" && <span className="text-xs text-muted-foreground">(Ordin de plată)</span>}
                       {analysis && (
-                        <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", analysis.status === "match" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300")}>
+                        <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", analysis.status === "match" ? "bg-success/15 text-success" : "bg-warning/15 text-warning")}>
                           {analysis.status === "match" ? "Concordant" : `${analysis.warnings} diferențe`}
                         </span>
                       )}
@@ -963,7 +965,7 @@ export function ParDetailPage() {
                         <summary className="cursor-pointer text-muted-foreground">Vezi verificarea AI</summary>
                         <ul className="mt-2 grid gap-1 sm:grid-cols-2">
                           {analysis.checks.map((check) => (
-                            <li key={check.field} className={cn("rounded px-2 py-1", check.matches === false ? "bg-amber-500/10 text-amber-800 dark:text-amber-300" : "bg-muted text-muted-foreground")}>
+                            <li key={check.field} className={cn("rounded px-2 py-1", check.matches === false ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground")}>
                               <span className="font-medium">{check.field}:</span> document {String(check.found ?? "nedetectat")} · PAR {String(check.expected ?? "nesetat")}
                             </li>
                           ))}

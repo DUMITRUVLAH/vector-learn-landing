@@ -39,7 +39,24 @@ import {
   type ParCycleTimeItem,
   type ParCurrencyBreakdownItem,
 } from "@/lib/api/par";
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  KpiTile,
+  Label,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Tabs,
+} from "@/components/ds";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,26 +80,6 @@ function chartColor(idx: number): string {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-interface StatCardProps {
-  label: string;
-  value: React.ReactNode;
-  icon: React.ReactNode;
-  sub?: string;
-}
-
-function StatCard({ label, value, icon, sub }: StatCardProps) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-4 flex items-start gap-3">
-      <div className="p-2 rounded-md bg-primary/10 text-primary flex-shrink-0">{icon}</div>
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-0.5">{label}</p>
-        <p className="text-lg font-bold text-foreground">{value}</p>
-        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
-      </div>
-    </div>
-  );
-}
-
 interface SpendChartProps {
   title: string;
   items: ParSpendByItem[];
@@ -100,14 +97,14 @@ function SpendChart({ title, items, loading }: SpendChartProps) {
     }));
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <h3 className="text-sm font-semibold text-foreground mb-3">{title}</h3>
+    <Card className="p-4">
+      <h3 className="mb-3 text-sm font-semibold text-foreground">{title}</h3>
       {loading ? (
         <div className="flex items-center justify-center h-32">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-label="Se încarcă" />
         </div>
       ) : data.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-8">Nicio înregistrare.</p>
+        <EmptyState compact title="Nicio înregistrare" />
       ) : (
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
@@ -144,18 +141,43 @@ function SpendChart({ title, items, loading }: SpendChartProps) {
           </BarChart>
         </ResponsiveContainer>
       )}
-    </div>
+    </Card>
   );
 }
 
 function BudgetExecutionTable({ items }: { items: ParSpendByItem[] }) {
   if (!items.some((item) => item.allocatedCents !== undefined)) return null;
   return (
-    <div className="mt-4 overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-sm" aria-label="Execuție bugetară pe cod">
-        <thead className="bg-muted/50"><tr><th className="p-3 text-left">Cod bugetar</th><th className="p-3 text-right">Alocat</th><th className="p-3 text-right">Angajat</th><th className="p-3 text-right">Plătit efectiv</th><th className="p-3 text-right">Disponibil</th></tr></thead>
-        <tbody>{items.map((item) => <tr key={item.id ?? item.label} className="border-t border-border"><td className="p-3 font-medium text-foreground">{item.label}</td><td className="p-3 text-right">{formatMDL(item.allocatedCents ?? 0)}</td><td className="p-3 text-right">{formatMDL(item.committedCents ?? 0)}</td><td className="p-3 text-right">{formatMDL(item.paidCents ?? 0)}</td><td className={`p-3 text-right font-medium ${(item.availableCents ?? 0) < 0 ? "text-destructive" : "text-foreground"}`}>{formatMDL(item.availableCents ?? 0)}</td></tr>)}</tbody>
-      </table>
+    <div className="mt-4">
+      <Table aria-label="Execuție bugetară pe cod">
+        <TableHeader>
+          <TableRow>
+            <TableHead scope="col">Cod bugetar</TableHead>
+            <TableHead scope="col" className="text-right">Alocat</TableHead>
+            <TableHead scope="col" className="text-right">Angajat</TableHead>
+            <TableHead scope="col" className="text-right">Plătit efectiv</TableHead>
+            <TableHead scope="col" className="text-right">Disponibil</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((item) => (
+            <TableRow key={item.id ?? item.label}>
+              <TableCell className="font-medium text-foreground">{item.label}</TableCell>
+              <TableCell className="text-right tabular-nums">{formatMDL(item.allocatedCents ?? 0)}</TableCell>
+              <TableCell className="text-right tabular-nums">{formatMDL(item.committedCents ?? 0)}</TableCell>
+              <TableCell className="text-right tabular-nums">{formatMDL(item.paidCents ?? 0)}</TableCell>
+              <TableCell
+                className={cn(
+                  "text-right font-medium tabular-nums",
+                  (item.availableCents ?? 0) < 0 ? "text-destructive" : "text-foreground",
+                )}
+              >
+                {formatMDL(item.availableCents ?? 0)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -179,8 +201,8 @@ const STATUS_LABELS: Record<string, string> = {
 
 function AgingTable({ items, loading }: AgingTableProps) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <h3 className="text-sm font-semibold text-foreground mb-3">Vechime cereri (Aging)</h3>
+    <Card className="p-4">
+      <h3 className="mb-3 text-sm font-semibold text-foreground">Vechime cereri (Aging)</h3>
       {loading ? (
         <div className="flex items-center justify-center h-20">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-label="Se încarcă" />
@@ -214,7 +236,7 @@ function AgingTable({ items, loading }: AgingTableProps) {
           </table>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -358,102 +380,89 @@ export function ParReports() {
       <div className="space-y-6">
 
         {/* Period filter */}
-        <div className="flex flex-wrap items-end gap-3 p-4 rounded-lg border border-border bg-card">
-          <div className="flex flex-wrap gap-1.5 basis-full" aria-label="Perioade prestabilite">
+        <Card className="flex flex-wrap items-end gap-3 p-4">
+          <div className="flex basis-full flex-wrap gap-1.5" aria-label="Perioade prestabilite">
             {([['month', 'Luna curentă'], ['quarter', 'Trimestrul curent'], ['year', 'Anul curent'], ['30', 'Ultimele 30 zile'], ['90', 'Ultimele 90 zile']] as const).map(([key, label]) => (
-              <button key={key} type="button" onClick={() => applyPreset(key)} className="rounded-full border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted">{label}</button>
+              <button
+                key={key}
+                type="button"
+                onClick={() => applyPreset(key)}
+                className="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
+              >
+                {label}
+              </button>
             ))}
           </div>
-          <div>
-            <label htmlFor="par-report-from" className="text-xs font-medium text-muted-foreground block mb-1">De la</label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="par-report-from">De la</Label>
+            <Input
               id="par-report-from"
+              className="w-auto"
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[40px]"
-              aria-label="Data de la"
             />
           </div>
-          <div>
-            <label htmlFor="par-report-to" className="text-xs font-medium text-muted-foreground block mb-1">Până la</label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="par-report-to">Până la</Label>
+            <Input
               id="par-report-to"
+              className="w-auto"
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[40px]"
-              aria-label="Data până la"
             />
           </div>
-          <button
-            type="button"
-            onClick={handleApply}
-            disabled={loadingCharts}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px]"
-            aria-label="Aplică filtrele"
-          >
+          <Button onClick={handleApply} disabled={loadingCharts} aria-label="Aplică filtrele">
             {loadingCharts ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
             Aplică
-          </button>
-        </div>
+          </Button>
+        </Card>
 
         {error && (
-          <div role="alert" className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-            <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
-            <span>{error}</span>
-          </div>
+          <Alert variant="destructive" icon={<AlertCircle className="h-4 w-4" />}>{error}</Alert>
         )}
 
         {/* KPI cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatCard
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <KpiTile
             label="Total estimat (perioadă)"
             value={formatMDL(totalSpend)}
-            icon={<FileText className="h-4 w-4" />}
-            sub={`${totalCount} cereri`}
+            tone="indigo"
+            icon={<FileText className="h-5 w-5" />}
+            hint={`${totalCount} cereri`}
           />
-          <StatCard
+          <KpiTile
             label="Timp mediu submit→aprobare"
             value={fmtDays(cycleTime?.avgSubmitToApprovedDays)}
-            icon={<Clock className="h-4 w-4" />}
+            tone="amber"
+            icon={<Clock className="h-5 w-5" />}
           />
-          <StatCard
+          <KpiTile
             label="Timp mediu submit→plată"
             value={fmtDays(cycleTime?.avgSubmitToPaidDays)}
-            icon={<TrendingUp className="h-4 w-4" />}
+            tone="emerald"
+            icon={<TrendingUp className="h-5 w-5" />}
           />
         </div>
 
         {/* Spend charts — tab selector */}
         <div>
-          <div className="flex flex-wrap gap-1 mb-4" role="tablist" aria-label="Cheltuieli per categorie">
-            {[
-              { id: "payer" as const, label: "Plătitor" },
-              { id: "budget" as const, label: "Cod bugetar" },
-              { id: "department" as const, label: "Departament" },
-              { id: "project" as const, label: "Proiect" },
-              { id: "vendor" as const, label: "Beneficiar" },
-              { id: "event" as const, label: "Eveniment" },
-              { id: "charge" as const, label: "Charge To" },
-            ].map((t) => (
-              <button
-                key={t.id}
-                role="tab"
-                aria-selected={tab === t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                className={[
-                  "px-3 py-1.5 rounded-full text-sm font-medium transition-colors min-h-[36px]",
-                  tab === t.id
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:text-foreground",
-                ].join(" ")}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            className="mb-4 flex-wrap"
+            aria-label="Cheltuieli per categorie"
+            value={tab}
+            onChange={(v) => setTab(v as typeof tab)}
+            tabs={[
+              { value: "payer", label: "Plătitor" },
+              { value: "budget", label: "Cod bugetar" },
+              { value: "department", label: "Departament" },
+              { value: "project", label: "Proiect" },
+              { value: "vendor", label: "Beneficiar" },
+              { value: "event", label: "Eveniment" },
+              { value: "charge", label: "Charge To" },
+            ]}
+          />
 
           {tab === "payer" && (
             <><SpendChart title="Execuție pe plătitor / organizație" items={byPayer} loading={loadingCharts} /><BudgetExecutionTable items={byPayer} /></>

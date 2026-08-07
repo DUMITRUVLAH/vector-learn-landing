@@ -10,7 +10,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { CheckCircle, XCircle, MessageSquare, Loader2, Inbox, AlertCircle, RefreshCcw, X, FileText } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
-import { Button } from "@/components/ds";
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Dialog,
+  Input,
+  Label,
+  Select,
+  Textarea,
+} from "@/components/ds";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -88,7 +97,7 @@ const DECISION_CONFIG: Record<
     commentRequired: false,
     commentLabel: "Comentariu opțional",
     showSignature: true,
-    buttonClass: "bg-green-600 hover:bg-green-700 text-white",
+    buttonClass: "bg-success text-success-foreground hover:bg-success/90",
     icon: <CheckCircle className="h-4 w-4" aria-hidden="true" />,
   },
   reject: {
@@ -106,7 +115,7 @@ const DECISION_CONFIG: Record<
     commentRequired: true,
     commentLabel: "Ce trebuie modificat (obligatoriu)",
     showSignature: false,
-    buttonClass: "bg-orange-500 hover:bg-orange-600 text-white",
+    buttonClass: "bg-warning text-warning-foreground hover:bg-warning/90",
     icon: <MessageSquare className="h-4 w-4" aria-hidden="true" />,
   },
 };
@@ -312,43 +321,34 @@ function BulkApproveModal({ ids, defaultSignatureName, onClose, onDone }: BulkAp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      role="dialog" aria-modal="true" aria-labelledby="bulk-title"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-background border border-border rounded-lg w-full max-w-md shadow-xl">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 id="bulk-title" className="font-semibold text-foreground">Aprobă {ids.length} cereri</h2>
-          <button type="button" onClick={onClose} aria-label="Închide" className="text-muted-foreground hover:text-foreground">
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Aprobă ${ids.length} cereri`}
+      description="Aceeași semnătură și comentariu se aplică tuturor cererilor selectate. Cele pe care nu le poți decide vor fi marcate individual."
+      size="md"
+    >
+      <form onSubmit={submit} className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="bulk-sig">Semnătură / Nume</Label>
+          {/* Was `className="vf-input"` — a class that exists in no stylesheet, so this
+              field rendered as a raw browser input inside a styled modal. */}
+          <Input id="bulk-sig" type="text" value={signatureName} onChange={(e) => setSignatureName(e.target.value)} />
         </div>
-        <form onSubmit={submit} className="p-4 space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Aceeași semnătură și comentariu se aplică tuturor cererilor selectate. Cele pe care nu le poți decide vor fi marcate individual.
-          </p>
-          <div>
-            <label htmlFor="bulk-sig" className="block text-sm font-semibold mb-1.5">Semnătură / Nume</label>
-            <input id="bulk-sig" type="text" value={signatureName} onChange={(e) => setSignatureName(e.target.value)} className="vf-input" />
-          </div>
-          <div>
-            <label htmlFor="bulk-comment" className="block text-sm font-semibold mb-1.5">Comentariu (opțional)</label>
-            <textarea id="bulk-comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={2}
-              className="vf-input resize-none" />
-          </div>
-          {error && (
-            <div role="alert" className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">{error}</div>
-          )}
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-md border border-input hover:bg-muted min-h-[44px]">Anulează</button>
-            <button type="submit" disabled={submitting}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 min-h-[44px]">
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle className="h-4 w-4" aria-hidden />}
-              Aprobă toate
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="bulk-comment">Comentariu (opțional)</Label>
+          <Textarea id="bulk-comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={2} className="resize-none" />
+        </div>
+        {error && <Alert variant="destructive">{error}</Alert>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>Anulează</Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle className="h-4 w-4" aria-hidden />}
+            Aprobă toate
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 
@@ -525,32 +525,32 @@ export default function ParInbox() {
                   <p className="text-sm text-muted-foreground">
                     {rows.length} din {items.length} {items.length === 1 ? "cerere" : "cereri"}
                   </p>
-                  <select
+                  <Select
                     value={projectFilter}
                     onChange={(e) => setProjectFilter(e.target.value)}
                     aria-label="Filtrează după proiect"
-                    className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px]"
+                    className="w-auto"
                   >
                     <option value="">Toate proiectele</option>
                     {projectOptions.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                  <select value={payerFilter} onChange={(e) => setPayerFilter(e.target.value)} aria-label="Filtrează după plătitor" className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px]">
+                  </Select>
+                  <Select className="w-auto" value={payerFilter} onChange={(e) => setPayerFilter(e.target.value)} aria-label="Filtrează după plătitor">
                     <option value="">Toți plătitorii</option>{payerOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                  <select value={eventFilter} onChange={(e) => setEventFilter(e.target.value)} aria-label="Filtrează după eveniment" className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px]">
+                  </Select>
+                  <Select className="w-auto" value={eventFilter} onChange={(e) => setEventFilter(e.target.value)} aria-label="Filtrează după eveniment">
                     <option value="">Toate evenimentele</option>{eventOptions.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-                  </select>
-                  <input value={requestorFilter} onChange={(e) => setRequestorFilter(e.target.value)} placeholder="Solicitant…" aria-label="Filtrează după solicitant" className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px] w-36" />
-                  <input value={beneficiaryFilter} onChange={(e) => setBeneficiaryFilter(e.target.value)} placeholder="Beneficiar…" aria-label="Filtrează după beneficiar" className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px] w-36" />
-                  <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="Depus de la" className="rounded-md border border-input bg-background px-2 py-1.5 text-sm min-h-[36px]" />
-                  <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Depus până la" className="rounded-md border border-input bg-background px-2 py-1.5 text-sm min-h-[36px]" />
-                  <input type="number" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="Min. MDL" aria-label="Sumă minimă" className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px] w-28" />
-                  <input type="number" value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="Max. MDL" aria-label="Sumă maximă" className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm min-h-[36px] w-28" />
+                  </Select>
+                  <Input className="w-36" value={requestorFilter} onChange={(e) => setRequestorFilter(e.target.value)} placeholder="Solicitant…" aria-label="Filtrează după solicitant" />
+                  <Input className="w-36" value={beneficiaryFilter} onChange={(e) => setBeneficiaryFilter(e.target.value)} placeholder="Beneficiar…" aria-label="Filtrează după beneficiar" />
+                  <Input className="w-auto" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="Depus de la" />
+                  <Input className="w-auto" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Depus până la" />
+                  <Input className="w-28" type="number" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="Min. MDL" aria-label="Sumă minimă" />
+                  <Input className="w-28" type="number" value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="Max. MDL" aria-label="Sumă maximă" />
                 </div>
                 {selectedIds.size > 0 && (
-                  <button type="button" onClick={() => setBulkOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 min-h-[36px]">
+                  <Button size="sm" onClick={() => setBulkOpen(true)}>
                     <CheckCircle className="h-4 w-4" aria-hidden="true" /> Aprobă {selectedIds.size} selectate
-                  </button>
+                  </Button>
                 )}
               </div>
 
@@ -560,39 +560,44 @@ export default function ParInbox() {
                   <thead>
                     <tr className="bg-muted/50 border-b border-border">
                       <th className="px-3 py-2.5 w-8">
-                        <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="Selectează tot" className="h-4 w-4 rounded border-input accent-[hsl(var(--primary))] cursor-pointer" />
+                        <Checkbox checked={allSelected} onChange={toggleSelectAll} aria-label="Selectează tot" />
                       </th>
+                      {/* Column order is the approver's decision order: WHO, HOW MUCH,
+                          WHAT FOR — then the supporting detail. "Sumă" used to sit in
+                          8th place, past the horizontal scroll edge, so the single most
+                          important number on the screen was invisible without scrolling. */}
                       <Th k="requestNo" label="Nr." />
                       <Th k="payeeName" label="Beneficiar" />
+                      <Th k="totalEstimatedCents" label="Sumă" align="right" />
+                      <th className="whitespace-nowrap px-3 py-2.5 text-left font-medium text-muted-foreground">Scop</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-left font-medium text-muted-foreground">Servicii / descriere</th>
                       <Th k="projectName" label="Proiect" />
                       <Th k="requestedByName" label="Solicitat de" />
-                      <th className="px-3 py-2.5 font-medium text-muted-foreground text-left">Scop</th>
-                      <th className="px-3 py-2.5 font-medium text-muted-foreground text-left">Servicii / descriere</th>
-                      <th className="px-3 py-2.5 font-medium text-muted-foreground text-left">Documente</th>
-                      <Th k="totalEstimatedCents" label="Sumă" align="right" />
+                      <th className="whitespace-nowrap px-3 py-2.5 text-left font-medium text-muted-foreground">Documente</th>
                       <Th k="submittedAt" label="Depus" />
-                      <th className="px-3 py-2.5 font-medium text-muted-foreground text-right">Acțiuni</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right font-medium text-muted-foreground">Acțiuni</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((item, idx) => (
                       <tr key={item.id} className={cn("border-b border-border last:border-0 hover:bg-muted/30", idx % 2 ? "bg-muted/10" : "bg-background")}>
                         <td className="px-3 py-2 align-middle">
-                          <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} aria-label={`Selectează ${item.requestNo}`} className="h-4 w-4 rounded border-input accent-[hsl(var(--primary))] cursor-pointer" />
+                          <Checkbox checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} aria-label={`Selectează ${item.requestNo}`} />
                         </td>
                         <td className="px-3 py-2 align-middle">
-                          <button onClick={() => navigate(`/business/par/${item.id}`)} className="font-mono text-xs text-foreground hover:text-primary hover:underline">{item.requestNo}</button>
+                          <button onClick={() => navigate(`/business/par/${item.id}`)} className="whitespace-nowrap font-mono text-xs text-foreground hover:text-primary hover:underline">{item.requestNo}</button>
                           {bulkResults[item.id] && (
-                            <div className={cn("text-[11px] font-medium", bulkResults[item.id].ok ? "text-green-600 dark:text-green-400" : "text-destructive")}>
+                            <div className={cn("text-[11px] font-medium", bulkResults[item.id].ok ? "text-success" : "text-destructive")}>
                               {bulkResults[item.id].ok ? "✓ Aprobată" : `✗ ${bulkResults[item.id].error ?? "Eroare"}`}
                             </div>
                           )}
                         </td>
                         <td className="px-3 py-2 align-middle text-foreground font-medium min-w-[200px] max-w-[320px]"><span className="line-clamp-2" title={item.payeeName ?? ""}>{item.payeeName ?? "—"}</span></td>
-                        <td className="px-3 py-2 align-middle max-w-[180px] truncate text-foreground" title={item.projectName ?? ""}>{item.projectName ?? "—"}</td>
-                        <td className="px-3 py-2 align-middle max-w-[160px] truncate text-foreground" title={item.requestedByName ?? ""}>{item.requestedByName ?? "—"}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right align-middle font-mono font-semibold text-foreground">{formatMDL(item.totalEstimatedCents)}</td>
                         <td className="px-3 py-2 align-middle text-muted-foreground text-xs whitespace-nowrap">{PURPOSE_LABEL[item.purpose] ?? item.purpose}</td>
                         <td className="px-3 py-2 align-middle text-foreground text-xs min-w-[220px] max-w-[360px]"><span className="line-clamp-2" title={item.endUse ?? ""}>{item.endUse || "—"}</span></td>
+                        <td className="px-3 py-2 align-middle max-w-[180px] truncate text-foreground" title={item.projectName ?? ""}>{item.projectName ?? "—"}</td>
+                        <td className="px-3 py-2 align-middle max-w-[160px] truncate text-foreground" title={item.requestedByName ?? ""}>{item.requestedByName ?? "—"}</td>
                         <td className="px-3 py-2 align-middle min-w-[180px] max-w-[260px]">
                           {item.attachments?.length ? (
                             <div className="flex flex-col items-start gap-1">
@@ -611,14 +616,13 @@ export default function ParInbox() {
                             </div>
                           ) : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="px-3 py-2 align-middle text-right font-mono text-foreground whitespace-nowrap">{formatMDL(item.totalEstimatedCents)}</td>
                         <td className="px-3 py-2 align-middle text-muted-foreground text-xs whitespace-nowrap">
                           {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                         </td>
                         <td className="px-3 py-2 align-middle">
                           <div className="flex items-center justify-end gap-1">
-                            <button onClick={() => handleAction(item, "approve")} title="Aprobă" aria-label={`Aprobă ${item.requestNo}`} className="p-1.5 rounded-md text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"><CheckCircle className="h-4 w-4" aria-hidden="true" /></button>
-                            <button onClick={() => handleAction(item, "request_changes")} title="Solicită modificări" aria-label={`Solicită modificări la ${item.requestNo}`} className="p-1.5 rounded-md text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"><MessageSquare className="h-4 w-4" aria-hidden="true" /></button>
+                            <button onClick={() => handleAction(item, "approve")} title="Aprobă" aria-label={`Aprobă ${item.requestNo}`} className="rounded-md p-1.5 text-success hover:bg-success/10"><CheckCircle className="h-4 w-4" aria-hidden="true" /></button>
+                            <button onClick={() => handleAction(item, "request_changes")} title="Solicită modificări" aria-label={`Solicită modificări la ${item.requestNo}`} className="rounded-md p-1.5 text-warning hover:bg-warning/10"><MessageSquare className="h-4 w-4" aria-hidden="true" /></button>
                             <button onClick={() => handleAction(item, "reject")} title="Respinge" aria-label={`Respinge ${item.requestNo}`} className="p-1.5 rounded-md text-destructive hover:bg-destructive/10"><XCircle className="h-4 w-4" aria-hidden="true" /></button>
                           </div>
                         </td>

@@ -12,6 +12,12 @@ import { cn } from "@/lib/utils";
 export type ButtonVariant =
   | "default"
   | "destructive"
+  /** Approve / confirm. Paired with `warning` and `destructive` wherever a
+   *  decision has three distinguishable outcomes (PAR approvals are the reason
+   *  these exist — mapping them onto ad-hoc `bg-green-600 text-white` was how
+   *  eight different greens ended up in the module). */
+  | "success"
+  | "warning"
   | "outline"
   | "secondary"
   | "ghost"
@@ -21,6 +27,8 @@ export type ButtonSize = "sm" | "default" | "lg" | "icon";
 const VARIANTS: Record<ButtonVariant, string> = {
   default: "bg-primary text-primary-foreground hover:bg-primary/90",
   destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+  success: "bg-success text-success-foreground hover:bg-success/90",
+  warning: "bg-warning text-warning-foreground hover:bg-warning/90",
   outline: "border-input bg-background text-foreground hover:bg-accent/10",
   secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
   ghost: "text-foreground hover:bg-accent/10",

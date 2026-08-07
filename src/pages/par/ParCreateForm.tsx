@@ -41,6 +41,7 @@ import {
   type ParPrefillResult,
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
+import { Card, PastelIcon, Select, Textarea, chipToneFor } from "@/components/ds";
 
 const ATTACHMENT_KIND_LABELS: Record<ParAttachmentKind, string> = {
   act_of_receipt: "Act de primire", contract: "Contract", quotation: "Ofertă",
@@ -57,8 +58,14 @@ const FIELD_MESSAGES: Record<string, string> = {
   payee_idnp: "IDNP invalid.",
 };
 
+/**
+ * Every control on this form is driven by this one class. It mirrors the `Input`
+ * primitive in `components/ds/Field.tsx`, with one deliberate difference: h-11
+ * instead of h-10, so each of the ~30 fields on this long form clears the 44px
+ * touch target. Keep the two in sync.
+ */
 const inputCls =
-  "h-11 rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-full";
+  "h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/45 disabled:cursor-not-allowed disabled:opacity-50";
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -143,11 +150,11 @@ function Section({ id, n, title, icon: Icon, hint, children }: {
   id?: string; n: string; title: string; icon: LucideIcon; hint?: string; children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-3 scroll-mt-24">
+    <Card id={id} tone="dashboard" className="scroll-mt-24 space-y-3 p-4 sm:p-5">
       <div className="flex items-center gap-3">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
-          <Icon className="h-4 w-4" aria-hidden />
-        </span>
+        <PastelIcon tone={chipToneFor(title)} size={32}>
+          <Icon className="h-4 w-4" />
+        </PastelIcon>
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
             {title}
@@ -157,7 +164,7 @@ function Section({ id, n, title, icon: Icon, hint, children }: {
         </div>
       </div>
       {children}
-    </section>
+    </Card>
   );
 }
 
@@ -851,9 +858,9 @@ export function ParCreateForm() {
             </div>
           )}
           {draftSavedMessage && (
-            <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+            <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
               <span>{draftSavedMessage}</span>
-              <button type="button" onClick={() => navigate("/business/par?status=draft")} className="rounded-md border border-emerald-600/30 px-3 py-1.5 font-medium hover:bg-emerald-500/10">
+              <button type="button" onClick={() => navigate("/business/par?status=draft")} className="rounded-md border border-success/30 px-3 py-1.5 font-medium hover:bg-success/10">
                 Deschide ciornele
               </button>
             </div>
@@ -889,12 +896,12 @@ export function ParCreateForm() {
                 />
               </Field>
               <Field label="Scop" htmlFor="purpose" hint="Obținere oferte pornește fluxul de achiziție (RFQ).">
-                <select id="purpose" className={inputCls} value={purpose}
+                <Select id="purpose" className="w-full" value={purpose}
                   onChange={(e) => setPurpose(e.target.value as ParPurpose)} aria-label="Scopul cererii">
                   <option value="execute_payment">Executare plată</option>
                   <option value="obtain_quotations">Obținere oferte</option>
                   <option value="provide_estimate">Estimare cost</option>
-                </select>
+                </Select>
               </Field>
             </div>
           </FieldGroup>
@@ -912,10 +919,10 @@ export function ParCreateForm() {
                 <input id="rcode" type="text" placeholder="ex. M13" className={inputCls} value={requestorCode} onChange={(e) => setRequestorCode(e.target.value)} />
               </Field>
               <Field label="Departament" htmlFor="dep">
-                <select id="dep" className={inputCls} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} aria-label="Departament">
+                <Select id="dep" className="w-full" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} aria-label="Departament">
                   <option value="">— Selectează —</option>
                   {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
+                </Select>
               </Field>
             </div>
           </FieldGroup>
@@ -924,7 +931,7 @@ export function ParCreateForm() {
           <FieldGroup label="Plătitor & proiect">
             <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="Plătitor / Organizație" htmlFor="payer">
-                <select id="payer" className={inputCls} value={payerId} onChange={(e) => {
+                <Select id="payer" className="w-full" value={payerId} onChange={(e) => {
                   const next = e.target.value;
                   setPayerId(next); setEventId(""); setBudgetCodeId("");
                   const eligible = projects.filter((p) => !next || p.payerId === next);
@@ -932,10 +939,10 @@ export function ParCreateForm() {
                 }}>
                   <option value="">— Selectează —</option>
                   {payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                </Select>
               </Field>
               <Field label="Proiect / Program" htmlFor="proj">
-                <select id="proj" className={inputCls} value={projectId}
+                <Select id="proj" className="w-full" value={projectId}
                   onChange={(e) => {
                     const next = e.target.value; setProjectId(next); setEventId(""); setBudgetCodeId("");
                     const selected = projects.find((p) => p.id === next); if (selected?.payerId) setPayerId(selected.payerId);
@@ -943,7 +950,7 @@ export function ParCreateForm() {
                   aria-label="Proiect">
                   <option value="">— Selectează —</option>
                   {projects.filter((p) => !payerId || p.payerId === payerId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                </Select>
               </Field>
               {/* VM1-04: Event — filtered by selected project.
                   VM3-03: când proiectul selectat NU are evenimente, câmpul nu mai dispare mut
@@ -957,14 +964,14 @@ export function ParCreateForm() {
                   return (
                     <Field label="Eveniment" htmlFor="evtId">
                       <input className={inputCls} value={eventSearch} onChange={(e) => setEventSearch(e.target.value)} placeholder="Caută eveniment…" aria-label="Caută eveniment" />
-                      <select id="evtId" className={inputCls} value={eventId}
+                      <Select id="evtId" className="w-full" value={eventId}
                         onChange={(e) => setEventId(e.target.value)}
                         aria-label="Eveniment">
                         <option value="">— Selectează —</option>
                         {filteredEvents.map((ev) => (
                           <option key={ev.id} value={ev.id}>{ev.name}</option>
                         ))}
-                      </select>
+                      </Select>
                       <div className="flex gap-2">
                         <input className={inputCls} value={newEventName} onChange={(e) => setNewEventName(e.target.value)} placeholder="Eveniment nou" aria-label="Denumire eveniment nou" />
                         <button type="button" onClick={addQuickEvent} className="px-3 rounded-md border border-input hover:bg-muted" aria-label="Adaugă eveniment"><Plus className="h-4 w-4" /></button>
@@ -995,10 +1002,10 @@ export function ParCreateForm() {
             <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="Cod bugetar" htmlFor="bc">
                 <input className={inputCls} value={budgetSearch} onChange={(e) => setBudgetSearch(e.target.value)} placeholder="Caută după cod sau denumire…" aria-label="Caută cod bugetar" />
-                <select id="bc" className={inputCls} value={budgetCodeId} onChange={(e) => setBudgetCodeId(e.target.value)} aria-label="Cod bugetar">
+                <Select id="bc" className="w-full" value={budgetCodeId} onChange={(e) => setBudgetCodeId(e.target.value)} aria-label="Cod bugetar">
                   <option value="">— Selectează —</option>
                   {budgetCodes.filter((b) => !!payerId && b.payerId === payerId && (!b.projectId || (!!projectId && b.projectId === projectId)) && (!budgetSearch.trim() || `${b.code} ${b.name}`.toLocaleLowerCase("ro").includes(budgetSearch.trim().toLocaleLowerCase("ro")))).map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
-                </select>
+                </Select>
                 {payerId && <div className="flex gap-2">
                   <input className={inputCls} value={newBudgetCode} onChange={(e) => setNewBudgetCode(e.target.value)} placeholder="Cod bugetar nou" aria-label="Cod bugetar nou" />
                   <button type="button" onClick={addQuickBudgetCode} className="px-3 rounded-md border border-input hover:bg-muted"><Plus className="h-4 w-4" /></button>
@@ -1014,7 +1021,7 @@ export function ParCreateForm() {
                       "text-xs font-medium flex items-center gap-1",
                       budgetBalance.availableCents <= 0 && budgetBalance.allocatedCents > 0
                         ? "text-destructive"
-                        : "text-emerald-600 dark:text-emerald-400"
+                        : "text-success"
                     )}>
                       {budgetBalance.allocatedCents > 0
                         ? `Disponibil: ${formatMDL(budgetBalance.availableCents)} din ${formatMDL(budgetBalance.allocatedCents)}`
@@ -1104,22 +1111,22 @@ export function ParCreateForm() {
           </div>
 
           <div className={cn("flex items-center justify-between p-3 rounded-lg",
-            aboveThreshold ? "bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800" : "bg-muted")}>
+            aboveThreshold ? "border border-warning/40 bg-warning/[0.08]" : "bg-muted")}>
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-foreground">TOTAL ESTIMAT</span>
               {/* VF-203: currency selector (draft only) */}
-              <select
+              <Select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as typeof currency)}
                 aria-label="Monedă"
-                className="rounded-md border border-input bg-background text-xs px-2 py-1 min-h-[44px]"
+                className="w-auto"
               >
                 <option value="MDL">MDL</option>
                 <option value="EUR">EUR</option>
                 <option value="USD">USD</option>
-              </select>
+              </Select>
             </div>
-            <span className={cn("text-base font-semibold", aboveThreshold ? "text-orange-700 dark:text-orange-300" : "text-foreground")}>{fmtMoney(totalCents, currency)}</span>
+            <span className={cn("text-base font-semibold", aboveThreshold ? "text-warning" : "text-foreground")}>{fmtMoney(totalCents, currency)}</span>
           </div>
           {currency !== "MDL" && (
             <p className="text-xs text-muted-foreground text-right">
@@ -1127,7 +1134,7 @@ export function ParCreateForm() {
             </p>
           )}
           {aboveThreshold && (
-            <p className="text-xs text-orange-600 dark:text-orange-400 flex items-start gap-1.5">
+            <p className="flex items-start gap-1.5 text-xs text-warning">
               <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden />
               Peste pragul micro-achiziție. Dacă plata finală depășește estimarea cu peste 10%, e nevoie de re-aprobare.
             </p>
@@ -1142,7 +1149,7 @@ export function ParCreateForm() {
         {/* 11 End-use */}
         <Section n="11" title="Utilizare finală" icon={AlignLeft} hint="Descrie pe scurt ce s-a livrat sau prestat.">
           <Field label="Descriere" htmlFor="endUse" required={purpose === "execute_payment"} error={fieldErrors.end_use}>
-            <textarea id="endUse" rows={4}
+            <Textarea id="endUse" rows={4}
               placeholder="Descrie detaliat serviciile/bunurile primite — ex. „Servicii de consultanță psihologică de grup, organizate în cadrul proiectului Digital Safeguard, cu durata de 120–180 min, pe platforma Zoom, pentru beneficiarii proiectului.”"
               className="min-h-[100px] rounded-md border border-input bg-background px-3 py-2.5 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-full resize-y"
               value={endUse} onChange={(e) => { setEndUse(e.target.value); setFieldErrors((p) => ({ ...p, end_use: "" })); }} />
@@ -1383,10 +1390,10 @@ export function ParCreateForm() {
             vendors.length > 0 ? (
               <Field label="Beneficiar salvat" htmlFor="vsel" hint="Alege un beneficiar din registru sau introdu manual mai jos">
                 <input className={inputCls} value={vendorSearch} onChange={(e) => setVendorSearch(e.target.value)} placeholder="Caută după nume, IDNO/IDNP sau IBAN…" aria-label="Caută beneficiar salvat" />
-                <select id="vsel" className={inputCls} value={vendorId} onChange={onVendorSelect} aria-label="Beneficiar salvat">
+                <Select id="vsel" className="w-full" value={vendorId} onChange={onVendorSelect} aria-label="Beneficiar salvat">
                   <option value="">— Introducere manuală —</option>
                   {vendors.filter((v) => !vendorSearch.trim() || `${v.name} ${v.idnp ?? ""} ${v.iban ?? ""}`.toLocaleLowerCase("ro").includes(vendorSearch.trim().toLocaleLowerCase("ro"))).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </select>
+                </Select>
               </Field>
             ) : (
               <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border p-3">
@@ -1456,7 +1463,7 @@ export function ParCreateForm() {
               </Collapsible>
               {!vendorId && payeeName.trim() && payeeIban.trim() && (
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" aria-hidden />
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
                   Beneficiarul cu IBAN se salvează automat în registru pentru reutilizare.
                 </p>
               )}
@@ -1471,9 +1478,9 @@ export function ParCreateForm() {
         <Section n="13" title="Documente" icon={Paperclip}>
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Tip document" htmlFor="uk">
-              <select id="uk" className={inputCls} value={uploadKind} onChange={(e) => setUploadKind(e.target.value as ParAttachmentKind)} aria-label="Tip document">
+              <Select id="uk" className="w-full" value={uploadKind} onChange={(e) => setUploadKind(e.target.value as ParAttachmentKind)} aria-label="Tip document">
                 {(Object.entries(ATTACHMENT_KIND_LABELS) as [ParAttachmentKind, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
+              </Select>
             </Field>
             <label className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium cursor-pointer hover:bg-secondary/80 transition-colors min-h-[44px]",
@@ -1496,7 +1503,7 @@ export function ParCreateForm() {
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-foreground truncate">{a.fileName}</span>
                       <span className="block text-xs text-muted-foreground">{ATTACHMENT_KIND_LABELS[a.kind]}</span>
-                      {analysis && <span className={cn("block text-xs font-medium", analysis.status === "match" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400")}>
+                      {analysis && <span className={cn("block text-xs font-medium", analysis.status === "match" ? "text-success" : "text-warning")}>
                         {analysis.status === "match" ? "AI: rechizite și sumă concordante" : `AI: ${analysis.warnings} neconcordanțe — ${analysis.checks.filter((c) => c.matches === false).map((c) => c.field).join(", ")}`}
                       </span>}
                     </span>
@@ -1520,7 +1527,7 @@ export function ParCreateForm() {
         <div className="max-w-4xl mx-auto px-4 py-3 space-y-2">
           {/* Feature 2: non-blocking budget overage warning */}
           {budgetOverageWarn && (
-            <div role="status" className="flex items-center gap-2 p-2 rounded-md bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300 text-xs">
+            <div role="status" className="flex items-center gap-2 p-2 rounded-md border border-warning/40 bg-warning/[0.08] text-xs text-warning">
               <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
               <span>Depășește bugetul disponibil pentru acest cod ({formatMDL(budgetBalance!.availableCents)} disponibil)</span>
             </div>
@@ -1528,7 +1535,7 @@ export function ParCreateForm() {
           <div className="flex items-center justify-between gap-3">
             <div className="leading-tight flex-shrink-0">
               <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">Total estimat</span>
-              <span className={cn("text-base font-bold tabular-nums", aboveThreshold ? "text-orange-600 dark:text-orange-400" : "text-foreground")}>{fmtMoney(totalCents, currency)}</span>
+              <span className={cn("text-base font-bold tabular-nums", aboveThreshold ? "text-warning" : "text-foreground")}>{fmtMoney(totalCents, currency)}</span>
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-end">
               {/* Feature 3: Templates */}

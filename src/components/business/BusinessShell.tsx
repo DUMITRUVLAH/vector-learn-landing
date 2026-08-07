@@ -537,10 +537,13 @@ export function BusinessShell({
         </div>
       )}
 
-      {/* Main */}
-      <main className="flex min-w-0 flex-1 flex-col pb-16 md:pb-0">
-        {/* Utility row — no title bar; the page owns its title (PageHeader). */}
-        <div className="flex items-center gap-2 px-5 pt-5 sm:px-8">
+      {/* Main column. The utility row is a <header> SIBLING of <main>, not a child:
+          the hamburger and the notification bell are app chrome, not page content,
+          and burying them inside <main> puts them in the document's main landmark
+          (assistive tech reads them as part of the page; "first control in main"
+          resolves to the bell instead of the page's own first control). */}
+      <div className="flex min-w-0 flex-1 flex-col pb-16 md:pb-0">
+        <header className="flex items-center gap-2 px-5 pt-5 sm:px-8">
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
@@ -551,17 +554,17 @@ export function BusinessShell({
           </button>
           <div className="flex-1" />
           <NotificationBell />
-        </div>
+        </header>
 
-        <div className="mx-auto w-full max-w-7xl px-5 pb-8 pt-2 sm:px-8">
+        <main className="mx-auto w-full max-w-7xl px-5 pb-8 pt-2 sm:px-8">
           {/* An empty pageTitle means the page owns its own header (FinLayout passes ""),
               so we must not emit a stray empty <h1> above it. */}
           {pageTitle ? (
             <PageHeader title={pageTitle} subtitle={pageDescription} actions={actions} />
           ) : null}
           {children}
-        </div>
-      </main>
+        </main>
+      </div>
 
       {/* Mobile bottom nav — 4 tab-uri principale */}
       <nav

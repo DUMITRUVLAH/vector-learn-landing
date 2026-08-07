@@ -17,7 +17,7 @@ function fmtDate(iso: string | null | undefined): string {
 function DecisionBadge({ decision }: { decision: ParApproval["decision"] }) {
   if (decision === "approved")
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
         <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
         Aprobat
       </span>
@@ -31,7 +31,7 @@ function DecisionBadge({ decision }: { decision: ParApproval["decision"] }) {
     );
   if (decision === "changes_requested")
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-warning">
         <AlertCircle className="h-3.5 w-3.5" aria-hidden />
         Modificări cerute
       </span>
@@ -72,8 +72,12 @@ export function ParSignatureBlock({ approval, sectionLabel, isLocked }: Props) {
             <span className="text-xs text-muted-foreground">(blocat)</span>
           )}
         </div>
-        <p className="text-sm font-medium text-foreground mt-0.5">
-          {approval.signatureName ?? approval.approverUserId ?? "—"}
+        {/* Never fall back to `approverUserId`: that printed a raw UUID
+            ("d7516877-4cd6-…") where a person's name belongs, for every approver
+            who hasn't signed yet. The API returns no resolved name for a pending
+            approver — the role label above carries the meaning until they sign. */}
+        <p className="mt-0.5 text-sm font-medium text-foreground">
+          {approval.signatureName ?? (approval.decision === "pending" ? "În așteptarea semnăturii" : "—")}
         </p>
         {approval.signatureTitle && (
           <p className="text-xs text-muted-foreground">{approval.signatureTitle}</p>
@@ -82,7 +86,7 @@ export function ParSignatureBlock({ approval, sectionLabel, isLocked }: Props) {
           <p className="text-xs text-muted-foreground">{fmtDate(approval.decidedAt)}</p>
         )}
         {approval.comment && (
-          <p className="text-sm text-foreground mt-1 pl-2 border-l-2 border-amber-400/60 italic">
+          <p className="text-sm text-foreground mt-1 pl-2 border-l-2 border-warning/60 italic">
             {approval.comment}
           </p>
         )}

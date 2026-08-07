@@ -25,6 +25,7 @@ import {
   Loader2,
   AlertCircle,
   ClipboardList,
+  Landmark,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
@@ -38,6 +39,7 @@ import {
   type ParEvent,
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
+import { Alert, Badge, Card, EmptyState, KpiTile, PastelIcon, Skeleton } from "@/components/ds";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -174,9 +176,9 @@ function buildFolders(
 // ─── Components ──────────────────────────────────────────────────────────────
 
 const folderStatusColor: Record<FolderStatus, string> = {
-  pending_approval: "text-yellow-600 dark:text-yellow-400",
+  pending_approval: "text-warning",
   approved_in_finance: "text-blue-600 dark:text-blue-400",
-  paid: "text-green-600 dark:text-green-400",
+  paid: "text-success",
 };
 
 function BucketRow({ bucket, onNavigate }: { bucket: FolderBucket; onNavigate: () => void }) {
@@ -187,9 +189,7 @@ function BucketRow({ bucket, onNavigate }: { bucket: FolderBucket; onNavigate: (
       onClick={onNavigate}
       className={cn(
         "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors w-full text-left min-h-[44px] group",
-        isPaid
-          ? "bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30"
-          : "hover:bg-muted"
+        isPaid ? "bg-success/[0.06] hover:bg-success/10" : "hover:bg-muted"
       )}
       aria-label={`${bucket.label}: ${bucket.count} cereri, ${formatMDL(bucket.totalMdlCents)}`}
     >
@@ -197,7 +197,7 @@ function BucketRow({ bucket, onNavigate }: { bucket: FolderBucket; onNavigate: (
         className={cn("h-4 w-4 flex-shrink-0", folderStatusColor[bucket.status])}
         aria-hidden
       />
-      <span className={cn("flex-1 text-sm", isPaid ? "text-green-700 dark:text-green-400 font-medium" : "text-foreground")}>
+      <span className={cn("flex-1 text-sm", isPaid ? "font-medium text-success" : "text-foreground")}>
         {bucket.label}
       </span>
       <span className="text-xs text-muted-foreground tabular-nums">{bucket.count} cereri</span>
@@ -273,10 +273,12 @@ export function ParFolders() {
 
   if (loading) {
     return (
-      <BusinessShell pageTitle="Foldere PAR">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          <span>Se încarcă...</span>
+      <BusinessShell pageTitle="Foldere PAR" pageDescription="Vizualizare pe proiecte și statusuri">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {[0, 1, 2].map((i) => <Skeleton key={i} className="h-[132px] rounded-2xl" />)}
+          </div>
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-[52px] rounded-lg" />)}
         </div>
       </BusinessShell>
     );
@@ -285,10 +287,7 @@ export function ParFolders() {
   if (error) {
     return (
       <BusinessShell pageTitle="Foldere PAR">
-        <div role="alert" className="flex items-center gap-2 p-4 rounded-lg bg-destructive/10 text-destructive text-sm">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
-          <span>{error}</span>
-        </div>
+        <Alert variant="destructive" icon={<AlertCircle className="h-4 w-4" />}>{error}</Alert>
       </BusinessShell>
     );
   }
@@ -300,39 +299,31 @@ export function ParFolders() {
     <BusinessShell pageTitle="Foldere PAR" pageDescription="Vizualizare pe proiecte și statusuri">
       <div className="space-y-4">
         {/* Summary strip */}
-        <div className="flex flex-wrap gap-4 p-4 rounded-lg bg-muted/50 text-sm">
-          <div>
-            <span className="text-muted-foreground">Total cereri: </span>
-            <span className="font-semibold text-foreground">{totalCount}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Total MDL: </span>
-            <span className="font-semibold text-foreground">{formatMDL(totalMdl)}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Proiecte: </span>
-            <span className="font-semibold text-foreground">
-              {folders.filter((f) => f.projectId !== null).length}
-            </span>
-          </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <KpiTile label="Total cereri" value={totalCount} tone="indigo" icon={<ClipboardList className="h-5 w-5" />} />
+          <KpiTile label="Total MDL" value={formatMDL(totalMdl)} tone="emerald" icon={<Landmark className="h-5 w-5" />} />
+          <KpiTile
+            label="Proiecte"
+            value={folders.filter((f) => f.projectId !== null).length}
+            tone="violet"
+            icon={<FolderOpen className="h-5 w-5" />}
+          />
         </div>
 
         {/* Project folder list */}
         {folders.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <ClipboardList className="h-10 w-10 text-muted-foreground/40" aria-hidden />
-            <p className="text-sm text-muted-foreground">Nu există cereri PAR.</p>
-          </div>
+          <EmptyState
+            icon={<ClipboardList className="h-6 w-6" />}
+            title="Nu există cereri PAR"
+            description="Folderele se populează pe măsură ce apar cereri pe proiecte."
+          />
         ) : (
           <div className="space-y-2">
             {folders.map((folder) => {
               const opened = isOpen(folder.projectId);
               const folderKey = folder.projectId ?? "__null__";
               return (
-                <div
-                  key={folderKey}
-                  className="rounded-lg border border-border bg-card overflow-hidden"
-                >
+                <Card key={folderKey} className="overflow-hidden">
                   {/* Project header */}
                   <button
                     type="button"
@@ -340,20 +331,23 @@ export function ParFolders() {
                     aria-expanded={opened}
                     className="flex items-center gap-3 w-full px-4 py-3 hover:bg-muted/50 transition-colors text-left min-h-[52px]"
                   >
-                    {opened ? (
-                      <FolderOpen className="h-5 w-5 text-primary flex-shrink-0" aria-hidden />
-                    ) : (
-                      <Folder className="h-5 w-5 text-primary/60 flex-shrink-0" aria-hidden />
-                    )}
+                    <PastelIcon tone="violet" size={32}>
+                      {opened ? <FolderOpen className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
+                    </PastelIcon>
                     <span className="flex-1 font-medium text-foreground">{folder.projectName}</span>
                     <span className="hidden md:flex items-center gap-1.5">
                       {folder.buckets.map((bucket) => (
-                        <span key={bucket.status} className={cn(
-                          "rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums",
-                          bucket.status === "pending_approval" && "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-                          bucket.status === "approved_in_finance" && "bg-blue-500/10 text-blue-700 dark:text-blue-300",
-                          bucket.status === "paid" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                        )}>{bucket.label}: {bucket.count}</span>
+                        <Badge
+                          key={bucket.status}
+                          variant={
+                            bucket.status === "pending_approval" ? "warning"
+                            : bucket.status === "approved_in_finance" ? "info"
+                            : "success"
+                          }
+                          className="tabular-nums"
+                        >
+                          {bucket.label}: {bucket.count}
+                        </Badge>
                       ))}
                     </span>
                     <span className="text-xs text-muted-foreground tabular-nums hidden sm:inline">
@@ -433,7 +427,7 @@ export function ParFolders() {
                       </div>
                     </div>
                   )}
-                </div>
+                </Card>
               );
             })}
           </div>

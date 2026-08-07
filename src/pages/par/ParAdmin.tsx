@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { cn } from "@/lib/utils";
+import { Alert, Badge, Button, Card, Checkbox, Input, Label, Select, Switch, Tabs, Textarea } from "@/components/ds";
 import {
   type RuleDraft, type ApproverPick, type GroupedRule,
   ruleScopeKey, buildDoaRows, groupDoaRows, emptyRuleDraft,
@@ -426,17 +427,17 @@ function ApprovalRuleBuilder({ initial, isNew, saving, departments, payers, proj
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Plătitor / Organizație</label>
-            <select value={draft.payerId ?? ""} onChange={(e) => setDraft((d) => ({ ...d, payerId: e.target.value || null, projectId: null }))} className={field} aria-label="Plătitor regulă de aprobare">
+            <Select value={draft.payerId ?? ""} onChange={(e) => setDraft((d) => ({ ...d, payerId: e.target.value || null, projectId: null }))} className={field} aria-label="Plătitor regulă de aprobare">
               <option value="">Orice plătitor</option>
               {payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </Select>
           </div>
           <div>
             <label className={labelCls}>Proiect / Program</label>
-            <select value={draft.projectId ?? ""} onChange={(e) => set("projectId", e.target.value || null)} className={field} aria-label="Proiect regulă de aprobare">
+            <Select value={draft.projectId ?? ""} onChange={(e) => set("projectId", e.target.value || null)} className={field} aria-label="Proiect regulă de aprobare">
               <option value="">Orice proiect</option>
               {projects.filter((p) => !draft.payerId || p.payerId === draft.payerId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </Select>
           </div>
         </div>
       </fieldset>
@@ -465,7 +466,7 @@ function ApprovalRuleBuilder({ initial, isNew, saving, departments, payers, proj
             ))}
           </ul>
         )}
-        <select value={addPick} onChange={(e) => addApprover(e.target.value)} className={cn(field, "sm:max-w-md")} aria-label="Adaugă aprobator">
+        <Select value={addPick} onChange={(e) => addApprover(e.target.value)} className={cn(field, "sm:max-w-md")} aria-label="Adaugă aprobator">
           <option value="">+ Adaugă aprobator…</option>
           {members.length > 0 && (
             <optgroup label="Persoane">
@@ -477,7 +478,7 @@ function ApprovalRuleBuilder({ initial, isNew, saving, departments, payers, proj
           <optgroup label="Oricine cu rolul">
             {ROLE_OPTIONS.map((o) => <option key={o.value} value={`role:${o.value}`}>{o.label}</option>)}
           </optgroup>
-        </select>
+        </Select>
       </fieldset>
 
       {/* 3. Mode — only matters with 2+ approvers */}
@@ -509,24 +510,24 @@ function ApprovalRuleBuilder({ initial, isNew, saving, departments, payers, proj
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
             <div>
               <label className={labelCls}>Sumă de la (MDL)</label>
-              <input type="number" min={0} step={100} value={(draft.minAmountCents ?? 0) / 100} onChange={(e) => set("minAmountCents", Math.round(parseFloat(e.target.value || "0") * 100))} className={field} aria-label="Sumă minimă MDL" />
+              <Input type="number" min={0} step={100} value={(draft.minAmountCents ?? 0) / 100} onChange={(e) => set("minAmountCents", Math.round(parseFloat(e.target.value || "0") * 100))} className={field} aria-label="Sumă minimă MDL" />
             </div>
             <div>
               <label className={labelCls}>Până la (MDL, gol = ∞)</label>
-              <input type="number" min={0} step={100} value={draft.maxAmountCents != null ? draft.maxAmountCents / 100 : ""} onChange={(e) => set("maxAmountCents", e.target.value ? Math.round(parseFloat(e.target.value) * 100) : null)} className={field} placeholder="Fără limită" aria-label="Sumă maximă MDL" />
+              <Input type="number" min={0} step={100} value={draft.maxAmountCents != null ? draft.maxAmountCents / 100 : ""} onChange={(e) => set("maxAmountCents", e.target.value ? Math.round(parseFloat(e.target.value) * 100) : null)} className={field} placeholder="Fără limită" aria-label="Sumă maximă MDL" />
             </div>
             <div>
               <label className={labelCls}>Departament</label>
-              <select value={draft.departmentId ?? ""} onChange={(e) => set("departmentId", e.target.value || null)} className={field} aria-label="Departament">
+              <Select value={draft.departmentId ?? ""} onChange={(e) => set("departmentId", e.target.value || null)} className={field} aria-label="Departament">
                 <option value="">Orice</option>
                 {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+              </Select>
             </div>
             <div>
               <label className={labelCls}>Charge To</label>
-              <select value={draft.chargeTo ?? ""} onChange={(e) => set("chargeTo", (e.target.value || null) as RuleDraft["chargeTo"])} className={field} aria-label="Charge To">
+              <Select value={draft.chargeTo ?? ""} onChange={(e) => set("chargeTo", (e.target.value || null) as RuleDraft["chargeTo"])} className={field} aria-label="Charge To">
                 {CHARGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              </Select>
             </div>
           </div>
         )}
@@ -676,7 +677,7 @@ function ParSettingsForm() {
         <p className="text-xs text-muted-foreground mb-2">
           Cererile sub acest prag necesită o singură aprobare. Modificarea afectează cererile noi.
         </p>
-        <input
+        <Input
           id="par-threshold"
           type="number"
           min={0}
@@ -700,7 +701,7 @@ function ParSettingsForm() {
         <label htmlFor="par-currency" className="text-sm font-medium text-foreground block mb-1">
           Monedă implicită
         </label>
-        <input
+        <Input
           id="par-currency"
           type="text"
           maxLength={3}
@@ -715,7 +716,7 @@ function ParSettingsForm() {
         <label htmlFor="par-legal-name" className="text-sm font-medium text-foreground block mb-1">
           Denumire legală organizație
         </label>
-        <input
+        <Input
           id="par-legal-name"
           type="text"
           value={settings.orgLegalName ?? ""}
@@ -729,7 +730,7 @@ function ParSettingsForm() {
         <label htmlFor="par-logo-url" className="text-sm font-medium text-foreground block mb-1">
           Logo URL (opțional)
         </label>
-        <input
+        <Input
           id="par-logo-url"
           type="url"
           value={settings.orgLogoUrl ?? ""}
@@ -743,7 +744,7 @@ function ParSettingsForm() {
         <label htmlFor="par-help-url" className="text-sm font-medium text-foreground block mb-1">
           URL Instrucțiuni (help link PDF)
         </label>
-        <input
+        <Input
           id="par-help-url"
           type="url"
           value={settings.pdfHelpUrl ?? ""}
@@ -757,7 +758,7 @@ function ParSettingsForm() {
         <label htmlFor="par-prefix" className="text-sm font-medium text-foreground block mb-1">
           Prefix număr cerere
         </label>
-        <input
+        <Input
           id="par-prefix"
           type="text"
           value={settings.requestNoPrefix ?? "PAR"}
@@ -775,7 +776,7 @@ function ParSettingsForm() {
             type="checkbox"
             checked={settings.enforceThreeWayMatch ?? false}
             onChange={(e) => setSettings((s) => ({ ...s, enforceThreeWayMatch: e.target.checked }))}
-            className="mt-0.5 h-4 w-4 rounded border-input accent-[hsl(var(--primary))]"
+            className="mt-0.5"
             aria-label="Impune 3-way match la plată"
           />
           <span>
@@ -792,7 +793,7 @@ function ParSettingsForm() {
         className={cn(
           "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] transition-colors",
           saved
-            ? "bg-emerald-600 text-white"
+            ? "bg-success text-success-foreground"
             : "bg-primary text-primary-foreground hover:bg-primary/90",
           saving && "opacity-70 cursor-not-allowed"
         )}
@@ -813,7 +814,7 @@ function delegationStatus(d: ParDelegation): { label: string; cls: string } {
   if (!d.active) return { label: "Anulată", cls: "text-muted-foreground" };
   if (now < start) return { label: "Programată", cls: "text-blue-600 dark:text-blue-400" };
   if (now > end) return { label: "Expirată", cls: "text-muted-foreground" };
-  return { label: "Activă", cls: "text-green-700 dark:text-green-400" };
+  return { label: "Activă", cls: "text-success" };
 }
 
 function DelegationSection({ members }: { members: ParMember[] }) {
@@ -864,18 +865,18 @@ function DelegationSection({ members }: { members: ParMember[] }) {
       <form onSubmit={submit} className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
         <div className="sm:col-span-2">
           <label htmlFor="deleg-to" className="text-xs font-medium text-muted-foreground block mb-1">Către</label>
-          <select id="deleg-to" value={toUserId} onChange={(e) => setToUserId(e.target.value)} className="vf-input" aria-label="Delegat">
+          <Select id="deleg-to" value={toUserId} onChange={(e) => setToUserId(e.target.value)} aria-label="Delegat">
             <option value="">Alege aprobator…</option>
             {approverMembers.map((m) => <option key={m.userId} value={m.userId}>{m.userName ?? m.userId}</option>)}
-          </select>
+          </Select>
         </div>
         <div>
           <label htmlFor="deleg-from" className="text-xs font-medium text-muted-foreground block mb-1">De la</label>
-          <input id="deleg-from" type="date" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="vf-input" />
+          <Input id="deleg-from" type="date" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
         </div>
         <div>
           <label htmlFor="deleg-until" className="text-xs font-medium text-muted-foreground block mb-1">Până la</label>
-          <input id="deleg-until" type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} className="vf-input" />
+          <Input id="deleg-until" type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
         </div>
         <div className="sm:col-span-4">
           <button type="submit" disabled={busy || !toUserId || !startsAt || !endsAt}
@@ -1017,25 +1018,25 @@ function AuditTab() {
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label htmlFor="audit-event" className="text-xs font-medium text-muted-foreground block mb-1">Eveniment</label>
-          <select id="audit-event" value={eventFilter} onChange={(e) => setEventFilter(e.target.value)}
-            className="h-10 rounded-md border border-input bg-background px-2 text-sm min-h-[40px]">
+          <Select id="audit-event" value={eventFilter} onChange={(e) => setEventFilter(e.target.value)}
+           >
             {AUDIT_EVENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          </Select>
         </div>
-        <select value={payerFilter} onChange={(e) => { setPayerFilter(e.target.value); setProjectFilter(""); }} aria-label="Filtru plătitor" className="h-10 rounded-md border border-input bg-background px-2 text-sm"><option value="">Toți plătitorii</option>{payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-        <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} aria-label="Filtru proiect" className="h-10 rounded-md border border-input bg-background px-2 text-sm"><option value="">Toate proiectele</option>{projects.filter((p) => !payerFilter || p.payerId === payerFilter).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-        <select value={parEventFilter} onChange={(e) => setParEventFilter(e.target.value)} aria-label="Filtru eveniment PAR" className="h-10 rounded-md border border-input bg-background px-2 text-sm"><option value="">Toate evenimentele PAR</option>{events.filter((ev) => !projectFilter || ev.projectId === projectFilter).map((ev) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}</select>
-        <select value={actorFilter} onChange={(e) => setActorFilter(e.target.value)} aria-label="Filtru persoană" className="h-10 rounded-md border border-input bg-background px-2 text-sm"><option value="">Toate persoanele</option>{members.map((m) => <option key={m.userId} value={m.userId}>{m.userName ?? m.userId}</option>)}</select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filtru statut PAR" className="h-10 rounded-md border border-input bg-background px-2 text-sm"><option value="">Toate statusurile</option>{["draft","pending_approval","changes_requested","rejected","approved","in_finance","reapproval_required","paid","cancelled"].map((s) => <option key={s} value={s}>{s}</option>)}</select>
+        <Select value={payerFilter} onChange={(e) => { setPayerFilter(e.target.value); setProjectFilter(""); }} aria-label="Filtru plătitor"><option value="">Toți plătitorii</option>{payers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>
+        <Select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} aria-label="Filtru proiect"><option value="">Toate proiectele</option>{projects.filter((p) => !payerFilter || p.payerId === payerFilter).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>
+        <Select value={parEventFilter} onChange={(e) => setParEventFilter(e.target.value)} aria-label="Filtru eveniment PAR"><option value="">Toate evenimentele PAR</option>{events.filter((ev) => !projectFilter || ev.projectId === projectFilter).map((ev) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}</Select>
+        <Select value={actorFilter} onChange={(e) => setActorFilter(e.target.value)} aria-label="Filtru persoană"><option value="">Toate persoanele</option>{members.map((m) => <option key={m.userId} value={m.userId}>{m.userName ?? m.userId}</option>)}</Select>
+        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filtru statut PAR"><option value="">Toate statusurile</option>{["draft","pending_approval","changes_requested","rejected","approved","in_finance","reapproval_required","paid","cancelled"].map((s) => <option key={s} value={s}>{s}</option>)}</Select>
         <div>
           <label htmlFor="audit-from" className="text-xs font-medium text-muted-foreground block mb-1">De la</label>
-          <input id="audit-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-            className="h-10 rounded-md border border-input bg-background px-2 text-sm min-h-[40px]" />
+          <Input id="audit-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+            />
         </div>
         <div>
           <label htmlFor="audit-to" className="text-xs font-medium text-muted-foreground block mb-1">Până la</label>
-          <input id="audit-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-            className="h-10 rounded-md border border-input bg-background px-2 text-sm min-h-[40px]" />
+          <Input id="audit-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+            />
         </div>
         <button type="button" onClick={exportCsv} disabled={entries.length === 0}
           className="inline-flex items-center gap-1.5 h-10 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted disabled:opacity-50 min-h-[40px]">
@@ -1128,7 +1129,7 @@ function EmailLogSection() {
         )}
         <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
           <input type="checkbox" checked={onlyFailed} onChange={(e) => setOnlyFailed(e.target.checked)}
-            className="h-4 w-4 rounded border-input" />
+             />
           Doar eșuate
         </label>
       </div>
@@ -1163,7 +1164,7 @@ function EmailLogSection() {
                         Eșuat
                       </span>
                     ) : m.status === "sent" ? (
-                      <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 text-xs font-medium">
+                      <span className="rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success">
                         Trimis
                       </span>
                     ) : (
@@ -1242,16 +1243,16 @@ function InviteSection({ payers }: { payers: ParPayer[] }) {
 
       <form onSubmit={submit} className="space-y-3">
         <div className="flex flex-col sm:flex-row gap-2">
-        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+        <Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
           placeholder="email@exemplu.md" aria-label="Email invitat"
-          className="vf-input flex-1" />
-        <select value={role} onChange={(e) => setRole(e.target.value as typeof role)}
-          aria-label="Rol invitat" className="vf-input sm:w-44">
+          className="flex-1" />
+        <Select value={role} onChange={(e) => setRole(e.target.value as typeof role)}
+          aria-label="Rol invitat" className="sm:w-44">
           <option value="requestor">Solicitant</option>
           <option value="approver">Aprobator</option>
           <option value="finance">Finanțe</option>
           <option value="par_admin">Administrator</option>
-        </select>
+        </Select>
         <button type="submit" disabled={busy || payerIds.length === 0}
           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 min-h-[44px]">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
@@ -1278,7 +1279,7 @@ function InviteSection({ payers }: { payers: ParPayer[] }) {
       {lastUrl && (
         <div className="space-y-1.5">
           {lastEmailed === false && (
-            <div role="status" className="flex items-start gap-2 p-2.5 rounded-md bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+            <div role="status" className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/[0.08] p-2.5 text-xs text-warning">
               <AlertCircle className="h-4 w-4 flex-shrink-0 mt-px" aria-hidden />
               <span>Emailul <strong>nu s-a trimis</strong> (serviciul de email nu e configurat). Copiază linkul de mai jos și trimite-l manual persoanei invitate — trebuie să-l deschidă și să apese «Continuă cu Google».</span>
             </div>
@@ -1351,8 +1352,8 @@ function groupMembers(members: ParMember[]): GroupedMember[] {
 
 const ROLE_BADGE_COLORS: Record<ParMember["role"], string> = {
   requestor: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-  approver: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  finance: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  approver: "bg-warning/15 text-warning",
+  finance: "bg-success/15 text-success",
   par_admin: "bg-primary/10 text-primary",
 };
 
@@ -1427,18 +1428,18 @@ function MyRolesPanel({ onChanged }: { onChanged: () => void }) {
       </div>
       <div className="flex flex-wrap items-end gap-2">
         <label htmlFor="self-role" className="sr-only">Rol de adăugat mie</label>
-        <select
+        <Select
           id="self-role"
           value={role}
           onChange={(e) => setRole(e.target.value as typeof role)}
-          className="rounded-lg border border-input bg-background px-3 py-2 text-sm min-h-[44px]"
+         
         >
           {SELF_ASSIGNABLE.map((o) => (
             <option key={o.value} value={o.value} disabled={has(o.value)}>
               {o.label}{has(o.value) ? " (ai deja)" : ""}
             </option>
           ))}
-        </select>
+        </Select>
         <button
           type="button"
           onClick={addToSelf}
@@ -1530,13 +1531,13 @@ function MemberAccessEditor({
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <label className="text-xs font-medium text-muted-foreground">Departament
-              <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className="vf-input mt-1"><option value="">Fără implicit</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+              <Select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className="mt-1"><option value="">Fără implicit</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</Select>
             </label>
             <label className="text-xs font-medium text-muted-foreground">Funcție
-              <input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} className="vf-input mt-1" placeholder="ex. Coordonator proiect" />
+              <Input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} className="mt-1" placeholder="ex. Coordonator proiect" />
             </label>
             <label className="text-xs font-medium text-muted-foreground">Cod personal
-              <input value={staffCode} onChange={(e) => setStaffCode(e.target.value)} className="vf-input mt-1" placeholder="ex. FIN-024" />
+              <Input value={staffCode} onChange={(e) => setStaffCode(e.target.value)} className="mt-1" placeholder="ex. FIN-024" />
             </label>
           </div>
           <fieldset>
@@ -1704,7 +1705,7 @@ function ParMembersTab() {
             <label htmlFor="member-user-id" className="text-xs font-medium text-muted-foreground block mb-1">
               User ID (UUID)
             </label>
-            <input
+            <Input
               id="member-user-id"
               type="text"
               value={addForm.userId}
@@ -1718,7 +1719,7 @@ function ParMembersTab() {
             <label htmlFor="member-role" className="text-xs font-medium text-muted-foreground block mb-1">
               Rol
             </label>
-            <select
+            <Select
               id="member-role"
               value={addForm.role}
               onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value }))}
@@ -1728,13 +1729,13 @@ function ParMembersTab() {
               {ROLE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
             <label htmlFor="member-limit" className="text-xs font-medium text-muted-foreground block mb-1">
               Limită aprobare (MDL, opțional)
             </label>
-            <input
+            <Input
               id="member-limit"
               type="number"
               min={0}
@@ -2037,25 +2038,13 @@ function ParReferenceData() {
       )}
 
       {/* Section tabs */}
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Secțiuni date referință">
-        {(Object.keys(sectionLabels) as RefSection[]).map((s) => (
-          <button
-            key={s}
-            role="tab"
-            aria-selected={section === s}
-            type="button"
-            onClick={() => setSection(s)}
-            className={cn(
-              "px-3 py-1.5 rounded-full text-sm font-medium transition-colors min-h-[36px]",
-              section === s
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {sectionLabels[s]}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        className="flex-wrap"
+        aria-label="Secțiuni date referință"
+        value={section}
+        onChange={(v) => setSection(v as RefSection)}
+        tabs={(Object.keys(sectionLabels) as RefSection[]).map((s) => ({ value: s, label: sectionLabels[s] }))}
+      />
 
       {section === "payers" && (
         <SimpleRefTable
@@ -2366,52 +2355,52 @@ function EventsTable({ events, projects, onReload }: EventsTableProps) {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label htmlFor="ev-name" className="block text-xs font-medium text-muted-foreground mb-1">Denumire *</label>
-              <input
+              <Input
                 id="ev-name"
                 type="text"
                 required
                 placeholder="ex. Conferința Anuală 2026"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground w-full focus:outline-none focus:ring-2 focus:ring-ring"
+               
               />
             </div>
             <div>
               <label htmlFor="ev-project" className="block text-xs font-medium text-muted-foreground mb-1">Proiect (opțional)</label>
-              <select
+              <Select
                 id="ev-project"
                 value={form.project_id}
                 onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value }))}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground w-full focus:outline-none focus:ring-2 focus:ring-ring"
+               
                 aria-label="Proiect"
               >
                 <option value="">— Neasociat —</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </Select>
             </div>
             <div>
               <label htmlFor="ev-starts" className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                 <Calendar className="h-3 w-3" aria-hidden /> Data început
               </label>
-              <input
+              <Input
                 id="ev-starts"
                 type="date"
                 value={form.starts_at}
                 onChange={(e) => setForm((f) => ({ ...f, starts_at: e.target.value }))}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground w-full focus:outline-none focus:ring-2 focus:ring-ring"
+               
               />
             </div>
             <div>
               <label htmlFor="ev-ends" className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                 <Calendar className="h-3 w-3" aria-hidden /> Data sfârșit
               </label>
-              <input
+              <Input
                 id="ev-ends"
                 type="date"
                 value={form.ends_at}
                 min={form.starts_at || undefined}
                 onChange={(e) => setForm((f) => ({ ...f, ends_at: e.target.value }))}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground w-full focus:outline-none focus:ring-2 focus:ring-ring"
+               
               />
             </div>
           </div>
@@ -2503,8 +2492,8 @@ interface BudgetCodeItem extends ParBudgetCode {
 function BudgetProgress({ usage }: { usage?: BudgetCodeUsage }) {
   if (!usage || usage.allocatedCents <= 0 || usage.usedPct == null) return null;
   const pct = usage.usedPct;
-  const barColor = pct > 100 ? "bg-destructive" : pct >= 80 ? "bg-yellow-500" : "bg-green-500";
-  const textColor = pct > 100 ? "text-destructive" : pct >= 80 ? "text-yellow-700 dark:text-yellow-400" : "text-muted-foreground";
+  const barColor = pct > 100 ? "bg-destructive" : pct >= 80 ? "bg-warning" : "bg-success";
+  const textColor = pct > 100 ? "text-destructive" : pct >= 80 ? "text-warning" : "text-muted-foreground";
   return (
     <div className="mt-1.5 w-full max-w-[180px] ml-auto">
       <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
@@ -2583,35 +2572,35 @@ function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: 
     <div className={cn("grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5", inline && "mt-2")}>
       <div>
         <label htmlFor="bc-code" className="text-xs font-medium text-muted-foreground block mb-1">Cod</label>
-        <input id="bc-code" type="text" value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
+        <Input id="bc-code" type="text" value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
           placeholder="ex. OPS-001" className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Cod bugetar" />
       </div>
       <div>
         <label htmlFor="bc-name" className="text-xs font-medium text-muted-foreground block mb-1">Denumire</label>
-        <input id="bc-name" type="text" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+        <Input id="bc-name" type="text" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
           placeholder="ex. Cheltuieli operaționale" className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Denumire cod bugetar" />
       </div>
       <div>
         <label htmlFor="bc-alloc" className="text-xs font-medium text-muted-foreground block mb-1">Alocare (MDL, 0 = fără plafon)</label>
-        <input id="bc-alloc" type="number" min={0} step={100} value={form.allocatedMDL}
+        <Input id="bc-alloc" type="number" min={0} step={100} value={form.allocatedMDL}
           onChange={(e) => setForm((f) => ({ ...f, allocatedMDL: e.target.value }))}
           placeholder="ex. 50000" className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Alocare MDL" />
       </div>
       <div>
         <label htmlFor="bc-payer" className="text-xs font-medium text-muted-foreground block mb-1">Plătitor / Organizație</label>
-        <select id="bc-payer" value={form.payerId} required onChange={(e) => setForm((f) => ({ ...f, payerId: e.target.value, projectId: "" }))}
+        <Select id="bc-payer" value={form.payerId} required onChange={(e) => setForm((f) => ({ ...f, payerId: e.target.value, projectId: "" }))}
           className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]">
           <option value="">— Selectează —</option>
           {payers.map((payer) => <option key={payer.id} value={payer.id}>{payer.name}</option>)}
-        </select>
+        </Select>
       </div>
       <div>
         <label htmlFor="bc-project" className="text-xs font-medium text-muted-foreground block mb-1">Proiect (opțional)</label>
-        <select id="bc-project" value={form.projectId} onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}
+        <Select id="bc-project" value={form.projectId} onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}
           className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]">
           <option value="">Toate proiectele plătitorului</option>
           {projects.filter((project) => !form.payerId || project.payerId === form.payerId).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-        </select>
+        </Select>
       </div>
       <div className="col-span-1 sm:col-span-2 lg:col-span-5 flex gap-2">
         <button type="button" onClick={handleSave} disabled={saving || !form.code.trim() || !form.name.trim() || !form.payerId}
@@ -2772,7 +2761,7 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
       ] as { id: string; label: string; placeholder: string }[]).map((field) => (
         <div key={field.id}>
           <label htmlFor={`vnd-${field.id}`} className="text-xs font-medium text-muted-foreground block mb-1">{field.label}</label>
-          <input id={`vnd-${field.id}`} type="text" value={form[field.id] ?? ""} onChange={(e) => setForm((f) => ({ ...f, [field.id]: e.target.value }))}
+          <Input id={`vnd-${field.id}`} type="text" value={form[field.id] ?? ""} onChange={(e) => setForm((f) => ({ ...f, [field.id]: e.target.value }))}
             placeholder={field.placeholder} className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label={field.label} />
         </div>
       ))}
@@ -2805,8 +2794,8 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
         <p className="text-xs font-medium text-muted-foreground">Caută în registrul contafirm.md (autofill)</p>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden />
-          <input type="text" value={registryQuery} onChange={(e) => onQueryChange(e.target.value)}
-            className="w-full h-10 rounded-md border border-input bg-background pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          <Input type="text" value={registryQuery} onChange={(e) => onQueryChange(e.target.value)}
+           
             placeholder="ex. ATIC sau 1002600020555"
             aria-label="Caută companie în registrul contafirm.md" />
           {registrySearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" aria-hidden />}
@@ -2959,13 +2948,13 @@ function SimpleRefTable<T extends { id: string; active?: boolean; name?: string 
             {field.label}
           </label>
           {field.options ? (
-            <select id={`ref-${field.id}`} value={form[field.id] ?? ""} onChange={(e) => setForm((f) => ({ ...f, [field.id]: e.target.value }))}
+            <Select id={`ref-${field.id}`} value={form[field.id] ?? ""} onChange={(e) => setForm((f) => ({ ...f, [field.id]: e.target.value }))}
               className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label={field.label}>
               <option value="">— Selectează —</option>
               {field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
+            </Select>
           ) : (
-            <input id={`ref-${field.id}`} type="text" value={form[field.id] ?? ""}
+            <Input id={`ref-${field.id}`} type="text" value={form[field.id] ?? ""}
               onChange={(e) => setForm((f) => ({ ...f, [field.id]: e.target.value }))} placeholder={field.placeholder}
               className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label={field.label} />
           )}
