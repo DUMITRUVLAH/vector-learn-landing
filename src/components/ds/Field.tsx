@@ -133,13 +133,17 @@ export interface CheckboxProps {
   disabled?: boolean;
   id?: string;
   className?: string;
+  /** Required when there is no visible `label` — the skin span is aria-hidden. */
+  "aria-label"?: string;
 }
 
-export function Checkbox({ checked, onChange, label, disabled, id, className }: CheckboxProps) {
+export function Checkbox({ checked, onChange, label, disabled, id, className, ...rest }: CheckboxProps) {
   const box = (
     <span
       className={cn(
-        "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary text-primary-foreground transition-colors",
+        // Explicit 4px: the token scale is built for cards, and `rounded-sm` (10px)
+        // on a 16px box renders as a circle — indistinguishable from a radio.
+        "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-primary text-primary-foreground transition-colors",
         checked ? "bg-primary" : "bg-transparent",
         disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
         className,
@@ -160,6 +164,7 @@ export function Checkbox({ checked, onChange, label, disabled, id, className }: 
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         className="sr-only"
+        {...rest}
       />
       {box}
       {label && <span className="text-sm font-medium">{label}</span>}
