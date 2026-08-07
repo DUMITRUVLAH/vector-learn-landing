@@ -8,6 +8,7 @@
  * `<article>`, so screen readers don't announce a dead control.
  */
 import type { ReactNode } from "react";
+import { Link } from "@/router/HashRouter";
 import { PastelIcon } from "./PastelIcon";
 import type { ChipTone } from "./tones";
 import { cn } from "@/lib/utils";
@@ -19,9 +20,12 @@ export interface KpiTileProps {
   tone?: ChipTone;
   /** Optional second line under the label (delta, period, hint). */
   hint?: ReactNode;
+  /** Makes the whole tile a router link. Takes precedence over `onClick`. */
+  href?: string;
   onClick?: () => void;
   loading?: boolean;
   className?: string;
+  "data-testid"?: string;
 }
 
 const SHELL =
@@ -33,9 +37,11 @@ export function KpiTile({
   icon,
   tone = "indigo",
   hint,
+  href,
   onClick,
   loading = false,
   className,
+  "data-testid": testId,
 }: KpiTileProps) {
   const body = (
     <>
@@ -57,12 +63,29 @@ export function KpiTile({
     </>
   );
 
+  const INTERACTIVE =
+    "transition-[transform,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
+  if (href) {
+    return (
+      <Link
+        to={href}
+        aria-label={`${label} — deschide`}
+        className={cn(SHELL, INTERACTIVE, "no-underline hover:no-underline", className)}
+        data-testid={testId}
+      >
+        {body}
+      </Link>
+    );
+  }
+
   if (!onClick) {
     return (
       <article
         className={cn(SHELL, className)}
-        aria-label={loading ? `${label} — se încarcă` : `${label}`}
+        aria-label={loading ? `${label} — se încarcă` : label}
         aria-busy={loading || undefined}
+        data-testid={testId}
       >
         {body}
       </article>
@@ -74,11 +97,8 @@ export function KpiTile({
       type="button"
       onClick={onClick}
       aria-label={`${label} — deschide`}
-      className={cn(
-        SHELL,
-        "transition-[transform,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-        className,
-      )}
+      className={cn(SHELL, INTERACTIVE, className)}
+      data-testid={testId}
     >
       {body}
     </button>
