@@ -3119,17 +3119,11 @@ export function ParAdmin({ isAdmin }: ParAdminProps) {
   }
 
   return (
-    <AppShell pageTitle="Administrare PAR">
-      <div className="max-w-5xl mx-auto px-4 py-6">
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-1">
-            <Settings className="h-5 w-5 text-primary" aria-hidden />
-            <h1 className="text-xl font-bold text-foreground">Administrare PAR</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Configurați regulile de aprobare, setările organizației, membrii și datele de referință.
-          </p>
-        </div>
+    <AppShell
+      pageTitle="Administrare PAR"
+      pageDescription="Configurați regulile de aprobare, setările organizației, membrii și datele de referință."
+    >
+      <div>
 
         {/* Tab list */}
         <div

@@ -216,10 +216,9 @@ function SidebarGroup({
   // Persist open/closed across shell remounts (each nav remounts the shell) so sections don't
   // reset and the sidebar doesn't "jump". Keyed by section label.
   const stateKey = group.section ?? "_";
-  const [open, setOpen] = useState(() => {
-    const remembered = sectionOpenState.get(stateKey);
-    return remembered ?? (!hasHeader || isActive);
-  });
+  // HR365 keeps its sidebar groups expanded — a column of bare group labels reads as a
+  // broken menu. Collapsing stays available (and is remembered), it just isn't the default.
+  const [open, setOpen] = useState(() => sectionOpenState.get(stateKey) ?? true);
   const setOpenPersisted = (next: boolean) => {
     sectionOpenState.set(stateKey, next);
     setOpen(next);
@@ -555,7 +554,11 @@ export function BusinessShell({
         </div>
 
         <div className="mx-auto w-full max-w-7xl px-5 pb-8 pt-2 sm:px-8">
-          <PageHeader title={pageTitle} subtitle={pageDescription} actions={actions} />
+          {/* An empty pageTitle means the page owns its own header (FinLayout passes ""),
+              so we must not emit a stray empty <h1> above it. */}
+          {pageTitle ? (
+            <PageHeader title={pageTitle} subtitle={pageDescription} actions={actions} />
+          ) : null}
           {children}
         </div>
       </main>

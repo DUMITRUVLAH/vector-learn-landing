@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { CheckCircle, XCircle, MessageSquare, Loader2, Inbox, AlertCircle, RefreshCcw, X, FileText } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { Button } from "@/components/ds";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -448,33 +449,21 @@ export default function ParInbox() {
     setSelectedIds(allSelected ? new Set() : new Set(items.map((i) => i.id)));
 
   return (
-    <AppShell pageTitle={t("inbox.title")}>
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {/* Page header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-foreground">{t("inbox.title")}</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {t("inbox.subtitle")}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={loadInbox}
-              disabled={loading}
-              className="p-2 rounded-md border border-input hover:bg-muted text-muted-foreground touch-target"
-              aria-label="Reîncarcă inbox"
-            >
-              <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} aria-hidden="true" />
-            </button>
-            <button
-              onClick={() => navigate("/business/par")}
-              className="px-3 py-2 text-sm rounded-md border border-input hover:bg-muted text-foreground touch-target"
-            >
-              Toate cererile
-            </button>
-          </div>
-        </div>
+    <AppShell
+      pageTitle={t("inbox.title")}
+      pageDescription={t("inbox.subtitle")}
+      actions={
+        <>
+          <Button variant="outline" size="icon" onClick={loadInbox} disabled={loading} aria-label="Reîncarcă inbox">
+            <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} aria-hidden="true" />
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/business/par")}>
+            Toate cererile
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-6">
 
         {/* Content */}
         {loading && (

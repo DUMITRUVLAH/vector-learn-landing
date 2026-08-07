@@ -13,6 +13,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Filter, Loader2, FileText, AlertCircle, Inbox, Landmark, ArrowRight, SlidersHorizontal, X } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { Button } from "@/components/ds";
 import { useRouter } from "@/router/HashRouter";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import {
@@ -241,27 +242,17 @@ export function ParDashboard() {
     .reduce((sum, r) => sum + r.totalEstimatedCents, 0);
 
   return (
-    <AppShell pageTitle={t("dashboard.title")}>
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <FileText className="h-6 w-6 text-primary flex-shrink-0" aria-hidden />
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">{t("dashboard.title")}</h1>
-              <p className="text-sm text-muted-foreground">{t("dashboard.subtitle")}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate("/business/par/new")}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px]"
-            aria-label="Cerere PAR nouă"
-          >
-            <Plus className="h-4 w-4" aria-hidden />
-            Cerere nouă
-          </button>
-        </div>
+    <AppShell
+      pageTitle={t("dashboard.title")}
+      pageDescription={t("dashboard.subtitle")}
+      actions={
+        <Button onClick={() => navigate("/business/par/new")} aria-label="Cerere PAR nouă">
+          <Plus className="h-4 w-4" aria-hidden />
+          Cerere nouă
+        </Button>
+      }
+    >
+      <div className="space-y-6">
 
         {/* "Te așteaptă" — one-click deep links to where decisions are needed */}
         {(inboxCount > 0 || (isFinance && awaitingPayment.length > 0)) && (

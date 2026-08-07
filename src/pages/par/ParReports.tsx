@@ -328,36 +328,34 @@ export function ParReports() {
   const exportXlsxUrl = getParReportExportXlsxUrl(filters);
 
   return (
-    <AppShell pageTitle="Rapoarte PAR">
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <BarChart2 className="h-5 w-5 text-primary flex-shrink-0" aria-hidden />
-            <h1 className="text-xl font-bold text-foreground">Rapoarte PAR</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <a
-              href={exportXlsxUrl}
-              download="par-export.xlsx"
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px]"
-              aria-label="Exportă Excel"
-            >
-              <Download className="h-4 w-4" aria-hidden />
-              Export Excel
-            </a>
-            <a
-              href={exportUrl}
-              download="par-export.csv"
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors min-h-[44px]"
-              aria-label="Exportă CSV"
-            >
-              <Download className="h-4 w-4" aria-hidden />
-              Export CSV
-            </a>
-          </div>
-        </div>
+    <AppShell
+      pageTitle="Rapoarte PAR"
+      pageDescription="Statistici pe perioadă, departament și cod bugetar."
+      actions={
+        <>
+          {/* Native <a download> — these are file downloads, not navigations. */}
+          <a
+            href={exportXlsxUrl}
+            download="par-export.xlsx"
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary/90 hover:no-underline"
+            aria-label="Exportă Excel"
+          >
+            <Download className="h-4 w-4" aria-hidden />
+            Export Excel
+          </a>
+          <a
+            href={exportUrl}
+            download="par-export.csv"
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground no-underline transition-colors hover:bg-accent/10 hover:no-underline"
+            aria-label="Exportă CSV"
+          >
+            <Download className="h-4 w-4" aria-hidden />
+            Export CSV
+          </a>
+        </>
+      }
+    >
+      <div className="space-y-6">
 
         {/* Period filter */}
         <div className="flex flex-wrap items-end gap-3 p-4 rounded-lg border border-border bg-card">
