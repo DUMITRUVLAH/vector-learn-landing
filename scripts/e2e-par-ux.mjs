@@ -95,6 +95,24 @@ await T("dashboard: 'Mai multe filtre' deschide cele 4 câmpuri, iar suma minim�
   await page.waitForTimeout(600);
 });
 
+await T("dashboard: niciun număr de cerere nu apare de două ori pe pagină", async () => {
+  // First cell is the request number; the second is the project, which repeats legitimately.
+  const nums = await page.$$eval("tbody tr td:first-child", (tds) => tds.map((t) => t.innerText.trim()));
+  const dupes = nums.filter((n, i) => n && nums.indexOf(n) !== i);
+  assert(dupes.length === 0, `rânduri duplicate: ${[...new Set(dupes)].slice(0, 3).join(", ")}`);
+});
+
+await T("dashboard: lista e plafonată, cu link către restul", async () => {
+  const rows = await rowCount();
+  assert(rows <= 25, `${rows} rânduri randate dintr-o dată`);
+  const more = page.getByRole("button", { name: /Arată toate cele \d+ cereri/ });
+  if (await more.count()) {
+    await more.click();
+    await page.waitForTimeout(800);
+    assert(await rowCount() > rows, "linkul nu a extins lista");
+  }
+});
+
 await T("dashboard: click pe un rând navighează la detaliu", async () => {
   await page.locator("tbody tr").first().click();
   await page.waitForTimeout(1800);
@@ -180,6 +198,15 @@ await T("inbox: spațiu de la tastatură bifează checkbox-ul", async () => {
   await page.keyboard.press("Space");
   await page.waitForTimeout(500);
   assert(await cb.isChecked() !== before, "Space nu a comutat checkbox-ul");
+});
+
+await T("inbox: suma e vizibilă fără derulare laterală", async () => {
+  const cell = page.locator("tbody tr").first().locator("td").nth(3); // checkbox, Nr., Beneficiar, Sumă
+  const box = await cell.boundingBox();
+  const vw = page.viewportSize().width;
+  assert(box && box.x + box.width <= vw, `coloana Sumă începe la ${box?.x} — în afara ecranului de ${vw}px`);
+  const txt = await cell.innerText();
+  assert(/\d/.test(txt), `a patra coloană nu conține o sumă: "${txt}"`);
 });
 
 await T("inbox: filtrul după beneficiar restrânge lista", async () => {

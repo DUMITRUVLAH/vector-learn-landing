@@ -562,14 +562,18 @@ export default function ParInbox() {
                       <th className="px-3 py-2.5 w-8">
                         <Checkbox checked={allSelected} onChange={toggleSelectAll} aria-label="Selectează tot" />
                       </th>
+                      {/* Column order is the approver's decision order: WHO, HOW MUCH,
+                          WHAT FOR — then the supporting detail. "Sumă" used to sit in
+                          8th place, past the horizontal scroll edge, so the single most
+                          important number on the screen was invisible without scrolling. */}
                       <Th k="requestNo" label="Nr." />
                       <Th k="payeeName" label="Beneficiar" />
-                      <Th k="projectName" label="Proiect" />
-                      <Th k="requestedByName" label="Solicitat de" />
+                      <Th k="totalEstimatedCents" label="Sumă" align="right" />
                       <th className="whitespace-nowrap px-3 py-2.5 text-left font-medium text-muted-foreground">Scop</th>
                       <th className="whitespace-nowrap px-3 py-2.5 text-left font-medium text-muted-foreground">Servicii / descriere</th>
+                      <Th k="projectName" label="Proiect" />
+                      <Th k="requestedByName" label="Solicitat de" />
                       <th className="whitespace-nowrap px-3 py-2.5 text-left font-medium text-muted-foreground">Documente</th>
-                      <Th k="totalEstimatedCents" label="Sumă" align="right" />
                       <Th k="submittedAt" label="Depus" />
                       <th className="whitespace-nowrap px-3 py-2.5 text-right font-medium text-muted-foreground">Acțiuni</th>
                     </tr>
@@ -589,10 +593,11 @@ export default function ParInbox() {
                           )}
                         </td>
                         <td className="px-3 py-2 align-middle text-foreground font-medium min-w-[200px] max-w-[320px]"><span className="line-clamp-2" title={item.payeeName ?? ""}>{item.payeeName ?? "—"}</span></td>
-                        <td className="px-3 py-2 align-middle max-w-[180px] truncate text-foreground" title={item.projectName ?? ""}>{item.projectName ?? "—"}</td>
-                        <td className="px-3 py-2 align-middle max-w-[160px] truncate text-foreground" title={item.requestedByName ?? ""}>{item.requestedByName ?? "—"}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right align-middle font-mono font-semibold text-foreground">{formatMDL(item.totalEstimatedCents)}</td>
                         <td className="px-3 py-2 align-middle text-muted-foreground text-xs whitespace-nowrap">{PURPOSE_LABEL[item.purpose] ?? item.purpose}</td>
                         <td className="px-3 py-2 align-middle text-foreground text-xs min-w-[220px] max-w-[360px]"><span className="line-clamp-2" title={item.endUse ?? ""}>{item.endUse || "—"}</span></td>
+                        <td className="px-3 py-2 align-middle max-w-[180px] truncate text-foreground" title={item.projectName ?? ""}>{item.projectName ?? "—"}</td>
+                        <td className="px-3 py-2 align-middle max-w-[160px] truncate text-foreground" title={item.requestedByName ?? ""}>{item.requestedByName ?? "—"}</td>
                         <td className="px-3 py-2 align-middle min-w-[180px] max-w-[260px]">
                           {item.attachments?.length ? (
                             <div className="flex flex-col items-start gap-1">
@@ -611,7 +616,6 @@ export default function ParInbox() {
                             </div>
                           ) : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="px-3 py-2 align-middle text-right font-mono text-foreground whitespace-nowrap">{formatMDL(item.totalEstimatedCents)}</td>
                         <td className="px-3 py-2 align-middle text-muted-foreground text-xs whitespace-nowrap">
                           {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                         </td>

@@ -80,6 +80,9 @@ const PURPOSE_OPTIONS: { value: ParPurpose | ""; label: string }[] = [
 
 const FILTERS_KEY = "vf.dashboard.filters";
 
+/** Rows rendered before the "show all" link appears. */
+const ROW_CAP = 25;
+
 interface SavedFilters {
   status?: ParStatus | "";
   purpose?: ParPurpose | "";
@@ -247,7 +250,9 @@ export function ParDashboard() {
     : requests
   ).filter((r) => !projectFilter || r.projectId === projectFilter);
   const myRequests = filteredByEvent;
-  const pendingApproval = filteredByEvent.filter((r) => r.status === "pending_approval");
+  // The list grows with every request the org ever files; render a page of it and
+  // let the reader ask for the rest. Filters and tabs narrow it first.
+  const [showAll, setShowAll] = useState(false);
   const awaitingPayment = filteredByEvent.filter((r) => r.status === "in_finance");
 
   // Summary totals
@@ -495,37 +500,24 @@ export function ParDashboard() {
             <Section
               title={statusFilter === "draft" ? "Ciornele mele" : statusFilter === "changes_requested" ? "Cereri întoarse pentru modificări" : "Cererile mele"}
               count={myRequests.length}
-              requests={myRequests}
+              requests={showAll ? myRequests : myRequests.slice(0, ROW_CAP)}
+              onShowAll={!showAll && myRequests.length > ROW_CAP ? () => setShowAll(true) : undefined}
               onRowClick={(id) => navigate(`/business/par/${id}`)}
               emptyMessage="Nu ai cereri de plată încă."
               projectsMap={projectsMap}
             />
 
-            {/* Pending my approval (only shown if there are any) */}
-            {pendingApproval.length > 0 && (
-              <Section
-                title="În proces de aprobare"
-                count={pendingApproval.length}
-                requests={pendingApproval}
-                onRowClick={(id) => navigate(`/business/par/${id}`)}
-                emptyMessage=""
-                projectsMap={projectsMap}
-                highlight
-              />
-            )}
+            {/*
+              "În proces de aprobare" and "La finanțe" used to render here as two more
+              tables — but both were `filteredByEvent` filtered by status, i.e. subsets
+              of the list directly above. The same rows appeared twice on one screen,
+              and neither copy could be filtered or sorted independently.
 
-            {/* Awaiting payment (only shown if there are any) */}
-            {awaitingPayment.length > 0 && (
-              <Section
-                title="La finanțe — în așteptarea plății"
-                count={awaitingPayment.length}
-                requests={awaitingPayment}
-                onRowClick={(id) => navigate(`/business/par/${id}`)}
-                emptyMessage=""
-                projectsMap={projectsMap}
-                highlight
-              />
-            )}
+              The two ActionRow banners at the top of this page already carry that
+              signal, and they link to the screens built for those decisions (inbox,
+              finance queue). The list below stays the single place a request lives;
+              the status filter and the tabs narrow it.
+            */}
           </div>
         )}
       </div>
@@ -542,11 +534,13 @@ interface SectionProps {
   onRowClick: (id: string) => void;
   emptyMessage: string;
   highlight?: boolean;
+  /** Set when more rows exist than are rendered. */
+  onShowAll?: () => void;
   /** projectId → name, to render the project column as a name (not a UUID/placeholder). */
   projectsMap: Record<string, string>;
 }
 
-function Section({ title, count, requests, onRowClick, emptyMessage, highlight, projectsMap }: SectionProps) {
+function Section({ title, count, requests, onRowClick, emptyMessage, highlight, projectsMap, onShowAll }: SectionProps) {
   return (
     <section aria-labelledby={`section-${title}`}>
       <div className="flex items-center gap-2 mb-3">
@@ -618,6 +612,15 @@ function Section({ title, count, requests, onRowClick, emptyMessage, highlight, 
             ))}
           </TableBody>
         </Table>
+      )}
+      {onShowAll && (
+        <button
+          type="button"
+          onClick={onShowAll}
+          className="mt-3 text-sm font-medium text-primary hover:underline"
+        >
+          Arată toate cele {count} cereri
+        </button>
       )}
     </section>
   );
