@@ -1328,14 +1328,14 @@ interface GroupedMember {
   userId: string;
   userName?: string;
   userEmail?: string;
-  roles: Array<{ id: string; role: ParMember["role"]; approvalLimitCents: number | null }>;
+  roles: Array<{ id: string; role: ParMember["role"]; approvalLimitCents: number | null; implicit?: boolean; implicitFromTenantRole?: string }>;
 }
 
 function groupMembers(members: ParMember[]): GroupedMember[] {
   const map = new Map<string, GroupedMember>();
   for (const m of members) {
     const existing = map.get(m.userId);
-    const roleEntry = { id: m.id, role: m.role, approvalLimitCents: m.approvalLimitCents };
+    const roleEntry = { id: m.id, role: m.role, approvalLimitCents: m.approvalLimitCents, implicit: m.implicit, implicitFromTenantRole: m.implicitFromTenantRole };
     if (existing) {
       existing.roles.push(roleEntry);
     } else {
@@ -1829,14 +1829,25 @@ function ParMembersTab() {
                           )}>
                             {ROLE_LABELS[r.role]}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => handleRevoke(r.id, ROLE_LABELS[r.role], displayName)}
-                            className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                            aria-label={`Revoce rolul ${ROLE_LABELS[r.role]} pentru ${displayName}`}
-                          >
-                            <X className="h-3 w-3" aria-hidden />
-                          </button>
+                          {r.implicit ? (
+                            /* Authority comes from the tenant role — there is no par_members
+                               row to revoke, so offering an X here would silently do nothing. */
+                            <span
+                              className="ml-1 rounded-full bg-warning/15 px-2 py-0.5 text-2xs font-medium text-warning"
+                              title={`Drepturile vin din rolul de organizație „${r.implicitFromTenantRole}". Se retrag schimbând acel rol, nu de aici.`}
+                            >
+                              implicit · {r.implicitFromTenantRole}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleRevoke(r.id, ROLE_LABELS[r.role], displayName)}
+                              className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                              aria-label={`Revoce rolul ${ROLE_LABELS[r.role]} pentru ${displayName}`}
+                            >
+                              <X className="h-3 w-3" aria-hidden />
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>

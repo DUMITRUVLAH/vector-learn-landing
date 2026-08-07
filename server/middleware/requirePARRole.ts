@@ -27,7 +27,7 @@ export type ParRole = "requestor" | "approver" | "finance" | "par_admin";
  * the first PAR member (assigning requires par_admin). The tenant owner/admin
  * therefore gets full PAR access by default and can hand out real PAR roles.
  */
-const IMPLICIT_PAR_ADMIN_TENANT_ROLES = ["admin", "manager"];
+export const IMPLICIT_PAR_ADMIN_TENANT_ROLES: readonly string[] = ["admin", "manager"];
 
 export function requirePARRole(
   ...roles: ParRole[]
