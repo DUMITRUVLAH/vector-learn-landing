@@ -346,13 +346,26 @@ export function ParReports() {
   const totalSpend = totalMdlCents;
   const totalCount = currencyBreakdown.reduce((s, it) => s + it.count, 0);
 
+  /**
+   * Every number on this page is scoped by the period filter, but nothing said so —
+   * a reader comparing the report total against the request list saw a ~20% gap and
+   * no explanation. Spell the window out next to the figure.
+   */
+  const periodLabel = (() => {
+    const fmt = (d: string) => new Date(d).toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" });
+    if (fromDate && toDate) return `${fmt(fromDate)} – ${fmt(toDate)}`;
+    if (fromDate) return `din ${fmt(fromDate)}`;
+    if (toDate) return `până la ${fmt(toDate)}`;
+    return "toate perioadele";
+  })();
+
   const exportUrl = getParReportExportUrl(filters);
   const exportXlsxUrl = getParReportExportXlsxUrl(filters);
 
   return (
     <AppShell
       pageTitle="Rapoarte PAR"
-      pageDescription="Statistici pe perioadă, departament și cod bugetar."
+      pageDescription={`Statistici pe perioadă, departament și cod bugetar · ${periodLabel}`}
       actions={
         <>
           {/* Native <a download> — these are file downloads, not navigations. */}
@@ -430,7 +443,7 @@ export function ParReports() {
             value={formatMDL(totalSpend)}
             tone="indigo"
             icon={<FileText className="h-5 w-5" />}
-            hint={`${totalCount} cereri`}
+            hint={`${totalCount} cereri · ${periodLabel}`}
           />
           <KpiTile
             label="Timp mediu submit→aprobare"

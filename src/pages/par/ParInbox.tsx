@@ -7,7 +7,7 @@
  * CORE: backlog/par/PAR-CORE.md §1, §6
  * Design system: Vector 365 tokens only, light + dark, WCAG AA
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { CheckCircle, XCircle, MessageSquare, Loader2, Inbox, AlertCircle, RefreshCcw, X, FileText } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import {
@@ -121,6 +121,15 @@ const DECISION_CONFIG: Record<
 };
 
 function DecisionModal({ par, type, onClose, onSuccess, defaultSignatureName }: DecisionModalProps) {
+  // Escape closes it, like the DS `Dialog` and every other overlay in the app.
+  // Without this the only way out was the small × in the corner — and a modal
+  // that ignores Escape also swallows the keyboard flow on the list behind it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const config = DECISION_CONFIG[type];
   const [comment, setComment] = useState("");
   const [signatureName, setSignatureName] = useState(defaultSignatureName ?? "");
@@ -431,6 +440,55 @@ export default function ParInbox() {
     setModalTarget({ par, type });
   };
 
+  /**
+   * Keyboard flow for the approver.
+   *
+   * This is the one screen someone works through in series — twenty requests,
+   * same three decisions each time. Reaching for the mouse to hit a 28px icon
+   * on every row is where the minutes go. j/k moves, a/m/r decides, Enter opens
+   * the full request, x selects for a bulk run.
+   *
+   * `visibleRowsRef` is filled during render because the filtered+sorted list is
+   * computed inside the JSX; the handler needs whatever is on screen right now.
+   */
+  const visibleRowsRef = useRef<ParInboxItem[]>([]);
+  const [cursor, setCursor] = useState(0);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Never steal a keystroke that belongs to a field or an open dialog.
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const rows = visibleRowsRef.current;
+      if (rows.length === 0) return;
+      const at = Math.min(cursor, rows.length - 1);
+      const item = rows[at];
+
+      switch (e.key) {
+        case "j": case "ArrowDown":
+          e.preventDefault(); setCursor((c) => Math.min(c + 1, rows.length - 1)); break;
+        case "k": case "ArrowUp":
+          e.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); break;
+        case "a": e.preventDefault(); handleAction(item, "approve"); break;
+        case "m": e.preventDefault(); handleAction(item, "request_changes"); break;
+        case "r": e.preventDefault(); handleAction(item, "reject"); break;
+        case "x": e.preventDefault(); toggleSelect(item.id); break;
+        case "Enter": e.preventDefault(); navigate(`/business/par/${item.id}`); break;
+        default: break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [cursor, navigate, toggleSelect]);
+
+  // Keep the highlighted row in view when moving with the keyboard.
+  useEffect(() => {
+    document.querySelector<HTMLElement>('[data-cursor="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [cursor]);
+
   const handleSuccess = async () => {
     setModalTarget(null);
     await loadInbox();
@@ -509,6 +567,8 @@ export default function ParInbox() {
               && (min == null || item.totalEstimatedCents >= min)
               && (max == null || item.totalEstimatedCents <= max);
           });
+          // Hand the on-screen list to the keyboard handler (see visibleRowsRef).
+          visibleRowsRef.current = rows;
           const arrow = (key: InboxSortKey) => (sort.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
           const Th = ({ k, label, align = "left" }: { k: InboxSortKey; label: string; align?: "left" | "right" }) => (
             <th className={cn("px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap", align === "right" ? "text-right" : "text-left")}>
@@ -554,6 +614,17 @@ export default function ParInbox() {
                 )}
               </div>
 
+              {/* A shortcut nobody knows about saves nobody any time — say it out loud. */}
+              <p className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span className="font-medium">Tastatură:</span>
+                {[["j / k", "navighează"], ["a", "aprobă"], ["m", "cere modificări"], ["r", "respinge"], ["x", "selectează"], ["Enter", "deschide"]].map(([key, what]) => (
+                  <span key={key} className="inline-flex items-center gap-1">
+                    <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-2xs text-foreground">{key}</kbd>
+                    {what}
+                  </span>
+                ))}
+              </p>
+
               {/* Excel-style table */}
               <div className="overflow-x-auto rounded-lg border border-border pb-20">
                 <table className="w-full text-sm">
@@ -580,7 +651,15 @@ export default function ParInbox() {
                   </thead>
                   <tbody>
                     {rows.map((item, idx) => (
-                      <tr key={item.id} className={cn("border-b border-border last:border-0 hover:bg-muted/30", idx % 2 ? "bg-muted/10" : "bg-background")}>
+                      <tr
+                        key={item.id}
+                        data-cursor={idx === Math.min(cursor, rows.length - 1) ? "true" : undefined}
+                        className={cn(
+                          "border-b border-border last:border-0 hover:bg-muted/30",
+                          idx % 2 ? "bg-muted/10" : "bg-background",
+                          idx === Math.min(cursor, rows.length - 1) && "bg-primary/5 ring-1 ring-inset ring-primary/30",
+                        )}
+                      >
                         <td className="px-3 py-2 align-middle">
                           <Checkbox checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} aria-label={`Selectează ${item.requestNo}`} />
                         </td>

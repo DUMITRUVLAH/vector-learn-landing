@@ -826,7 +826,12 @@ function DelegationSection({ members }: { members: ParMember[] }) {
   const [error, setError] = useState<string | null>(null);
 
   // Only approvers/admins can be delegates.
-  const approverMembers = members.filter((m) => m.role === "approver" || m.role === "par_admin");
+  // Any member of the org can receive a delegation — the delegation is what grants
+  // approval authority for the window. Restricting the list to existing approvers
+  // made delegation impossible in a one-approver org, which is when it is needed.
+  const delegateCandidates = Array.from(
+    new Map(members.map((m) => [m.userId, m])).values(),
+  );
 
   const load = async () => {
     try { const { delegations: d } = await listParDelegations(); setDelegations(d); } catch { /* ignore */ }
@@ -866,8 +871,13 @@ function DelegationSection({ members }: { members: ParMember[] }) {
         <div className="sm:col-span-2">
           <label htmlFor="deleg-to" className="text-xs font-medium text-muted-foreground block mb-1">Către</label>
           <Select id="deleg-to" value={toUserId} onChange={(e) => setToUserId(e.target.value)} aria-label="Delegat">
-            <option value="">Alege aprobator…</option>
-            {approverMembers.map((m) => <option key={m.userId} value={m.userId}>{m.userName ?? m.userId}</option>)}
+            <option value="">Alege coleg…</option>
+            {delegateCandidates.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.userName ?? m.userId}
+                {m.role === "approver" || m.role === "par_admin" ? "" : " (primește drept de aprobare)"}
+              </option>
+            ))}
           </Select>
         </div>
         <div>

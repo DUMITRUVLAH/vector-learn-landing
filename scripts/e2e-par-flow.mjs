@@ -220,14 +220,15 @@ await F("oferte", "peste pragul micro, lipsa a 3 oferte e semnalată", async () 
 // ─── 5. Delegări ──────────────────────────────────────────────────────────
 console.log("\n── 5. Delegări (aprobare în absență) ──");
 
-await F("delegări", "par_admin poate crea o delegare", async () => {
-  // A delegation is created BY the delegator for themselves → someone else.
+await F("delegări", "se poate crea o delegare către un coleg", async () => {
   const members = (await GET("admin", "/api/par/members")).json.members;
   const to = members.find((m) => m.role === "approver");
+  // Use a window far enough out that repeated runs don't collide with the overlap guard.
+  const offset = 30 + Math.floor(Math.random() * 300);
   const r = await POST("admin", "/api/par/delegations", {
     to_user_id: to.userId,
-    starts_at: new Date().toISOString(),
-    ends_at: new Date(Date.now() + 7 * 864e5).toISOString(),
+    starts_at: new Date(Date.now() + offset * 864e5).toISOString(),
+    ends_at: new Date(Date.now() + (offset + 5) * 864e5).toISOString(),
   });
   must(r.status < 400, `creare delegare: ${r.status} ${JSON.stringify(r.json).slice(0, 200)}`);
   const list = await GET("admin", "/api/par/delegations");
@@ -235,27 +236,47 @@ await F("delegări", "par_admin poate crea o delegare", async () => {
   return "creată + listată";
 });
 
-await F("delegări", "delegarea către un NEaprobator este respinsă (regula e corectă)", async () => {
+await F("delegări", "un coleg care NU e încă aprobator poate primi delegare", async () => {
+  // The old rule required the delegate to already be an approver, which made
+  // delegation impossible in a one-approver org — exactly when it is needed.
   const members = (await GET("admin", "/api/par/members")).json.members;
   const fin = members.find((m) => m.role === "finance");
+  const offset = 400 + Math.floor(Math.random() * 300);
   const r = await POST("admin", "/api/par/delegations", {
     to_user_id: fin.userId,
+    starts_at: new Date(Date.now() + offset * 864e5).toISOString(),
+    ends_at: new Date(Date.now() + (offset + 3) * 864e5).toISOString(),
+  });
+  must(r.status < 400, `respins cu ${r.status} ${JSON.stringify(r.json).slice(0, 160)}`);
+  return "delegarea conferă dreptul, nu îl presupune";
+});
+
+await F("delegări", "o a doua delegare suprapusă către aceeași persoană e respinsă", async () => {
+  const members = (await GET("admin", "/api/par/members")).json.members;
+  const to = members.find((m) => m.role === "approver");
+  const offset = 800 + Math.floor(Math.random() * 300);
+  const win = {
+    to_user_id: to.userId,
+    starts_at: new Date(Date.now() + offset * 864e5).toISOString(),
+    ends_at: new Date(Date.now() + (offset + 6) * 864e5).toISOString(),
+  };
+  const first = await POST("admin", "/api/par/delegations", win);
+  must(first.status < 400, `prima delegare a eșuat: ${first.status}`);
+  const second = await POST("admin", "/api/par/delegations", {
+    ...win,
+    starts_at: new Date(Date.now() + (offset + 2) * 864e5).toISOString(),
+  });
+  must(second.status === 409, `duplicat suprapus acceptat cu ${second.status}`);
+  return "409 overlapping_delegation";
+});
+
+await F("delegări", "nu se poate delega către cineva din afara organizației", async () => {
+  const r = await POST("admin", "/api/par/delegations", {
+    to_user_id: "00000000-0000-0000-0000-000000000000",
     starts_at: new Date().toISOString(),
     ends_at: new Date(Date.now() + 864e5).toISOString(),
   });
-  must(r.status === 400 && r.json?.error === "delegate_not_approver", `status ${r.status} ${JSON.stringify(r.json)}`);
-  return "doar aprobatorii pot primi delegare";
-});
-
-await F("delegări", "o organizație cu UN SINGUR aprobator poate delega?", async () => {
-  const members = (await GET("admin", "/api/par/members")).json.members;
-  const approvers = members.filter((m) => ["approver", "par_admin"].includes(m.role));
-  const uniq = new Set(approvers.map((m) => m.userId));
-  if (uniq.size > 1) return `sărit — ${uniq.size} persoane cu drept de aprobare`;
-  throw new Error(
-    "cu un singur aprobator, delegarea e imposibilă: auto-delegarea e blocată, iar delegatul trebuie să fie deja aprobator. " +
-    "Exact cazul în care ai nevoie de ea (aprobatorul pleacă în concediu) e cel în care nu funcționează."
-  );
+  must(r.status === 400 && r.json?.error === "not_a_member", `status ${r.status} ${JSON.stringify(r.json)}`);
 });
 
 // ─── 6. Documente ─────────────────────────────────────────────────────────

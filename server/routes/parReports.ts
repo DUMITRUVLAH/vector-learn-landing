@@ -425,9 +425,11 @@ parReportsRoutes.get("/export.csv", async (c) => {
 
   const csv = header + csvRows;
 
-  c.header("Content-Type", "text/csv; charset=utf-8");
+  // `c.text()` sets Content-Type: text/plain and overwrites the header set above,
+  // so the export left the server announcing itself as plain text. Excel and most
+  // import tools sniff that header; return the body directly instead.
   c.header("Content-Disposition", `attachment; filename="par-export.csv"`);
-  return c.text(csv);
+  return c.body(csv, 200, { "Content-Type": "text/csv; charset=utf-8" });
 });
 
 /** VF-201: GET /api/par/reports/export.xlsx — Excel workbook (3 sheets, resolved names). */

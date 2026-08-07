@@ -9,7 +9,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, desc, or } from "drizzle-orm";
+import { and, eq, gte, lte, desc, or } from "drizzle-orm";
 import { db } from "../db/client";
 import { parDelegations, parMembers } from "../db/schema/par";
 import { users } from "../db/schema/users";
@@ -89,19 +89,43 @@ parDelegationsRoutes.post("/", zValidator("json", createSchema), async (c) => {
     return c.json({ error: "invalid_interval", detail: "Sfârșitul trebuie să fie după început." }, 400);
   }
 
-  // The delegate must be able to approve (approver or par_admin) — reuse VF-002 rule.
-  const targetRoles = await getUserPARRoles(to_user_id, tenantId);
-  if (!targetRoles.some((r) => ["approver", "par_admin"].includes(r))) {
-    // Also confirm they are a member of THIS tenant (getUserPARRoles is tenant-scoped, so empty = not a member/role).
-    const member = await db
-      .select({ id: parMembers.id })
-      .from(parMembers)
-      .where(and(eq(parMembers.tenantId, tenantId), eq(parMembers.userId, to_user_id)))
-      .limit(1);
-    if (member.length === 0) {
-      return c.json({ error: "not_a_member", detail: "Utilizatorul nu face parte din organizație." }, 400);
-    }
-    return c.json({ error: "delegate_not_approver", detail: "Delegatul trebuie să fie aprobator." }, 400);
+  // The delegate must be a member of THIS tenant. They do NOT have to already be
+  // an approver: requiring that made delegation useless in exactly the case it
+  // exists for — an org with a single approver going on leave could not delegate
+  // at all (self-delegation is blocked above, and the only other candidates were
+  // by definition not approvers). The delegation itself is what confers approval
+  // authority, and it is time-boxed, created by someone who already holds that
+  // authority, and written to the audit log.
+  const member = await db
+    .select({ id: parMembers.id })
+    .from(parMembers)
+    .where(and(eq(parMembers.tenantId, tenantId), eq(parMembers.userId, to_user_id)))
+    .limit(1);
+  if (member.length === 0) {
+    return c.json({ error: "not_a_member", detail: "Utilizatorul nu face parte din organizație." }, 400);
+  }
+
+  // Reject an overlapping delegation for the same pair: two live windows for the
+  // same from→to answer "who may approve right now?" twice, and the list turns
+  // into duplicate rows nobody can tell apart.
+  const overlapping = await db
+    .select({ id: parDelegations.id })
+    .from(parDelegations)
+    .where(
+      and(
+        eq(parDelegations.tenantId, tenantId),
+        eq(parDelegations.fromUserId, user.id),
+        eq(parDelegations.toUserId, to_user_id),
+        lte(parDelegations.startsAt, endsAt),
+        gte(parDelegations.endsAt, startsAt),
+      ),
+    )
+    .limit(1);
+  if (overlapping.length > 0) {
+    return c.json(
+      { error: "overlapping_delegation", detail: "Există deja o delegare către această persoană în acest interval." },
+      409,
+    );
   }
 
   const [row] = await db
