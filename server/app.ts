@@ -98,6 +98,9 @@ import { recordError } from "./lib/errorTelemetry";
 import { alertOwnerOnNewError } from "./lib/errorAlerts";
 import { requireAuth } from "./middleware/requireAuth";
 import { requireModuleEntitlement } from "./middleware/requireModuleEntitlement";
+import { securityHeaders } from "./middleware/securityHeaders";
+import { httpCache } from "./middleware/httpCache";
+import { authRateLimit, expensiveRateLimit } from "./middleware/rateLimit";
 
 // STMT module (STMT-001..004): Statement upload → review → e-Factura → history
 import { finStatementRoutes } from "./routes/finStatement";
@@ -138,9 +141,30 @@ app.onError((err, c) => {
 
 app.use("*", logger());
 
+// PERF/SEC-001: headere de securitate + politică de cache pe TOT traficul (inclusiv fișierele
+// statice servite de server/index.ts). Montate primele, ca să acopere și răspunsurile rutelor
+// de mai jos, și fallback-ul SPA.
+app.use("*", securityHeaders);
+app.use("*", httpCache);
+
 // PLATFORM-002: prinde orice 5xx și orice 404 pe /api/* (rută nemontată = bug real aici).
 // Montat înaintea rutelor, ca să vadă răspunsul fiecăreia.
 app.use("/api/*", errorCapture);
+
+// SEC-002: limitare de rată pe autentificare, invitații și endpoint-urile AI (cost real per apel).
+// Fără ea, POST /api/business/auth/login accepta un număr nelimitat de încercări de parolă.
+// Montată DUPĂ errorCapture, ca un 429 să fie și el vizibil în Consola Platformă.
+app.use("/api/auth/login", authRateLimit);
+app.use("/api/auth/signup", authRateLimit);
+app.use("/api/auth/forgot-password", authRateLimit);
+app.use("/api/auth/reset-password", authRateLimit);
+app.use("/api/business/auth/login", authRateLimit);
+app.use("/api/business/auth/signup", authRateLimit);
+app.use("/api/business/auth/forgot-password", authRateLimit);
+app.use("/api/business/auth/reset-password", authRateLimit);
+app.use("/api/par/invites/accept", authRateLimit);
+app.use("/api/par/ai-prefill/*", expensiveRateLimit);
+app.use("/api/itpark/ai/*", expensiveRateLimit);
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -150,7 +174,11 @@ const allowedOrigins = [
 app.use(
   "/api/*",
   cors({
-    origin: (origin) => (allowedOrigins.includes(origin) ? origin : allowedOrigins[0]),
+    // SEC-001: o origine necunoscută NU mai primește niciun header CORS. Varianta anterioară
+    // (`: allowedOrigins[0]`) răspundea oricărui site cu `Access-Control-Allow-Origin:
+    // http://localhost:5173` plus `credentials: true` — un header greșit, care în plus masca
+    // un `ALLOWED_ORIGINS` neconfigurat în loc să-l facă vizibil.
+    origin: (origin) => (allowedOrigins.includes(origin) ? origin : null),
     credentials: true,
   })
 );

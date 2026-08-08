@@ -29,6 +29,10 @@ vi.mock("../auth/session", () => ({
   createSession: vi.fn().mockResolvedValue({ token: "test-session-token", expiresAt: new Date(Date.now() + 86_400_000) }),
   revokeSession: vi.fn().mockResolvedValue(undefined),
   getSessionUser: vi.fn().mockResolvedValue(null),
+  // PERF-005: resetarea parolei golește cache-ul de sesiuni (altfel un token invalidat ar mai
+  // funcționa până la 30 s). Mock-ul trebuie să expună funcția, altfel ruta aruncă 500.
+  dropAllCachedSessions: vi.fn(),
+  dropCachedSession: vi.fn(),
   SESSION_COOKIE: "vl_session",
 }));
 vi.mock("../auth/password", () => ({

@@ -741,17 +741,49 @@ parRoutes.get("/", async (c) => {
   if (Number.isFinite(minN)) conditions.push(gte(parRequests.totalEstimatedCents, Math.round(minN)));
   if (Number.isFinite(maxN)) conditions.push(lte(parRequests.totalEstimatedCents, Math.round(maxN)));
 
-  const rows = await db
-    .select()
-    .from(parRequests)
-    .where(and(...conditions))
-    .orderBy(desc(parRequests.createdAt));
+  /**
+   * PERF-007 — plafon dur pe numărul de rânduri.
+   *
+   * Interogarea era `db.select().from(parRequests).where(...)` fără `limit`: întorcea TOATE
+   * cererile tenantului, cu toate coloanele. La câteva mii de PAR-uri asta înseamnă un răspuns
+   * de câțiva MB și o sortare completă la fiecare apel — iar un tenant mare ar fi doborât ruta
+   * pentru toți ceilalți de pe aceeași instanță.
+   *
+   * `total` vine acum dintr-un COUNT real, nu din `rows.length`, ca să rămână corect când
+   * rezultatul e plafonat. `limit`/`offset` sunt opționale, iar valoarea implicită e peste ce are
+   * azi orice tenant real — deci comportamentul apelanților existenți nu se schimbă, dar ruta nu
+   * mai poate returna nelimitat.
+   *
+   * ATENȚIE pentru cine continuă: `ParDashboard` calculează KPI-urile în client, însumând peste
+   * `requests`. Când un tenant va depăși plafonul, acele sume vor fi parțiale. Reparația corectă
+   * e un endpoint de sumar agregat pe server — notat în raportul de audit, nu făcut aici, pentru
+   * că schimbă cifrele afișate și cere verificare separată.
+   */
+  const MAX_LIMIT = 1000;
+  const limitParam = Number(c.req.query("limit"));
+  const offsetParam = Number(c.req.query("offset"));
+  const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, MAX_LIMIT) : MAX_LIMIT;
+  const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0;
 
-  // Get micro-purchase threshold for flag
-  const [settings] = await db
-    .select({ threshold: parSettings.microPurchaseThresholdCents })
-    .from(parSettings)
-    .where(eq(parSettings.tenantId, tenantId));
+  const [rows, [countRow], [settings]] = await Promise.all([
+    db
+      .select()
+      .from(parRequests)
+      .where(and(...conditions))
+      .orderBy(desc(parRequests.createdAt))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(parRequests)
+      .where(and(...conditions)),
+    // Get micro-purchase threshold for flag
+    db
+      .select({ threshold: parSettings.microPurchaseThresholdCents })
+      .from(parSettings)
+      .where(eq(parSettings.tenantId, tenantId)),
+  ]);
+
   const threshold = settings?.threshold ?? 1000000;
 
   const result = rows.map((r) => ({
@@ -809,11 +841,11 @@ parRoutes.get("/", async (c) => {
           },
         };
       }),
-      total: result.length,
+      total: countRow?.n ?? result.length,
     });
   }
 
-  return c.json({ requests: result, total: result.length });
+  return c.json({ requests: result, total: countRow?.n ?? result.length });
 });
 
 const parStatusValues = [

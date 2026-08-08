@@ -9,6 +9,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { api, ApiError } from "@/lib/api";
 import { clearSessionCache } from "@/lib/sessionCache";
+import { clearApiCache, peekApiCache } from "@/lib/apiCache";
 
 export interface BusinessSessionUser {
   id: string;
@@ -35,16 +36,22 @@ type BusinessSessionState =
   | { status: "unauthenticated"; data: null; error: null }
   | { status: "error"; data: null; error: string };
 
+const ME_PATH = "/api/business/auth/me";
+
 export function useBusinessSession() {
-  const [state, setState] = useState<BusinessSessionState>({
-    status: "loading",
-    data: null,
-    error: null,
-  });
+  // PERF-002: shell-ul, guard-ul și pagina montează fiecare acest hook la fiecare navigare.
+  // Pornind din valoarea deja rezolvată din cache, remontarea randează instant conținutul în loc
+  // să treacă prin „loading" — asta elimină spinner-ul care apărea la fiecare clic în meniu.
+  const cached = peekApiCache<BusinessSessionData>(ME_PATH);
+  const [state, setState] = useState<BusinessSessionState>(
+    cached
+      ? { status: "authenticated", data: cached, error: null }
+      : { status: "loading", data: null, error: null }
+  );
 
   const refresh = useCallback(async () => {
     try {
-      const data = await api<BusinessSessionData>("/api/business/auth/me");
+      const data = await api<BusinessSessionData>(ME_PATH);
       setState({ status: "authenticated", data, error: null });
     } catch (err) {
       // 403 = wrong_app sau workspace_suspended (PLATFORM-001). Ambele înseamnă
@@ -74,6 +81,9 @@ export function useBusinessSession() {
     }
     // Drop cached identity (fin-me, par-me) so a different user doesn't see stale nav/roles.
     clearSessionCache();
+    // PERF-002: și cache-ul de cereri — altfel următorul utilizator care se loghează pe același
+    // tab ar vedea, pentru câteva minute, identitatea și modulele celui precedent.
+    clearApiCache();
     setState({ status: "unauthenticated", data: null, error: null });
   }, []);
 

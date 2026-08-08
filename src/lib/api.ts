@@ -1,4 +1,5 @@
 import { reportClientError } from "@/lib/telemetry";
+import { clearApiCache, dedupe } from "./apiCache";
 
 export interface ApiFieldError {
   field: string;
@@ -17,11 +18,29 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * PERF-002: GET-urile trec prin deduplicare + micro-cache (`src/lib/apiCache.ts`); orice altă
+ * metodă golește cache-ul, ca o listă să nu rămână învechită după o mutație. Vezi acolo pentru
+ * de ce ferestrele sunt cele alese.
+ */
 export async function api<T = unknown>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
-  const res = await fetch(path.startsWith("/") ? path : `/api/${path}`, {
+  const method = (init.method ?? "GET").toUpperCase();
+  const url = path.startsWith("/") ? path : `/api/${path}`;
+
+  if (method !== "GET") {
+    clearApiCache();
+    return rawApi<T>(url, init);
+  }
+  // `cache: "reload"` = reîncărcare cerută explicit de utilizator (butonul „Reîncarcă").
+  // Trebuie să ocolească micro-cache-ul, altfel butonul pare că nu face nimic.
+  return dedupe(url, () => rawApi<T>(url, init), init.cache === "reload");
+}
+
+async function rawApi<T>(url: string, init: RequestInit): Promise<T> {
+  const res = await fetch(url, {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
@@ -65,7 +84,10 @@ export async function api<T = unknown>(
   }
 
   if (res.status === 204) return undefined as T;
-  return (await parseJson<T>(res, path)) as T;
+  // `url`, nu `path`: parametrul a fost redenumit când `api()` a fost împărțit în api()+rawApi()
+  // pentru cache-ul de cereri (PERF-002). Referința rămasă la `path` arunca „ReferenceError: path
+  // is not defined" pe FIECARE răspuns reușit — adică ar fi rupt toată aplicația.
+  return (await parseJson<T>(res, url)) as T;
 }
 
 /**
@@ -97,6 +119,9 @@ async function parseJson<T>(res: Response, path: string): Promise<T> {
  * credentials + error-coercion behaviour as api().
  */
 export async function apiUpload<T = unknown>(path: string, form: FormData): Promise<T> {
+  // PERF-002: un upload e o mutație — listele cache-uite (capturi, atașamente, extrase) trebuie
+  // să se reîncarce după el, altfel fișierul tocmai încărcat nu apare.
+  clearApiCache();
   const res = await fetch(path.startsWith("/") ? path : `/api/${path}`, {
     method: "POST",
     credentials: "include",

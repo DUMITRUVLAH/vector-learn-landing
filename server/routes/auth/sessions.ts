@@ -12,7 +12,7 @@ import { getCookie } from "hono/cookie";
 import { db } from "../../db/client";
 import { sessions } from "../../db/schema";
 import { requireAuth, type AuthVariables } from "../../middleware/requireAuth";
-import { SESSION_COOKIE } from "../../auth/session";
+import { SESSION_COOKIE, dropAllCachedSessions } from "../../auth/session";
 
 export const sessionMgmtRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -58,6 +58,9 @@ sessionMgmtRoutes.delete("/:id", requireAuth, async (c) => {
     // Front-end should redirect to login after this.
   }
 
+  // PERF-005: revocarea trebuie sa goleasca si cache-ul de sesiuni, altfel dispozitivul
+  // deconectat din acest ecran ar continua sa functioneze pana la 30 s.
+  dropAllCachedSessions();
   await db.delete(sessions).where(eq(sessions.id, id));
   return c.json({ ok: true });
 });
@@ -65,6 +68,7 @@ sessionMgmtRoutes.delete("/:id", requireAuth, async (c) => {
 // DELETE /api/auth/sessions?except=current — revoke all sessions except the current one
 sessionMgmtRoutes.delete("/", requireAuth, async (c) => {
   const user = c.get("user");
+  dropAllCachedSessions(); // PERF-005 - vezi comentariul de la revocarea individuala.
   const except = c.req.query("except");
   const currentToken = getCookie(c, SESSION_COOKIE) ?? "";
 

@@ -411,7 +411,7 @@ function SidebarBody({
         <button
           type="button"
           onClick={onLogout}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sidebar-foreground/40 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-md text-sidebar-foreground/40 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground sm:h-8 sm:w-8"
           aria-label="Deconectare FinFlow"
         >
           <LogOut className="h-4 w-4" aria-hidden="true" />
@@ -569,7 +569,7 @@ export function BusinessShell({
           <button
             type="button"
             onClick={() => setDrawerOpen(false)}
-            className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-md bg-card text-foreground"
+            className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-md bg-card text-foreground"
             aria-label="Închide meniul"
           >
             <X className="h-5 w-5" aria-hidden="true" />
@@ -584,10 +584,11 @@ export function BusinessShell({
           resolves to the bell instead of the page's own first control). */}
       <div className="flex min-w-0 flex-1 flex-col pb-16 md:pb-0">
         <header className="flex items-center gap-2 px-5 pt-5 sm:px-8">
+          {/* MOB-002: hamburgerul e cel mai apăsat control de pe telefon și măsura 40×40. */}
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
             aria-label="Deschide meniul"
           >
             <Menu className="h-5 w-5" aria-hidden="true" />

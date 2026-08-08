@@ -3151,7 +3151,7 @@ export function ParAdmin({ isAdmin }: ParAdminProps) {
               type="button"
               onClick={() => setTab(t.id)}
               className={cn(
-                "inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-md transition-colors -mb-px border-b-2",
+                "inline-flex min-h-[44px] items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-md transition-colors -mb-px border-b-2",
                 tab === t.id
                   ? "border-primary text-primary bg-primary/5"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"

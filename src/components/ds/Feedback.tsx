@@ -77,9 +77,21 @@ export function Tabs<T extends string = string>({
   ...rest
 }: TabsProps<T>) {
   return (
+    /**
+     * MOB-001: banda de taburi era `inline-flex` cu butoane `whitespace-nowrap`, deci lățimea ei
+     * era suma etichetelor — pe iPhone SE, „Toate cererile / Ciorne / Întoarse pentru modificări"
+     * ieșea cu 39 px peste ecran și făcea ÎNTREAGA pagină să deruleze pe orizontală (măsurat).
+     *
+     * `flex` + `max-w-full` + `overflow-x-auto` o menține în lățimea părintelui și lasă taburile
+     * să deruleze în interiorul benzii. Butoanele rămân `whitespace-nowrap` — o etichetă ruptă în
+     * două rânduri e mai rea decât una la care ajungi derulând. `shrink-0` împiedică turtirea lor.
+     */
     <div
       role="tablist"
-      className={cn("inline-flex items-center gap-0.5 rounded-md bg-muted p-1", className)}
+      className={cn(
+        "flex max-w-full items-center gap-0.5 overflow-x-auto scrollbar-none rounded-md bg-muted p-1",
+        className,
+      )}
       {...rest}
     >
       {tabs.map((tab) => {
@@ -92,7 +104,9 @@ export function Tabs<T extends string = string>({
             aria-selected={on}
             onClick={() => onChange(tab.value)}
             className={cn(
-              "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border px-3 py-1.5 text-sm transition-all duration-200",
+              // MOB-002: min-h 44px pe touch (WCAG 2.1 AA / CLAUDE.md §3.3); pe desktop, unde
+              // ținta e cursorul, rămâne compact.
+              "inline-flex min-h-[44px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border px-3 py-1.5 text-sm transition-all duration-200 sm:min-h-[2.25rem]",
               on
                 ? "border-border bg-background font-semibold text-primary shadow-sm"
                 : "border-transparent font-medium text-muted-foreground hover:text-foreground",

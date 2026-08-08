@@ -473,7 +473,7 @@ export function PartiesPage() {
               aria-selected={pageTab === tab.id}
               onClick={() => setPageTab(tab.id)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
+                "flex min-h-[44px] items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
                 pageTab === tab.id
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -548,7 +548,7 @@ export function PartiesPage() {
           <p className="text-sm">Niciun partener găsit.</p>
           <button
             onClick={() => setAddOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 max-sm:min-h-[44px] rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Adaugă primul partener

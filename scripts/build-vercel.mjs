@@ -74,6 +74,11 @@ writeFileSync(
 // NOTE: the AUTOBILL daily cron is triggered by a GitHub Action (.github/workflows/autobill-cron.yml)
 // hitting /api/fin/cron/run-recurring — NOT a Vercel Cron. A `crons` entry here failed the deploy
 // at the "Deploying outputs" step (account/plan cron validation), so we schedule externally.
+// PERF-001: fără aceste headere, Vercel servea assets-urile cu revalidare la fiecare cerere —
+// browserul redescărca 3 MB de JS la FIECARE refresh (simptomul „se reîncarcă tot"). Numele
+// fișierelor din /assets/ conțin hash-ul de conținut, deci sunt imutabile prin construcție și
+// pot fi cache-uite un an. index.html rămâne `no-cache`: dacă l-am cache-ui, un deploy nou n-ar
+// mai fi văzut (HTML vechi → bundle-uri șterse → ecran alb).
 writeFileSync(
   `${OUT}/config.json`,
   JSON.stringify(
@@ -81,8 +86,22 @@ writeFileSync(
       version: 3,
       routes: [
         { src: "/api/(.*)", dest: "/api" },
+        {
+          src: "/assets/(.*)",
+          headers: { "cache-control": "public, max-age=31536000, immutable" },
+          continue: true,
+        },
+        {
+          src: "/(favicon\\.svg|manifest\\.json|.*\\.(png|jpg|jpeg|webp|avif|woff2?))",
+          headers: { "cache-control": "public, max-age=86400, must-revalidate" },
+          continue: true,
+        },
         { handle: "filesystem" },
-        { src: "/(.*)", dest: "/index.html" },
+        {
+          src: "/(.*)",
+          dest: "/index.html",
+          headers: { "cache-control": "no-cache" },
+        },
       ],
     },
     null,

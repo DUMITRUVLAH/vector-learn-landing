@@ -1,78 +1,96 @@
 import { HashRouter, useRouter } from "./router/HashRouter";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { BranchProvider } from "./contexts/BranchContext";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { getParMe } from "./lib/api/par";
+import { RouteFallback } from "./components/RouteFallback";
 
-// PAR routes
-import { ParCreateForm } from "./pages/par/ParCreateForm";
-import { ParOnboarding } from "./pages/par/ParOnboarding";
-import { ParDashboard } from "./pages/par/ParDashboard";
-import ParInbox from "./pages/par/ParInbox";
-import ParFinanceQueue from "./pages/par/ParFinanceQueue";
-import { ParDetailPage } from "./pages/par/ParDetail";
-import { ParAdmin } from "./pages/par/ParAdmin";
-import { ParReports } from "./pages/par/ParReports";
-import { ParFolders } from "./pages/par/ParFolders";
+/**
+ * PERF-003 — fiecare pagină e un chunk separat.
+ *
+ * Înainte, acest fișier importa STATIC ~60 de pagini. Rezultatul măsurat: un singur bundle de
+ * 3,06 MB (669 KB gzip), descărcat integral inclusiv de cineva care doar deschide ecranul de
+ * login. Prin importurile statice intrau în el și `recharts` (via ParReports), `jspdf` +
+ * `html2canvas` (via ParDetail → parPdf) și `qrcode` — biblioteci de care 90% dintre sesiuni
+ * n-au nevoie niciodată.
+ *
+ * `lazy()` face ca fiecare rută să-și aducă propriul cod la prima vizită și doar atunci.
+ * Excepțiile eager, intenționat: infrastructura shell-ului (router, guard-uri, error boundary)
+ * și primele două ecrane pe care le vede un utilizator nelogat (landing + login) — pentru ele,
+ * un chunk separat ar însemna un dus-întors în plus exact pe calea critică.
+ */
 
-// DOCMERGE module routes
-import { DocMergeTemplatesPage } from "./pages/business/docmerge/DocMergeTemplatesPage";
-import { DocMergeJobPage } from "./pages/business/docmerge/DocMergeJobPage";
-import { DocMergeWizardPage } from "./pages/business/docmerge/DocMergeWizardPage";
-
-// Business / FinDesk routes
-import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
-import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
-import { BusinessSignupPage } from "./pages/business/BusinessSignupPage";
-import { ForgotPasswordPage } from "./pages/business/ForgotPasswordPage";
-import { ResetPasswordPage } from "./pages/business/ResetPasswordPage";
-import { BusinessDashboardPage } from "./pages/business/BusinessDashboardPage";
-import { PlatformAdminPage } from "./pages/business/PlatformAdminPage";
-import { PlatformConsolePage } from "./pages/business/platform/PlatformConsolePage";
+// Guard-uri + shell — eager (apar pe fiecare rută, n-au ce câștiga dintr-un chunk separat).
 import { BusinessGuardPage } from "./components/business/BusinessGuardPage";
 import { ParGuardPage } from "./components/par/ParGuardPage";
+// Primul ecran pentru un utilizator nelogat — eager, ca să nu adauge un dus-întors la login.
+import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
+import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
+
+// PAR
+const ParCreateForm = lazy(() => import("./pages/par/ParCreateForm").then((m) => ({ default: m.ParCreateForm })));
+const ParOnboarding = lazy(() => import("./pages/par/ParOnboarding").then((m) => ({ default: m.ParOnboarding })));
+const ParDashboard = lazy(() => import("./pages/par/ParDashboard").then((m) => ({ default: m.ParDashboard })));
+const ParInbox = lazy(() => import("./pages/par/ParInbox"));
+const ParFinanceQueue = lazy(() => import("./pages/par/ParFinanceQueue"));
+const ParDetailPage = lazy(() => import("./pages/par/ParDetail").then((m) => ({ default: m.ParDetailPage })));
+const ParAdmin = lazy(() => import("./pages/par/ParAdmin").then((m) => ({ default: m.ParAdmin })));
+const ParReports = lazy(() => import("./pages/par/ParReports").then((m) => ({ default: m.ParReports })));
+const ParFolders = lazy(() => import("./pages/par/ParFolders").then((m) => ({ default: m.ParFolders })));
+
+// DOCMERGE
+const DocMergeTemplatesPage = lazy(() => import("./pages/business/docmerge/DocMergeTemplatesPage").then((m) => ({ default: m.DocMergeTemplatesPage })));
+const DocMergeJobPage = lazy(() => import("./pages/business/docmerge/DocMergeJobPage").then((m) => ({ default: m.DocMergeJobPage })));
+const DocMergeWizardPage = lazy(() => import("./pages/business/docmerge/DocMergeWizardPage").then((m) => ({ default: m.DocMergeWizardPage })));
+
+// Business — ciclul de viață al contului
+const BusinessSignupPage = lazy(() => import("./pages/business/BusinessSignupPage").then((m) => ({ default: m.BusinessSignupPage })));
+const ForgotPasswordPage = lazy(() => import("./pages/business/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import("./pages/business/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage })));
+const BusinessDashboardPage = lazy(() => import("./pages/business/BusinessDashboardPage").then((m) => ({ default: m.BusinessDashboardPage })));
+const PlatformAdminPage = lazy(() => import("./pages/business/PlatformAdminPage").then((m) => ({ default: m.PlatformAdminPage })));
+// PLATFORM-001: Consola Platformă. Lazy ca restul rutelor — o vede doar superadminul,
+// deci n-are ce căuta în bundle-ul pe care îl descarcă fiecare client.
+const PlatformConsolePage = lazy(() => import("./pages/business/platform/PlatformConsolePage").then((m) => ({ default: m.PlatformConsolePage })));
 // SHELL-503: PAR invite acceptance (public — no auth guard)
-import { InvitePage } from "./pages/business/InvitePage";
-import { WelcomePage } from "./pages/business/WelcomePage";
+const InvitePage = lazy(() => import("./pages/business/InvitePage").then((m) => ({ default: m.InvitePage })));
+const WelcomePage = lazy(() => import("./pages/business/WelcomePage").then((m) => ({ default: m.WelcomePage })));
 
-// FinDesk pages under /business/fin/*
-import { FinHome } from "./pages/fin/FinHome";
-import { FinCompany } from "./pages/fin/FinCompany";
-import { FinOnboarding } from "./pages/fin/FinOnboarding";
-import { FinAiAuditPage } from "./pages/fin/FinAiAuditPage";
-import { FinSecuritySettingsPage } from "./pages/fin/FinSecuritySettingsPage";
+// FinDesk — /business/fin/*
+const FinHome = lazy(() => import("./pages/fin/FinHome").then((m) => ({ default: m.FinHome })));
+const FinCompany = lazy(() => import("./pages/fin/FinCompany").then((m) => ({ default: m.FinCompany })));
+const FinOnboarding = lazy(() => import("./pages/fin/FinOnboarding").then((m) => ({ default: m.FinOnboarding })));
+const FinAiAuditPage = lazy(() => import("./pages/fin/FinAiAuditPage").then((m) => ({ default: m.FinAiAuditPage })));
+const FinSecuritySettingsPage = lazy(() => import("./pages/fin/FinSecuritySettingsPage").then((m) => ({ default: m.FinSecuritySettingsPage })));
 
-// FinDesk app pages
-import CapturesListPage from "./pages/fin/CapturesListPage";
-import CapturePage from "./pages/fin/CapturePage";
-import { FinInvoicesPage } from "./pages/app/FinInvoicesPage";
-import { FinInvoiceDocPage } from "./pages/app/FinInvoiceDocPage";
-import { FinExpensesPage } from "./pages/app/FinExpensesPage";
-import { FinRegistryPage } from "./pages/app/FinRegistryPage";
-import { FinEinvoicesPage } from "./pages/app/FinEinvoicesPage";
-import { BudgetPage } from "./pages/app/BudgetPage";
-import { AssetsPage } from "./pages/app/AssetsPage";
-import { RevaluationPage } from "./pages/app/RevaluationPage";
-import { InventoryPage } from "./pages/app/InventoryPage";
-import { InventoryReportPage } from "./pages/app/InventoryReportPage";
-import { PaymentAccountsPage } from "./pages/app/PaymentAccountsPage";
-import { PaymentAccountEditorPage } from "./pages/app/PaymentAccountEditorPage";
-import { PaymentAccountViewPage } from "./pages/app/PaymentAccountViewPage";
+const CapturesListPage = lazy(() => import("./pages/fin/CapturesListPage"));
+const CapturePage = lazy(() => import("./pages/fin/CapturePage"));
+const FinInvoicesPage = lazy(() => import("./pages/app/FinInvoicesPage").then((m) => ({ default: m.FinInvoicesPage })));
+const FinInvoiceDocPage = lazy(() => import("./pages/app/FinInvoiceDocPage").then((m) => ({ default: m.FinInvoiceDocPage })));
+const FinExpensesPage = lazy(() => import("./pages/app/FinExpensesPage").then((m) => ({ default: m.FinExpensesPage })));
+const FinRegistryPage = lazy(() => import("./pages/app/FinRegistryPage").then((m) => ({ default: m.FinRegistryPage })));
+const FinEinvoicesPage = lazy(() => import("./pages/app/FinEinvoicesPage").then((m) => ({ default: m.FinEinvoicesPage })));
+const BudgetPage = lazy(() => import("./pages/app/BudgetPage").then((m) => ({ default: m.BudgetPage })));
+const AssetsPage = lazy(() => import("./pages/app/AssetsPage").then((m) => ({ default: m.AssetsPage })));
+const RevaluationPage = lazy(() => import("./pages/app/RevaluationPage").then((m) => ({ default: m.RevaluationPage })));
+const InventoryPage = lazy(() => import("./pages/app/InventoryPage").then((m) => ({ default: m.InventoryPage })));
+const InventoryReportPage = lazy(() => import("./pages/app/InventoryReportPage").then((m) => ({ default: m.InventoryReportPage })));
+const PaymentAccountsPage = lazy(() => import("./pages/app/PaymentAccountsPage").then((m) => ({ default: m.PaymentAccountsPage })));
+const PaymentAccountEditorPage = lazy(() => import("./pages/app/PaymentAccountEditorPage").then((m) => ({ default: m.PaymentAccountEditorPage })));
+const PaymentAccountViewPage = lazy(() => import("./pages/app/PaymentAccountViewPage").then((m) => ({ default: m.PaymentAccountViewPage })));
 // FIX-502: Use FinDesk payroll pages (pages/fin/*) not the CRM payroll page (pages/app/PayrollPage).
 // The CRM page calls /api/hr/payroll which is NOT mounted; FinDesk pages call /api/fin/payroll/* which IS mounted.
-import { PayrollFINPage } from "./pages/fin/PayrollPage";
-import { PayrollEmployeesPage } from "./pages/fin/PayrollEmployeesPage";
-import { PayrollRunDetailPage } from "./pages/fin/PayrollRunDetailPage";
-import ReconcilePage from "./pages/fin/ReconcilePage";
-import CashPage from "./pages/fin/CashPage";
-import { PartiesPage } from "./pages/app/fin/PartiesPage";
-import { PartyDetailPage } from "./pages/app/fin/PartyDetailPage";
-import { FinExportCenter } from "./pages/app/fin/ExportCenter";
-import ItparkDetail from "./pages/app/fin/itpark/ItparkDetail";
-import { FinInsightsPage } from "./pages/finance/FinInsightsPage";
-
-import { lazy, Suspense, useState, useEffect as _useEffect } from "react";
-import { getParMe } from "./lib/api/par";
-import { CXPage } from "./pages/app/CXPage";
+const PayrollFINPage = lazy(() => import("./pages/fin/PayrollPage").then((m) => ({ default: m.PayrollFINPage })));
+const PayrollEmployeesPage = lazy(() => import("./pages/fin/PayrollEmployeesPage").then((m) => ({ default: m.PayrollEmployeesPage })));
+const PayrollRunDetailPage = lazy(() => import("./pages/fin/PayrollRunDetailPage").then((m) => ({ default: m.PayrollRunDetailPage })));
+const ReconcilePage = lazy(() => import("./pages/fin/ReconcilePage"));
+const CashPage = lazy(() => import("./pages/fin/CashPage"));
+const PartiesPage = lazy(() => import("./pages/app/fin/PartiesPage").then((m) => ({ default: m.PartiesPage })));
+const PartyDetailPage = lazy(() => import("./pages/app/fin/PartyDetailPage").then((m) => ({ default: m.PartyDetailPage })));
+const FinExportCenter = lazy(() => import("./pages/app/fin/ExportCenter").then((m) => ({ default: m.FinExportCenter })));
+const ItparkDetail = lazy(() => import("./pages/app/fin/itpark/ItparkDetail"));
+const FinInsightsPage = lazy(() => import("./pages/finance/FinInsightsPage").then((m) => ({ default: m.FinInsightsPage })));
+const CXPage = lazy(() => import("./pages/app/CXPage").then((m) => ({ default: m.CXPage })));
 
 // STMT-001..004: Statement pages
 const StatementUploadPage = lazy(() => import("./pages/fin/StatementUploadPage"));
@@ -92,7 +110,7 @@ const FinPaymentsPage = lazy(() => import("./pages/fin/PaymentsPage"));
 
 function ParAdminPage() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  _useEffect(() => {
+  useEffect(() => {
     getParMe()
       .then((r) => setIsAdmin(r.roles.includes("par_admin")))
       .catch(() => setIsAdmin(false));
@@ -262,7 +280,11 @@ function BoundedRoutes() {
   const { path } = useRouter();
   return (
     <ErrorBoundary resetKey={path}>
-      <Routes />
+      {/* PERF-003: o singură graniță Suspense pentru toate rutele lazy. `key={path}` o resetează
+          la navigare, ca fallback-ul să apară pentru pagina nouă, nu pentru cea părăsită. */}
+      <Suspense key={path} fallback={<RouteFallback />}>
+        <Routes />
+      </Suspense>
     </ErrorBoundary>
   );
 }

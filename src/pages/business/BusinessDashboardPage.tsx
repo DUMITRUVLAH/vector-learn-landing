@@ -78,7 +78,7 @@ function WidgetCard({ title, subtitle, href, icon, tone, loading, error, childre
         </div>
         <Link
           to={href}
-          className="mt-0.5 shrink-0 text-xs text-primary hover:underline"
+          className="mt-0.5 inline-flex shrink-0 items-center text-xs text-primary hover:underline max-sm:min-h-[44px]"
           aria-label={`Deschide ${title}`}
         >
           Vezi tot

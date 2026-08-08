@@ -3,6 +3,7 @@
  * Mirrors the server's fin_role enum and provides typed fetchers.
  * CORE: backlog/fin/FIN-CORE.md §2
  */
+import { dedupe } from "@/lib/apiCache";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,10 +68,17 @@ export function finIsReadOnly(role: FinRole | null | undefined): boolean {
  * Returns null if the user is not a FinDesk member.
  */
 export async function getFinMe(): Promise<FinMeResponse | null> {
-  const res = await fetch("/api/fin/members/me", { credentials: "include" });
-  if (res.status === 403 || res.status === 401) return null;
-  if (!res.ok) throw new Error(`getFinMe: ${res.status}`);
-  return res.json() as Promise<FinMeResponse>;
+  // PERF-002: `fetch` direct ocolește deduplicarea din src/lib/api.ts, iar shell-ul FinDesk
+  // cerea asta de 3 ori pe încărcare de pagină. E un endpoint de identitate (rolul meu în
+  // workspace), deci trece prin `dedupe` cu TTL-ul lung de identitate.
+  // Nu poate folosi `api()` pentru că 401/403 înseamnă aici „nu ești membru FinDesk" (→ null),
+  // nu o eroare de propagat.
+  return dedupe("/api/fin/members/me", async () => {
+    const res = await fetch("/api/fin/members/me", { credentials: "include" });
+    if (res.status === 403 || res.status === 401) return null;
+    if (!res.ok) throw new Error(`getFinMe: ${res.status}`);
+    return res.json() as Promise<FinMeResponse>;
+  });
 }
 
 /**
