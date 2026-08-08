@@ -24,6 +24,13 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # 0. vercel.json must pass Vercel's schema validation. That check runs BEFORE the build
+      #    starts, so a violation fails the production deploy with NO build logs at all — the
+      #    hardest kind of failure to diagnose from the dashboard. (2026-08-08: buildCommand grew
+      #    to 345 chars, over Vercel's hard 256 limit, and the prod deploy died instantly.)
+      - name: Vercel config gate
+        run: node scripts/check-vercel-config.mjs
+
       # 1. Undefined references (TS2304/2552) — a missing import ships a runtime ReferenceError.
       - name: Undefined-reference gate
         run: node scripts/check-undefined-refs.mjs
