@@ -6,6 +6,31 @@
 
 ---
 
+## 0.0 REGULA LOVABLE-DEPLOY (repo-uri Lovable/Supabase, ex. crm-vector) — OBLIGATORIE
+
+Când lucrez pe un repo sincronizat cu **Lovable** (deploy-ul preia codul de pe `main`,
+dar **NU aplică automat migrările SQL** și nici alți pași manuali Supabase):
+
+1. **De fiecare dată când o schimbare cere un pas manual** (migrare nouă în
+   `supabase/migrations/`, secret de edge function, setare Supabase — orice nu se
+   aplică singur la sync-ul Lovable): scriu/actualizez un `LOVABLE-DEPLOY.md` în
+   rădăcina repo-ului cu o intrare per pas — SQL-ul complet gata de copiat (sau
+   instrucțiunea exactă) + status `[ ] NEAPLICAT` / `[x] Aplicat pe <dată>`.
+   Owner-ul copiază de acolo în Lovable (chat „apply migration X") sau în SQL
+   Editor Supabase.
+2. **Push-ul NU marchează pasul ca aplicat** — mută doar codul. Rămâne `NEAPLICAT`
+   până e confirmat pe Supabase-ul live.
+3. **La FIECARE push viitor**, înainte de a raporta „gata": verific pentru fiecare
+   intrare `NEAPLICAT` dacă s-a aplicat între timp (interoghez Supabase-ul live prin
+   REST cu cheia publishable din `.env`: 200/206 = există, 404 = lipsește),
+   **actualizez `LOVABLE-DEPLOY.md`** (bifez ce s-a aplicat, adaug intrări noi), și
+   raportez owner-ului ce mai are de aplicat manual.
+
+Regula completă (+ convenția de migrare Supabase, cum verific tabelele live) trăiește
+și în `CLAUDE.md`-ul din repo-ul `crm-vector`. Vezi memoria [[taskboard-module]].
+
+---
+
 ## 0. The single most important rule
 
 **Do not ask the user permission for anything that is already specified in the backlog or in this file.** If you find yourself drafting a question, stop and re-read this document. The answer is almost certainly here or in `backlog/specs/`.
@@ -154,6 +179,93 @@ o notezi în raport/commit, și mergi mai departe.
 
 ---
 
+## 0.4 Lucru în PARALEL, în mai multe chaturi, pe același repo — OBLIGATORIU
+
+**Owner-ul lucrează de obicei în mai multe conversații simultan, pe module diferite.** Asta e
+normal și trebuie să funcționeze. Problema NU e conflictul de cod (modulele sunt separate) — e
+că **toate chaturile împart UN SINGUR working tree**. Orice `git stash`, `git checkout`,
+`git switch` sau `git clean` rulat într-un chat **șterge din fața celuilalt chat munca lui
+nesalvată**, inclusiv fișierele noi.
+
+> **Incident real (2026-08-08):** un chat a rulat `git stash -u` pe branch-ul
+> `feat/platform-console-faza-1`. Celălalt chat, care tocmai scrisese ~500 de linii (rute noi,
+> componente noi), a găsit brusc fișierele **reverted la HEAD și fișierele noi șterse**. Nimic
+> nu s-a pierdut definitiv (era în `stash@{0}`, recuperat cu `git stash pop`), dar munca a
+> trebuit refăcută parțial și au apărut coliziuni de nume de fișier
+> (`vendorAutosave.ts` scris peste `vendorAutoSave.ts` existent — macOS e case-insensitive).
+
+### Soluția tehnică: un `git worktree` per chat (izolare reală)
+
+Un worktree = **director propriu pe disc + branch propriu**, dar același `.git` și același
+istoric. Două chaturi în două worktree-uri nu se pot călca pe picioare: `stash`/`checkout`
+într-unul nu atinge fizic celălalt director.
+
+```bash
+# O SINGURĂ dată, la începutul unui chat nou care lucrează pe un alt modul:
+git worktree add ../vl-<modul> -b feat/<MODUL>-faza-<X>-<slug> origin/main
+cd ../vl-<modul>
+npm install            # node_modules e per worktree
+```
+
+Exemplu concret pentru două chaturi simultane:
+
+```bash
+git worktree add ../vl-par     -b feat/PAR-faza-3-sugestii    origin/main
+git worktree add ../vl-console -b feat/platform-console-faza-1 origin/main
+```
+
+La final, după ce PR-ul e deschis și merged:
+
+```bash
+git worktree remove ../vl-par      # curăță directorul
+git worktree list                  # verifică ce mai e activ
+```
+
+**Porturi separate**, altfel al doilea server moare (PGlite deschide `.pglite` exclusiv — două
+procese pe același director dau `RuntimeError: Aborted()`):
+
+```bash
+PORT=3131 npm run server:dev       # chat A
+PORT=3132 npm run server:dev       # chat B
+```
+
+Fiecare worktree are propriul `.pglite`, deci propria bază locală — nu se mai bat pe fișier.
+
+### Regulile pe care Claude le respectă în ORICE chat (fără excepție)
+
+1. **NU rula NICIODATĂ `git stash`, `git checkout -- .`, `git restore .`, `git clean -fd` sau
+   `git reset --hard` pe working tree-ul partajat.** Sunt comenzi care distrug munca altui chat
+   fără avertisment. Dacă chiar ai nevoie de un tree curat → fă un worktree nou, nu curăța-l pe
+   acesta.
+2. **Înainte de orice comandă git care schimbă working tree-ul**, rulează `git status --short`.
+   Dacă vezi modificări pe care NU le-ai făcut tu în acest chat → **oprește-te și întreabă**.
+   (Excepție §0.3: noaptea alegi varianta reversibilă — creezi un worktree — și loghezi.)
+3. **Commit-uri dese, mici.** Munca necomisă e singura care se poate pierde. După fiecare item
+   din secvența de build: `git add -A && git commit`. Un commit e recuperabil din reflog; un
+   working tree stash-uit de altcineva, nu întotdeauna.
+4. **Verifică coliziunile de nume de fișier case-insensitive** (macOS/APFS): înainte de a crea
+   `server/lib/x/fooBar.ts`, rulează `ls server/lib/x/ | grep -i foobar`. Pe macOS,
+   `Write` la `foobar.ts` **suprascrie** `fooBar.ts` fără să te avertizeze.
+5. **Un chat = un modul = un branch = un worktree.** Nu edita în chatul B fișiere pe care
+   chatul A le are deschise în lucru. Dacă trebuie neapărat, spune-i owner-ului.
+
+### Cum recuperezi dacă s-a întâmplat deja (a mers azi)
+
+```bash
+git stash list                          # cauți intrarea; e acolo aproape sigur
+git stash show --include-untracked --stat stash@{0}   # vezi CE conține (inclusiv fișiere noi)
+git diff > /tmp/current.patch           # salvează ce ai ACUM, ca să nu-l pierzi la pop
+git checkout -- <fișierul care ar intra în conflict>
+git stash pop                           # readuce tot, inclusiv untracked
+```
+
+`git stash pop` păstrează intrarea dacă apar conflicte — deci nu e o operație pe care o pierzi
+din prima. După recuperare, verifică ÎNTOTDEAUNA cu `npm run check-refs` +
+`node scripts/check-route-mounts.mjs`: un import sau un `app.route(...)` pierdut la round-trip
+nu se vede la citit, dar rupe prod-ul.
+
+---
+
 ## 1. Project at a glance
 
 - **What**: Landing site for **Vector Learn**, a CRM for educational centers (language, programming, music, dance, sports, exam prep, kids).
@@ -161,6 +273,12 @@ o notezi în raport/commit, și mergi mai departe.
 - **Status**: Landing v1 shipped. Now building per-module deep-dive pages (`/modules/<slug>`) via autopilot.
 - **Repo**: `DUMITRUVLAH/vector-learn-landing`
 - **Owner**: Dumitru Vlah (vlahdumitru@gmail.com)
+
+### 1.1 Terminology — "Lovable" = the vector-crm GitHub repo
+
+When the owner says **"Lovable"**, they mean the **vector-crm** project on GitHub (the owner's
+CRM app, originally scaffolded in Lovable). Treat "Lovable" as a synonym for that repo — not for
+the Lovable.dev platform. If the owner references "Lovable", look to / work in vector-crm.
 
 ---
 
@@ -294,6 +412,13 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
 - **Webhook/callback handlers that mutate financial state** must REJECT anything they cannot
   cryptographically verify — "no secret configured" means "don't trust" (400), never "skip the check".
   Secrets at rest use AES-256-GCM (`server/lib/crypto.ts`), never base64.
+- **Outbound side-effects (email/SMS) must be gated by recipient + environment, never by "is the API
+  key missing".** The dev `.env` holds the real `RESEND_API_KEY`, so every PAR e2e sweep against the
+  `@atic.demo.io` demo tenant sent live mail that hard-bounced on `noreply@finflow.best` — test traffic
+  burning the product's sender reputation (Resend suspends around 5% bounces). All send paths go through
+  `server/lib/emailGuard.ts`: demo/reserved domains are blocked everywhere, non-production sends nothing
+  unless `EMAIL_SEND_MODE=on`, `EMAIL_ALLOWLIST` narrows prod. Demo fixtures use unroutable domains only.
+  See [docs/solutions/architecture-patterns/email-deliverability-guard.md].
 
 > **`.github/workflows/prod-safety.yml`** runs all four static/PGlite guards (undefined-refs,
 > route-mounts, migration-breakpoints, schema-drift) on every PR + push to main. It is fast, needs

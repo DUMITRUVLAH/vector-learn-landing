@@ -263,6 +263,49 @@ async function main() {
       "created_at" timestamp with time zone NOT NULL DEFAULT now()
     )`,
     `CREATE INDEX IF NOT EXISTS "tenant_notes_tenant_idx" ON "tenant_notes" ("tenant_id","created_at")`,
+    // PLATFORM-002 (migration 0139): telemetria de erori. Se scrie din `app.onError`, adică
+    // exact în momentul în care ceva deja merge prost — dacă tabela lipsește, nu are voie să
+    // adauge o a doua eroare peste prima. De aceea e healed aici, nu doar migrat.
+    `CREATE TABLE IF NOT EXISTS "error_groups" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "fingerprint" varchar(64) NOT NULL,
+      "kind" varchar(30) NOT NULL,
+      "title" varchar(300) NOT NULL,
+      "location" varchar(300),
+      "occurrences" integer NOT NULL DEFAULT 1,
+      "affected_tenants" integer NOT NULL DEFAULT 0,
+      "first_seen_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "last_seen_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "status" varchar(20) NOT NULL DEFAULT 'open',
+      "resolved_by_user_id" uuid REFERENCES "users"("id") ON DELETE set null,
+      "resolved_at" timestamp with time zone,
+      "alerted_at" timestamp with time zone,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "error_groups_fingerprint_uniq" ON "error_groups" ("fingerprint")`,
+    `CREATE INDEX IF NOT EXISTS "error_groups_last_seen_idx" ON "error_groups" ("last_seen_at")`,
+    `CREATE INDEX IF NOT EXISTS "error_groups_status_idx" ON "error_groups" ("status","last_seen_at")`,
+    `CREATE TABLE IF NOT EXISTS "error_events" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "group_id" uuid REFERENCES "error_groups"("id") ON DELETE cascade,
+      "fingerprint" varchar(64) NOT NULL,
+      "kind" varchar(30) NOT NULL,
+      "message" text NOT NULL,
+      "stack" text,
+      "location" varchar(300),
+      "method" varchar(10),
+      "status_code" integer,
+      "url" varchar(1000),
+      "tenant_id" uuid REFERENCES "tenants"("id") ON DELETE set null,
+      "user_id" uuid REFERENCES "users"("id") ON DELETE set null,
+      "user_email" varchar(255),
+      "user_agent" varchar(512),
+      "ip_address" varchar(64),
+      "created_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "error_events_group_idx" ON "error_events" ("group_id","created_at")`,
+    `CREATE INDEX IF NOT EXISTS "error_events_created_idx" ON "error_events" ("created_at")`,
+    `CREATE INDEX IF NOT EXISTS "error_events_tenant_idx" ON "error_events" ("tenant_id","created_at")`,
   ];
   for (const stmt of ENSURE_STATEMENTS) {
     try {

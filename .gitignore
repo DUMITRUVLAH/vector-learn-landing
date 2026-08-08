@@ -36,3 +36,12 @@ yarn-error.log*
 # Material de referință local (proiecte portate, nu fac parte din app)
 reference/
 .tmp-diag/
+
+# Artefacte locale care au ajuns de mai multe ori la un pas de commit:
+# backup-uri de bază PGlite (zeci de MB), capturi/rapoarte generate de scripturile de audit,
+# și documente de lucru ale owner-ului ținute în rădăcina repo-ului.
+.pglite.backup-*/
+output/
+*.pdf
+variante_arhitectura.html
+HR365*.html

@@ -285,6 +285,73 @@ describe("ParDetailPage — PAR-118", () => {
     });
   });
 
+  /**
+   * Regression: the detail page used to decide for itself whether the viewer could approve, by
+   * looking for a pending step that named them (`approverUserId === me`). The default DOA chain
+   * routes by ROLE (`approverUserId: null`), so an approver saw the PAR in "Inbox aprobare" with
+   * Approve/Reject and then no actions at all when opening it from "Cereri de plată". Authority is
+   * now the server's answer (`my_decision`), computed with the same rules /approve enforces.
+   */
+  it("aprobatorul vede acțiunile și pe un pas ROLE-BASED (approverUserId null)", async () => {
+    mockGetPar.mockResolvedValue({
+      ...mockPar,
+      approvals: [
+        mockPar.approvals[0],
+        { ...mockPar.approvals[1], approverUserId: null },
+      ],
+      my_decision: {
+        can_approve: true,
+        active_step: 1,
+        active_step_label: "DOA Holder",
+        locked_step: null,
+        reason: null,
+      },
+    });
+    mockGetParMe.mockResolvedValue({ roles: ["approver"], userId: "user-approver", tenantId: "tenant-1" });
+
+    const { default: ParDetailPage } = await import("../ParDetail");
+    render(<ParDetailPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Aprobă cererea")).toBeDefined();
+      expect(screen.getByLabelText("Respinge cererea")).toBeDefined();
+      expect(screen.getByLabelText("Cere modificări")).toBeDefined();
+    }, { timeout: 5000 });
+  });
+
+  it("fără acțiuni, cererea în aprobare spune DE CE (pas blocat / cerere proprie)", async () => {
+    mockGetPar.mockResolvedValue({
+      ...mockPar,
+      my_decision: { can_approve: false, active_step: null, active_step_label: null, locked_step: 2, reason: "locked" },
+    });
+    mockGetParMe.mockResolvedValue({ roles: ["approver"], userId: "user-approver", tenantId: "tenant-1" });
+
+    const { default: ParDetailPage } = await import("../ParDetail");
+    render(<ParDetailPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Rândul tău e pasul 2/)).toBeInTheDocument();
+    }, { timeout: 5000 });
+    expect(screen.queryByLabelText("Aprobă cererea")).toBeNull();
+  });
+
+  it("my_decision al serverului are ultimul cuvânt peste ghicitul din client", async () => {
+    // Pasul îl numește pe utilizator, dar serverul spune NU (ex. auto-aprobare) → fără butoane.
+    mockGetPar.mockResolvedValue({
+      ...mockPar,
+      my_decision: { can_approve: false, active_step: null, active_step_label: null, locked_step: null, reason: "self_approval" },
+    });
+    mockGetParMe.mockResolvedValue({ roles: ["approver"], userId: "user-approver", tenantId: "tenant-1" });
+
+    const { default: ParDetailPage } = await import("../ParDetail");
+    render(<ParDetailPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Nu îți poți aproba propria cerere/)).toBeInTheDocument();
+    }, { timeout: 5000 });
+    expect(screen.queryByLabelText("Aprobă cererea")).toBeNull();
+  });
+
   it("timeline toggle expands/collapses", async () => {
     mockGetParMe.mockResolvedValue({ roles: [], userId: "user-1", tenantId: "t-1" });
 

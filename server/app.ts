@@ -65,6 +65,7 @@ import { parAiPrefillRoutes } from "./routes/parAiPrefill";
 import { parMembersRoutes } from "./routes/parMembers";
 import { parPayersRoutes } from "./routes/parPayers";
 import { parProfilesRoutes } from "./routes/parProfiles";
+import { parSuggestionsRoutes } from "./routes/parSuggestions";
 import { parDoaRoutes } from "./routes/parDoa";
 import { parBudgetCodesRoutes } from "./routes/parBudgetCodes";
 import { parDepartmentsRoutes } from "./routes/parDepartments";
@@ -90,6 +91,11 @@ import { parReceiptsRoutes } from "./routes/parReceipts";
 import { parConfigImportRoutes } from "./routes/parConfigImport";
 import { platformAdminRoutes } from "./routes/platformAdmin";
 import { myModulesRoutes } from "./routes/myModules";
+import { telemetryRoutes } from "./routes/telemetry";
+import { platformInsightsRoutes } from "./routes/platformInsights";
+import { errorCapture } from "./middleware/errorCapture";
+import { recordError } from "./lib/errorTelemetry";
+import { alertOwnerOnNewError } from "./lib/errorAlerts";
 import { requireAuth } from "./middleware/requireAuth";
 import { requireModuleEntitlement } from "./middleware/requireModuleEntitlement";
 
@@ -106,10 +112,35 @@ export const app = new Hono();
 
 app.onError((err, c) => {
   console.error("[ERR]", err.message);
+  // PLATFORM-002: excepțiile nu mai mor în log-ul serverului — ajung în Consola Platformă,
+  // iar la primul lor tip nou pleacă și un email către proprietar. `void`: raportarea nu
+  // are voie să întârzie sau să schimbe răspunsul dat clientului.
+  void recordError({
+    kind: "server_exception",
+    message: err.message,
+    stack: err.stack ?? null,
+    location: new URL(c.req.url).pathname,
+    method: c.req.method,
+    statusCode: 500,
+    userAgent: c.req.header("user-agent") ?? null,
+  }).then((result) => {
+    if (result?.isNew) {
+      void alertOwnerOnNewError({
+        groupId: result.groupId,
+        kind: "server_exception",
+        message: err.message,
+        location: new URL(c.req.url).pathname,
+      });
+    }
+  });
   return c.json({ error: err.message }, 500);
 });
 
 app.use("*", logger());
+
+// PLATFORM-002: prinde orice 5xx și orice 404 pe /api/* (rută nemontată = bug real aici).
+// Montat înaintea rutelor, ca să vadă răspunsul fiecăreia.
+app.use("/api/*", errorCapture);
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -209,6 +240,7 @@ app.route("/api/par/config-import", parConfigImportRoutes);
 app.route("/api/par/members", parMembersRoutes);
 app.route("/api/par/payers", parPayersRoutes);
 app.route("/api/par/profiles", parProfilesRoutes);
+app.route("/api/par/suggestions", parSuggestionsRoutes);
 app.route("/api/par/doa", parDoaRoutes);
 app.route("/api/par/budget-codes", parBudgetCodesRoutes);
 app.route("/api/par/departments", parDepartmentsRoutes);
@@ -231,8 +263,13 @@ app.route("/api/par", parAttachmentsRoutes);
 
 // Platform operations (global superadmin only)
 app.route("/api/platform", platformAdminRoutes);
+// PLATFORM-002: erorile clienților + semnalele de creștere (același prefix, router separat,
+// cu propriile requireAuth + requirePlatformAdmin — nu moștenește nimic de la vecin).
+app.route("/api/platform", platformInsightsRoutes);
 // PLATFORM-001: ce module vede workspace-ul curent (citit de shell-ul FinFlow).
 app.route("/api/modules", myModulesRoutes);
+// PLATFORM-002: raportarea erorilor din browser (public — vezi routes/telemetry.ts).
+app.route("/api/telemetry", telemetryRoutes);
 
 // DOCMERGE-001: Document Merge templates
 app.route("/api/docmerge", docmergeTemplatesRoutes);
@@ -270,5 +307,19 @@ app.get("/api/health/db", async (c) => {
     return c.json({ ok: false, error: error instanceof Error ? error.message : "unknown" }, 503);
   }
 });
+
+/**
+ * PLATFORM-002 — plasa de la capătul lui `/api/*`.
+ *
+ * Fără ea, o cerere către o rută API care NU există cade în fallback-ul SPA și primește
+ * `200` + index.html. Clientul face `JSON.parse("<!doctype …")` și pagina crapă cu
+ * „Unexpected token '<'" — clasa de bug-uri #1 din acest repo (44 de routere au fost odată
+ * orfane, iar simptomul arăta ca o pagină stricată, nu ca o rută lipsă).
+ *
+ * Declarată DUPĂ toate `app.route(...)`, deci prinde exact ce n-a fost montat. Răspunde
+ * JSON, ca frontend-ul să primească o eroare pe care o poate citi, iar `errorCapture` să o
+ * poată raporta ca `api_route_missing`.
+ */
+app.all("/api/*", (c) => c.json({ error: "route_not_found", path: new URL(c.req.url).pathname }, 404));
 
 export default app;

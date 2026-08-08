@@ -49,6 +49,7 @@ import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { useParRoles } from "@/hooks/useParRoles";
 import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { getParInbox, getFinanceQueue } from "@/lib/api/par";
+import { onParBadgeRefresh } from "@/lib/par/badgeBus";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { api } from "@/lib/api";
 import { Avatar, PageHeader, SidebarNavItem, type ChipTone } from "@/components/ds";
@@ -62,6 +63,25 @@ interface BusinessShellProps {
 
 /** PAR role labels used to gate per-feature nav visibility (SHELL-502). */
 type ParNavRole = "requestor" | "approver" | "finance" | "par_admin";
+
+/** Romanian labels for PAR roles, most authoritative first. */
+const PAR_ROLE_LABELS: ReadonlyArray<[ParNavRole, string]> = [
+  ["par_admin", "Administrator PAR"],
+  ["finance", "Finanțe"],
+  ["approver", "Aprobator"],
+  ["requestor", "Solicitant"],
+];
+
+/**
+ * The role to show under the user's name inside the PAR module. Someone can hold several
+ * (approver + finance); we name the highest-authority one and count the rest, so the footer stays
+ * one line. Returns null when the user has no PAR role — the caller falls back to the tenant role.
+ */
+function parRoleLabel(roles: string[]): string | null {
+  const held = PAR_ROLE_LABELS.filter(([role]) => roles.includes(role));
+  if (held.length === 0) return null;
+  return held.length === 1 ? held[0][1] : `${held[0][1]} +${held.length - 1}`;
+}
 
 interface NavItem {
   label: string;
@@ -440,7 +460,10 @@ export function BusinessShell({
     };
     fetchCounts();
     const iv = setInterval(fetchCounts, 60_000);
-    return () => { alive = false; clearInterval(iv); };
+    // A decision taken on any PAR page must be reflected here immediately — the 60s
+    // poll otherwise leaves the pill claiming 4 while the list already shows 3.
+    const off = onParBadgeRefresh(fetchCounts);
+    return () => { alive = false; clearInterval(iv); off(); };
   }, [canApproveNav, canFinanceNav]);
 
   // SPLIT-501: inside PAR module → focused PAR-only sidebar.
@@ -492,7 +515,11 @@ export function BusinessShell({
   };
 
   const userName = session.data?.user?.name || session.data?.user?.email || "Utilizator";
-  const userRole = session.data?.user?.role || "membru";
+  // Inside PAR, the identity that matters is the PAR role — showing the tenant role there said
+  // "Teacher" to someone whose whole job in the module is approving payments.
+  const userRole = (isParModule ? parRoleLabel(parRoles) : null)
+    ?? session.data?.user?.role
+    ?? "membru";
 
   const sidebarBody = (
     <SidebarBody

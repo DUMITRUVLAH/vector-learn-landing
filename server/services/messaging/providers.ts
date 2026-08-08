@@ -7,6 +7,7 @@
  * SmsProvider / WhatsAppProvider: stubs — replace with Twilio / Meta Cloud API.
  */
 import { Resend } from "resend";
+import { emailSendDecision } from "../../lib/emailGuard";
 
 export interface ProviderSendResult {
   messageId: string;
@@ -34,6 +35,17 @@ export interface EmailSendOptions {
 
 const FROM_ADDRESS = process.env.EMAIL_FROM ?? "noreply@notifications.vectorlearn.md";
 
+/**
+ * Absolute base URL for assets referenced from an email (the logo).
+ * Email clients cannot resolve relative paths, and a localhost `APP_URL` (dev)
+ * would render as a broken image in the recipient's inbox — so only an https
+ * origin is trusted; otherwise fall back to the public production domain.
+ */
+function publicAssetOrigin(): string {
+  const appUrl = process.env.APP_URL;
+  return appUrl?.startsWith("https://") ? appUrl.replace(/\/+$/, "") : "https://finflow.best";
+}
+
 export class EmailProvider {
   private client: Resend | null;
 
@@ -48,6 +60,19 @@ export class EmailProvider {
   }
 
   async send(opts: EmailSendOptions): Promise<ProviderSendResult> {
+    // Deliverability guard: never let demo/e2e traffic hard-bounce on the real sending domain.
+    const decision = emailSendDecision(opts.to);
+    if (!decision.allowed) {
+      console.warn(
+        `[EMAIL BLOCKED] to="${opts.to}" subject="${opts.subject}" reason=${decision.reason}`
+      );
+      return {
+        messageId: crypto.randomUUID(),
+        status: "failed",
+        errorMessage: `email not sent — ${decision.reason}`,
+      };
+    }
+
     if (!this.client) {
       const att = opts.attachments?.length ? ` +${opts.attachments.length} attachment(s)` : "";
       console.warn(
@@ -85,25 +110,43 @@ export class EmailProvider {
   }
 }
 
-/** Minimal HTML email wrapper — plain-text body inside a clean card. */
-function buildHtml(subject: string, body: string): string {
-  const escaped = body
+function escapeHtml(value: string): string {
+  return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/\n/g, "<br>");
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Minimal HTML email wrapper — plain-text body inside a clean card, under the
+ * FinFlow lockup used in the app shell (square mark + wordmark).
+ *
+ * The mark is a hosted PNG (email clients don't render SVG, and Gmail strips
+ * `onerror`), and the "FinFlow" wordmark next to it is real HTML text with an
+ * empty `alt` on the image — so a blocked or missing image degrades to the
+ * wordmark alone instead of a broken-image icon.
+ */
+export function buildHtml(subject: string, body: string): string {
+  const escaped = escapeHtml(body).replace(/\n/g, "<br>");
+  const logoUrl = `${publicAssetOrigin()}/finflow-mark.png`;
 
   return `<!DOCTYPE html>
 <html lang="ro">
-<head><meta charset="utf-8"><title>${subject}</title></head>
-<body style="font-family:Arial,sans-serif;background:#f5f5f5;margin:0;padding:24px">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(subject)}</title></head>
+<body style="font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;margin:0;padding:24px">
   <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;padding:32px;box-shadow:0 1px 4px rgba(0,0,0,.1)">
-    <div style="margin-bottom:24px">
-      <img src="https://vectorlearn.md/logo.png" alt="Vector Learn" height="32" onerror="this.style.display='none'">
-    </div>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-bottom:24px">
+      <tr>
+        <td style="padding-right:10px;vertical-align:middle;line-height:0">
+          <img src="${logoUrl}" alt="" width="36" height="36" style="display:block;border:0;width:36px;height:36px;border-radius:8px">
+        </td>
+        <td style="vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:bold;letter-spacing:-.3px;color:#1a1aff">FinFlow</td>
+      </tr>
+    </table>
     <p style="font-size:15px;line-height:1.6;color:#333">${escaped}</p>
     <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-    <p style="font-size:12px;color:#999">Vector Learn · Notificare automată · Nu răspunde la acest email</p>
+    <p style="font-size:12px;color:#999">FinFlow · Notificare automată · Nu răspunde la acest email</p>
   </div>
 </body>
 </html>`;
