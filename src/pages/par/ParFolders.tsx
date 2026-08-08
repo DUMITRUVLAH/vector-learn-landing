@@ -1,226 +1,156 @@
 /**
- * VM1-10: PAR Folders — Proiect → status hierarchy
+ * VM1-10b: Foldere PAR — navigare ca într-un drive.
  *
- * Shows PAR requests organized as:
- *   Projects (incl. "Fără proiect")
- *     └─ De aprobat (pending_approval) — count + MDL total
- *     └─ Aprobate   (approved + in_finance)
- *     └─ Plătite    (paid)
+ * Un singur nivel pe ecran, exact ca în Google Drive:
  *
- * If VM1-04 events are present, optionally shows Proiect → Eveniment → status.
- * Click on a folder navigates to ParDashboard with pre-applied filters.
+ *   Proiecte → (Evenimente) → Statusuri → Cereri (PAR) → Documentele cererii
  *
- * Pure UI + aggregation over existing statuses — no new table, no new status.
- * Reuses totalMdlCents (VM1-03) for MDL totals.
+ * Nivelul curent trăiește în URL (`?p=…&e=…&b=…&id=…`, vezi `@/lib/par/folders`), deci Back-ul
+ * browserului, refresh-ul și link-ul trimis unui coleg funcționează. Nivelul final NU mai aruncă
+ * utilizatorul în lista globală de cereri (bug-ul raportat: "mă duce și văd toate cererile") —
+ * arată documentele acelei cereri: atașamentele dosarului plus ce a adăugat finanțele (ordin de
+ * plată / confirmarea plății).
  *
- * CORE: backlog/par/PAR-CORE.md
- * Design: Vector 365 tokens, light+dark, WCAG AA.
+ * Statisticile (număr cereri, total MDL, de aprobat / aprobate / plătite) rămân — dar recalculate
+ * pentru folderul în care ești, nu doar pentru rădăcină.
+ *
+ * CORE: backlog/par/PAR-CORE.md · Design: Vector 365 tokens, light+dark, WCAG AA.
  */
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  AlertCircle,
+  ArrowLeft,
+  Banknote,
+  CalendarDays,
+  ChevronRight,
+  ClipboardList,
+  Download,
+  ExternalLink,
+  FileText,
   Folder,
   FolderOpen,
-  ChevronRight,
-  ChevronDown,
-  Loader2,
-  AlertCircle,
-  ClipboardList,
   Landmark,
+  Paperclip,
+  ReceiptText,
+  Search,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
+import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { useRouter } from "@/router/HashRouter";
 import {
+  downloadDosar,
+  formatMDL,
+  getPar,
+  listEvents,
   listPar,
   listProjects,
-  listEvents,
-  formatMDL,
-  type ParRequest,
-  type ParProject,
+  type ParAttachment,
+  type ParDetail,
   type ParEvent,
+  type ParListRow,
+  type ParProject,
 } from "@/lib/api/par";
+import {
+  ATTACHMENT_KIND_LABELS,
+  buildBreadcrumb,
+  buildEventFolders,
+  buildFolderHref,
+  buildProjectFolders,
+  buildBuckets,
+  bucketDef,
+  isFinanceDoc,
+  levelOf,
+  parentLocation,
+  parseFolderLocation,
+  scopeRows,
+  sumMdlCents,
+  type BucketFolder,
+  type BucketKey,
+  type FolderLocation,
+} from "@/lib/par/folders";
+import { openParAttachment } from "@/lib/parFiles";
 import { cn } from "@/lib/utils";
-import { Alert, Badge, Card, EmptyState, KpiTile, PastelIcon, Skeleton } from "@/components/ds";
+import { Alert, Badge, Button, Card, EmptyState, Input, KpiTile, PastelIcon, Skeleton } from "@/components/ds";
+import type { ChipTone } from "@/components/ds";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Row primitives ───────────────────────────────────────────────────────────
 
-type FolderStatus = "pending_approval" | "approved_in_finance" | "paid";
-
-interface FolderBucket {
-  status: FolderStatus;
-  label: string;
-  statuses: string[];
-  count: number;
-  totalMdlCents: number;
+interface FolderRowProps {
+  icon: React.ReactNode;
+  name: string;
+  subtitle?: React.ReactNode;
+  badges?: React.ReactNode;
+  meta?: React.ReactNode;
+  href: string;
+  ariaLabel: string;
 }
 
-interface ProjectFolder {
-  projectId: string | null;
-  projectName: string;
-  totalCount: number;
-  totalMdlCents: number;
-  buckets: FolderBucket[];
-  events: EventFolder[];
-}
-
-interface EventFolder {
-  eventId: string;
-  eventName: string;
-  count: number;
-  totalMdlCents: number;
-  buckets: FolderBucket[];
-}
-
-// ─── Status groupings ─────────────────────────────────────────────────────────
-
-const FOLDER_DEFS: { status: FolderStatus; label: string; statuses: string[] }[] = [
-  {
-    status: "pending_approval",
-    label: "De aprobat",
-    statuses: ["pending_approval", "changes_requested", "reapproval_required"],
-  },
-  {
-    status: "approved_in_finance",
-    label: "Aprobate",
-    statuses: ["approved", "in_finance"],
-  },
-  {
-    status: "paid",
-    label: "Plătite",
-    statuses: ["paid"],
-  },
-];
-
-// ─── Aggregation helpers ──────────────────────────────────────────────────────
-
-type ParRow = ParRequest & { eventId?: string | null; totalMdlCents?: number | null };
-
-function buildBuckets(rows: ParRow[]): FolderBucket[] {
-  // Always return all 3 status folders (De aprobat / Aprobate / Plătite) so the structure is
-  // consistent per project — even an empty one shows (count 0), as the owner requested.
-  return FOLDER_DEFS.map((def) => {
-    const matching = rows.filter((r) => def.statuses.includes(r.status));
-    return {
-      ...def,
-      count: matching.length,
-      totalMdlCents: matching.reduce((s, r) => s + (r.totalMdlCents ?? r.totalEstimatedCents), 0),
-    };
-  });
-}
-
-function buildFolders(
-  requests: ParRow[],
-  projects: ParProject[],
-  events: ParEvent[]
-): ProjectFolder[] {
-  const projectMap = new Map(projects.map((p) => [p.id, p.name]));
-  const eventMap = new Map(events.map((e) => [e.id, e.name]));
-
-  // Group by projectId (null → "Fără proiect")
-  const groups = new Map<string | null, ParRow[]>();
-  groups.set(null, []);
-  for (const p of projects) groups.set(p.id, []);
-
-  for (const r of requests) {
-    const key = r.projectId ?? null;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(r);
-  }
-
-  const folders: ProjectFolder[] = [];
-
-  for (const [projectId, rows] of groups.entries()) {
-    if (rows.length === 0 && projectId !== null) continue; // skip empty known projects
-
-    // Sub-group by eventId
-    const eventGroups = new Map<string, ParRow[]>();
-    const noEvent: ParRow[] = [];
-    for (const r of rows) {
-      if (r.eventId) {
-        if (!eventGroups.has(r.eventId)) eventGroups.set(r.eventId, []);
-        eventGroups.get(r.eventId)!.push(r);
-      } else {
-        noEvent.push(r);
-      }
-    }
-
-    const eventFolders: EventFolder[] = [];
-    for (const [evId, evRows] of eventGroups.entries()) {
-      eventFolders.push({
-        eventId: evId,
-        eventName: eventMap.get(evId) ?? evId.slice(0, 8),
-        count: evRows.length,
-        totalMdlCents: evRows.reduce((s, r) => s + (r.totalMdlCents ?? r.totalEstimatedCents), 0),
-        buckets: buildBuckets(evRows),
-      });
-    }
-
-    folders.push({
-      projectId,
-      projectName:
-        projectId === null ? "Fără proiect" : (projectMap.get(projectId) ?? "Proiect necunoscut"),
-      totalCount: rows.length,
-      totalMdlCents: rows.reduce((s, r) => s + (r.totalMdlCents ?? r.totalEstimatedCents), 0),
-      buckets: buildBuckets(rows),
-      events: eventFolders,
-    });
-  }
-
-  // Sort: "Fără proiect" at end, alphabetical otherwise
-  return folders.sort((a, b) => {
-    if (a.projectId === null) return 1;
-    if (b.projectId === null) return -1;
-    return a.projectName.localeCompare(b.projectName, "ro");
-  });
-}
-
-// ─── Components ──────────────────────────────────────────────────────────────
-
-const folderStatusColor: Record<FolderStatus, string> = {
-  pending_approval: "text-warning",
-  approved_in_finance: "text-blue-600 dark:text-blue-400",
-  paid: "text-success",
-};
-
-function BucketRow({ bucket, onNavigate }: { bucket: FolderBucket; onNavigate: () => void }) {
-  const isPaid = bucket.status === "paid";
+/** A folder line. Rendered as a real anchor so middle-click / "open in new tab" work. */
+function FolderRow({ icon, name, subtitle, badges, meta, href, ariaLabel }: FolderRowProps) {
   return (
-    <button
-      type="button"
-      onClick={onNavigate}
-      className={cn(
-        "flex items-center gap-3 px-3 py-2 rounded-lg transition-colors w-full text-left min-h-[44px] group",
-        isPaid ? "bg-success/[0.06] hover:bg-success/10" : "hover:bg-muted"
-      )}
-      aria-label={`${bucket.label}: ${bucket.count} cereri, ${formatMDL(bucket.totalMdlCents)}`}
+    <a
+      href={`#${href}`}
+      aria-label={ariaLabel}
+      className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <Folder
-        className={cn("h-4 w-4 flex-shrink-0", folderStatusColor[bucket.status])}
-        aria-hidden
-      />
-      <span className={cn("flex-1 text-sm", isPaid ? "font-medium text-success" : "text-foreground")}>
-        {bucket.label}
+      {icon}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium text-foreground">{name}</span>
+        {subtitle ? <span className="block truncate text-xs text-muted-foreground">{subtitle}</span> : null}
       </span>
-      <span className="text-xs text-muted-foreground tabular-nums">{bucket.count} cereri</span>
-      <span className="text-xs font-medium text-foreground tabular-nums ml-2 hidden sm:inline">
-        {formatMDL(bucket.totalMdlCents)}
-      </span>
-      <ChevronRight
-        className="h-3 w-3 text-muted-foreground flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-        aria-hidden
-      />
-    </button>
+      {badges ? <span className="hidden items-center gap-1.5 md:flex">{badges}</span> : null}
+      {meta ? <span className="hidden text-xs tabular-nums text-muted-foreground sm:block">{meta}</span> : null}
+      <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden />
+    </a>
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+/** Folder-icon tint per status bucket (ChipTone — no hex in .tsx). */
+const BUCKET_TONE: Record<BucketKey, ChipTone> = {
+  draft: "sky",
+  pending: "amber",
+  approved: "blue",
+  paid: "emerald",
+  closed: "rose",
+};
+
+function BucketBadges({ buckets }: { buckets: BucketFolder[] }) {
+  return (
+    <>
+      {buckets
+        .filter((b) => bucketDef(b.key).core)
+        .map((b) => (
+          <Badge
+            key={b.key}
+            variant={b.key === "pending" ? "warning" : b.key === "approved" ? "info" : "success"}
+            className="tabular-nums"
+          >
+            {b.label}: {b.count}
+          </Badge>
+        ))}
+    </>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function ParFolders() {
-  const { navigate } = useRouter();
+  const { path, navigate } = useRouter();
+  const loc = useMemo(() => parseFolderLocation(path), [path]);
+  const level = levelOf(loc);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [folders, setFolders] = useState<ProjectFolder[]>([]);
-  const [openProjects, setOpenProjects] = useState<Set<string | null>>(new Set());
+  const [rows, setRows] = useState<ParListRow[]>([]);
+  const [projects, setProjects] = useState<ParProject[]>([]);
+  const [events, setEvents] = useState<ParEvent[]>([]);
+  const [query, setQuery] = useState("");
+
+  // Detail of the opened PAR (documents level).
+  const [par, setPar] = useState<ParDetail | null>(null);
+  const [parLoading, setParLoading] = useState(false);
+  const [parError, setParError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -228,57 +158,91 @@ export function ParFolders() {
       setLoading(true);
       try {
         const [reqRes, projRes, evtRes] = await Promise.all([
-          listPar({}),
+          // include_docs: doc count + ordin de plată / confirmare, în același răspuns (fără N cereri).
+          listPar({ include_docs: true }),
           listProjects(),
           listEvents(),
         ]);
         if (!alive) return;
-        const reqs = (reqRes.requests ?? []) as ParRow[];
-        const projs = projRes.items.filter((p) => p.active);
-        const evts = evtRes.events.filter((e) => e.active);
-        setFolders(buildFolders(reqs, projs, evts));
+        setRows(reqRes.requests ?? []);
+        setProjects((projRes.items ?? []).filter((p) => p.active));
+        setEvents((evtRes.events ?? []).filter((e) => e.active));
+        setError(null);
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : "Eroare la încărcare");
       } finally {
         if (alive) setLoading(false);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  const toggleProject = (projectId: string | null) => {
-    setOpenProjects((prev) => {
-      const next = new Set(prev);
-      const key = projectId ?? "__null__";
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
+  // Documents level: load the dossier of the opened PAR.
+  useEffect(() => {
+    if (!loc.parId) {
+      setPar(null);
+      setParError(null);
+      return;
+    }
+    let alive = true;
+    setParLoading(true);
+    getPar(loc.parId)
+      .then((detail) => {
+        if (!alive) return;
+        setPar(detail);
+        setParError(null);
+      })
+      .catch((e) => {
+        if (alive) setParError(e instanceof Error ? e.message : "Cererea nu a putut fi deschisă");
+      })
+      .finally(() => {
+        if (alive) setParLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [loc.parId]);
 
-  const isOpen = (projectId: string | null) =>
-    openProjects.has(projectId ?? "__null__");
+  // Clear the filter box when changing folder — a leftover query on a new level looks like "empty folder".
+  useEffect(() => setQuery(""), [loc.projectId, loc.eventId, loc.bucket, loc.parId]);
 
-  /** Navigate to dashboard pre-filtered by projectId + statuses */
-  const goToDashboard = (projectId: string | null, statuses?: string[]) => {
-    sessionStorage.setItem("par:returnTo", "/business/par/folders");
-    const params = new URLSearchParams();
-    params.set("from", "folders");
-    if (projectId) params.set("project_id", projectId);
-    if (statuses && statuses.length === 1) params.set("status", statuses[0]);
-    navigate(`/business/par${params.toString() ? `?${params.toString()}` : ""}`);
-  };
+  const go = useCallback((next: FolderLocation) => navigate(buildFolderHref(next)), [navigate]);
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+  const knownProjectIds = useMemo(() => new Set(projects.map((p) => p.id)), [projects]);
+  const scoped = useMemo(() => scopeRows(rows, loc, knownProjectIds), [rows, loc, knownProjectIds]);
+  const buckets = useMemo(() => buildBuckets(scoped), [scoped]);
+  const projectName = useMemo(
+    () => (loc.projectId ? (projects.find((p) => p.id === loc.projectId)?.name ?? "Proiect") : null),
+    [projects, loc.projectId],
+  );
+  const eventName = useMemo(
+    () => (loc.eventId ? (events.find((e) => e.id === loc.eventId)?.name ?? "Eveniment") : null),
+    [events, loc.eventId],
+  );
+
+  const crumbs = buildBreadcrumb(loc, {
+    projectName,
+    eventName,
+    parLabel: par?.requestNo ?? (loc.parId ? "Cerere" : null),
+  });
+  const parent = parentLocation(loc);
+
+  // ─── Loading / error ───────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <BusinessShell pageTitle="Foldere PAR" pageDescription="Vizualizare pe proiecte și statusuri">
+      <BusinessShell pageTitle="Foldere PAR" pageDescription="Navighezi pe foldere, ca într-un drive">
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {[0, 1, 2].map((i) => <Skeleton key={i} className="h-[132px] rounded-2xl" />)}
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-[132px] rounded-2xl" />
+            ))}
           </div>
-          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-[52px] rounded-lg" />)}
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-14 rounded-xl" />
+          ))}
         </div>
       </BusinessShell>
     );
@@ -287,153 +251,515 @@ export function ParFolders() {
   if (error) {
     return (
       <BusinessShell pageTitle="Foldere PAR">
-        <Alert variant="destructive" icon={<AlertCircle className="h-4 w-4" />}>{error}</Alert>
+        <Alert variant="destructive" icon={<AlertCircle className="h-4 w-4" />}>
+          {error}
+        </Alert>
       </BusinessShell>
     );
   }
 
-  const totalCount = folders.reduce((s, f) => s + f.totalCount, 0);
-  const totalMdl = folders.reduce((s, f) => s + f.totalMdlCents, 0);
+  // ─── Listings ──────────────────────────────────────────────────────────────
+
+  const q = query.trim().toLocaleLowerCase("ro");
+  const matches = (...fields: (string | null | undefined)[]) =>
+    !q || fields.some((f) => (f ?? "").toLocaleLowerCase("ro").includes(q));
+
+  const projectFolders = buildProjectFolders(rows, projects, events).filter((f) =>
+    matches(f.projectName, f.donor),
+  );
+  const eventFolders = buildEventFolders(scoped, events).filter((f) => matches(f.eventName));
+  const parRows = scoped.filter((r) => matches(r.requestNo, r.payeeName, r.endUse));
+
+  const headerCounts = {
+    count: level === "root" ? rows.length : scoped.length,
+    totalMdl: level === "root" ? sumMdlCents(rows) : sumMdlCents(scoped),
+  };
 
   return (
-    <BusinessShell pageTitle="Foldere PAR" pageDescription="Vizualizare pe proiecte și statusuri">
+    <BusinessShell pageTitle="Foldere PAR" pageDescription="Navighezi pe foldere, ca într-un drive">
       <div className="space-y-4">
-        {/* Summary strip */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <KpiTile label="Total cereri" value={totalCount} tone="indigo" icon={<ClipboardList className="h-5 w-5" />} />
-          <KpiTile label="Total MDL" value={formatMDL(totalMdl)} tone="emerald" icon={<Landmark className="h-5 w-5" />} />
-          <KpiTile
-            label="Proiecte"
-            value={folders.filter((f) => f.projectId !== null).length}
-            tone="violet"
-            icon={<FolderOpen className="h-5 w-5" />}
-          />
+        {/* Breadcrumb + back. At the root the single crumb would just repeat the page title. */}
+        <div className={cn("flex flex-wrap items-center gap-2", level === "root" && "hidden")}>
+          {parent && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => go(parent)}
+              aria-label="Înapoi la folderul precedent"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              Înapoi
+            </Button>
+          )}
+          <nav aria-label="Cale foldere" className="flex min-w-0 flex-wrap items-center gap-1 text-sm">
+            {crumbs.map((crumb, i) => (
+              <span key={crumb.href + i} className="flex min-w-0 items-center gap-1">
+                {i > 0 && <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" aria-hidden />}
+                {crumb.current ? (
+                  <span className="truncate font-medium text-foreground" aria-current="page">
+                    {crumb.label}
+                  </span>
+                ) : (
+                  <a href={`#${crumb.href}`} className="truncate text-muted-foreground hover:text-foreground hover:underline">
+                    {crumb.label}
+                  </a>
+                )}
+              </span>
+            ))}
+          </nav>
         </div>
 
-        {/* Project folder list */}
-        {folders.length === 0 ? (
-          <EmptyState
-            icon={<ClipboardList className="h-6 w-6" />}
-            title="Nu există cereri PAR"
-            description="Folderele se populează pe măsură ce apar cereri pe proiecte."
+        {level === "par" ? (
+          <ParDocuments
+            par={par}
+            loading={parLoading}
+            error={parError}
+            downloading={downloading}
+            onDownloadDosar={async () => {
+              if (!par) return;
+              setDownloading(true);
+              try {
+                await downloadDosar(par.id, par.requestNo);
+              } catch (e) {
+                setParError(e instanceof Error ? e.message : "Dosarul nu a putut fi descărcat");
+              } finally {
+                setDownloading(false);
+              }
+            }}
+            onOpenRequest={() => navigate(`/business/par/${par?.id ?? ""}`)}
           />
         ) : (
-          <div className="space-y-2">
-            {folders.map((folder) => {
-              const opened = isOpen(folder.projectId);
-              const folderKey = folder.projectId ?? "__null__";
-              return (
-                <Card key={folderKey} className="overflow-hidden">
-                  {/* Project header */}
-                  <button
-                    type="button"
-                    onClick={() => toggleProject(folder.projectId)}
-                    aria-expanded={opened}
-                    className="flex items-center gap-3 w-full px-4 py-3 hover:bg-muted/50 transition-colors text-left min-h-[52px]"
-                  >
-                    <PastelIcon tone="violet" size={32}>
-                      {opened ? <FolderOpen className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
-                    </PastelIcon>
-                    <span className="flex-1 font-medium text-foreground">{folder.projectName}</span>
-                    <span className="hidden md:flex items-center gap-1.5">
-                      {folder.buckets.map((bucket) => (
-                        <Badge
-                          key={bucket.status}
-                          variant={
-                            bucket.status === "pending_approval" ? "warning"
-                            : bucket.status === "approved_in_finance" ? "info"
-                            : "success"
-                          }
-                          className="tabular-nums"
-                        >
-                          {bucket.label}: {bucket.count}
-                        </Badge>
-                      ))}
-                    </span>
-                    <span className="text-xs text-muted-foreground tabular-nums hidden sm:inline">
-                      {formatMDL(folder.totalMdlCents)}
-                    </span>
-                    <span className="text-xs text-muted-foreground tabular-nums ml-3">
-                      {folder.totalCount} cereri
-                    </span>
-                    {opened ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-hidden />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-hidden />
-                    )}
-                  </button>
+          <>
+            {/* Stats for the CURRENT folder */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <KpiTile
+                label={level === "root" ? "Total cereri" : "Cereri în folder"}
+                value={headerCounts.count}
+                tone="indigo"
+                icon={<ClipboardList className="h-5 w-5" />}
+              />
+              <KpiTile
+                label="Total MDL"
+                value={formatMDL(headerCounts.totalMdl)}
+                tone="emerald"
+                icon={<Landmark className="h-5 w-5" />}
+              />
+              {level === "root" ? (
+                <KpiTile
+                  label="Proiecte"
+                  value={projectFolders.filter((f) => f.projectId !== null).length}
+                  tone="violet"
+                  icon={<FolderOpen className="h-5 w-5" />}
+                />
+              ) : level === "bucket" ? (
+                // Inside a status folder, "de aprobat" would always read 0 (or everything) — the
+                // useful number here is how many documents the folder holds.
+                <KpiTile
+                  label="Documente"
+                  value={scoped.reduce((sum, r) => sum + (r.docs?.count ?? 0), 0)}
+                  tone="sky"
+                  icon={<Paperclip className="h-5 w-5" />}
+                />
+              ) : (
+                <KpiTile
+                  label="De aprobat"
+                  value={buckets.find((b) => b.key === "pending")?.count ?? 0}
+                  tone="amber"
+                  icon={<ClipboardList className="h-5 w-5" />}
+                />
+              )}
+            </div>
 
-                  {/* Expanded: status buckets */}
-                  {opened && (
-                    <div className="border-t border-border bg-background">
-                      <div className="px-3 py-2 space-y-0.5">
-                        {folder.buckets.length === 0 ? (
-                          <p className="text-xs text-muted-foreground px-3 py-2">
-                            Nicio cerere activă.
-                          </p>
-                        ) : (
-                          folder.buckets.map((bucket) => (
-                            <BucketRow
-                              key={bucket.status}
-                              bucket={bucket}
-                              onNavigate={() =>
-                                goToDashboard(folder.projectId, bucket.statuses)
-                              }
-                            />
-                          ))
-                        )}
-                      </div>
+            {/* Filter inside the current folder */}
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={level === "bucket" ? "Caută cerere, beneficiar…" : "Caută folder…"}
+              aria-label="Caută în folderul curent"
+              icon={<Search className="h-4 w-4" />}
+            />
 
-                      {/* VM1-04: event sub-folders */}
-                      {folder.events.length > 0 && (
-                        <div className="border-t border-border px-3 py-2 space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground px-2 py-1">
-                            Pe eveniment
-                          </p>
-                          {folder.events.map((ev) => (
-                            <div key={ev.eventId} className="ml-4">
-                              <div className="flex items-center gap-2 px-2 py-1.5 text-sm">
-                                <Folder className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-                                <span className="flex-1 text-foreground font-medium">{ev.eventName}</span>
-                                <span className="text-xs text-muted-foreground tabular-nums">
-                                  {ev.count} cereri · {formatMDL(ev.totalMdlCents)}
-                                </span>
-                              </div>
-                              <div className="ml-6 space-y-0.5">
-                                {ev.buckets.map((bucket) => (
-                                  <BucketRow
-                                    key={bucket.status}
-                                    bucket={bucket}
-                                    onNavigate={() =>
-                                      goToDashboard(folder.projectId, bucket.statuses)
-                                    }
-                                  />
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* View all for this project */}
-                      <div className="border-t border-border px-4 py-2">
-                        <button
-                          type="button"
-                          onClick={() => goToDashboard(folder.projectId)}
-                          className="text-xs text-primary hover:underline"
-                        >
-                          Toate cererile acestui proiect →
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
-          </div>
+            {level === "root" && <RootListing folders={projectFolders} />}
+            {(level === "project" || level === "event") && (
+              <FolderListing
+                loc={loc}
+                buckets={buckets.filter((b) => matches(b.label))}
+                events={level === "project" ? eventFolders : []}
+                empty={scoped.length === 0}
+              />
+            )}
+            {level === "bucket" && <ParListing loc={loc} rows={parRows} />}
+          </>
         )}
       </div>
     </BusinessShell>
+  );
+}
+
+// ─── Level: root (projects) ───────────────────────────────────────────────────
+
+function RootListing({ folders }: { folders: ReturnType<typeof buildProjectFolders> }) {
+  if (folders.length === 0) {
+    return (
+      <EmptyState
+        icon={<ClipboardList className="h-6 w-6" />}
+        title="Niciun folder"
+        description="Folderele apar pe măsură ce sunt configurate proiecte sau se creează cereri."
+      />
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {folders.map((folder) => (
+        <FolderRow
+          key={folder.projectId ?? "__none__"}
+          href={buildFolderHref({ projectId: folder.projectId })}
+          icon={
+            <PastelIcon tone="violet" size={32}>
+              <Folder className="h-4 w-4" />
+            </PastelIcon>
+          }
+          name={folder.projectName}
+          subtitle={
+            [
+              folder.donor,
+              folder.eventCount > 0 ? `${folder.eventCount} evenimente` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || undefined
+          }
+          badges={<BucketBadges buckets={folder.buckets} />}
+          meta={`${formatMDL(folder.totalMdlCents)} · ${folder.count} cereri`}
+          ariaLabel={`Deschide folderul ${folder.projectName}: ${folder.count} cereri, ${formatMDL(folder.totalMdlCents)}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Level: project / event (status sub-folders) ──────────────────────────────
+
+function FolderListing({
+  loc,
+  buckets,
+  events,
+  empty,
+}: {
+  loc: FolderLocation;
+  buckets: BucketFolder[];
+  events: ReturnType<typeof buildEventFolders>;
+  empty: boolean;
+}) {
+  if (empty) {
+    return (
+      <EmptyState
+        icon={<Folder className="h-6 w-6" />}
+        title="Folder gol"
+        description="Nicio cerere pe acest proiect încă. Apare aici imediat ce se creează una."
+      />
+    );
+  }
+  return (
+    <div className="space-y-4">
+      {events.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Evenimente
+          </h2>
+          {events.map((ev) => (
+            <FolderRow
+              key={ev.eventId}
+              href={buildFolderHref({ projectId: loc.projectId, eventId: ev.eventId })}
+              icon={
+                <PastelIcon tone="teal" size={32}>
+                  <CalendarDays className="h-4 w-4" />
+                </PastelIcon>
+              }
+              name={ev.eventName}
+              badges={<BucketBadges buckets={ev.buckets} />}
+              meta={`${formatMDL(ev.totalMdlCents)} · ${ev.count} cereri`}
+              ariaLabel={`Deschide folderul evenimentului ${ev.eventName}: ${ev.count} cereri`}
+            />
+          ))}
+        </section>
+      )}
+
+      <section className="space-y-2">
+        <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {events.length > 0 ? "Toate cererile, pe status" : "Pe status"}
+        </h2>
+        {buckets.map((bucket) => (
+          <FolderRow
+            key={bucket.key}
+            href={buildFolderHref({ projectId: loc.projectId, eventId: loc.eventId, bucket: bucket.key })}
+            icon={
+              <PastelIcon tone={BUCKET_TONE[bucket.key]} size={32}>
+                <Folder className="h-4 w-4" />
+              </PastelIcon>
+            }
+            name={bucket.label}
+            meta={`${formatMDL(bucket.totalMdlCents)} · ${bucket.count} cereri`}
+            ariaLabel={`Deschide folderul ${bucket.label}: ${bucket.count} cereri, ${formatMDL(bucket.totalMdlCents)}`}
+          />
+        ))}
+      </section>
+    </div>
+  );
+}
+
+// ─── Level: bucket (the PAR requests) ─────────────────────────────────────────
+
+function ParListing({ loc, rows }: { loc: FolderLocation; rows: ParListRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        icon={<FileText className="h-6 w-6" />}
+        title="Nicio cerere aici"
+        description={`Folderul „${bucketDef(loc.bucket ?? "pending").label}" este gol.`}
+      />
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {rows.map((row) => {
+        const docs = row.docs;
+        return (
+          <a
+            key={row.id}
+            href={`#${buildFolderHref({ ...loc, parId: row.id })}`}
+            aria-label={`Deschide documentele cererii ${row.requestNo}`}
+            className="flex min-h-[56px] w-full items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <PastelIcon tone="indigo" size={32}>
+              <FileText className="h-4 w-4" />
+            </PastelIcon>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium text-foreground">
+                {row.requestNo}
+                {row.payeeName ? <span className="font-normal text-muted-foreground"> · {row.payeeName}</span> : null}
+              </span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {row.endUse || "Fără descriere"}
+              </span>
+            </span>
+            <span className="hidden items-center gap-1.5 lg:flex">
+              {docs ? (
+                <Badge variant="outline" className="tabular-nums">
+                  <Paperclip className="mr-1 h-3 w-3" aria-hidden />
+                  {docs.count}
+                </Badge>
+              ) : null}
+              {docs?.has_payment_order && <Badge variant="success">Ordin de plată</Badge>}
+              {docs?.has_payment_proof && <Badge variant="success">Confirmare</Badge>}
+              {row.status === "paid" && docs && !docs.has_payment_order && !docs.has_payment_proof && (
+                <Badge variant="warning">Fără dovadă de plată</Badge>
+              )}
+            </span>
+            <ParStatusChip status={row.status} />
+            <span className="hidden text-xs font-medium tabular-nums text-foreground sm:block">
+              {formatMDL(row.totalMdlCents ?? row.totalEstimatedCents)}
+            </span>
+            <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden />
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Level: par (the documents) ───────────────────────────────────────────────
+
+function DocRow({ att, parId }: { att: ParAttachment; parId: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => void openParAttachment(att.fileUrl, att.fileName, parId, att.id)}
+      aria-label={`Deschide documentul ${att.fileName}`}
+      className="flex min-h-[52px] w-full items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <PastelIcon tone={isFinanceDoc(att.kind) ? "emerald" : "sky"} size={32}>
+        {isFinanceDoc(att.kind) ? <ReceiptText className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+      </PastelIcon>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium text-foreground">{att.fileName}</span>
+        <span className="block text-xs text-muted-foreground">
+          {ATTACHMENT_KIND_LABELS[att.kind] ?? att.kind}
+          {att.createdAt ? ` · ${new Date(att.createdAt).toLocaleDateString("ro-MD")}` : ""}
+        </span>
+      </span>
+      <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden />
+    </button>
+  );
+}
+
+function ParDocuments({
+  par,
+  loading,
+  error,
+  downloading,
+  onDownloadDosar,
+  onOpenRequest,
+}: {
+  par: ParDetail | null;
+  loading: boolean;
+  error: string | null;
+  downloading: boolean;
+  onDownloadDosar: () => void;
+  onOpenRequest: () => void;
+}) {
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-32 rounded-2xl" />
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="h-14 rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+  if (error || !par) {
+    return (
+      <Alert variant="destructive" icon={<AlertCircle className="h-4 w-4" />}>
+        {error ?? "Cererea nu a putut fi încărcată."}
+      </Alert>
+    );
+  }
+
+  const attachments = par.attachments ?? [];
+  const requestDocs = attachments.filter((a) => !isFinanceDoc(a.kind));
+  const financeDocs = attachments.filter((a) => isFinanceDoc(a.kind));
+  const payment = par.payment;
+  const proofUrl = payment?.proofUrl ?? null;
+  const hasFinanceEvidence = financeDocs.length > 0 || Boolean(proofUrl);
+
+  return (
+    <div className="space-y-4">
+      {/* Request summary — the "file card" of this folder */}
+      <Card className="p-4">
+        <div className="flex flex-wrap items-start gap-3">
+          <PastelIcon tone="indigo" size={40}>
+            <FileText className="h-5 w-5" />
+          </PastelIcon>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold text-foreground">{par.requestNo}</h2>
+              <ParStatusChip status={par.status} />
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {par.payeeName || "Beneficiar nespecificat"} ·{" "}
+              <span className="font-medium text-foreground">
+                {formatMDL(par.totalMdlCents ?? par.totalEstimatedCents)}
+              </span>
+              {par.projectName ? ` · ${par.projectName}` : ""}
+              {par.eventName ? ` · ${par.eventName}` : ""}
+            </p>
+            {par.endUse ? <p className="mt-1 text-sm text-foreground">{par.endUse}</p> : null}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={onOpenRequest} aria-label="Deschide cererea completă">
+              <ExternalLink className="h-4 w-4" aria-hidden />
+              Deschide cererea
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onDownloadDosar}
+              disabled={downloading}
+              aria-label="Descarcă dosarul complet în PDF"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              {downloading ? "Se pregătește…" : "Dosar PDF"}
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Documents of the request */}
+      <section className="space-y-2">
+        <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Documentele cererii ({requestDocs.length})
+        </h2>
+        {requestDocs.length === 0 ? (
+          // A compact note, not a full-height EmptyState: this is one section of the dossier, and a
+          // giant empty block here pushed the finance documents below the fold.
+          <p className="rounded-xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+            Niciun document atașat. Facturile, contractele și ofertele cererii apar aici.
+          </p>
+        ) : (
+          requestDocs.map((att) => <DocRow key={att.id} att={att} parId={par.id} />)
+        )}
+      </section>
+
+      {/* Finance: payment order / confirmation */}
+      <section className="space-y-2">
+        <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Plata (finanțe)
+        </h2>
+
+        {payment?.paymentDate || payment?.paymentRef || payment?.actualAmountCents != null ? (
+          <Card className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4 text-sm">
+            {payment?.actualAmountCents != null && (
+              <span className="flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <span className="text-muted-foreground">Sumă achitată:</span>
+                <span className="font-medium tabular-nums text-foreground">
+                  {formatMDL(payment.actualAmountCents)}
+                </span>
+              </span>
+            )}
+            {payment?.paymentDate && (
+              <span className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <span className="text-muted-foreground">Data plății:</span>
+                <span className="font-medium text-foreground">
+                  {new Date(payment.paymentDate).toLocaleDateString("ro-MD")}
+                </span>
+              </span>
+            )}
+            {payment?.paymentRef && (
+              <span className="flex items-center gap-2">
+                <ReceiptText className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <span className="text-muted-foreground">Referință:</span>
+                <span className="font-medium text-foreground">{payment.paymentRef}</span>
+              </span>
+            )}
+          </Card>
+        ) : null}
+
+        {financeDocs.map((att) => (
+          <DocRow key={att.id} att={att} parId={par.id} />
+        ))}
+
+        {proofUrl && (
+          <button
+            type="button"
+            onClick={() => void openParAttachment(proofUrl, `Confirmare_plata_${par.requestNo}`)}
+            aria-label="Deschide confirmarea plății"
+            className="flex min-h-[52px] w-full items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <PastelIcon tone="emerald" size={32}>
+              <ReceiptText className="h-4 w-4" />
+            </PastelIcon>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium text-foreground">Confirmarea plății</span>
+              <span className="block text-xs text-muted-foreground">Dovada încărcată de finanțe</span>
+            </span>
+            <ExternalLink className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden />
+          </button>
+        )}
+
+        {!hasFinanceEvidence && (
+          <Alert
+            variant={par.status === "paid" ? "warning" : "default"}
+            icon={<AlertCircle className="h-4 w-4" />}
+          >
+            {par.status === "paid"
+              ? "Cererea e marcată plătită, dar finanțele nu au atașat încă ordinul de plată sau confirmarea."
+              : "Finanțele nu au încărcat încă ordinul de plată / confirmarea. Apar aici după executarea plății."}
+          </Alert>
+        )}
+      </section>
+    </div>
   );
 }
 

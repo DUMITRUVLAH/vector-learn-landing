@@ -487,8 +487,14 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 > în inventarul real crm-vector (strategy_kpis, sales×marketing_costs, analyze-team-workload,
 > zoom_recordings, tasks-mcp — există deja) + cercetare de piață AI-coworker (2026-07-16).
 >
-> Concept: [`vicu/VICU-CORE.md`](vicu/VICU-CORE.md) · Backlog complet (33 item-uri, 8 faze +
-> trasabilitate la briefing): [`vicu/VICU-BACKLOG.md`](vicu/VICU-BACKLOG.md).
+> **Pachet complet de planificare (gata de dat în lucru):**
+> [`vicu/VICU-ANALYSIS.md`](vicu/VICU-ANALYSIS.md) (analiza afacerii + definiția „produs gata"
+> v1.0) · [`vicu/VICU-BUILD-PLAN.md`](vicu/VICU-BUILD-PLAN.md) (infrastructură unică, **buget
+> max ~35%/zi**, runbook) · [`vicu/VICU-BUILD-SEQUENCE.md`](vicu/VICU-BUILD-SEQUENCE.md)
+> (driverul: schema DB, contracte edge functions, item cu item W0–W7) ·
+> [`vicu/VICU-TEST-SCENARIOS.md`](vicu/VICU-TEST-SCENARIOS.md) (gate dur, ~50 scenarii) ·
+> [`vicu/VICU-CORE.md`](vicu/VICU-CORE.md) (comportament) ·
+> [`vicu/VICU-BACKLOG.md`](vicu/VICU-BACKLOG.md) (33 item-uri + AC + trasabilitate).
 >
 > ⚠️ **Implementarea țintește repo-ul crm-vector** (Lovable/Supabase, regula §0.0) — item-urile
 > NU intră în STATE.json-ul acestui repo și NU se construiesc de autopilotul de aici. Pilot ales

@@ -65,6 +65,7 @@ import { parAiPrefillRoutes } from "./routes/parAiPrefill";
 import { parMembersRoutes } from "./routes/parMembers";
 import { parPayersRoutes } from "./routes/parPayers";
 import { parProfilesRoutes } from "./routes/parProfiles";
+import { parSuggestionsRoutes } from "./routes/parSuggestions";
 import { parDoaRoutes } from "./routes/parDoa";
 import { parBudgetCodesRoutes } from "./routes/parBudgetCodes";
 import { parDepartmentsRoutes } from "./routes/parDepartments";
@@ -121,6 +122,7 @@ app.onError((err, c) => {
     location: new URL(c.req.url).pathname,
     method: c.req.method,
     statusCode: 500,
+    userAgent: c.req.header("user-agent") ?? null,
   }).then((result) => {
     if (result?.isNew) {
       void alertOwnerOnNewError({
@@ -238,6 +240,7 @@ app.route("/api/par/config-import", parConfigImportRoutes);
 app.route("/api/par/members", parMembersRoutes);
 app.route("/api/par/payers", parPayersRoutes);
 app.route("/api/par/profiles", parProfilesRoutes);
+app.route("/api/par/suggestions", parSuggestionsRoutes);
 app.route("/api/par/doa", parDoaRoutes);
 app.route("/api/par/budget-codes", parBudgetCodesRoutes);
 app.route("/api/par/departments", parDepartmentsRoutes);

@@ -386,16 +386,22 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
 
   const isAdmin = currentRoles.includes("par_admin");
   const isFinance = currentRoles.includes("finance") || isAdmin;
-  const isApprover = currentRoles.includes("approver") || isAdmin;
   const isRequestor = par.requestedByUserId === currentUserId;
 
   const status = par.status;
 
-  // Active approval step for current user
-  const myActiveStep = par.approvals?.find(
-    (a) => a.approverUserId === currentUserId && a.decision === "pending" && !a.locked
-  ) ?? null;
-  const canApprove = (isApprover || isAdmin) && myActiveStep !== null && status === "pending_approval";
+  // Who may decide is the SERVER's answer (`my_decision`, computed with the same rules
+  // /approve enforces) — not a client guess. The old local check only matched steps assigned to me
+  // by name, so a role-based step (the default chain: approver_user_id = null) showed zero actions
+  // here while the very same PAR sat in "Inbox aprobare" with Approve/Reject.
+  // Fallback keeps an older server build usable: personal assignment only, as before.
+  const myDecision = par.my_decision ?? null;
+  const canApprove = myDecision
+    ? myDecision.can_approve
+    : (currentRoles.includes("approver") || isAdmin) &&
+      status === "pending_approval" &&
+      par.requestedByUserId !== currentUserId &&
+      par.approvals?.some((a) => a.approverUserId === currentUserId && a.decision === "pending" && !a.locked);
 
   const do_ = async (label: string, action: () => Promise<unknown>) => {
     setBusy(label);
@@ -596,11 +602,33 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
     }
   }
 
-  if (actions.length === 0) return null;
+  // A PAR "în aprobare" with no buttons used to be a dead end — the approver could not tell whether
+  // the app was broken or the request simply wasn't theirs yet. Say which it is, in words.
+  const pendingNotice =
+    status === "pending_approval" && !canApprove && myDecision
+      ? {
+          locked: myDecision.locked_step
+            ? `Rândul tău e pasul ${myDecision.locked_step} — cererea așteaptă întâi aprobarea pasului anterior.`
+            : "Cererea așteaptă întâi aprobarea pasului anterior.",
+          self_approval: "Nu îți poți aproba propria cerere (separarea atribuțiilor).",
+          not_your_step: "Această cerere e la un alt aprobator — nu e pasul tău.",
+          no_par_role: "Nu ai rol de aprobare în acest spațiu de lucru.",
+          not_pending_approval: null,
+        }[myDecision.reason ?? "not_pending_approval"]
+      : null;
+
+  if (actions.length === 0 && !pendingNotice) return null;
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
       <h2 className="text-sm font-semibold text-foreground">Acțiuni disponibile</h2>
+
+      {pendingNotice && (
+        <p role="status" className="flex items-start gap-2 rounded border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden />
+          <span>{pendingNotice}</span>
+        </p>
+      )}
 
       {error && (
         <div role="alert" className="flex items-center gap-2 p-2 rounded bg-destructive/10 text-destructive text-xs">

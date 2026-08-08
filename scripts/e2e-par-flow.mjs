@@ -6,7 +6,7 @@
 // to end and asserts the business rule it claims to enforce.
 import { request } from "playwright-core";
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const PW = "demo123456";
 const U = { admin: "admin@atic.demo.io", approver: "approver@atic.demo.io", finance: "finance@atic.demo.io", requestor: "requestor@atic.demo.io" };
 const IBAN = "MD24AG000225100013104168";
