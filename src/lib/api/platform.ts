@@ -186,3 +186,68 @@ export const removePlatformAdmin = (userId: string) =>
 
 export const getPlatformAudit = () =>
   api<{ entries: PlatformAuditEntry[] }>("/api/platform/audit?limit=200");
+
+// ─── PLATFORM-002: erori + creștere ───────────────────────────────────────────
+
+export interface PlatformErrorGroup {
+  id: string;
+  fingerprint: string;
+  kind: string;
+  title: string;
+  location: string | null;
+  occurrences: number;
+  affectedTenants: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  status: string;
+}
+
+export interface PlatformErrorEvent {
+  id: string;
+  message: string;
+  stack: string | null;
+  location: string | null;
+  method: string | null;
+  statusCode: number | null;
+  url: string | null;
+  userEmail: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  tenantName: string | null;
+}
+
+export interface PlatformGrowth {
+  windowDays: number;
+  funnel: { signedUp: number; loggedIn: number; activated: number };
+  sources: { source: string; signups: number; activated: number }[];
+  adoption: { key: string; label: string; enabled: number; used: number; total: number }[];
+  callList: {
+    id: string;
+    name: string;
+    plan: string;
+    contactEmail: string | null;
+    createdAt: string;
+    lastLoginAt: string | null;
+    activatedAt: string | null;
+    activated: boolean;
+    reasons: string[];
+  }[];
+  contactsAvailable: number;
+}
+
+export const getPlatformErrors = (status: string, days: number) =>
+  api<{ groups: PlatformErrorGroup[]; openCount: number }>(
+    `/api/platform/errors?status=${encodeURIComponent(status)}&days=${days}`,
+  );
+
+export const getPlatformErrorDetail = (groupId: string) =>
+  api<{ group: PlatformErrorGroup; events: PlatformErrorEvent[] }>(`/api/platform/errors/${groupId}`);
+
+export const setErrorStatus = (groupId: string, status: "open" | "resolved" | "ignored") =>
+  api<{ ok: true }>(`/api/platform/errors/${groupId}/status`, {
+    method: "PUT",
+    body: JSON.stringify({ status }),
+  });
+
+export const getPlatformGrowth = (days: number) =>
+  api<PlatformGrowth>(`/api/platform/growth?days=${days}`);

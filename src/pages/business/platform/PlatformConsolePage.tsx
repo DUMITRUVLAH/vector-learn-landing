@@ -49,6 +49,7 @@ import {
   getPlatformAdmins,
   getPlatformAudit,
   getPlatformCatalog,
+  getPlatformErrors,
   getPlatformLogins,
   getPlatformOverview,
   getPlatformWorkspaces,
@@ -64,6 +65,8 @@ import {
   type PlatformWorkspace,
 } from "@/lib/api/platform";
 import { WorkspaceSheet } from "./WorkspaceSheet";
+import { ErrorsTab } from "./ErrorsTab";
+import { GrowthTab } from "./GrowthTab";
 import {
   auditActionLabel,
   failureLabel,
@@ -73,21 +76,29 @@ import {
   statusLabel,
 } from "./format";
 
-type TabKey = "overview" | "workspaces" | "modules" | "logins" | "access";
+type TabKey = "overview" | "workspaces" | "errors" | "growth" | "modules" | "logins" | "access";
 
-const TABS: { value: TabKey; label: string }[] = [
-  { value: "overview", label: "Ansamblu" },
-  { value: "workspaces", label: "Workspace-uri" },
-  { value: "modules", label: "Module" },
-  { value: "logins", label: "Logări" },
-  { value: "access", label: "Acces & audit" },
-];
+/** Filele consolei. „Erori" poartă un contor — e singura care cere reacție rapidă. */
+function tabsWithCounts(openErrors: number): { value: TabKey; label: string; count?: number }[] {
+  return [
+    { value: "overview", label: "Ansamblu" },
+    { value: "workspaces", label: "Workspace-uri" },
+    { value: "errors", label: "Erori", count: openErrors },
+    { value: "growth", label: "Creștere" },
+    { value: "modules", label: "Module" },
+    { value: "logins", label: "Logări" },
+    { value: "access", label: "Acces & audit" },
+  ];
+}
 
 export function PlatformConsolePage() {
   const [tab, setTab] = useState<TabKey>("overview");
   const [modules, setModules] = useState<PlatformModule[]>([]);
   const [forbidden, setForbidden] = useState(false);
   const [ready, setReady] = useState(false);
+  // Contorul de erori deschise se încarcă odată cu pagina, nu abia când intri pe filă —
+  // altfel insigna care ar trebui să te cheme acolo ar apărea doar după ce ai ajuns.
+  const [openErrors, setOpenErrors] = useState(0);
 
   useEffect(() => {
     getPlatformCatalog()
@@ -96,6 +107,9 @@ export function PlatformConsolePage() {
         if (err instanceof ApiError && (err.status === 403 || err.status === 401)) setForbidden(true);
       })
       .finally(() => setReady(true));
+    getPlatformErrors("open", 30)
+      .then((data) => setOpenErrors(data.openCount))
+      .catch(() => setOpenErrors(0));
   }, []);
 
   if (!ready) {
@@ -125,7 +139,7 @@ export function PlatformConsolePage() {
       pageDescription="Clienții, modulele pe care le văd, statisticile și istoricul de logări."
     >
       <Tabs<TabKey>
-        tabs={TABS}
+        tabs={tabsWithCounts(openErrors)}
         value={tab}
         onChange={setTab}
         className="mb-5"
@@ -133,6 +147,8 @@ export function PlatformConsolePage() {
       />
       {tab === "overview" && <OverviewTab />}
       {tab === "workspaces" && <WorkspacesTab modules={modules} />}
+      {tab === "errors" && <ErrorsTab onOpenCount={setOpenErrors} />}
+      {tab === "growth" && <GrowthTab />}
       {tab === "modules" && <ModulesTab modules={modules} />}
       {tab === "logins" && <LoginsTab />}
       {tab === "access" && <AccessTab />}

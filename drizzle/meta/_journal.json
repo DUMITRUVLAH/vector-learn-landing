@@ -967,6 +967,13 @@
       "when": 1786291200000,
       "tag": "0138_platform_console",
       "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1786291300000,
+      "tag": "0139_platform_telemetry",
+      "breakpoints": true
     }
   ]
 }

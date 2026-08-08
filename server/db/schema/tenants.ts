@@ -62,6 +62,21 @@ export const tenants = pgTable("tenants", {
   trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
   /** PLATFORM-001: motivul suspendării, arătat superadminului (nu clientului). */
   suspendedReason: varchar("suspended_reason", { length: 300 }),
+  /**
+   * PLATFORM-002 (marketing): de unde a venit clientul. Capturat la înregistrare din
+   * parametrii UTM și din referrer, păstrat pe workspace ca să se poată răspunde la
+   * „ce canal aduce clienți care rămân". Fără el, orice buget de promovare e pe ghicite.
+   */
+  signupSource: varchar("signup_source", { length: 100 }),
+  signupMedium: varchar("signup_medium", { length: 100 }),
+  signupCampaign: varchar("signup_campaign", { length: 150 }),
+  signupReferrer: varchar("signup_referrer", { length: 500 }),
+  /**
+   * PLATFORM-002: momentul primei acțiuni cu valoare reală (factură, cheltuială, cerere
+   * PAR…). „S-a logat" nu înseamnă activat — diferența dintre cele două e chiar rata de
+   * activare, singurul număr care spune dacă produsul prinde.
+   */
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

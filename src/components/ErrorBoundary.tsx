@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { reportClientError } from "@/lib/telemetry";
 
 interface Props {
   children: ReactNode;
@@ -23,8 +24,14 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // Surface in the console for debugging; a real telemetry sink can hook in here later.
     console.error("[ErrorBoundary]", error, info.componentStack);
+    // PLATFORM-002: pagina tocmai a murit pentru un client real. Până acum se oprea în
+    // consola LUI de browser, unde nu se uită nimeni; acum ajunge în Consola Platformă.
+    reportClientError({
+      kind: "client_crash",
+      message: error.message || String(error),
+      stack: `${error.stack ?? ""}\n--- componentStack ---${info.componentStack ?? ""}`,
+    });
   }
 
   componentDidUpdate(prev: Props): void {

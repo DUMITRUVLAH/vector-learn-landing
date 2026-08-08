@@ -66,3 +66,5 @@ export * from "./promoCodes";
 export * from "./docmergeTemplates";
 // Consola Platformă (PLATFORM-001) — module per workspace, istoric logări, audit superadmin
 export * from "./platform";
+// Telemetrie de erori + semnale de creștere (PLATFORM-002)
+export * from "./telemetry";

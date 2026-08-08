@@ -33,6 +33,11 @@ const signupSchema = z.object({
   name: z.string().min(2).max(200),
   email: z.string().email().max(255),
   password: z.string().min(8).max(200),
+  // PLATFORM-002 (marketing): de unde vine clientul. Trimise de ecranul de înregistrare din
+  // parametrii UTM ai linkului. Opționale — o înregistrare nu are voie să pice din cauza lor.
+  utmSource: z.string().max(100).optional(),
+  utmMedium: z.string().max(100).optional(),
+  utmCampaign: z.string().max(150).optional(),
 });
 
 function slugify(name: string): string {
@@ -93,7 +98,18 @@ businessAuthRoutes.post("/auth/signup", zValidator("json", signupSchema), async 
   const { tenant, user } = await db.transaction(async (tx) => {
     const [t] = await tx
       .insert(tenants)
-      .values({ name: body.tenantName, slug, plan: "starter", appKind: "business" })
+      .values({
+        name: body.tenantName,
+        slug,
+        plan: "starter",
+        appKind: "business",
+        // Referrer-ul îl citim din antet, nu din corp: e sub controlul browserului, deci
+        // nu poate fi falsificat la fel de ușor ca un câmp trimis de pagină.
+        signupSource: body.utmSource ?? null,
+        signupMedium: body.utmMedium ?? null,
+        signupCampaign: body.utmCampaign ?? null,
+        signupReferrer: c.req.header("referer")?.slice(0, 500) ?? null,
+      })
       .returning();
     const [u] = await tx
       .insert(users)

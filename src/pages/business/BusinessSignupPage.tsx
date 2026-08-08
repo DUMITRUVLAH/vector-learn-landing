@@ -4,6 +4,31 @@
  * the workspace. For joining an EXISTING org, users use an invite link instead.
  */
 import { useState } from "react";
+
+/**
+ * PLATFORM-002: parametrii UTM ai linkului prin care a ajuns omul aici, trimiși la
+ * înregistrare ca să se știe ce canal aduce clienți. Sunt și în hash (aplicația e pe
+ * hash-routing), și în query-ul paginii — le citim din ambele, altfel un link de
+ * campanie ar ajunge la noi fără sursă.
+ */
+function campaignParams(): Record<string, string> {
+  try {
+    const fromSearch = new URLSearchParams(window.location.search);
+    const hashQuery = window.location.hash.split("?")[1] ?? "";
+    const fromHash = new URLSearchParams(hashQuery);
+    const pick = (key: string) => fromHash.get(key) ?? fromSearch.get(key) ?? undefined;
+    const out: Record<string, string> = {};
+    const source = pick("utm_source");
+    const medium = pick("utm_medium");
+    const campaign = pick("utm_campaign");
+    if (source) out.utmSource = source.slice(0, 100);
+    if (medium) out.utmMedium = medium.slice(0, 100);
+    if (campaign) out.utmCampaign = campaign.slice(0, 150);
+    return out;
+  } catch {
+    return {};
+  }
+}
 import { Loader2, UserPlus, ArrowLeft } from "lucide-react";
 import { AuthLayout } from "@/components/app/AuthLayout";
 import { FinFlowLogo } from "@/components/business/FinFlowLogo";
@@ -27,7 +52,7 @@ export function BusinessSignupPage() {
     try {
       await api("/api/business/auth/signup", {
         method: "POST",
-        body: JSON.stringify({ tenantName, name, email, password }),
+        body: JSON.stringify({ tenantName, name, email, password, ...campaignParams() }),
       });
       navigate("/business/dashboard");
     } catch (err) {
