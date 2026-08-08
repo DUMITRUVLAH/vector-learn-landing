@@ -79,12 +79,53 @@ writeFileSync(
 // fișierelor din /assets/ conțin hash-ul de conținut, deci sunt imutabile prin construcție și
 // pot fi cache-uite un an. index.html rămâne `no-cache`: dacă l-am cache-ui, un deploy nou n-ar
 // mai fi văzut (HTML vechi → bundle-uri șterse → ecran alb).
+/**
+ * SEC-001 — headerele de securitate trebuie emise și de CDN, nu doar de funcția API.
+ *
+ * `server/middleware/securityHeaders.ts` le pune pe fiecare răspuns al aplicației Hono — dar pe
+ * Vercel, Hono servește DOAR `/api/*`. Fișierele statice (inclusiv `index.html`) le servește CDN-ul,
+ * care nu trece prin niciun middleware. Verificat în producție după primul deploy: `/api/health`
+ * avea CSP + X-Frame-Options, iar pagina HTML nu avea niciunul.
+ *
+ * Asta făcea protecția inutilă exact acolo unde contează: clickjacking-ul înseamnă să pui
+ * DOCUMENTUL într-un iframe, peste butoanele de aprobare a plăților. Un `X-Frame-Options` pe un
+ * răspuns JSON nu apără nimic.
+ *
+ * Valorile sunt ținute identice cu cele din middleware. Dacă se schimbă acolo, se schimbă și aici.
+ */
+const SECURITY_HEADERS = {
+  "content-security-policy": [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: blob:",
+    "media-src 'self' blob:",
+    "connect-src 'self'",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self' https://accounts.google.com https://checkout.stripe.com",
+    "frame-ancestors 'none'",
+    "upgrade-insecure-requests",
+  ].join("; "),
+  "x-frame-options": "DENY",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy":
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
+  "strict-transport-security": "max-age=31536000; includeSubDomains",
+};
+
 writeFileSync(
   `${OUT}/config.json`,
   JSON.stringify(
     {
       version: 3,
       routes: [
+        // Headerele de securitate pe TOT ce iese din CDN. `continue: true` — doar adaugă
+        // headere, apoi lasă cererea să meargă la regula ei de rutare de mai jos.
+        { src: "/(.*)", headers: SECURITY_HEADERS, continue: true },
         { src: "/api/(.*)", dest: "/api" },
         {
           src: "/assets/(.*)",
