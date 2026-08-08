@@ -47,7 +47,9 @@ import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { useParRoles } from "@/hooks/useParRoles";
+import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { getParInbox, getFinanceQueue } from "@/lib/api/par";
+import { onParBadgeRefresh } from "@/lib/par/badgeBus";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { api } from "@/lib/api";
 import { Avatar, PageHeader, SidebarNavItem, type ChipTone } from "@/components/ds";
@@ -61,6 +63,25 @@ interface BusinessShellProps {
 
 /** PAR role labels used to gate per-feature nav visibility (SHELL-502). */
 type ParNavRole = "requestor" | "approver" | "finance" | "par_admin";
+
+/** Romanian labels for PAR roles, most authoritative first. */
+const PAR_ROLE_LABELS: ReadonlyArray<[ParNavRole, string]> = [
+  ["par_admin", "Administrator PAR"],
+  ["finance", "Finanțe"],
+  ["approver", "Aprobator"],
+  ["requestor", "Solicitant"],
+];
+
+/**
+ * The role to show under the user's name inside the PAR module. Someone can hold several
+ * (approver + finance); we name the highest-authority one and count the rest, so the footer stays
+ * one line. Returns null when the user has no PAR role — the caller falls back to the tenant role.
+ */
+function parRoleLabel(roles: string[]): string | null {
+  const held = PAR_ROLE_LABELS.filter(([role]) => roles.includes(role));
+  if (held.length === 0) return null;
+  return held.length === 1 ? held[0][1] : `${held[0][1]} +${held.length - 1}`;
+}
 
 interface NavItem {
   label: string;
@@ -411,10 +432,13 @@ export function BusinessShell({
 
   // VM1-01: fetch PAR roles to gate the PAR navigation section.
   const { roles: parRoles, status: parRolesStatus } = useParRoles();
-  const hasPar = parRolesStatus === "resolved" && parRoles.length >= 1;
+  // PLATFORM-001: modulele dezactivate din Consola Platformă dispar din meniu.
+  const { isEnabled } = useEnabledModules();
+  const hasPar = parRolesStatus === "resolved" && parRoles.length >= 1 && isEnabled("par");
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   useEffect(() => {
-    api("/api/platform/organizations").then(() => setIsPlatformAdmin(true)).catch(() => setIsPlatformAdmin(false));
+    // Sonda cea mai ieftină pentru „sunt superadmin?" — /catalog nu atinge datele clienților.
+    api("/api/platform/catalog").then(() => setIsPlatformAdmin(true)).catch(() => setIsPlatformAdmin(false));
   }, []);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -436,27 +460,39 @@ export function BusinessShell({
     };
     fetchCounts();
     const iv = setInterval(fetchCounts, 60_000);
-    return () => { alive = false; clearInterval(iv); };
+    // A decision taken on any PAR page must be reflected here immediately — the 60s
+    // poll otherwise leaves the pill claiming 4 while the list already shows 3.
+    const off = onParBadgeRefresh(fetchCounts);
+    return () => { alive = false; clearInterval(iv); off(); };
   }, [canApproveNav, canFinanceNav]);
 
   // SPLIT-501: inside PAR module → focused PAR-only sidebar.
   const isParModule = path.startsWith("/business/par");
 
   const availableGroups: NavGroup[] = isPlatformAdmin
-    ? [...NAV_GROUPS, { section: "Platformă", prefix: "/business/platform-admin", items: [{ label: "Superadmin module", href: "/business/platform-admin", icon: ShieldCheck, tone: "rose" as ChipTone }] }]
+    ? [...NAV_GROUPS, { section: "Platformă", prefix: "/business/platform", items: [{ label: "Consola Platformă", href: "/business/platform", icon: ShieldCheck, tone: "rose" as ChipTone }] }]
     : NAV_GROUPS;
   const baseGroups = isParModule
     ? PAR_NAV_GROUPS
     : availableGroups.filter((g) => {
         if (g.section === "PAR — Cereri de plată") return hasPar;
+        if (g.section === "FinDesk — Finanțe") return isEnabled("findesk");
         // DocMerge apare în sidebar doar când ești pe rutele DocMerge
-        if (g.section === "Document Merge") return path.startsWith("/business/docmerge");
+        if (g.section === "Document Merge") return isEnabled("docmerge") && path.startsWith("/business/docmerge");
         return true;
       });
 
   // SHELL-502: per-item PAR role filter.
   const navGroups = baseGroups
-    .map((g) => ({ ...g, items: g.items.filter((it) => !it.roles || it.roles.some((r) => parRoles.includes(r))) }))
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((it) => {
+        if (it.roles && !it.roles.some((r) => parRoles.includes(r))) return false;
+        // Rândul ITPark trăiește sub FinDesk, dar e un modul separat în catalog.
+        if (it.href.startsWith("/business/fin/itpark")) return isEnabled("itpark");
+        return true;
+      }),
+    }))
     .filter((g) => g.items.length > 0);
 
   // Guard: redirect if unauthenticated.
@@ -479,7 +515,11 @@ export function BusinessShell({
   };
 
   const userName = session.data?.user?.name || session.data?.user?.email || "Utilizator";
-  const userRole = session.data?.user?.role || "membru";
+  // Inside PAR, the identity that matters is the PAR role — showing the tenant role there said
+  // "Teacher" to someone whose whole job in the module is approving payments.
+  const userRole = (isParModule ? parRoleLabel(parRoles) : null)
+    ?? session.data?.user?.role
+    ?? "membru";
 
   const sidebarBody = (
     <SidebarBody
@@ -585,10 +625,10 @@ export function BusinessShell({
               ]
             : [
                 { label: "Dashboard", href: "/business/dashboard", icon: LayoutDashboard },
-                { label: "FinDesk", href: "/business/fin/", icon: Landmark },
+                ...(isEnabled("findesk") ? [{ label: "FinDesk", href: "/business/fin/", icon: Landmark }] : []),
                 // VM1-01: only show PAR tab if user has at least one PAR role
                 ...(hasPar ? [{ label: "PAR", href: "/business/par", icon: ClipboardList }] : []),
-                { label: "ITPark", href: "/business/itpark", icon: Building2 },
+                ...(isEnabled("itpark") ? [{ label: "ITPark", href: "/business/itpark", icon: Building2 }] : []),
               ];
           const colsClass =
             mobileItems.length >= 4 ? "grid-cols-4"

@@ -3,6 +3,7 @@
  * The plaintext token lives only in the invite URL; the DB stores sha256(token).
  */
 import { randomBytes, createHash } from "node:crypto";
+import { emailSendDecision } from "../emailGuard";
 
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -36,6 +37,11 @@ export async function sendInviteEmail(params: {
 }): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return false;
+  const decision = emailSendDecision(params.to);
+  if (!decision.allowed) {
+    console.warn(`[par-invite] email blocked to="${params.to}": ${decision.reason}`);
+    return false;
+  }
   // Same verified sender as the rest of the app (EMAIL_FROM). onboarding@resend.dev is a
   // sandbox address Resend only delivers to the account owner — it must stay a last resort.
   const from =

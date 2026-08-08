@@ -1,3 +1,5 @@
+import { reportClientError } from "@/lib/telemetry";
+
 export interface ApiFieldError {
   field: string;
   message: string;
@@ -63,7 +65,30 @@ export async function api<T = unknown>(
   }
 
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  return (await parseJson<T>(res, path)) as T;
+}
+
+/**
+ * PLATFORM-002: un 200 cu HTML în loc de JSON e clasa de bug-uri #1 din repo — o rută
+ * nemontată cade în fallback-ul SPA, iar pagina crapă cu „Unexpected token '<'". Serverul
+ * NU vede nimic (a răspuns 200), deci singurul loc de unde se poate raporta e aici.
+ */
+async function parseJson<T>(res: Response, path: string): Promise<T> {
+  try {
+    // Citim DOAR prin res.json(). Varianta „ia textul, apoi JSON.parse" ar da un mesaj de
+    // eroare mai bogat, dar consumă corpul altfel decât se așteaptă zeci de teste care
+    // mochează fetch cu un obiect ce are numai `json()` — și un helper folosit peste tot
+    // nu are voie să ceară mai mult din Response decât cere contractul lui real.
+    return (await res.json()) as T;
+  } catch {
+    const type = res.headers?.get?.("content-type") ?? "necunoscut";
+    reportClientError({
+      kind: "client_api_error",
+      message: `Răspuns non-JSON de la ${path} (content-type: ${type}) — probabil rută nemontată`,
+      statusCode: res.status,
+    });
+    throw new ApiError(res.status, "invalid_json_response");
+  }
 }
 
 /**
@@ -97,5 +122,5 @@ export async function apiUpload<T = unknown>(path: string, form: FormData): Prom
   }
 
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  return (await parseJson<T>(res, path)) as T;
 }

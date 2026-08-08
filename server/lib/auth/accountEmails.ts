@@ -3,6 +3,8 @@
  * Email is transport only: gated on RESEND_API_KEY, never throws so a send failure can't break the
  * request. The reset link points at the business SPA route (/#/business/reset).
  */
+import { emailSendDecision } from "../emailGuard";
+
 function appUrl(): string {
   return process.env.APP_URL ?? "http://localhost:5173";
 }
@@ -15,6 +17,11 @@ export function passwordResetUrl(token: string): string {
 export async function sendPasswordResetEmail(params: { to: string; url: string }): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return false;
+  const decision = emailSendDecision(params.to);
+  if (!decision.allowed) {
+    console.warn(`[auth-reset] email blocked to="${params.to}": ${decision.reason}`);
+    return false;
+  }
   const from =
     process.env.EMAIL_FROM ?? process.env.RESEND_FROM ?? "Vector Finance <onboarding@resend.dev>";
   try {

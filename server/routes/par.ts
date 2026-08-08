@@ -47,10 +47,14 @@ import { generateRequestNo } from "../lib/par/requestNo";
 import { isValidMoldovaIBAN, isValidIDNP } from "../lib/par/validators";
 import { recalcParTotal } from "../lib/par/totals";
 import { submitPAR, buildBodyForHash } from "../lib/par/submit";
+import { autosaveVendorFromPar } from "../lib/par/vendorAutoSave";
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { buildApprovalSheetLines, type SheetLine } from "../lib/par/approvalSheet";
 import { winAnsiSafe } from "../lib/par/pdfText";
 import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
+import { getDesignatedApprovers, projectAllowsApprover } from "../lib/par/projectApprovers";
+import { getActiveDelegators } from "../lib/par/delegations";
+import { resolveViewerDecision } from "../lib/par/decisionAuthority";
 import { enabledPayerIds, hasPayerModuleEntitlement } from "../middleware/requireModuleEntitlement";
 
 export const parRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -755,6 +759,60 @@ parRoutes.get("/", async (c) => {
     above_micro_threshold: r.totalEstimatedCents > threshold,
   }));
 
+  // VM1-10b: `?include_docs=1` enriches every row with its dossier summary, so the Foldere view can
+  // show — without N round-trips — how many documents a PAR carries and whether finance already
+  // attached the ordin de plată / confirmarea plății. `file_url` is a base64 data URL (megabytes),
+  // so only the kind is selected here; proofUrl is reduced to a boolean in SQL for the same reason.
+  if (c.req.query("include_docs") && result.length > 0) {
+    const ids = result.map((r) => r.id);
+    const [attachmentRows, paymentRows] = await Promise.all([
+      db
+        .select({ parId: parAttachments.parId, kind: parAttachments.kind })
+        .from(parAttachments)
+        .where(and(eq(parAttachments.tenantId, tenantId), inArray(parAttachments.parId, ids))),
+      db
+        .select({
+          parId: parPayments.parId,
+          paymentDate: parPayments.paymentDate,
+          paymentRef: parPayments.paymentRef,
+          actualAmountCents: parPayments.actualAmountCents,
+          hasProof: sql<boolean>`(${parPayments.proofUrl} IS NOT NULL AND ${parPayments.proofUrl} <> '')`,
+        })
+        .from(parPayments)
+        .where(and(eq(parPayments.tenantId, tenantId), inArray(parPayments.parId, ids))),
+    ]);
+
+    const kindsByPar = new Map<string, string[]>();
+    for (const row of attachmentRows) {
+      const list = kindsByPar.get(row.parId) ?? [];
+      list.push(row.kind);
+      kindsByPar.set(row.parId, list);
+    }
+    const paymentByPar = new Map(paymentRows.map((p) => [p.parId, p]));
+
+    return c.json({
+      requests: result.map((r) => {
+        const kinds = kindsByPar.get(r.id) ?? [];
+        const payment = paymentByPar.get(r.id);
+        return {
+          ...r,
+          docs: {
+            count: kinds.length,
+            kinds,
+            has_payment_order: kinds.includes("payment_order"),
+            has_invoice: kinds.includes("invoice"),
+            // Confirmarea plății = dovada încărcată de finanțe pe plată (proof_url).
+            has_payment_proof: Boolean(payment?.hasProof),
+            payment_date: payment?.paymentDate ?? null,
+            payment_ref: payment?.paymentRef ?? null,
+            actual_amount_cents: payment?.actualAmountCents ?? null,
+          },
+        };
+      }),
+      total: result.length,
+    });
+  }
+
   return c.json({ requests: result, total: result.length });
 });
 
@@ -915,11 +973,32 @@ parRoutes.get("/:id", async (c) => {
         .where(and(eq(parEvents.tenantId, tenantId), eq(parEvents.id, evId)))
     : [];
 
+  // The viewer's authority over this PAR, computed with the SAME rules the approve/reject endpoints
+  // enforce (server/lib/par/decisionAuthority.ts). Without it the detail page had to guess, and its
+  // guess ("the step names me personally") hid Approve/Reject from approvers whose step is
+  // role-based — the exact PARs they could act on from "Inbox aprobare".
+  const designatedApprovers = par.projectId
+    ? await getDesignatedApprovers(tenantId, par.projectId)
+    : new Set<string>();
+  const myDecision = resolveViewerDecision({
+    status: par.status,
+    requestedByUserId: par.requestedByUserId,
+    steps: approvals,
+    ctx: {
+      userId: user.id,
+      parRoles: roles,
+      delegators: await getActiveDelegators(user.id, tenantId),
+      allowedOnProject: projectAllowsApprover(par.projectId, user.id, designatedApprovers),
+    },
+  });
+
   return c.json({
     ...parData,
     above_micro_threshold: par.totalEstimatedCents > threshold,
     line_items: lineItems,
     approvals,
+    /** Can THIS viewer approve/reject right now, and if not, why (drives the detail-page actions). */
+    my_decision: myDecision,
     attachments,
     payment: payment ?? null,
     // Resolved display names (UUIDs stay in the *Id fields above)
@@ -1360,6 +1439,16 @@ parRoutes.post("/:id/submit", async (c) => {
     }
     return c.json({ error: `PAR is not in a submittable status: ${par.status}` }, 400);
   }
+
+  // Every submitted payee joins the registry — nobody should have to remember to press
+  // "save beneficiary" for someone they are already paying. Best-effort by design: this
+  // is bookkeeping convenience and must never turn a valid submit into an error.
+  //
+  // MUST run BEFORE submitPAR: it writes `vendor_id` onto the PAR, and `vendor_id` is part of
+  // the body that submit hashes (lib/par/submit.ts buildBodyForHash). Run after, it changed the
+  // body behind the seal and EVERY approve died with
+  // "integrity_violation: PAR body hash mismatch — body was modified after submit".
+  await autosaveVendorFromPar(parId, tenantId);
 
   const result = await submitPAR({
     parId,

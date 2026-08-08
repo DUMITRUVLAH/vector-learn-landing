@@ -52,6 +52,31 @@ export const tenants = pgTable("tenants", {
   iban: varchar("iban", { length: 34 }),
   /** CONT-PLATA: tenant bank BIC/SWIFT (migration 0108) */
   bic: varchar("bic", { length: 11 }),
+  /**
+   * PLATFORM-001: ciclul de viață al workspace-ului, controlat din Consola Platformă.
+   * "active" (implicit) · "trial" · "suspended" → login-ul business e refuzat cu
+   * `workspace_suspended`. Varchar, nu enum pg, ca sync-schema.ts să-l poată ADD COLUMN.
+   */
+  status: varchar("status", { length: 20 }).notNull().default("active"),
+  /** PLATFORM-001: când expiră perioada de probă (informativ, nu blochează singur). */
+  trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+  /** PLATFORM-001: motivul suspendării, arătat superadminului (nu clientului). */
+  suspendedReason: varchar("suspended_reason", { length: 300 }),
+  /**
+   * PLATFORM-002 (marketing): de unde a venit clientul. Capturat la înregistrare din
+   * parametrii UTM și din referrer, păstrat pe workspace ca să se poată răspunde la
+   * „ce canal aduce clienți care rămân". Fără el, orice buget de promovare e pe ghicite.
+   */
+  signupSource: varchar("signup_source", { length: 100 }),
+  signupMedium: varchar("signup_medium", { length: 100 }),
+  signupCampaign: varchar("signup_campaign", { length: 150 }),
+  signupReferrer: varchar("signup_referrer", { length: 500 }),
+  /**
+   * PLATFORM-002: momentul primei acțiuni cu valoare reală (factură, cheltuială, cerere
+   * PAR…). „S-a logat" nu înseamnă activat — diferența dintre cele două e chiar rata de
+   * activare, singurul număr care spune dacă produsul prinde.
+   */
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

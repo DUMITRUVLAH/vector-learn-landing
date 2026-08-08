@@ -42,6 +42,7 @@ import {
 } from "../lib/par/projectApprovers";
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { getActiveDelegators } from "../lib/par/delegations";
+import { stepMatchesViewer } from "../lib/par/decisionAuthority";
 import { blocksOnApprovalLimit } from "../lib/par/approvalLimit";
 import { approvalProgressAfterDecision } from "../lib/par/approvalProgress";
 import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
@@ -149,8 +150,6 @@ async function approveParStep(
   body: { comment?: string | null; signatureName?: string | null }
 ): Promise<ApproveResult> {
   const roles = await getUserPARRoles(userId, tenantId);
-  const isAdmin = roles.includes("par_admin");
-  const isApprover = roles.includes("approver") || isAdmin;
   // VF-302: principals who delegated their approval authority to this user (active now).
   const delegators = await getActiveDelegators(userId, tenantId);
   // PARQA-007: coarse gate — block only users with NO par role and no delegation. The real per-step
@@ -194,20 +193,11 @@ async function approveParStep(
   const designated = par.projectId ? await getDesignatedApprovers(tenantId, par.projectId) : new Set<string>();
   const allowedOnProject = projectAllowsApprover(par.projectId, userId, designated);
 
-  // PARQA-007: a role-based step may require a SPECIFIC par_role (e.g. "finance"). It's decidable only
-  // by a user holding that role (par_admin overrides; null/"approver" = the generic approver role).
-  const canDecideRoleStep = (required: string | null) => {
-    if (isAdmin) return true;
-    if (!required || required === "approver") return isApprover;
-    return roles.includes(required);
-  };
-
-  // A step matches the user if assigned to them, role-routed (unassigned + can decide the required
-  // role + allowed on the project), OR assigned to someone who delegated to them.
-  const stepMatches = (s: typeof approvalSteps[number]) =>
-    s.approverUserId === userId ||
-    (s.approverUserId === null && allowedOnProject && canDecideRoleStep(s.approverParRole)) ||
-    (s.approverUserId != null && delegators.has(s.approverUserId));
+  // The "is this step mine?" rule set lives in decisionAuthority.ts — the SAME function backs the
+  // inbox, reject, request-changes and the `my_decision` block on GET /api/par/:id, so what the
+  // detail page shows can never disagree with what this endpoint accepts.
+  const viewerCtx = { userId, parRoles: roles, delegators, allowedOnProject };
+  const stepMatches = (s: typeof approvalSteps[number]) => stepMatchesViewer(s, viewerCtx);
 
   const lockedStepForUser = approvalSteps.find(
     (s) => s.step > 0 && s.decision === "pending" && s.locked === true && stepMatches(s)
@@ -418,6 +408,7 @@ parApprovalsRoutes.get("/inbox", async (c) => {
       parId: parApprovals.parId,
       approverUserId: parApprovals.approverUserId,
       approverRoleLabel: parApprovals.approverRoleLabel,
+      approverParRole: parApprovals.approverParRole,
       id: parApprovals.id,
     })
     .from(parApprovals)
@@ -452,14 +443,22 @@ parApprovalsRoutes.get("/inbox", async (c) => {
       ? accessibleProjects === null || accessibleProjects.includes(parScope.projectId)
       : !!parScope?.payerId && (accessiblePayers === null || accessiblePayers.includes(parScope.payerId));
     if (!allowedByMembership) return false;
-    if (s.approverUserId === user.id) return true; // explicit assignment → bypasses project scoping
-    // Role-based: any approver/par_admin can decide, IF allowed on this PAR's project.
-    if (s.approverUserId === null && isApprover) {
-      return projectAllowsApprover(parScope?.projectId, user.id, projectApproverMap.get(parScope?.projectId ?? ""));
-    }
-    // VF-302: a step assigned to a delegator (X→me active) is mine to decide.
-    if (s.approverUserId != null && delegators.has(s.approverUserId)) return true;
-    return false;
+    // Same rule set as approve/reject (decisionAuthority.ts): explicit assignment bypasses project
+    // scoping; a role-based step needs project permission AND the role the step requires; a step
+    // assigned to a delegator (X→me active) is mine. Nothing lands in the inbox that approve 403s on.
+    return stepMatchesViewer(
+      { ...s, decision: "pending", locked: false },
+      {
+        userId: user.id,
+        parRoles: roles,
+        delegators,
+        allowedOnProject: projectAllowsApprover(
+          parScope?.projectId,
+          user.id,
+          projectApproverMap.get(parScope?.projectId ?? ""),
+        ),
+      },
+    );
   });
 
   if (mySteps.length === 0) {
@@ -621,10 +620,10 @@ parApprovalsRoutes.post(
     // project can no longer reject it (before, scoping was only enforced on approve/inbox).
     const designated = par.projectId ? await getDesignatedApprovers(tenantId, par.projectId) : new Set<string>();
     const allowedOnProject = projectAllowsApprover(par.projectId, user.id, designated);
+    // Same rule set as approve (decisionAuthority.ts) — incl. a step's required par_role, which the
+    // hand-rolled copy here used to ignore (a "finance"-gated step was rejectable by any approver).
     const stepMatches = (s: typeof approvalSteps[number]) =>
-      s.approverUserId === user.id ||
-      (s.approverUserId === null && canApprove && allowedOnProject) ||
-      (s.approverUserId != null && delegators.has(s.approverUserId));
+      stepMatchesViewer(s, { userId: user.id, parRoles: roles, delegators, allowedOnProject });
 
     const lockedStepForUserReject = approvalSteps.find(
       (s) => s.step > 0 && s.decision === "pending" && s.locked === true && stepMatches(s)
@@ -723,13 +722,11 @@ parApprovalsRoutes.post(
       .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)))
       .orderBy(asc(parApprovals.step));
 
-    // PARQA-010: same project-scoping + delegation matching as approve/reject.
+    // PARQA-010: same project-scoping + delegation matching as approve/reject (decisionAuthority.ts).
     const designated = par.projectId ? await getDesignatedApprovers(tenantId, par.projectId) : new Set<string>();
     const allowedOnProject = projectAllowsApprover(par.projectId, user.id, designated);
     const stepMatches = (s: typeof approvalSteps[number]) =>
-      s.approverUserId === user.id ||
-      (s.approverUserId === null && canApprove && allowedOnProject) ||
-      (s.approverUserId != null && delegators.has(s.approverUserId));
+      stepMatchesViewer(s, { userId: user.id, parRoles: roles, delegators, allowedOnProject });
 
     const activeStep = approvalSteps.find(
       (s) => s.step > 0 && s.decision === "pending" && s.locked === false && stepMatches(s)

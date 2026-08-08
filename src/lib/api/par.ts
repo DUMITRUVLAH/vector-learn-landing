@@ -96,9 +96,30 @@ export interface ParAttachment {
   analysis?: string | null;
 }
 
+/**
+ * Server-computed approval authority for the current viewer, using the same rules the
+ * approve/reject endpoints enforce (server/lib/par/decisionAuthority.ts). The detail page must
+ * never re-derive this: its old client-side guess ("the step names me") hid the buttons from
+ * approvers whose step is role-based, even though the inbox let them decide the same PAR.
+ */
+export interface ParMyDecision {
+  can_approve: boolean;
+  active_step: number | null;
+  active_step_label: string | null;
+  locked_step: number | null;
+  reason:
+    | "not_pending_approval"
+    | "self_approval"
+    | "no_par_role"
+    | "locked"
+    | "not_your_step"
+    | null;
+}
+
 export interface ParDetail extends ParRequest {
   line_items: ParLineItem[];
   approvals: ParApproval[];
+  my_decision?: ParMyDecision;
   attachments: ParAttachment[];
   payment: ParPayment | null;
   /** Resolved display names for the PDF/print form (UUIDs stay in the *Id fields). */
@@ -365,13 +386,36 @@ export interface ListParFilters {
   date_to?: string;
   min_total?: number;
   max_total?: number;
+  /** VM1-10b: attach the dossier summary (doc count/kinds + payment order/proof) to every row. */
+  include_docs?: boolean;
 }
 
+/**
+ * VM1-10b: per-PAR dossier summary returned when `include_docs` is set. Lets the Foldere view
+ * show "3 documente · ordin de plată ✓" without one request per PAR.
+ */
+export interface ParDocsSummary {
+  count: number;
+  kinds: ParAttachmentKind[];
+  has_payment_order: boolean;
+  has_invoice: boolean;
+  has_payment_proof: boolean;
+  payment_date: string | null;
+  payment_ref: string | null;
+  actual_amount_cents: number | null;
+}
+
+export type ParListRow = ParRequest & {
+  above_micro_threshold: boolean;
+  docs?: ParDocsSummary;
+};
+
 export async function listPar(filters: ListParFilters = {}): Promise<{
-  requests: (ParRequest & { above_micro_threshold: boolean })[];
+  requests: ParListRow[];
   total: number;
 }> {
   const params = new URLSearchParams();
+  if (filters.include_docs) params.set("include_docs", "1");
   if (filters.status) params.set("status", filters.status);
   if (filters.purpose) params.set("purpose", filters.purpose);
   if (filters.project_id) params.set("project_id", filters.project_id);
@@ -468,6 +512,33 @@ export interface LineItemPayload {
   quantity: number;
   unit?: string | null;
   unit_price_cents: number;
+}
+
+/** One past line item offered back as a starting point (see server/routes/parSuggestions.ts). */
+export interface ParLineItemSuggestion {
+  key: string;
+  description: string;
+  unit: string | null;
+  unitPriceCents: number;
+  currency: string;
+  quantity: number;
+  usageCount: number;
+  lastUsedAt: string | null;
+  sourceRequestNo: string;
+  payee: {
+    vendorId: string | null;
+    name: string | null;
+    idnp: string | null;
+    iban: string | null;
+    bank: string | null;
+    type: string | null;
+  };
+}
+
+/** Past line items for the tenant, deduped by description, most-used first. */
+export async function getLineItemSuggestions(q = ""): Promise<{ suggestions: ParLineItemSuggestion[]; total: number }> {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+  return api<{ suggestions: ParLineItemSuggestion[]; total: number }>(`/api/par/suggestions/line-items${qs}`);
 }
 
 export async function addLineItem(

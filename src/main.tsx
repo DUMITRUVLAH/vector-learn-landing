@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { installGlobalErrorReporting } from "./lib/telemetry";
 
 // MOB-101: Register service worker for PWA offline support in production only.
 // A previously cached Vector Learn shell can otherwise intercept localhost and hide the
@@ -19,6 +20,10 @@ if ("serviceWorker" in navigator) {
     });
   }
 }
+
+// PLATFORM-002: excepțiile globale și promisiunile respinse ajung în Consola Platformă.
+// Instalat înainte de randare, ca să prindă și ce crapă la primul render.
+installGlobalErrorReporting();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

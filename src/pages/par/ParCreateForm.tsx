@@ -33,12 +33,13 @@ import {
   searchRegistryCompanies, getBudgetCodeBalance,
   listParTemplates, saveParTemplate, instantiateParTemplate,
   prefillParFromDocument,
+  getLineItemSuggestions,
   formatMDL,
   type ParRequest, type ParLineItem, type ParAttachment,
   type ParDepartment, type ParPayer, type ParProject, type ParEvent, type ParBudgetCode, type ParVendor,
   type ParPurpose, type ParChargeTo, type ParAttachmentKind,
   type RegistryCompany, type BudgetCodeBalance, type ParTemplate,
-  type ParPrefillResult,
+  type ParPrefillResult, type ParLineItemSuggestion, type ParAttachmentAnalysis,
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
 import { Card, PastelIcon, Select, Textarea, chipToneFor } from "@/components/ds";
@@ -110,6 +111,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 /** VM3-03: sugestii pentru unitatea de măsură (Violeta: „adăugăm bucăți… servicii"). Text liber. */
 const UNIT_SUGGESTIONS = ["bucăți", "servicii", "ore", "zile", "sesiuni", "persoane", "luni", "km", "set"];
+/** What an untouched UM field means. Matches the placeholder shown in the input. */
+const DEFAULT_UNIT = "bucăți";
 
 // VF-203: format minor units in a given currency (MDL uses the existing "L" symbol via formatMDL).
 function fmtMoney(cents: number, currency: string): string {
@@ -118,9 +121,63 @@ function fmtMoney(cents: number, currency: string): string {
   return `${v} ${currency}`;
 }
 
-function attachmentAnalysis(raw: string | null | undefined): null | { status: "match" | "warning"; warnings: number; checks: Array<{ field: string; matches: boolean | null }> } {
+function attachmentAnalysis(raw: string | null | undefined): ParAttachmentAnalysis | null {
   if (!raw) return null;
   try { return JSON.parse(raw); } catch { return null; }
+}
+
+/** Fields whose `expected`/`found` are money in minor units; everything else is a string. */
+const MONEY_CHECK_FIELDS = new Set(["sumă"]);
+
+/** Render one side of a comparison the way the user would read it on paper. */
+function formatCheckValue(field: string, value: string | number | null, currency: string): string {
+  if (value === null || value === "") return "lipsește";
+  if (MONEY_CHECK_FIELDS.has(field) && typeof value === "number") return fmtMoney(value, currency);
+  return String(value);
+}
+
+/**
+ * The reconciliation result, spelled out.
+ *
+ * "AI: 2 neconcordanțe — sumă, valută" names the fields but withholds the only thing that
+ * lets someone act: WHAT the two sides actually say. Whoever reads this is about to decide
+ * whether the document or the form is wrong, and they cannot do that without both values
+ * side by side.
+ *
+ * Fields the AI could not read (matches === null) are listed separately — silence there is
+ * not agreement, and an approver who assumes the IBAN was verified when it never was is
+ * worse off than one who knows it wasn't. (The server checks beneficiar, IDNO/IDNP, IBAN
+ * and bancă alongside sumă/valută — see analyzeAttachmentAgainstPar.)
+ */
+function AttachmentAnalysisSummary({ analysis, currency }: { analysis: ParAttachmentAnalysis; currency: string }) {
+  const mismatches = analysis.checks.filter((c) => c.matches === false);
+  const verified = analysis.checks.filter((c) => c.matches === true);
+  const unchecked = analysis.checks.filter((c) => c.matches === null);
+
+  return (
+    <span className="mt-1 block space-y-1">
+      <span className={cn("block text-xs font-medium", mismatches.length ? "text-warning" : "text-success")}>
+        {mismatches.length
+          ? `AI: ${mismatches.length} ${mismatches.length === 1 ? "neconcordanță" : "neconcordanțe"}`
+          : `AI: document concordant cu cererea (${verified.length} câmpuri verificate)`}
+      </span>
+      {mismatches.map((c) => (
+        <span key={c.field} className="block text-xs text-foreground">
+          <span className="font-medium capitalize">{c.field}:</span>{" "}
+          în document <strong className="text-warning">{formatCheckValue(c.field, c.found, currency)}</strong>,
+          {" "}în cerere <strong>{formatCheckValue(c.field, c.expected, currency)}</strong>
+        </span>
+      ))}
+      {verified.length > 0 && mismatches.length > 0 && (
+        <span className="block text-xs text-success">Coincid: {verified.map((c) => c.field).join(", ")}</span>
+      )}
+      {unchecked.length > 0 && (
+        <span className="block text-xs text-muted-foreground">
+          Neverificate (nu apar în document sau în cerere): {unchecked.map((c) => c.field).join(", ")}
+        </span>
+      )}
+    </span>
+  );
 }
 
 function Field({ label, htmlFor, required, hint, error, children }: {
@@ -329,6 +386,19 @@ export function ParCreateForm() {
   const [nlPrice, setNlPrice] = useState("");
   const [lineError, setLineError] = useState<string | null>(null);
   const [addingLine, setAddingLine] = useState(false);
+
+  // ── Sugestii din cereri anterioare ─────────────────────────────────────────
+  // Most of what an NGO pays for repeats: the same trainer, the same venue, the same
+  // monthly service. Retyping the description and re-keying the beneficiary's IBAN from
+  // a paper copy is where the errors come from — so offer what was actually paid before.
+  const [suggestions, setSuggestions] = useState<ParLineItemSuggestion[]>([]);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestCursor, setSuggestCursor] = useState(-1);
+  /** Set when a picked suggestion carries a payee we did NOT apply (one is already filled). */
+  const [payeeConflict, setPayeeConflict] = useState<ParLineItemSuggestion | null>(null);
+  /** Set when a suggestion's payee WAS applied — so the user sees where it came from. */
+  const [payeeFilledFrom, setPayeeFilledFrom] = useState<string | null>(null);
 
   // VM1-13: AI prefill state
   const [aiPrefilling, setAiPrefilling] = useState(false);
@@ -697,6 +767,87 @@ export function ParCreateForm() {
     }
   };
 
+  /**
+   * Load suggestions for whatever is currently typed. Debounced by the caller's effect:
+   * the field is a search box, and firing on every keystroke would be a request per letter.
+   */
+  useEffect(() => {
+    if (!suggestOpen) return;
+    let alive = true;
+    setSuggestLoading(true);
+    const timer = setTimeout(() => {
+      getLineItemSuggestions(nlDesc.trim())
+        .then((r) => { if (alive) { setSuggestions(r.suggestions); setSuggestCursor(-1); } })
+        .catch(() => { if (alive) setSuggestions([]); })
+        .finally(() => { if (alive) setSuggestLoading(false); });
+    }, nlDesc.trim() ? 220 : 0);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [nlDesc, suggestOpen]);
+
+  /**
+   * Copy a past line into the "add article" fields, and — this is the part that saves the
+   * real time — the beneficiary that was actually paid for it.
+   *
+   * Two guards, both about not being clever with someone else's money:
+   *  · the price only travels when the currencies match. A 7.000 EUR line pasted into an
+   *    MDL request would look plausible and be off by a factor of ~19.
+   *  · an already-filled payee is never silently replaced. If it differs, we say so and
+   *    let the user choose.
+   */
+  const applySuggestion = (s: ParLineItemSuggestion) => {
+    setNlDesc(s.description);
+    setNlUnit(s.unit ?? "");
+    setNlQty(String(s.quantity || 1));
+    if (s.currency === currency) {
+      setNlPrice(String(s.unitPriceCents / 100));
+    } else {
+      setNlPrice("");
+      setLineError(`Prețul anterior era în ${s.currency}, cererea e în ${currency} — introdu suma manual.`);
+    }
+    setSuggestOpen(false);
+    setSuggestCursor(-1);
+
+    const hasPayee = Boolean(vendorId || payeeName.trim() || payeeIban.trim());
+    const suggestedPayee = s.payee.name || s.payee.iban;
+    if (!suggestedPayee) return;
+    if (hasPayee) {
+      // Same beneficiary already there → nothing to say. Different one → ask, don't overwrite.
+      const same = (s.payee.vendorId && s.payee.vendorId === vendorId) ||
+        (s.payee.name ?? "").trim().toLocaleLowerCase("ro") === payeeName.trim().toLocaleLowerCase("ro");
+      setPayeeConflict(same ? null : s);
+      return;
+    }
+    fillPayeeFromSuggestion(s);
+  };
+
+  /** Write a suggestion's payee snapshot into the beneficiary block. */
+  const fillPayeeFromSuggestion = (s: ParLineItemSuggestion) => {
+    const savedVendor = s.payee.vendorId ? vendors.find((v) => v.id === s.payee.vendorId) : undefined;
+    if (savedVendor) {
+      // Prefer the live vendor record over the snapshot — the IBAN may have been corrected since.
+      setVendorId(savedVendor.id);
+      setPayeeName(savedVendor.name);
+      setPayeeIdnp(savedVendor.idnp ?? "");
+      setPayeeIban(savedVendor.iban ?? "");
+      setPayeeBank(savedVendor.bank ?? "");
+      setPayeeBic(savedVendor.bicSwift ?? "");
+      setPayeeLegalAddress(savedVendor.legalAddress ?? "");
+      setPayeeAdministrator(savedVendor.administratorName ?? "");
+      setPayeeMethod("saved");
+    } else {
+      setVendorId("");
+      setPayeeName(s.payee.name ?? "");
+      setPayeeIdnp(s.payee.idnp ?? "");
+      setPayeeIban(s.payee.iban ?? "");
+      setPayeeBank(s.payee.bank ?? "");
+      setPayeeMethod("manual");
+    }
+    const type = (s.payee.type as PayeeType | null) ?? detectPayeeType(s.payee.name ?? "");
+    if (type) setPayeeType(type);
+    setPayeeConflict(null);
+    setPayeeFilledFrom(`${s.payee.name ?? "Beneficiar"} · din ${s.sourceRequestNo}`);
+  };
+
   const addLine = async () => {
     const qty = parseInt(nlQty, 10);
     // Preț/u is entered in MDL (major units) → convert to cents. Accept "2000", "2000.50", "2000,50".
@@ -709,7 +860,10 @@ export function ParCreateForm() {
     try {
       const draftId = await ensureDraft();
       const res = await addLineItem(draftId, {
-        description: nlDesc.trim(), quantity: qty, unit: nlUnit.trim() || null, unit_price_cents: price,
+        // "bucăți" is shown as a placeholder, so people read it as what they'll get and
+        // move on — then the saved row shows "—". A placeholder that looks like a default
+        // has to BE the default; anyone who means something else types it.
+        description: nlDesc.trim(), quantity: qty, unit: nlUnit.trim() || DEFAULT_UNIT, unit_price_cents: price,
       });
       setLineItems((p) => [...p, res.line_item]);
       setTotalCents(res.par_total_estimated_cents);
@@ -735,7 +889,26 @@ export function ParCreateForm() {
     if (!e.target.files?.length) return;
     // VM1-06: accept multiple files in one go (max 10 attachments per PAR).
     const MAX_ATTACHMENTS = 10;
-    const ALLOWED = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
+    // Mirrors ALLOWED_MIME_TYPES in server/routes/parAttachments.ts — the server is the
+    // authority, this is only so a rejection is instant instead of a round-trip.
+    // Browsers leave `file.type` empty for types they don't recognise (.heic on older
+    // Chrome, .msg), so an empty type is passed through and let the server rule on it.
+    const ALLOWED = [
+      "application/pdf",
+      "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/bmp",
+      "image/tiff", "image/heic", "image/heif",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "application/vnd.oasis.opendocument.text",
+      "application/vnd.oasis.opendocument.spreadsheet",
+      "application/vnd.oasis.opendocument.presentation",
+      "text/plain", "text/csv", "application/rtf",
+      "application/zip", "application/x-zip-compressed",
+    ];
     const picked = Array.from(e.target.files);
     e.target.value = "";
     let slots = MAX_ATTACHMENTS - attachments.length;
@@ -748,7 +921,10 @@ export function ParCreateForm() {
       const draftId = await ensureDraft();
       for (const file of picked) {
         if (slots <= 0) break;
-        if (!ALLOWED.includes(file.type)) { setError(`${file.name}: tip neacceptat (PDF, PNG, JPEG).`); continue; }
+        if (file.type && !ALLOWED.includes(file.type)) {
+          setError(`${file.name}: tip neacceptat (PDF, imagini, Word, Excel, PowerPoint, text/CSV, ZIP).`);
+          continue;
+        }
         if (file.size > 10 * 1024 * 1024) { setError(`${file.name}: depășește 10 MB.`); continue; }
         const dataUrl = await fileToDataUrl(file);
         const att = await uploadAttachment(draftId, {
@@ -1139,11 +1315,89 @@ export function ParCreateForm() {
 
           {/* Add row — description full width, then qty/UM/price below */}
           <div className="rounded-lg border border-dashed border-border p-4 space-y-3">
-            <Field label="Descriere / Specificații" htmlFor="nlDesc">
-              <input id="nlDesc" type="text" placeholder="ex. Servicii de consultanță psihologică de grup, 120–180 min, pe Zoom"
-                className={inputCls} value={nlDesc}
-                onChange={(e) => setNlDesc(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLine()} />
+            <Field label="Descriere / Specificații" htmlFor="nlDesc"
+              hint="Scrie sau alege dintr-o cerere anterioară — preluăm și beneficiarul">
+              {/* Combobox: the input stays free text; the list is a shortcut, never a gate. */}
+              <div className="relative" onBlur={(e) => {
+                // Close only when focus actually leaves the combobox — clicking an option
+                // blurs the input first, and closing there would cancel the click.
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setSuggestOpen(false);
+              }}>
+                <input id="nlDesc" type="text" placeholder="ex. Servicii de consultanță psihologică de grup, 120–180 min, pe Zoom"
+                  className={inputCls} value={nlDesc}
+                  role="combobox" aria-expanded={suggestOpen} aria-controls="nl-suggestions" aria-autocomplete="list"
+                  onFocus={() => setSuggestOpen(true)}
+                  onChange={(e) => { setNlDesc(e.target.value); setSuggestOpen(true); }}
+                  onKeyDown={(e) => {
+                    if (suggestOpen && suggestions.length > 0) {
+                      if (e.key === "ArrowDown") { e.preventDefault(); setSuggestCursor((i) => Math.min(i + 1, suggestions.length - 1)); return; }
+                      if (e.key === "ArrowUp") { e.preventDefault(); setSuggestCursor((i) => Math.max(i - 1, -1)); return; }
+                      if (e.key === "Enter" && suggestCursor >= 0) { e.preventDefault(); applySuggestion(suggestions[suggestCursor]); return; }
+                    }
+                    if (e.key === "Escape") { setSuggestOpen(false); return; }
+                    if (e.key === "Enter") addLine();
+                  }} />
+                {suggestOpen && (
+                  <div id="nl-suggestions" role="listbox" aria-label="Articole din cereri anterioare"
+                    className="absolute z-30 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border border-border bg-popover shadow-lg">
+                    {suggestLoading && (
+                      <p className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Caut în cererile anterioare…
+                      </p>
+                    )}
+                    {!suggestLoading && suggestions.length === 0 && (
+                      <p className="px-3 py-3 text-xs text-muted-foreground">
+                        {nlDesc.trim() ? "Nimic asemănător în cererile anterioare — scrie descrierea." : "Încă nu ai cereri anterioare din care să reiei."}
+                      </p>
+                    )}
+                    {!suggestLoading && suggestions.map((s, i) => (
+                      <button key={s.key} type="button" role="option" aria-selected={i === suggestCursor}
+                        onMouseEnter={() => setSuggestCursor(i)}
+                        onClick={() => applySuggestion(s)}
+                        className={cn(
+                          "block w-full border-b border-border/50 px-3 py-2.5 text-left last:border-0 hover:bg-muted/60",
+                          i === suggestCursor && "bg-muted/60",
+                        )}>
+                        <span className="block text-sm text-foreground">{s.description}</span>
+                        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                          <span className="font-mono text-foreground">{fmtMoney(s.unitPriceCents, s.currency)}</span>
+                          <span>/ {s.unit ?? DEFAULT_UNIT}</span>
+                          {s.payee.name && <span className="truncate">→ {s.payee.name}</span>}
+                          {s.usageCount > 1 && <span className="rounded bg-muted px-1.5">×{s.usageCount}</span>}
+                          <span className="text-muted-foreground/70">{s.sourceRequestNo}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </Field>
+
+            {/* What the pick did to the beneficiary block — stated, because it changed a
+                section the user is not currently looking at. */}
+            {payeeFilledFrom && (
+              <p className="flex items-center gap-1.5 text-xs text-success">
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Beneficiar completat automat: {payeeFilledFrom}
+              </p>
+            )}
+            {payeeConflict && (
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-warning/40 bg-warning/[0.08] px-3 py-2 text-xs text-foreground">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
+                <span>
+                  Cererea anterioară era pe <strong>{payeeConflict.payee.name}</strong>, dar ai deja
+                  un beneficiar completat. L-am păstrat pe al tău.
+                </span>
+                <button type="button" onClick={() => fillPayeeFromSuggestion(payeeConflict)}
+                  className="rounded-md border border-input bg-background px-2 py-1 font-medium hover:bg-muted min-h-[32px]">
+                  Înlocuiește
+                </button>
+                <button type="button" onClick={() => setPayeeConflict(null)}
+                  className="rounded-md px-2 py-1 text-muted-foreground hover:text-foreground min-h-[32px]">
+                  Păstrează
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:max-w-md">
               <Field label="Cant." htmlFor="nlQty"><input id="nlQty" type="number" min="1" className={inputCls} value={nlQty} onChange={(e) => setNlQty(e.target.value)} /></Field>
               <Field label="UM" htmlFor="nlUnit">
@@ -1545,9 +1799,11 @@ export function ParCreateForm() {
             )}>
               {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
               <span>Încarcă fișiere</span>
-              <input type="file" multiple className="sr-only" accept=".pdf,.png,.jpg,.jpeg" onChange={onUpload} disabled={uploadingFile || attachments.length >= 10} aria-label="Alege fișierele" />
+              <input type="file" multiple className="sr-only"
+                accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff,.heic,.heif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv,.rtf,.zip"
+                onChange={onUpload} disabled={uploadingFile || attachments.length >= 10} aria-label="Alege fișierele" />
             </label>
-            <span className="text-xs text-muted-foreground">PDF, PNG, JPEG — max 10 MB · {attachments.length}/10 fișiere</span>
+            <span className="text-xs text-muted-foreground">PDF, imagini, Word, Excel, PowerPoint, CSV, ZIP — max 10 MB · {attachments.length}/10 fișiere</span>
           </div>
           {attachments.length > 0 && (
             <ul className="space-y-2" aria-label="Fișiere atașate">
@@ -1560,9 +1816,7 @@ export function ParCreateForm() {
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-foreground truncate">{a.fileName}</span>
                       <span className="block text-xs text-muted-foreground">{ATTACHMENT_KIND_LABELS[a.kind]}</span>
-                      {analysis && <span className={cn("block text-xs font-medium", analysis.status === "match" ? "text-success" : "text-warning")}>
-                        {analysis.status === "match" ? "AI: rechizite și sumă concordante" : `AI: ${analysis.warnings} neconcordanțe — ${analysis.checks.filter((c) => c.matches === false).map((c) => c.field).join(", ")}`}
-                      </span>}
+                      {analysis && <AttachmentAnalysisSummary analysis={analysis} currency={currency} />}
                     </span>
                   </span>
                   <button type="button" aria-label={`Șterge ${a.fileName}`} onClick={async () => { if (parId) { try { await deleteAttachment(parId, a.id); setAttachments((p) => p.filter((x) => x.id !== a.id)); } catch { /* */ } } }}

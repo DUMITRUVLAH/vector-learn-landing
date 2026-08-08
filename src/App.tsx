@@ -27,6 +27,7 @@ import { ForgotPasswordPage } from "./pages/business/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/business/ResetPasswordPage";
 import { BusinessDashboardPage } from "./pages/business/BusinessDashboardPage";
 import { PlatformAdminPage } from "./pages/business/PlatformAdminPage";
+import { PlatformConsolePage } from "./pages/business/platform/PlatformConsolePage";
 import { BusinessGuardPage } from "./components/business/BusinessGuardPage";
 import { ParGuardPage } from "./components/par/ParGuardPage";
 // SHELL-503: PAR invite acceptance (public — no auth guard)
@@ -213,7 +214,11 @@ function Routes() {
   if (path.startsWith("/business/fin/company")) return <BusinessGuardPage><FinCompany /></BusinessGuardPage>;
   if (path.startsWith("/business/fin/")) return <BusinessGuardPage><FinHome /></BusinessGuardPage>;
 
+  // PLATFORM-001: consola completă (workspace-uri, module, statistici, logări, audit).
+  // Ecranul vechi, per entitate juridică, rămâne pe ruta lui — deci trebuie testat ÎNAINTE,
+  // altfel `startsWith("/business/platform")` l-ar înghiți.
   if (path.startsWith("/business/platform-admin")) return <BusinessGuardPage><PlatformAdminPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/platform")) return <BusinessGuardPage><PlatformConsolePage /></BusinessGuardPage>;
 
   // PAR routes under /business/par/* — ParGuardPage (VM1-01 Decizia 9) hides the whole
   // module from users with zero PAR roles, even on direct URL access.

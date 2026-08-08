@@ -20,6 +20,8 @@ import { parPayers, parPayerModules, parPayerMembers } from "../db/schema/par";
 import { verifyPassword, hashPassword } from "../auth/password";
 import { createSession, revokeSession, SESSION_COOKIE } from "../auth/session";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { recordLoginEvent } from "../lib/loginEvents";
+import { applyDefaultsToTenant, getModuleDefaults } from "../lib/platformModules";
 
 const loginSchema = z.object({
   email: z.string().email().max(255),
@@ -31,6 +33,11 @@ const signupSchema = z.object({
   name: z.string().min(2).max(200),
   email: z.string().email().max(255),
   password: z.string().min(8).max(200),
+  // PLATFORM-002 (marketing): de unde vine clientul. Trimise de ecranul de înregistrare din
+  // parametrii UTM ai linkului. Opționale — o înregistrare nu are voie să pice din cauza lor.
+  utmSource: z.string().max(100).optional(),
+  utmMedium: z.string().max(100).optional(),
+  utmCampaign: z.string().max(150).optional(),
 });
 
 function slugify(name: string): string {
@@ -81,13 +88,28 @@ businessAuthRoutes.post("/auth/signup", zValidator("json", signupSchema), async 
 
   const passwordHash = await hashPassword(body.password);
 
+  // PLATFORM-001: ce module primește un workspace NOU e decis din Consola Platformă,
+  // nu hardcodat aici. Implicitele lipsă = modul activ (fail-open, vezi lib/platformModules).
+  const moduleDefaults = await getModuleDefaults();
+
   // One transaction: a partial workspace (tenant with no owner/payer) is never left behind.
   // Bootstrap mirrors /api/auth/google/create-workspace so the new admin can actually use FinDesk
   // (GET /api/fin/members/me needs a fin_members row) and PAR (payer + payer membership).
   const { tenant, user } = await db.transaction(async (tx) => {
     const [t] = await tx
       .insert(tenants)
-      .values({ name: body.tenantName, slug, plan: "starter", appKind: "business" })
+      .values({
+        name: body.tenantName,
+        slug,
+        plan: "starter",
+        appKind: "business",
+        // Referrer-ul îl citim din antet, nu din corp: e sub controlul browserului, deci
+        // nu poate fi falsificat la fel de ușor ca un câmp trimis de pagină.
+        signupSource: body.utmSource ?? null,
+        signupMedium: body.utmMedium ?? null,
+        signupCampaign: body.utmCampaign ?? null,
+        signupReferrer: c.req.header("referer")?.slice(0, 500) ?? null,
+      })
       .returning();
     const [u] = await tx
       .insert(users)
@@ -97,9 +119,12 @@ businessAuthRoutes.post("/auth/signup", zValidator("json", signupSchema), async 
       .insert(parPayers)
       .values({ tenantId: t.id, name: body.tenantName, legalName: body.tenantName })
       .returning();
+    // Oglindim implicitele și la nivel de payer, ca `requireModuleEntitlement` (care verifică
+    // per entitate juridică) să spună același lucru ca `tenant_modules`. Un singur set de
+    // implicite, două locuri de citire — nu două sisteme concurente.
     await tx.insert(parPayerModules).values([
-      { tenantId: t.id, payerId: payer.id, moduleKey: "findesk", enabled: true, updatedByUserId: u.id },
-      { tenantId: t.id, payerId: payer.id, moduleKey: "par", enabled: false, updatedByUserId: u.id },
+      { tenantId: t.id, payerId: payer.id, moduleKey: "findesk", enabled: moduleDefaults.findesk !== false, updatedByUserId: u.id },
+      { tenantId: t.id, payerId: payer.id, moduleKey: "par", enabled: moduleDefaults.par !== false, updatedByUserId: u.id },
     ]);
     await tx.insert(parPayerMembers).values({ tenantId: t.id, payerId: payer.id, userId: u.id });
     // Workspace creator is the FinDesk owner too; best-effort so a missing table never fails signup.
@@ -111,6 +136,9 @@ businessAuthRoutes.post("/auth/signup", zValidator("json", signupSchema), async 
     return { tenant: t, user: u };
   });
 
+  // Drepturile de modul ale workspace-ului nou, din implicitele platformei.
+  await applyDefaultsToTenant(tenant.id, user.id);
+
   const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? null;
   const userAgent = c.req.header("user-agent") ?? null;
   const { token, expiresAt } = await createSession(user.id, {
@@ -118,6 +146,10 @@ businessAuthRoutes.post("/auth/signup", zValidator("json", signupSchema), async 
     userAgent: userAgent ?? undefined,
   });
   setSessionCookie(c, token, expiresAt);
+  await recordLoginEvent(c, {
+    email, success: true, app: "business", method: "signup",
+    userId: user.id, tenantId: tenant.id,
+  });
 
   return c.json({
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
@@ -137,13 +169,24 @@ businessAuthRoutes.post("/auth/login", zValidator("json", loginSchema), async (c
     where: eq(users.email, body.email),
   });
 
+  // PLATFORM-001: fiecare ieșire de mai jos scrie un `login_event`. Eșecurile pe un email
+  // inexistent sunt exact ce vrem să vedem în istoric (încercări repetate), deci se
+  // înregistrează și ele, cu userId/tenantId null.
+  const fail = async (reason: string, status: 401 | 403 | 500) => {
+    await recordLoginEvent(c, {
+      email: body.email, success: false, app: "business", method: "password",
+      userId: user?.id ?? null, tenantId: user?.tenantId ?? null, failureReason: reason,
+    });
+    return c.json({ error: reason }, status);
+  };
+
   if (!user || !user.passwordHash) {
-    return c.json({ error: "invalid_credentials" }, 401);
+    return fail("invalid_credentials", 401);
   }
 
   const ok = await verifyPassword(body.password, user.passwordHash);
   if (!ok) {
-    return c.json({ error: "invalid_credentials" }, 401);
+    return fail("invalid_credentials", 401);
   }
 
   const tenant = await db.query.tenants.findFirst({
@@ -151,17 +194,23 @@ businessAuthRoutes.post("/auth/login", zValidator("json", loginSchema), async (c
   });
 
   if (!tenant) {
-    return c.json({ error: "tenant_not_found" }, 500);
+    return fail("tenant_not_found", 500);
   }
 
   // SPLIT-003: enforce Business Suite — reject CRM/learn users
   if (tenant.appKind !== "business") {
-    return c.json({ error: "wrong_app" }, 403);
+    return fail("wrong_app", 403);
   }
 
   // SET-801: disabled accounts
   if (user.isActive === false) {
-    return c.json({ error: "account_disabled" }, 401);
+    return fail("account_disabled", 401);
+  }
+
+  // PLATFORM-001: workspace suspendat din Consola Platformă (ex. client neplătitor).
+  // Nu ștergem nimic — se reactivează dintr-un singur click.
+  if (tenant.status === "suspended") {
+    return fail("workspace_suspended", 403);
   }
 
   const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? null;
@@ -172,6 +221,10 @@ businessAuthRoutes.post("/auth/login", zValidator("json", loginSchema), async (c
     userAgent: userAgent ?? undefined,
   });
   setSessionCookie(c, token, expiresAt);
+  await recordLoginEvent(c, {
+    email: user.email, success: true, app: "business", method: "password",
+    userId: user.id, tenantId: tenant.id,
+  });
 
   return c.json({
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
@@ -203,6 +256,13 @@ businessAuthRoutes.get("/auth/me", requireAuth, async (c) => {
   // Optionally: also enforce app_kind here so a learn user can't GET /api/business/auth/me
   if (tenant.appKind !== "business") {
     return c.json({ error: "wrong_app" }, 403);
+  }
+
+  // PLATFORM-001: suspendarea trebuie să taie și sesiunile DEJA deschise, nu doar
+  // login-urile viitoare — altfel un client suspendat rămâne înăuntru încă 30 de zile.
+  // Shell-ul tratează 403 pe /auth/me ca „neautentificat" și redirecționează la login.
+  if (tenant.status === "suspended") {
+    return c.json({ error: "workspace_suspended" }, 403);
   }
 
   return c.json({

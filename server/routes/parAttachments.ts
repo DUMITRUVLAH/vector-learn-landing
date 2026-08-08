@@ -30,16 +30,43 @@ export const parAttachmentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parAttachmentsRoutes.use("*", requireAuth);
 parAttachmentsRoutes.use("/:parId/:action/*", parUuidGuard("parId"));
 
-// Allowed MIME types aligned with the rest of the repo
+/**
+ * What a dossier may carry. Broad on purpose — the supporting evidence for a payment is
+ * whatever the counterparty sent: a scanned act, a PowerPoint offer, a CSV price list.
+ *
+ * SVG is deliberately NOT here even though it is an image: this endpoint serves
+ * attachments back with `Content-Disposition: inline`, and an SVG is a script-bearing
+ * document, so an inline preview would run the uploader's JS on our origin.
+ */
 const ALLOWED_MIME_TYPES = [
   "application/pdf",
+  // Images
   "image/png",
   "image/jpeg",
   "image/jpg",
+  "image/gif",
+  "image/webp",
+  "image/bmp",
+  "image/tiff",
+  "image/heic",
+  "image/heif",
+  // Word / Excel / PowerPoint — legacy + OOXML
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  // OpenDocument (LibreOffice — common in public institutions here)
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.presentation",
+  // Plain data + archives
+  "text/plain",
+  "text/csv",
+  "application/rtf",
+  "application/zip",
+  "application/x-zip-compressed",
 ];
 
 // PARQA-021: the data-URL MIME prefix is CLIENT-controlled, so an attacker can label arbitrary bytes
@@ -56,6 +83,9 @@ function magicBytesMatch(dataUrl: string, mime: string): boolean {
   }
   if (b.length < 4) return false;
   const at = (...sig: number[]) => sig.every((v, i) => b[i] === v);
+  const atOffset = (offset: number, ...sig: number[]) => sig.every((v, i) => b[offset + i] === v);
+  const isZip = () => at(0x50, 0x4b, 0x03, 0x04) || at(0x50, 0x4b, 0x05, 0x06) || at(0x50, 0x4b, 0x07, 0x08);
+  const isOle2 = () => at(0xd0, 0xcf, 0x11, 0xe0); // legacy .doc/.xls/.ppt compound file
   switch (mime) {
     case "application/pdf":
       return at(0x25, 0x50, 0x44, 0x46); // %PDF
@@ -64,12 +94,41 @@ function magicBytesMatch(dataUrl: string, mime: string): boolean {
     case "image/jpeg":
     case "image/jpg":
       return at(0xff, 0xd8, 0xff); // JPEG SOI
+    case "image/gif":
+      return at(0x47, 0x49, 0x46, 0x38); // GIF8
+    case "image/webp":
+      return at(0x52, 0x49, 0x46, 0x46) && atOffset(8, 0x57, 0x45, 0x42, 0x50); // RIFF….WEBP
+    case "image/bmp":
+      return at(0x42, 0x4d); // BM
+    case "image/tiff":
+      return at(0x49, 0x49, 0x2a, 0x00) || at(0x4d, 0x4d, 0x00, 0x2a); // II*. / MM.*
+    case "image/heic":
+    case "image/heif":
+      return atOffset(4, 0x66, 0x74, 0x79, 0x70); // ISO-BMFF "ftyp" box at offset 4
+    // Every OOXML and OpenDocument file is a ZIP container — the signature can only
+    // prove "this is a zip", which is exactly what these formats are.
     case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
     case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-      return at(0x50, 0x4b, 0x03, 0x04) || at(0x50, 0x4b, 0x05, 0x06); // ZIP container (docx/xlsx)
+    case "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+    case "application/vnd.oasis.opendocument.text":
+    case "application/vnd.oasis.opendocument.spreadsheet":
+    case "application/vnd.oasis.opendocument.presentation":
+    case "application/zip":
+    case "application/x-zip-compressed":
+      return isZip();
     case "application/msword":
     case "application/vnd.ms-excel":
-      return at(0xd0, 0xcf, 0x11, 0xe0); // OLE2 compound (legacy .doc/.xls)
+    case "application/vnd.ms-powerpoint":
+      // Legacy Office is OLE2, but Word/Excel also happily save OOXML under the old
+      // MIME when a browser guesses the type from the extension — accept both.
+      return isOle2() || isZip();
+    case "application/rtf":
+      return at(0x7b, 0x5c, 0x72, 0x74); // {\rt
+    // Text formats have no signature by design; the size + type allowlist is the guard,
+    // and they are served with `nosniff` so a mislabeled one cannot execute.
+    case "text/plain":
+    case "text/csv":
+      return true;
     default:
       return false;
   }
@@ -301,7 +360,7 @@ parAttachmentsRoutes.post(
       return c.json(
         {
           error: "invalid_file_type",
-          detail: `Allowed: PDF, PNG, JPEG, Word, Excel. Got: ${effectiveMime}`,
+          detail: `Allowed: PDF, imagini, Word, Excel, PowerPoint, OpenDocument, text/CSV, ZIP. Got: ${effectiveMime}`,
         },
         400
       );
