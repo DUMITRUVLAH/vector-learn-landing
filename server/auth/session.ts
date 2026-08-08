@@ -41,13 +41,57 @@ export async function createSession(
   return { token, expiresAt };
 }
 
+/**
+ * PERF-005 — cache de sesiune în proces.
+ *
+ * Fiecare cerere autentificată făcea 3 dus-întorsuri la baza de date: SELECT din `sessions`,
+ * SELECT din `users`, UPDATE pe `last_active_at`. Local, cu PGlite în proces, e invizibil; pe
+ * producție, cu Supabase peste rețea, sunt ~60–120 ms de overhead pur de autentificare pe
+ * FIECARE cerere — înmulțit cu zecile de cereri pe care le face o pagină.
+ *
+ * TTL 30 s, deliberat scurt: e fereastra maximă în care o sesiune revocată ar mai fi acceptată.
+ * Revocarea explicită (logout, ștergerea sesiunii din ecranul de securitate, dezactivarea
+ * utilizatorului) golește cache-ul pe loc prin `dropCachedSession`, deci fereastra se aplică doar
+ * expirărilor naturale, nu și acțiunilor deliberate de securitate.
+ *
+ * Cache-ul e per instanță de proces. Pe Vercel fiecare instanță are propriul cache — corect: nu
+ * există stare partajată de invalidat, iar o instanță nouă pornește cu cache gol.
+ */
+const SESSION_CACHE_TTL_MS = 30_000;
+const sessionCache = new Map<string, { at: number; value: { session: Session; user: User } }>();
+
+/** Șterge o sesiune din cache. OBLIGATORIU la logout/revocare — vezi comentariul de mai sus. */
+export function dropCachedSession(token: string): void {
+  sessionCache.delete(token);
+}
+
+/** Golește tot cache-ul (dezactivare de utilizator, schimbare de parolă). */
+export function dropAllCachedSessions(): void {
+  sessionCache.clear();
+}
+
+/**
+ * PERF-005: `last_active_at` se scria la FIECARE cerere — amplificare de scrieri pentru un câmp
+ * a cărui unică utilizare e ecranul „sesiunile mele". Îl scriem cel mult o dată pe minut per
+ * sesiune; precizia rămâne mult peste ce arată acel ecran.
+ */
+const LAST_ACTIVE_WRITE_INTERVAL_MS = 60_000;
+const lastActiveWrittenAt = new Map<string, number>();
+
 export async function getSessionUser(token: string): Promise<{ session: Session; user: User } | null> {
+  const cached = sessionCache.get(token);
+  if (cached && Date.now() - cached.at < SESSION_CACHE_TTL_MS) {
+    touchLastActive(cached.value.session.id);
+    return cached.value;
+  }
+
   const session = await db.query.sessions.findFirst({
     where: eq(sessions.token, token),
   });
   if (!session) return null;
   if (session.expiresAt.getTime() < Date.now()) {
     await db.delete(sessions).where(eq(sessions.id, session.id));
+    sessionCache.delete(token);
     return null;
   }
   // AUTH-004: block pending 2FA sessions from accessing protected endpoints
@@ -55,17 +99,29 @@ export async function getSessionUser(token: string): Promise<{ session: Session;
   const user = await db.query.users.findFirst({ where: eq(users.id, session.userId) });
   if (!user) return null;
 
-  // Update lastActiveAt (fire-and-forget, don't await)
+  const value = { session, user };
+  sessionCache.set(token, { at: Date.now(), value });
+  touchLastActive(session.id);
+
+  return value;
+}
+
+/** Scrie `last_active_at` cel mult o dată pe minut per sesiune, fără să blocheze cererea. */
+function touchLastActive(sessionId: string): void {
+  const last = lastActiveWrittenAt.get(sessionId) ?? 0;
+  if (Date.now() - last < LAST_ACTIVE_WRITE_INTERVAL_MS) return;
+  lastActiveWrittenAt.set(sessionId, Date.now());
   void db
     .update(sessions)
     .set({ lastActiveAt: new Date() })
-    .where(eq(sessions.id, session.id))
+    .where(eq(sessions.id, sessionId))
     .catch(() => {});
-
-  return { session, user };
 }
 
 export async function revokeSession(token: string): Promise<void> {
+  // PERF-005: cache-ul trebuie golit ÎNAINTE de ștergere. Altfel, timp de până la 30 s după
+  // logout, o cerere cu acel token ar fi servită din cache — adică logout-ul n-ar deconecta.
+  dropCachedSession(token);
   await db.delete(sessions).where(eq(sessions.token, token));
 }
 

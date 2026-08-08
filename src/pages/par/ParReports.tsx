@@ -372,7 +372,7 @@ export function ParReports() {
           <a
             href={exportXlsxUrl}
             download="par-export.xlsx"
-            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary/90 hover:no-underline"
+            className="inline-flex h-10 max-sm:h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground no-underline transition-colors hover:bg-primary/90 hover:no-underline"
             aria-label="Exportă Excel"
           >
             <Download className="h-4 w-4" aria-hidden />
@@ -381,7 +381,7 @@ export function ParReports() {
           <a
             href={exportUrl}
             download="par-export.csv"
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground no-underline transition-colors hover:bg-accent/10 hover:no-underline"
+            className="inline-flex h-10 max-sm:h-11 items-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground no-underline transition-colors hover:bg-accent/10 hover:no-underline"
             aria-label="Exportă CSV"
           >
             <Download className="h-4 w-4" aria-hidden />
@@ -400,7 +400,7 @@ export function ParReports() {
                 key={key}
                 type="button"
                 onClick={() => applyPreset(key)}
-                className="rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
+                className="min-h-[44px] rounded-full border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted sm:min-h-0"
               >
                 {label}
               </button>

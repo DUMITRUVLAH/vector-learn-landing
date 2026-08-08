@@ -150,12 +150,116 @@ Capturi: `output/mobile/<ecran>/<rută>.png`.
 
 ---
 
-## 4. Plan de remediere (ordonat după impact)
+## 4. Ce s-a livrat — măsurători înainte/după
 
-1. `Cache-Control: immutable` pe assets + `no-cache` pe `index.html` + `ETag` + compresie — local și în `.vercel/output/config.json`
-2. Strat de cache/dedup pentru cereri în `src/lib/api.ts` + sesiune prin `sessionCache`
-3. Code splitting: rute lazy + `manualChunks` pentru `recharts`/`jspdf`/`html2canvas`
-4. Headere de securitate + rate limiting + CORS corect
-5. Cache de sesiune pe server (elimină 2 din 3 dus-întorsuri per cerere)
-6. Sincronizare indecși la deploy + paginare pe `GET /api/par`
-7. Mobil: overflow, ținte de atingere, dimensiuni de text, densitate KPI
+Toate cifrele sunt măsurate pe același build de producție, aceeași mașină, același tenant.
+
+### 4.1 Încărcare inițială
+
+| | Înainte | După | |
+|---|---|---|---|
+| Calea critică (gzip) | **684 KB** | **90 KB** | −87% |
+| Chunk de intrare | 3.063 KB / 669 KB gz | 106 KB / 22 KB gz | −97% |
+| react-vendor | 328 KB / 99 KB gz | 142 KB / 46 KB gz | build de producție, nu de dezvoltare |
+| `Cache-Control` pe assets | absent | `max-age=31536000, immutable` | refresh-ul nu mai redescarcă nimic |
+| Compresie | absentă | gzip (3,06 MB → 669 KB pe fir) | |
+
+### 4.2 Cereri API pe încărcare de pagină
+
+| Rută | Înainte | După |
+|---|---|---|
+| `/business/par` | **34** (`auth/me` ×6) | **12** (zero duplicate) |
+| `/business/fin/invoices` | 16 | 6 |
+| `/business/dashboard` | 15 | 10 |
+| `/business/fin/` | 13 | 5 |
+
+### 4.3 Cost pe cerere autentificată
+
+3 interogări DB → **1 la 30 s per sesiune** (cache în proces). `last_active_at` se scrie cel mult
+o dată pe minut, nu la fiecare cerere. Pe Supabase asta înseamnă ~60–120 ms mai puțin pe FIECARE
+cerere autentificată; înmulțit cu cele 12 cereri ale unei pagini PAR, e cea mai mare economie de
+pe producție (local, cu PGlite în proces, e invizibilă — de asta trebuie măsurată pe prod).
+
+### 4.4 Mobil (iPhone SE 375 / iPhone 14 390 / Pixel 7 412)
+
+| | Înainte | După |
+|---|---|---|
+| Pagini care derulează lateral | **6** | **0** |
+| Ținte de atingere < 44×44 | **246** | **18** |
+| Erori JS | 0 | 0 |
+
+Cele 18 rămase sunt bifele native de 13×13 (ținta reală e `<label>`-ul din jur) și câteva butoane
+locale de pagină. Reparațiile de fond stau în design system (`ds/Button`, `ds/Field`, `ds/Tabs`)
+plus o regulă CSS pentru controalele native — deci se aplică și paginilor scrise de acum înainte.
+
+### 4.5 Securitate
+
+- CSP, `X-Frame-Options: DENY`, HSTS (doar prod), `X-Content-Type-Options`, `Referrer-Policy`,
+  `Permissions-Policy` — pe fiecare răspuns.
+- Limitare de rată: 10 încercări / 15 min / IP pe login, signup, reset parolă și acceptare de
+  invitație; 20/oră pe endpoint-urile AI. **Verificat live:** a 11-a încercare primește 429.
+- CORS: originile necunoscute nu mai primesc niciun header.
+- Revocarea sesiunii (logout, deconectare dispozitiv, resetare parolă) golește cache-ul de sesiuni
+  pe loc — testat în `server/__tests__/session-cache.test.ts`.
+
+---
+
+## 5. Bug-ul care nu era pe listă
+
+Cel mai mare câștig de viteză nu era niciuna dintre ipotezele inițiale.
+
+`.env` și `.env.example` conțin `NODE_ENV=development`. Vite citește `NODE_ENV` din fișierele
+`.env`, deci **fiecare build de producție împacheta build-ul de DEZVOLTARE al React** — confirmat
+prin prezența textelor de avertizare care există doar acolo („Invalid hook call", „Each child in a
+list should have a unique key").
+
+Asta nu înseamnă doar 2,3× mai mulți octeți. Build-ul de dezvoltare al React rulează validări
+suplimentare la FIECARE randare a FIECĂREI componente. Aplicația era efectiv mai lentă în producția
+clientului plătitor, dintr-un motiv invizibil în cod și în review.
+
+Reparat în comanda de build (`package.json` + `vercel.json`), nu în `vite.config.ts`: prima
+încercare, cu `define: { "process.env.NODE_ENV": "production" }`, a schimbat runtime-ul React fără
+să schimbe transformarea JSX din pluginul SWC → `r.jsxDEV is not a function` și ecran alb pe toate
+rutele. Ambele decizii vin din `NODE_ENV`, deci trebuie setat înainte ca Vite să pornească.
+
+> **Dacă simptomul revine doar pe Vercel:** verifică `NODE_ENV` în variabilele de mediu ale
+> proiectului (Settings → Environment Variables). Dacă e `development` acolo, build-ul îl va citi.
+
+---
+
+## 6. Porți noi (ca regresiile să nu se poată întoarce tăcut) — CLAUDE.md §3.5.1quater
+
+| Poartă | Ce blochează |
+|---|---|
+| `scripts/check-react-prod-build.mjs` | React de dezvoltare ÎN dist — atât runtime-ul, cât și transformarea JSX |
+| `scripts/check-bundle-budget.mjs` | un import static nou în `App.tsx` care umflă calea critică peste 150 KB gzip |
+| `src/__tests__/perf/apiCache.test.ts` | cache-ul care ar începe să servească date învechite după o mutație |
+| `server/__tests__/session-cache.test.ts` | o sesiune revocată care ar mai fi acceptată din cache |
+
+Ambele porți de build și-au dovedit utilitatea în timpul acestei lucrări:
+
+- **check-bundle-budget** a prins prima variantă de `manualChunks`: forțând `recharts` și `jspdf`
+  în chunk-uri numite, Rollup a mutat acolo și helperele partajate, iar chunk-ul de intrare a ajuns
+  să importe STATIC `pdf-*.js` (171 KB gzip) pentru câțiva octeți de utilitar. Fără poartă, s-ar fi
+  livrat ca „optimizare".
+- **check-react-prod-build** a trecut verde peste un build complet nefuncțional, pentru că verifica
+  doar runtime-ul, nu și transformarea JSX. Acum verifică ambele jumătăți ale perechii.
+
+---
+
+## 7. Ce NU s-a făcut (deliberat) — următorii pași
+
+1. **KPI-urile din `ParDashboard` se calculează în client**, însumând peste toate cererile.
+   `GET /api/par` are acum un plafon de 1000 de rânduri (înainte: nelimitat), deci pentru un tenant
+   care depășește plafonul sumele vor fi parțiale. Reparația corectă e un endpoint de sumar agregat
+   pe server — schimbă cifrele afișate, deci cere verificare separată, nu merită strecurată aici.
+2. **63 de `fetch("/api/...")` directe** în `src/` ocolesc `src/lib/api.ts`, deci nu beneficiază de
+   deduplicare. Am rutat prin cache doar `getFinMe` (singurul care apărea duplicat în măsurători).
+   Restul: migrare treptată, fiecare are tratare proprie de erori.
+3. **Rate limiting per instanță.** Pe Vercel, fiecare instanță serverless are contorul ei, deci un
+   atac distribuit nu e oprit. Un contor global cere Redis/Upstash — decizie de infrastructură.
+4. **Text sub 12 px** (10–11 px pe formularul PAR și pe Acasă FinDesk, 72 de apariții). Nu e o
+   încălcare WCAG, ci un prag ales de mine; mărirea afectează densitatea unor ecrane dense de
+   finanțe. Recomand decizia de design înainte de schimbare.
+5. **Fonturile Google blochează randarea** (`index.html`). Auto-găzduirea lor ar mai scoate un
+   dus-întors către un domeniu terț de pe calea critică.

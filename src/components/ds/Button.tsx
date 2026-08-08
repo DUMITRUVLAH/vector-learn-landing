@@ -35,11 +35,22 @@ const VARIANTS: Record<ButtonVariant, string> = {
   link: "text-primary underline-offset-4 hover:underline",
 };
 
+/**
+ * MOB-002 — pe telefon, fiecare buton este cel puțin 44×44.
+ *
+ * Auditul mobil a numărat 246 de ținte sub 44×44 pe 17 rute (CLAUDE.md §3.3 / WCAG 2.1 AA).
+ * Cauza nu era o pagină anume, ci chiar valorile de aici: `sm` = 36 px, `default` și `icon` = 40 px.
+ * Reparate în acest fișier, se repară peste tot deodată.
+ *
+ * `max-sm:` (sub 640 px = telefoane) ridică înălțimea la 44 px doar acolo unde ținta e degetul.
+ * Pe desktop, unde ținta e cursorul, densitatea proiectată de design system rămâne neschimbată —
+ * de asta nu am mărit pur și simplu valorile de bază.
+ */
 const SIZES: Record<ButtonSize, string> = {
-  sm: "h-9 px-3",
-  default: "h-10 px-4",
+  sm: "h-9 px-3 max-sm:h-11",
+  default: "h-10 px-4 max-sm:h-11",
   lg: "h-11 px-8",
-  icon: "h-10 w-10 p-0",
+  icon: "h-10 w-10 p-0 max-sm:h-11 max-sm:w-11",
 };
 
 const BASE =

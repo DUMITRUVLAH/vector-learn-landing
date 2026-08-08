@@ -61,10 +61,14 @@ function ttlFor(path: string): number {
 /**
  * Rulează `fn` pentru `key`, refolosind cererea în zbor sau răspunsul proaspăt din cache.
  * Erorile NU se cache-uiesc: o cerere picată trebuie să poată fi reîncercată imediat.
+ *
+ * `force: true` ocolește cache-ul și îl rescrie. Necesar pentru reîncărcările cerute EXPLICIT de
+ * utilizator (butoanele „Reîncarcă"): fără el, un clic la mai puțin de 1,5 s după încărcarea
+ * paginii ar primi exact răspunsul dinainte, adică butonul ar părea că nu face nimic.
  */
-export function dedupe<T>(key: string, fn: () => Promise<T>): Promise<T> {
+export function dedupe<T>(key: string, fn: () => Promise<T>, force = false): Promise<T> {
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < ttlFor(key)) {
+  if (!force && hit && Date.now() - hit.at < ttlFor(key)) {
     return hit.promise as Promise<T>;
   }
 

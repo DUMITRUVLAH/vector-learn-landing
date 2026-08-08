@@ -12,7 +12,7 @@ import { finInvoices, finCaptures, finExpenses } from "../db/schema";
 import { invoices, payments, students, leads, courses, docmergeTemplates, itparkEngagements } from "../db/schema";
 import { parInvites, parMembers, parPayerMembers, parProjectMembers, parPayers, parProjects, parVendors, parPayerModules, parRequests } from "../db/schema/par";
 import { hashPassword, verifyPassword } from "../auth/password";
-import { createSession, revokeSession, SESSION_COOKIE } from "../auth/session";
+import { createSession, revokeSession, SESSION_COOKIE, dropAllCachedSessions } from "../auth/session";
 import { recordLoginEvent } from "../lib/loginEvents";
 import { applyDefaultsToTenant, getModuleDefaults } from "../lib/platformModules";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -302,6 +302,8 @@ authRoutes.post("/reset-password", zValidator("json", resetPasswordSchema), asyn
     .where(eq(passwordResetTokens.id, record.id));
 
   // Invalidate all existing sessions for this user.
+  // PERF-005: si cache-ul de sesiuni - altfel un token resetat ar mai fi acceptat pana la 30 s.
+  dropAllCachedSessions();
   await db.delete(sessions).where(eq(sessions.userId, record.userId));
 
   // Create a fresh session so the user is logged in immediately after reset.
@@ -377,6 +379,8 @@ authRoutes.post("/change-password", requireAuth, zValidator("json", changePasswo
   await db.update(users).set({ passwordHash: newPasswordHash, updatedAt: new Date() }).where(eq(users.id, currentUser.id));
 
   // Invalidate all sessions (including the current one — user must log in fresh).
+  // PERF-005: cache-ul trebuie golit odata cu randurile, altfel schimbarea parolei n-ar deconecta.
+  dropAllCachedSessions();
   await db.delete(sessions).where(eq(sessions.userId, currentUser.id));
   deleteCookie(c, SESSION_COOKIE, { path: "/" });
   return c.json({ ok: true });
@@ -417,6 +421,7 @@ authRoutes.post("/delete-account", requireAuth, zValidator("json", z.object({
 
   // Soft-delete: set deleted_at, revoke all sessions.
   await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, user.id));
+  dropAllCachedSessions(); // PERF-005
   await db.delete(sessions).where(eq(sessions.userId, user.id));
 
   deleteCookie(c, SESSION_COOKIE, { path: "/" });

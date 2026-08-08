@@ -316,8 +316,87 @@ async function main() {
   }
   console.log(`[sync-schema] ensured par_project_approvers`);
 
-  console.log(`[sync-schema] done — ${added} missing column(s) added.`);
+  const indexesAdded = await ensureIndexes(sql);
+
+  console.log(
+    `[sync-schema] done — ${added} missing column(s), ${indexesAdded} missing index(es) added.`
+  );
   await sql.end();
+}
+
+/**
+ * PERF-006 — creează indecșii declarați în schema drizzle care lipsesc din baza de date.
+ *
+ * De ce e necesar: schema declară ~294 de indecși, dar migrările NU se aplică fiabil pe producție
+ * (vezi docs/solutions/database-issues + memoria „prod-migration-tracking-desynced"). Restul lui
+ * sync-schema vindecă doar COLOANE, deci un index declarat într-o migrare care n-a rulat niciodată
+ * pur și simplu nu există în producție.
+ *
+ * Consecința e invizibilă până devine gravă: interogările funcționează, doar fac seq scan. Cel mai
+ * costisitor exemplu e `sessions_token_idx` — căutarea după token se face la FIECARE cerere
+ * autentificată; fără index, costul crește liniar cu numărul total de sesiuni din sistem.
+ *
+ * `CREATE INDEX IF NOT EXISTS` e idempotent și non-distructiv, la fel ca `ADD COLUMN IF NOT EXISTS`
+ * de mai sus. Fără `CONCURRENTLY`: la deploy, tabelele sunt mici sau indexul există deja, iar
+ * `CONCURRENTLY` nu poate rula într-o tranzacție și complică recuperarea din eșec.
+ */
+async function ensureIndexes(sql: ReturnType<typeof postgres>): Promise<number> {
+  const tables = Object.values(schema).filter(
+    (v: unknown) =>
+      !!v && typeof v === "object" && (v as Record<symbol, unknown>)[Symbol.for("drizzle:IsDrizzleTable")] === true
+  );
+
+  // Ce indecși există deja — o singură interogare, nu una per index.
+  const existing = new Set(
+    (
+      await sql<{ indexname: string }[]>`
+        SELECT indexname FROM pg_indexes WHERE schemaname = 'public'
+      `
+    ).map((r) => r.indexname)
+  );
+
+  let created = 0;
+  for (const table of tables) {
+    const tableName = getTableName(table as never);
+    // Configurația de indecși stă pe simbolul intern al drizzle (`ExtraConfigBuilder`).
+    const extra = (table as Record<symbol, unknown>)[Symbol.for("drizzle:ExtraConfigBuilder")] as
+      | ((self: unknown) => Record<string, unknown>)
+      | undefined;
+    if (typeof extra !== "function") continue;
+
+    let config: Record<string, unknown>;
+    try {
+      config = extra((table as Record<symbol, unknown>)[Symbol.for("drizzle:ExtraConfigColumns")] ?? table);
+    } catch {
+      continue; // o configurație pe care n-o putem evalua nu are voie să oprească deploy-ul
+    }
+
+    for (const builder of Object.values(config ?? {})) {
+      const cfg = (builder as { config?: { name?: string; columns?: unknown[]; unique?: boolean } })?.config;
+      if (!cfg?.name || !Array.isArray(cfg.columns) || cfg.columns.length === 0) continue;
+      if (existing.has(cfg.name)) continue;
+
+      const cols = cfg.columns
+        .map((col) => (col as { name?: string })?.name)
+        .filter((n): n is string => typeof n === "string");
+      if (cols.length !== cfg.columns.length) continue; // expresie, nu simple coloane — o sărim
+
+      const unique = cfg.unique ? "UNIQUE " : "";
+      const stmt = `CREATE ${unique}INDEX IF NOT EXISTS "${cfg.name}" ON "${tableName}" (${cols
+        .map((cn) => `"${cn}"`)
+        .join(", ")})`;
+      try {
+        await sql.unsafe(stmt);
+        console.log(`[sync-schema] +index ${cfg.name} on ${tableName}(${cols.join(", ")})`);
+        created++;
+      } catch (e) {
+        // Un index care nu se poate crea (coloană lipsă, duplicate pe unic) e demn de semnalat,
+        // dar nu de oprit deploy-ul — aplicația funcționează și fără el, doar mai lent.
+        console.warn(`[sync-schema] index ${cfg.name} skipped:`, e instanceof Error ? e.message : e);
+      }
+    }
+  }
+  return created;
 }
 
 main().catch((err) => {

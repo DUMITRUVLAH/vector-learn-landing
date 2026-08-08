@@ -50,7 +50,7 @@ export function Input({ invalid, icon, className, ...rest }: InputProps) {
   const field = (
     <input
       aria-invalid={invalid || undefined}
-      className={cn(FIELD, "h-10", invalid ? "border-destructive" : "border-input", icon && "pl-9", className)}
+      className={cn(FIELD, "h-10 max-sm:h-11", invalid ? "border-destructive" : "border-input", icon && "pl-9", className)}
       {...rest}
     />
   );
@@ -109,7 +109,8 @@ export function Select({ invalid, className, children, ...rest }: SelectProps) {
         aria-invalid={invalid || undefined}
         className={cn(
           FIELD,
-          "h-10 w-full cursor-pointer appearance-none pr-9",
+          // MOB-002: 44 px pe telefon (WCAG 2.1 AA), densitatea de desktop ramane neschimbata.
+          "h-10 max-sm:h-11 w-full cursor-pointer appearance-none pr-9",
           invalid ? "border-destructive" : "border-input",
         )}
         {...rest}

@@ -34,7 +34,9 @@ export async function api<T = unknown>(
     clearApiCache();
     return rawApi<T>(url, init);
   }
-  return dedupe(url, () => rawApi<T>(url, init));
+  // `cache: "reload"` = reîncărcare cerută explicit de utilizator (butonul „Reîncarcă").
+  // Trebuie să ocolească micro-cache-ul, altfel butonul pare că nu face nimic.
+  return dedupe(url, () => rawApi<T>(url, init), init.cache === "reload");
 }
 
 async function rawApi<T>(url: string, init: RequestInit): Promise<T> {
@@ -82,7 +84,10 @@ async function rawApi<T>(url: string, init: RequestInit): Promise<T> {
   }
 
   if (res.status === 204) return undefined as T;
-  return (await parseJson<T>(res, path)) as T;
+  // `url`, nu `path`: parametrul a fost redenumit când `api()` a fost împărțit în api()+rawApi()
+  // pentru cache-ul de cereri (PERF-002). Referința rămasă la `path` arunca „ReferenceError: path
+  // is not defined" pe FIECARE răspuns reușit — adică ar fi rupt toată aplicația.
+  return (await parseJson<T>(res, url)) as T;
 }
 
 /**

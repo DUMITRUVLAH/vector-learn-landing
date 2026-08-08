@@ -226,6 +226,54 @@
     @apply min-h-[44px] min-w-[44px];
   }
 
+  /**
+   * MOB-002 — controalele native de formular ating 44 px pe telefon.
+   *
+   * Primitivele din design system (`ds/Button`, `ds/Field`) sunt reparate la sursă, dar auditul
+   * a găsit zeci de `<select>` și `<input>` scrise direct în pagini, cu `h-9`/`h-10` în className
+   * (38–40 px). Regula asta le prinde pe toate deodată, fără să umble prin 17 fișiere — și,
+   * important, prinde și pe cele care se vor scrie mâine.
+   *
+   * Doar sub 640 px (telefoane): pe desktop ținta e cursorul, iar densitatea proiectată rămâne.
+   * Excluse: bifele și butoanele radio (au dimensiune proprie și ținta reală e `<label>`-ul),
+   * intrările ascunse și cele `.sr-only` (input-uri de fișier ascunse în spatele unui buton).
+   */
+  @media (max-width: 639px) {
+    select,
+    textarea,
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not(.sr-only) {
+      min-height: 44px;
+    }
+  }
+
+  /**
+   * MOB-001: bandă care derulează pe orizontală fără bară vizibilă de scroll.
+   * Folosită de rândurile care nu au voie să lățească pagina (taburi, bare de acțiuni).
+   * Derularea rămâne funcțională la deget și la trackpad; doar indicatorul e ascuns,
+   * pentru că pe un rând de 44 px o bară de scroll ocupă cât conținutul.
+   */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /**
+   * MOB-001: rând de acțiuni care, pe ecran îngust, derulează în loc să lățească pagina.
+   * `-mx-*` + `px-*` lasă primul și ultimul element să atingă marginile ecranului la capete,
+   * altfel ultimul buton pare tăiat de padding.
+   */
+  .action-row-scroll {
+    @apply -mx-5 flex max-w-[100vw] items-center gap-2 overflow-x-auto px-5 sm:mx-0 sm:max-w-none sm:px-0;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .action-row-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
   .pastel-mint { background-color: hsl(var(--pastel-mint)); }
   .pastel-lavender { background-color: hsl(var(--pastel-lavender)); }
   .pastel-peach { background-color: hsl(var(--pastel-peach)); }

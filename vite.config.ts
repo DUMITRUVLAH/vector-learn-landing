@@ -2,34 +2,37 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "node:path";
 
-export default defineConfig(({ command }) => ({
+/**
+ * PERF-004 — build-ul de productie TREBUIE sa ruleze cu NODE_ENV=production.
+ *
+ * Bug real, gasit prin masurare: `.env` (si `.env.example`, pe care il copiaza toata lumea)
+ * contine `NODE_ENV=development`, iar Vite citeste NODE_ENV din fisierele `.env`. Consecinta:
+ * `vite build` impacheta `react-dom.development.js` in productie — confirmat prin textele de
+ * avertizare care exista DOAR in build-ul de dezvoltare („Invalid hook call", „Each child in a
+ * list should have a unique key").
+ *
+ * Cost masurat: react-vendor 328 KB (99 KB gzip) in loc de 142 KB (46 KB gzip) — si, mult mai
+ * important, build-ul de dezvoltare al React face validari suplimentare la FIECARE randare.
+ * Aplicatia nu era doar mai mare, ci efectiv mai lenta, in productia clientului platitor.
+ *
+ * De ce NU e reparat aici cu `define: { "process.env.NODE_ENV": "production" }`:
+ * am incercat, si rezultatul a fost o aplicatie complet alba. `define` schimba doar ce ramura
+ * din react-dom supravietuieste, dar NU si transformarea JSX: pluginul SWC continua sa emita
+ * apeluri `jsxDEV`, pe care runtime-ul de productie al React nu le exporta →
+ * „r.jsxDEV is not a function" pe fiecare pagina. Runtime si transformare JSX trebuie sa vina
+ * din ACEEASI decizie, iar acea decizie e NODE_ENV.
+ *
+ * Deci reparatia sta in comanda de build (`package.json` + `vercel.json`), care seteaza
+ * NODE_ENV=production inainte ca Vite sa porneasca, iar `scripts/check-react-prod-build.mjs`
+ * verifica AMBELE simptome in artefact.
+ */
+export default defineConfig(() => ({
   plugins: [react()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  /**
-   * PERF-004 — build-ul de producție TREBUIE să conțină React de producție.
-   *
-   * Bug real, găsit prin măsurare: `.env` (și `.env.example`, pe care îl copiază toată lumea)
-   * conține `NODE_ENV=development`. Vite citește `NODE_ENV` din fișierele `.env`, deci `vite build`
-   * împacheta `react-dom.development.js` — verificat prin prezența textelor de avertizare care
-   * există DOAR în build-ul de dezvoltare („Invalid hook call", „Each child in a list should have
-   * a unique key").
-   *
-   * Costul măsurat: react-vendor 328 KB (99 KB gzip) în loc de 142 KB (46 KB gzip) — plus, mult
-   * mai important, build-ul de dezvoltare al React face validări suplimentare la fiecare randare.
-   * Adică aplicația nu era doar mai mare, ci și efectiv mai lentă la rulare.
-   *
-   * `define` înlocuiește textual identificatorul la compilare, deci decide ce ramură din
-   * `react-dom/index.js` supraviețuiește tree-shaking-ului — indiferent ce spune `.env`.
-   * `scripts/check-react-prod-build.mjs` verifică rezultatul, ca regresia să nu se poată întoarce.
-   */
-  define:
-    command === "build"
-      ? { "process.env.NODE_ENV": JSON.stringify("production") }
-      : {},
   build: {
     // PERF-003: chunk-ul principal era de 3,06 MB. După ce rutele au devenit lazy, pragul
     // coboară la o valoare care chiar prinde o regresie în loc să fie zgomot permanent.
