@@ -45,3 +45,9 @@ output/
 *.pdf
 variante_arhitectura.html
 HR365*.html
+
+# Scripturi temporare de verificare rulate ad-hoc (nu fac parte din suită).
+.prodcheck.mjs
+.perf-measure.mjs
+.mobile-audit.mjs
+.verify.mjs

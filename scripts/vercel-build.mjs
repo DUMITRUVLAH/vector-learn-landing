@@ -41,6 +41,10 @@ const STEPS = [
 
   // ── Împachetarea pentru Vercel (Build Output API v3). Ultima, consumă dist/.
   ["Build Output pentru Vercel", "node scripts/build-vercel.mjs"],
+
+  // ── Ultima poartă: verifică ARTEFACTUL de deploy, nu sursa. Headerele de securitate arată
+  //    corect în cod chiar și când CDN-ul nu le emite (middleware-ul Hono acoperă doar /api/*).
+  ["headere pe Build Output", "node scripts/check-vercel-headers.mjs"],
 ];
 
 for (const [label, cmd] of STEPS) {
