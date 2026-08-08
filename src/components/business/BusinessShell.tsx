@@ -47,6 +47,7 @@ import { Link, useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { useParRoles } from "@/hooks/useParRoles";
+import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { getParInbox, getFinanceQueue } from "@/lib/api/par";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { api } from "@/lib/api";
@@ -411,10 +412,13 @@ export function BusinessShell({
 
   // VM1-01: fetch PAR roles to gate the PAR navigation section.
   const { roles: parRoles, status: parRolesStatus } = useParRoles();
-  const hasPar = parRolesStatus === "resolved" && parRoles.length >= 1;
+  // PLATFORM-001: modulele dezactivate din Consola Platformă dispar din meniu.
+  const { isEnabled } = useEnabledModules();
+  const hasPar = parRolesStatus === "resolved" && parRoles.length >= 1 && isEnabled("par");
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   useEffect(() => {
-    api("/api/platform/organizations").then(() => setIsPlatformAdmin(true)).catch(() => setIsPlatformAdmin(false));
+    // Sonda cea mai ieftină pentru „sunt superadmin?" — /catalog nu atinge datele clienților.
+    api("/api/platform/catalog").then(() => setIsPlatformAdmin(true)).catch(() => setIsPlatformAdmin(false));
   }, []);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -443,20 +447,29 @@ export function BusinessShell({
   const isParModule = path.startsWith("/business/par");
 
   const availableGroups: NavGroup[] = isPlatformAdmin
-    ? [...NAV_GROUPS, { section: "Platformă", prefix: "/business/platform-admin", items: [{ label: "Superadmin module", href: "/business/platform-admin", icon: ShieldCheck, tone: "rose" as ChipTone }] }]
+    ? [...NAV_GROUPS, { section: "Platformă", prefix: "/business/platform", items: [{ label: "Consola Platformă", href: "/business/platform", icon: ShieldCheck, tone: "rose" as ChipTone }] }]
     : NAV_GROUPS;
   const baseGroups = isParModule
     ? PAR_NAV_GROUPS
     : availableGroups.filter((g) => {
         if (g.section === "PAR — Cereri de plată") return hasPar;
+        if (g.section === "FinDesk — Finanțe") return isEnabled("findesk");
         // DocMerge apare în sidebar doar când ești pe rutele DocMerge
-        if (g.section === "Document Merge") return path.startsWith("/business/docmerge");
+        if (g.section === "Document Merge") return isEnabled("docmerge") && path.startsWith("/business/docmerge");
         return true;
       });
 
   // SHELL-502: per-item PAR role filter.
   const navGroups = baseGroups
-    .map((g) => ({ ...g, items: g.items.filter((it) => !it.roles || it.roles.some((r) => parRoles.includes(r))) }))
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((it) => {
+        if (it.roles && !it.roles.some((r) => parRoles.includes(r))) return false;
+        // Rândul ITPark trăiește sub FinDesk, dar e un modul separat în catalog.
+        if (it.href.startsWith("/business/fin/itpark")) return isEnabled("itpark");
+        return true;
+      }),
+    }))
     .filter((g) => g.items.length > 0);
 
   // Guard: redirect if unauthenticated.
@@ -585,10 +598,10 @@ export function BusinessShell({
               ]
             : [
                 { label: "Dashboard", href: "/business/dashboard", icon: LayoutDashboard },
-                { label: "FinDesk", href: "/business/fin/", icon: Landmark },
+                ...(isEnabled("findesk") ? [{ label: "FinDesk", href: "/business/fin/", icon: Landmark }] : []),
                 // VM1-01: only show PAR tab if user has at least one PAR role
                 ...(hasPar ? [{ label: "PAR", href: "/business/par", icon: ClipboardList }] : []),
-                { label: "ITPark", href: "/business/itpark", icon: Building2 },
+                ...(isEnabled("itpark") ? [{ label: "ITPark", href: "/business/itpark", icon: Building2 }] : []),
               ];
           const colsClass =
             mobileItems.length >= 4 ? "grid-cols-4"

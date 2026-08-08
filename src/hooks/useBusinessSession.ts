@@ -47,7 +47,10 @@ export function useBusinessSession() {
       const data = await api<BusinessSessionData>("/api/business/auth/me");
       setState({ status: "authenticated", data, error: null });
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
+      // 403 = wrong_app sau workspace_suspended (PLATFORM-001). Ambele înseamnă
+      // „nu ai ce căuta aici" → tratăm ca sesiune invalidă și trimitem la login,
+      // fără un ecran de eroare intermediar.
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setState({ status: "unauthenticated", data: null, error: null });
       } else {
         setState({

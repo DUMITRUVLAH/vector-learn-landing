@@ -89,6 +89,7 @@ import { parReceiptsRoutes } from "./routes/parReceipts";
 // VM1-02: PAR config import (projects/departments/budget codes from Excel)
 import { parConfigImportRoutes } from "./routes/parConfigImport";
 import { platformAdminRoutes } from "./routes/platformAdmin";
+import { myModulesRoutes } from "./routes/myModules";
 import { requireAuth } from "./middleware/requireAuth";
 import { requireModuleEntitlement } from "./middleware/requireModuleEntitlement";
 
@@ -230,6 +231,8 @@ app.route("/api/par", parAttachmentsRoutes);
 
 // Platform operations (global superadmin only)
 app.route("/api/platform", platformAdminRoutes);
+// PLATFORM-001: ce module vede workspace-ul curent (citit de shell-ul FinFlow).
+app.route("/api/modules", myModulesRoutes);
 
 // DOCMERGE-001: Document Merge templates
 app.route("/api/docmerge", docmergeTemplatesRoutes);

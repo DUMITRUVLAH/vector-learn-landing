@@ -2,6 +2,7 @@ import type { MiddlewareHandler } from "hono";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { parPayerModules, parRequests, platformAdmins } from "../db/schema/par";
+import { isModuleEnabledForTenant } from "../lib/platformModules";
 import type { AuthVariables } from "./requireAuth";
 
 export function requireModuleEntitlement(moduleKey: string): MiddlewareHandler<{ Variables: AuthVariables }> {
@@ -10,6 +11,11 @@ export function requireModuleEntitlement(moduleKey: string): MiddlewareHandler<{
     if (!user) { await next(); return; } // requireAuth on the target router returns the canonical 401.
     const [superadmin] = await db.select({ id: platformAdmins.id }).from(platformAdmins).where(eq(platformAdmins.userId, user.id));
     if (superadmin) { await next(); return; }
+    // PLATFORM-001: comutatorul de workspace din Consola Platformă are ultimul cuvânt.
+    // Doar un „oprit" EXPLICIT blochează — lipsa rândului lasă lucrurile deschise, ca înainte.
+    if (!(await isModuleEnabledForTenant(user.tenantId, moduleKey))) {
+      return c.json({ error: "module_disabled", module: moduleKey }, 403);
+    }
     let payerId = c.req.query("payer_id") ?? null;
     const match = new URL(c.req.url).pathname.match(/^\/api\/par\/([0-9a-f-]{36})(?:\/|$)/i);
     if (!payerId && match) {

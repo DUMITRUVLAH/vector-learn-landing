@@ -13,6 +13,8 @@ import { invoices, payments, students, leads, courses, docmergeTemplates, itpark
 import { parInvites, parMembers, parPayerMembers, parProjectMembers, parPayers, parProjects, parVendors, parPayerModules, parRequests } from "../db/schema/par";
 import { hashPassword, verifyPassword } from "../auth/password";
 import { createSession, revokeSession, SESSION_COOKIE } from "../auth/session";
+import { recordLoginEvent } from "../lib/loginEvents";
+import { applyDefaultsToTenant, getModuleDefaults } from "../lib/platformModules";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { twoFactorRoutes } from "./auth/twoFactor";
 import { sessionMgmtRoutes } from "./auth/sessions";
@@ -114,21 +116,32 @@ authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
   const user = await db.query.users.findFirst({
     where: eq(users.email, body.email),
   });
+  // PLATFORM-001: istoricul de logări acoperă ambele aplicații, nu doar Business Suite.
+  const fail = async (reason: string, status: 401 | 403 | 500) => {
+    await recordLoginEvent(c, {
+      email: body.email, success: false, app: "learn", method: "password",
+      userId: user?.id ?? null, tenantId: user?.tenantId ?? null, failureReason: reason,
+    });
+    return c.json({ error: reason }, status);
+  };
   if (!user) {
-    return c.json({ error: "invalid_credentials" }, 401);
+    return fail("invalid_credentials", 401);
   }
   // Google-only accounts have no local password hash — they must use Google
   // sign-in. Return the generic error to avoid leaking which accounts exist.
   if (!user.passwordHash) {
-    return c.json({ error: "invalid_credentials" }, 401);
+    return fail("invalid_credentials", 401);
   }
   const ok = await verifyPassword(body.password, user.passwordHash);
   if (!ok) {
-    return c.json({ error: "invalid_credentials" }, 401);
+    return fail("invalid_credentials", 401);
   }
 
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, user.tenantId) });
-  if (!tenant) return c.json({ error: "tenant_not_found" }, 500);
+  if (!tenant) return fail("tenant_not_found", 500);
+
+  // PLATFORM-001: workspace suspendat din Consola Platformă.
+  if (tenant.status === "suspended") return fail("workspace_suspended", 403);
 
   // AUTH-004: check if 2FA is enabled for this user
   const tfRow = await db.query.twoFactorSettings.findFirst({
@@ -155,6 +168,10 @@ authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
     userAgent: userAgent ?? undefined,
   });
   setSessionCookie(c, token, expiresAt);
+  await recordLoginEvent(c, {
+    email: user.email, success: true, app: "learn", method: "password",
+    userId: user.id, tenantId: tenant.id,
+  });
 
   return c.json({
     user: { id: user.id, email: user.email, name: user.name, role: user.role },
@@ -612,6 +629,10 @@ authRoutes.post("/accept-invite", zValidator("json", acceptInviteSchema), async 
     userAgent,
   });
   setSessionCookie(c, sessionToken, expiresAt);
+  await recordLoginEvent(c, {
+    email: targetUser.email, success: true, app: "business", method: "invite",
+    userId: targetUser.id, tenantId: targetUser.tenantId,
+  });
 
   return c.json({
     user: {
@@ -979,6 +1000,10 @@ authRoutes.get("/google/callback", async (c) => {
         if (rehomed) {
           const { token, expiresAt } = await createSession(rehomed.id, { ipAddress, userAgent });
           setSessionCookie(c, token, expiresAt);
+          await recordLoginEvent(c, {
+            email: rehomed.email, success: true, app: "business", method: "google",
+            userId: rehomed.id, tenantId: rehomed.tenantId,
+          });
           return c.redirect(`${appUrl()}/#/business/par`);
         }
         // Old workspace has real data → do not auto-move; explain the conflict on the login screen.
@@ -1097,6 +1122,10 @@ authRoutes.get("/google/callback", async (c) => {
       // Issue session and redirect to PAR area (not FinDesk, since this user was invited for PAR).
       const { token, expiresAt } = await createSession(user.id, { ipAddress, userAgent });
       setSessionCookie(c, token, expiresAt);
+      await recordLoginEvent(c, {
+        email: user.email, success: true, app: "business", method: "invite",
+        userId: user.id, tenantId: user.tenantId,
+      });
       return c.redirect(`${appUrl()}/#/business/par`);
     }
 
@@ -1125,6 +1154,10 @@ authRoutes.get("/google/callback", async (c) => {
   // issue a full session directly.
   const { token, expiresAt } = await createSession(user.id, { ipAddress, userAgent });
   setSessionCookie(c, token, expiresAt);
+  await recordLoginEvent(c, {
+    email: user.email, success: true, app: "business", method: "google",
+    userId: user.id, tenantId: user.tenantId,
+  });
 
   return c.redirect(`${appUrl()}/#/business/fin/`);
 });
@@ -1199,10 +1232,14 @@ authRoutes.post("/google/create-workspace", zValidator("json", createWorkspaceSc
     name: baseName,
     legalName: baseName,
   }).returning();
+  // PLATFORM-001: aceleași implicite ca la signup-ul cu parolă — un singur loc decide
+  // ce module primește un workspace nou (Consola Platformă), indiferent de calea de intrare.
+  const moduleDefaults = await getModuleDefaults();
   await db.insert(parPayerModules).values([
-    { tenantId: tenant.id, payerId: payer.id, moduleKey: "findesk", enabled: true, updatedByUserId: created.id },
-    { tenantId: tenant.id, payerId: payer.id, moduleKey: "par", enabled: false, updatedByUserId: created.id },
+    { tenantId: tenant.id, payerId: payer.id, moduleKey: "findesk", enabled: moduleDefaults.findesk !== false, updatedByUserId: created.id },
+    { tenantId: tenant.id, payerId: payer.id, moduleKey: "par", enabled: moduleDefaults.par !== false, updatedByUserId: created.id },
   ]);
+  await applyDefaultsToTenant(tenant.id, created.id);
   await db.insert(parPayerMembers).values({ tenantId: tenant.id, payerId: payer.id, userId: created.id });
   // Workspace creator is the FinDesk owner too (else GET /api/fin/members/me 403s → "Acces
   // restricționat"). Best-effort: never fail workspace creation if the FinDesk table is absent.
@@ -1215,6 +1252,10 @@ authRoutes.post("/google/create-workspace", zValidator("json", createWorkspaceSc
   deleteCookie(c, G_PENDING_COOKIE, { path: "/api/auth/google" });
   const { token, expiresAt } = await createSession(created.id, { ipAddress, userAgent });
   setSessionCookie(c, token, expiresAt);
+  await recordLoginEvent(c, {
+    email: created.email, success: true, app: "business", method: "signup",
+    userId: created.id, tenantId: tenant.id,
+  });
   return c.json({ ok: true, redirect: "/#/business/fin/" });
 });
 
@@ -1306,6 +1347,10 @@ authRoutes.post("/google/join", zValidator("json", joinWithInviteSchema), async 
   deleteCookie(c, G_PENDING_COOKIE, { path: "/api/auth/google" });
   const { token: sessionToken, expiresAt } = await createSession(joinedUser.id, { ipAddress, userAgent });
   setSessionCookie(c, sessionToken, expiresAt);
+  await recordLoginEvent(c, {
+    email: joinedUser.email, success: true, app: "business", method: "invite",
+    userId: joinedUser.id, tenantId: joinedUser.tenantId,
+  });
   return c.json({ ok: true, redirect: "/#/business/par" });
 });
 
@@ -1397,6 +1442,10 @@ authRoutes.post("/google/accept-matched-invite", async (c) => {
   deleteCookie(c, G_PENDING_COOKIE, { path: "/api/auth/google" });
   const { token: sessionToken, expiresAt } = await createSession(joinedUser.id, { ipAddress, userAgent });
   setSessionCookie(c, sessionToken, expiresAt);
+  await recordLoginEvent(c, {
+    email: joinedUser.email, success: true, app: "business", method: "invite",
+    userId: joinedUser.id, tenantId: joinedUser.tenantId,
+  });
   return c.json({ ok: true, redirect: "/#/business/par" });
 });
 

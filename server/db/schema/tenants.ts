@@ -52,6 +52,16 @@ export const tenants = pgTable("tenants", {
   iban: varchar("iban", { length: 34 }),
   /** CONT-PLATA: tenant bank BIC/SWIFT (migration 0108) */
   bic: varchar("bic", { length: 11 }),
+  /**
+   * PLATFORM-001: ciclul de viață al workspace-ului, controlat din Consola Platformă.
+   * "active" (implicit) · "trial" · "suspended" → login-ul business e refuzat cu
+   * `workspace_suspended`. Varchar, nu enum pg, ca sync-schema.ts să-l poată ADD COLUMN.
+   */
+  status: varchar("status", { length: 20 }).notNull().default("active"),
+  /** PLATFORM-001: când expiră perioada de probă (informativ, nu blochează singur). */
+  trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+  /** PLATFORM-001: motivul suspendării, arătat superadminului (nu clientului). */
+  suspendedReason: varchar("suspended_reason", { length: 300 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

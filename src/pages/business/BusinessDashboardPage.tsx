@@ -31,6 +31,7 @@ import { Link } from "@/router/HashRouter";
 import { useBusinessDashboard } from "@/hooks/useBusinessDashboard";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { useDashboardWidgets, type WidgetId } from "@/hooks/useDashboardWidgets";
+import { useEnabledModules, type ModuleKey } from "@/hooks/useEnabledModules";
 import { formatCents } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import {
@@ -138,6 +139,8 @@ interface ModuleTile {
   href: string;
   icon: ReactNode;
   tone: ModuleTone;
+  /** PLATFORM-001: cheia din catalogul de module — dala dispare dacă modulul e oprit. */
+  moduleKey: ModuleKey;
 }
 
 const MODULE_TILES: ModuleTile[] = [
@@ -147,6 +150,7 @@ const MODULE_TILES: ModuleTile[] = [
     href: "/business/fin/",
     icon: <Landmark className="h-7 w-7" />,
     tone: "sky",
+    moduleKey: "findesk",
   },
   {
     label: "PAR — Cereri de plată",
@@ -154,6 +158,7 @@ const MODULE_TILES: ModuleTile[] = [
     href: "/business/par",
     icon: <ClipboardList className="h-7 w-7" />,
     tone: "violet",
+    moduleKey: "par",
   },
   {
     label: "ITPark — Rezidenți",
@@ -161,6 +166,7 @@ const MODULE_TILES: ModuleTile[] = [
     href: "/business/fin/itpark",
     icon: <Building2 className="h-7 w-7" />,
     tone: "emerald",
+    moduleKey: "itpark",
   },
 ];
 
@@ -320,6 +326,9 @@ export function BusinessDashboardPage() {
 
   const [customizerOpen, setCustomizerOpen] = useState(false);
   const { visibleWidgets, allWidgets, toggleWidget, moveUp, moveDown, reset } = useDashboardWidgets(userId);
+  // PLATFORM-001: dalele modulelor oprite din Consola Platformă nu se mai afișează.
+  const { isEnabled } = useEnabledModules();
+  const moduleTiles = MODULE_TILES.filter((tile) => isEnabled(tile.moduleKey));
 
   return (
     <BusinessShell
@@ -369,7 +378,7 @@ export function BusinessDashboardPage() {
           Alege un modul
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {MODULE_TILES.map((tile) => (
+          {moduleTiles.map((tile) => (
             <ModuleCard
               key={tile.href}
               title={tile.label}
