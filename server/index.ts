@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { compress } from "hono/compress";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { app } from "./app";
@@ -17,11 +18,19 @@ import { app } from "./app";
 const distDir = path.resolve(process.cwd(), "dist");
 if (existsSync(distDir)) {
   console.log(`📦 Serving frontend from ${distDir}`);
+  // PERF-001: comprimă răspunsurile text (JS/CSS/HTML/JSON). Bundle-ul de 3 MB pleca necomprimat
+  // pe firul local, ceea ce făcea ca măsurătorile locale să nu semene deloc cu prod-ul.
+  // `compress()` sare singur peste ce e deja comprimat (imagini, fonturi woff2).
+  app.use("/*", compress());
   app.use("/*", serveStatic({ root: "./dist" }));
   app.notFound(async (c) => {
     const indexPath = path.join(distDir, "index.html");
     if (existsSync(indexPath)) {
       const html = await import("node:fs/promises").then((fs) => fs.readFile(indexPath, "utf8"));
+      // PERF-001: shell-ul SPA trebuie revalidat la fiecare cerere. Dacă ar fi cache-uit, un
+      // deploy nou n-ar mai fi văzut: browserul ar servi HTML vechi care indică bundle-uri
+      // șterse → ecran alb până la golirea manuală a cache-ului.
+      c.header("Cache-Control", "no-cache");
       return c.html(html);
     }
     return c.text("Not found", 404);
