@@ -333,6 +333,29 @@ await F("rapoarte", "totalurile din raport se potrivesc cu lista de cereri", asy
   return drift < 0.02 ? "se potrivesc" : `diferență ${(drift * 100).toFixed(0)}% (raport ${repTotal / 100} vs listă ${listTotal / 100}) — filtre diferite`;
 });
 
+// ─── 7b. Membri — picker-ul după nume (PARQA-025) ─────────────────────────
+console.log("\n── 7b. Membri ──");
+
+await F("membri", "candidații pentru roluri se listează după nume (admin) și sunt refuzați requestor-ului", async () => {
+  const ok200 = await GET("admin", "/api/par/members/candidates");
+  must(ok200.status === 200, `admin → ${ok200.status}`);
+  const cands = ok200.json.candidates ?? [];
+  must(cands.length > 0 && cands.every((c) => c.email && "name" in c), "lista nu are nume+email");
+  const deny = await GET("requestor", "/api/par/members/candidates");
+  must(deny.status === 403, `requestor → ${deny.status} (aștept 403)`);
+  return `${cands.length} candidați`;
+});
+
+await F("membri", "un rol se atribuie folosind id-ul unui candidat din listă", async () => {
+  const cands = (await GET("admin", "/api/par/members/candidates")).json.candidates;
+  const target = cands.find((c) => c.email === U.requestor);
+  must(target, "requestor-ul demo nu apare în candidați");
+  const r = await POST("admin", "/api/par/members", { userId: target.id, role: "requestor" });
+  must([200, 201].includes(r.status), `atribuire → ${r.status}`);
+  const members = (await GET("admin", "/api/par/members")).json.members;
+  must(members.some((m) => m.userId === target.id && m.role === "requestor"), "rolul nu apare în listă");
+});
+
 // ─── 8. Semnături — regresie: aprobarea fără signatureName nu stochează UUID ──
 console.log("\n── 8. Semnături ──");
 
