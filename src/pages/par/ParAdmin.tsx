@@ -625,12 +625,24 @@ function RuleCard({ group, departments, payers, projects, members, onEdit, onDel
 
 // ─── Sub-tab: Settings ────────────────────────────────────────────────────────
 
+/** The four currencies the module actually supports (same list as the onboarding wizard). */
+const CURRENCY_OPTIONS = [
+  { value: "MDL", label: "MDL — Leu moldovenesc" },
+  { value: "EUR", label: "EUR — Euro" },
+  { value: "USD", label: "USD — Dolar american" },
+  { value: "RON", label: "RON — Leu românesc" },
+];
+
+const isHttpUrl = (v: string) => /^https?:\/\/\S+$/i.test(v);
+
 function ParSettingsForm() {
+  const { navigate } = useRouter();
   const [settings, setSettings] = useState<Partial<ParSettings>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [logoBroken, setLogoBroken] = useState(false);
 
   useEffect(() => {
     getParSettings().then((s) => {
@@ -640,6 +652,16 @@ function ParSettingsForm() {
   }, []);
 
   const handleSave = async () => {
+    // The server's zod gate rejects non-URLs with a raw 400 — say it in Romanian, before the trip.
+    for (const [val, label] of [
+      [settings.orgLogoUrl, "Logo URL"],
+      [settings.pdfHelpUrl, "URL Instrucțiuni"],
+    ] as const) {
+      if (val && !isHttpUrl(val)) {
+        setError(`${label} trebuie să fie un link complet (http:// sau https://).`);
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -672,6 +694,16 @@ function ParSettingsForm() {
 
   const thresholdMDL = (settings.microPurchaseThresholdCents ?? 1000000) / 100;
 
+  const section = (title: string, hint: string, children: React.ReactNode) => (
+    <section className="rounded-lg border border-border bg-card p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      </div>
+      {children}
+    </section>
+  );
+
   return (
     <div className="max-w-lg space-y-5">
       {error && (
@@ -681,107 +713,129 @@ function ParSettingsForm() {
         </div>
       )}
 
-      <div>
-        <label htmlFor="par-threshold" className="text-sm font-medium text-foreground block mb-1">
-          Prag micro-achiziție (MDL)
-        </label>
-        <p className="text-xs text-muted-foreground mb-2">
-          Cererile sub acest prag necesită o singură aprobare. Modificarea afectează cererile noi.
-        </p>
-        <Input
-          id="par-threshold"
-          type="number"
-          min={0}
-          step={100}
-          value={thresholdMDL}
-          onChange={(e) =>
-            setSettings((s) => ({
-              ...s,
-              microPurchaseThresholdCents: Math.round(parseFloat(e.target.value || "0") * 100),
-            }))
-          }
-          className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[44px]"
-          aria-label="Prag micro-achiziție MDL"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          Actual: {formatMDL(settings.microPurchaseThresholdCents ?? 1000000)}
-        </p>
-      </div>
+      {section("Organizație", "Apar pe formularele PAR generate și în antetul PDF-ului.", (
+        <>
+          <div>
+            <label htmlFor="par-legal-name" className="text-sm font-medium text-foreground block mb-1">
+              Denumire legală organizație
+            </label>
+            <Input
+              id="par-legal-name"
+              type="text"
+              value={settings.orgLegalName ?? ""}
+              onChange={(e) => setSettings((s) => ({ ...s, orgLegalName: e.target.value || null }))}
+              aria-label="Denumire legală organizație"
+            />
+          </div>
 
-      <div>
-        <label htmlFor="par-currency" className="text-sm font-medium text-foreground block mb-1">
-          Monedă implicită
-        </label>
-        <Input
-          id="par-currency"
-          type="text"
-          maxLength={3}
-          value={settings.defaultCurrency ?? "MDL"}
-          onChange={(e) => setSettings((s) => ({ ...s, defaultCurrency: e.target.value.toUpperCase() }))}
-          className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[44px]"
-          aria-label="Monedă implicită (cod ISO 4217)"
-        />
-      </div>
+          <div>
+            <label htmlFor="par-logo-url" className="text-sm font-medium text-foreground block mb-1">
+              Logo URL (opțional)
+            </label>
+            <div className="flex items-center gap-3">
+              <Input
+                id="par-logo-url"
+                type="url"
+                value={settings.orgLogoUrl ?? ""}
+                onChange={(e) => { setSettings((s) => ({ ...s, orgLogoUrl: e.target.value || null })); setLogoBroken(false); }}
+                placeholder="https://…/logo.png"
+                aria-label="Logo URL"
+                className="flex-1"
+              />
+              {settings.orgLogoUrl && isHttpUrl(settings.orgLogoUrl) && !logoBroken && (
+                <img
+                  src={settings.orgLogoUrl}
+                  alt="Previzualizare logo"
+                  className="h-10 w-10 flex-shrink-0 rounded-md border border-border object-contain bg-background"
+                  onError={() => setLogoBroken(true)}
+                />
+              )}
+            </div>
+            {logoBroken && (
+              <p className="mt-1 text-xs text-warning">Imaginea nu s-a putut încărca de la acest link.</p>
+            )}
+          </div>
 
-      <div>
-        <label htmlFor="par-legal-name" className="text-sm font-medium text-foreground block mb-1">
-          Denumire legală organizație
-        </label>
-        <Input
-          id="par-legal-name"
-          type="text"
-          value={settings.orgLegalName ?? ""}
-          onChange={(e) => setSettings((s) => ({ ...s, orgLegalName: e.target.value || null }))}
-          className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[44px]"
-          aria-label="Denumire legală organizație"
-        />
-      </div>
+          <div>
+            <label htmlFor="par-help-url" className="text-sm font-medium text-foreground block mb-1">
+              URL Instrucțiuni (help link PDF)
+            </label>
+            <Input
+              id="par-help-url"
+              type="url"
+              value={settings.pdfHelpUrl ?? ""}
+              onChange={(e) => setSettings((s) => ({ ...s, pdfHelpUrl: e.target.value || null }))}
+              placeholder="https://…/instrucțiuni.pdf"
+              aria-label="URL Instrucțiuni PDF"
+            />
+          </div>
+        </>
+      ))}
 
-      <div>
-        <label htmlFor="par-logo-url" className="text-sm font-medium text-foreground block mb-1">
-          Logo URL (opțional)
-        </label>
-        <Input
-          id="par-logo-url"
-          type="url"
-          value={settings.orgLogoUrl ?? ""}
-          onChange={(e) => setSettings((s) => ({ ...s, orgLogoUrl: e.target.value || null }))}
-          className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[44px]"
-          aria-label="Logo URL"
-        />
-      </div>
+      {section("Cereri de plată", "Cum se numerotează și se rutează cererile noi.", (
+        <>
+          <div>
+            <label htmlFor="par-prefix" className="text-sm font-medium text-foreground block mb-1">
+              Prefix număr cerere
+            </label>
+            <Input
+              id="par-prefix"
+              type="text"
+              value={settings.requestNoPrefix ?? "PAR"}
+              onChange={(e) => setSettings((s) => ({ ...s, requestNoPrefix: e.target.value || "PAR" }))}
+              aria-label="Prefix număr cerere (ex. PAR)"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Exemplu: {(settings.requestNoPrefix ?? "PAR").toUpperCase() || "PAR"} → {(settings.requestNoPrefix ?? "PAR").toUpperCase() || "PAR"}-2026-0001
+            </p>
+          </div>
 
-      <div>
-        <label htmlFor="par-help-url" className="text-sm font-medium text-foreground block mb-1">
-          URL Instrucțiuni (help link PDF)
-        </label>
-        <Input
-          id="par-help-url"
-          type="url"
-          value={settings.pdfHelpUrl ?? ""}
-          onChange={(e) => setSettings((s) => ({ ...s, pdfHelpUrl: e.target.value || null }))}
-          className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[44px]"
-          aria-label="URL Instrucțiuni PDF"
-        />
-      </div>
+          <div>
+            <label htmlFor="par-currency" className="text-sm font-medium text-foreground block mb-1">
+              Monedă implicită
+            </label>
+            <Select
+              id="par-currency"
+              value={settings.defaultCurrency ?? "MDL"}
+              onChange={(e) => setSettings((s) => ({ ...s, defaultCurrency: e.target.value }))}
+              aria-label="Monedă implicită"
+            >
+              {CURRENCY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </Select>
+          </div>
 
-      <div>
-        <label htmlFor="par-prefix" className="text-sm font-medium text-foreground block mb-1">
-          Prefix număr cerere
-        </label>
-        <Input
-          id="par-prefix"
-          type="text"
-          value={settings.requestNoPrefix ?? "PAR"}
-          onChange={(e) => setSettings((s) => ({ ...s, requestNoPrefix: e.target.value || "PAR" }))}
-          className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[44px]"
-          aria-label="Prefix număr cerere (ex. PAR)"
-        />
-        <p className="text-xs text-muted-foreground mt-1">Exemplu: PAR → PAR-2026-0001</p>
-      </div>
+          <div>
+            <label htmlFor="par-threshold" className="text-sm font-medium text-foreground block mb-1">
+              Prag micro-achiziție (MDL)
+            </label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Cererile sub acest prag necesită o singură aprobare. Modificarea afectează cererile noi.
+            </p>
+            <Input
+              id="par-threshold"
+              type="number"
+              min={0}
+              step={100}
+              value={thresholdMDL}
+              onChange={(e) =>
+                setSettings((s) => ({
+                  ...s,
+                  microPurchaseThresholdCents: Math.round(parseFloat(e.target.value || "0") * 100),
+                }))
+              }
+              aria-label="Prag micro-achiziție MDL"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Actual: {formatMDL(settings.microPurchaseThresholdCents ?? 1000000)}
+            </p>
+          </div>
+        </>
+      ))}
 
-      {/* VF-505: enforce 3-way match toggle */}
-      <div>
+      {section("Control financiar", "Verificări suplimentare înainte de plată.", (
+        /* VF-505: enforce 3-way match toggle */
         <label className="flex items-start gap-2.5 cursor-pointer">
           <input
             type="checkbox"
@@ -795,23 +849,20 @@ function ParSettingsForm() {
             <span className="block text-xs text-muted-foreground">Blochează plata până când există PO, recepție completă și suma e în limita comenzii (±10%).</span>
           </span>
         </label>
-      </div>
+      ))}
 
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={saving}
-        className={cn(
-          "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] transition-colors",
-          saved
-            ? "bg-success text-success-foreground"
-            : "bg-primary text-primary-foreground hover:bg-primary/90",
-          saving && "opacity-70 cursor-not-allowed"
-        )}
-      >
-        {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : saved ? <Check className="h-4 w-4" aria-hidden /> : null}
-        {saving ? "Se salvează..." : saved ? "Salvat!" : "Salvează setări"}
-      </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Button onClick={handleSave} disabled={saving} size="lg"
+          className={cn(saved && "bg-success text-success-foreground hover:bg-success/90")}>
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : saved ? <Check className="h-4 w-4" aria-hidden /> : null}
+          {saving ? "Se salvează..." : saved ? "Salvat!" : "Salvează setări"}
+        </Button>
+        {/* The wizard is idempotent (skips what exists), so re-running it is always safe. */}
+        <Button variant="ghost" onClick={() => navigate("/business/par/onboarding")}
+          className="text-muted-foreground">
+          Reia configurarea inițială
+        </Button>
+      </div>
     </div>
   );
 }
