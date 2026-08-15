@@ -71,14 +71,26 @@ await T("dashboard: tabul Ciorne schimbă conținutul secțiunii", async () => {
   await page.waitForTimeout(600);
 });
 
+// Filtrele se verifică pe DATELE reale (nu pe un status/o sumă hardcodate care pot lipsi
+// din seed), iar resetarea stă în finally — un assert picat nu mai lasă filtrul blocat
+// și nu mai prăbușește în cascadă restul verificărilor de dashboard.
+const allRequests = (await (await api.get("/api/par?limit=200")).json()).requests ?? [];
+
 await T("dashboard: statusul din dropdown filtrează", async () => {
+  const counts = {};
+  for (const r of allRequests) counts[r.status] = (counts[r.status] ?? 0) + 1;
+  const target = Object.entries(counts).find(([, c]) => c > 0 && c < allRequests.length)?.[0];
+  assert(target, "toate cererile au același status — nimic de filtrat");
   const before = await rowCount();
-  await page.selectOption('select[aria-label="Filtrează după status"]', "rejected");
-  await page.waitForTimeout(900);
-  const after = await rowCount();
-  assert(after > 0 && after < before, `filtrul de status nu a redus lista: ${before} → ${after}`);
-  await page.selectOption('select[aria-label="Filtrează după status"]', "");
-  await page.waitForTimeout(600);
+  try {
+    await page.selectOption('select[aria-label="Filtrează după status"]', target);
+    await page.waitForTimeout(900);
+    const after = await rowCount();
+    assert(after > 0 && after < before, `filtrul „${target}" nu a redus lista: ${before} → ${after}`);
+  } finally {
+    await page.selectOption('select[aria-label="Filtrează după status"]', "");
+    await page.waitForTimeout(600);
+  }
 });
 
 await T("dashboard: 'Mai multe filtre' deschide cele 4 câmpuri, iar suma minimă filtrează", async () => {
@@ -86,13 +98,20 @@ await T("dashboard: 'Mai multe filtre' deschide cele 4 câmpuri, iar suma minim�
   await page.waitForTimeout(500);
   assert(await page.locator("#date-from").isVisible(), "câmpul 'De la data' nu apare");
   assert(await page.locator("#min-total").isVisible(), "câmpul 'Sumă minimă' nu apare");
+  const totals = allRequests.map((r) => r.totalEstimatedCents ?? 0).sort((a, b) => a - b);
+  assert(totals.length > 1 && totals[0] !== totals[totals.length - 1], "toate cererile au aceeași sumă — nimic de filtrat");
+  // La mijloc între min și max: exclude garantat rândul minim, păstrează garantat maximul.
+  const cut = Math.round((totals[0] + totals[totals.length - 1]) / 2 / 100);
   const before = await rowCount();
-  await page.fill("#min-total", "50000");
-  await page.waitForTimeout(900);
-  const after = await rowCount();
-  assert(after < before, `suma minimă nu a filtrat: ${before} → ${after}`);
-  await page.fill("#min-total", "");
-  await page.waitForTimeout(600);
+  try {
+    await page.fill("#min-total", String(cut));
+    await page.waitForTimeout(900);
+    const after = await rowCount();
+    assert(after > 0 && after < before, `suma minimă ${cut} nu a filtrat: ${before} → ${after}`);
+  } finally {
+    await page.fill("#min-total", "");
+    await page.waitForTimeout(600);
+  }
 });
 
 await T("dashboard: niciun număr de cerere nu apare de două ori pe pagină", async () => {
@@ -203,30 +222,32 @@ await T("inbox: spațiu de la tastatură bifează checkbox-ul", async () => {
   assert(await cb.isChecked() !== before, "Space nu a comutat checkbox-ul");
 });
 
+// Ordinea actuală a coloanelor din inbox: checkbox(1), Acțiuni(2), Nr.(3), Beneficiar(4), Sumă(5)
+// — deciziile conduc rândul (comentariul din ParInbox.tsx). Indexurile de mai jos o urmează.
 await T("inbox: suma e vizibilă fără derulare laterală", async () => {
-  const cell = page.locator("tbody tr").first().locator("td").nth(3); // checkbox, Nr., Beneficiar, Sumă
+  const cell = page.locator("tbody tr").first().locator("td").nth(4);
   const box = await cell.boundingBox();
   const vw = page.viewportSize().width;
   assert(box && box.x + box.width <= vw, `coloana Sumă începe la ${box?.x} — în afara ecranului de ${vw}px`);
   const txt = await cell.innerText();
-  assert(/\d/.test(txt), `a patra coloană nu conține o sumă: "${txt}"`);
+  assert(/\d/.test(txt), `a cincea coloană nu conține o sumă: "${txt}"`);
 });
 
 await T("inbox: j/k mută cursorul pe rânduri", async () => {
   await page.locator("h1").first().click(); // focus the page, NOT the sidebar at (5,5)
-  const first = await page.locator('tr[data-cursor="true"] td:nth-child(2)').innerText();
+  const first = await page.locator('tr[data-cursor="true"] td:nth-child(3)').innerText();
   await page.keyboard.press("j");
   await page.waitForTimeout(400);
-  const second = await page.locator('tr[data-cursor="true"] td:nth-child(2)').innerText();
+  const second = await page.locator('tr[data-cursor="true"] td:nth-child(3)').innerText();
   assert(first !== second, `cursorul nu s-a mutat: rămas pe ${first}`);
   await page.keyboard.press("k");
   await page.waitForTimeout(400);
-  assert(await page.locator('tr[data-cursor="true"] td:nth-child(2)').innerText() === first, "k nu a revenit");
+  assert(await page.locator('tr[data-cursor="true"] td:nth-child(3)').innerText() === first, "k nu a revenit");
   return `${first.trim()} → ${second.trim()}`;
 });
 
 await T("inbox: tasta 'a' deschide decizia de aprobare pentru rândul curent", async () => {
-  const num = (await page.locator('tr[data-cursor="true"] td:nth-child(2)').innerText()).trim();
+  const num = (await page.locator('tr[data-cursor="true"] td:nth-child(3)').innerText()).trim();
   await page.keyboard.press("a");
   await page.waitForTimeout(800);
   const dlg = page.locator('[role="dialog"]');
@@ -252,10 +273,23 @@ await T("inbox: tastele NU fură input-ul când scrii într-un câmp", async () 
 
 await T("inbox: filtrul după beneficiar restrânge lista", async () => {
   const before = await rowCount();
-  await page.fill('input[aria-label="Filtrează după beneficiar"]', "Audit");
-  await page.waitForTimeout(900);
-  const after = await rowCount();
-  assert(after < before && after > 0, `filtrul nu a funcționat: ${before} → ${after}`);
+  assert(before > 0, "inboxul e gol — nimic de filtrat");
+  // Data-agnostic: un beneficiar REAL de pe primul rând trebuie să rămână (≥1),
+  // iar un text imposibil trebuie să golească lista (0). Amândouă probează filtrarea.
+  const payee = (await page.locator("tbody tr").first().locator("td").nth(3).innerText()).trim().split(/\s+/)[0];
+  const f = page.locator('input[aria-label="Filtrează după beneficiar"]');
+  try {
+    await f.fill(payee);
+    await page.waitForTimeout(900);
+    const kept = await rowCount();
+    assert(kept > 0 && kept <= before, `filtrul „${payee}" a golit lista: ${before} → ${kept}`);
+    await f.fill("zzz-beneficiar-inexistent");
+    await page.waitForTimeout(900);
+    assert((await rowCount()) === 0, "un beneficiar inexistent nu a golit lista — filtrul nu filtrează");
+  } finally {
+    await f.fill("");
+    await page.waitForTimeout(600);
+  }
 });
 
 // ── Finance queue ───────────────────────────────────────────────────────────
@@ -265,11 +299,23 @@ await go("/#/business/par/finance");
 await T("coadă finanțe: căutarea filtrează rândurile", async () => {
   const before = await rowCount();
   assert(before > 0, "coada e goală — nimic de filtrat");
-  await page.fill('input[aria-label="Caută în coada finanțe"]', "Audit");
-  await page.waitForTimeout(900);
-  const after = await rowCount();
-  assert(after < before && after > 0, `${before} → ${after}`);
-  await page.fill('input[aria-label="Caută în coada finanțe"]', "");
+  // Numărul cererii de pe primul rând e unic — căutarea lui trebuie să restrângă la ≥1 rând.
+  const rowText = await page.locator("tbody tr").first().innerText();
+  const no = rowText.match(/[A-Z]{2,}-\d{4}-\d+/)?.[0];
+  assert(no, `primul rând nu conține un număr de cerere: "${rowText.slice(0, 60)}"`);
+  const f = page.locator('input[aria-label="Caută în coada finanțe"]');
+  try {
+    await f.fill(no);
+    await page.waitForTimeout(900);
+    const kept = await rowCount();
+    assert(kept >= 1 && kept <= before, `căutarea „${no}" a golit coada: ${before} → ${kept}`);
+    await f.fill("zzz-nimic");
+    await page.waitForTimeout(900);
+    assert((await rowCount()) === 0, "o căutare imposibilă nu a golit coada");
+  } finally {
+    await f.fill("");
+    await page.waitForTimeout(600);
+  }
 });
 
 // ── Reports ─────────────────────────────────────────────────────────────────
@@ -399,13 +445,25 @@ await T("admin: Setări — comutatoarele răspund la click", async () => {
 // ── Folders ─────────────────────────────────────────────────────────────────
 await go("/#/business/par/folders");
 
-await T("foldere: proiectul se extinde și duce la lista filtrată", async () => {
-  const head = page.locator('main button[aria-expanded]').first();
-  await head.click();
-  await page.waitForTimeout(700);
-  assert(await head.getAttribute("aria-expanded") === "true", "folderul nu s-a extins");
-  const link = page.getByRole("button", { name: /Toate cererile acestui proiect/ });
-  assert(await link.isVisible(), "linkul spre lista filtrată nu apare după extindere");
+await T("foldere: click pe un folder de proiect intră în folder (drill-down)", async () => {
+  // Pagina nu mai e un accordion (button[aria-expanded]) — e o navigare pe niveluri:
+  // fiecare folder e un <a> real către /business/par/folders?project_id=… (PR #279).
+  const rows = page.locator('main a[href*="/business/par/folders"]');
+  const n = await rows.count();
+  assert(n > 0, "niciun folder de proiect pe pagină");
+  // Alege un folder NEVID (meta „· N cereri" cu N ≥ 1) — unul gol arată doar empty state.
+  let row = rows.first();
+  for (let i = 0; i < n; i++) {
+    if (/[1-9]\d*\s+cereri/.test(await rows.nth(i).innerText())) { row = rows.nth(i); break; }
+  }
+  const name = (await row.locator("span span").first().innerText()).trim();
+  await row.click();
+  await page.waitForTimeout(900);
+  const main = await page.locator("main").innerText();
+  assert(main.includes(name), `după click nu sunt în folderul „${name}"`);
+  const buckets = await page.locator('main a[href*="&b="]').count();
+  assert(buckets > 0 || /folder gol/i.test(main),
+    "în folderul proiectului nu apar nici subfolderele de status, nici empty state-ul");
 });
 
 await page.screenshot({ path: `${OUT}/ux-last.png`, fullPage: true });
