@@ -12,7 +12,7 @@
 // Usage: node scripts/e2e-par-ux.mjs   (needs a seeded local server on :3000)
 import { chromium, request } from "playwright-core";
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.BASE_URL ?? process.env.BASE ?? "http://localhost:3000";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const U = { admin: "admin@atic.demo.io", approver: "approver@atic.demo.io", finance: "finance@atic.demo.io" };
 const OUT = process.env.OUT ?? ".";

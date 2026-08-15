@@ -268,7 +268,17 @@ async function approveParStep(
   // VF-302: if acting on a step assigned to someone else (a delegator), annotate the signature/title.
   const viaDelegation =
     activeStep.approverUserId != null && activeStep.approverUserId !== userId && delegators.has(activeStep.approverUserId);
-  const signatureTitle = viaDelegation ? `delegat de ${activeStep.approverUserId}` : undefined;
+
+  // signature_name is a HUMAN field: it lands in the signature block on the detail page and on the
+  // printed PAR PDF. When the client omits it (bulk approve, keyboard shortcut), fall back to the
+  // decider's display name — never their raw UUID. Same for the delegation annotation.
+  const nameOf = async (id: string): Promise<string> => {
+    const [u] = await db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, id));
+    return u?.name ?? u?.email ?? id;
+  };
+  const deciderName = await nameOf(userId);
+  const delegatorName = viaDelegation ? await nameOf(activeStep.approverUserId!) : null;
+  const signatureTitle = delegatorName ? `delegat de ${delegatorName}` : undefined;
 
   await db
     .update(parApprovals)
@@ -276,7 +286,7 @@ async function approveParStep(
       decision: "approved",
       decidedAt: new Date(),
       comment: body.comment ?? null,
-      signatureName: body.signatureName ?? userId,
+      signatureName: body.signatureName ?? deciderName,
       ...(signatureTitle ? { signatureTitle } : {}),
       updatedAt: new Date(),
     })
@@ -284,7 +294,7 @@ async function approveParStep(
 
   await writeAudit({
     tenantId, parId, actorUserId: userId, event: "approved",
-    detail: `Step ${activeStep.step} (${activeStep.approverRoleLabel}) approved${viaDelegation ? ` — prin delegare de la ${activeStep.approverUserId}` : ""}`,
+    detail: `Step ${activeStep.step} (${activeStep.approverRoleLabel}) approved${delegatorName ? ` — prin delegare de la ${delegatorName}` : ""}`,
   });
 
   // A parallel level advances only after every approver on that level has decided.

@@ -333,6 +333,29 @@ await F("rapoarte", "totalurile din raport se potrivesc cu lista de cereri", asy
   return drift < 0.02 ? "se potrivesc" : `diferență ${(drift * 100).toFixed(0)}% (raport ${repTotal / 100} vs listă ${listTotal / 100}) — filtre diferite`;
 });
 
+// ─── 8. Semnături — regresie: aprobarea fără signatureName nu stochează UUID ──
+console.log("\n── 8. Semnături ──");
+
+await F("semnături", "aprobare fără signatureName → semnătura e numele, nu UUID-ul", async () => {
+  const id = await draft("requestor", 200000);
+  await POST("requestor", `/api/par/${id}/submit`, {});
+  // Invocă acțiunea exact ca butonul din inbox / shortcut-ul de tastatură: FĂRĂ signatureName.
+  for (const r of ["approver", "admin"]) {
+    await POST(r, `/api/par/${id}/approve`, { comment: "ok" });
+    const s = (await GET("admin", `/api/par/${id}`)).json.status;
+    if (["approved", "in_finance"].includes(s)) break;
+  }
+  const det = (await GET("admin", `/api/par/${id}`)).json;
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const decided = (det.approvals ?? []).filter((a) => a.decision === "approved" && a.step > 0);
+  must(decided.length > 0, "niciun pas aprobat");
+  for (const a of decided) {
+    must(a.signatureName && !uuidRe.test(a.signatureName),
+      `pasul ${a.step} are semnătura "${a.signatureName}" — UUID brut în loc de nume`);
+  }
+  return decided.map((a) => `pas ${a.step}: "${a.signatureName}"`).join(" · ");
+});
+
 console.log(`\n═══ ${ok}/${n} verificări trecute ═══`);
 if (notes.length) { console.log(`\n${notes.length} CONSTATĂRI:`); for (const f of notes) console.log(`  • ${f.area} · ${f.name}\n      ${f.detail}`); }
 process.exit(0);
