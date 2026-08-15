@@ -356,6 +356,59 @@ await F("membri", "un rol se atribuie folosind id-ul unui candidat din listă", 
   must(members.some((m) => m.userId === target.id && m.role === "requestor"), "rolul nu apare în listă");
 });
 
+// ─── 7c. Onboarding pentru un workspace NOU — secvența completă a wizardului ──
+console.log("\n── 7c. Onboarding workspace nou ──");
+
+await F("onboarding", "signup → wizard: setări + structură + plătitor implicit + invitație + complete", async () => {
+  const { request } = await import("playwright-core");
+  const fresh = await request.newContext({ baseURL: BASE });
+  const stamp = Date.now();
+  // Domeniu nerutabil (.invalid) — emailGuard blochează trimiterea reală; invitația
+  // trebuie să se creeze totuși, cu emailed:false și link de copiat.
+  const sign = await fresh.post("/api/business/auth/signup", { data: {
+    tenantName: `Onboarding Test ${stamp}`, name: "Owner Test",
+    email: `owner-${stamp}@onboarding-e2e.invalid`, password: "parola-e2e-123",
+  } });
+  must(sign.status() === 200 || sign.status() === 201, `signup → ${sign.status()}`);
+
+  const j = async (r) => { try { return await r.json(); } catch { return null; } };
+  const s0 = await j(await fresh.get("/api/par/settings"));
+  must(s0 && s0.onboardingComplete === false, `tenant nou cu onboardingComplete=${s0?.onboardingComplete} (aștept false)`);
+
+  // Pasul 1 — setările organizației
+  const p1 = await fresh.patch("/api/par/settings", { data: {
+    orgLegalName: "Onboarding Test ONG", defaultCurrency: "MDL",
+    requestNoPrefix: "OTG", microPurchaseThresholdCents: 500000,
+  } });
+  must([200, 201].includes(p1.status()), `setări pas 1 → ${p1.status()}`);
+
+  // Pasul 2 — structura
+  const dep = await fresh.post("/api/par/departments", { data: { name: "Programe" } });
+  must(dep.status() === 201 || dep.status() === 200, `departament → ${dep.status()}`);
+  const code = await fresh.post("/api/par/budget-codes", { data: { code: "M1", name: "Educație" } });
+  must(code.status() === 201 || code.status() === 200, `cod buget → ${code.status()}`);
+
+  // Pasul 3 — plătitor implicit (tenant nou = zero plătitori) + invitație
+  const payers0 = await j(await fresh.get("/api/par/payers"));
+  must((payers0.items ?? []).length === 0, `tenant nou are deja ${payers0.items?.length} plătitori`);
+  const payer = await j(await fresh.post("/api/par/payers", { data: { name: "Onboarding Test ONG" } }));
+  must(payer?.id, "plătitorul implicit nu s-a creat");
+  const inv = await fresh.post("/api/par/invites", { data: {
+    email: `coleg-${stamp}@onboarding-e2e.invalid`, par_role: "approver", payer_ids: [payer.id],
+  } });
+  const invBody = await j(inv);
+  must(inv.status() === 201, `invitație → ${inv.status()} ${JSON.stringify(invBody)}`);
+  must(invBody.inviteUrl, "invitația nu are link");
+  must(invBody.emailed === false, "emailGuard trebuia să blocheze domeniul .invalid");
+
+  // Finalizare — abia ACUM se marchează complet
+  await fresh.patch("/api/par/settings", { data: { onboardingComplete: true } });
+  const s1 = await j(await fresh.get("/api/par/settings"));
+  must(s1.onboardingComplete === true, "onboardingComplete nu s-a salvat");
+  await fresh.dispose();
+  return `workspace nou configurat cap-coadă (prefix OTG, invitație cu link)`;
+});
+
 // ─── 8. Semnături — regresie: aprobarea fără signatureName nu stochează UUID ──
 console.log("\n── 8. Semnături ──");
 
