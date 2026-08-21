@@ -44,7 +44,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { generateRequestNo } from "../lib/par/requestNo";
-import { isValidMoldovaIBAN, isValidIDNP } from "../lib/par/validators";
+import { validateIban, validateFiscalId, ibanCountry } from "../lib/par/validators";
 import { recalcParTotal } from "../lib/par/totals";
 import { submitPAR, buildBodyForHash } from "../lib/par/submit";
 import { autosaveVendorFromPar } from "../lib/par/vendorAutoSave";
@@ -105,7 +105,9 @@ const updateParSchema = z.object({
   end_use: z.string().max(5000).optional().nullable(),
   vendor_id: z.string().uuid().optional().nullable(),
   payee_name: z.string().max(300).optional().nullable(),
-  payee_idnp: z.string().max(13).optional().nullable(),
+  // Cod fiscal: 13 cifre pentru MD, dar un beneficiar străin are alt format (VAT DE…,
+  // personal code EE de 11 cifre). Lățimea o dă validateFiscalId, nu zod-ul.
+  payee_idnp: z.string().max(50).optional().nullable(),
   payee_iban: z.string().max(34).optional().nullable(),
   payee_bank: z.string().max(300).optional().nullable(),
   /** Feature 1: "fizic" (persoană fizică) | "juridic" (persoană juridică) */
@@ -1104,19 +1106,28 @@ parRoutes.patch(
       }
     }
 
-    // PAR-103: IBAN / IDNP validation
+    // PAR-103: validare IBAN + cod fiscal.
+    // Plățile pot fi internaționale, deci acceptăm ORICE IBAN valid ISO 13616 (lungime corectă
+    // pentru țara din prefix + mod-97), nu doar MD. Un IBAN estonian/german e la fel de legitim.
+    let payeeIbanCountry: string | null = body.payee_iban ? ibanCountry(body.payee_iban) : null;
     if (body.payee_iban) {
-      if (!isValidMoldovaIBAN(body.payee_iban)) {
+      const check = validateIban(body.payee_iban);
+      if (!check.ok) {
         return c.json(
-          { error: "invalid_iban: must be a valid MD IBAN (mod-97 checksum)" },
+          { error: `invalid_iban: ${check.message ?? "not a valid IBAN (ISO 13616)"}`, reason: check.reason },
           400
         );
       }
     }
     if (body.payee_idnp) {
-      if (!isValidIDNP(body.payee_idnp)) {
+      // Regula „exact 13 cifre" e moldovenească — se aplică doar când beneficiarul e moldovean
+      // (IBAN MD, sau lipsă IBAN → presupunem local, cazul implicit al aplicației).
+      // `ok:false` = doar gunoi. Un cod fiscal străin (11 cifre EE, VAT DE…) trece — regula de
+      // 13 cifre e moldovenească și nu are ce căuta pe o plată internațională.
+      const fiscal = validateFiscalId(body.payee_idnp, { country: payeeIbanCountry ?? "MD" });
+      if (!fiscal.ok) {
         return c.json(
-          { error: "invalid_idnp: must be exactly 13 digits" },
+          { error: `invalid_idnp: ${fiscal.message ?? "invalid fiscal id"}` },
           400
         );
       }

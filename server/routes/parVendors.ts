@@ -2,7 +2,8 @@
  * PAR-003: Vendor / Payee registry CRUD
  * GET/POST/PATCH/DELETE /api/par/vendors
  * GDPR-sensitive: IDNP + IBAN.
- * Validates IBAN (mod-97) + IDNP (13 digits) on write.
+ * Validates IBAN (ISO 13616 mod-97, ORICE țară — plățile pot fi internaționale) +
+ * codul fiscal (13 cifre doar pentru beneficiarii moldoveni) on write.
  */
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
@@ -12,7 +13,7 @@ import { db } from "../db/client";
 import { parVendors } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
-import { isValidMoldovaIBAN, isValidIDNP } from "../lib/par/validators";
+import { validateIban, validateFiscalId, ibanCountry } from "../lib/par/validators";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parVendorsRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -21,7 +22,8 @@ parVendorsRoutes.use("/:id", parUuidGuard("id"));
 
 const vendorSchema = z.object({
   name: z.string().min(1).max(300),
-  idnp: z.string().max(13).optional().nullable(),
+  // Cod fiscal: 13 cifre la MD, alt format la beneficiarii străini → lățimea o dă validateFiscalId.
+  idnp: z.string().max(50).optional().nullable(),
   iban: z.string().max(34).optional().nullable(),
   bank: z.string().max(300).optional().nullable(),
   bic_swift: z.string().max(32).optional().nullable(),
@@ -40,11 +42,19 @@ function validateVendorFields(body: {
   idnp?: string | null;
   iban?: string | null;
 }): { ok: false; error: string } | { ok: true } {
-  if (body.idnp && !isValidIDNP(body.idnp)) {
-    return { ok: false, error: "invalid_idnp: must be exactly 13 digits" };
+  if (body.iban) {
+    const check = validateIban(body.iban);
+    if (!check.ok) {
+      return { ok: false, error: `invalid_iban: ${check.message ?? "not a valid IBAN (ISO 13616)"}` };
+    }
   }
-  if (body.iban && !isValidMoldovaIBAN(body.iban)) {
-    return { ok: false, error: "invalid_iban: must be a valid MD IBAN (mod-97 checksum)" };
+  if (body.idnp) {
+    // Ţara o dă IBAN-ul; fără IBAN presupunem MD (cazul implicit). `ok:false` = doar gunoi —
+    // un cod fiscal străin e acceptat, regula de 13 cifre e moldovenească.
+    const fiscal = validateFiscalId(body.idnp, { country: ibanCountry(body.iban ?? null) ?? "MD" });
+    if (!fiscal.ok) {
+      return { ok: false, error: `invalid_idnp: ${fiscal.message ?? "invalid fiscal id"}` };
+    }
   }
   return { ok: true };
 }

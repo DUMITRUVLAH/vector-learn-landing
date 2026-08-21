@@ -88,7 +88,7 @@ const createTemplateSchema = z.object({
       endUse: z.string().optional().nullable(),
       vendorId: z.string().uuid().optional().nullable(),
       payeeName: z.string().max(300).optional().nullable(),
-      payeeIdnp: z.string().max(13).optional().nullable(),
+      payeeIdnp: z.string().max(50).optional().nullable(),
       payeeIban: z.string().max(34).optional().nullable(),
       payeeBank: z.string().max(300).optional().nullable(),
       lineItems: z.array(lineItemSchema).optional(),

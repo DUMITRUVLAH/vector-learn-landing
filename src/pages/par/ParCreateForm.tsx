@@ -7,11 +7,11 @@
  *
  * Design system: Vector 365 tokens only, light + dark, WCAG AA.
  */
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   FileText, Loader2, Plus, Trash2, Upload, X, AlertCircle, CheckCircle2, Paperclip, Save,
   Search, Building2, BookmarkPlus, BookOpen, Sparkles, Info, Pencil,
-  ClipboardList, ListChecks, AlignLeft, Wallet, ChevronDown,
+  ClipboardList, ListChecks, AlignLeft, Wallet, ChevronDown, Globe,
   type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
@@ -19,7 +19,7 @@ import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import { detectPayeeType, type PayeeType } from "@/lib/par/payeeTypeDetector";
 import { plusDays } from "@/lib/par/dates";
-import { isValidMoldovaIBAN } from "@/lib/par/ibanCheck";
+import { validateIban, validateFiscalId, isValidBic, type IbanValidation } from "@/lib/par/iban";
 import type { ParPayeeCandidate } from "@/lib/par/parCandidateTypes";
 import { QuotesSection } from "@/components/par/QuotesSection";
 import { ApiError } from "@/lib/api";
@@ -364,6 +364,21 @@ export function ParCreateForm() {
   const [payeeAdministrator, setPayeeAdministrator] = useState("");
   // Feature 1: persoană fizică vs juridică toggle
   const [payeeType, setPayeeType] = useState<PayeeType>("juridic");
+  /**
+   * Analiza IBAN-ului tastat — o singură sursă pentru: eroarea de câmp, bifa de „valid",
+   * țara beneficiarului (care decide formatul codului fiscal) și cerințele de plată externă.
+   */
+  const ibanInfo: IbanValidation = useMemo(() => validateIban(payeeIban), [payeeIban]);
+  /** IBAN valid dintr-o altă țară → plata pleacă prin SWIFT/SEPA, nu prin transfer intern. */
+  const payeeIsForeign = ibanInfo.ok && ibanInfo.isForeign;
+  /**
+   * Codul fiscal: IDNO/IDNP e o noțiune MOLDOVENEASCĂ. Un beneficiar străin are alt format, deci
+   * câmpul acceptă orice identificator plauzibil; când nu arată a IDNO moldovenesc doar semnalăm.
+   */
+  const fiscalInfo = useMemo(
+    () => validateFiscalId(payeeIdnp, { country: ibanInfo.country ?? "MD" }),
+    [payeeIdnp, ibanInfo.country]
+  );
   // Beneficiary UX: pick ONE way to add the payee (manual / company registry / AI document / saved),
   // so the section isn't a wall of four tools stacked at once. `null` = show only the picker.
   const [payeeMethod, setPayeeMethod] = useState<"manual" | "registry" | "ai" | "saved" | null>(null);
@@ -657,7 +672,8 @@ export function ParCreateForm() {
   /**
    * Fill the payee fields from a SINGLE resolved prefill result. The server already routed
    * IDNO-vs-IBAN authoritatively (choosePayee/routeIdAndIban), so the frontend no longer guesses;
-   * we keep one defensive `isValidMoldovaIBAN` guard so an invalid IBAN never lands in the box.
+   * we keep one defensive `validateIban` guard so an invalid IBAN never lands in the box. Orice
+   * țară trece — plățile pot fi internaționale, iar un IBAN estonian valid nu e o eroare.
    */
   const applyResolvedPayee = (result: ParPrefillResult) => {
     if (result.payeeName.value) {
@@ -676,10 +692,10 @@ export function ParCreateForm() {
     if (result.payeeBic?.value) setPayeeBic(String(result.payeeBic.value));
     if (result.payeeLegalAddress?.value) setPayeeLegalAddress(String(result.payeeLegalAddress.value));
     if (result.payeeAdministrator?.value) setPayeeAdministrator(String(result.payeeAdministrator.value));
-    // IBAN — defensive: only fill a structurally valid MD IBAN even though the server validated it.
+    // IBAN — defensive: umplem doar un IBAN valid ISO 13616 (orice țară), deși serverul l-a validat.
     if (result.payeeIban.value) {
       const ibanRaw = String(result.payeeIban.value).replace(/\s/g, "").toUpperCase();
-      if (isValidMoldovaIBAN(ibanRaw)) setPayeeIban(ibanRaw);
+      if (validateIban(ibanRaw).ok) setPayeeIban(ibanRaw);
     }
   };
 
@@ -725,8 +741,8 @@ export function ParCreateForm() {
     setPayeeBic(c.bic ?? "");
     setPayeeLegalAddress(c.legalAddress ?? "");
     setPayeeAdministrator(c.administratorName ?? "");
-    // Defensive IBAN guard — leave empty (→ "⚠ de verificat") if it isn't a valid MD IBAN.
-    if (c.iban && isValidMoldovaIBAN(c.iban)) {
+    // Defensive IBAN guard — lăsăm gol (→ "⚠ de verificat") dacă nu e IBAN valid (orice țară).
+    if (c.iban && validateIban(c.iban).ok) {
       setPayeeIban(c.iban.replace(/\s/g, "").toUpperCase());
     } else {
       setPayeeIban("");
@@ -984,8 +1000,19 @@ export function ParCreateForm() {
   function clientValidate(): boolean {
     const errs: Record<string, string> = {};
     if (lineItems.length === 0 || totalCents <= 0) errs.line_items = FIELD_MESSAGES.line_items;
-    if (payeeIban && !/^MD\d{2}[A-Z0-9]{20}$/.test(payeeIban)) errs.payee_iban = "IBAN invalid — format MD + 2 cifre + 20 caractere.";
-    if (payeeIdnp && !/^\d{13}$/.test(payeeIdnp)) errs.payee_idnp = "IDNP trebuie să aibă exact 13 cifre.";
+    // IBAN: acceptăm orice țară (ISO 13616). Mesajul e specific țării detectate — „IBAN EE
+    // (Estonia) are 20 de caractere", nu „format MD…", care era înșelător pentru plăți externe.
+    if (payeeIban && !ibanInfo.ok) errs.payee_iban = ibanInfo.message ?? "IBAN invalid.";
+    // Codul fiscal: regula de 13 cifre e moldovenească, deci NU blochează — un cod străin
+    // (11 cifre EE, VAT DE…) e la fel de valid. Blocăm doar gunoiul.
+    if (!fiscalInfo.ok) errs.payee_idnp = fiscalInfo.message ?? "Cod fiscal invalid.";
+    // Plată internațională: fără BIC/SWIFT banca nu poate rula transferul, iar adresa
+    // beneficiarului e cerută de regulile SWIFT/SEPA. Le cerem doar când IBAN-ul e non-MD.
+    if (payeeIsForeign && purpose === "execute_payment" && !vendorId) {
+      if (!payeeBic.trim()) errs.payee_bic = "BIC/SWIFT e obligatoriu pentru o plată internațională.";
+      else if (!isValidBic(payeeBic)) errs.payee_bic = "BIC/SWIFT invalid — 8 sau 11 caractere (ex. HABAEE2X).";
+      if (!payeeLegalAddress.trim()) errs.payee_address = "Adresa beneficiarului e obligatorie pentru o plată internațională.";
+    }
     if (purpose === "execute_payment") {
       if (!endUse.trim()) errs.end_use = FIELD_MESSAGES.end_use;
       const hasPayee = !!vendorId || (!!payeeName.trim() && !!payeeIban.trim());
@@ -1738,38 +1765,93 @@ export function ParCreateForm() {
                     }}
                   />
                 </Field>
+                {/* Codul fiscal: eticheta, hint-ul și lungimea urmează ȚARA beneficiarului.
+                    „IDNP, exact 13 cifre" e regula moldovenească — un furnizor estonian are 11
+                    cifre, unul german un VAT „DE123456789". */}
                 <Field
-                  label={payeeType === "fizic" ? "IDNP" : "IDNO"}
+                  label={payeeIsForeign ? "Cod fiscal / VAT" : payeeType === "fizic" ? "IDNP" : "IDNO"}
                   htmlFor="pi"
-                  hint="13 cifre"
+                  hint={payeeIsForeign
+                    ? `codul fiscal din ${ibanInfo.countryName ?? "țara beneficiarului"}`
+                    : "13 cifre (MD) sau codul fiscal al unui beneficiar străin"}
                   error={fieldErrors.payee_idnp}
                 >
-                  <input id="pi" type="text" maxLength={13} placeholder="2008001007903" value={payeeIdnp}
+                  {/* maxLength 50, nu 13: un cod străin poate fi tastat înaintea IBAN-ului, iar
+                      trunchierea la 13 ar strica tăcut valoarea. */}
+                  <input id="pi" type="text" maxLength={50}
+                    placeholder={payeeIsForeign ? "ex. DE123456789" : "2008001007903"} value={payeeIdnp}
                     className={cn(inputCls, fieldErrors.payee_idnp && "border-destructive")}
                     onChange={(e) => { setPayeeIdnp(e.target.value); setFieldErrors((p) => ({ ...p, payee_idnp: "" })); }} />
+                  {fiscalInfo.level === "warning" && !fieldErrors.payee_idnp && (
+                    <p className="mt-1 flex items-start gap-1 text-xs text-muted-foreground">
+                      <Info className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                      {fiscalInfo.message}
+                    </p>
+                  )}
                 </Field>
-                <Field label="IBAN" htmlFor="pb" hint="MD + 2 cifre + 20 caractere" error={fieldErrors.payee_iban} required={purpose === "execute_payment" && !vendorId}>
+                {/* IBAN: acceptăm orice țară din registrul ISO 13616, nu doar MD — plățile pot fi
+                    internaționale. Hint-ul devine specific țării de îndată ce o recunoaștem. */}
+                <Field
+                  label="IBAN"
+                  htmlFor="pb"
+                  hint={ibanInfo.country && ibanInfo.expectedLength
+                    ? `${ibanInfo.country} — ${ibanInfo.expectedLength} caractere`
+                    : "orice țară (MD, RO, EE, DE…)"}
+                  error={fieldErrors.payee_iban}
+                  required={purpose === "execute_payment" && !vendorId}
+                >
                   <div className="relative">
                     <input id="pb" type="text" maxLength={34} placeholder="MD48ML000002259A19498121" value={payeeIban}
                       aria-required={purpose === "execute_payment" && !vendorId ? true : undefined}
+                      aria-invalid={fieldErrors.payee_iban ? true : undefined}
                       className={cn(inputCls, "pr-9", fieldErrors.payee_iban && "border-destructive")}
                       onChange={(e) => { setPayeeIban(e.target.value.toUpperCase()); setFieldErrors((p) => ({ ...p, payee_iban: "" })); }} />
-                    {isValidMoldovaIBAN(payeeIban) && (
+                    {ibanInfo.ok && (
                       <CheckCircle2 className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-success" aria-label="IBAN valid" />
                     )}
                   </div>
                 </Field>
               </div>
+              {/* Plată internațională: spunem explicit ce se schimbă și cerem cele două requisite
+                  fără de care banca nu poate executa transferul (BIC + adresa beneficiarului). */}
+              {payeeIsForeign && (
+                <p className="flex items-start gap-1.5 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-xs text-foreground" role="status">
+                  <Globe className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                  <span>
+                    IBAN internațional ({ibanInfo.countryName ?? ibanInfo.country}) — plata pleacă prin SWIFT/SEPA.
+                    Completează <strong>BIC/SWIFT</strong> și <strong>adresa beneficiarului</strong>; băncile le cer obligatoriu,
+                    iar comisionul e mai mare decât la un transfer intern.
+                  </span>
+                </p>
+              )}
               <Collapsible
                 summary="Detalii bancă & reprezentant"
                 defaultOpen
-                forceOpen={!!(payeeBank.trim() || payeeBic.trim() || payeeAdministrator.trim() || payeeLegalAddress.trim())}
+                forceOpen={payeeIsForeign || !!(payeeBank.trim() || payeeBic.trim() || payeeAdministrator.trim() || payeeLegalAddress.trim())}
               >
                 <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <Field label="Bancă" htmlFor="pbk"><input id="pbk" type="text" placeholder="ex. BC Moldindconbank S.A." className={inputCls} value={payeeBank} onChange={(e) => setPayeeBank(e.target.value)} /></Field>
-                  <Field label="BIC / SWIFT" htmlFor="pbic"><input id="pbic" type="text" placeholder="ex. MOLDMD2X" className={inputCls} value={payeeBic} onChange={(e) => setPayeeBic(e.target.value.toUpperCase())} /></Field>
+                  <Field label="Bancă" htmlFor="pbk"><input id="pbk" type="text" placeholder={payeeIsForeign ? "ex. Swedbank AS" : "ex. BC Moldindconbank S.A."} className={inputCls} value={payeeBank} onChange={(e) => setPayeeBank(e.target.value)} /></Field>
+                  <Field label="BIC / SWIFT" htmlFor="pbic" required={payeeIsForeign} error={fieldErrors.payee_bic}>
+                    <input id="pbic" type="text" maxLength={11} placeholder={payeeIsForeign ? "ex. HABAEE2X" : "ex. MOLDMD2X"}
+                      aria-required={payeeIsForeign ? true : undefined}
+                      className={cn(inputCls, fieldErrors.payee_bic && "border-destructive")}
+                      value={payeeBic}
+                      onChange={(e) => { setPayeeBic(e.target.value.toUpperCase()); setFieldErrors((p) => ({ ...p, payee_bic: "" })); }} />
+                  </Field>
                   <Field label="Administrator / reprezentant" htmlFor="padmin"><input id="padmin" type="text" placeholder="Prenume Nume" className={inputCls} value={payeeAdministrator} onChange={(e) => setPayeeAdministrator(e.target.value)} /></Field>
-                  <Field label="Adresă juridică" htmlFor="paddr"><input id="paddr" type="text" placeholder="Localitate, stradă, număr" className={inputCls} value={payeeLegalAddress} onChange={(e) => setPayeeLegalAddress(e.target.value)} /></Field>
+                  <Field
+                    label={payeeIsForeign ? "Adresa beneficiarului" : "Adresă juridică"}
+                    htmlFor="paddr"
+                    required={payeeIsForeign}
+                    error={fieldErrors.payee_address}
+                    hint={payeeIsForeign ? "stradă, oraș, țară" : undefined}
+                  >
+                    <input id="paddr" type="text" placeholder={payeeIsForeign ? "ex. Liivalaia 8, Tallinn, Estonia" : "Localitate, stradă, număr"}
+                      aria-required={payeeIsForeign ? true : undefined}
+                      className={cn(inputCls, fieldErrors.payee_address && "border-destructive")}
+                      value={payeeLegalAddress}
+                      onChange={(e) => { setPayeeLegalAddress(e.target.value); setFieldErrors((p) => ({ ...p, payee_address: "" })); }} />
+                  </Field>
                 </div>
               </Collapsible>
               {!vendorId && payeeName.trim() && payeeIban.trim() && (
