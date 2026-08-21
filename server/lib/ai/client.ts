@@ -52,7 +52,23 @@ export interface AiCallOptions {
    * vision so the model reads the document directly without pre-extracted text.
    */
   imageDataUrl?: string;
+  /**
+   * Optional PDF (or other document) sent to the model AS A FILE, base64 data URL
+   * ("data:application/pdf;base64,..."). Used when a PDF has no text layer (scanned /
+   * photographed act): the provider renders the pages itself, so the model still reads it.
+   * OpenAI → a "file" content part; Anthropic → a "document" block. Ignored in stub mode.
+   */
+  fileDataUrl?: string;
+  /** File name shown to the provider alongside `fileDataUrl` (OpenAI requires one). */
+  fileName?: string;
 }
+
+/** Why an AI call did not reach the model (surfaced to the UI instead of a silent "demo"). */
+export type AiUnavailableReason =
+  | "no_key"
+  | "feature_disabled"
+  | "budget_exceeded"
+  | "api_error";
 
 export interface AiCallResult {
   text: string;
@@ -61,6 +77,11 @@ export interface AiCallResult {
   promptTokens: number;
   completionTokens: number;
   isStub: boolean;
+  /**
+   * Set whenever the model was NOT actually consulted. `isStub` alone hid a real outage
+   * behind a "(demo)" badge — an expired API quota looked exactly like "no key configured".
+   */
+  unavailable?: AiUnavailableReason;
 }
 
 /** Stub responses per action when API key is not configured */
@@ -101,6 +122,8 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
     entityId,
     maxTokens = 512,
     imageDataUrl,
+    fileDataUrl,
+    fileName,
   } = opts;
 
   // --- AI-A04: Feature-disabled gate ---
@@ -136,6 +159,7 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
         promptTokens: 0,
         completionTokens: 0,
         isStub: true,
+        unavailable: "feature_disabled",
       };
     }
   }
@@ -171,6 +195,7 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
       promptTokens: 0,
       completionTokens: 0,
       isStub: true,
+      unavailable: "budget_exceeded",
     };
   }
 
@@ -202,6 +227,7 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
       promptTokens: 0,
       completionTokens: 0,
       isStub: true,
+      unavailable: "no_key",
     };
   }
 
@@ -211,16 +237,24 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
   let completionTokens = 0;
   let status = "completed";
   let note: string | undefined;
+  let apiFailed = false;
 
   try {
     if (PROVIDER === "openai") {
       // OpenAI Chat Completions. System + user as two messages. When an image is
       // provided, the user content becomes a [text, image_url] array (vision).
-      const userContent = imageDataUrl
-        ? [
-            { type: "text", text: userMessage },
-            { type: "image_url", image_url: { url: imageDataUrl } },
-          ]
+      const parts: Array<Record<string, unknown>> = [];
+      if (imageDataUrl) parts.push({ type: "image_url", image_url: { url: imageDataUrl } });
+      if (fileDataUrl) {
+        // OpenAI reads PDFs natively (text layer AND rendered page images), so a SCANNED act
+        // still gets extracted — this is the path a photographed/scanned PDF takes.
+        parts.push({
+          type: "file",
+          file: { filename: fileName ?? "document.pdf", file_data: fileDataUrl },
+        });
+      }
+      const userContent = parts.length
+        ? [{ type: "text", text: userMessage }, ...parts]
         : userMessage;
       const payload = {
         model: MODEL,
@@ -256,11 +290,39 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
       completionTokens = data.usage?.completion_tokens ?? 0;
     } else {
       // Anthropic Messages API.
+      // Anthropic accepts image blocks and (base64) PDF document blocks. Without this the
+      // provider silently ignored attachments: a scanned act reached the model as bare text.
+      const blocks: Array<Record<string, unknown>> = [];
+      if (imageDataUrl) {
+        const parsed = parseDataUrl(imageDataUrl);
+        if (parsed) {
+          blocks.push({
+            type: "image",
+            source: { type: "base64", media_type: parsed.mediaType, data: parsed.base64 },
+          });
+        }
+      }
+      if (fileDataUrl) {
+        const parsed = parseDataUrl(fileDataUrl);
+        if (parsed) {
+          blocks.push({
+            type: "document",
+            source: { type: "base64", media_type: parsed.mediaType, data: parsed.base64 },
+          });
+        }
+      }
       const payload = {
         model: MODEL,
         max_tokens: maxTokens,
         system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
+        messages: [
+          {
+            role: "user",
+            content: blocks.length
+              ? [...blocks, { type: "text", text: userMessage }]
+              : userMessage,
+          },
+        ],
       };
 
       const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -296,6 +358,7 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
     status = "error";
     note = err instanceof Error ? err.message : String(err);
     responseText = STUB_RESPONSES[action] ?? STUB_RESPONSES.default;
+    apiFailed = true;
   }
 
   const costMicro = Math.round(
@@ -327,6 +390,15 @@ export async function callAi(opts: AiCallOptions): Promise<AiCallResult> {
     model: MODEL,
     promptTokens,
     completionTokens,
-    isStub: false,
+    // An API failure (expired quota, 429, timeout) is NOT a successful call: report it as such
+    // so the caller can tell the user "AI indisponibil" instead of showing bogus fallback data.
+    isStub: apiFailed,
+    ...(apiFailed ? { unavailable: "api_error" as const } : {}),
   };
+}
+
+/** Split "data:<media>;base64,<payload>" into its parts (Anthropic needs them separately). */
+function parseDataUrl(dataUrl: string): { mediaType: string; base64: string } | null {
+  const m = /^data:([^;,]+);base64,(.+)$/s.exec(dataUrl);
+  return m ? { mediaType: m[1], base64: m[2] } : null;
 }

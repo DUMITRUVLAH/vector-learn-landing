@@ -30,6 +30,12 @@ export interface ParExtractedParty {
   idno?: string | null;
   /** Raw, possibly space-broken or invalid; choosePayee normalizes + validates. */
   iban?: string | null;
+  /**
+   * ALL bank accounts printed for this party when the document lists more than one
+   * (a MDL and a EUR account, a second bank…). `iban` stays the primary one; choosePayee
+   * validates each and the UI asks the user which account to pay into.
+   */
+  ibans?: string[] | null;
   /** Bank name if printed for this party. */
   bank?: string | null;
   /** SWIFT/BIC if printed. */
@@ -63,6 +69,11 @@ export interface ParPartiesExtraction {
   /** Line items / services from the document (section 10 "Articole"). Unit price in CENTS. */
   lineItems?: ParExtractedLineItem[];
   isStub: boolean;
+  /**
+   * Why the model was not consulted (stub fallback). Distinguishes "no API key configured"
+   * from a real outage (expired quota / 429 / timeout), which the UI must report differently.
+   */
+  unavailable?: "no_key" | "feature_disabled" | "budget_exceeded" | "api_error";
 }
 
 export interface ParExtractedLineItem {
@@ -83,6 +94,8 @@ export interface PayeeCandidate {
   idno: string | null;
   /** Only set if valid (MD mod-97) OR valid foreign (flagged via ibanForeign). */
   iban: string | null;
+  /** Every VALID account found for this party (≥2 → the UI asks which one to pay into). */
+  ibans?: string[];
   /** true if non-MD but ISO-13616 valid → UI shows "verificați (IBAN non-MD)". */
   ibanForeign?: boolean;
   bank: string | null;
@@ -92,8 +105,28 @@ export interface PayeeCandidate {
   payeeType: "fizic" | "juridic" | null;
 }
 
+/**
+ * One party the document names, with its own group of requisites. Returned for EVERY
+ * plausible payee (not only on a tie) so the UI can always show "cine primește plata?"
+ * with the automatically-chosen option marked.
+ */
+export interface PayeeOption extends PayeeCandidate {
+  /** The role the extractor assigned — shown as a hint ("Prestator", "Client"…). */
+  role: ParRole;
+  /** true for the option `choosePayee` would auto-fill. */
+  recommended: boolean;
+  /** true when the party is the one that PAYS (kept visible, but never auto-filled). */
+  isPayer: boolean;
+}
+
 export interface ChoosePayeeResult {
   needsClarification: boolean;
+  /**
+   * Every party found (payer included, banks and the tenant's own org excluded), each with its
+   * own requisite group, ranked; `recommended` marks the auto-filled one. The UI lists these
+   * whenever there are ≥2 so the user can switch without re-uploading.
+   */
+  options: PayeeOption[];
   /** When needsClarification: 2+; else 0 (resolved payee carried in `payee`). */
   candidates: PayeeCandidate[];
   /** The resolved payee (null when ambiguous or none). */

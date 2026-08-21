@@ -19,7 +19,9 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { extractParParties } from "../lib/ai/parExtractor";
 import { choosePayee } from "../lib/par/choosePayee";
+import type { PayeeCandidate } from "../lib/par/parPartyTypes";
 import { extractPdfText } from "../lib/ai/pdfText";
+import { extractOfficeText } from "../lib/ai/officeText";
 import { db } from "../db/client";
 import { parSettings } from "../db/schema/par";
 
@@ -40,12 +42,24 @@ export interface ParPrefillCandidate {
   name: string;
   idno: string | null;
   iban: string | null;
+  /** All valid accounts of this party — present only when the document listed 2+. */
+  ibans?: string[];
   ibanForeign?: boolean;
   bank: string | null;
   bic?: string | null;
   legalAddress?: string | null;
   administratorName?: string | null;
   payeeType: "fizic" | "juridic" | null;
+}
+
+/** A candidate plus the context the UI needs to render the "cine primește plata?" groups. */
+export interface ParPrefillPartyOption extends ParPrefillCandidate {
+  /** extractor role: executor | provider | client | bank | unknown */
+  role: string;
+  /** true for the option the server auto-filled */
+  recommended: boolean;
+  /** true when this party is the PAYER (shown, but never auto-filled) */
+  isPayer: boolean;
 }
 
 export interface ParPrefillResult {
@@ -68,17 +82,28 @@ export interface ParPrefillResult {
   currency: ParPrefillField;
   /** end-use/purpose description (= scope) */
   endUse: ParPrefillField;
-  /** The document class — 'not_invoice' triggers a non-blocking warning */
+  /**
+   * The document type, INFORMATIONAL only ("invoice" / "receipt" / "not_invoice").
+   * It no longer gates anything: requisites are extracted from any act (contract, act de
+   * primire-predare, proces-verbal…), because a PAR is routinely raised against those.
+   */
   documentClass: {
     value: string | null;
     confidence: number;
     reason?: string;
-    not_financial?: boolean;
   };
   /** true when 2+ equally-plausible payees → UI must ask the user */
   needsClarification: boolean;
   /** the candidate payees to choose from (empty when resolved) */
   candidates: ParPrefillCandidate[];
+  /**
+   * EVERY party found in the document, grouped with its own requisites and ranked, with
+   * `recommended` on the auto-filled one. The UI lists these whenever there are 2+, so the
+   * user can switch beneficiary/prestator without re-uploading.
+   */
+  partyOptions: ParPrefillPartyOption[];
+  /** Set when the model was not reached — the UI says why instead of showing "(demo)". */
+  aiUnavailable?: "no_key" | "feature_disabled" | "budget_exceeded" | "api_error";
   /** the full party list the extractor found (debug / advanced UI) */
   parties: Array<{ name: string; role: string; idno: string | null; iban: string | null }>;
   /** line items / services to pre-fill the "Articole" section (unit price in cents) */
@@ -86,6 +111,12 @@ export interface ParPrefillResult {
   /** true if the extraction used the mock stub (no API key) */
   isStub: boolean;
 }
+
+/**
+ * Below this many characters a PDF's text layer is treated as absent (a scan often yields a few
+ * stray glyphs from a watermark or page number, not content).
+ */
+const MIN_USABLE_TEXT_CHARS = 200;
 
 // ─── helper ───────────────────────────────────────────────────────────────────
 
@@ -98,6 +129,22 @@ function field(
     value,
     confidence,
     low_confidence: low ?? confidence < 0.7,
+  };
+}
+
+/** Map a choosePayee candidate/option to the wire shape (one place, two call sites). */
+function toPrefillCandidate(cand: PayeeCandidate): ParPrefillCandidate {
+  return {
+    name: cand.name,
+    idno: cand.idno,
+    iban: cand.iban,
+    ...(cand.ibans && cand.ibans.length > 1 ? { ibans: cand.ibans } : {}),
+    ...(cand.ibanForeign ? { ibanForeign: true } : {}),
+    bank: cand.bank,
+    bic: cand.bic ?? null,
+    legalAddress: cand.legalAddress ?? null,
+    administratorName: cand.administratorName ?? null,
+    payeeType: cand.payeeType,
   };
 }
 
@@ -132,9 +179,16 @@ parAiPrefillRoutes.post(
 
     const buf = Buffer.from(await f.arrayBuffer());
 
-    // Extract text from file
+    // Extract text from the file — ANY format the user might have of an act.
+    //   image        → sent to the model as an image (vision)
+    //   PDF          → text layer; a SCANNED pdf has none, so the PDF itself is sent to the model
+    //   docx / xlsx  → real text extraction (these are ZIPs: toString("utf8") produced garbage)
+    //   csv / txt    → plain text
+    // A file we cannot read as text is still forwarded to the model as an attachment rather than
+    // failing — that is what "orice tip de act" means in practice.
     let rawText = "";
     let imageDataUrl: string | undefined;
+    let fileDataUrl: string | undefined;
     const isPdf = mimeType === "application/pdf" || /\.pdf$/i.test(fileName);
 
     try {
@@ -142,8 +196,12 @@ parAiPrefillRoutes.post(
         imageDataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
       } else if (isPdf) {
         rawText = await extractPdfText(buf);
+        if (rawText.trim().length < MIN_USABLE_TEXT_CHARS) {
+          // Scanned / photographed act: no text layer. The provider renders the pages itself.
+          fileDataUrl = `data:application/pdf;base64,${buf.toString("base64")}`;
+        }
       } else {
-        rawText = buf.toString("utf8");
+        rawText = await extractOfficeText(buf, fileName, mimeType);
       }
     } catch {
       rawText = "";
@@ -155,6 +213,8 @@ parAiPrefillRoutes.post(
     // Multi-party extraction (LLM or stub regex parser).
     const extraction = await extractParParties(rawText, {
       imageDataUrl,
+      fileDataUrl,
+      fileName: fileName || "document.pdf",
       tenantId: user.tenantId,
       userId: user.id,
       prefillId,
@@ -195,20 +255,16 @@ parAiPrefillRoutes.post(
         value: extraction.documentClass,
         confidence: extraction.documentClass ? 0.8 : 0,
         ...(extraction.documentClassReason ? { reason: extraction.documentClassReason } : {}),
-        not_financial: extraction.documentClass === "not_invoice",
       },
       needsClarification: choice.needsClarification,
-      candidates: choice.candidates.map((cand) => ({
-        name: cand.name,
-        idno: cand.idno,
-        iban: cand.iban,
-        ...(cand.ibanForeign ? { ibanForeign: true } : {}),
-        bank: cand.bank,
-        bic: cand.bic,
-        legalAddress: cand.legalAddress,
-        administratorName: cand.administratorName,
-        payeeType: cand.payeeType,
+      candidates: choice.candidates.map(toPrefillCandidate),
+      partyOptions: choice.options.map((opt) => ({
+        ...toPrefillCandidate(opt),
+        role: opt.role,
+        recommended: opt.recommended,
+        isPayer: opt.isPayer,
       })),
+      ...(extraction.unavailable ? { aiUnavailable: extraction.unavailable } : {}),
       parties: extraction.parties.map((p) => ({
         name: p.name,
         role: p.role,

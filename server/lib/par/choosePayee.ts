@@ -16,6 +16,7 @@ import type {
   ParPartiesExtraction,
   ParRole,
   PayeeCandidate,
+  PayeeOption,
   ChoosePayeeResult,
 } from "./parPartyTypes";
 import { isPayeeBank } from "./payeeBankClassifier";
@@ -126,6 +127,8 @@ export function roleRank(role: ParRole): number {
 interface RoutedRequisites {
   idno: string | null;
   iban: string | null;
+  /** Every valid account for this party (primary first) — ≥2 means the UI asks which to use. */
+  ibans: string[];
   ibanForeign: boolean;
   ibanLowConf: boolean;
   idnoDropped: boolean;
@@ -135,6 +138,10 @@ interface RoutedRequisites {
 export function routeIdAndIban(p: ParExtractedParty): RoutedRequisites {
   let idno: string | null = p.idno ?? null;
   let ibanRaw = normalizeIban(p.iban ?? null);
+  // Extra accounts (MDL + EUR, second bank…) travel in `ibans`; the primary stays in `iban`.
+  const extraIbans = (p.ibans ?? [])
+    .map((v) => normalizeIban(v))
+    .filter((v): v is string => v != null);
   let ibanForeign = false;
   let ibanLowConf = false;
   let iban: string | null = null;
@@ -176,7 +183,22 @@ export function routeIdAndIban(p: ParExtractedParty): RoutedRequisites {
     }
   }
 
-  return { idno, iban, ibanForeign, ibanLowConf, idnoDropped };
+  // (e) validate the extra accounts the same way; keep only genuinely valid ones, deduped.
+  const validExtras: string[] = [];
+  for (const cand of extraIbans) {
+    if (/^\d{13}$/.test(cand)) continue; // a fiscal id that slipped into the account list
+    const ok = /^MD\d{2}[A-Z0-9]{20}$/.test(cand) ? isValidMoldovaIBAN(cand) : isValidIBAN(cand);
+    if (ok) validExtras.push(cand);
+  }
+  const ibans = [...new Set([...(iban ? [iban] : []), ...validExtras])];
+  // A doc that lists several accounts but whose primary failed validation still offers a choice.
+  if (!iban && ibans.length > 0) {
+    iban = ibans[0];
+    ibanForeign = !/^MD/.test(iban);
+    ibanLowConf = ibans.length > 1 || ibanForeign;
+  }
+
+  return { idno, iban, ibans, ibanForeign, ibanLowConf, idnoDropped };
 }
 
 // ─── Internal candidate (carries decision metadata) ───────────────────────────
@@ -198,6 +220,7 @@ function stripInternal(c: InternalCandidate): PayeeCandidate {
     name: c.name,
     idno: c.idno,
     iban: c.iban,
+    ...(c.ibans && c.ibans.length > 1 ? { ibans: c.ibans } : {}),
     ...(c.ibanForeign ? { ibanForeign: true } : {}),
     bank: c.bank,
     bic: c.bic,
@@ -218,25 +241,22 @@ function dedupeByName(cands: InternalCandidate[]): InternalCandidate[] {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export function choosePayee(
+/**
+ * The decision itself (payee / ask / none). Kept private: `choosePayee` wraps it to attach the
+ * grouped `options` list.
+ *
+ * NOTE: there is deliberately NO document-type gate here any more. Requisites are extracted from
+ * ANY act — contract, act de predare-primire, proces-verbal, invoice, receipt — because a PAR is
+ * routinely raised against a non-invoice document. When a document really has nothing payable,
+ * the party/amount extraction comes back empty on its own; that is a better signal than a class
+ * label, which used to blank out perfectly good acts.
+ */
+function decidePayee(
   ext: ParPartiesExtraction,
   tenantOrgName: string | null,
-): ChoosePayeeResult {
+): Omit<ChoosePayeeResult, "options"> & { _pool: InternalCandidate[] } {
   const currency = ext.currency ?? "MDL";
   const scope = ext.scope;
-
-  // 2. Non-financial / nothing to pay.
-  if (ext.documentClass === "not_invoice" && ext.amountCents == null) {
-    return {
-      needsClarification: false,
-      candidates: [],
-      payee: null,
-      lowConfidence: {},
-      amountCents: 0,
-      currency,
-      scope,
-    };
-  }
 
   // 1. Drop banks + self/payer-by-name.
   // On the LLM path (not the coarse stub), the extractor's role labels are reliable, so an explicit
@@ -246,22 +266,24 @@ export function choosePayee(
   // the buyer as the beneficiary (→ yields no payee instead, which is correct: there is no one to pay).
   // The stub mislabels both parties "client", so we keep the lenient behavior there (isPayerHint only).
   const trustRoles = ext.isStub === false;
-  const pool = ext.parties.filter(
-    (p) =>
-      p.role !== "bank" &&
-      !isPayeeBank(p.name) &&
-      !fuzzyOrgMatch(p.name, tenantOrgName) &&
-      !(trustRoles && p.role === "client"),
+  // Everything that is not a bank and not the tenant itself. The DECISION narrows this further
+  // (below), but the UI needs the full list: the payer is shown as a (non-recommended) group so a
+  // user can still pick it when the document's role wording misled the extractor — the classic
+  // Moldovan "BENEFICIAR = the one who pays" trap.
+  const displayPool = ext.parties.filter(
+    (p) => p.role !== "bank" && !isPayeeBank(p.name) && !fuzzyOrgMatch(p.name, tenantOrgName),
   );
+  const pool = displayPool.filter((p) => !(trustRoles && p.role === "client"));
 
   // 3. Build validated candidates from the pool.
-  const candidates: InternalCandidate[] = pool.map((p) => {
+  const toCandidate = (p: ParExtractedParty): InternalCandidate => {
     const r = routeIdAndIban(p);
     const name = p.name;
     return {
       name,
       idno: r.idno,
       iban: r.iban,
+      ibans: r.ibans,
       ibanForeign: r.ibanForeign,
       bank: p.bank ?? null,
       bic: p.bic ?? null,
@@ -274,7 +296,9 @@ export function choosePayee(
       _isPayerHint: !!p.isPayerHint,
       _hadIdno: p.idno != null || (p.iban != null && /^\d{13}$/.test(normalizeIban(p.iban) ?? "")),
     };
-  });
+  };
+  const candidates: InternalCandidate[] = pool.map(toCandidate);
+  const displayCandidates: InternalCandidate[] = displayPool.map(toCandidate);
 
   // 4. Prefer paid-role parties; otherwise keep any party that is NOT an explicit payer/client.
   // We deliberately do NOT fall back to `candidates` (which would resurrect the excluded
@@ -287,6 +311,24 @@ export function choosePayee(
     // tags BOTH parties 'client'), so drop only EXPLICIT payers (isPayerHint — a "CLIENT/plătitor"
     // marker on THAT party). A remaining 'client'-labelled party is the counterparty = the payee.
     paid = candidates.filter((c) => !c._isPayerHint);
+  }
+
+  // 4-bis. Nothing payable in the document (no amount anywhere AND no party carries a fiscal id
+  // or an account) → propose NO payee. This replaces the old "documentClass === not_invoice"
+  // gate, which blanked perfectly good acts just because they were not invoices. The signal now
+  // comes from the CONTENT (are there payment requisites?), not from the document's label — so an
+  // act de primire-predare with an IBAN and a sum prefills, while a meeting protocol does not.
+  if (ext.amountCents == null && candidates.every((c) => !c.idno && !c.iban)) {
+    return {
+      _pool: displayCandidates,
+      needsClarification: false,
+      candidates: [],
+      payee: null,
+      lowConfidence: {},
+      amountCents: 0,
+      currency,
+      scope,
+    };
   }
 
   // 5. Rank: executor before provider; tie-break = more complete requisites.
@@ -302,6 +344,7 @@ export function choosePayee(
   if (distinct.length === 1) {
     const payee = distinct[0];
     return {
+      _pool: displayCandidates,
       needsClarification: false,
       candidates: [],
       payee: stripInternal(payee),
@@ -326,6 +369,7 @@ export function choosePayee(
     // (e.g. lone executor/provider vs client/payer-hint parties).
     if (roleRank(top._role) < roleRank(second._role)) {
       return {
+        _pool: displayCandidates,
         needsClarification: false,
         candidates: [],
         payee: stripInternal(top),
@@ -342,6 +386,7 @@ export function choosePayee(
     }
     // Genuine tie among paid roles → ASK.
     return {
+      _pool: displayCandidates,
       needsClarification: true,
       candidates: distinct.map(stripInternal),
       payee: null,
@@ -354,6 +399,7 @@ export function choosePayee(
 
   // distinct.length === 0 → nothing payable found.
   return {
+    _pool: displayCandidates,
     needsClarification: false,
     candidates: [],
     payee: null,
@@ -362,6 +408,36 @@ export function choosePayee(
     currency,
     scope,
   };
+}
+
+/**
+ * Public entry point: decide the payee AND return every party the document names, grouped with
+ * its own requisites (IDNO, account(s), bank, address, administrator).
+ *
+ * Why the grouped list exists even when a payee WAS resolved: documents routinely name several
+ * providers/beneficiaries, and the automatic pick is a ranking, not a certainty. The UI shows the
+ * groups, marks the recommended one, and lets the user switch — instead of silently filling one
+ * party and hiding the others (which forced a re-upload or manual retyping when it guessed wrong).
+ */
+export function choosePayee(
+  ext: ParPartiesExtraction,
+  tenantOrgName: string | null,
+): ChoosePayeeResult {
+  const { _pool, ...decision } = decidePayee(ext, tenantOrgName);
+
+  const recommendedName = decision.payee?.name.toLowerCase() ?? null;
+  const options: PayeeOption[] = dedupeByName(
+    [..._pool].sort(
+      (a, b) => roleRank(a._role) - roleRank(b._role) || requisiteScore(b) - requisiteScore(a),
+    ),
+  ).map((c) => ({
+    ...stripInternal(c),
+    role: c._role,
+    recommended: recommendedName != null && c.name.toLowerCase() === recommendedName,
+    isPayer: c._isPayerHint || c._role === "client",
+  }));
+
+  return { ...decision, options };
 }
 
 /**

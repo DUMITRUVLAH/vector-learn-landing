@@ -20,7 +20,7 @@ import { useRouter } from "@/router/HashRouter";
 import { detectPayeeType, type PayeeType } from "@/lib/par/payeeTypeDetector";
 import { plusDays } from "@/lib/par/dates";
 import { isValidMoldovaIBAN } from "@/lib/par/ibanCheck";
-import type { ParPayeeCandidate } from "@/lib/par/parCandidateTypes";
+import type { ParPayeeCandidate, ParPayeeOption } from "@/lib/par/parCandidateTypes";
 import { QuotesSection } from "@/components/par/QuotesSection";
 import { ApiError } from "@/lib/api";
 import {
@@ -47,6 +47,18 @@ import { Card, PastelIcon, Select, Textarea, chipToneFor } from "@/components/ds
 const ATTACHMENT_KIND_LABELS: Record<ParAttachmentKind, string> = {
   act_of_receipt: "Act de primire", contract: "Contract", quotation: "Ofertă",
   invoice: "Factură", par_pdf: "PAR PDF", payment_order: "Ordin de plată", other: "Altul",
+};
+
+/** Why the AI could not be consulted — shown verbatim instead of a silent "(demo)" badge. */
+const AI_UNAVAILABLE_MESSAGE: Record<string, string> = {
+  no_key:
+    "AI-ul nu este configurat pe acest mediu, așa că am completat doar ce s-a putut citi automat din document. Verifică fiecare câmp.",
+  feature_disabled:
+    "Extragerea automată este dezactivată de administrator. Câmpurile de mai jos vin dintr-o citire simplă a documentului.",
+  budget_exceeded:
+    "Bugetul lunar de AI al organizației a fost depășit, deci documentul a fost citit fără AI. Verifică fiecare câmp.",
+  api_error:
+    "Serviciul AI nu a răspuns (cont fără credit sau eroare temporară). Am completat doar ce s-a putut citi direct din document — verifică fiecare câmp.",
 };
 
 /** Map server submit `errors[].field` → friendly RO message for the summary + inline. */
@@ -407,6 +419,16 @@ export function ParCreateForm() {
   const aiPrefillFileRef = useRef<HTMLInputElement>(null);
   // PAR AI overhaul: when the document has 2+ equally-plausible payees the user must pick one.
   const [payeeCandidates, setPayeeCandidates] = useState<ParPayeeCandidate[]>([]);
+  /**
+   * Every party the document named, grouped with its own requisites. Shown whenever there are 2+,
+   * even when the server resolved one automatically — the user confirms or switches in one click
+   * instead of re-uploading the act.
+   */
+  const [partyOptions, setPartyOptions] = useState<ParPayeeOption[]>([]);
+  /** Name of the party currently applied to the form (highlights the active group). */
+  const [pickedPartyName, setPickedPartyName] = useState<string | null>(null);
+  /** Accounts of the applied party when it has more than one → the user picks which to pay into. */
+  const [ibanChoices, setIbanChoices] = useState<string[]>([]);
 
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -621,6 +643,9 @@ export function ParCreateForm() {
     setAiPrefillError(null);
     setAiPrefillResult(null);
     setPayeeCandidates([]);
+    setPartyOptions([]);
+    setPickedPartyName(null);
+    setIbanChoices([]);
     setAiPrefilling(true);
     try {
       await ensureDraft();
@@ -635,6 +660,9 @@ export function ParCreateForm() {
       // Clear vendor selection so the AI-derived payee takes precedence.
       setVendorId("");
 
+      // All parties found, grouped with their own requisites — shown when there are 2+.
+      setPartyOptions(result.partyOptions ?? []);
+
       if (result.needsClarification && result.candidates.length > 0) {
         // 2+ equally-plausible payees → ask the user. DON'T fill name/IBAN/IDNO yet.
         setPayeeCandidates(result.candidates);
@@ -642,6 +670,10 @@ export function ParCreateForm() {
         // Single resolved payee → fill from the (server-routed) fields.
         setPayeeCandidates([]);
         applyResolvedPayee(result);
+        if (result.payeeName.value) setPickedPartyName(String(result.payeeName.value));
+        const applied = (result.partyOptions ?? []).find((o) => o.recommended);
+        const accounts = applied ? selectableAccounts(applied) : [];
+        setIbanChoices(accounts.length > 1 ? accounts : []);
       }
       // Articole: pre-fill the line items (services + qty + unit price) extracted from the document.
       if (result.lineItems && result.lineItems.length > 0) {
@@ -716,8 +748,23 @@ export function ParCreateForm() {
     });
   };
 
+  /**
+   * The accounts of a party this form can actually submit. The PAR form accepts MD IBANs only
+   * (see validate(): payee_iban), so offering a foreign account would only produce a form error.
+   */
+  const selectableAccounts = (c: { ibans?: string[]; iban: string | null }): string[] => {
+    const all = c.ibans && c.ibans.length > 0 ? c.ibans : c.iban ? [c.iban] : [];
+    return [...new Set(all.map((i) => i.replace(/\s/g, "").toUpperCase()))].filter((i) =>
+      isValidMoldovaIBAN(i),
+    );
+  };
+
   /** User picked one of the candidate payees from the "Care companie e beneficiarul plății?" chooser. */
   const pickCandidate = (c: ParPayeeCandidate) => {
+    setPickedPartyName(c.name);
+    // A party with several accounts (MDL + EUR, two banks) → let the user say which one is paid.
+    const accounts = selectableAccounts(c);
+    setIbanChoices(accounts.length > 1 ? accounts : []);
     setPayeeName(c.name);
     setPayeeType(c.payeeType ?? detectPayeeType(c.name) ?? "juridic");
     setPayeeIdnp(c.idno ?? "");
@@ -732,7 +779,13 @@ export function ParCreateForm() {
       setPayeeIban("");
     }
     setVendorId("");
-    setPayeeCandidates([]); // hide the chooser once a choice is made
+    setPayeeCandidates([]); // hide the tie chooser once a choice is made
+  };
+
+  /** User picked WHICH account of the selected party receives the payment. */
+  const pickIban = (iban: string) => {
+    setPayeeIban(iban.replace(/\s/g, "").toUpperCase());
+    setVendorId("");
   };
 
   // Feature 3: instantiate a template into the current draft
@@ -1520,10 +1573,11 @@ export function ParCreateForm() {
           <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4 flex flex-col gap-2">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <Sparkles className="h-4 w-4 text-primary flex-shrink-0" aria-hidden />
-              Ai o factură sau un contract? Completează automat.
+              Ai un act, o factură sau un contract? Completează automat.
             </div>
             <p className="text-xs text-muted-foreground">
-              AI extrage beneficiarul, IBAN-ul, suma și articolele dintr-un document. Tu verifici și confirmi.
+              Orice tip de act: factură, contract, act de primire-predare, deviz, chitanță — inclusiv
+              scanat sau fotografiat. AI extrage beneficiarul, IBAN-ul, suma și articolele. Tu verifici și confirmi.
             </p>
             <div>
               <button
@@ -1545,7 +1599,7 @@ export function ParCreateForm() {
             <input
               ref={aiPrefillFileRef}
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.xlsx,.csv"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.docx,.xlsx,.csv,.txt"
               className="sr-only"
               aria-label="Alege document pentru analiză AI"
               onChange={handleAiPrefillFile}
@@ -1566,18 +1620,17 @@ export function ParCreateForm() {
             <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-1.5 text-sm">
               <div className="flex items-center gap-1.5 font-medium text-foreground">
                 <Sparkles className="h-4 w-4 text-primary" aria-hidden />
-                Câmpuri propuse de AI {aiPrefillResult.isStub && <span className="text-xs text-muted-foreground font-normal">(demo)</span>}
+                Câmpuri propuse de AI{" "}
+                {aiPrefillResult.isStub && !aiPrefillResult.aiUnavailable && (
+                  <span className="text-xs text-muted-foreground font-normal">(demo)</span>
+                )}
               </div>
 
-              {/* Non-financial document guard */}
-              {aiPrefillResult.documentClass.not_financial && (
+              {/* AI not reached (no key / quota / disabled) — say so instead of showing "(demo)". */}
+              {aiPrefillResult.aiUnavailable && (
                 <div className="flex items-start gap-2 p-2 rounded-md bg-warning/10 border border-warning/30 text-foreground text-xs">
                   <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5 text-warning" aria-hidden />
-                  <span>
-                    Documentul nu pare a fi o factură sau bon financiar
-                    {aiPrefillResult.documentClass.reason && ` — ${aiPrefillResult.documentClass.reason}`}.
-                    Câmpurile precompletate pot fi incorecte.
-                  </span>
+                  <span>{AI_UNAVAILABLE_MESSAGE[aiPrefillResult.aiUnavailable]}</span>
                 </div>
               )}
 
@@ -1603,6 +1656,110 @@ export function ParCreateForm() {
                   Câmpurile de mai jos au fost completate. Verifică și corectează înainte de trimitere.
                 </p>
               )}
+            </div>
+          )}
+
+          {/*
+            Grouped parties: every party the document named, each with ITS OWN requisites.
+            Shown whenever the act has 2+ parties — including when the server already picked one —
+            so the user confirms or switches without re-uploading. The tie chooser below stays for
+            the case where the server deliberately filled nothing.
+          */}
+          {payeeCandidates.length === 0 && partyOptions.length > 1 && (
+            <div
+              role="radiogroup"
+              aria-label="Părțile găsite în document"
+              className="rounded-lg border border-border bg-muted/30 p-3 space-y-2"
+            >
+              <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-primary" aria-hidden />
+                Am găsit {partyOptions.length} părți în document
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Alege cine primește plata — câmpurile beneficiarului se completează din partea aleasă:
+              </p>
+              <div className="space-y-2">
+                {partyOptions.map((o) => {
+                  const active = pickedPartyName?.toLowerCase() === o.name.toLowerCase();
+                  return (
+                    <button
+                      key={`opt-${o.name}-${o.idno ?? ""}-${o.iban ?? ""}`}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => pickCandidate(o)}
+                      className={cn(
+                        "touch-target w-full text-left rounded-lg border bg-card p-3 space-y-0.5 transition-colors",
+                        active
+                          ? "border-primary ring-1 ring-primary"
+                          : "border-border hover:border-primary hover:bg-accent",
+                      )}
+                    >
+                      <span className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-foreground">{o.name}</span>
+                        {o.isPayer && (
+                          <span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-muted text-muted-foreground">
+                            plătitor
+                          </span>
+                        )}
+                        {o.recommended && (
+                          <span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-primary/10 text-primary">
+                            propus de AI
+                          </span>
+                        )}
+                        {active && (
+                          <span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-success/10 text-success">
+                            selectat
+                          </span>
+                        )}
+                      </span>
+                      {o.idno && (
+                        <span className="block text-xs text-muted-foreground">IDNO/IDNP {o.idno}</span>
+                      )}
+                      {(o.ibans && o.ibans.length > 1 ? o.ibans : o.iban ? [o.iban] : []).map((ib) => (
+                        <span key={ib} className="block text-xs text-muted-foreground">
+                          {ib}
+                          {o.ibanForeign && <span className="text-warning"> (IBAN non-MD ⚠)</span>}
+                        </span>
+                      ))}
+                      {o.bank && <span className="block text-xs text-muted-foreground">{o.bank}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* The chosen party has several accounts → ask which one receives the payment. */}
+          {ibanChoices.length > 1 && (
+            <div
+              role="radiogroup"
+              aria-label="În ce cont se face plata?"
+              className="rounded-lg border border-border bg-muted/30 p-3 space-y-2"
+            >
+              <p className="text-sm font-medium text-foreground">În ce cont se face plata?</p>
+              <p className="text-xs text-muted-foreground">
+                {pickedPartyName ?? "Beneficiarul"} are mai multe conturi în document. Alege unul:
+              </p>
+              <div className="space-y-2">
+                {ibanChoices.map((ib) => (
+                  <button
+                    key={`iban-${ib}`}
+                    type="button"
+                    role="radio"
+                    aria-checked={payeeIban === ib}
+                    onClick={() => pickIban(ib)}
+                    className={cn(
+                      "touch-target w-full text-left rounded-lg border bg-card p-3 font-mono text-xs transition-colors",
+                      payeeIban === ib
+                        ? "border-primary ring-1 ring-primary text-foreground"
+                        : "border-border text-muted-foreground hover:border-primary hover:bg-accent",
+                    )}
+                  >
+                    {ib}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
