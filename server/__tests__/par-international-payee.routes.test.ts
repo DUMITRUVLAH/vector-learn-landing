@@ -9,11 +9,16 @@
  * `PATCH /api/par/:id` cu „invalid_iban: must be a valid MD IBAN" și de `POST /api/par/vendors`
  * la fel. Ambele rute presupuneau că orice plată e locală.
  *
+ * Contractul (decizie owner, 2026-08-21): rechizitele beneficiarului se ATENȚIONEAZĂ, nu se
+ * blochează. Formatele internaționale sunt prea variate ca validatorul să aibă mereu dreptate,
+ * iar un solicitant cu factura pe masă nu trebuie ținut în loc. Semnalul apare în formular și pe
+ * cerere (ParDetail), unde îl văd aprobatorii și finanțele — gardul real e acolo.
+ *
  * Ce blochează testele de aici:
  *   1. un IBAN valid din ORICE țară e acceptat pe PAR și în registrul de beneficiari
  *   2. un cod fiscal străin (11 cifre) NU mai e respins pentru că nu are 13 cifre…
  *   3. …și încape efectiv în coloană (migrarea 0140: varchar(13) → varchar(50))
- *   4. un IBAN cu checksum stricat rămâne respins — relaxarea nu a devenit „acceptă orice"
+ *   4. nici măcar un IBAN care nu trece verificarea nu blochează cererea — se salvează ca atare
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
@@ -152,20 +157,25 @@ describe("PATCH /api/par/:id — beneficiar internațional", () => {
     expect(row?.payeeIdnp).toBe(longVat); // NU trunchiat la 13
   });
 
-  it("IBAN cu checksum stricat → 400 (relaxarea nu a devenit acceptă-orice)", async () => {
-    const res = await patchPar({ payee_iban: "EE172200221068653841" });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; reason?: string };
-    expect(body.error).toContain("invalid_iban");
-    expect(body.reason).toBe("bad_checksum");
+  it("IBAN care NU trece verificarea → tot 200, salvat ca atare (atenționăm, nu blocăm)", async () => {
+    // Serverul nu mai e un zid: dacă solicitantul insistă, cererea pleacă. Avertismentul e
+    // recalculat la afișare (ParDetail) din aceeași bibliotecă, deci nu se pierde.
+    const suspicious = "EE172200221068653841"; // checksum stricat
+    const res = await patchPar({ payee_iban: suspicious });
+    expect(res.status).toBe(200);
+    const row = await testDb.query.parRequests.findFirst({ where: eq(parRequests.id, parId) });
+    expect(row?.payeeIban).toBe(suspicious);
   });
 
-  it("IBAN cu lungime greșită pentru țara lui → 400, cu mesaj despre ȚARA ACEEA", async () => {
-    const res = await patchPar({ payee_iban: "EE1622002210686538" });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; reason?: string };
-    expect(body.reason).toBe("bad_length");
-    expect(body.error).toContain("Estonia");
+  it("biblioteca marchează totuși valoarea ca de-verificat — semnalul e disponibil pentru UI", async () => {
+    // Perechea testului de mai sus: „nu blocăm" NU înseamnă „nu observăm".
+    const { validateIban } = await import("../lib/par/validators");
+    const bad = validateIban("EE172200221068653841");
+    expect(bad.ok).toBe(false);
+    expect(bad.reason).toBe("bad_checksum");
+    const short = validateIban("EE1622002210686538");
+    expect(short.reason).toBe("bad_length");
+    expect(short.message).toContain("Estonia");
   });
 
   it("IBAN moldovenesc valid continuă să meargă (fără regresie pe cazul obișnuit)", async () => {
@@ -191,10 +201,15 @@ describe("POST /api/par/vendors — registrul de beneficiari", () => {
     expect(saved?.bicSwift).toBe(EE.bic);
   });
 
-  it("IBAN invalid → 400 (nu intră gunoi în registru)", async () => {
-    const res = await postVendor({ name: "Fake SRL", iban: "XX00NOTANIBAN0000000" });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toContain("invalid_iban");
+  it("IBAN neverificat NU face salvarea să eșueze tăcut", async () => {
+    // Registrul se completează automat la fiecare trimitere de PAR. Dacă am respinge aici ce
+    // formularul a acceptat, beneficiarul pur și simplu n-ar mai fi salvat — eșec tăcut, cel mai
+    // prost rezultat posibil pentru cel care va refolosi rechizitele data viitoare.
+    const res = await postVendor({ name: "Furnizor Nou SRL", iban: "EE172200221068653841" });
+    expect([200, 201]).toContain(res.status);
+    const saved = await testDb.query.parVendors.findFirst({
+      where: eq(parVendors.iban, "EE172200221068653841"),
+    });
+    expect(saved?.name).toBe("Furnizor Nou SRL");
   });
 });

@@ -44,7 +44,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { generateRequestNo } from "../lib/par/requestNo";
-import { validateIban, validateFiscalId, ibanCountry } from "../lib/par/validators";
+import { validateIban } from "../lib/par/validators";
 import { recalcParTotal } from "../lib/par/totals";
 import { submitPAR, buildBodyForHash } from "../lib/par/submit";
 import { autosaveVendorFromPar } from "../lib/par/vendorAutoSave";
@@ -1106,30 +1106,18 @@ parRoutes.patch(
       }
     }
 
-    // PAR-103: validare IBAN + cod fiscal.
-    // Plățile pot fi internaționale, deci acceptăm ORICE IBAN valid ISO 13616 (lungime corectă
-    // pentru țara din prefix + mod-97), nu doar MD. Un IBAN estonian/german e la fel de legitim.
-    let payeeIbanCountry: string | null = body.payee_iban ? ibanCountry(body.payee_iban) : null;
+    // PAR-103: IBAN + cod fiscal — ATENȚIONĂM, NU BLOCĂM (decizie owner, 2026-08-21).
+    //
+    // Regulile de format nu pot fi un zid: plățile pot fi internaționale, iar formatele străine
+    // sunt prea variate ca să le garantăm pe toate. Un solicitant care are rechizitele pe hârtie
+    // în față nu trebuie să rămână blocat pentru că validatorul nostru nu recunoaște un caz.
+    // Avertismentul se calculează din aceeași bibliotecă și se afișează în formular ȘI pe cererea
+    // trimisă (ParDetail) — deci aprobatorii și finanțele văd semnalul acolo unde contează, iar
+    // ei sunt gardul real înainte de plată.
     if (body.payee_iban) {
       const check = validateIban(body.payee_iban);
       if (!check.ok) {
-        return c.json(
-          { error: `invalid_iban: ${check.message ?? "not a valid IBAN (ISO 13616)"}`, reason: check.reason },
-          400
-        );
-      }
-    }
-    if (body.payee_idnp) {
-      // Regula „exact 13 cifre" e moldovenească — se aplică doar când beneficiarul e moldovean
-      // (IBAN MD, sau lipsă IBAN → presupunem local, cazul implicit al aplicației).
-      // `ok:false` = doar gunoi. Un cod fiscal străin (11 cifre EE, VAT DE…) trece — regula de
-      // 13 cifre e moldovenească și nu are ce căuta pe o plată internațională.
-      const fiscal = validateFiscalId(body.payee_idnp, { country: payeeIbanCountry ?? "MD" });
-      if (!fiscal.ok) {
-        return c.json(
-          { error: `invalid_idnp: ${fiscal.message ?? "invalid fiscal id"}` },
-          400
-        );
+        console.warn(`[par] IBAN neverificat pe ${parId}: ${check.reason} — salvat oricum (atenționare, nu blocaj)`);
       }
     }
 
