@@ -191,6 +191,11 @@ async function main() {
     // VM1-12: finance uploads the signed payment order; code writes kind='payment_order'.
     // Prod migrations lag deploys (see docs/solutions prod-migration-desync), so heal the enum here too.
     `ALTER TYPE "public"."par_attachment_kind" ADD VALUE IF NOT EXISTS 'payment_order'`,
+    // Migrarea 0140: anexele standard din formularul PAR. Fără heal, un upload cu unul din
+    // tipurile noi 500-ează pe prod ("invalid input value for enum") până aterizează migrarea.
+    `ALTER TYPE "public"."par_attachment_kind" ADD VALUE IF NOT EXISTS 'participants_list'`,
+    `ALTER TYPE "public"."par_attachment_kind" ADD VALUE IF NOT EXISTS 'narrative_report'`,
+    `ALTER TYPE "public"."par_attachment_kind" ADD VALUE IF NOT EXISTS 'deliverables'`,
     // PLATFORM-001 (migration 0138): Consola Platformă. `login_events` e scris pe FIECARE
     // login (business + learn + Google), iar `tenant_modules` e citit la fiecare hidratare a
     // shell-ului. Prod nu aplică fiabil migrările, deci fără heal login-ul ar loga o eroare la

@@ -19,6 +19,9 @@ import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import { detectPayeeType, type PayeeType } from "@/lib/par/payeeTypeDetector";
 import { plusDays } from "@/lib/par/dates";
+import {
+  ATTACHMENT_KIND_ORDER, ATTACHMENT_KIND_LABELS, attachmentKindLabel, KIND_OTHER_MAX_LEN,
+} from "@/lib/par/attachmentKinds";
 import { isValidMoldovaIBAN } from "@/lib/par/ibanCheck";
 import type { ParPayeeCandidate } from "@/lib/par/parCandidateTypes";
 import { QuotesSection } from "@/components/par/QuotesSection";
@@ -43,11 +46,6 @@ import {
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
 import { Card, PastelIcon, Select, Textarea, chipToneFor } from "@/components/ds";
-
-const ATTACHMENT_KIND_LABELS: Record<ParAttachmentKind, string> = {
-  act_of_receipt: "Act de primire", contract: "Contract", quotation: "Ofertă",
-  invoice: "Factură", par_pdf: "PAR PDF", payment_order: "Ordin de plată", other: "Altul",
-};
 
 /** Map server submit `errors[].field` → friendly RO message for the summary + inline. */
 const FIELD_MESSAGES: Record<string, string> = {
@@ -371,6 +369,8 @@ export function ParCreateForm() {
   const [attachmentsPresent, setAttachmentsPresent] = useState(false);
   const [attachmentsNote, setAttachmentsNote] = useState("");
   const [uploadKind, setUploadKind] = useState<ParAttachmentKind>("contract");
+  /** Doar pentru „Altul": ce document e. Obligatoriu, altfel dosarul rămâne cu „Alt document". */
+  const [uploadKindOther, setUploadKindOther] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
   const [draftSavedMessage, setDraftSavedMessage] = useState<string | null>(null);
   const [eventSearch, setEventSearch] = useState("");
@@ -885,6 +885,9 @@ export function ParCreateForm() {
     } catch { /* non-blocking */ }
   };
 
+  /** „Altul" fără nume = upload blocat (butonul rămâne inert până se completează). */
+  const uploadKindOtherMissing = uploadKind === "other" && !uploadKindOther.trim();
+
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
     // VM1-06: accept multiple files in one go (max 10 attachments per PAR).
@@ -911,6 +914,11 @@ export function ParCreateForm() {
     ];
     const picked = Array.from(e.target.files);
     e.target.value = "";
+    // „Altul" fără nume ar ajunge în dosar ca „Alt document" — cere numele înainte de upload.
+    const kindOther = uploadKindOther.trim();
+    if (uploadKind === "other" && !kindOther) {
+      return setError("Scrie ce document este, în câmpul de lângă „Altul”, înainte de a-l încărca.");
+    }
     let slots = MAX_ATTACHMENTS - attachments.length;
     if (slots <= 0) return setError(`Maxim ${MAX_ATTACHMENTS} fișiere per cerere.`);
     if (picked.length > slots) {
@@ -929,6 +937,7 @@ export function ParCreateForm() {
         const dataUrl = await fileToDataUrl(file);
         const att = await uploadAttachment(draftId, {
           file_name: file.name, file_url: dataUrl, mime: file.type, kind: uploadKind, size_bytes: file.size,
+          ...(uploadKind === "other" ? { kind_other: kindOther } : {}),
         });
         setAttachments((p) => [...p, att]);
         reconcileAttachment(draftId, att.id)
@@ -1458,7 +1467,7 @@ export function ParCreateForm() {
         )}
 
         {/* 11 End-use */}
-        <Section n="11" title="Utilizare finală" icon={AlignLeft} hint="Descrie pe scurt ce s-a livrat sau prestat.">
+        <Section n="11" title="Utilizare finală" icon={AlignLeft} hint="Descrie detaliat și specific ce s-a livrat sau prestat — serviciul/bunul, cantitatea sau durata, perioada, locul și beneficiarii. Nu rezuma într-o singură frază generală.">
           <Field label="Descriere" htmlFor="endUse" required={purpose === "execute_payment"} error={fieldErrors.end_use}>
             <Textarea id="endUse" rows={4}
               placeholder="Descrie detaliat serviciile/bunurile primite — ex. „Servicii de consultanță psihologică de grup, organizate în cadrul proiectului Digital Safeguard, cu durata de 120–180 min, pe platforma Zoom, pentru beneficiarii proiectului.”"
@@ -1786,22 +1795,29 @@ export function ParCreateForm() {
         </Section>
 
         {/* 13 Attachments */}
-        <Section n="13" title="Documente" icon={Paperclip}>
+        <Section n="13" title="Documente" icon={Paperclip} hint="Anexează factura fiscală, contractul, actul de predare-primire, lista de participanți, raportul narativ, livrabilele — sau „Altul”, scriind ce document este.">
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Tip document" htmlFor="uk">
               <Select id="uk" className="w-full" value={uploadKind} onChange={(e) => setUploadKind(e.target.value as ParAttachmentKind)} aria-label="Tip document">
-                {(Object.entries(ATTACHMENT_KIND_LABELS) as [ParAttachmentKind, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                {ATTACHMENT_KIND_ORDER.map((k) => <option key={k} value={k}>{ATTACHMENT_KIND_LABELS[k]}</option>)}
               </Select>
             </Field>
+            {uploadKind === "other" && (
+              <Field label="Ce document este?" htmlFor="ukother" required>
+                <input id="ukother" type="text" className={inputCls} maxLength={KIND_OTHER_MAX_LEN}
+                  placeholder="ex. Certificat de conformitate"
+                  value={uploadKindOther} onChange={(e) => setUploadKindOther(e.target.value)} />
+              </Field>
+            )}
             <label className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium cursor-pointer hover:bg-secondary/80 transition-colors min-h-[44px]",
-              (uploadingFile || attachments.length >= 10) && "opacity-50 cursor-not-allowed"
+              (uploadingFile || attachments.length >= 10 || uploadKindOtherMissing) && "opacity-50 cursor-not-allowed"
             )}>
               {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
               <span>Încarcă fișiere</span>
               <input type="file" multiple className="sr-only"
                 accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff,.heic,.heif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv,.rtf,.zip"
-                onChange={onUpload} disabled={uploadingFile || attachments.length >= 10} aria-label="Alege fișierele" />
+                onChange={onUpload} disabled={uploadingFile || attachments.length >= 10 || uploadKindOtherMissing} aria-label="Alege fișierele" />
             </label>
             <span className="text-xs text-muted-foreground">PDF, imagini, Word, Excel, PowerPoint, CSV, ZIP — max 10 MB · {attachments.length}/10 fișiere</span>
           </div>
@@ -1815,7 +1831,7 @@ export function ParCreateForm() {
                     <Paperclip className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-hidden />
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-foreground truncate">{a.fileName}</span>
-                      <span className="block text-xs text-muted-foreground">{ATTACHMENT_KIND_LABELS[a.kind]}</span>
+                      <span className="block text-xs text-muted-foreground">{attachmentKindLabel(a.kind, a.kindOther)}</span>
                       {analysis && <AttachmentAnalysisSummary analysis={analysis} currency={currency} />}
                     </span>
                   </span>

@@ -105,7 +105,16 @@ REGULI ABSOLUTE:
    Exemplu: "5000 lei" → 5000. "45 000,00 lei" → 45000. "EUR 2,400.00" → 2400.
    Dacă documentul nu conține o sumă de plată → null.
 4. currency: "MDL" pentru lei/лей, "EUR" pentru €/EUR, "USD" pentru $/USD. Implicit "MDL".
-5. scope: o frază scurtă (max 15 cuvinte) cu obiectul plății / serviciul.
+5. scope: descrierea DETALIATĂ și SPECIFICĂ a ce s-a livrat sau prestat (utilizarea finală).
+   NU un rezumat de o frază generală. Include, dacă documentul le conține: fiecare serviciu/bun
+   livrat (enumeră-le pe toate din tabelul de articole), cantitatea/durata (nr. de sesiuni, ore,
+   zile, bucăți), perioada sau data prestării, locul/platforma, proiectul sau evenimentul în
+   cadrul căruia s-a prestat și beneficiarii. Scrie 1–4 propoziții (până la ~80 de cuvinte),
+   folosind DOAR informații din document — nu inventa detalii lipsă.
+   Rău: "Servicii de comunicare pentru evenimentul X prestate în luna iulie 2026".
+   Bun: "Servicii de comunicare pentru evenimentul X, desfășurat pe 14–16 iulie 2026 la Chișinău:
+   redactarea și distribuirea a 3 comunicate de presă, administrarea paginilor de Facebook și
+   Instagram ale evenimentului timp de o lună și acreditarea a 25 de jurnaliști."
 6. documentClass: "invoice" / "receipt" / "not_invoice" (contract/proces-verbal/poză = not_invoice).
    NU forța "invoice" pe un document care nu e factură.
 7. NU decide tu cine e beneficiarul plății. Doar listează părțile cu rolul lor corect.
@@ -299,7 +308,9 @@ export async function extractParParties(
       ? "Extrage TOATE părțile din documentul din imagine."
       : `Extrage TOATE părțile din textul OCR:\n\n${aiText}`,
     imageDataUrl: opts.imageDataUrl,
-    maxTokens: 900,
+    // 1600 (was 900): the detailed `scope` + up to 30 line items can overflow 900 tokens,
+    // and a truncated JSON silently falls back to the regex stub (all extraction lost).
+    maxTokens: 1600,
     entityType: "fin_capture",
     entityId: opts.prefillId,
     tenantId: opts.tenantId,
