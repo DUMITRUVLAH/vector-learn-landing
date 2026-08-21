@@ -974,6 +974,13 @@
       "when": 1786291300000,
       "tag": "0139_platform_telemetry",
       "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1786291400000,
+      "tag": "0140_par_attachment_kinds",
+      "breakpoints": true
     }
   ]
 }

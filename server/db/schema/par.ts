@@ -64,6 +64,11 @@ export const parAttachmentKindEnum = pgEnum("par_attachment_kind", [
   "contract",
   "quotation",
   "invoice",
+  // Anexele standard listate în formularul PAR (migrarea 0140). Enum-ul din Postgres se
+  // extinde cu ALTER TYPE … ADD VALUE, deci ordinea de aici e doar documentară.
+  "participants_list",
+  "narrative_report",
+  "deliverables",
   "par_pdf",
   "payment_order",
   "other",
@@ -582,6 +587,8 @@ export const parAttachments = pgTable(
     fileUrl: text("file_url").notNull(),
     fileName: varchar("file_name", { length: 500 }).notNull(),
     kind: parAttachmentKindEnum("kind").notNull().default("other"),
+    /** Pentru kind='other': ce document e, scris de utilizator ("Certificat de conformitate"). */
+    kindOther: varchar("kind_other", { length: 200 }),
     /** Latest non-blocking AI consistency analysis (JSON). */
     analysis: text("analysis"),
     uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
