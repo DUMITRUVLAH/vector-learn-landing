@@ -13,6 +13,7 @@ import {
   cleanName,
   parsePartiesFromText,
 } from "../stubPartyParser";
+import { SCENARIOS } from "./scenarios.fixture";
 import {
   normalizeIban,
   fuzzyOrgMatch,
@@ -166,6 +167,44 @@ describe("roleRank", () => {
     expect(roleRank("executor")).toBeLessThan(roleRank("provider"));
     expect(roleRank("provider")).toBeLessThan(roleRank("client"));
     expect(roleRank("client")).toBeLessThan(roleRank("bank"));
+  });
+});
+
+describe("stub parser — legalAddress + administratorName extraction (previously always null)", () => {
+  // Versatility follow-up (2026-08-25): the stub/no-API-key path never extracted these two
+  // fields at all, no matter how clearly the document stated them — every document went through
+  // AI-prefill with "Adresă juridică" and "Administrator" permanently blank. Both are extracted
+  // only from an explicit label ("cu sediul în" / "reprezentată de ...") — never guessed from an
+  // unlabelled line — matching the "prefer null over wrong" rule the LLM prompt itself follows.
+  it("extracts both parties' address + administrator from a real MD-contract scenario", () => {
+    const scenario = SCENARIOS.find((s) => s.id === "par-ai-001");
+    if (!scenario) throw new Error("fixture par-ai-001 not found");
+    const ext = parsePartiesFromText(scenario.docText);
+
+    const executor = ext.parties.find((p) => /Ducont/i.test(p.name));
+    expect(executor?.legalAddress).toBe("mun. Chișinău, str. Columna 170");
+    expect(executor?.administratorName).toBe("Andrei Ducaru");
+
+    const beneficiar = ext.parties.find((p) => /Vector Academy/i.test(p.name));
+    expect(beneficiar?.legalAddress).toBe("mun. Chișinău, bd. Ștefan cel Mare 202");
+    expect(beneficiar?.administratorName).toBe("Elena Roșca");
+  });
+
+  it("does not invent an address/administrator when the document doesn't label one", () => {
+    const ext = parsePartiesFromText(
+      'Prestator: "Lumina Print" SRL, IDNO 1003600012345, IBAN MD24AG000225100013104168.',
+    );
+    const party = ext.parties.find((p) => /Lumina Print/i.test(p.name));
+    expect(party?.legalAddress ?? null).toBeNull();
+    expect(party?.administratorName ?? null).toBeNull();
+  });
+
+  it("English 'registered address' label is recognized", () => {
+    const ext = parsePartiesFromText(
+      'Supplier: "Bright Labs" Ltd, registered address: 5 King Street, London, IBAN DE89370400440532013000.',
+    );
+    const party = ext.parties.find((p) => /Bright Labs/i.test(p.name));
+    expect(party?.legalAddress).toBe("5 King Street, London");
   });
 });
 
