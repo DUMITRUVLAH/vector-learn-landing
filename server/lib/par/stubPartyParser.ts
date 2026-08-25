@@ -157,8 +157,22 @@ function detectCurrencyNear(snippet: string): "MDL" | "EUR" | "USD" | null {
  *   group 2 — currency (or a bracket) AFTER it ("8 000,00 lei", "45000.00)")
  * Avoids matching list prefixes ("3.1."), dates, article numbers, percentages.
  */
-const MONEY_NUM_RE =
-  /\b(?:MDL|EUR|USD|LEI)\s*(\d{1,3}(?:[ .,]\d{3})+(?:[.,]\d{2})?|\d+[.,]\d{2}|\d{3,})|(\d{1,3}(?:[ .,]\d{3})+(?:[.,]\d{2})?|\d+[.,]\d{2}|\d{3,})\s*(?:lei|лей|леев|MDL|€|EUR|\$|USD|\)|\(|$)/gi;
+/** Grouped ("8 000,00", "8,000.00") or plainly decimal ("450.00") — unmistakably money. */
+const MONEY_STRONG = String.raw`\d{1,3}(?:[ .,]\d{3})+(?:[.,]\d{2})?|\d+[.,]\d{2}`;
+/** A bare digit run ("8000") — only money when a currency or bracket sits right next to it,
+ * otherwise it is a fiscal code, a document number or a year. */
+const MONEY_LOOSE = String.raw`\d{3,}`;
+const CURRENCY_AFTER = String.raw`lei|лей|леев|MDL|€|EUR|\$|USD`;
+
+const MONEY_NUM_RE = new RegExp(
+  // currency printed BEFORE the number: "MDL 8,000.00 (opt mii lei)"
+  String.raw`\b(?:MDL|EUR|USD|LEI)\s*(${MONEY_STRONG}|${MONEY_LOOSE})` +
+    // …or after it, incl. at end of line: "Preț total (inclusiv TVA) 8,000.00"
+    String.raw`|(${MONEY_STRONG})\s*(?:${CURRENCY_AFTER}|[)(]|\n|$)` +
+    // …a bare run needs an explicit currency/bracket next to it to count as money at all
+    String.raw`|(${MONEY_LOOSE})\s*(?:${CURRENCY_AFTER}|[)(])`,
+  "gi",
+);
 
 /**
  * Find the first genuine money amount in `window`.
@@ -172,7 +186,7 @@ function findMoneyInWindow(window: string): number | null {
   MONEY_NUM_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = MONEY_NUM_RE.exec(window)) !== null) {
-    const raw = m[1] ?? m[2];
+    const raw = m[1] ?? m[2] ?? m[3];
     if (!raw) continue;
     const numIndex = m.index + m[0].indexOf(raw);
     if (/[A-Za-z]/.test(window[numIndex - 1] ?? "")) continue; // inside an IBAN / code token
@@ -897,8 +911,11 @@ function extractAddressSnippet(block: string): string | null {
 
 /** The role nouns a signatory is introduced by, in every declension the documents print
  * ("Administrator," / "în persoana Administratorului," / "Președintelui" / "Director general"). */
+// Longest suffix FIRST in every alternation: `(?:ul|ului)` would match "Directorul" inside
+// "Directorului" and stop, leaving "ui, Elena Roșca" — and because everything after the label is
+// optional, the regex has no reason to backtrack, so the name is silently lost.
 const ADMIN_ROLE_NOUN =
-  "(?:administrator(?:ul|ului)?|director(?:ul|ului)?(?:\\s+general)?|pre[șşs]edinte(?:le|lui)?|reprezentant(?:ul)?(?:\\s+legal)?|gerant(?:ul)?)";
+  "(?:administrator(?:ului|ul)?|director(?:ului|ul)?(?:\\s+general)?|pre[șşs]edinte(?:lui|le)?|reprezentant(?:ului|ul)?(?:\\s+legal)?|gerant(?:ului|ul)?)";
 
 /** Administrator/representative label anchors — same "labelled only" discipline as the address.
  * Either an introducing phrase ("reprezentată de", "în persoana", "в лице") optionally followed by

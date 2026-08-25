@@ -219,6 +219,27 @@ parAttachmentsRoutes.get("/:parId/attachments", async (c) => {
 type ReconcileCheck = { field: string; expected: string | number | null; found: string | number | null; matches: boolean | null };
 const norm = (value: string | null | undefined) => (value ?? "").replace(/\s/g, "").toLocaleLowerCase("ro");
 
+/**
+ * Of every party the document names, the one this PAR is about — matched on the strongest
+ * available identifier (fiscal id, then account, then name), falling back to the extractor's
+ * recommendation when nothing lines up (a genuinely unrelated document, which SHOULD then
+ * report mismatches).
+ */
+export function matchPartyToPar(
+  choice: ReturnType<typeof choosePayee>,
+  par: Pick<typeof parRequests.$inferSelect, "payeeName" | "payeeIdnp" | "payeeIban">,
+) {
+  const parties = choice.options.length ? choice.options : choice.payee ? [choice.payee] : [];
+  const by = (pick: (p: (typeof parties)[number]) => string | null | undefined, want: string | null) =>
+    want ? parties.find((p) => norm(pick(p)) && norm(pick(p)) === norm(want)) : undefined;
+  return (
+    by((p) => p.idno, par.payeeIdnp) ??
+    by((p) => p.iban, par.payeeIban) ??
+    by((p) => p.name, par.payeeName) ??
+    choice.payee
+  );
+}
+
 async function analyzeAttachmentAgainstPar(
   par: typeof parRequests.$inferSelect,
   attachment: typeof parAttachments.$inferSelect,
@@ -237,7 +258,11 @@ async function analyzeAttachmentAgainstPar(
     imageDataUrl, tenantId: par.tenantId, userId: actorUserId, prefillId: randomUUID(),
   });
   const choice = choosePayee(extraction, null);
-  const payee = choice.payee;
+  // Compare against the party the PAR actually names, not the one the extractor would recommend.
+  // A contract names both sides; `choosePayee` picks the one it thinks is paid, which on a
+  // document where the tenant is the provider is the OTHER party — so every requisite check came
+  // back "neverificat" (and the beneficiary a false mismatch) on a perfectly matching document.
+  const payee = matchPartyToPar(choice, par);
   const checks: ReconcileCheck[] = [
     { field: "sumă", expected: par.totalEstimatedCents, found: choice.amountCents, matches: choice.amountCents == null ? null : choice.amountCents === par.totalEstimatedCents },
     { field: "valută", expected: par.currency, found: choice.currency, matches: !choice.currency ? null : choice.currency === par.currency },
