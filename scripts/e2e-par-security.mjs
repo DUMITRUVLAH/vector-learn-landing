@@ -245,18 +245,20 @@ await CHECK("izolare", "un utilizator din alt tenant NU poate aproba", async () 
 // ══════════════ D. VALIDAREA CÂMPURILOR ══════════════
 console.log("\n── D. Validarea câmpurilor ──");
 
-await CHECK("validare", "IBAN invalid este respins la submit", async () => {
+await CHECK("validare", "IBAN-ul neverificabil se salvează canonic, nu se pierde", async () => {
+  // Plățile pot fi internaționale, deci un IBAN pe care validatorul nu-l recunoaște NU mai
+  // blochează solicitantul: se salvează (normalizat) și se semnalează aprobatorului înainte de
+  // plată (ParDetail). Ce trebuie garantat aici e că valoarea nu ajunge la bancă cu spații.
   const c = await POST("requestor", "/api/par", {});
   const id = c.json.id;
   const r = await PATCH("requestor", `/api/par/${id}`, {
     purpose: "execute_payment", currency: "MDL", end_use: "test",
-    payee_name: "X SRL", payee_iban: "MD00INVALIDIBAN123", payee_idnp: IDNP,
+    payee_name: "X SRL", payee_iban: "md00 inva lidi ban1 23", payee_idnp: IDNP,
   });
-  if (r.status >= 400) return `respins la PATCH (${r.status})`;
-  await POST("requestor", `/api/par/${id}/line-items`, { description: "x", quantity: 1, unit_price_cents: 1000 });
-  const s = await POST("requestor", `/api/par/${id}/submit`, {});
-  must(s.status >= 400, `IBAN invalid a trecut până la submit (${s.status})`);
-  return "respins la submit";
+  must(r.status === 200, `PATCH a picat (${r.status})`);
+  const d = await GET("requestor", `/api/par/${id}`);
+  must(d.json.payeeIban === "MD00INVALIDIBAN123", `IBAN stocat brut: ${d.json.payeeIban}`);
+  return "salvat canonic + semnalat la afișare";
 });
 
 await CHECK("validare", "cantitatea zero / negativă este respinsă", async () => {

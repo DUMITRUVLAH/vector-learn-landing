@@ -404,12 +404,19 @@ await T("end use text is stored on the draft", async () => {
 await T("a valid Moldovan IBAN is accepted", async () => {
   eq((await PATCH("requestor", `/api/par/${payeePar.id}`, { payee_iban: IBAN_A })).status, 200);
 });
-await T("an IBAN failing the mod-97 checksum is rejected", async () => {
-  const r = await PATCH("requestor", `/api/par/${payeePar.id}`, { payee_iban: "MD24AG000225100013104169" });
-  eq(r.status, 400);
+await T("an IBAN failing the mod-97 checksum is kept but flagged, not blocked", async () => {
+  // Deliberate (server/routes/par.ts): payments can be international and foreign formats are too
+  // varied to guarantee, so a requestor holding the paperwork is never walled off. The gate is the
+  // warning the approver/finance sees before paying — see the browser scenario below.
+  const bad = "MD24AG000225100013104169";
+  const r = await PATCH("requestor", `/api/par/${payeePar.id}`, { payee_iban: bad });
+  eq(r.status, 200);
+  eq((await detail("requestor", payeePar.id)).payeeIban, bad, "stored value");
 });
-await T("a too-short IBAN is rejected", async () => {
-  eq((await PATCH("requestor", `/api/par/${payeePar.id}`, { payee_iban: "MD24AG00" })).status, 400);
+await T("a foreign IBAN is accepted (international payments)", async () => {
+  const r = await PATCH("requestor", `/api/par/${payeePar.id}`, { payee_iban: "DE89370400440532013000" });
+  eq(r.status, 200);
+  eq((await detail("requestor", payeePar.id)).payeeIban, "DE89370400440532013000", "stored value");
 });
 await T("a pasted IBAN with spaces is stored canonically", async () => {
   const r = await PATCH("requestor", `/api/par/${payeePar.id}`, { payee_iban: "MD24 AG00 0225 1000 1310 4168" });
@@ -421,11 +428,13 @@ await T("a lowercase IBAN is upper-cased on the way in", async () => {
   eq(r.status, 200);
   eq((await detail("requestor", payeePar.id)).payeeIban, IBAN_A, "upper-cased iban");
 });
-await T("an IDNP with the wrong length is rejected", async () => {
-  eq((await PATCH("requestor", `/api/par/${payeePar.id}`, { payee_idnp: "123" })).status, 400);
+await T("a foreign fiscal id is accepted (not everyone has a 13-digit IDNP)", async () => {
+  const r = await PATCH("requestor", `/api/par/${payeePar.id}`, { payee_idnp: "DE123456789" });
+  eq(r.status, 200);
+  eq((await detail("requestor", payeePar.id)).payeeIdnp, "DE123456789", "stored value");
 });
-await T("an IDNP containing letters is rejected", async () => {
-  eq((await PATCH("requestor", `/api/par/${payeePar.id}`, { payee_idnp: "20026000ABCDE" })).status, 400);
+await T("an absurdly long fiscal id is still refused by the column bound", async () => {
+  eq((await PATCH("requestor", `/api/par/${payeePar.id}`, { payee_idnp: "9".repeat(80) })).status, 400);
 });
 await T("a 13-digit IDNP is accepted", async () => {
   eq((await PATCH("requestor", `/api/par/${payeePar.id}`, { payee_idnp: IDNP })).status, 200);
@@ -985,9 +994,9 @@ await T("vendors are reusable and carry banking data", async () => {
   const r = await POST("admin", "/api/par/vendors", { name: "Furnizor Test SRL", iban: IBAN_B, bank: "BC Test", idnp: null });
   inSet(r.status, [200, 201], "status");
 });
-await T("a vendor with an invalid IBAN is refused", async () => {
-  const r = await POST("admin", "/api/par/vendors", { name: "Bad IBAN SRL", iban: "MD00XXXX" });
-  eq(r.status, 400);
+await T("a vendor with a foreign IBAN can be registered", async () => {
+  const r = await POST("admin", "/api/par/vendors", { name: "Auslandpartner GmbH", iban: "DE89370400440532013000" });
+  inSet(r.status, [200, 201], `status — ${r.text.slice(0, 150)}`);
 });
 await T("a vendor without a name is refused", async () => {
   eq((await POST("admin", "/api/par/vendors", { name: "" })).status, 400);
@@ -1482,6 +1491,25 @@ await T("PAR pages render for a requestor without runtime errors", async () => {
       assert(!/Unexpected token|is not a function|undefined is not|Cannot read propert/i.test(txt), `runtime error text at ${path}: ${txt.slice(0, 160)}`);
     }
     assert(errors.length === 0, `pageerror: ${errors[0]}`);
+  } finally { await browser.close(); }
+});
+await T("the detail page warns the approver about an unverifiable IBAN before payment", async () => {
+  const p = await createDraft("requestor");
+  await addLine("requestor", p.id, {});
+  await fillPayee("requestor", p.id, { payee_iban: "MD24AG000225100013104169" });
+  await POST("requestor", `/api/par/${p.id}/submit`);
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  try {
+    await page.goto(`${BASE}/#/business/login`, { waitUntil: "domcontentloaded" });
+    await page.fill('input[type="email"]', USERS.approver);
+    await page.fill('input[type="password"]', PW);
+    await page.click('button[type="submit"]');
+    await page.waitForTimeout(2500);
+    await page.goto(`${BASE}/#/business/par/${p.id}`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(2000);
+    const txt = await page.evaluate(() => document.body.innerText);
+    assert(/Verific(ă|a) IBAN-ul/i.test(txt), `no IBAN warning on the detail page: ${txt.slice(0, 300)}`);
   } finally { await browser.close(); }
 });
 await T("the PAR detail page renders a paid request", async () => {
