@@ -41,6 +41,7 @@ import {
   Download,
   Calendar,
   BarChart2,
+  Wand2,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { cn } from "@/lib/utils";
@@ -99,6 +100,7 @@ import {
   updateBudgetCode,
   deleteBudgetCode,
   createVendor,
+  normalizeVendorRequisites,
   updateVendor,
   deleteVendor,
   createEvent,
@@ -2129,6 +2131,30 @@ function ParReferenceData() {
 
   useEffect(() => { load(); }, []); // eslint-disable-line
 
+  // Separarea rechizitelor vechi trăiește AICI, nu în VendorSection: `load()` ridică `loading`,
+  // iar secțiunea e înlocuită cu spinnerul — o stare locală în VendorSection s-ar pierde la
+  // remontare și utilizatorul n-ar apuca să vadă niciodată câte rânduri au fost reparate.
+  const [normalizing, setNormalizing] = useState(false);
+  const [normalizeResult, setNormalizeResult] = useState<string | null>(null);
+
+  const handleNormalizeVendors = async () => {
+    setNormalizing(true);
+    setNormalizeResult(null);
+    try {
+      const res = await normalizeVendorRequisites();
+      setNormalizeResult(
+        res.updated > 0
+          ? `${res.updated} din ${res.scanned} beneficiari au fost separați.`
+          : "Nimic de separat — codurile sunt deja în coloanele lor."
+      );
+      await load();
+    } catch (e) {
+      setNormalizeResult(e instanceof Error ? e.message : "Separarea nu a reușit.");
+    } finally {
+      setNormalizing(false);
+    }
+  };
+
   // VM1-02: handle Excel file selection → upload → preview result
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2367,7 +2393,13 @@ function ParReferenceData() {
       )}
 
       {section === "vendors" && (
-        <VendorSection vendors={vendors} onReload={load} />
+        <VendorSection
+          vendors={vendors}
+          onReload={load}
+          normalizing={normalizing}
+          normalizeResult={normalizeResult}
+          onNormalize={handleNormalizeVendors}
+        />
       )}
     </div>
   );
@@ -2908,9 +2940,13 @@ function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: 
 interface VendorSectionProps {
   vendors: ParVendor[];
   onReload: () => void;
+  /** Separarea rechizitelor vechi e ținută de părinte — vezi comentariul de la handleNormalizeVendors. */
+  normalizing: boolean;
+  normalizeResult: string | null;
+  onNormalize: () => void;
 }
 
-function VendorSection({ vendors, onReload }: VendorSectionProps) {
+function VendorSection({ vendors, onReload, normalizing, normalizeResult, onNormalize }: VendorSectionProps) {
   const [registryQuery, setRegistryQuery] = useState("");
   const [registryResults, setRegistryResults] = useState<RegistryCompany[]>([]);
   const [registrySearching, setRegistrySearching] = useState(false);
@@ -2920,7 +2956,7 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
   // Pre-fill vendor form from registry pick
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const emptyVendorForm = () => ({ name: "", idnp: "", iban: "", bank: "", bic_swift: "", legal_address: "", administrator_name: "", contact_name: "", contact_phone: "", contact_email: "" });
+  const emptyVendorForm = () => ({ name: "", idnp: "", vat_code: "", iban: "", bank: "", bic_swift: "", legal_address: "", administrator_name: "", contact_name: "", contact_phone: "", contact_email: "" });
   const [form, setForm] = useState<Record<string, string>>(emptyVendorForm());
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -2949,17 +2985,18 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
   };
 
   const startAdd = () => { setForm(emptyVendorForm()); setShowForm(true); setEditingId(null); setSaveError(null); };
-  const startEdit = (v: ParVendor) => { setForm({ ...emptyVendorForm(), name: v.name, idnp: v.idnp ?? "", iban: v.iban ?? "", bank: v.bank ?? "", bic_swift: v.bicSwift ?? "", legal_address: v.legalAddress ?? "", administrator_name: v.administratorName ?? "", contact_name: v.contactName ?? "", contact_phone: v.contactPhone ?? "", contact_email: v.contactEmail ?? "" }); setEditingId(v.id); setShowForm(false); };
+  const startEdit = (v: ParVendor) => { setForm({ ...emptyVendorForm(), name: v.name, idnp: v.idnp ?? "", vat_code: v.vatCode ?? "", iban: v.iban ?? "", bank: v.bank ?? "", bic_swift: v.bicSwift ?? "", legal_address: v.legalAddress ?? "", administrator_name: v.administratorName ?? "", contact_name: v.contactName ?? "", contact_phone: v.contactPhone ?? "", contact_email: v.contactEmail ?? "" }); setEditingId(v.id); setShowForm(false); };
   const cancel = () => { setShowForm(false); setEditingId(null); setForm(emptyVendorForm()); };
 
   const handleSave = async () => {
     setSaving(true);
     setSaveError(null);
     try {
+      const payload = { name: form.name, idnp: form.idnp || null, vat_code: form.vat_code || null, iban: form.iban || null, bank: form.bank || null, bic_swift: form.bic_swift || null, legal_address: form.legal_address || null, administrator_name: form.administrator_name || null, contact_name: form.contact_name || null, contact_phone: form.contact_phone || null, contact_email: form.contact_email || null };
       if (editingId) {
-        await updateVendor(editingId, { name: form.name, idnp: form.idnp || null, iban: form.iban || null, bank: form.bank || null, bic_swift: form.bic_swift || null, legal_address: form.legal_address || null, administrator_name: form.administrator_name || null, contact_name: form.contact_name || null, contact_phone: form.contact_phone || null, contact_email: form.contact_email || null });
+        await updateVendor(editingId, payload);
       } else {
-        await createVendor({ name: form.name, idnp: form.idnp || null, iban: form.iban || null, bank: form.bank || null, bic_swift: form.bic_swift || null, legal_address: form.legal_address || null, administrator_name: form.administrator_name || null, contact_name: form.contact_name || null, contact_phone: form.contact_phone || null, contact_email: form.contact_email || null });
+        await createVendor(payload);
       }
       await onReload();
       cancel();
@@ -2979,9 +3016,12 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
         // IDNO/IDNP e formatul MOLDOVENESC (13 cifre); registrul ține și beneficiari străini,
         // al căror cod fiscal are alt format — de aceea eticheta nu mai promite „13 cifre".
         { id: "idnp", label: "IDNO / IDNP sau cod fiscal străin", placeholder: "2008001007903" },
+        // Codul de TVA e un număr DISTINCT de codul fiscal, chiar dacă documentele le tipăresc
+        // lipite („c.f./ nr.TVA …"). Contabila filtrează după el, deci are câmpul lui.
+        { id: "vat_code", label: "Cod TVA", placeholder: "0301234" },
         { id: "iban", label: "IBAN (orice țară)", placeholder: "MD48ML000002259A19498121" },
-        { id: "bank", label: "Bancă", placeholder: 'BC "Moldindconbank" S.A.' },
-        { id: "bic_swift", label: "BIC / SWIFT", placeholder: "MOLDMD2X" },
+        { id: "bank", label: "Bancă (doar denumirea)", placeholder: 'BC "Moldindconbank" S.A.' },
+        { id: "bic_swift", label: "Cod bancar (BIC / SWIFT)", placeholder: "MOLDMD2X322" },
         { id: "administrator_name", label: "Administrator / reprezentant", placeholder: "Prenume Nume" },
         { id: "legal_address", label: "Adresă juridică", placeholder: "Localitate, stradă, număr" },
         { id: "contact_name", label: "Persoană de contact", placeholder: "Prenume Nume" },
@@ -3033,6 +3073,20 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
           {registrySearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" aria-hidden />}
         </div>
         {registryError && <p className="text-xs text-destructive">{registryError}</p>}
+
+        {/* Beneficiarii salvați înainte de separare au banca + codul bancar + codul fiscal + TVA
+            îngrămădite în „Bancă". Separarea la scriere curăță doar ce se salvează de-acum;
+            istoricul trece o dată prin același separator, de aici. Se poate rula de oricâte ori. */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
+          <button type="button" onClick={onNormalize} disabled={normalizing}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted disabled:opacity-60 min-h-[44px]">
+            {normalizing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Wand2 className="h-4 w-4" aria-hidden />}
+            Separă codurile din coloana „Bancă"
+          </button>
+          <span className="text-xs text-muted-foreground">
+            {normalizeResult ?? "Mută codul bancar, codul fiscal și TVA-ul din denumirea băncii în coloanele lor."}
+          </span>
+        </div>
         {registryResults.length > 0 && (
           <ul className="rounded-lg border border-border bg-popover shadow divide-y divide-border max-h-48 overflow-y-auto" role="listbox" aria-label="Rezultate căutare">
             {registryResults.map((co) => (
@@ -3053,29 +3107,37 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
 
       {showForm && renderVendorForm()}
 
-      <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full text-sm" aria-label="Furnizori">
+      {/* Rechizitele au fiecare coloana ei: contabila filtrează/copiază un cod, nu un paragraf.
+          Tabelul e lat, deci derulează pe orizontală în interiorul lui — pagina nu se lățește. */}
+      <div className="rounded-lg border border-border overflow-x-auto">
+        <table className="w-full min-w-[900px] text-sm" aria-label="Furnizori">
           <thead className="bg-muted/50">
             <tr>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Nume</th>
+              <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Cod fiscal / IDNO</th>
+              <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Cod TVA</th>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">IBAN</th>
+              <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Cod bancar</th>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Bancă</th>
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground sr-only">Acțiuni</th>
             </tr>
           </thead>
           <tbody>
             {vendors.length === 0 && (
-              <tr><td colSpan={4} className="p-6 text-center text-sm text-muted-foreground">Niciun furnizor.</td></tr>
+              <tr><td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">Niciun furnizor.</td></tr>
             )}
             {vendors.map((v) => (
               <tr key={v.id} className="border-t border-border">
                 {editingId === v.id ? (
-                  <td colSpan={4} className="p-0">{renderVendorForm(true)}</td>
+                  <td colSpan={7} className="p-0">{renderVendorForm(true)}</td>
                 ) : (
                   <>
                     <td className="p-3 text-foreground">{v.name}</td>
-                    <td className="p-3 text-foreground font-mono text-xs">{v.iban ?? <span className="text-muted-foreground">—</span>}</td>
-                    <td className="p-3 text-foreground">{v.bank ?? <span className="text-muted-foreground">—</span>}</td>
+                    <td className="p-3 text-foreground font-mono text-xs whitespace-nowrap">{v.idnp || <span className="font-sans text-muted-foreground">—</span>}</td>
+                    <td className="p-3 text-foreground font-mono text-xs whitespace-nowrap">{v.vatCode || <span className="font-sans text-muted-foreground">—</span>}</td>
+                    <td className="p-3 text-foreground font-mono text-xs whitespace-nowrap">{v.iban || <span className="font-sans text-muted-foreground">—</span>}</td>
+                    <td className="p-3 text-foreground font-mono text-xs whitespace-nowrap">{v.bicSwift || <span className="font-sans text-muted-foreground">—</span>}</td>
+                    <td className="p-3 text-foreground">{v.bank || <span className="text-muted-foreground">—</span>}</td>
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button type="button" onClick={() => startEdit(v)}

@@ -15,6 +15,7 @@ import type {
   ParRole,
 } from "./parPartyTypes";
 import { isPayeeBank, findBankKeywordMatch } from "./payeeBankClassifier";
+import { splitBankRequisites } from "./bankRequisites";
 
 // ─── Low-level token extractors (exported for unit tests) ─────────────────────
 
@@ -707,6 +708,11 @@ function cleanBankName(line: string): string {
       "",
     )
     .trim();
+  // …iar codurile NEetichetate lipite de nume (BIC-ul de filială „AGRNMD2X885", un „c.f./ nr.TVA
+  // 1014…") scapă de regula de mai sus, care se uită doar după etichete. Separatorul comun le taie
+  // pe toate, cu aceleași reguli folosite la salvarea beneficiarului.
+  const split = splitBankRequisites(s);
+  if (split.bank) s = split.bank;
   s = s.replace(/\s+/g, " ").trim();
   return (s || windowed.trim()).slice(0, MAX_BANK_NAME_LEN);
 }

@@ -199,7 +199,11 @@ export interface ParEvent {
 }
 export interface ParVendor {
   id: string; name: string; idnp: string | null; iban: string | null; bank: string | null; active: boolean;
-  bicSwift?: string | null; bankAccount?: string | null; bankAccountCurrency?: string | null;
+  /** Cod bancar (BIC/SWIFT), în MD cu sufix de filială: AGRNMD2X885. */
+  bicSwift?: string | null;
+  /** Nr. de plătitor de TVA — coloană separată de codul fiscal (`idnp`). */
+  vatCode?: string | null;
+  bankAccount?: string | null; bankAccountCurrency?: string | null;
   legalAddress?: string | null; contactName?: string | null; contactPhone?: string | null;
   contactEmail?: string | null; administratorName?: string | null;
 }
@@ -1033,7 +1037,8 @@ export async function deleteBudgetCode(id: string): Promise<{ ok: boolean }> {
 
 export async function createVendor(payload: {
   name: string; idnp?: string | null; iban?: string | null; bank?: string | null;
-  bic_swift?: string | null; bank_account?: string | null; bank_account_currency?: string | null;
+  bic_swift?: string | null; vat_code?: string | null;
+  bank_account?: string | null; bank_account_currency?: string | null;
   legal_address?: string | null; contact_name?: string | null; contact_phone?: string | null;
   contact_email?: string | null; administrator_name?: string | null;
 }): Promise<ParVendor> {
@@ -1041,11 +1046,20 @@ export async function createVendor(payload: {
 }
 export async function updateVendor(id: string, payload: Partial<{
   name: string; idnp?: string | null; iban?: string | null; bank?: string | null; active: boolean;
-  bic_swift?: string | null; bank_account?: string | null; bank_account_currency?: string | null;
+  bic_swift?: string | null; vat_code?: string | null;
+  bank_account?: string | null; bank_account_currency?: string | null;
   legal_address?: string | null; contact_name?: string | null; contact_phone?: string | null;
   contact_email?: string | null; administrator_name?: string | null;
 }>): Promise<ParVendor> {
   return api(`/api/par/vendors/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+/**
+ * Trece beneficiarii deja salvați prin separatorul de rechizite: banca, codul bancar, codul
+ * fiscal și nr. TVA erau îngrămădite într-un singur câmp „Bancă". Sigur de rulat de mai multe
+ * ori — rândurile deja curate sunt sărite.
+ */
+export async function normalizeVendorRequisites(): Promise<{ ok: boolean; scanned: number; updated: number }> {
+  return api("/api/par/vendors/actions/normalize", { method: "POST" });
 }
 export async function deleteVendor(id: string): Promise<{ ok: boolean }> {
   return api(`/api/par/vendors/${id}`, { method: "DELETE" });
