@@ -43,6 +43,7 @@ import {
   BarChart2,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { ParImportMappingDialog } from "@/components/par/ParImportMappingDialog";
 import { cn } from "@/lib/utils";
 import { Alert, Badge, Button, Card, Checkbox, Input, Label, Select, Switch, Tabs, Textarea } from "@/components/ds";
 import {
@@ -106,8 +107,11 @@ import {
   searchRegistryCompanies,
   formatMDL,
   importParConfigExcel,
+  previewParConfigExcel,
   downloadParConfigTemplate,
   type ParConfigImportResult,
+  type ParConfigImportMapping,
+  type ParConfigImportPreview,
   type ParDoaRow,
   type ParMember,
   type ParSettings,
@@ -1902,6 +1906,9 @@ function ParReferenceData() {
   const [importResult, setImportResult] = useState<ParConfigImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
+  // VM1-02b: the file waits in the mapping dialog until the admin says what each column is.
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<ParConfigImportPreview | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -1929,7 +1936,7 @@ function ParReferenceData() {
 
   useEffect(() => { load(); }, []); // eslint-disable-line
 
-  // VM1-02: handle Excel file selection → upload → preview result
+  // VM1-02: file selection → read the sheets/columns (no writes) → mapping dialog
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1937,10 +1944,26 @@ function ParReferenceData() {
     e.target.value = "";
     setImportError(null);
     setImportResult(null);
-    setImportLoading(true);
+    setImportPreview(null);
+    setImportFile(file);
     try {
-      const result = await importParConfigExcel(file);
+      setImportPreview(await previewParConfigExcel(file));
+    } catch (err) {
+      setImportFile(null);
+      setImportError(err instanceof Error ? err.message : "Fișierul nu a putut fi citit.");
+    }
+  };
+
+  // VM1-02b: the admin confirmed what every column means → import with that exact mapping
+  const runImport = async (mapping: ParConfigImportMapping) => {
+    if (!importFile) return;
+    setImportLoading(true);
+    setImportError(null);
+    try {
+      const result = await importParConfigExcel(importFile, mapping);
       setImportResult(result);
+      setImportFile(null);
+      setImportPreview(null);
       // Reload reference data after successful import
       await load();
     } catch (err) {
@@ -1948,6 +1971,11 @@ function ParReferenceData() {
     } finally {
       setImportLoading(false);
     }
+  };
+
+  const cancelImport = () => {
+    setImportFile(null);
+    setImportPreview(null);
   };
 
   if (loading) {
@@ -2013,12 +2041,22 @@ function ParReferenceData() {
           onChange={handleImportFile}
         />
       </div>
+
+      {/* VM1-02b: choose the import type + column mapping before anything is written */}
+      <ParImportMappingDialog
+        open={importFile !== null}
+        preview={importPreview}
+        fileName={importFile?.name ?? ""}
+        loading={importLoading}
+        onCancel={cancelImport}
+        onConfirm={runImport}
+      />
       <details className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm">
         <summary className="cursor-pointer font-medium text-foreground">Cum se face importul Excel</summary>
         <div className="mt-2 space-y-1 text-muted-foreground">
-          <p>1. Poți folosi template-ul sau propriul fișier — foaia este recunoscută după antetul coloanelor (prima linie), nu după numele foii.</p>
-          <p>2. Anteturi acceptate: <span className="font-mono">Cod</span> + <span className="font-mono">Denumire</span> (+ opțional <span className="font-mono">Denumire proiect</span>, <span className="font-mono">Alocare</span>) pentru coduri bugetare; <span className="font-mono">Denumire proiect</span> pentru proiecte; <span className="font-mono">Denumire departament</span> pentru departamente; <span className="font-mono">Denumire plătitor</span> pentru plătitori.</p>
-          <p>3. Dacă în coloana <span className="font-mono">Cod</span> ai tot textul (ex. <span className="font-mono">1.1 Project Coordinator</span>), codul și denumirea sunt separate automat. Proiectul indicat pe rând este creat dacă nu există.</p>
+          <p>1. Poți folosi template-ul sau <strong className="font-medium text-foreground">orice fișier al tău</strong> — denumirile foilor și ale coloanelor nu contează.</p>
+          <p>2. După ce alegi fișierul se deschide o fereastră în care <strong className="font-medium text-foreground">tu decizi</strong>: pentru fiecare foaie, ce fel de date conține (coduri bugetare, proiecte, departamente, plătitori) și ce reprezintă fiecare coloană. Coloanele lăsate pe „nu importa" sunt ignorate. Sugestiile sunt pre-completate, dar le poți schimba.</p>
+          <p>3. Dacă în coloana pusă pe <span className="font-mono">Cod</span> ai tot textul (ex. <span className="font-mono">1.1 Project Coordinator</span>), codul și denumirea sunt separate automat. Proiectul indicat pe rând este creat dacă nu există.</p>
           <p>4. Sumele acceptă atât formatul MD/EU (<span className="font-mono">12 500,50</span>), cât și formatul internațional (<span className="font-mono">12500.50</span>).</p>
           <p>Importul nu oprește tot fișierul la prima eroare: rândurile valide sunt procesate, iar erorile rămân vizibile pentru corectare.</p>
         </div>
