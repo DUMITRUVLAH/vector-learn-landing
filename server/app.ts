@@ -196,7 +196,10 @@ app.route("/api/fin/cash", finCashRoutes);
 app.route("/api/fin/banklink", finBankLinkRoutes);
 app.route("/api/fin/mass", finMassRoutes);
 app.route("/api/fin/members", finMembersRoutes);
-app.route("/api/fin/org", finOrgRoutes);
+// finOrgRoutes defines "/org", "/series", "/series/:id" internally, so mount at /api/fin —
+// mounting at /api/fin/org doubled the segment → /api/fin/org/org 404'd every profile load/save
+// (live: error_groups "route_not_found" at /api/fin/org, first seen 2026-08-10, still open).
+app.route("/api/fin", finOrgRoutes);
 app.route("/api/fin/parties", finPartiesRoutes);
 app.route("/api/fin/agreements", finAgreementsRoutes);
 app.route("/api/fin/inventory", finInventoryRoutes);
