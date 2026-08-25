@@ -16,6 +16,7 @@ import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
+import { canViewPar } from "../lib/par/visibility";
 
 export const parTimelineRoutes = new Hono<{ Variables: AuthVariables }>();
 parTimelineRoutes.use("*", requireAuth);
@@ -36,18 +37,17 @@ parTimelineRoutes.get("/:id/timeline", async (c) => {
       id: parRequests.id,
       requestedByUserId: parRequests.requestedByUserId,
       tenantId: parRequests.tenantId,
+      // Needed by canViewPar: an unsubmitted draft is private to its author.
+      status: parRequests.status,
     })
     .from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
 
   if (!par) return c.json({ error: "not_found" }, 404);
 
-  // Roles gate: requestors can only view their own PAR timeline; elevated roles see all
-  const roles = await getUserPARRoles(user.id, tenantId);
-  const hasElevatedRole = roles.some((r) =>
-    ["approver", "finance", "par_admin"].includes(r)
-  );
-  if (!hasElevatedRole && par.requestedByUserId !== user.id) {
+  // Roles gate: requestors see only their own timeline; elevated roles see every SUBMITTED PAR
+  // (an unsubmitted draft stays with its author — server/lib/par/visibility.ts).
+  if (!(await canViewPar(user, tenantId, par))) {
     return c.json({ error: "not_found" }, 404);
   }
 

@@ -20,7 +20,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { zodFieldErrorsHook } from "../lib/zodFieldErrors";
-import { and, eq, ilike, desc, asc, inArray, isNull, or, gte, lte, sql } from "drizzle-orm";
+import { and, eq, ne, ilike, desc, asc, inArray, isNull, or, gte, lte, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   parRequests,
@@ -45,8 +45,9 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { generateRequestNo } from "../lib/par/requestNo";
-import { validateIban } from "../lib/par/validators";
+import { validateIban, normalizeIban } from "../lib/par/validators";
 import { recalcParTotal } from "../lib/par/totals";
+import { MAX_MONEY_CENTS, MAX_LINE_QUANTITY, exceedsMoneyBound, moneyBoundError } from "../lib/par/moneyBounds";
 import { submitPAR, buildBodyForHash } from "../lib/par/submit";
 import { autosaveVendorFromPar } from "../lib/par/vendorAutoSave";
 import { verifyParBodyHash } from "../lib/par/integrity";
@@ -54,9 +55,10 @@ import { buildApprovalSheetLines, type SheetLine } from "../lib/par/approvalShee
 import { winAnsiSafe } from "../lib/par/pdfText";
 import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { getDesignatedApprovers, projectAllowsApprover } from "../lib/par/projectApprovers";
-import { getActiveDelegators } from "../lib/par/delegations";
+import { getActiveDelegators, getDelegatedAuthority } from "../lib/par/delegations";
 import { resolveViewerDecision } from "../lib/par/decisionAuthority";
 import { enabledPayerIds, hasPayerModuleEntitlement } from "../middleware/requireModuleEntitlement";
+import { canViewPar, isWorkspaceAdminRole } from "../lib/par/visibility";
 
 export const parRoutes = new Hono<{ Variables: AuthVariables }>();
 parRoutes.use("*", requireAuth);
@@ -64,6 +66,11 @@ parRoutes.use("*", requireAuth);
 // bare `/:id` (GET/PATCH/DELETE) and the nested `/:id/...` (submit, line-items, comments, quotes…).
 parRoutes.use("/:id", parUuidGuard("id"));
 parRoutes.use("/:id/:action/*", parUuidGuard("id"));
+// The SECOND uuid on a nested path (line item, quote) is just as fatal: `DELETE
+// /api/par/<uuid>/line-items/not-a-uuid` reached a Postgres uuid comparison → 500.
+parRoutes.use("/:id/line-items/:lineId", parUuidGuard("lineId"));
+parRoutes.use("/:id/quotes/:quoteId", parUuidGuard("quoteId"));
+parRoutes.use("/:id/quotes/:quoteId/*", parUuidGuard("quoteId"));
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
@@ -122,9 +129,10 @@ const updateParSchema = z.object({
 
 const lineItemSchema = z.object({
   description: z.string().min(1).max(2000),
-  quantity: z.number().int().positive("quantity must be > 0"),
+  quantity: z.number().int().positive("quantity must be > 0").max(MAX_LINE_QUANTITY, "quantity is unrealistically large"),
   unit: z.string().max(50).optional().nullable(),
-  unit_price_cents: z.number().int().min(0, "unit_price_cents must be >= 0"),
+  // Bounded: the column is a Postgres integer — an unbounded value 500s on INSERT (see moneyBounds.ts).
+  unit_price_cents: z.number().int().min(0, "unit_price_cents must be >= 0").max(MAX_MONEY_CENTS, "unit_price_cents is out of range"),
 });
 
 const lineItemUpdateSchema = lineItemSchema.partial().refine(
@@ -177,14 +185,19 @@ async function validateScopeSelection(params: {
   projectId: string | null;
   eventId: string | null;
   budgetCodeId: string | null;
+  /** A department id from another tenant used to reach the INSERT and die on the FK
+   *  constraint with a 500. Validated here like every other foreign selection. */
+  departmentId?: string | null;
 }): Promise<string | null> {
-  const { tenantId, payerId, projectId, eventId, budgetCodeId } = params;
-  const [payer, project, event, budgetCode] = await Promise.all([
+  const { tenantId, payerId, projectId, eventId, budgetCodeId, departmentId } = params;
+  const [payer, project, event, budgetCode, department] = await Promise.all([
     payerId ? db.select({ id: parPayers.id }).from(parPayers).where(and(eq(parPayers.id, payerId), eq(parPayers.tenantId, tenantId), eq(parPayers.active, true))).then((rows) => rows[0]) : null,
     projectId ? db.select({ id: parProjects.id, payerId: parProjects.payerId }).from(parProjects).where(and(eq(parProjects.id, projectId), eq(parProjects.tenantId, tenantId), eq(parProjects.active, true))).then((rows) => rows[0]) : null,
     eventId ? db.select({ id: parEvents.id, projectId: parEvents.projectId }).from(parEvents).where(and(eq(parEvents.id, eventId), eq(parEvents.tenantId, tenantId), eq(parEvents.active, true))).then((rows) => rows[0]) : null,
     budgetCodeId ? db.select({ id: parBudgetCodes.id, payerId: parBudgetCodes.payerId, projectId: parBudgetCodes.projectId }).from(parBudgetCodes).where(and(eq(parBudgetCodes.id, budgetCodeId), eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.active, true))).then((rows) => rows[0]) : null,
+    departmentId ? db.select({ id: parDepartments.id }).from(parDepartments).where(and(eq(parDepartments.id, departmentId), eq(parDepartments.tenantId, tenantId))).then((rows) => rows[0]) : null,
   ]);
+  if (departmentId && !department) return "department_not_found";
   if (payerId && !payer) return "payer_not_found";
   if (projectId && !project) return "project_not_found";
   if (project?.payerId && payerId && project.payerId !== payerId) return "project_not_in_payer";
@@ -236,6 +249,7 @@ parRoutes.post(
       projectId: body.project_id ?? null,
       eventId: body.event_id ?? null,
       budgetCodeId: body.budget_code_id ?? null,
+      departmentId: body.department_id ?? profile?.departmentId ?? null,
     });
     if (selectionError) return c.json({ error: selectionError }, 400);
     if (!(await hasPayerModuleEntitlement(user.id, tenantId, payerId, "par"))) {
@@ -309,8 +323,8 @@ parRoutes.post("/:id/duplicate", async (c) => {
 
   const roles = await getUserPARRoles(user.id, tenantId);
   const hasElevatedRole = roles.some((r) => ["approver", "finance", "par_admin"].includes(r));
-  // Requestors can only see (hence duplicate) their own PARs.
-  if (!hasElevatedRole && source.requestedByUserId !== user.id) {
+  // Requestors can only see (hence duplicate) their own PARs; so can nobody else for a draft.
+  if (!(await canViewPar(user, tenantId, source))) {
     return c.json({ error: "not_found" }, 404);
   }
   const sourceInScope = source.projectId
@@ -397,12 +411,8 @@ parRoutes.post("/:id/duplicate", async (c) => {
 // ─── VF-104: comments ─────────────────────────────────────────────────────────
 // Comments live under /:id, so they're safe inside parRoutes (no mount-order conflict).
 
-/** Can this user see (and thus comment on) the PAR? Same rule as GET /:id. */
-async function canSeePAR(userId: string, tenantId: string, par: { requestedByUserId: string }): Promise<boolean> {
-  const roles = await getUserPARRoles(userId, tenantId);
-  const hasElevatedRole = roles.some((r) => ["approver", "finance", "par_admin"].includes(r));
-  return hasElevatedRole || par.requestedByUserId === userId;
-}
+/** Can this user see (and thus comment on) the PAR? One rule for every read path. */
+const canSeePAR = canViewPar;
 
 const commentSchema = z.object({ body: z.string().min(1).max(5000) });
 
@@ -414,7 +424,7 @@ parRoutes.get("/:id/comments", async (c) => {
 
   const par = await getPAR(parId, tenantId);
   if (!par) return c.json({ error: "not_found" }, 404);
-  if (!(await canSeePAR(user.id, tenantId, par))) return c.json({ error: "not_found" }, 404);
+  if (!(await canSeePAR(user, tenantId, par))) return c.json({ error: "not_found" }, 404);
 
   const rows = await db
     .select({
@@ -441,7 +451,7 @@ parRoutes.post("/:id/comments", zValidator("json", commentSchema), async (c) => 
 
   const par = await getPAR(parId, tenantId);
   if (!par) return c.json({ error: "not_found" }, 404);
-  if (!(await canSeePAR(user.id, tenantId, par))) return c.json({ error: "not_found" }, 404);
+  if (!(await canSeePAR(user, tenantId, par))) return c.json({ error: "not_found" }, 404);
 
   const [comment] = await db
     .insert(parComments)
@@ -461,7 +471,7 @@ parRoutes.post("/:id/comments", zValidator("json", commentSchema), async (c) => 
 const quoteSchema = z.object({
   vendor_id: z.string().uuid().optional().nullable(),
   vendor_name: z.string().max(300).optional().nullable(),
-  total_cents: z.number().int().positive(),
+  total_cents: z.number().int().positive().max(MAX_MONEY_CENTS),
   // VM1-03: currency MDL/EUR/USD only.
   currency: z.enum(["MDL", "EUR", "USD"]).optional(),
   valid_until: z.string().datetime({ offset: true }).or(z.string().date()).optional().nullable(),
@@ -476,7 +486,7 @@ parRoutes.get("/:id/quotes", async (c) => {
   const parId = c.req.param("id");
   const par = await getPAR(parId, tenantId);
   if (!par) return c.json({ error: "not_found" }, 404);
-  if (!(await canSeePAR(user.id, tenantId, par))) return c.json({ error: "not_found" }, 404);
+  if (!(await canSeePAR(user, tenantId, par))) return c.json({ error: "not_found" }, 404);
 
   const rows = await db
     .select()
@@ -668,6 +678,13 @@ parRoutes.get("/", async (c) => {
   );
   if (!hasElevatedRole) {
     conditions.push(eq(parRequests.requestedByUserId, user.id));
+  } else if (!isWorkspaceAdminRole(user.role)) {
+    // Others' unsubmitted drafts stay private (same rule as GET /:id above).
+    const draftsOfOthers = or(
+      ne(parRequests.status, "draft"),
+      eq(parRequests.requestedByUserId, user.id)
+    );
+    if (draftsOfOthers) conditions.push(draftsOfOthers);
   }
   // Everyone — including a PAR-role par_admin — is constrained to their granted payer/project
   // scope; only a WORKSPACE admin/manager is unrestricted (accessible*Ids returns null for them).
@@ -884,6 +901,17 @@ parRoutes.get("/:id", async (c) => {
   if (!hasElevatedRole && par.requestedByUserId !== user.id) {
     return c.json({ error: "not_found" }, 404);
   }
+  // CORE §1/§9: a DRAFT has not been routed to anyone yet, so no approver or finance officer is
+  // "the routed approver" — yet an elevated role could open it and read the payee block (name,
+  // IDNP, IBAN) of a request its author had not even submitted. A draft is private to its author;
+  // only a workspace admin/manager keeps the support-level view.
+  if (
+    par.status === "draft" &&
+    par.requestedByUserId !== user.id &&
+    !isWorkspaceAdminRole(user.role)
+  ) {
+    return c.json({ error: "not_found" }, 404);
+  }
   const inScope = par.projectId
     ? await mayAccessProject(user.id, tenantId, par.projectId, user.role)
     : await mayAccessPayer(user.id, tenantId, par.payerId, user.role);
@@ -1015,6 +1043,8 @@ parRoutes.get("/:id", async (c) => {
   const designatedApprovers = par.projectId
     ? await getDesignatedApprovers(tenantId, par.projectId)
     : new Set<string>();
+  const viewerDelegators = await getActiveDelegators(user.id, tenantId);
+  const viewerDelegated = await getDelegatedAuthority(viewerDelegators, tenantId, par.projectId);
   const myDecision = resolveViewerDecision({
     status: par.status,
     requestedByUserId: par.requestedByUserId,
@@ -1022,7 +1052,9 @@ parRoutes.get("/:id", async (c) => {
     ctx: {
       userId: user.id,
       parRoles: roles,
-      delegators: await getActiveDelegators(user.id, tenantId),
+      delegators: viewerDelegators,
+      delegatedRoles: viewerDelegated.roles,
+      delegatedAllowedOnProject: viewerDelegated.allowedOnProject,
       allowedOnProject: projectAllowsApprover(par.projectId, user.id, designatedApprovers),
     },
   });
@@ -1087,6 +1119,7 @@ parRoutes.patch(
       projectId: body.project_id !== undefined ? body.project_id : par.projectId,
       eventId: body.event_id !== undefined ? body.event_id : par.eventId,
       budgetCodeId: body.budget_code_id !== undefined ? body.budget_code_id : par.budgetCodeId,
+      departmentId: body.department_id !== undefined ? body.department_id : par.departmentId,
     });
     if (selectionError) return c.json({ error: selectionError }, 400);
     if (!(await hasPayerModuleEntitlement(user.id, tenantId, selectedPayerId, "par"))) {
@@ -1191,7 +1224,8 @@ parRoutes.patch(
     if (!body.vendor_id) {
       if (body.payee_name !== undefined) updateData.payeeName = body.payee_name;
       if (body.payee_idnp !== undefined) updateData.payeeIdnp = body.payee_idnp;
-      if (body.payee_iban !== undefined) updateData.payeeIban = body.payee_iban;
+      if (body.payee_iban !== undefined)
+        updateData.payeeIban = body.payee_iban ? normalizeIban(body.payee_iban) : body.payee_iban;
       if (body.payee_bank !== undefined) updateData.payeeBank = body.payee_bank;
     }
     // Feature 1: payee_type is always accepted regardless of vendor_id
@@ -1326,14 +1360,22 @@ parRoutes.post(
 
     // Compute line total server-side (never trust client)
     const lineTotalCents = body.quantity * body.unit_price_cents;
+    if (exceedsMoneyBound(lineTotalCents)) {
+      return c.json(moneyBoundError("line_total_cents"), 400);
+    }
 
     // Get next position
     const existingLines = await db
-      .select({ position: parLineItems.position })
+      .select({ position: parLineItems.position, lineTotalCents: parLineItems.lineTotalCents })
       .from(parLineItems)
       .where(
         and(eq(parLineItems.parId, parId), eq(parLineItems.tenantId, tenantId))
       );
+    // …and the PAR total this line would produce, which lands in another integer column.
+    const projectedTotal = existingLines.reduce((acc, l) => acc + l.lineTotalCents, 0) + lineTotalCents;
+    if (exceedsMoneyBound(projectedTotal)) {
+      return c.json(moneyBoundError("total_estimated_cents"), 400);
+    }
     const nextPosition =
       existingLines.length === 0
         ? 1
@@ -1412,6 +1454,23 @@ parRoutes.patch(
     const newQty = body.quantity ?? existing.quantity;
     const newUnitPrice = body.unit_price_cents ?? existing.unitPriceCents;
     const newLineTotal = newQty * newUnitPrice;
+    if (exceedsMoneyBound(newLineTotal)) {
+      return c.json(moneyBoundError("line_total_cents"), 400);
+    }
+    {
+      // The PAR total this edit would produce also lands in an integer column.
+      const siblings = await db
+        .select({ id: parLineItems.id, lineTotalCents: parLineItems.lineTotalCents })
+        .from(parLineItems)
+        .where(and(eq(parLineItems.parId, parId), eq(parLineItems.tenantId, tenantId)));
+      const projectedTotal = siblings.reduce(
+        (acc, l) => acc + (l.id === lineId ? newLineTotal : l.lineTotalCents),
+        0
+      );
+      if (exceedsMoneyBound(projectedTotal)) {
+        return c.json(moneyBoundError("total_estimated_cents"), 400);
+      }
+    }
 
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
     if (body.description !== undefined) updateData.description = body.description;
@@ -1656,8 +1715,7 @@ parRoutes.get("/:id/dosar", async (c) => {
   // IBAN/IDNP and bank documents. Mirror GET /:id visibility — only the author or an elevated role
   // (approver/finance/par_admin) may download it. A plain requestor viewing someone else's PAR (or
   // any non-elevated role) is forbidden, matching the payee-nulling rule of GET /:id (par.ts:711).
-  const hasElevatedRole = roles.some((r) => ["approver", "finance", "par_admin"].includes(r));
-  if (!hasElevatedRole && par.requestedByUserId !== user.id) {
+  if (!(await canViewPar(user, tenantId, par))) {
     return c.json({ error: "forbidden" }, 403);
   }
 

@@ -163,6 +163,33 @@ RBAC helper: a `requirePARRole(...roles)` middleware (built in PAR-002) layered 
 mirroring the tenant-scoped pattern already in the repo. **Tenant isolation is mandatory on every
 query** (CLAUDE.md integration rules).
 
+**Clarifications settled by the 336-scenario blind sweep (2026-08-25):**
+
+- **Budget codes / payees may be CREATED by any PAR role, edited only by `par_admin`.** The create
+  form lets a requestor type a budget code or a payee that is not in the registry yet (otherwise
+  they are blocked mid-request waiting for an admin). Renaming, deactivating or deleting an
+  existing code — the chart of accounts itself — stays `par_admin`. Codes are unique per payer,
+  case-insensitively: two rows with the same code make every "spend by budget code" figure
+  ambiguous.
+- **A `draft` is private to its author.** An elevated role (approver / finance / par_admin) sees
+  every *submitted* PAR, but an unsubmitted draft has not been routed to anybody, so nobody else
+  may open it, list it, read its timeline, its comments, its attachments, its dossier PDF, or
+  duplicate it. Only a WORKSPACE admin/manager keeps the support-level view. This is the §9 GDPR
+  rule applied consistently: the payee block (name, IDNP, IBAN) and the uploaded contracts are the
+  most sensitive data in the module, and a half-typed draft is the least reviewed state they are in.
+  One implementation: `server/lib/par/visibility.ts` (`canViewPar`) — never re-derive it inline.
+- **A delegation hands over the delegator's AUTHORITY, not just their pinned steps.** While
+  X→Y is active, Y may decide the steps assigned to X *and* the role-based steps X could have
+  decided (X's PAR roles, X's project scope). Without this, delegation did nothing at all on the
+  default chain, which is entirely role-based. Segregation of duties is unaffected: nobody, however
+  delegated, approves their own PAR.
+- **Money has a hard ceiling.** Every `*_cents` column is a Postgres `integer`, so amounts are
+  bounded at 2 147 483 647 cents (21 474 836.47 units) on the line total AND on the recomputed PAR
+  total; beyond it the request is refused with `400 amount_too_large`. A typo with one zero too many
+  is a validation error, never a 500. See `server/lib/par/moneyBounds.ts`.
+- **IBANs are stored canonically** (no spaces, upper case). Validation always ignored spacing; storage
+  now matches, so a pasted "MD24 AG00 …" cannot travel to the PDF, the payment file or the bank.
+
 ---
 
 ## 2. Entities (data model — `server/db/schema/par.ts`)
@@ -307,9 +334,18 @@ All screens: Vector 365 tokens, light + dark, WCAG AA, mobile-usable (CLAUDE.md 
 
 ## 8. Reporting (PAR-117)
 
-Spend by **budget code**, **department**, **project/program**, **charge-to**; PAR **aging**
-(time in each state); **approval cycle time** (submit → approved); paid vs estimated variance;
-export CSV. Tenant-scoped, branch-scoped where relevant.
+Spend by **budget code**, **department**, **project/program**, **charge-to**, **payee**, **payer**,
+**event**; PAR **aging** (time in each state); **approval cycle time** (submit → approved); paid vs
+estimated variance; export CSV/XLSX. Tenant-scoped, branch-scoped where relevant.
+
+- **Every dimension answers "paid vs estimated"** — `totalCents`, `committedCents` and `paidCents`
+  on each row, not only on the budget-code report.
+- **A scoped user's report covers the same rows as their list**: the projects they are on PLUS the
+  payer-level requests (`project_id IS NULL`) of the payers they belong to. Filtering on the project
+  alone made every payer-level request vanish, so an approver opened a spend report and saw zeros —
+  a silently wrong number, which in a finance report is worse than an error.
+- **Money sums are cast to `bigint`**, never `integer`: a tenant's lifetime spend crosses 2.1 billion
+  cents long before anything else breaks, and an overflowing cast 500s every report at once.
 
 ---
 
