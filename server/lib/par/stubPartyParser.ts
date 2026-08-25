@@ -14,7 +14,7 @@ import type {
   ParPartiesExtraction,
   ParRole,
 } from "./parPartyTypes";
-import { isPayeeBank } from "./payeeBankClassifier";
+import { isPayeeBank, findBankKeywordMatch } from "./payeeBankClassifier";
 
 // ─── Low-level token extractors (exported for unit tests) ─────────────────────
 
@@ -531,6 +531,8 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
       .map((l) => l.trim())
       .find((l) => isPayeeBank(l));
     const bank = bankLine ? cleanBankName(bankLine) : null;
+    const legalAddress = extractAddressSnippet(block);
+    const administratorName = extractAdministratorSnippet(block);
     const subAmt = extractSubAmount(block);
 
     const existing = partyMap.get(key);
@@ -545,6 +547,8 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
         usedIban.add(blockIban.index);
       }
       if (!existing.bank && bank) existing.bank = bank;
+      if (!existing.legalAddress && legalAddress) existing.legalAddress = legalAddress;
+      if (!existing.administratorName && administratorName) existing.administratorName = administratorName;
       if (!existing.vatCode && blockVat) existing.vatCode = blockVat.value;
       // Prefer a paid role if a later anchor disambiguates it (e.g. rechizite under "EXECUTOR").
       if (
@@ -569,6 +573,8 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
       idno: blockId?.value ?? null,
       iban: blockIban?.value ?? null,
       bank,
+      legalAddress,
+      administratorName,
       vatCode: blockVat?.value ?? null,
       isPayerHint: payerHint,
       // Lock a confidently-labelled role (a real anchor right before the name).
@@ -669,16 +675,82 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
+/** A real bank name is short — anything longer means the window below still smuggled in
+ * unrelated text (payee_bank is capped at 300 chars server-side; a longer value 400s the
+ * PATCH with an unlabeled "String must contain at most 300 character(s)" that blocks the
+ * whole draft from saving). */
+const MAX_BANK_NAME_LEN = 100;
+
 function cleanBankName(line: string): string {
+  // Bound to a window around the ACTUAL matched bank keyword, not the whole line. A genuine
+  // "Banca: X" line is short, so this is a no-op there — but when the "line" is really one
+  // PDF-collapsed blob (a party's name/address/IDNO/IBAN with no real newline between them and
+  // a stray bank mention), isPayeeBank() only proves the blob CONTAINS a bank reference
+  // somewhere; it does not mean the whole blob IS the bank name. Without this, a false-positive
+  // match (e.g. a "conform cursului BNM" exchange-rate footer sitting on the same collapsed
+  // line as the payee's requisites) swallowed the payee's quoted name + legal address whole
+  // into the "Bancă" field.
+  const m = findBankKeywordMatch(line);
+  const windowed = m
+    ? line.slice(Math.max(0, (m.index ?? 0) - 20), Math.min(line.length, (m.index ?? 0) + m[0].length + 80))
+    : line;
   // Drop leading "Banca:", "Банк:", "Bank:", "Banca benef.:", "Beneficiary bank:" labels.
-  let s = line.replace(
+  let s = windowed.replace(
     /^.*?(?:Banca(?:\s*(?:plătitorului|beneficiarului|benef\.?))?|Банк|Bank|Beneficiary\s*bank|Банк)\s*:?\s*/i,
     "",
   );
   s = s.replace(/^[,;:\-–\s]+/, "").trim();
-  s = s.replace(/,\s*(?:cod\s*banc|код\s*банка|BIC|SWIFT).*$/i, "").trim();
+  // A bank name never runs into the next requisite/address field — cut there too.
+  s = s
+    .replace(
+      /,?\s*(?:cod\s*banc\w*|код\s*банка|BIC|SWIFT|IBAN|cod\s*fiscal|IDNO|IDNP|ИДНО|mun\.|or\.|sat\.|str\.|bd\.|sediul\w*|adres[ăa]).*$/i,
+      "",
+    )
+    .trim();
   s = s.replace(/\s+/g, " ").trim();
-  return s || line.trim();
+  return (s || windowed.trim()).slice(0, MAX_BANK_NAME_LEN);
+}
+
+/** Address-context label anchors — only a LABELLED address is extracted (an unlabelled address
+ * line is too easy to confuse with something else); "prefer null over wrong" per the LLM prompt's
+ * own rule. */
+const ADDRESS_LABEL_RE =
+  /(?:cu\s+sediul(?:\s+social)?(?:\s*(?:în|in))?|sediul(?:\s+social)?(?:\s*(?:în|in))?|domiciliat[ăa]?\s*(?:în|in)|adresa(?:\s+juridic[ăa])?|registered\s*(?:address|office)|legal\s*address|beneficiary\s*address|юридическ\w*\s*адрес|\bадрес\b)\s*[:\.]?\s*/i;
+
+/** Requisites that mark the end of an address value — an address never runs into these. */
+const ADDRESS_STOP_RE =
+  /[,;]?\s*(?:IBAN\b|cod\s*fiscal\b|IDNO\b|IDNP\b|ИДНО\b|Banca\b|Bank\b|BIC\b|SWIFT\b|reprezentat\w*|denumit[ăa]?\s*în\s*continuare|в\s*лице)/i;
+
+/** Extract a bounded legal-address snippet from a party's requisite block. Windowed the same
+ * way cleanBankName is — a label match only ever pulls a short window forward, never the rest of
+ * a PDF-collapsed blob. */
+function extractAddressSnippet(block: string): string | null {
+  const m = ADDRESS_LABEL_RE.exec(block);
+  if (!m) return null;
+  const start = m.index + m[0].length;
+  const rest = block.slice(start, start + 160);
+  const stop = rest.search(ADDRESS_STOP_RE);
+  const cut = (stop >= 0 ? rest.slice(0, stop) : rest).replace(/\s+/g, " ").trim();
+  const snippet = cut.replace(/^[,:\-–\s]+/, "").replace(/[,;\s]+$/, "");
+  return snippet.length >= 4 ? snippet.slice(0, 200) : null;
+}
+
+/** Administrator/representative label anchors — same "labelled only" discipline as the address.
+ * "reprezentată de administrator dl. X" is the common MD-contract phrasing: an optional
+ * administrator/director role word can sit BETWEEN "reprezentat de" and the honorific+name. */
+const ADMINISTRATOR_LABEL_RE =
+  /(?:reprezentat[ăa]?\s+(?:de|prin)\s*(?:administrator(?:ul)?|director(?:ul)?(?:\s+general)?)?|administrator(?:ul)?|director(?:ul)?(?:\s+general)?|reprezentant(?:ul)?(?:\s+legal)?|în\s+persoana|в\s+лице)\s*[:\.]?\s*(?:dl\.|dna\.?|dnul|domnul|doamna|г-н|г-жа)?\s*/i;
+
+/** Extract a bounded "reprezentată de <Name>" style administrator name. Only accepts an
+ * immediately-following capitalized 2-3 word run (a real person name) — never a whole clause. */
+function extractAdministratorSnippet(block: string): string | null {
+  const m = ADMINISTRATOR_LABEL_RE.exec(block);
+  if (!m) return null;
+  const rest = block.slice(m.index + m[0].length, m.index + m[0].length + 60);
+  const name = rest.match(
+    /^[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+(?:\s+[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+){1,2}/,
+  );
+  return name ? name[0].trim() : null;
 }
 
 function extractScope(text: string): string | null {

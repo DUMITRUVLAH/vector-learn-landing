@@ -11,7 +11,9 @@ import {
   parseLocalizedAmount,
   extractAmount,
   cleanName,
+  parsePartiesFromText,
 } from "../stubPartyParser";
+import { SCENARIOS } from "./scenarios.fixture";
 import {
   normalizeIban,
   fuzzyOrgMatch,
@@ -165,5 +167,73 @@ describe("roleRank", () => {
     expect(roleRank("executor")).toBeLessThan(roleRank("provider"));
     expect(roleRank("provider")).toBeLessThan(roleRank("client"));
     expect(roleRank("client")).toBeLessThan(roleRank("bank"));
+  });
+});
+
+describe("stub parser — legalAddress + administratorName extraction (previously always null)", () => {
+  // Versatility follow-up (2026-08-25): the stub/no-API-key path never extracted these two
+  // fields at all, no matter how clearly the document stated them — every document went through
+  // AI-prefill with "Adresă juridică" and "Administrator" permanently blank. Both are extracted
+  // only from an explicit label ("cu sediul în" / "reprezentată de ...") — never guessed from an
+  // unlabelled line — matching the "prefer null over wrong" rule the LLM prompt itself follows.
+  it("extracts both parties' address + administrator from a real MD-contract scenario", () => {
+    const scenario = SCENARIOS.find((s) => s.id === "par-ai-001");
+    if (!scenario) throw new Error("fixture par-ai-001 not found");
+    const ext = parsePartiesFromText(scenario.docText);
+
+    const executor = ext.parties.find((p) => /Ducont/i.test(p.name));
+    expect(executor?.legalAddress).toBe("mun. Chișinău, str. Columna 170");
+    expect(executor?.administratorName).toBe("Andrei Ducaru");
+
+    const beneficiar = ext.parties.find((p) => /Vector Academy/i.test(p.name));
+    expect(beneficiar?.legalAddress).toBe("mun. Chișinău, bd. Ștefan cel Mare 202");
+    expect(beneficiar?.administratorName).toBe("Elena Roșca");
+  });
+
+  it("does not invent an address/administrator when the document doesn't label one", () => {
+    const ext = parsePartiesFromText(
+      'Prestator: "Lumina Print" SRL, IDNO 1003600012345, IBAN MD24AG000225100013104168.',
+    );
+    const party = ext.parties.find((p) => /Lumina Print/i.test(p.name));
+    expect(party?.legalAddress ?? null).toBeNull();
+    expect(party?.administratorName ?? null).toBeNull();
+  });
+
+  it("English 'registered address' label is recognized", () => {
+    const ext = parsePartiesFromText(
+      'Supplier: "Bright Labs" Ltd, registered address: 5 King Street, London, IBAN DE89370400440532013000.',
+    );
+    const party = ext.parties.find((p) => /Bright Labs/i.test(p.name));
+    expect(party?.legalAddress).toBe("5 King Street, London");
+  });
+});
+
+describe("bank-field extraction — false-positive bank keyword must not swallow the whole line", () => {
+  // Regression for the 2026-08-25 report: a PDF-collapsed line (payee name, IDNO, IBAN and
+  // address all run together with no real newline) that ALSO happens to mention "BNM" (a
+  // currency-rate footer, not an actual "Banca:" label) got captured WHOLE as the "Bancă" field
+  // — the payee's quoted name and "sec. Botanica" address leaked into payee_bank, which then
+  // blocked saving the draft (payee_bank is capped at 300 chars server-side).
+  it("BNM exchange-rate mention doesn't pull the payee's name/IDNO/IBAN/address into `bank`", () => {
+    const docText = [
+      "CONTRACT DE PRESTĂRI SERVICII Nr. 12/2026",
+      "",
+      'Prestator: "NEWS MAKER" SRL, IDNO 1020600033229, IBAN MD50AG000000022516524419, cu sediul in mun. Chisinau, sec. Botanica, str. Grenoble nr. 128, conform cursului valutar stabilit de BNM la data platii.',
+      "",
+      'Client: "Vector Academy" SRL, IDNO 1009600045678.',
+    ].join("\n");
+
+    const ext = parsePartiesFromText(docText);
+    const provider = ext.parties.find((p) => p.role === "provider" || p.role === "executor");
+    expect(provider).toBeTruthy();
+    expect(provider?.name).toBe("NEWS MAKER SRL");
+    expect(provider?.idno).toBe("1020600033229");
+    expect(provider?.iban).toBe("MD50AG000000022516524419");
+
+    const bank = provider?.bank ?? "";
+    expect(bank).not.toContain("NEWS MAKER");
+    expect(bank).not.toContain("Botanica");
+    expect(bank).not.toContain("1020600033229");
+    expect(bank.length).toBeLessThan(60);
   });
 });

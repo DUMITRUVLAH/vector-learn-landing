@@ -19,6 +19,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
+import { zodFieldErrorsHook } from "../lib/zodFieldErrors";
 import { and, eq, ilike, desc, asc, inArray, isNull, or, gte, lte, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
@@ -205,7 +206,7 @@ async function validateScopeSelection(params: {
 
 parRoutes.post(
   "/",
-  zValidator("json", createParSchema),
+  zValidator("json", createParSchema, zodFieldErrorsHook),
   async (c) => {
     const user = c.get("user");
     const body = c.req.valid("json");
@@ -1053,7 +1054,7 @@ parRoutes.get("/:id", async (c) => {
 
 parRoutes.patch(
   "/:id",
-  zValidator("json", updateParSchema),
+  zValidator("json", updateParSchema, zodFieldErrorsHook),
   async (c) => {
     const user = c.get("user");
     const tenantId = user.tenantId;
