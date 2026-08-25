@@ -1,9 +1,10 @@
 import { HashRouter, useRouter } from "./router/HashRouter";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { BranchProvider } from "./contexts/BranchContext";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { getParMe } from "./lib/api/par";
 import { RouteFallback } from "./components/RouteFallback";
+import { lazyWithTimeout } from "./lib/lazyWithTimeout";
 
 /**
  * PERF-003 — fiecare pagină e un chunk separat.
@@ -28,85 +29,85 @@ import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
 import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
 
 // PAR
-const ParCreateForm = lazy(() => import("./pages/par/ParCreateForm").then((m) => ({ default: m.ParCreateForm })));
-const ParOnboarding = lazy(() => import("./pages/par/ParOnboarding").then((m) => ({ default: m.ParOnboarding })));
-const ParDashboard = lazy(() => import("./pages/par/ParDashboard").then((m) => ({ default: m.ParDashboard })));
-const ParInbox = lazy(() => import("./pages/par/ParInbox"));
-const ParFinanceQueue = lazy(() => import("./pages/par/ParFinanceQueue"));
-const ParDetailPage = lazy(() => import("./pages/par/ParDetail").then((m) => ({ default: m.ParDetailPage })));
-const ParAdmin = lazy(() => import("./pages/par/ParAdmin").then((m) => ({ default: m.ParAdmin })));
-const ParReports = lazy(() => import("./pages/par/ParReports").then((m) => ({ default: m.ParReports })));
-const ParFolders = lazy(() => import("./pages/par/ParFolders").then((m) => ({ default: m.ParFolders })));
+const ParCreateForm = lazyWithTimeout(() => import("./pages/par/ParCreateForm").then((m) => ({ default: m.ParCreateForm })));
+const ParOnboarding = lazyWithTimeout(() => import("./pages/par/ParOnboarding").then((m) => ({ default: m.ParOnboarding })));
+const ParDashboard = lazyWithTimeout(() => import("./pages/par/ParDashboard").then((m) => ({ default: m.ParDashboard })));
+const ParInbox = lazyWithTimeout(() => import("./pages/par/ParInbox"));
+const ParFinanceQueue = lazyWithTimeout(() => import("./pages/par/ParFinanceQueue"));
+const ParDetailPage = lazyWithTimeout(() => import("./pages/par/ParDetail").then((m) => ({ default: m.ParDetailPage })));
+const ParAdmin = lazyWithTimeout(() => import("./pages/par/ParAdmin").then((m) => ({ default: m.ParAdmin })));
+const ParReports = lazyWithTimeout(() => import("./pages/par/ParReports").then((m) => ({ default: m.ParReports })));
+const ParFolders = lazyWithTimeout(() => import("./pages/par/ParFolders").then((m) => ({ default: m.ParFolders })));
 
 // DOCMERGE
-const DocMergeTemplatesPage = lazy(() => import("./pages/business/docmerge/DocMergeTemplatesPage").then((m) => ({ default: m.DocMergeTemplatesPage })));
-const DocMergeJobPage = lazy(() => import("./pages/business/docmerge/DocMergeJobPage").then((m) => ({ default: m.DocMergeJobPage })));
-const DocMergeWizardPage = lazy(() => import("./pages/business/docmerge/DocMergeWizardPage").then((m) => ({ default: m.DocMergeWizardPage })));
+const DocMergeTemplatesPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeTemplatesPage").then((m) => ({ default: m.DocMergeTemplatesPage })));
+const DocMergeJobPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeJobPage").then((m) => ({ default: m.DocMergeJobPage })));
+const DocMergeWizardPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeWizardPage").then((m) => ({ default: m.DocMergeWizardPage })));
 
 // Business — ciclul de viață al contului
-const BusinessSignupPage = lazy(() => import("./pages/business/BusinessSignupPage").then((m) => ({ default: m.BusinessSignupPage })));
-const ForgotPasswordPage = lazy(() => import("./pages/business/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage })));
-const ResetPasswordPage = lazy(() => import("./pages/business/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage })));
-const BusinessDashboardPage = lazy(() => import("./pages/business/BusinessDashboardPage").then((m) => ({ default: m.BusinessDashboardPage })));
-const PlatformAdminPage = lazy(() => import("./pages/business/PlatformAdminPage").then((m) => ({ default: m.PlatformAdminPage })));
+const BusinessSignupPage = lazyWithTimeout(() => import("./pages/business/BusinessSignupPage").then((m) => ({ default: m.BusinessSignupPage })));
+const ForgotPasswordPage = lazyWithTimeout(() => import("./pages/business/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazyWithTimeout(() => import("./pages/business/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage })));
+const BusinessDashboardPage = lazyWithTimeout(() => import("./pages/business/BusinessDashboardPage").then((m) => ({ default: m.BusinessDashboardPage })));
+const PlatformAdminPage = lazyWithTimeout(() => import("./pages/business/PlatformAdminPage").then((m) => ({ default: m.PlatformAdminPage })));
 // PLATFORM-001: Consola Platformă. Lazy ca restul rutelor — o vede doar superadminul,
 // deci n-are ce căuta în bundle-ul pe care îl descarcă fiecare client.
-const PlatformConsolePage = lazy(() => import("./pages/business/platform/PlatformConsolePage").then((m) => ({ default: m.PlatformConsolePage })));
+const PlatformConsolePage = lazyWithTimeout(() => import("./pages/business/platform/PlatformConsolePage").then((m) => ({ default: m.PlatformConsolePage })));
 // SHELL-503: PAR invite acceptance (public — no auth guard)
-const InvitePage = lazy(() => import("./pages/business/InvitePage").then((m) => ({ default: m.InvitePage })));
-const WelcomePage = lazy(() => import("./pages/business/WelcomePage").then((m) => ({ default: m.WelcomePage })));
+const InvitePage = lazyWithTimeout(() => import("./pages/business/InvitePage").then((m) => ({ default: m.InvitePage })));
+const WelcomePage = lazyWithTimeout(() => import("./pages/business/WelcomePage").then((m) => ({ default: m.WelcomePage })));
 
 // FinDesk — /business/fin/*
-const FinHome = lazy(() => import("./pages/fin/FinHome").then((m) => ({ default: m.FinHome })));
-const FinCompany = lazy(() => import("./pages/fin/FinCompany").then((m) => ({ default: m.FinCompany })));
-const FinOnboarding = lazy(() => import("./pages/fin/FinOnboarding").then((m) => ({ default: m.FinOnboarding })));
-const FinAiAuditPage = lazy(() => import("./pages/fin/FinAiAuditPage").then((m) => ({ default: m.FinAiAuditPage })));
-const FinSecuritySettingsPage = lazy(() => import("./pages/fin/FinSecuritySettingsPage").then((m) => ({ default: m.FinSecuritySettingsPage })));
+const FinHome = lazyWithTimeout(() => import("./pages/fin/FinHome").then((m) => ({ default: m.FinHome })));
+const FinCompany = lazyWithTimeout(() => import("./pages/fin/FinCompany").then((m) => ({ default: m.FinCompany })));
+const FinOnboarding = lazyWithTimeout(() => import("./pages/fin/FinOnboarding").then((m) => ({ default: m.FinOnboarding })));
+const FinAiAuditPage = lazyWithTimeout(() => import("./pages/fin/FinAiAuditPage").then((m) => ({ default: m.FinAiAuditPage })));
+const FinSecuritySettingsPage = lazyWithTimeout(() => import("./pages/fin/FinSecuritySettingsPage").then((m) => ({ default: m.FinSecuritySettingsPage })));
 
-const CapturesListPage = lazy(() => import("./pages/fin/CapturesListPage"));
-const CapturePage = lazy(() => import("./pages/fin/CapturePage"));
-const FinInvoicesPage = lazy(() => import("./pages/app/FinInvoicesPage").then((m) => ({ default: m.FinInvoicesPage })));
-const FinInvoiceDocPage = lazy(() => import("./pages/app/FinInvoiceDocPage").then((m) => ({ default: m.FinInvoiceDocPage })));
-const FinExpensesPage = lazy(() => import("./pages/app/FinExpensesPage").then((m) => ({ default: m.FinExpensesPage })));
-const FinRegistryPage = lazy(() => import("./pages/app/FinRegistryPage").then((m) => ({ default: m.FinRegistryPage })));
-const FinEinvoicesPage = lazy(() => import("./pages/app/FinEinvoicesPage").then((m) => ({ default: m.FinEinvoicesPage })));
-const BudgetPage = lazy(() => import("./pages/app/BudgetPage").then((m) => ({ default: m.BudgetPage })));
-const AssetsPage = lazy(() => import("./pages/app/AssetsPage").then((m) => ({ default: m.AssetsPage })));
-const RevaluationPage = lazy(() => import("./pages/app/RevaluationPage").then((m) => ({ default: m.RevaluationPage })));
-const InventoryPage = lazy(() => import("./pages/app/InventoryPage").then((m) => ({ default: m.InventoryPage })));
-const InventoryReportPage = lazy(() => import("./pages/app/InventoryReportPage").then((m) => ({ default: m.InventoryReportPage })));
-const PaymentAccountsPage = lazy(() => import("./pages/app/PaymentAccountsPage").then((m) => ({ default: m.PaymentAccountsPage })));
-const PaymentAccountEditorPage = lazy(() => import("./pages/app/PaymentAccountEditorPage").then((m) => ({ default: m.PaymentAccountEditorPage })));
-const PaymentAccountViewPage = lazy(() => import("./pages/app/PaymentAccountViewPage").then((m) => ({ default: m.PaymentAccountViewPage })));
+const CapturesListPage = lazyWithTimeout(() => import("./pages/fin/CapturesListPage"));
+const CapturePage = lazyWithTimeout(() => import("./pages/fin/CapturePage"));
+const FinInvoicesPage = lazyWithTimeout(() => import("./pages/app/FinInvoicesPage").then((m) => ({ default: m.FinInvoicesPage })));
+const FinInvoiceDocPage = lazyWithTimeout(() => import("./pages/app/FinInvoiceDocPage").then((m) => ({ default: m.FinInvoiceDocPage })));
+const FinExpensesPage = lazyWithTimeout(() => import("./pages/app/FinExpensesPage").then((m) => ({ default: m.FinExpensesPage })));
+const FinRegistryPage = lazyWithTimeout(() => import("./pages/app/FinRegistryPage").then((m) => ({ default: m.FinRegistryPage })));
+const FinEinvoicesPage = lazyWithTimeout(() => import("./pages/app/FinEinvoicesPage").then((m) => ({ default: m.FinEinvoicesPage })));
+const BudgetPage = lazyWithTimeout(() => import("./pages/app/BudgetPage").then((m) => ({ default: m.BudgetPage })));
+const AssetsPage = lazyWithTimeout(() => import("./pages/app/AssetsPage").then((m) => ({ default: m.AssetsPage })));
+const RevaluationPage = lazyWithTimeout(() => import("./pages/app/RevaluationPage").then((m) => ({ default: m.RevaluationPage })));
+const InventoryPage = lazyWithTimeout(() => import("./pages/app/InventoryPage").then((m) => ({ default: m.InventoryPage })));
+const InventoryReportPage = lazyWithTimeout(() => import("./pages/app/InventoryReportPage").then((m) => ({ default: m.InventoryReportPage })));
+const PaymentAccountsPage = lazyWithTimeout(() => import("./pages/app/PaymentAccountsPage").then((m) => ({ default: m.PaymentAccountsPage })));
+const PaymentAccountEditorPage = lazyWithTimeout(() => import("./pages/app/PaymentAccountEditorPage").then((m) => ({ default: m.PaymentAccountEditorPage })));
+const PaymentAccountViewPage = lazyWithTimeout(() => import("./pages/app/PaymentAccountViewPage").then((m) => ({ default: m.PaymentAccountViewPage })));
 // FIX-502: Use FinDesk payroll pages (pages/fin/*) not the CRM payroll page (pages/app/PayrollPage).
 // The CRM page calls /api/hr/payroll which is NOT mounted; FinDesk pages call /api/fin/payroll/* which IS mounted.
-const PayrollFINPage = lazy(() => import("./pages/fin/PayrollPage").then((m) => ({ default: m.PayrollFINPage })));
-const PayrollEmployeesPage = lazy(() => import("./pages/fin/PayrollEmployeesPage").then((m) => ({ default: m.PayrollEmployeesPage })));
-const PayrollRunDetailPage = lazy(() => import("./pages/fin/PayrollRunDetailPage").then((m) => ({ default: m.PayrollRunDetailPage })));
-const ReconcilePage = lazy(() => import("./pages/fin/ReconcilePage"));
-const CashPage = lazy(() => import("./pages/fin/CashPage"));
-const PartiesPage = lazy(() => import("./pages/app/fin/PartiesPage").then((m) => ({ default: m.PartiesPage })));
-const PartyDetailPage = lazy(() => import("./pages/app/fin/PartyDetailPage").then((m) => ({ default: m.PartyDetailPage })));
-const FinExportCenter = lazy(() => import("./pages/app/fin/ExportCenter").then((m) => ({ default: m.FinExportCenter })));
-const ItparkDetail = lazy(() => import("./pages/app/fin/itpark/ItparkDetail"));
-const FinInsightsPage = lazy(() => import("./pages/finance/FinInsightsPage").then((m) => ({ default: m.FinInsightsPage })));
-const CXPage = lazy(() => import("./pages/app/CXPage").then((m) => ({ default: m.CXPage })));
+const PayrollFINPage = lazyWithTimeout(() => import("./pages/fin/PayrollPage").then((m) => ({ default: m.PayrollFINPage })));
+const PayrollEmployeesPage = lazyWithTimeout(() => import("./pages/fin/PayrollEmployeesPage").then((m) => ({ default: m.PayrollEmployeesPage })));
+const PayrollRunDetailPage = lazyWithTimeout(() => import("./pages/fin/PayrollRunDetailPage").then((m) => ({ default: m.PayrollRunDetailPage })));
+const ReconcilePage = lazyWithTimeout(() => import("./pages/fin/ReconcilePage"));
+const CashPage = lazyWithTimeout(() => import("./pages/fin/CashPage"));
+const PartiesPage = lazyWithTimeout(() => import("./pages/app/fin/PartiesPage").then((m) => ({ default: m.PartiesPage })));
+const PartyDetailPage = lazyWithTimeout(() => import("./pages/app/fin/PartyDetailPage").then((m) => ({ default: m.PartyDetailPage })));
+const FinExportCenter = lazyWithTimeout(() => import("./pages/app/fin/ExportCenter").then((m) => ({ default: m.FinExportCenter })));
+const ItparkDetail = lazyWithTimeout(() => import("./pages/app/fin/itpark/ItparkDetail"));
+const FinInsightsPage = lazyWithTimeout(() => import("./pages/finance/FinInsightsPage").then((m) => ({ default: m.FinInsightsPage })));
+const CXPage = lazyWithTimeout(() => import("./pages/app/CXPage").then((m) => ({ default: m.CXPage })));
 
 // STMT-001..004: Statement pages
-const StatementUploadPage = lazy(() => import("./pages/fin/StatementUploadPage"));
-const StatementReviewPage = lazy(() => import("./pages/fin/StatementReviewPage"));
-const StatementHistoryPage = lazy(() => import("./pages/fin/StatementHistoryPage"));
+const StatementUploadPage = lazyWithTimeout(() => import("./pages/fin/StatementUploadPage"));
+const StatementReviewPage = lazyWithTimeout(() => import("./pages/fin/StatementReviewPage"));
+const StatementHistoryPage = lazyWithTimeout(() => import("./pages/fin/StatementHistoryPage"));
 
-const BankLinkPage = lazy(() => import("./pages/fin/BankLinkPage"));
-const BankLinkImportPage = lazy(() => import("./pages/fin/BankLinkImportPage"));
-const BankLinkQueuePage = lazy(() => import("./pages/fin/BankLinkQueuePage"));
-const BankLinkTransactionsPage = lazy(() => import("./pages/fin/BankLinkTransactionsPage"));
-const AgreementsPage = lazy(() => import("./pages/fin/AgreementsPage").then(m => ({ default: m.AgreementsPage })));
-const CashImportPage = lazy(() => import("./pages/fin/CashImportPage"));
-const FinCalendarPage = lazy(() => import("./pages/fin/FinCalendarPage").then(m => ({ default: m.FinCalendarPage })));
-const FinMassPage = lazy(() => import("./pages/fin/FinMassPage").then(m => ({ default: m.FinMassPage })));
-const TaxPage = lazy(() => import("./pages/fin/TaxPage").then(m => ({ default: m.TaxPage })));
-const FinPaymentsPage = lazy(() => import("./pages/fin/PaymentsPage"));
+const BankLinkPage = lazyWithTimeout(() => import("./pages/fin/BankLinkPage"));
+const BankLinkImportPage = lazyWithTimeout(() => import("./pages/fin/BankLinkImportPage"));
+const BankLinkQueuePage = lazyWithTimeout(() => import("./pages/fin/BankLinkQueuePage"));
+const BankLinkTransactionsPage = lazyWithTimeout(() => import("./pages/fin/BankLinkTransactionsPage"));
+const AgreementsPage = lazyWithTimeout(() => import("./pages/fin/AgreementsPage").then(m => ({ default: m.AgreementsPage })));
+const CashImportPage = lazyWithTimeout(() => import("./pages/fin/CashImportPage"));
+const FinCalendarPage = lazyWithTimeout(() => import("./pages/fin/FinCalendarPage").then(m => ({ default: m.FinCalendarPage })));
+const FinMassPage = lazyWithTimeout(() => import("./pages/fin/FinMassPage").then(m => ({ default: m.FinMassPage })));
+const TaxPage = lazyWithTimeout(() => import("./pages/fin/TaxPage").then(m => ({ default: m.TaxPage })));
+const FinPaymentsPage = lazyWithTimeout(() => import("./pages/fin/PaymentsPage"));
 
 function ParAdminPage() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
