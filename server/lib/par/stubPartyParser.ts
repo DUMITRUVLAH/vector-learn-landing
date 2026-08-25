@@ -126,6 +126,7 @@ const CURRENCY_HINTS: Array<{ re: RegExp; cur: "MDL" | "EUR" | "USD" }> = [
 const TOTAL_ANCHORS = [
   /Total\s*de\s*plat[ăa]/i,
   /TOTAL\s*DUE/i,
+  /\bAmount\s*(?:due|to\s*pay)?\s*:/i,
   /Итого\s*к\s*оплате/i,
   /всего/i,
   /сумма\s*к\s*оплате/i,
@@ -466,7 +467,7 @@ function findNameHits(text: string): NameHit[] {
   // 1. Quoted legal names, with optional legal-form prefix and/or suffix.
   //    SC "Ducont Audit" SRL  |  "Vector Academy" SRL  |  ООО «Клинсервис Про»  |  Î.I. "Andronic Construct"
   const quotedRe =
-    /((?:Întreprinderea\s+Individual[ăa]\s+|Intreprinderea\s+Individuala\s+|SC\s+|ООО\s+|ОАО\s+|ЗАО\s+|SRL\s+|S\.?A\.?\s+|Î\.?\s?I\.?\s+|ÎI\s+)?["“„«][^"“”„«»\n]{1,80}["”»](?:\s+(?:S\.?R\.?L\.?|S\.?A\.?|A\.?O\.?|SRL|SA))?)/g;
+    /((?:Întreprinderea\s+Individual[ăa]\s+|Intreprinderea\s+Individuala\s+|SC\s+|ООО\s+|ОАО\s+|ЗАО\s+|S\.?R\.?L\.?\s+|S\.?A\.?\s+|A\.?O\.?\s+|Î\.?\s?I\.?\s+|ÎI\s+)?["“„«][^"“”„«»\n]{1,80}["”»](?:\s+(?:S\.?R\.?L\.?|S\.?A\.?|A\.?O\.?|SRL|SA))?)/g;
   let m: RegExpExecArray | null;
   while ((m = quotedRe.exec(text)) !== null) {
     const raw = m[1];
@@ -538,7 +539,7 @@ function findNameHits(text: string): NameHit[] {
   // 4. Person-like "Prenume Nume" runs (latin or cyrillic), e.g. "Gheorghe Rusu".
   //    Only after a "Primit de:" / "Prestator:" style label to avoid grabbing director names.
   const personLabelRe =
-    /(?:Primit\s*de|Prestator(?:ul)?|Получатель|Получает)\s*[:\-]?\s*([A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+(?:\s+[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+){1,2})/g;
+    /(?:Primit\s*de|Prestator(?:ul)?|Получатель|Получает|Name,?\s*Surname|Nume,?\s*Prenume|Prenume,?\s*Nume|Payee|Beneficiar(?:ul)?\s*pl[ăa][țt]ii)\s*[:\-]?\s*([A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+(?:\s+[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+){1,2})/g;
   while ((m = personLabelRe.exec(text)) !== null) {
     push(m[1], m.index);
   }
@@ -1014,7 +1015,7 @@ function extractBicSnippet(block: string): string | null {
  * "Denumirea mărfurilor/activelor, serviciilor şi codul poziţiei tarifare…" on the
  * typized MD fiscal invoice. Header vocabulary, in any of the form's languages. */
 const SCOPE_HEADER_RE =
-  /codul\s*pozi[țt]iei|tarifare|unitate\s*de\s*m[ăa]sur|pre[țt]\s*unitar|cantitat|Наименование\s*товаров|товарной\s*позиции|единиц\w*\s*измерен/i;
+  /codul\s*pozi[țt]iei|tarifare|unitate\s*de\s*m[ăa]sur|pre[țt]\s*unitar|cantitat|Наименование\s*товаров|товарной\s*позиции|единиц\w*\s*измерен|^\s*(?:qty|quantity)\b|\bunit\s*price\b|\bqty\b.*\bamount\b|\bcant\.?\b.*\b(?:pre[țt]|sum[ăa])\b|\bpre[țt]\b.*\bsuma\b|\bcol(?:oana|umn)\b/i;
 
 function extractScope(text: string): string | null {
   const re =

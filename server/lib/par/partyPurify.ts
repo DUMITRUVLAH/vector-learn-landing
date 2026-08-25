@@ -36,7 +36,7 @@ const FISCAL_IN_TEXT_RE =
 
 /** Leftover requisite labels with no value attached ("c.f./ nr.TVA /" tails on fiscal forms). */
 const BARE_LABEL_RE =
-  /\b(?:c\.?\s?f\.?\s*\/?\s*)?(?:nr\.?\s*TVA|cod\s*fiscal|IDNO|IDNP|ИДНО)\b[\s./:]*|\bCont(?:ul)?\s*(?:nr\.?|bancar|de\s*decontare)?\s*:?\s*(?=$|[,;])/gi;
+  /\b(?:c\.?\s?f\.?\s*\/?\s*)?(?:nr\.?\s*TVA|cod\s*fiscal|IDNO|IDNP|ИДНО|ф\.?к\.?|код\s*НДС)\b[\s./:]*|\bCont(?:ul)?\s*(?:nr\.?|bancar|de\s*decontare)?\s*:?\s*(?=$|[,;])/gi;
 
 /**
  * Role labels in RO/RU/EN — semantic markers that are NEVER part of a legal name,
@@ -92,6 +92,24 @@ export function purifyParty(p: ParExtractedParty): ParExtractedParty {
   //    real bank found inside `name` (step 4) can take the slot.
   if (bank) {
     let b = bank;
+    // An IBAN printed next to the bank ("c/d MD87… în BC «Mobiasbanca» S.A.") belongs to the
+    // IBAN field — the bank slot must never display an account number.
+    b = b.replace(IBAN_IN_TEXT_RE, (_full, value: string) => {
+      if (!iban) {
+        iban = value;
+        repaired.iban = true;
+      }
+      repaired.bank = true;
+      return " ";
+    });
+    b = b.replace(FISCAL_IN_TEXT_RE, (_full, digits: string) => {
+      if (!idno) {
+        idno = digits;
+        repaired.idno = true;
+      }
+      repaired.bank = true;
+      return " ";
+    });
     BIC_IN_TEXT_RE.lastIndex = 0;
     const bm = BIC_IN_TEXT_RE.exec(b);
     if (bm) {
@@ -109,7 +127,7 @@ export function purifyParty(p: ParExtractedParty): ParExtractedParty {
       const s0 = b.lastIndexOf(",", kb.index) + 1;
       const e0raw = b.indexOf(",", kb.index + kb[0].length);
       const e0 = e0raw === -1 ? b.length : e0raw;
-      b = tidy(b.slice(s0, e0).replace(/^[\d ,.;:-]+/, ""));
+      b = tidy(b.slice(s0, e0).replace(/^[\d ,.;:-]+/, "").replace(/^(?:[îi]n|la|prin|в)\s+/i, ""));
     }
     if (b !== bank) repaired.bank = true;
     if (b && !isPayeeBank(b) && !/\bbanc|банк|bank/i.test(b)) {
