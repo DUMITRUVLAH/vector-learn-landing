@@ -15,6 +15,7 @@ import type {
   ParRole,
 } from "./parPartyTypes";
 import { isPayeeBank, findBankKeywordMatch } from "./payeeBankClassifier";
+import { purifyExtraction } from "./partyPurify";
 
 // ─── Low-level token extractors (exported for unit tests) ─────────────────────
 
@@ -170,7 +171,13 @@ export function extractAmount(text: string): AmountResult {
       const afterAnchor = line.slice(am.index + am[0].length);
       // Collapse OCR spaces around the decimal separator: "12 340 ,00" → "12 340,00".
       const window = `${afterAnchor}\n${lines[i + 1] ?? ""}`.replace(/(\d)\s+([.,]\d{2}\b)/g, "$1$2");
-      const numMatch = window.match(MONEY_NUM_RE);
+      // Tier 1: number followed by a currency word/symbol or line end. Tier 2 (fiscal-invoice
+      // forms): the typized MD invoice prints "TOTAL … 17000,00 X 0,00 17000,00 X X X" — the
+      // total is followed by COLUMN junk, not a currency. Accept a clearly money-shaped number
+      // (grouping or 2 decimals — never a list index "3.1" or a year) on the anchor line itself.
+      const numMatch =
+        window.match(MONEY_NUM_RE) ??
+        window.match(/(\d{1,3}(?:[ .,]\d{3})+(?:[.,]\d{2})?|\d+[.,]\d{2})(?=\s|$)/);
       if (!numMatch) continue;
       const major = parseLocalizedAmount(numMatch[1]);
       if (major == null || major <= 0) continue;
@@ -318,6 +325,11 @@ function findNameHits(text: string): NameHit[] {
       !hasLegalForm &&
       /^(Clientul|Antreprenorul|Subantreprenorul|Prestatorul|Executorul|Beneficiarul|Furnizorul|наш\b)/i.test(inner);
     if (isDefinedTerm) continue;
+    // Reject a quoted SERVICE/PRODUCT title on a table row (qty+price on the same line, no
+    // legal form) — «Servicii predare curs "Productie si editare video" serv 1 17000.00» must
+    // not mint a phantom party out of the course name.
+    const lineTail = text.slice(m.index + raw.length).split(/\r?\n/)[0] ?? "";
+    if (!hasLegalForm && /\d+[.,]\d{2}/.test(lineOf.replace(raw, "") + lineTail)) continue;
     push(raw, m.index);
   }
 
@@ -661,7 +673,7 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
     );
   const hasPerPartyAmounts = distinctSub.size >= 2 && singleTrancheNote;
 
-  return {
+  return purifyExtraction({
     parties,
     amountCents,
     amountConfidence: amountCents != null ? 0.85 : 0,
@@ -670,7 +682,7 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
     documentClass,
     documentClassReason: undefined,
     hasPerPartyAmounts,
-  };
+  });
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -695,8 +707,10 @@ function cleanBankName(line: string): string {
     ? line.slice(Math.max(0, (m.index ?? 0) - 20), Math.min(line.length, (m.index ?? 0) + m[0].length + 80))
     : line;
   // Drop leading "Banca:", "Банк:", "Bank:", "Banca benef.:", "Beneficiary bank:" labels.
+  // \b-guarded: the un-anchored `Bank` used to lazy-match the "bank" INSIDE "Moldindconbank"
+  // and strip the bank's own name, leaving junk like "'S.A., MOLDMD2X" in the field.
   let s = windowed.replace(
-    /^.*?(?:Banca(?:\s*(?:plătitorului|beneficiarului|benef\.?))?|Банк|Bank|Beneficiary\s*bank|Банк)\s*:?\s*/i,
+    /^.*?(?:\bBanca\b(?:\s*(?:plătitorului|beneficiarului|benef\.?))?|\bБанк\b|\bBank\b|Beneficiary\s*bank)\s*:?\s*/i,
     "",
   );
   s = s.replace(/^[,;:\-–\s]+/, "").trim();
@@ -753,13 +767,32 @@ function extractAdministratorSnippet(block: string): string | null {
   return name ? name[0].trim() : null;
 }
 
+/** A capture that is really a TABLE COLUMN HEADER, not the object of the payment —
+ * "Denumirea mărfurilor/activelor, serviciilor şi codul poziţiei tarifare…" on the
+ * typized MD fiscal invoice. Header vocabulary, in any of the form's languages. */
+const SCOPE_HEADER_RE =
+  /codul\s*pozi[țt]iei|tarifare|unitate\s*de\s*m[ăa]sur|pre[țt]\s*unitar|cantitat|Наименование\s*товаров|товарной\s*позиции|единиц\w*\s*измерен/i;
+
 function extractScope(text: string): string | null {
   const re =
-    /(?:OBIECTUL(?:\s*CONTRACTULUI)?|Denumire(?:a)?\s*(?:m[ăa]rfii)?[\/]?(?:serviciu(?:lui)?)?|Description|Destina[țt]ia\s*pl[ăa][țt]ii|Reprezent[âa]nd|Наименование\s*работ|ПРЕДМЕТ\s*ДОГОВОРА|Основание|Obiectul)\s*[:\.]?\s*([^\n]{3,90})/i;
-  const m = text.match(re);
-  if (m) {
+    /(?:OBIECTUL(?:\s*CONTRACTULUI)?|Denumire(?:a)?\s*(?:m[ăa]rfii)?[\/]?(?:serviciu(?:lui)?)?|Description|Destina[țt]ia\s*pl[ăa][țt]ii|Reprezent[âa]nd|Наименование\s*работ|ПРЕДМЕТ\s*ДОГОВОРА|Основание|Obiectul)\s*[:\.]?\s*([^\n]{3,90})/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
     const s = m[1].replace(/\s+/g, " ").trim().replace(/[.;]+$/, "");
-    if (s) return s.slice(0, 90);
+    if (!s || SCOPE_HEADER_RE.test(s)) continue; // header row, not the real object
+    return s.slice(0, 90);
+  }
+  // Fallback (fiscal-invoice table body): the service row itself — "Servicii predare curs
+  // «X» serv 1 17000.00 …". Take the descriptive head of the row, cut at the qty/price tail.
+  const rowRe = /^\s*(Servicii|Lucr[ăa]ri|Presta(?:re|ri)|Услуги|Работы)\b([^\n]{3,120})/im;
+  const rm = text.match(rowRe);
+  if (rm) {
+    const row = `${rm[1]}${rm[2]}`
+      .replace(/\s+(?:serv|buc|un|шт|ore|h)?\.?\s*\d[\d .,]*.*$/i, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/[.;,]+$/, "");
+    if (row.length >= 8 && !SCOPE_HEADER_RE.test(row)) return row.slice(0, 90);
   }
   return null;
 }

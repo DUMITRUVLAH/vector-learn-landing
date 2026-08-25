@@ -40,6 +40,19 @@ export interface ParExtractedParty {
   vatCode?: string | null;
   /** true if the doc labels this party with an explicit PAYER word (Plătitor/Ordonator/Заказчик/Bill To). */
   isPayerHint?: boolean;
+  /**
+   * Fields the purity layer (partyPurify.ts) had to repair — a value relocated into
+   * them from the wrong slot, or junk stripped out. Drives honest "⚠ de verificat"
+   * flags instead of hardcoded confidence.
+   */
+  repaired?: {
+    name?: boolean;
+    idno?: boolean;
+    iban?: boolean;
+    bank?: boolean;
+    bic?: boolean;
+    legalAddress?: boolean;
+  };
 }
 
 export interface ParPartiesExtraction {
@@ -104,6 +117,8 @@ export interface ChoosePayeeResult {
     idno?: boolean;
     iban?: boolean;
     bank?: boolean;
+    bic?: boolean;
+    legalAddress?: boolean;
   };
   amountCents: number | null;
   currency: "MDL" | "EUR" | "USD";
