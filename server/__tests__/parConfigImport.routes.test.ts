@@ -20,7 +20,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as schema from "../db/schema/index";
 import { tenants, users } from "../db/schema";
-import { parBudgetCodes, parPayers, parProjects } from "../db/schema/par";
+import { parBudgetCodes, parPayerModules, parPayers, parProjects } from "../db/schema/par";
 
 let pglite: PGlite;
 let testDb: ReturnType<typeof drizzle<typeof schema>>;
@@ -110,6 +110,7 @@ beforeAll(async () => {
   userId = u.id;
   const [payer] = await testDb.insert(parPayers).values({ tenantId, name: "ATIC" }).returning();
   payerId = payer.id;
+  await testDb.insert(parPayerModules).values({ tenantId, payerId, moduleKey: "par", enabled: true });
 }, 240_000);
 
 afterAll(async () => {
@@ -183,7 +184,21 @@ describe("POST /api/par/config-import — LED.xlsx (one sheet, 'Cod | Denumire |
     const stored = await testDb.select().from(parBudgetCodes).where(eq(parBudgetCodes.tenantId, tenantId));
     expect(stored).toHaveLength(LED_LINES.length);
   });
+  it("warns when the PAR module is not enabled for the payer the rows landed on", async () => {
+    // A saved row that the PAR lists filter out reads exactly like "the import didn't work" —
+    // GET /api/par/budget-codes only returns codes of payers entitled to the "par" module.
+    await testDb.delete(parPayerModules).where(eq(parPayerModules.payerId, payerId));
+    try {
+      const res = await postImport(await ledFile());
+      const body = (await res.json()) as ImportBody;
+      expect(body.budgetCodes.created).toBe(LED_LINES.length);
+      expect(body.warnings.join(" ")).toContain("Modulul PAR nu este activat");
+    } finally {
+      await testDb.insert(parPayerModules).values({ tenantId, payerId, moduleKey: "par", enabled: true });
+    }
+  });
 });
+
 
 describe("POST /api/par/config-import — the four-sheet template still works", () => {
   it("imports payers, projects, departments and budget codes from the template layout", async () => {
