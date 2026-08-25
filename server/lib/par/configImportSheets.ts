@@ -214,6 +214,91 @@ function headerOf(row: ExcelJS.Row): string[] {
   return headers;
 }
 
+// ─── Explicit column mapping (the user decides, detection only suggests) ──────
+
+/**
+ * The fields each kind of import can fill. `key` is the canonical name the upsert helpers
+ * read (it is present in the alias tables above, so a mapped row is read exactly like a
+ * row whose header already used the canonical spelling).
+ */
+export interface FieldDef {
+  key: string;
+  label: string;
+  required: boolean;
+  hint?: string;
+}
+
+export const FIELD_DEFS: Record<SheetKind, FieldDef[]> = {
+  payers: [
+    { key: "name", label: "Denumire plătitor", required: true },
+    { key: "legalName", label: "Denumire juridică", required: false },
+    { key: "idno", label: "IDNO", required: false },
+  ],
+  projects: [
+    { key: "name", label: "Denumire proiect", required: true },
+    { key: "donor", label: "Donor / Finanțator", required: false },
+    { key: "payer", label: "Plătitor / Organizație", required: false, hint: "Implicit: plătitorul curent" },
+  ],
+  departments: [{ key: "name", label: "Denumire departament", required: true }],
+  budgetCodes: [
+    { key: "code", label: "Cod", required: true, hint: "Dacă celula conține și denumirea, este separată automat" },
+    { key: "name", label: "Denumire", required: false, hint: "Implicit: textul rămas din coloana Cod" },
+    { key: "allocated", label: "Sumă alocată (MDL)", required: false },
+    { key: "project", label: "Proiect / Program", required: false, hint: "Se creează dacă nu există" },
+    { key: "payer", label: "Plătitor / Organizație", required: false, hint: "Implicit: plătitorul curent" },
+  ],
+};
+
+/** Per-field aliases used to pre-select a column for the user. */
+const FIELD_ALIASES: Record<string, string[]> = {
+  code: CODE_ALIASES,
+  name: NAME_ALIASES,
+  allocated: ALLOCATED_ALIASES,
+  project: PROJECT_ALIASES,
+  payer: PAYER_ALIASES,
+  donor: ["donor", "donor finantator", "finantator"],
+  legalName: ["denumire juridica", "legalname", "denumire legala"],
+  idno: ["idno", "cod fiscal", "codul fiscal"],
+};
+
+/** Field aliases that only make sense for one kind (a payers sheet's "Denumire" is its name). */
+const KIND_NAME_ALIASES: Record<SheetKind, string[]> = {
+  payers: PAYER_NAME_ALIASES,
+  projects: PROJECT_NAME_ALIASES,
+  departments: DEPARTMENT_NAME_ALIASES,
+  budgetCodes: NAME_ALIASES,
+};
+
+/**
+ * Best guess for "which column feeds which field", shown pre-filled in the mapping dialog.
+ * A column is never suggested for two fields — first field wins, in FIELD_DEFS order.
+ */
+export function suggestMapping(kind: SheetKind, headers: string[]): Record<string, string | null> {
+  const taken = new Set<string>();
+  const mapping: Record<string, string | null> = {};
+  for (const field of FIELD_DEFS[kind]) {
+    const aliases = (field.key === "name" ? KIND_NAME_ALIASES[kind] : FIELD_ALIASES[field.key] ?? []).map(normalizeHeader);
+    const match = headers.find((h) => h && !taken.has(h) && aliases.includes(normalizeHeader(h)));
+    mapping[field.key] = match ?? null;
+    if (match) taken.add(match);
+  }
+  return mapping;
+}
+
+/**
+ * Rewrite rows so their keys are the canonical field names the user picked.
+ * Columns left unmapped are dropped — that is the point of the dialog: the file's own
+ * header text stops mattering.
+ */
+export function applyMapping(rows: ImportRow[], columns: Record<string, string | null>): ImportRow[] {
+  const pairs = Object.entries(columns).filter((e): e is [string, string] => Boolean(e[1]));
+  return rows.map(({ row, data }) => {
+    const mapped: Record<string, string> = {};
+    for (const [field, header] of pairs) mapped[field] = data[header] ?? "";
+    return { row, data: mapped };
+  });
+}
+
 // ─── Value normalisation ──────────────────────────────────────────────────────
 
 /** A leading budget code: "1.1", "4.2.6.3", "2-1", "A.1" … followed by descriptive text. */

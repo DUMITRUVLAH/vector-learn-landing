@@ -59,6 +59,15 @@ whole upload instead of flagging one row.
 - A project named on a budget-code row is created on the fly (that is how a grant budget arrives:
   one file, project name repeated on every line).
 
+## Follow-up: the user decides, detection only suggests
+Detection alone is still a guess. The admin page now previews the file first
+(`POST /api/par/config-import/preview`, writes nothing) and opens a mapping dialog
+(`src/components/par/ParImportMappingDialog.tsx`): per worksheet, the admin picks **what kind of
+data it is** and **which column feeds which field**, with sample rows on screen. The choices go
+back as a `mapping` form field that overrides detection entirely, so a file whose headers mean
+nothing to any heuristic (`Coloana A | Coloana B`) still imports. Suggestions pre-fill the dialog;
+they no longer decide.
+
 ## Lesson
 1. **Import by content, not by position.** Any "sheet 2 is departments" / "column C is the amount"
    convention is a silent-data-loss bug waiting for the first real file.

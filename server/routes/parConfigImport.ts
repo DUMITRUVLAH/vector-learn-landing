@@ -3,7 +3,12 @@
  *
  * Routes:
  *   GET  /api/par/config-import/template  — download the .xlsx template
+ *   POST /api/par/config-import/preview   — read the sheets/columns WITHOUT writing anything
  *   POST /api/par/config-import           — upload + parse + upsert (par_admin only)
+ *
+ * The admin page previews the file first and shows a mapping dialog; the `mapping` field it
+ * sends back (per sheet: what kind of data + which column feeds which field) OVERRIDES the
+ * auto-detection below. Detection only pre-fills that dialog.
  *
  * CRITICAL: exceljs MUST be imported dynamically (lazy) — a top-level import
  * caused a prod outage (whole API down). Pattern from server/lib/docmerge/excelImport.ts.
@@ -24,6 +29,7 @@
  *   - A project named on a budget-code row is created on the fly if it doesn't exist yet
  */
 import { Hono } from "hono";
+import { z } from "zod";
 import type ExcelJS from "exceljs";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "../db/client";
@@ -41,12 +47,15 @@ import {
   PAYER_NAME_ALIASES,
   PROJECT_ALIASES,
   PROJECT_NAME_ALIASES,
+  FIELD_DEFS,
   type ImportRow,
   type SheetKind,
+  applyMapping,
   classifyWorkbook,
   getField,
   parseMdlAmount,
   splitCodeAndName,
+  suggestMapping,
 } from "../lib/par/configImportSheets";
 
 /** Context threaded into the upsert helpers so each row honours the caller's scope (PARQA). */
@@ -159,6 +168,98 @@ parConfigImportRoutes.get(
   }
 );
 
+// ─── Column mapping payload ───────────────────────────────────────────────────
+
+const mappingSchema = z.object({
+  sheets: z
+    .array(
+      z.object({
+        name: z.string(),
+        kind: z.enum(["payers", "projects", "departments", "budgetCodes", "skip"]),
+        /** field key → the column header that feeds it (null = not mapped). */
+        columns: z.record(z.string(), z.string().nullable()).default({}),
+      })
+    )
+    .max(50),
+});
+
+type MappingPayload = z.infer<typeof mappingSchema>;
+
+/** Reads the optional `mapping` form field. Throws with a user-facing message when malformed. */
+function readMapping(raw: unknown): MappingPayload | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new Error("Maparea coloanelor nu este un JSON valid.");
+  }
+  const parsed = mappingSchema.safeParse(json);
+  if (!parsed.success) throw new Error("Maparea coloanelor are un format neașteptat.");
+  return parsed.data;
+}
+
+/** Read the uploaded .xlsx out of a multipart body. Returns a message instead of throwing. */
+async function loadWorkbook(file: File): Promise<{ wb: ExcelJS.Workbook } | { error: string; status: 400 | 422 }> {
+  if (!(file.name ?? "").toLowerCase().endsWith(".xlsx")) {
+    return { error: "Doar fișiere .xlsx sunt acceptate.", status: 400 };
+  }
+  const buffer = Buffer.from(await file.arrayBuffer());
+  // Lazy-load exceljs (critical — top-level import = prod outage)
+  const { default: ExcelJSRuntime } = (await import("exceljs")) as { default: typeof ExcelJS };
+  const wb = new ExcelJSRuntime.Workbook();
+  try {
+    await wb.xlsx.load(buffer);
+  } catch {
+    return { error: "Fișierul Excel nu poate fi citit. Verifică dacă este un .xlsx valid.", status: 422 };
+  }
+  return { wb };
+}
+
+// ─── POST /preview ────────────────────────────────────────────────────────────
+
+/**
+ * Parse the file WITHOUT writing anything: returns each worksheet's columns, a few sample rows,
+ * and a suggested kind + column mapping. The admin page turns this into the mapping dialog, so
+ * the user — not a heuristic — decides what each column means.
+ */
+parConfigImportRoutes.post(
+  "/preview",
+  requirePARRole("par_admin"),
+  async (c) => {
+    let formData: FormData;
+    try {
+      formData = await c.req.formData();
+    } catch {
+      return c.json({ error: "Cererea trebuie să fie multipart/form-data cu câmpul 'file'." }, 400);
+    }
+    const file = formData.get("file");
+    if (!file || typeof file === "string") {
+      return c.json({ error: "Câmpul 'file' lipsește sau nu este un fișier." }, 400);
+    }
+
+    const loaded = await loadWorkbook(file as File);
+    if ("error" in loaded) return c.json({ error: loaded.error }, loaded.status);
+
+    const sheets = classifyWorkbook(loaded.wb).map((sheet) => {
+      const headers = sheet.headers.filter(Boolean);
+      // Something has to be pre-selected in the dialog; budget codes is the common case.
+      const kind: SheetKind = sheet.kind ?? "budgetCodes";
+      return {
+        name: sheet.name,
+        headers,
+        totalRows: sheet.rows.length,
+        sampleRows: sheet.rows.slice(0, 5).map((r) => headers.map((h) => r.data[h] ?? "")),
+        detectedKind: sheet.kind,
+        suggestedKind: sheet.rows.length ? kind : ("skip" as const),
+        suggestedMapping: suggestMapping(kind, headers),
+      };
+    });
+
+    return c.json({ sheets, fields: FIELD_DEFS, kindLabels: KIND_LABELS });
+  }
+);
+
 // ─── POST / ───────────────────────────────────────────────────────────────────
 
 /**
@@ -192,55 +293,72 @@ parConfigImportRoutes.post(
       return c.json({ error: "Câmpul 'file' lipsește sau nu este un fișier." }, 400);
     }
 
-    const fileName = (file as File).name ?? "";
-    if (!fileName.toLowerCase().endsWith(".xlsx")) {
-      return c.json({ error: "Doar fișiere .xlsx sunt acceptate." }, 400);
-    }
+    const loaded = await loadWorkbook(file as File);
+    if ("error" in loaded) return c.json({ error: loaded.error }, loaded.status);
+    const wb = loaded.wb;
 
-    const arrayBuffer = await (file as File).arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Lazy-load exceljs (critical — top-level import = prod outage)
-    const { default: ExcelJSRuntime } = (await import("exceljs")) as {
-      default: typeof ExcelJS;
-    };
-
-    const wb = new ExcelJSRuntime.Workbook();
+    // An explicit mapping (from the preview dialog) always wins over auto-detection:
+    // the person looking at the file decides what each column is.
+    let mapping: MappingPayload | null;
     try {
-      await wb.xlsx.load(buffer);
-    } catch {
-      return c.json({ error: "Fișierul Excel nu poate fi citit. Verifică dacă este un .xlsx valid." }, 422);
+      mapping = readMapping(formData.get("mapping"));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "Maparea coloanelor este invalidă." }, 400);
     }
 
-    // Classify every worksheet by headers → name → (legacy) position.
     const sheets = classifyWorkbook(wb);
-    const recognised = sheets.filter((s) => s.kind !== null);
+    const warnings: string[] = [];
+    const selected: { kind: SheetKind; rows: ImportRow[] }[] = [];
 
-    if (recognised.length === 0) {
-      const found = sheets.map((s) => `„${s.name}" (${s.headers.filter(Boolean).join(", ") || "fără antet"})`).join("; ");
-      return c.json(
-        {
-          error:
-            "Nicio foaie din fișier nu a putut fi recunoscută. Prima linie a foii trebuie să conțină " +
-            "antetul coloanelor: „Cod\" + „Denumire\" pentru coduri bugetare, „Denumire proiect\" pentru " +
-            "proiecte, „Denumire departament\" pentru departamente, „Denumire plătitor\" pentru plătitori. " +
-            `Foi găsite: ${found}.`,
-        },
-        422
-      );
+    if (mapping) {
+      for (const chosen of mapping.sheets) {
+        const sheet = sheets.find((s) => s.name === chosen.name);
+        if (!sheet) {
+          warnings.push(`Foaia „${chosen.name}" nu există în fișier.`);
+          continue;
+        }
+        if (chosen.kind === "skip") continue;
+        const rows = applyMapping(sheet.rows, chosen.columns);
+        selected.push({ kind: chosen.kind, rows });
+        warnings.push(`Foaia „${sheet.name}" a fost importată ca „${KIND_LABELS[chosen.kind]}" (${rows.length} rânduri), conform mapării alese.`);
+      }
+      const named = new Set(mapping.sheets.map((s) => s.name));
+      for (const sheet of sheets) {
+        if (!named.has(sheet.name)) warnings.push(`Foaia „${sheet.name}" a fost sărită (neselectată).`);
+      }
+      if (selected.length === 0) {
+        return c.json({ error: "Nicio foaie nu a fost selectată pentru import." }, 400);
+      }
+    } else {
+      // No mapping: classify every worksheet by headers → name → (legacy) position.
+      const recognised = sheets.filter((s) => s.kind !== null);
+      if (recognised.length === 0) {
+        const found = sheets.map((s) => `„${s.name}" (${s.headers.filter(Boolean).join(", ") || "fără antet"})`).join("; ");
+        return c.json(
+          {
+            error:
+              "Nicio foaie din fișier nu a putut fi recunoscută. Prima linie a foii trebuie să conțină " +
+              "antetul coloanelor: „Cod\" + „Denumire\" pentru coduri bugetare, „Denumire proiect\" pentru " +
+              "proiecte, „Denumire departament\" pentru departamente, „Denumire plătitor\" pentru plătitori. " +
+              `Foi găsite: ${found}.`,
+          },
+          422
+        );
+      }
+      for (const sheet of sheets) {
+        if (sheet.kind === null) {
+          warnings.push(`Foaia „${sheet.name}" a fost ignorată — antetul coloanelor nu a putut fi recunoscut.`);
+          continue;
+        }
+        selected.push({ kind: sheet.kind, rows: sheet.rows });
+        if (sheet.via !== "name") {
+          warnings.push(`Foaia „${sheet.name}" a fost citită ca „${KIND_LABELS[sheet.kind]}" (${sheet.rows.length} rânduri).`);
+        }
+      }
     }
 
     const rowsFor = (kind: SheetKind): ImportRow[] =>
-      recognised.filter((s) => s.kind === kind).flatMap((s) => s.rows);
-
-    const warnings: string[] = [];
-    for (const sheet of sheets) {
-      if (sheet.kind === null) {
-        warnings.push(`Foaia „${sheet.name}" a fost ignorată — antetul coloanelor nu a putut fi recunoscut.`);
-      } else if (sheet.via !== "name") {
-        warnings.push(`Foaia „${sheet.name}" a fost citită ca „${KIND_LABELS[sheet.kind]}" (${sheet.rows.length} rânduri).`);
-      }
-    }
+      selected.filter((s) => s.kind === kind).flatMap((s) => s.rows);
 
     // Payers and projects first — budget codes reference them.
     const payerResult = await upsertPayers(ctx, rowsFor("payers"));

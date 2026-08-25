@@ -68,10 +68,26 @@ async function ledFile(): Promise<File> {
   });
 }
 
-async function postImport(file: File) {
+async function postImport(file: File, mapping?: unknown) {
   const form = new FormData();
   form.append("file", file);
+  if (mapping !== undefined) form.append("mapping", JSON.stringify(mapping));
   return app.request("/api/par/config-import", { method: "POST", body: form });
+}
+
+async function postPreview(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return app.request("/api/par/config-import/preview", { method: "POST", body: form });
+}
+
+interface PreviewBody {
+  sheets: {
+    name: string; headers: string[]; totalRows: number; sampleRows: string[][];
+    detectedKind: string | null; suggestedKind: string; suggestedMapping: Record<string, string | null>;
+  }[];
+  fields: Record<string, { key: string; label: string; required: boolean }[]>;
+  kindLabels: Record<string, string>;
 }
 
 interface Category { created: number; updated: number; errors: { row: number; column: string; message: string }[] }
@@ -267,5 +283,109 @@ describe("POST /api/par/config-import — unreadable files fail loudly, not sile
     expect(body.budgetCodes.errors).toHaveLength(1);
     expect(body.budgetCodes.errors[0].row).toBe(2);
     expect(body.budgetCodes.errors[0].message).toContain("50");
+  });
+});
+
+describe("POST /api/par/config-import/preview — the user decides, detection only suggests", () => {
+  it("returns the sheet's columns, sample rows and a suggested mapping, writing nothing", async () => {
+    const res = await postPreview(await ledFile());
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PreviewBody;
+
+    expect(body.sheets).toHaveLength(1);
+    const [sheet] = body.sheets;
+    expect(sheet.name).toBe("Sheet1");
+    expect(sheet.headers).toEqual(["Cod", "Denumire", "Denumire proiect"]);
+    expect(sheet.totalRows).toBe(LED_LINES.length);
+    expect(sheet.sampleRows[0]).toEqual([LED_LINES[0], LED_LINES[0], "LED 3/Youth Maker club"]);
+    expect(sheet.suggestedKind).toBe("budgetCodes");
+    expect(sheet.suggestedMapping).toMatchObject({ code: "Cod", name: "Denumire", project: "Denumire proiect" });
+    expect(body.fields.budgetCodes.find((f) => f.key === "code")?.required).toBe(true);
+
+    // Preview must not touch the database.
+    const stored = await testDb.select().from(parBudgetCodes).where(eq(parBudgetCodes.tenantId, tenantId));
+    expect(stored).toHaveLength(0);
+  });
+
+  it("rejects a non-xlsx file", async () => {
+    const res = await postPreview(new File(["x"], "note.txt"));
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /api/par/config-import — an explicit mapping overrides detection", () => {
+  it("[blocant] imports the columns the user chose, ignoring the ones left unmapped", async () => {
+    const res = await postImport(await ledFile(), {
+      sheets: [{ name: "Sheet1", kind: "budgetCodes", columns: { code: "Cod", name: "Denumire", project: null } }],
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ImportBody;
+    expect(body.budgetCodes.created).toBe(LED_LINES.length);
+    // "Denumire proiect" was deliberately not mapped → no project is created.
+    expect(body.projects.created).toBe(0);
+
+    const stored = await testDb.select().from(parBudgetCodes).where(eq(parBudgetCodes.tenantId, tenantId));
+    expect(stored.every((r) => r.projectId === null)).toBe(true);
+  });
+
+  it("[blocant] honours a sheet imported as a DIFFERENT kind than detection suggested", async () => {
+    const res = await postImport(await ledFile(), {
+      sheets: [{ name: "Sheet1", kind: "projects", columns: { name: "Denumire proiect" } }],
+    });
+    const body = (await res.json()) as ImportBody;
+    expect(body.budgetCodes.created).toBe(0);
+    // Same project name on every row ⇒ created once, updated for the rest.
+    expect(body.projects.created).toBe(1);
+    expect(body.projects.updated).toBe(LED_LINES.length - 1);
+
+    const projects = await testDb.select().from(parProjects).where(eq(parProjects.tenantId, tenantId));
+    expect(projects.map((p) => p.name)).toEqual(["LED 3/Youth Maker club"]);
+  });
+
+  it("takes a field from whatever column the user points at, however odd", async () => {
+    await postImport(await ledFile(), {
+      sheets: [{ name: "Sheet1", kind: "budgetCodes", columns: { code: "Cod", name: "Denumire proiect" } }],
+    });
+    const stored = await testDb.select().from(parBudgetCodes).where(eq(parBudgetCodes.tenantId, tenantId));
+    expect(stored.every((r) => r.name === "LED 3/Youth Maker club")).toBe(true);
+  });
+
+  it("skips a sheet marked 'skip' and says so", async () => {
+    const res = await postImport(await ledFile(), {
+      sheets: [{ name: "Sheet1", kind: "skip", columns: {} }],
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain("Nicio foaie");
+  });
+
+  it("rejects a malformed mapping instead of importing something unintended", async () => {
+    const form = new FormData();
+    form.append("file", await ledFile());
+    form.append("mapping", "{not json");
+    const res = await app.request("/api/par/config-import", { method: "POST", body: form });
+    expect(res.status).toBe(400);
+
+    const stored = await testDb.select().from(parBudgetCodes).where(eq(parBudgetCodes.tenantId, tenantId));
+    expect(stored).toHaveLength(0);
+  });
+
+  it("imports a file whose headers mean nothing to detection, once the user maps it", async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Buget 2026");
+    ws.addRow(["Coloana A", "Coloana B"]);
+    ws.addRow(["7.1", "Chirie sediu"]);
+    ws.addRow(["7.2", "Servicii audit"]);
+    const buf = await wb.xlsx.writeBuffer();
+
+    const res = await postImport(new File([buf], "necunoscut.xlsx"), {
+      sheets: [{ name: "Buget 2026", kind: "budgetCodes", columns: { code: "Coloana A", name: "Coloana B" } }],
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ImportBody;
+    expect(body.budgetCodes.created).toBe(2);
+
+    const stored = await testDb.select().from(parBudgetCodes).where(eq(parBudgetCodes.tenantId, tenantId));
+    expect(stored.map((r) => r.code).sort()).toEqual(["7.1", "7.2"]);
   });
 });

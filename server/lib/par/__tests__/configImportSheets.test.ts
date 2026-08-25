@@ -15,6 +15,8 @@
 import { describe, it, expect } from "vitest";
 import ExcelJS from "exceljs";
 import {
+  FIELD_DEFS,
+  applyMapping,
   classifyWorkbook,
   detectKindFromHeaders,
   detectKindFromName,
@@ -22,6 +24,7 @@ import {
   normalizeHeader,
   parseMdlAmount,
   splitCodeAndName,
+  suggestMapping,
 } from "../configImportSheets";
 
 /** Rebuilds the shape of the real LED.xlsx. */
@@ -206,5 +209,62 @@ describe("parseMdlAmount", () => {
   it("returns null for text", () => {
     expect(parseMdlAmount("n/a")).toBeNull();
     expect(parseMdlAmount("")).toBeNull();
+  });
+});
+
+describe("suggestMapping — what the mapping dialog pre-selects", () => {
+  it("pre-fills the LED.xlsx columns without stealing one column for two fields", () => {
+    const m = suggestMapping("budgetCodes", ["Cod", "Denumire", "Denumire proiect"]);
+    expect(m).toEqual({
+      code: "Cod",
+      name: "Denumire",
+      allocated: null,
+      project: "Denumire proiect",
+      payer: null,
+    });
+  });
+
+  it("uses the kind's own name aliases (a payers sheet's 'Denumire' is its name)", () => {
+    expect(suggestMapping("payers", ["Denumire", "IDNO"])).toEqual({
+      name: "Denumire",
+      legalName: null,
+      idno: "IDNO",
+    });
+  });
+
+  it("suggests nothing when no column matches — the user picks by hand", () => {
+    const m = suggestMapping("budgetCodes", ["Coloana A", "Coloana B"]);
+    expect(Object.values(m).every((v) => v === null)).toBe(true);
+  });
+
+  it("every kind declares at least one required field", () => {
+    for (const defs of Object.values(FIELD_DEFS)) {
+      expect(defs.some((f) => f.required)).toBe(true);
+    }
+  });
+});
+
+describe("applyMapping — the user's choice replaces the file's headers", () => {
+  const rows = [{ row: 2, data: { Cod: "1.1 Director", Denumire: "1.1 Director", "Denumire proiect": "LED 3" } }];
+
+  it("rewrites row keys to the canonical field names", () => {
+    expect(applyMapping(rows, { code: "Cod", name: "Denumire", project: "Denumire proiect" })).toEqual([
+      { row: 2, data: { code: "1.1 Director", name: "1.1 Director", project: "LED 3" } },
+    ]);
+  });
+
+  it("drops columns the user left unmapped", () => {
+    const [mapped] = applyMapping(rows, { code: "Cod", name: null, project: null });
+    expect(mapped.data).toEqual({ code: "1.1 Director" });
+  });
+
+  it("honours a deliberately unusual choice (name taken from the project column)", () => {
+    const [mapped] = applyMapping(rows, { code: "Cod", name: "Denumire proiect" });
+    expect(mapped.data).toEqual({ code: "1.1 Director", name: "LED 3" });
+  });
+
+  it("yields an empty string for a header that isn't in the row", () => {
+    const [mapped] = applyMapping(rows, { code: "Cod", allocated: "Sumă" });
+    expect(mapped.data.allocated).toBe("");
   });
 });
