@@ -25,10 +25,12 @@ vi.mock("@/router/HashRouter", () => ({
 }));
 
 vi.mock("@/components/app/AppShell", () => ({
-  // `actions` must render: the page puts its "Reîncarcă" button there, and a mock that
-  // drops the slot silently hides every header control from the tests.
-  AppShell: ({ children, actions }: { children: React.ReactNode; actions?: React.ReactNode }) => (
+  // HR365-005: the shell OWNS the page header — pageTitle and the header `actions`
+  // (incl. the Reîncarcă button) render through it. A mock that drops them makes
+  // every header assertion fail against a page that is actually fine.
+  AppShell: ({ children, pageTitle, actions }: { children: React.ReactNode; pageTitle?: React.ReactNode; actions?: React.ReactNode }) => (
     <div data-testid="app-shell">
+      {pageTitle ? <h1>{pageTitle}</h1> : null}
       {actions}
       {children}
     </div>

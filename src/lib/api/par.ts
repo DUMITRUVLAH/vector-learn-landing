@@ -937,6 +937,18 @@ export async function listParMembers(): Promise<{ members: ParMember[] }> {
   return api("/api/par/members");
 }
 
+/** A tenant user the admin can grant a PAR role to (PARQA-025 by-name picker). */
+export interface ParMemberCandidate {
+  id: string;
+  name: string | null;
+  email: string;
+  tenantRole: string;
+}
+
+export async function listParMemberCandidates(): Promise<{ candidates: ParMemberCandidate[] }> {
+  return api("/api/par/members/candidates");
+}
+
 export async function assignParMember(payload: {
   userId: string;
   role: "requestor" | "approver" | "finance" | "par_admin";
