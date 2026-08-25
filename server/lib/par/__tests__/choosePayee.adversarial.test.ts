@@ -82,3 +82,83 @@ describe("choosePayee — adversarial regressions", () => {
     expect(r.payee?.iban).toBe("MD24AG000225100013104168");
   });
 });
+
+// PAR bug 2026-08-25: the "Bancă" field showed a payee's own quoted name + legal address instead
+// of a bank name. The root fix bounds extraction (stubPartyParser.cleanBankName windowing); this
+// suite locks the SECOND, format-agnostic layer — choosePayee's fieldSanity cross-check — so any
+// future extraction path (a new LLM prompt, a new stub heuristic) that mis-slots a value still
+// gets caught here, not just in the one parser that happened to cause the original report.
+describe("choosePayee — field-sanity cross-check (bank/legalAddress/administratorName)", () => {
+  it("an IDNO extracted into the `bank` slot is recovered as idno, not surfaced as a bank name", () => {
+    const r = choosePayee(
+      ext([{ name: "NEWS MAKER SRL", role: "provider", bank: "1020600033229" }]),
+      null,
+    );
+    expect(r.payee?.name).toBe("NEWS MAKER SRL");
+    expect(r.payee?.idno).toBe("1020600033229");
+    expect(r.payee?.bank).toBeNull();
+  });
+
+  it("an IBAN extracted into the `bank` slot is recovered as iban, not surfaced as a bank name", () => {
+    const r = choosePayee(
+      ext([{ name: "NEWS MAKER SRL", role: "provider", bank: "MD50AG000000022516524419" }]),
+      null,
+    );
+    expect(r.payee?.name).toBe("NEWS MAKER SRL");
+    expect(r.payee?.iban).toBe("MD50AG000000022516524419");
+    expect(r.payee?.bank).toBeNull();
+  });
+
+  it("a company's own name + address bled into `bank` is dropped, not surfaced", () => {
+    const r = choosePayee(
+      ext([
+        {
+          name: "NEWS MAKER SRL",
+          role: "provider",
+          idno: "1020600033229",
+          iban: "MD50AG000000022516524419",
+          bank: '"NEWS MAKER" SRL, cu sediul in mun. Chisinau, sec. Botanica, str. Grenoble nr. 128',
+        },
+      ]),
+      null,
+    );
+    expect(r.payee?.name).toBe("NEWS MAKER SRL");
+    expect(r.payee?.idno).toBe("1020600033229");
+    expect(r.payee?.iban).toBe("MD50AG000000022516524419");
+    expect(r.payee?.bank).toBeNull();
+  });
+
+  it("a company name (legal-form suffix) extracted into administratorName is dropped", () => {
+    const r = choosePayee(
+      ext([
+        {
+          name: "NEWS MAKER SRL",
+          role: "provider",
+          administratorName: "Some Other Company SRL",
+        },
+      ]),
+      null,
+    );
+    expect(r.payee?.administratorName).toBeNull();
+  });
+
+  it("does not disturb a well-formed bank/address/administrator on an otherwise-clean document", () => {
+    const r = choosePayee(
+      ext([
+        {
+          name: "NEWS MAKER SRL",
+          role: "provider",
+          idno: "1020600033229",
+          iban: "MD50AG000000022516524419",
+          bank: "BC Moldindconbank S.A.",
+          legalAddress: "mun. Chișinău, sec. Botanica, str. Grenoble 128",
+          administratorName: "Ion Popescu",
+        },
+      ]),
+      null,
+    );
+    expect(r.payee?.bank).toBe("BC Moldindconbank S.A.");
+    expect(r.payee?.legalAddress).toBe("mun. Chișinău, sec. Botanica, str. Grenoble 128");
+    expect(r.payee?.administratorName).toBe("Ion Popescu");
+  });
+});

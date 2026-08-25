@@ -21,6 +21,7 @@ import type {
 import { isPayeeBank } from "./payeeBankClassifier";
 import { detectPayeeType } from "./payeeTypeDetectorServer";
 import { isValidMoldovaIBAN, isValidIBAN, isValidIDNP } from "./validators";
+import { sanitizeRequisites } from "./fieldSanity";
 
 // ─── Helpers (exported for unit tests) ────────────────────────────────────────
 
@@ -254,19 +255,28 @@ export function choosePayee(
       !(trustRoles && p.role === "client"),
   );
 
-  // 3. Build validated candidates from the pool.
+  // 3. Build validated candidates from the pool. Cross-check bank/legalAddress/administratorName
+  // against what their slot actually claims to be BEFORE routing idno/iban — a value that bled
+  // into the wrong field (an IBAN/IDNO sitting in `bank`, an address sitting in `bank`, a company
+  // name sitting in `administratorName`) must never reach the API response as-is, regardless of
+  // whether the LLM or the regex stub produced it (see fieldSanity.ts).
   const candidates: InternalCandidate[] = pool.map((p) => {
-    const r = routeIdAndIban(p);
+    const sanitized = sanitizeRequisites(p);
+    const r = routeIdAndIban({
+      ...p,
+      idno: p.idno ?? sanitized.recoveredIdno,
+      iban: p.iban ?? sanitized.recoveredIban,
+    });
     const name = p.name;
     return {
       name,
       idno: r.idno,
       iban: r.iban,
       ibanForeign: r.ibanForeign,
-      bank: p.bank ?? null,
+      bank: sanitized.bank,
       bic: p.bic ?? null,
-      legalAddress: p.legalAddress ?? null,
-      administratorName: p.administratorName ?? null,
+      legalAddress: sanitized.legalAddress,
+      administratorName: sanitized.administratorName,
       payeeType: detectPayeeType(name),
       _role: p.role,
       _ibanLowConf: r.ibanLowConf,

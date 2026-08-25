@@ -14,6 +14,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { isValidMoldovaIBAN, isValidIDNP } from "../lib/par/validators";
 import { parUuidGuard } from "../middleware/parUuidGuard";
+import { zodFieldErrorsHook } from "../lib/zodFieldErrors";
 
 export const parVendorsRoutes = new Hono<{ Variables: AuthVariables }>();
 parVendorsRoutes.use("*", requireAuth);
@@ -76,7 +77,7 @@ parVendorsRoutes.post(
   // requestor legitimately adds a payee inline while creating a PAR, so all four roles are allowed,
   // but a tenant user with NO PAR role (e.g. an invited "teacher" account) cannot write bank data.
   requirePARRole("requestor", "approver", "finance", "par_admin"),
-  zValidator("json", vendorSchema),
+  zValidator("json", vendorSchema, zodFieldErrorsHook),
   async (c) => {
     const tenantId = c.get("user").tenantId;
     const body = c.req.valid("json");
@@ -150,7 +151,7 @@ parVendorsRoutes.patch(
   // risk — changing an IBAN redirects money. Restrict to par_admin (matches DELETE). Only the admin
   // Vendors UI calls this; the requestor create flow always POSTs (dedup backfills, never PATCHes).
   requirePARRole("par_admin"),
-  zValidator("json", vendorSchema.partial()),
+  zValidator("json", vendorSchema.partial(), zodFieldErrorsHook),
   async (c) => {
     const tenantId = c.get("user").tenantId;
     const id = c.req.param("id");
