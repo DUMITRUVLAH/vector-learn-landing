@@ -16,6 +16,7 @@ import { requirePARRole } from "../middleware/requirePARRole";
 import { validateIban } from "../lib/par/validators";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { zodFieldErrorsHook } from "../lib/zodFieldErrors";
+import { splitBankRequisites } from "../lib/par/bankRequisites";
 
 export const parVendorsRoutes = new Hono<{ Variables: AuthVariables }>();
 parVendorsRoutes.use("*", requireAuth);
@@ -28,6 +29,7 @@ const vendorSchema = z.object({
   iban: z.string().max(34).optional().nullable(),
   bank: z.string().max(300).optional().nullable(),
   bic_swift: z.string().max(32).optional().nullable(),
+  vat_code: z.string().max(50).optional().nullable(),
   bank_account: z.string().max(100).optional().nullable(),
   bank_account_currency: z.string().length(3).optional().nullable(),
   legal_address: z.string().max(1000).optional().nullable(),
@@ -54,6 +56,48 @@ function warnOnVendorFields(body: { idnp?: string | null; iban?: string | null }
       console.warn(`[par-vendors] IBAN neverificat (${check.reason}) — salvat oricum`);
     }
   }
+}
+
+/** Câmpurile pe care le poate produce separarea rândului de rechizite. */
+type SplittableVendorFields = {
+  bank?: string | null;
+  bic_swift?: string | null;
+  vat_code?: string | null;
+  idnp?: string | null;
+  iban?: string | null;
+};
+
+/**
+ * Desparte rechizitele lipite în câmpul „Bancă" înainte de scriere.
+ *
+ * Pe documentele MD banca, codul bancar, codul fiscal și nr. TVA se tipăresc pe un singur rând,
+ * iar textul ajungea întreg în `bank` — contabila nu putea citi niciun cod separat. Aici îl
+ * despicăm o singură dată, la intrarea în registru, indiferent de sursă (formular, lipit manual,
+ * prefill AI, auto-salvare din cerere).
+ *
+ * ENRICH, NU CLOBBER: un cod extras completează doar un câmp gol. Dacă utilizatorul a scris
+ * explicit un IBAN sau un cod fiscal — sau dacă rândul salvat îl are deja (`current`, la PATCH) —
+ * valoarea aceea rămâne. Extragerea dintr-un text lipit nu are voie să rescrie un cod curat:
+ * schimbarea unui IBAN redirecționează bani.
+ */
+export function splitVendorBankField<T extends SplittableVendorFields>(
+  body: T,
+  current?: { idnp?: string | null; bicSwift?: string | null; vatCode?: string | null; iban?: string | null } | null
+): T {
+  if (!body.bank) return body;
+  const parts = splitBankRequisites(body.bank);
+  // Nimic de separat → lăsăm obiectul exact cum a venit (idempotent pe rânduri deja curate).
+  if (!parts.bankCode && !parts.fiscalCode && !parts.vatCode && !parts.iban) return body;
+  const keep = (fromBody: string | null | undefined, stored: string | null | undefined, derived: string | null) =>
+    fromBody || stored || derived;
+  return {
+    ...body,
+    bank: parts.bank,
+    bic_swift: keep(body.bic_swift, current?.bicSwift, parts.bankCode),
+    vat_code: keep(body.vat_code, current?.vatCode, parts.vatCode),
+    idnp: keep(body.idnp, current?.idnp, parts.fiscalCode),
+    iban: keep(body.iban, current?.iban, parts.iban),
+  };
 }
 
 /** GET — list all active vendors */
@@ -86,7 +130,7 @@ parVendorsRoutes.post(
   zValidator("json", vendorSchema, zodFieldErrorsHook),
   async (c) => {
     const tenantId = c.get("user").tenantId;
-    const body = c.req.valid("json");
+    const body = splitVendorBankField(c.req.valid("json"));
 
     warnOnVendorFields(body);
 
@@ -106,6 +150,7 @@ parVendorsRoutes.post(
         if (!e.idnp && body.idnp) patch.idnp = body.idnp;
         if (!e.bank && body.bank) patch.bank = body.bank;
         if (!e.bicSwift && body.bic_swift) patch.bicSwift = body.bic_swift;
+        if (!e.vatCode && body.vat_code) patch.vatCode = body.vat_code;
         if (!e.bankAccount && body.bank_account) patch.bankAccount = body.bank_account;
         if (!e.bankAccountCurrency && body.bank_account_currency) patch.bankAccountCurrency = body.bank_account_currency;
         if (!e.legalAddress && body.legal_address) patch.legalAddress = body.legal_address;
@@ -135,6 +180,7 @@ parVendorsRoutes.post(
         iban: normIban,
         bank: body.bank ?? null,
         bicSwift: body.bic_swift ?? null,
+        vatCode: body.vat_code ?? null,
         bankAccount: body.bank_account ?? null,
         bankAccountCurrency: body.bank_account_currency ?? null,
         legalAddress: body.legal_address ?? null,
@@ -160,7 +206,14 @@ parVendorsRoutes.patch(
   async (c) => {
     const tenantId = c.get("user").tenantId;
     const id = c.req.param("id");
-    const body = c.req.valid("json");
+    // Citim rândul înainte de separare: codurile deja salvate au prioritate față de cele deduse
+    // dintr-un text lipit în câmpul „Bancă" (vezi splitVendorBankField).
+    const [current] = await db
+      .select()
+      .from(parVendors)
+      .where(and(eq(parVendors.id, id), eq(parVendors.tenantId, tenantId)));
+    if (!current) return c.json({ error: "not_found" }, 404);
+    const body = splitVendorBankField(c.req.valid("json"), current);
 
     warnOnVendorFields(body);
 
@@ -170,6 +223,7 @@ parVendorsRoutes.patch(
       ...(body.iban !== undefined ? { iban: body.iban?.replace(/\s/g, "").toUpperCase() ?? null } : {}),
       ...(body.bank !== undefined ? { bank: body.bank } : {}),
       ...(body.bic_swift !== undefined ? { bicSwift: body.bic_swift } : {}),
+      ...(body.vat_code !== undefined ? { vatCode: body.vat_code } : {}),
       ...(body.bank_account !== undefined ? { bankAccount: body.bank_account } : {}),
       ...(body.bank_account_currency !== undefined ? { bankAccountCurrency: body.bank_account_currency } : {}),
       ...(body.legal_address !== undefined ? { legalAddress: body.legal_address } : {}),
@@ -190,6 +244,41 @@ parVendorsRoutes.patch(
     return c.json(row);
   }
 );
+
+/**
+ * POST /actions/normalize — repară rândurile salvate ÎNAINTE de separare.
+ *
+ * Beneficiarii introduși până acum au banca, codul bancar, codul fiscal și nr. TVA îngrămădite
+ * în coloana „Bancă". Separarea la scriere (mai sus) curăță doar ce se salvează de-acum încolo;
+ * istoricul rămâne murdar până e trecut o dată prin același separator. Endpoint-ul face exact
+ * asta, pentru tenantul curent, și e sigur de rulat de oricâte ori: pe un rând deja curat
+ * `splitBankRequisites` nu găsește niciun cod și rândul e sărit.
+ *
+ * Calea are DOUĂ segmente intenționat: `use("/:id", parUuidGuard)` prinde doar căile de un
+ * segment, deci `/actions/normalize` nu e confundată cu un id de beneficiar.
+ */
+parVendorsRoutes.post("/actions/normalize", requirePARRole("par_admin"), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const rows = await db.select().from(parVendors).where(eq(parVendors.tenantId, tenantId));
+
+  let updated = 0;
+  for (const row of rows) {
+    const parts = splitBankRequisites(row.bank);
+    if (!parts.bankCode && !parts.fiscalCode && !parts.vatCode && !parts.iban) continue;
+    // Enrich, nu clobber: doar câmpurile goale se completează; banca se scurtează la numele ei.
+    const patch: Record<string, unknown> = { bank: parts.bank };
+    if (!row.bicSwift && parts.bankCode) patch.bicSwift = parts.bankCode;
+    if (!row.vatCode && parts.vatCode) patch.vatCode = parts.vatCode;
+    if (!row.idnp && parts.fiscalCode) patch.idnp = parts.fiscalCode;
+    if (!row.iban && parts.iban) patch.iban = parts.iban;
+    await db
+      .update(parVendors)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(parVendors.id, row.id), eq(parVendors.tenantId, tenantId)));
+    updated++;
+  }
+  return c.json({ ok: true, scanned: rows.length, updated });
+});
 
 /** DELETE /:id — soft delete */
 parVendorsRoutes.delete("/:id", requirePARRole("par_admin"), async (c) => {
