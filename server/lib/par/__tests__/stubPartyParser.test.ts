@@ -11,6 +11,7 @@ import {
   parseLocalizedAmount,
   extractAmount,
   cleanName,
+  parsePartiesFromText,
 } from "../stubPartyParser";
 import {
   normalizeIban,
@@ -165,5 +166,35 @@ describe("roleRank", () => {
     expect(roleRank("executor")).toBeLessThan(roleRank("provider"));
     expect(roleRank("provider")).toBeLessThan(roleRank("client"));
     expect(roleRank("client")).toBeLessThan(roleRank("bank"));
+  });
+});
+
+describe("bank-field extraction — false-positive bank keyword must not swallow the whole line", () => {
+  // Regression for the 2026-08-25 report: a PDF-collapsed line (payee name, IDNO, IBAN and
+  // address all run together with no real newline) that ALSO happens to mention "BNM" (a
+  // currency-rate footer, not an actual "Banca:" label) got captured WHOLE as the "Bancă" field
+  // — the payee's quoted name and "sec. Botanica" address leaked into payee_bank, which then
+  // blocked saving the draft (payee_bank is capped at 300 chars server-side).
+  it("BNM exchange-rate mention doesn't pull the payee's name/IDNO/IBAN/address into `bank`", () => {
+    const docText = [
+      "CONTRACT DE PRESTĂRI SERVICII Nr. 12/2026",
+      "",
+      'Prestator: "NEWS MAKER" SRL, IDNO 1020600033229, IBAN MD50AG000000022516524419, cu sediul in mun. Chisinau, sec. Botanica, str. Grenoble nr. 128, conform cursului valutar stabilit de BNM la data platii.',
+      "",
+      'Client: "Vector Academy" SRL, IDNO 1009600045678.',
+    ].join("\n");
+
+    const ext = parsePartiesFromText(docText);
+    const provider = ext.parties.find((p) => p.role === "provider" || p.role === "executor");
+    expect(provider).toBeTruthy();
+    expect(provider?.name).toBe("NEWS MAKER SRL");
+    expect(provider?.idno).toBe("1020600033229");
+    expect(provider?.iban).toBe("MD50AG000000022516524419");
+
+    const bank = provider?.bank ?? "";
+    expect(bank).not.toContain("NEWS MAKER");
+    expect(bank).not.toContain("Botanica");
+    expect(bank).not.toContain("1020600033229");
+    expect(bank.length).toBeLessThan(60);
   });
 });
