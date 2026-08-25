@@ -2016,9 +2016,10 @@ function ParReferenceData() {
       <details className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm">
         <summary className="cursor-pointer font-medium text-foreground">Cum se face importul Excel</summary>
         <div className="mt-2 space-y-1 text-muted-foreground">
-          <p>1. Descarcă template-ul și păstrează denumirile foilor și coloanelor.</p>
-          <p>2. Completează proiectele, departamentele și codurile bugetare. Sumele acceptă atât formatul MD/EU (<span className="font-mono">12 500,50</span>), cât și formatul internațional (<span className="font-mono">12500.50</span>).</p>
-          <p>3. Încarcă fișierul. Elementele existente sunt actualizate, iar rezultatul arată separat fiecare rând invalid, coloană lipsă sau duplicat.</p>
+          <p>1. Poți folosi template-ul sau propriul fișier — foaia este recunoscută după antetul coloanelor (prima linie), nu după numele foii.</p>
+          <p>2. Anteturi acceptate: <span className="font-mono">Cod</span> + <span className="font-mono">Denumire</span> (+ opțional <span className="font-mono">Denumire proiect</span>, <span className="font-mono">Alocare</span>) pentru coduri bugetare; <span className="font-mono">Denumire proiect</span> pentru proiecte; <span className="font-mono">Denumire departament</span> pentru departamente; <span className="font-mono">Denumire plătitor</span> pentru plătitori.</p>
+          <p>3. Dacă în coloana <span className="font-mono">Cod</span> ai tot textul (ex. <span className="font-mono">1.1 Project Coordinator</span>), codul și denumirea sunt separate automat. Proiectul indicat pe rând este creat dacă nu există.</p>
+          <p>4. Sumele acceptă atât formatul MD/EU (<span className="font-mono">12 500,50</span>), cât și formatul internațional (<span className="font-mono">12500.50</span>).</p>
           <p>Importul nu oprește tot fișierul la prima eroare: rândurile valide sunt procesate, iar erorile rămân vizibile pentru corectare.</p>
         </div>
       </details>
@@ -2035,6 +2036,10 @@ function ParReferenceData() {
       {importResult && (
         <div className="rounded-lg border border-border bg-card p-3 space-y-2 text-sm">
           <p className="font-medium text-foreground">Rezultat import:</p>
+          {/* Which sheet was read as what — so a file that imports 0 rows is explainable */}
+          {(importResult.warnings ?? []).map((w, i) => (
+            <p key={`w-${i}`} className="text-muted-foreground text-xs">{w}</p>
+          ))}
           {(["payers", "projects", "departments", "budgetCodes"] as const).map((key) => {
             const cat = importResult[key];
             const label = key === "payers" ? "Plătitori" : key === "projects" ? "Proiecte" : key === "departments" ? "Departamente" : "Coduri buget";

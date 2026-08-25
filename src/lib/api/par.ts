@@ -1481,6 +1481,8 @@ export interface ParConfigImportResult {
   projects: { created: number; updated: number; errors: ParConfigImportRowError[] };
   departments: { created: number; updated: number; errors: ParConfigImportRowError[] };
   budgetCodes: { created: number; updated: number; errors: ParConfigImportRowError[] };
+  /** Which sheet was read as what, and which sheets were ignored. Optional for older servers. */
+  warnings?: string[];
 }
 
 /** Upload Excel config file and return import result. */
