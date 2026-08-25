@@ -17,8 +17,9 @@
  *   DELETE /api/par/:id/line-items/:lineId       → delete line item
  */
 import { Hono } from "hono";
-import { zValidator, type Hook } from "@hono/zod-validator";
+import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
+import { zodFieldErrorsHook } from "../lib/zodFieldErrors";
 import { and, eq, ilike, desc, asc, inArray, isNull, or, gte, lte, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import {
@@ -63,23 +64,6 @@ parRoutes.use("*", requireAuth);
 // bare `/:id` (GET/PATCH/DELETE) and the nested `/:id/...` (submit, line-items, comments, quotes…).
 parRoutes.use("/:id", parUuidGuard("id"));
 parRoutes.use("/:id/:action/*", parUuidGuard("id"));
-
-/**
- * Without a hook, @hono/zod-validator returns the raw ZodError on a failed body — the client
- * (src/lib/api.ts) can only surface that as ONE generic, unscoped message (e.g. "String must
- * contain at most 300 character(s)"), with no way to say which field is wrong or highlight it
- * inline (bug 2026-08-25: a garbled AI-prefilled "Bancă" value blocked PAR draft saves with
- * exactly this unlabeled error). Reformat into the `{field, message}[]` shape the frontend's
- * submit() already knows how to map onto per-field errors (see ParCreateForm.tsx).
- */
-const zodFieldErrorsHook: Hook<unknown, { Variables: AuthVariables }, string> = (result, c) => {
-  if (result.success) return;
-  const errors = result.error.issues.map((issue) => ({
-    field: issue.path.join(".") || "form",
-    message: issue.message,
-  }));
-  return c.json({ error: "validation_failed", errors }, 400);
-};
 
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
