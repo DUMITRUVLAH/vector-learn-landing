@@ -498,7 +498,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
               if (!res.ok) throw new Error("Eroare la anulare");
             });
           }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-destructive/10 hover:text-destructive min-h-[44px] disabled:opacity-60"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-destructive/40 bg-background text-destructive text-sm font-medium hover:bg-destructive/10 hover:border-destructive min-h-[44px] disabled:opacity-60"
           aria-label="Anulează cererea"
         >
           {busy === "cancel" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Trash2 className="h-4 w-4" aria-hidden />}
