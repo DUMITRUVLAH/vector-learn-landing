@@ -41,7 +41,7 @@ import {
   projectAllowsApprover,
 } from "../lib/par/projectApprovers";
 import { verifyParBodyHash } from "../lib/par/integrity";
-import { getActiveDelegators } from "../lib/par/delegations";
+import { getActiveDelegators, getDelegatedAuthority } from "../lib/par/delegations";
 import { stepMatchesViewer } from "../lib/par/decisionAuthority";
 import { blocksOnApprovalLimit } from "../lib/par/approvalLimit";
 import { approvalProgressAfterDecision } from "../lib/par/approvalProgress";
@@ -196,7 +196,11 @@ async function approveParStep(
   // The "is this step mine?" rule set lives in decisionAuthority.ts — the SAME function backs the
   // inbox, reject, request-changes and the `my_decision` block on GET /api/par/:id, so what the
   // detail page shows can never disagree with what this endpoint accepts.
-  const viewerCtx = { userId, parRoles: roles, delegators, allowedOnProject };
+  const delegated = await getDelegatedAuthority(delegators, tenantId, par.projectId);
+  const viewerCtx = {
+    userId, parRoles: roles, delegators, allowedOnProject,
+    delegatedRoles: delegated.roles, delegatedAllowedOnProject: delegated.allowedOnProject,
+  };
   const stepMatches = (s: typeof approvalSteps[number]) => stepMatchesViewer(s, viewerCtx);
 
   const lockedStepForUser = approvalSteps.find(
@@ -390,6 +394,8 @@ parApprovalsRoutes.get("/inbox", async (c) => {
 
   // VF-302: principals who delegated their authority to this user (active now).
   const delegators = await getActiveDelegators(user.id, tenantId);
+  // Roles inherited through an active delegation — the inbox must show what approve/reject accept.
+  const { roles: inboxDelegatedRoles } = await getDelegatedAuthority(delegators, tenantId, null);
 
   // Non-approvers with no incoming delegations get an empty inbox (role-aware UI hides the tab anyway).
   if (!isApprover && delegators.size === 0) {
@@ -462,6 +468,10 @@ parApprovalsRoutes.get("/inbox", async (c) => {
         userId: user.id,
         parRoles: roles,
         delegators,
+        delegatedRoles: inboxDelegatedRoles,
+        // The inbox spans many projects; per-project delegation scoping is re-checked by
+        // approve/reject, which is the gate that matters.
+        delegatedAllowedOnProject: inboxDelegatedRoles.length > 0,
         allowedOnProject: projectAllowsApprover(
           parScope?.projectId,
           user.id,
@@ -632,8 +642,12 @@ parApprovalsRoutes.post(
     const allowedOnProject = projectAllowsApprover(par.projectId, user.id, designated);
     // Same rule set as approve (decisionAuthority.ts) — incl. a step's required par_role, which the
     // hand-rolled copy here used to ignore (a "finance"-gated step was rejectable by any approver).
+    const delegated = await getDelegatedAuthority(delegators, tenantId, par.projectId);
     const stepMatches = (s: typeof approvalSteps[number]) =>
-      stepMatchesViewer(s, { userId: user.id, parRoles: roles, delegators, allowedOnProject });
+      stepMatchesViewer(s, {
+        userId: user.id, parRoles: roles, delegators, allowedOnProject,
+        delegatedRoles: delegated.roles, delegatedAllowedOnProject: delegated.allowedOnProject,
+      });
 
     const lockedStepForUserReject = approvalSteps.find(
       (s) => s.step > 0 && s.decision === "pending" && s.locked === true && stepMatches(s)
@@ -735,8 +749,12 @@ parApprovalsRoutes.post(
     // PARQA-010: same project-scoping + delegation matching as approve/reject (decisionAuthority.ts).
     const designated = par.projectId ? await getDesignatedApprovers(tenantId, par.projectId) : new Set<string>();
     const allowedOnProject = projectAllowsApprover(par.projectId, user.id, designated);
+    const delegated = await getDelegatedAuthority(delegators, tenantId, par.projectId);
     const stepMatches = (s: typeof approvalSteps[number]) =>
-      stepMatchesViewer(s, { userId: user.id, parRoles: roles, delegators, allowedOnProject });
+      stepMatchesViewer(s, {
+        userId: user.id, parRoles: roles, delegators, allowedOnProject,
+        delegatedRoles: delegated.roles, delegatedAllowedOnProject: delegated.allowedOnProject,
+      });
 
     const activeStep = approvalSteps.find(
       (s) => s.step > 0 && s.decision === "pending" && s.locked === false && stepMatches(s)

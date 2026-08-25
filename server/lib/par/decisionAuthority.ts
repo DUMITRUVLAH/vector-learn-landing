@@ -15,6 +15,7 @@
  *   - role-based step (`approverUserId === null`) → mine if I'm allowed on the PAR's project AND
  *     I hold the role the step requires (`approverParRole`; null/"approver" = generic approver)
  *   - a step assigned to someone who delegated to me (VF-302) → mine
+ *   - a ROLE-BASED step my delegator could have decided (their role, their project) → mine
  *   - par_admin decides anything
  */
 
@@ -34,6 +35,10 @@ export type ViewerContext = {
   parRoles: string[];
   /** VF-302: users who delegated their approval authority to `userId`, active now. */
   delegators: Set<string>;
+  /** PAR roles inherited from those delegators (empty when there is no active delegation). */
+  delegatedRoles?: string[];
+  /** Whether a delegator is allowed on this PAR's project (role-based steps are project-scoped). */
+  delegatedAllowedOnProject?: boolean;
   /** Project-scoping verdict for ROLE-BASED steps (`projectAllowsApprover`). */
   allowedOnProject: boolean;
 };
@@ -53,6 +58,20 @@ export function stepMatchesViewer(step: DecidableStep, ctx: ViewerContext): bool
   if (step.approverUserId === ctx.userId) return true;
   if (step.approverUserId === null && ctx.allowedOnProject && canDecideRoleStep(step.approverParRole)) return true;
   if (step.approverUserId != null && ctx.delegators.has(step.approverUserId)) return true;
+  // A delegation hands over the delegator's authority, which on the default chain is a ROLE, not a
+  // pinned step — otherwise "sign for me while I'm away" never applied to anything.
+  const delegated = ctx.delegatedRoles ?? [];
+  if (
+    step.approverUserId === null &&
+    delegated.length > 0 &&
+    (ctx.delegatedAllowedOnProject ?? false) &&
+    (delegated.includes("par_admin") ||
+      (!step.approverParRole || step.approverParRole === "approver"
+        ? delegated.includes("approver")
+        : delegated.includes(step.approverParRole)))
+  ) {
+    return true;
+  }
   return false;
 }
 

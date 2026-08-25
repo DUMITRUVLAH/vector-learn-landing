@@ -52,7 +52,7 @@ async function validatePayerProjectPair(
   return !payerId || project.payerId === payerId;
 }
 
-const doaRowSchema = z.object({
+const doaRowBase = z.object({
   chargeTo: z.enum(["operations", "program", "other"]).nullable().optional(),
   departmentId: z.string().uuid().nullable().optional(),
   payerId: z.string().uuid().nullable().optional(),
@@ -66,6 +66,15 @@ const doaRowSchema = z.object({
   approverParRole: z.enum(["requestor", "approver", "finance", "par_admin"]).nullable().optional(),
   active: z.boolean().optional(),
 });
+
+/** A band whose ceiling sits below its floor can never match an amount: the rule looks configured
+ *  but silently routes nothing, and the PAR quietly skips a signature it was supposed to require. */
+const bandIsCoherent = (r: { minAmountCents?: number; maxAmountCents?: number | null }) =>
+  r.maxAmountCents == null || r.minAmountCents == null || r.maxAmountCents > r.minAmountCents;
+const bandError = { message: "maxAmountCents must be greater than minAmountCents", path: ["maxAmountCents"] as const };
+
+const doaRowSchema = doaRowBase.refine(bandIsCoherent, bandError);
+const doaRowUpdateSchema = doaRowBase.partial().refine(bandIsCoherent, bandError);
 
 /** GET /api/par/doa — list all active DOA matrix rows */
 parDoaRoutes.get("/", requirePARRole("par_admin", "approver", "finance"), async (c) => {
@@ -133,7 +142,7 @@ parDoaRoutes.post(
 parDoaRoutes.patch(
   "/:id",
   requirePARRole("par_admin"),
-  zValidator("json", doaRowSchema.partial()),
+  zValidator("json", doaRowUpdateSchema),
   async (c) => {
     const user = c.get("user"); const tenantId = user.tenantId;
     const id = c.req.param("id");

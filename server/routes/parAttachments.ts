@@ -19,6 +19,7 @@ import { db } from "../db/client";
 import { parRequests, parAttachments, parAudit } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
+import { isWorkspaceAdminRole } from "../lib/par/visibility";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { extractPdfText } from "../lib/ai/pdfText";
 import { extractParParties } from "../lib/ai/parExtractor";
@@ -29,6 +30,10 @@ import { mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 export const parAttachmentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parAttachmentsRoutes.use("*", requireAuth);
 parAttachmentsRoutes.use("/:parId/:action/*", parUuidGuard("parId"));
+// The attachment id is a uuid too — `DELETE /api/par/<uuid>/attachments/not-a-uuid` would
+// otherwise reach the uuid comparison and 500 (same class as the parId guard above).
+parAttachmentsRoutes.use("/:parId/attachments/:attId", parUuidGuard("attId"));
+parAttachmentsRoutes.use("/:parId/attachments/:attId/*", parUuidGuard("attId"));
 
 /**
  * What a dossier may carry. Broad on purpose — the supporting evidence for a payment is
@@ -171,11 +176,14 @@ const EDITABLE_STATUSES = ["draft", "changes_requested"] as const;
 
 async function hasScopedDossierAccess(
   user: { id: string; tenantId: string; role: string },
-  par: { requestedByUserId: string; projectId: string | null; payerId: string | null },
+  par: { requestedByUserId: string; projectId: string | null; payerId: string | null; status?: string | null },
 ): Promise<boolean> {
   if (par.requestedByUserId === user.id) return true;
   const roles = await getUserPARRoles(user.id, user.tenantId, user.role);
   if (!roles.some((role) => ["approver", "finance", "par_admin"].includes(role))) return false;
+  // The attachments ARE the sensitive documents (contracts, bank papers). An unsubmitted draft has
+  // not been routed to anybody, so it stays with its author — server/lib/par/visibility.ts.
+  if (par.status === "draft" && !isWorkspaceAdminRole(user.role)) return false;
   return par.projectId
     ? mayAccessProject(user.id, user.tenantId, par.projectId, user.role)
     : mayAccessPayer(user.id, user.tenantId, par.payerId, user.role);
@@ -190,7 +198,7 @@ parAttachmentsRoutes.get("/:parId/attachments", async (c) => {
 
   // Verify PAR exists and belongs to tenant
   const [par] = await db
-    .select({ id: parRequests.id, requestedByUserId: parRequests.requestedByUserId, projectId: parRequests.projectId, payerId: parRequests.payerId })
+    .select({ id: parRequests.id, requestedByUserId: parRequests.requestedByUserId, projectId: parRequests.projectId, payerId: parRequests.payerId, status: parRequests.status })
     .from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
 
@@ -312,7 +320,7 @@ parAttachmentsRoutes.get("/:parId/attachments/:attId/preview", async (c) => {
   const { parId, attId } = c.req.param();
   const user = c.get("user");
   const tenantId = user.tenantId;
-  const [par] = await db.select({ requestedByUserId: parRequests.requestedByUserId, projectId: parRequests.projectId, payerId: parRequests.payerId }).from(parRequests)
+  const [par] = await db.select({ requestedByUserId: parRequests.requestedByUserId, projectId: parRequests.projectId, payerId: parRequests.payerId, status: parRequests.status }).from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
   if (!par) return c.json({ error: "not_found" }, 404);
   if (!(await hasScopedDossierAccess(user, par))) return c.json({ error: "not_found" }, 404);

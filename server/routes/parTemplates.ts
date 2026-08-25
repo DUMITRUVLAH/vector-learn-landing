@@ -19,12 +19,14 @@ import {
   parLineItems,
   parSettings,
   parAudit,
+  parProjects,
 } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole, getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { generateRequestNo } from "../lib/par/requestNo";
 import { recalcParTotal } from "../lib/par/totals";
+import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
 
 export const parTemplatesRoutes = new Hono<{ Variables: AuthVariables }>();
 parTemplatesRoutes.use("*", requireAuth);
@@ -290,6 +292,19 @@ parTemplatesRoutes.post("/:id/instantiate", async (c) => {
   // Passing the prefix as the 2nd (year) arg produced "PAR-PAR-0001" — fixed.
   const requestNo = await generateRequestNo(tenantId);
 
+  // The payer is what every visibility rule keys on: `mayAccessPayer` returns FALSE for a null
+  // payer and the list query filters on `payerId IN (entitled payers)`. A template-instantiated
+  // PAR without one was invisible to its own author (404 on the detail page it had just been
+  // redirected to) and could never be submitted. Resolve it exactly like POST /api/par does:
+  // the snapshot's project decides, otherwise the workspace's first PAR-enabled payer.
+  const [snapshotProject] = snapshot.projectId
+    ? await db
+        .select({ payerId: parProjects.payerId })
+        .from(parProjects)
+        .where(and(eq(parProjects.id, snapshot.projectId), eq(parProjects.tenantId, tenantId)))
+    : [];
+  const payerId = snapshotProject?.payerId ?? (await enabledPayerIds(tenantId, "par"))[0] ?? null;
+
   // Create the PAR header
   const [newPar] = await db
     .insert(parRequests)
@@ -298,6 +313,7 @@ parTemplatesRoutes.post("/:id/instantiate", async (c) => {
       requestNo,
       dateOfRequest: new Date(),
       requestedByUserId: userId,
+      payerId,
       requestorTitle: snapshot.requestorTitle,
       departmentId: snapshot.departmentId,
       projectId: snapshot.projectId,

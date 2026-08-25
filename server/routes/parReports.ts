@@ -15,7 +15,7 @@
  */
 import { Hono } from "hono";
 import { z } from "zod";
-import { and, eq, gte, lte, sql, isNotNull, inArray, type SQL } from "drizzle-orm";
+import { and, eq, gte, lte, or, sql, isNotNull, isNull, inArray, type SQL } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   parRequests,
@@ -32,7 +32,7 @@ import { tenants } from "../db/schema/tenants";
 import { buildParWorkbook } from "../lib/par/excelExport";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
-import { accessibleProjectIds } from "../lib/par/projectScope";
+import { accessiblePayerIds, accessibleProjectIds } from "../lib/par/projectScope";
 import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
 
 type ReportVariables = AuthVariables & { parReportScope: SQL };
@@ -47,9 +47,25 @@ parReportsRoutes.use("*", async (c, next) => {
   const conditions: SQL[] = [payerIds.length
     ? inArray(parRequests.payerId, payerIds)
     : eq(parRequests.id, "00000000-0000-0000-0000-000000000000")];
-  if (projectIds !== null) conditions.push(projectIds.length
-    ? inArray(parRequests.projectId, projectIds)
-    : eq(parRequests.projectId, "00000000-0000-0000-0000-000000000000"));
+  if (projectIds !== null) {
+    // A scoped user's reports must cover the SAME rows as their list (par.ts GET /): the projects
+    // they are on, PLUS the payer-only requests (projectId = null) of the payers they belong to.
+    // Filtering on the project alone made every payer-level request vanish, so an approver or a
+    // finance officer opened "spend by payee/department" and saw zeros — a silent wrong number,
+    // which in a finance report is worse than an error.
+    const scopedPayers = (await accessiblePayerIds(user.id, user.tenantId, user.role))
+      ?.filter((id) => payerIds.includes(id)) ?? payerIds;
+    const branches: SQL[] = [];
+    if (projectIds.length) branches.push(inArray(parRequests.projectId, projectIds));
+    if (scopedPayers.length) {
+      branches.push(and(isNull(parRequests.projectId), inArray(parRequests.payerId, scopedPayers))!);
+    }
+    conditions.push(
+      branches.length
+        ? or(...branches)!
+        : eq(parRequests.id, "00000000-0000-0000-0000-000000000000")
+    );
+  }
   c.set("parReportScope", and(...conditions)!);
   await next();
 });
@@ -86,9 +102,9 @@ parReportsRoutes.get("/by-budget", async (c) => {
       label: parBudgetCodes.code,
       name: parBudgetCodes.name,
       allocatedCents: parBudgetCodes.allocatedCents,
-      committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as integer)`,
-      paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as integer)`,
-      totalCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested','paid') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as integer)`,
+      committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as bigint)`,
+      paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as bigint)`,
+      totalCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested','paid') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as bigint)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
@@ -121,10 +137,10 @@ parReportsRoutes.get("/by-payer", async (c) => {
   const rows = await db.select({
     id: parRequests.payerId,
     label: parPayers.name,
-    allocatedCents: sql<number>`cast(coalesce((select sum(b.allocated_cents) from par_budget_codes b where b.tenant_id = ${tenantId} and b.payer_id = ${parRequests.payerId} and b.active = true), 0) as integer)`,
-    committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as integer)`,
-    paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as integer)`,
-    totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+    allocatedCents: sql<number>`cast(coalesce((select sum(b.allocated_cents) from par_budget_codes b where b.tenant_id = ${tenantId} and b.payer_id = ${parRequests.payerId} and b.active = true), 0) as bigint)`,
+    committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as bigint)`,
+    paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as bigint)`,
+    totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as bigint)`,
     count: sql<number>`cast(count(*) as integer)`,
   }).from(parRequests)
     .leftJoin(parPayers, and(eq(parPayers.id, parRequests.payerId!), eq(parPayers.tenantId, tenantId)))
@@ -149,7 +165,9 @@ parReportsRoutes.get("/by-department", async (c) => {
     .select({
       id: parRequests.departmentId,
       label: parDepartments.name,
-      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as bigint)`,
+      committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as bigint)`,
+      paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as bigint)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
@@ -157,6 +175,7 @@ parReportsRoutes.get("/by-department", async (c) => {
       eq(parDepartments.id, parRequests.departmentId!),
       eq(parDepartments.tenantId, tenantId)
     ))
+    .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
     .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
     .groupBy(parRequests.departmentId, parDepartments.name);
 
@@ -164,6 +183,9 @@ parReportsRoutes.get("/by-department", async (c) => {
     id: r.id as string | null,
     label: ((r.label as string | null) ?? r.id ?? "unknown") as string,
     totalCents: Number(r.totalCents ?? 0),
+    // CORE §8: every dimension answers "paid vs estimated", not just the budget-code one.
+    committedCents: Number(r.committedCents ?? 0),
+    paidCents: Number(r.paidCents ?? 0),
     count: Number(r.count ?? 0),
   }));
 
@@ -179,10 +201,10 @@ parReportsRoutes.get("/by-project", async (c) => {
     .select({
       id: parRequests.projectId,
       label: parProjects.name,
-      allocatedCents: sql<number>`cast(coalesce((select sum(b.allocated_cents) from par_budget_codes b where b.tenant_id = ${tenantId} and b.project_id = ${parRequests.projectId} and b.active = true), 0) as integer)`,
-      committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as integer)`,
-      paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as integer)`,
-      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+      allocatedCents: sql<number>`cast(coalesce((select sum(b.allocated_cents) from par_budget_codes b where b.tenant_id = ${tenantId} and b.project_id = ${parRequests.projectId} and b.active = true), 0) as bigint)`,
+      committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as bigint)`,
+      paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as bigint)`,
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as bigint)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
@@ -214,9 +236,9 @@ parReportsRoutes.get("/by-event", async (c) => {
       id: parRequests.eventId,
       label: parEvents.name,
       allocatedCents: sql<number>`cast(0 as integer)`,
-      committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as integer)`,
-      paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as integer)`,
-      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+      committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as bigint)`,
+      paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as bigint)`,
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as bigint)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
@@ -245,10 +267,13 @@ parReportsRoutes.get("/by-charge-to", async (c) => {
   const rows = await db
     .select({
       id: parRequests.chargeTo,
-      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as bigint)`,
+      committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as bigint)`,
+      paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as bigint)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
+    .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
     .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
     .groupBy(parRequests.chargeTo);
 
@@ -256,6 +281,8 @@ parReportsRoutes.get("/by-charge-to", async (c) => {
     id: r.id as string | null,
     label: (r.id ?? "other") as string,
     totalCents: Number(r.totalCents ?? 0),
+    committedCents: Number(r.committedCents ?? 0),
+    paidCents: Number(r.paidCents ?? 0),
     count: Number(r.count ?? 0),
   }));
 
@@ -273,10 +300,13 @@ parReportsRoutes.get("/by-vendor", async (c) => {
   const rows = await db
     .select({
       label: parRequests.payeeName,
-      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as bigint)`,
+      committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as bigint)`,
+      paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as bigint)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
+    .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
     .where(and(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")), isNotNull(parRequests.payeeName)))
     .groupBy(parRequests.payeeName);
 
@@ -284,6 +314,8 @@ parReportsRoutes.get("/by-vendor", async (c) => {
     id: (r.label as string | null) ?? null,
     label: ((r.label as string | null) ?? "Beneficiar necunoscut") as string,
     totalCents: Number(r.totalCents ?? 0),
+    committedCents: Number(r.committedCents ?? 0),
+    paidCents: Number(r.paidCents ?? 0),
     count: Number(r.count ?? 0),
   }));
 
@@ -298,8 +330,8 @@ parReportsRoutes.get("/currency-breakdown", async (c) => {
   const rows = await db
     .select({
       currency: parRequests.currency,
-      nativeTotalCents: sql<number>`cast(sum(${parRequests.totalEstimatedCents}) as integer)`,
-      mdlTotalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+      nativeTotalCents: sql<number>`cast(sum(${parRequests.totalEstimatedCents}) as bigint)`,
+      mdlTotalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as bigint)`,
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
@@ -327,7 +359,7 @@ parReportsRoutes.get("/aging", async (c) => {
     .select({
       status: parRequests.status,
       count: sql<number>`cast(count(*) as integer)`,
-      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as integer)`,
+      totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as bigint)`,
       avgAgingDays: sql<number>`
         cast(avg(
           extract(epoch from (now() - ${parRequests.createdAt})) / 86400

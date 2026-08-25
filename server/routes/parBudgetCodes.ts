@@ -10,7 +10,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, asc, inArray, sql, or } from "drizzle-orm";
+import { and, eq, asc, ilike, inArray, sql, or } from "drizzle-orm";
 import { db } from "../db/client";
 import { parBudgetCodes, parRequests, parPayments, parProjects } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -263,6 +263,21 @@ parBudgetCodesRoutes.post(
     }
     payerId = payerId ?? (await enabledPayerIds(tenantId, "par"))[0] ?? null;
     if (!payerId) return c.json({ error: "payer_required" }, 400);
+    // A budget code IS the accounting key — two rows with the same code under one payer make
+    // every "spend by budget code" figure ambiguous, and the create-form's inline "add code"
+    // made it easy to mint one by accident. Match case-insensitively: "A-01" and "a-01" are
+    // the same line to a finance officer.
+    const [duplicate] = await db
+      .select({ id: parBudgetCodes.id })
+      .from(parBudgetCodes)
+      .where(and(
+        eq(parBudgetCodes.tenantId, tenantId),
+        eq(parBudgetCodes.payerId, payerId),
+        ilike(parBudgetCodes.code, body.code.trim()),
+      ));
+    if (duplicate) {
+      return c.json({ error: "duplicate_code", message: `Codul de buget „${body.code}" există deja.` }, 409);
+    }
     if (!(await mayAccessPayer(user.id, tenantId, payerId, user.role))) return c.json({ error: "forbidden_payer" }, 403);
     if (!(await hasPayerModuleEntitlement(user.id, tenantId, payerId, "par"))) return c.json({ error: "module_disabled", module: "par" }, 403);
     const [row] = await db
