@@ -2923,6 +2923,7 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
   const emptyVendorForm = () => ({ name: "", idnp: "", iban: "", bank: "", bic_swift: "", legal_address: "", administrator_name: "", contact_name: "", contact_phone: "", contact_email: "" });
   const [form, setForm] = useState<Record<string, string>>(emptyVendorForm());
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const doSearch = useCallback((q: string) => {
     if (q.trim().length < 2) { setRegistryResults([]); return; }
@@ -2947,12 +2948,13 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
     setShowForm(true);
   };
 
-  const startAdd = () => { setForm(emptyVendorForm()); setShowForm(true); setEditingId(null); };
+  const startAdd = () => { setForm(emptyVendorForm()); setShowForm(true); setEditingId(null); setSaveError(null); };
   const startEdit = (v: ParVendor) => { setForm({ ...emptyVendorForm(), name: v.name, idnp: v.idnp ?? "", iban: v.iban ?? "", bank: v.bank ?? "", bic_swift: v.bicSwift ?? "", legal_address: v.legalAddress ?? "", administrator_name: v.administratorName ?? "", contact_name: v.contactName ?? "", contact_phone: v.contactPhone ?? "", contact_email: v.contactEmail ?? "" }); setEditingId(v.id); setShowForm(false); };
   const cancel = () => { setShowForm(false); setEditingId(null); setForm(emptyVendorForm()); };
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       if (editingId) {
         await updateVendor(editingId, { name: form.name, idnp: form.idnp || null, iban: form.iban || null, bank: form.bank || null, bic_swift: form.bic_swift || null, legal_address: form.legal_address || null, administrator_name: form.administrator_name || null, contact_name: form.contact_name || null, contact_phone: form.contact_phone || null, contact_email: form.contact_email || null });
@@ -2961,6 +2963,10 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
       }
       await onReload();
       cancel();
+    } catch (e) {
+      // Serverul validează IBAN-ul/codul fiscal și poate răspunde 400. Fără acest catch,
+      // eroarea se pierdea și butonul „Salvează" părea că nu face nimic.
+      setSaveError(e instanceof Error ? e.message : "Beneficiarul nu a putut fi salvat.");
     } finally {
       setSaving(false);
     }
@@ -2970,8 +2976,10 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
     <div className={cn("grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5", inline && "mt-2")}>
       {([
         { id: "name", label: "Nume", placeholder: "Daria Roitman" },
-        { id: "idnp", label: "IDNP (13 cifre)", placeholder: "2008001007903" },
-        { id: "iban", label: "IBAN", placeholder: "MD48ML000002259A19498121" },
+        // IDNO/IDNP e formatul MOLDOVENESC (13 cifre); registrul ține și beneficiari străini,
+        // al căror cod fiscal are alt format — de aceea eticheta nu mai promite „13 cifre".
+        { id: "idnp", label: "IDNO / IDNP sau cod fiscal străin", placeholder: "2008001007903" },
+        { id: "iban", label: "IBAN (orice țară)", placeholder: "MD48ML000002259A19498121" },
         { id: "bank", label: "Bancă", placeholder: 'BC "Moldindconbank" S.A.' },
         { id: "bic_swift", label: "BIC / SWIFT", placeholder: "MOLDMD2X" },
         { id: "administrator_name", label: "Administrator / reprezentant", placeholder: "Prenume Nume" },
@@ -2986,6 +2994,9 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
             placeholder={field.placeholder} className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label={field.label} />
         </div>
       ))}
+      {saveError && (
+        <p className="col-span-1 sm:col-span-2 text-xs text-destructive" role="alert">{saveError}</p>
+      )}
       <div className="col-span-1 sm:col-span-2 flex gap-2">
         <button type="button" onClick={handleSave} disabled={saving}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px]">

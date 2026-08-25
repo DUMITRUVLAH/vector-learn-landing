@@ -74,10 +74,27 @@ async function main() {
     ["par_attachments", "file_url"],
     ["par_payments", "proof_url"],
   ];
+  // Migrarea 0140 lărgește codul fiscal al beneficiarului de la varchar(13) (formatul MD) la
+  // varchar(50), ca plățile internaționale să poată păstra un cod estonian/german. Migrările nu
+  // se aplică fiabil pe prod (tracking desincronizat), deci vindecăm și aici — idempotent.
+  const VARCHAR_WIDEN: Array<[string, string, number]> = [
+    ["par_vendors", "idnp", 50],
+    ["par_requests", "payee_idnp", 50],
+    ["par_purchase_orders", "vendor_idnp", 50],
+  ];
   for (const [table, col] of TEXT_WIDEN) {
     try {
       await sql.unsafe(`ALTER TABLE "${table}" ALTER COLUMN "${col}" TYPE text`);
       console.log(`[sync-schema] ~${table}.${col} → text`);
+    } catch (e) {
+      // table/column may not exist yet on a given DB — non-fatal.
+      console.warn(`[sync-schema] widen ${table}.${col} skipped:`, e instanceof Error ? e.message : e);
+    }
+  }
+  for (const [table, col, len] of VARCHAR_WIDEN) {
+    try {
+      await sql.unsafe(`ALTER TABLE "${table}" ALTER COLUMN "${col}" TYPE varchar(${len})`);
+      console.log(`[sync-schema] ~${table}.${col} → varchar(${len})`);
     } catch (e) {
       // table/column may not exist yet on a given DB — non-fatal.
       console.warn(`[sync-schema] widen ${table}.${col} skipped:`, e instanceof Error ? e.message : e);

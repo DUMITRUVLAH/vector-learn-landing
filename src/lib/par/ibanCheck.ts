@@ -1,14 +1,20 @@
 /**
- * Client-side defensive Moldova IBAN check.
+ * Compatibilitate: punctul de intrare istoric pentru validarea IBAN în frontend.
  *
- * The server (server/lib/par/choosePayee.ts → routeIdAndIban) is the AUTHORITATIVE
- * validator (mod-97). This is only a last-line guard so the form never fills the IBAN
- * field with a value that doesn't even look like an MD IBAN, even if the server slips.
- * Mirrors the inline regex previously used in ParCreateForm — kept in one place now.
+ * Logica reală (orice țară, ISO 13616) trăiește acum în `src/lib/par/iban.ts` — vezi comentariul
+ * de acolo pentru „de ce": PAR-ul acceptă și plăți internaționale, nu doar IBAN-uri MD.
+ * Fișierul acesta rămâne doar ca re-export ca să nu rupem importurile existente.
  */
-
-/** True if `iban` is a structurally valid Moldova IBAN (MD + 2 check digits + 20 alnum). */
-export function isValidMoldovaIBAN(iban: string | null | undefined): boolean {
-  if (!iban) return false;
-  return /^MD\d{2}[A-Z0-9]{20}$/.test(iban.replace(/\s/g, "").toUpperCase());
-}
+export {
+  isValidMoldovaIBAN,
+  isValidIBAN,
+  validateIban,
+  normalizeIban,
+  formatIban,
+  ibanCountry,
+  countryNameRo,
+  isValidBic,
+  bicMatchesIban,
+  validateFiscalId,
+  type IbanValidation,
+} from "./iban";
