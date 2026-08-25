@@ -131,6 +131,8 @@ const TOTAL_ANCHORS = [
   /всего/i,
   /сумма\s*к\s*оплате/i,
   /Valoarea\s*total[ăa]/i,
+  /Valoarea\s*contractului/i,
+  /Стоимость\s*договора/i,
   /ИТОГО\s*к\s*оплате/i,
   /ИТОГО/i,
   /Remunera\w+/i,
@@ -536,6 +538,23 @@ function findNameHits(text: string): NameHit[] {
     }
   }
 
+  // 3b. Role-labelled org name WITHOUT a legal form: "Prestator: Centrul de Resurse
+  //     Juridice", "Заказчик: Фонд Открытых Инициатив". NGOs/institutions carry no SRL/SA,
+  //     so the quoted and legal-form paths never see them. Colon required; the value must
+  //     start uppercase and have ≥2 words (a single word after "Prestator:" is usually a
+  //     defined term, and person names are path 4's job — dedupe merges overlaps).
+  const labelledOrgRe =
+    /(?:Prestator(?:ul)?|Executor(?:ul)?|Furnizor(?:ul)?|V[âa]nz[ăa]tor(?:ul)?|Antreprenor(?:ul)?|Beneficiar(?:ul)?|Cump[ăa]r[ăa]tor(?:ul)?|Client(?:ul)?|Achizitor(?:ul)?|Исполнитель|Заказчик|Поставщик|Подрядчик|Supplier|Contractor|Provider|Buyer)\s*:\s*([A-ZĂÂÎȘȚА-ЯЁ][^\n,;]{2,79})/g;
+  while ((m = labelledOrgRe.exec(text)) !== null) {
+    const val = m[1].trim();
+    // ≥2 words, no digit runs (a value like "MD80VI…" or "1010620008129" is a requisite,
+    // not a name), not a bank line.
+    if (val.split(/\s+/).length < 2) continue;
+    if (/\d{4,}/.test(val)) continue;
+    if (isPayeeBank(val)) continue;
+    push(val, m.index);
+  }
+
   // 4. Person-like "Prenume Nume" runs (latin or cyrillic), e.g. "Gheorghe Rusu".
   //    Only after a "Primit de:" / "Prestator:" style label to avoid grabbing director names.
   const personLabelRe =
@@ -713,9 +732,10 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
       .split(/\r?\n/)
       .map((l) => l.trim())
       .find((l) => isPayeeBank(l));
-    const bank = bankLine ? cleanBankName(bankLine) : null;
-    const bic = extractBicSnippet(block);
-    const legalAddress = extractAddressSnippet(block);
+    const bankReq = bankLine ? cleanBankRequisites(bankLine) : null;
+    const bank = bankReq?.bank ?? null;
+    const bic = extractBicSnippet(block) ?? bankReq?.bic ?? null;
+    const legalAddress = extractAddressSnippet(block) ?? extractNameLineAddress(text, hit.index);
     const administratorName = extractAdministratorSnippet(block);
     const subAmt = extractSubAmount(block);
 
@@ -874,7 +894,7 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
  * whole draft from saving). */
 const MAX_BANK_NAME_LEN = 100;
 
-function cleanBankName(line: string): string {
+function cleanBankRequisites(line: string): { bank: string; bic: string | null } {
   // Bound to a window around the ACTUAL matched bank keyword, not the whole line. A genuine
   // "Banca: X" line is short, so this is a no-op there — but when the "line" is really one
   // PDF-collapsed blob (a party's name/address/IDNO/IBAN with no real newline between them and
@@ -911,7 +931,46 @@ function cleanBankName(line: string): string {
   const split = splitBankRequisites(s);
   if (split.bank) s = split.bank;
   s = s.replace(/\s+/g, " ").trim();
-  return (s || windowed.trim()).slice(0, MAX_BANK_NAME_LEN);
+  return {
+    bank: (s || windowed.trim()).slice(0, MAX_BANK_NAME_LEN),
+    // The separator isolates an unlabelled BIC glued after the bank name
+    // ("BC'Moldindconbank'S.A., MOLDMD2X") — surface it instead of discarding it
+    // (that discard left the form's BIC/SWIFT box empty on the typized fiscal invoice).
+    bic: split.bankCode,
+  };
+}
+
+function cleanBankName(line: string): string {
+  return cleanBankRequisites(line).bank;
+}
+
+/** A comma-segment that is an ADDRESS: street/city tokens or "nr./bl./of." + digit. */
+const ADDR_SEGMENT_RE =
+  /\b(?:mun|or|ora[șs]|sat|com|str|bd|sec[țt]?|SEC|et)\.\s*\S|\b(?:nr|bl|of|ap)\.?\s*\d|\bstrada\b|\bул\.|\bмун\.|Chi[șs]in[ăa]u|Кишин[её]в|B[ăa]l[țt]i|Бельцы/i;
+
+/**
+ * Unlabelled address sitting on the party's own NAME line — the typized fiscal invoice prints
+ * `"DAIKIRI STUDIO" S.R.L., SEC.CENTRU Grenoble nr.159 bl.6 of.12 Cont MD05ML…`: the quoted-name
+ * regex takes just the name, so the address between the legal form and the requisites was simply
+ * DROPPED (never entered any field → nothing for the purity layer to relocate; owner report
+ * 2026-08-25 #2). Only comma-segments that carry street/city tokens count — "prefer null over
+ * wrong" still holds for everything else on the line.
+ */
+function extractNameLineAddress(text: string, hitIndex: number): string | null {
+  const lineStart = text.lastIndexOf("\n", hitIndex) + 1;
+  const lineEndRaw = text.indexOf("\n", hitIndex);
+  const line = text.slice(lineStart, lineEndRaw === -1 ? text.length : lineEndRaw);
+  // Cut the requisites tail: everything from the first account/fiscal marker onward.
+  const cut = line.split(
+    /\bCont(?:ul)?\b|\bIBAN\b|\bc\.?\s?f\.?\s*\/|\bcod\s*fiscal\b|\bIDNO\b|\bIDNP\b|\bИДНО\b|\bnr\.?\s*TVA\b|MD\d{2}[A-Z0-9]{20}/i,
+  )[0];
+  const segs = cut.split(",").map((x) => x.trim()).filter(Boolean);
+  const addr = segs.filter(
+    (x) => ADDR_SEGMENT_RE.test(x) && !LEGAL_FORM_RE.test(x) && !isPayeeBank(x),
+  );
+  if (!addr.length) return null;
+  const a = addr.join(", ").replace(/\s+/g, " ").trim();
+  return a.length >= 6 && a.length <= 300 ? a : null;
 }
 
 /** Address-context label anchors — only a LABELLED address is extracted (an unlabelled address

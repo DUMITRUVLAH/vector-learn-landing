@@ -143,6 +143,41 @@ Nr  Denumirea serviciului              Cant  Preț    Suma
                                       Total: 3250,00 lei`,
   },
   {
+    name: "9. Factură fiscală MD — layout PDF real (banca pe rând separat)",
+    expect: "BIC + adresă extrase de pe rândul numelui",
+    text: `FACTURĂ FISCALĂ
+НАЛОГОВАЯ НАКЛАДНАЯ
+Серия, № EBC000579678
+1. Furnizor:
+ Поставщик
+"DAIKIRI STUDIO" S.R.L., SEC.CENTRU Grenoble nr.159 bl.6 of.12 Cont MD05ML022510000000001296, 
+BC'Moldindconbank'S.A., MOLDMD2X
+c.f./ nr.TVA 1024600006236 /
+2. Cumpărător/beneficiar: 
+ Покупатель/получатель
+VECTOR ACADEMY S.R.L., SEC.CENTRU 31 August 1989 nr.78 c.f./ nr.TVA 1024600035737 /
+Servicii predare curs "Productie si editare video" serv 1 17000.00 17000,00 - 0,00 17000,00
+12. TOTAL (pe factura fiscală) / Всего (по налоговой накладной) 17000,00 X 0,00 17000,00 X X X 0,00`,
+  },
+  {
+    name: "10. Contract cu ONG fără formă juridică + rechizite etichetate",
+    expect: "Centrul de Resurse Juridice cu toate rechizitele",
+    text: `CONTRACT DE PRESTĂRI SERVICII nr. 12/2026
+încheiat între:
+Prestator: Centrul de Resurse Juridice
+IDNO: 1010620008129
+Adresa juridică: str. A.Șciusev 33, MD-2001, mun. Chișinău
+IBAN: MD80VI000002224217675MDL
+Banca: VictoriaBank S.A. fil. Nr. 17
+Codul Băncii: VICBMD2X457
+Administrator: Ilie CHIRTOACĂ
+
+și Beneficiar: VECTOR ACADEMY S.R.L., IDNO 1024600035737
+
+Obiectul: servicii de consultanță juridică pentru programul educațional, martie–iunie 2026.
+Valoarea contractului: 24 000,00 lei.`,
+  },
+  {
     name: "8. Document NEFINANCIAR (proces-verbal)",
     expect: "not_invoice, fără beneficiar",
     text: `PROCES-VERBAL nr. 4
@@ -243,6 +278,35 @@ describe("corpus de documente — extragerea găsește ce e în document", () =>
     expect(choice.payee?.bank).toContain("Mobiasbanca");
     expect(choice.payee?.bank).not.toMatch(IBAN_RE);
     expect(ext.amountCents).toBe(325000);
+  });
+
+  it("9. layout PDF real: BIC-ul de pe rândul băncii și adresa de pe rândul numelui nu se pierd", () => {
+    const { ext, choice } = run("9.");
+    expect(choice.payee?.name).toBe("DAIKIRI STUDIO S.R.L.");
+    expect(choice.payee?.iban).toBe("MD05ML022510000000001296");
+    // BIC-ul neetichetat lipit după numele băncii ("BC'Moldindconbank'S.A., MOLDMD2X") era
+    // separat corect de splitBankRequisites dar ARUNCAT de cleanBankName (owner, 2026-08-25 #2).
+    expect(choice.payee?.bic).toBe("MOLDMD2X");
+    expect(choice.payee?.bank).toContain("Moldindconbank");
+    expect(choice.payee?.bank).not.toContain("MOLDMD2X");
+    // Adresa neetichetată de pe rândul numelui ("…S.R.L., SEC.CENTRU Grenoble nr.159 …") era
+    // pur și simplu abandonată de regexul de nume-citat.
+    expect(choice.payee?.legalAddress).toContain("Grenoble nr.159");
+    expect(ext.amountCents).toBe(1700000);
+  });
+
+  it("10. ONG fără formă juridică: partea e descoperită cu TOATE rechizitele etichetate", () => {
+    const { ext, choice } = run("10.");
+    // "Centrul de Resurse Juridice" nu are SRL/SA — căile pe nume-citat și formă-juridică nu îl
+    // vedeau deloc, deci IBAN/BIC/administratorul lui se pierdeau integral (owner, 2026-08-25 #2).
+    expect(choice.payee?.name).toBe("Centrul de Resurse Juridice");
+    expect(choice.payee?.idno).toBe("1010620008129");
+    expect(choice.payee?.iban).toBe("MD80VI000002224217675MDL");
+    expect(choice.payee?.bic).toBe("VICBMD2X457");
+    expect(choice.payee?.bank).toContain("VictoriaBank");
+    expect(choice.payee?.legalAddress).toContain("A.Șciusev 33");
+    expect(choice.payee?.administratorName).toBe("Ilie CHIRTOACĂ");
+    expect(ext.amountCents).toBe(2400000); // „Valoarea contractului: 24 000,00 lei"
   });
 
   it("8. proces-verbal nefinanciar: not_invoice, niciun beneficiar propus", () => {
