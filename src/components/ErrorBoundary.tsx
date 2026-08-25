@@ -27,6 +27,21 @@ const STALE_CHUNK_RELOAD_KEY = "vl-stale-chunk-reload-at";
 const STALE_CHUNK_RELOAD_COOLDOWN_MS = 15_000;
 
 /**
+ * Where "Spre panou" actually goes.
+ *
+ * It used to be a hardcoded "#/app/dashboard" — a route App.tsx no longer has since the CRM
+ * split, so it fell through the redirect chain onto "/#/business", the LOGGED-OUT marketing page
+ * ("Intră în cont"). A logged-in user recovering from an error was shown a signup screen.
+ *
+ * This became reachable in practice on 2026-08-25: the stale-chunk auto-reload above deliberately
+ * falls through to this card on a SECOND failure inside the cooldown, so it is the screen a
+ * business user actually hits after a failed recovery — exactly the wrong moment to look logged
+ * out. Every signed-in page in this app lives under /business/*, so that is the panel.
+ * `scripts/check-nav-links.mjs` keeps this honest against App.tsx's route table.
+ */
+const PANEL_HREF = "#/business/dashboard";
+
+/**
  * Catches render-time errors in the subtree so one broken page shows a recoverable error card
  * instead of white-screening the whole SPA (IMPROVEMENTS #8 / code-quality #1). Resets when
  * `resetKey` changes so navigating to another route clears a crashed page.
@@ -98,7 +113,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 Reîncarcă
               </button>
               <a
-                href="#/app/dashboard"
+                href={PANEL_HREF}
                 className="touch-target rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
               >
                 Spre panou

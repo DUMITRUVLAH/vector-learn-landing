@@ -717,18 +717,34 @@ function cleanBankName(line: string): string {
 const ADDRESS_LABEL_RE =
   /(?:cu\s+sediul(?:\s+social)?(?:\s*(?:în|in))?|sediul(?:\s+social)?(?:\s*(?:în|in))?|domiciliat[ăa]?\s*(?:în|in)|adresa(?:\s+juridic[ăa])?|registered\s*(?:address|office)|legal\s*address|beneficiary\s*address|юридическ\w*\s*адрес|\bадрес\b)\s*[:\.]?\s*/i;
 
-/** Requisites that mark the end of an address value — an address never runs into these. */
+/** Requisites that mark the end of an address value — an address never runs into these.
+ * "Administrator"/"Director"/"Cont" were added 2026-08-25: on a one-line (collapsed) source they
+ * are the ONLY thing standing between the address and the next requisite. */
 const ADDRESS_STOP_RE =
-  /[,;]?\s*(?:IBAN\b|cod\s*fiscal\b|IDNO\b|IDNP\b|ИДНО\b|Banca\b|Bank\b|BIC\b|SWIFT\b|reprezentat\w*|denumit[ăa]?\s*în\s*continuare|в\s*лице)/i;
+  /[,;]?\s*(?:IBAN\b|cont\s*(?:bancar|curent|de\s*decontare)?\b|cod\s*fiscal\b|cod(?:ul)?\s*bancar\b|IDNO\b|IDNP\b|ИДНО\b|Banca\b|Bank\b|BIC\b|SWIFT\b|administrator\w*\b|director\w*\b|pre[șşs]edinte\w*\b|tel(?:efon)?\b|e-?mail\b|reprezentat\w*|denumit[ăa]?\s*în\s*continuare|в\s*лице)/i;
 
-/** Extract a bounded legal-address snippet from a party's requisite block. Windowed the same
- * way cleanBankName is — a label match only ever pulls a short window forward, never the rest of
- * a PDF-collapsed blob. */
+/**
+ * The remainder of the line the label sits on.
+ *
+ * A LABELLED requisite value ends where its line ends — that is how every contract prints it.
+ * Before PR #293 the PDF text arrived as one collapsed line so this boundary did not exist and
+ * the extractors had to rely on a character window plus a stop-word list; with the real line
+ * structure restored, the line IS the boundary, and the stop words stay as the guard for sources
+ * that genuinely have no newlines (plain .txt exports, OCR blobs, the collapsed legacy path).
+ */
+function restOfLine(block: string, from: number, maxChars: number): string {
+  const rest = block.slice(from, from + maxChars);
+  const nl = rest.search(/\r?\n/);
+  return nl >= 0 ? rest.slice(0, nl) : rest;
+}
+
+/** Extract a bounded legal-address snippet from a party's requisite block. Bounded by the label's
+ * own line first (see restOfLine), then by the stop-word list within that line. */
 function extractAddressSnippet(block: string): string | null {
   const m = ADDRESS_LABEL_RE.exec(block);
   if (!m) return null;
   const start = m.index + m[0].length;
-  const rest = block.slice(start, start + 160);
+  const rest = restOfLine(block, start, 160);
   const stop = rest.search(ADDRESS_STOP_RE);
   const cut = (stop >= 0 ? rest.slice(0, stop) : rest).replace(/\s+/g, " ").trim();
   const snippet = cut.replace(/^[,:\-–\s]+/, "").replace(/[,;\s]+$/, "");
@@ -741,14 +757,25 @@ function extractAddressSnippet(block: string): string | null {
 const ADMINISTRATOR_LABEL_RE =
   /(?:reprezentat[ăa]?\s+(?:de|prin)\s*(?:administrator(?:ul)?|director(?:ul)?(?:\s+general)?)?|administrator(?:ul)?|director(?:ul)?(?:\s+general)?|reprezentant(?:ul)?(?:\s+legal)?|în\s+persoana|в\s+лице)\s*[:\.]?\s*(?:dl\.|dna\.?|dnul|domnul|doamna|г-н|г-жа)?\s*/i;
 
+/** Words that begin the NEXT requisite, so they can never be part of a person's name. On a
+ * source with real newlines restOfLine() already stops there; this is the same boundary for a
+ * collapsed one-line source, where "Administrator: Vasile Popescu Cont bancar (IBAN): …" would
+ * otherwise read as the three-word name "Vasile Popescu Cont". */
+const REQUISITE_WORD_RE =
+  /\b(?:cont|banca|bank|IBAN|BIC|SWIFT|cod|codul|adresa|sediul|tel|telefon|e-?mail|IDNO|IDNP)\b/i;
+
 /** Extract a bounded "reprezentată de <Name>" style administrator name. Only accepts an
  * immediately-following capitalized 2-3 word run (a real person name) — never a whole clause. */
 function extractAdministratorSnippet(block: string): string | null {
   const m = ADMINISTRATOR_LABEL_RE.exec(block);
   if (!m) return null;
-  const rest = block.slice(m.index + m[0].length, m.index + m[0].length + 60);
+  // Bounded by the label's own line: "Administrator: Vasile Popescu\nCont bancar (IBAN): …" used
+  // to yield "Vasile Popescu\nCont", because `\s+` between the name's words matches a NEWLINE and
+  // happily borrowed the first word of the next line. Inside the line the separator is a real
+  // space/tab only, for the same reason.
+  const rest = restOfLine(block, m.index + m[0].length, 60).split(REQUISITE_WORD_RE)[0];
   const name = rest.match(
-    /^[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+(?:\s+[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+){1,2}/,
+    /^[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+(?:[ \t]+[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+){1,2}/,
   );
   return name ? name[0].trim() : null;
 }
