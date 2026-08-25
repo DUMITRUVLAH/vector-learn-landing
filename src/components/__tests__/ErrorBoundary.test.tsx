@@ -111,4 +111,19 @@ describe("ErrorBoundary — stale chunk after deploy", () => {
     );
     expect(screen.getByText("fine now")).toBeTruthy();
   });
+
+  it("„Spre panou” duce la un panou REAL, nu la pagina de marketing pentru nelogați", () => {
+    // Regresie 2026-08-25: href-ul era "#/app/dashboard", o rută pe care App.tsx nu o mai are
+    // după separarea CRM-ului; lanțul de redirect ateriza pe "/#/business" — landing-ul public
+    // „Intră în cont". Adică exact în momentul recuperării dintr-o eroare, utilizatorul logat
+    // vedea un ecran de neautentificat. Ruta corectă e panoul din /business/*.
+    render(
+      <ErrorBoundary>
+        <Boom message="ceva a crăpat la randare" />
+      </ErrorBoundary>,
+    );
+    const link = screen.getByRole("link", { name: /spre panou/i });
+    expect(link.getAttribute("href")).toBe("#/business/dashboard");
+    expect(link.getAttribute("href")).not.toBe("#/app/dashboard");
+  });
 });
