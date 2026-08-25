@@ -14,7 +14,7 @@ import type {
   ParPartiesExtraction,
   ParRole,
 } from "./parPartyTypes";
-import { isPayeeBank } from "./payeeBankClassifier";
+import { isPayeeBank, findBankKeywordMatch } from "./payeeBankClassifier";
 
 // ─── Low-level token extractors (exported for unit tests) ─────────────────────
 
@@ -669,16 +669,40 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
+/** A real bank name is short — anything longer means the window below still smuggled in
+ * unrelated text (payee_bank is capped at 300 chars server-side; a longer value 400s the
+ * PATCH with an unlabeled "String must contain at most 300 character(s)" that blocks the
+ * whole draft from saving). */
+const MAX_BANK_NAME_LEN = 100;
+
 function cleanBankName(line: string): string {
+  // Bound to a window around the ACTUAL matched bank keyword, not the whole line. A genuine
+  // "Banca: X" line is short, so this is a no-op there — but when the "line" is really one
+  // PDF-collapsed blob (a party's name/address/IDNO/IBAN with no real newline between them and
+  // a stray bank mention), isPayeeBank() only proves the blob CONTAINS a bank reference
+  // somewhere; it does not mean the whole blob IS the bank name. Without this, a false-positive
+  // match (e.g. a "conform cursului BNM" exchange-rate footer sitting on the same collapsed
+  // line as the payee's requisites) swallowed the payee's quoted name + legal address whole
+  // into the "Bancă" field.
+  const m = findBankKeywordMatch(line);
+  const windowed = m
+    ? line.slice(Math.max(0, (m.index ?? 0) - 20), Math.min(line.length, (m.index ?? 0) + m[0].length + 80))
+    : line;
   // Drop leading "Banca:", "Банк:", "Bank:", "Banca benef.:", "Beneficiary bank:" labels.
-  let s = line.replace(
+  let s = windowed.replace(
     /^.*?(?:Banca(?:\s*(?:plătitorului|beneficiarului|benef\.?))?|Банк|Bank|Beneficiary\s*bank|Банк)\s*:?\s*/i,
     "",
   );
   s = s.replace(/^[,;:\-–\s]+/, "").trim();
-  s = s.replace(/,\s*(?:cod\s*banc|код\s*банка|BIC|SWIFT).*$/i, "").trim();
+  // A bank name never runs into the next requisite/address field — cut there too.
+  s = s
+    .replace(
+      /,?\s*(?:cod\s*banc\w*|код\s*банка|BIC|SWIFT|IBAN|cod\s*fiscal|IDNO|IDNP|ИДНО|mun\.|or\.|sat\.|str\.|bd\.|sediul\w*|adres[ăa]).*$/i,
+      "",
+    )
+    .trim();
   s = s.replace(/\s+/g, " ").trim();
-  return s || line.trim();
+  return (s || windowed.trim()).slice(0, MAX_BANK_NAME_LEN);
 }
 
 function extractScope(text: string): string | null {

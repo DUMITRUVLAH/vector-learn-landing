@@ -161,6 +161,15 @@ function asStringOrNull(v: unknown): string | null {
   return t.length ? t : null;
 }
 
+/** payee_bank/payee_name/legal_address are capped at 300 chars server-side (server/routes/par.ts) —
+ * a longer value 400s the save with an unlabeled Zod error. Cap here too so a model hallucination
+ * (e.g. echoing a whole address/paragraph into `bank`) degrades to a truncated, correctable field
+ * instead of silently blocking the draft from saving. */
+function asBoundedStringOrNull(v: unknown, maxLen: number): string | null {
+  const s = asStringOrNull(v);
+  return s ? s.slice(0, maxLen) : null;
+}
+
 /** Normalize the model JSON into a ParPartiesExtraction (isStub:false). */
 export function normalizeParExtraction(json: Record<string, unknown>): ParPartiesExtraction {
   const rawParties = Array.isArray(json.parties) ? json.parties : [];
@@ -168,7 +177,7 @@ export function normalizeParExtraction(json: Record<string, unknown>): ParPartie
   for (const raw of rawParties) {
     if (!raw || typeof raw !== "object") continue;
     const p = raw as Record<string, unknown>;
-    const name = asStringOrNull(p.name);
+    const name = asBoundedStringOrNull(p.name, 300);
     if (!name) continue; // drop empty-name parties
     const role = (VALID_ROLES as readonly string[]).includes(String(p.role))
       ? (p.role as ParRole)
@@ -178,10 +187,10 @@ export function normalizeParExtraction(json: Record<string, unknown>): ParPartie
       role,
       idno: asStringOrNull(p.idno),
       iban: asStringOrNull(p.iban),
-      bank: asStringOrNull(p.bank),
+      bank: asBoundedStringOrNull(p.bank, 100),
       bic: asStringOrNull(p.bic),
-      legalAddress: asStringOrNull(p.legalAddress),
-      administratorName: asStringOrNull(p.administratorName),
+      legalAddress: asBoundedStringOrNull(p.legalAddress, 300),
+      administratorName: asBoundedStringOrNull(p.administratorName, 300),
       vatCode: asStringOrNull(p.vatCode),
     });
   }

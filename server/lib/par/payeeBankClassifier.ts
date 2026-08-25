@@ -29,6 +29,16 @@ export function isPayeeBank(name: string): boolean {
 }
 
 /**
+ * Returns the bank-keyword match (with its position) inside `text`, or null.
+ * Used to window a bank-name extraction around the actual keyword instead of
+ * trusting the whole containing line/block — see stubPartyParser.cleanBankName.
+ */
+export function findBankKeywordMatch(text: string): RegExpMatchArray | null {
+  if (!text) return null;
+  return text.match(BANK_KEYWORDS_RE);
+}
+
+/**
  * Attempt to extract the actual beneficiary from a vendor_name string
  * that may contain "Beneficiar: <name>" embedded in text (some OCR outputs include
  * structured data in a single field). Returns null if no embedded beneficiary found.

@@ -55,6 +55,7 @@ const FIELD_MESSAGES: Record<string, string> = {
   payee: "Completează beneficiarul: nume + IBAN (sau alege un furnizor salvat).",
   payee_iban: "IBAN invalid.",
   payee_idnp: "IDNP invalid.",
+  payee_bank: "Numele băncii e prea lung (max 300 caractere) — scurtează-l sau corectează-l.",
 };
 
 /**
@@ -1010,7 +1011,7 @@ export function ParCreateForm() {
   }
 
   const saveDraft = async () => {
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setFieldErrors({});
     try {
       const draftId = await ensureDraft();
       await patchHeader(draftId);
@@ -1018,7 +1019,16 @@ export function ParCreateForm() {
       setPar(fresh);
       setDraftSavedMessage(`Ciorna ${fresh.requestNo} a fost salvată în Cererile mele → Ciorne.`);
     }
-    catch (e) { setError(e instanceof Error ? e.message : "Eroare la salvare"); }
+    catch (e) {
+      if (e instanceof ApiError && e.details.length) {
+        const mapped: Record<string, string> = {};
+        for (const d of e.details) mapped[d.field] = FIELD_MESSAGES[d.field] ?? d.message;
+        setFieldErrors(mapped);
+        setError("Ciorna nu a putut fi salvată — vezi câmpurile marcate mai jos.");
+      } else {
+        setError(e instanceof Error ? e.message : "Eroare la salvare");
+      }
+    }
     finally { setBusy(false); }
   };
 
@@ -1775,7 +1785,16 @@ export function ParCreateForm() {
                 forceOpen={!!(payeeBank.trim() || payeeBic.trim() || payeeAdministrator.trim() || payeeLegalAddress.trim())}
               >
                 <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <Field label="Bancă" htmlFor="pbk"><input id="pbk" type="text" placeholder="ex. BC Moldindconbank S.A." className={inputCls} value={payeeBank} onChange={(e) => setPayeeBank(e.target.value)} /></Field>
+                  <Field label="Bancă" htmlFor="pbk" error={fieldErrors.payee_bank}>
+                    <input
+                      id="pbk"
+                      type="text"
+                      placeholder="ex. BC Moldindconbank S.A."
+                      className={cn(inputCls, fieldErrors.payee_bank && "border-destructive")}
+                      value={payeeBank}
+                      onChange={(e) => setPayeeBank(e.target.value)}
+                    />
+                  </Field>
                   <Field label="BIC / SWIFT" htmlFor="pbic"><input id="pbic" type="text" placeholder="ex. MOLDMD2X" className={inputCls} value={payeeBic} onChange={(e) => setPayeeBic(e.target.value.toUpperCase())} /></Field>
                   <Field label="Administrator / reprezentant" htmlFor="padmin"><input id="padmin" type="text" placeholder="Prenume Nume" className={inputCls} value={payeeAdministrator} onChange={(e) => setPayeeAdministrator(e.target.value)} /></Field>
                   <Field label="Adresă juridică" htmlFor="paddr"><input id="paddr" type="text" placeholder="Localitate, stradă, număr" className={inputCls} value={payeeLegalAddress} onChange={(e) => setPayeeLegalAddress(e.target.value)} /></Field>
