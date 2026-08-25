@@ -210,10 +210,27 @@ interface InternalCandidate extends PayeeCandidate {
   _idnoDropped: boolean;
   _isPayerHint: boolean;
   _hadIdno: boolean;
+  /** Fields the purity layer had to repair (see partyPurify.ts) → honest "⚠ de verificat". */
+  _repaired: NonNullable<ParExtractedParty["repaired"]>;
 }
 
 function requisiteScore(c: InternalCandidate): number {
   return (c.idno ? 1 : 0) + (c.iban ? 1 : 0) + (c.bank ? 1 : 0);
+}
+
+/** Honest per-field flags: anything the purity layer repaired, or validation dropped/doubted,
+ * is marked "⚠ de verificat" — a relocated value is a good guess, never a certainty. */
+function lowConfFor(c: InternalCandidate): ChoosePayeeResult["lowConfidence"] {
+  return {
+    name: !!c._repaired.name,
+    // Only flag idno when one was expected but dropped as invalid — not when the
+    // doc legitimately has none (e.g. a cash receipt).
+    idno: c._idnoDropped || !!c._repaired.idno,
+    iban: c._ibanLowConf || !!c._repaired.iban,
+    bank: !!c._repaired.bank,
+    bic: !!c._repaired.bic,
+    legalAddress: !!c._repaired.legalAddress,
+  };
 }
 
 function stripInternal(c: InternalCandidate): PayeeCandidate {
@@ -305,6 +322,7 @@ function decidePayee(
       _idnoDropped: r.idnoDropped,
       _isPayerHint: !!p.isPayerHint,
       _hadIdno: p.idno != null || (p.iban != null && /^\d{13}$/.test(normalizeIban(p.iban) ?? "")),
+      _repaired: p.repaired ?? {},
     };
   };
   const candidates: InternalCandidate[] = pool.map(toCandidate);
@@ -358,14 +376,7 @@ function decidePayee(
       needsClarification: false,
       candidates: [],
       payee: stripInternal(payee),
-      lowConfidence: {
-        name: false,
-        // Only flag idno when one was expected but dropped as invalid — not when the
-        // doc legitimately has none (e.g. a cash receipt).
-        idno: payee._idnoDropped,
-        iban: payee._ibanLowConf,
-        bank: false,
-      },
+      lowConfidence: lowConfFor(payee),
       amountCents: baseAmount,
       currency,
       scope,
@@ -383,12 +394,7 @@ function decidePayee(
         needsClarification: false,
         candidates: [],
         payee: stripInternal(top),
-        lowConfidence: {
-          name: false,
-          idno: top._idnoDropped,
-          iban: top._ibanLowConf,
-          bank: false,
-        },
+        lowConfidence: lowConfFor(top),
         amountCents: baseAmount,
         currency,
         scope,

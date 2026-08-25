@@ -236,14 +236,25 @@ parAiPrefillRoutes.post(
     const choice = choosePayee(extraction, orgLegalName);
 
     const payee = choice.payee;
+    // Honest confidence: the regex stub has no contextual understanding, so its output is
+    // capped below the 0.7 low-confidence threshold — EVERY stub-filled field renders
+    // "⚠ de verificat" (matching the banner's "verifică fiecare câmp"), instead of the
+    // stub's guesses shipping with LLM-grade trust. An explicit lowConfidence flag from
+    // choosePayee (validation/purity repair) always forces the warning on either path.
+    const conf = (v: number) => (extraction.isStub ? Math.min(v, 0.6) : v);
+    const lowFlag = (f?: boolean) => (extraction.isStub ? f || undefined : f);
     const result: ParPrefillResult = {
-      payeeName: field(payee?.name ?? "", payee ? 0.9 : 0, choice.lowConfidence.name),
-      payeeIdno: field(payee?.idno ?? "", payee?.idno ? 0.85 : 0, choice.lowConfidence.idno),
-      payeeIban: field(payee?.iban ?? "", payee?.iban ? 0.85 : 0, choice.lowConfidence.iban),
-      payeeBank: field(payee?.bank ?? "", payee?.bank ? 0.8 : 0, choice.lowConfidence.bank),
-      payeeBic: field(payee?.bic ?? "", payee?.bic ? 0.8 : 0),
-      payeeLegalAddress: field(payee?.legalAddress ?? "", payee?.legalAddress ? 0.75 : 0),
-      payeeAdministrator: field(payee?.administratorName ?? "", payee?.administratorName ? 0.75 : 0),
+      payeeName: field(payee?.name ?? "", conf(payee ? 0.9 : 0), lowFlag(choice.lowConfidence.name)),
+      payeeIdno: field(payee?.idno ?? "", conf(payee?.idno ? 0.85 : 0), lowFlag(choice.lowConfidence.idno)),
+      payeeIban: field(payee?.iban ?? "", conf(payee?.iban ? 0.85 : 0), lowFlag(choice.lowConfidence.iban)),
+      payeeBank: field(payee?.bank ?? "", conf(payee?.bank ? 0.8 : 0), lowFlag(choice.lowConfidence.bank)),
+      payeeBic: field(payee?.bic ?? "", conf(payee?.bic ? 0.8 : 0), lowFlag(choice.lowConfidence.bic)),
+      payeeLegalAddress: field(
+        payee?.legalAddress ?? "",
+        conf(payee?.legalAddress ? 0.75 : 0),
+        lowFlag(choice.lowConfidence.legalAddress),
+      ),
+      payeeAdministrator: field(payee?.administratorName ?? "", conf(payee?.administratorName ? 0.75 : 0)),
       payeeType: {
         value: payee?.payeeType ?? null,
         confidence: payee?.payeeType ? 0.8 : 0,

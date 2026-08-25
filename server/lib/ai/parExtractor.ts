@@ -11,6 +11,7 @@
 
 import { callAi } from "./client";
 import { parsePartiesFromText } from "../par/stubPartyParser";
+import { purifyExtraction } from "../par/partyPurify";
 import type {
   ParPartiesExtraction,
   ParExtractedParty,
@@ -257,7 +258,10 @@ export function normalizeParExtraction(json: Record<string, unknown>): ParPartie
     .filter((it) => it.description.length > 0)
     .slice(0, 30);
 
-  return {
+  // Field-purity pass: the model can still glue a label/address/IBAN into `name`
+  // (or junk into `bank`) — the invariant "each field holds only its own info" is
+  // enforced HERE for the LLM path, same as the stub path (see partyPurify.ts).
+  return purifyExtraction({
     parties,
     amountCents,
     amountConfidence,
@@ -267,7 +271,7 @@ export function normalizeParExtraction(json: Record<string, unknown>): ParPartie
     documentClassReason,
     lineItems,
     isStub: false,
-  };
+  });
 }
 
 export interface ExtractParPartiesOpts {
