@@ -1493,12 +1493,75 @@ export interface ParConfigImportResult {
   projects: { created: number; updated: number; errors: ParConfigImportRowError[] };
   departments: { created: number; updated: number; errors: ParConfigImportRowError[] };
   budgetCodes: { created: number; updated: number; errors: ParConfigImportRowError[] };
+  /** Which sheet was read as what, and which sheets were ignored. Optional for older servers. */
+  warnings?: string[];
 }
 
-/** Upload Excel config file and return import result. */
-export async function importParConfigExcel(file: File): Promise<ParConfigImportResult> {
+/** What each kind of import can be fed, as declared by the server. */
+export interface ParImportFieldDef {
+  key: string;
+  label: string;
+  required: boolean;
+  hint?: string;
+}
+
+export type ParImportKind = "payers" | "projects" | "departments" | "budgetCodes";
+
+export interface ParImportSheetPreview {
+  name: string;
+  headers: string[];
+  totalRows: number;
+  /** First rows, aligned with `headers`. */
+  sampleRows: string[][];
+  detectedKind: ParImportKind | null;
+  suggestedKind: ParImportKind | "skip";
+  suggestedMapping: Record<string, string | null>;
+}
+
+export interface ParConfigImportPreview {
+  sheets: ParImportSheetPreview[];
+  fields: Record<ParImportKind, ParImportFieldDef[]>;
+  kindLabels: Record<ParImportKind, string>;
+}
+
+/** One sheet's decision: what it is, and which column feeds each field. */
+export interface ParImportSheetMapping {
+  name: string;
+  kind: ParImportKind | "skip";
+  columns: Record<string, string | null>;
+}
+
+export interface ParConfigImportMapping {
+  sheets: ParImportSheetMapping[];
+}
+
+/** Read the file's sheets/columns WITHOUT importing anything (feeds the mapping dialog). */
+export async function previewParConfigExcel(file: File): Promise<ParConfigImportPreview> {
   const formData = new FormData();
   formData.append("file", file);
+  const res = await fetch("/api/par/config-import/preview", {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Upload Excel config file and return import result.
+ * With `mapping`, the user's column choices win over auto-detection.
+ */
+export async function importParConfigExcel(
+  file: File,
+  mapping?: ParConfigImportMapping
+): Promise<ParConfigImportResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (mapping) formData.append("mapping", JSON.stringify(mapping));
   // Use raw fetch (not api()) because we need multipart, not JSON
   const res = await fetch("/api/par/config-import", {
     method: "POST",

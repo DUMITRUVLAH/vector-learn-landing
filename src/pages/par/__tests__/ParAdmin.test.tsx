@@ -55,7 +55,22 @@ vi.mock("@/lib/api/par", () => ({
   updateVendor: vi.fn().mockResolvedValue({}),
   deleteVendor: vi.fn().mockResolvedValue({ ok: true }),
   formatMDL: (cents: number) => `${(cents / 100).toLocaleString()} MDL`,
+  listEvents: vi.fn().mockResolvedValue({ events: [] }),
+  getBudgetCodesUsage: vi.fn().mockResolvedValue({ usage: [] }),
+  createPayer: vi.fn().mockResolvedValue({}),
+  updatePayer: vi.fn().mockResolvedValue({}),
+  deletePayer: vi.fn().mockResolvedValue({ ok: true }),
+  createEvent: vi.fn().mockResolvedValue({}),
+  updateEvent: vi.fn().mockResolvedValue({}),
+  deleteEvent: vi.fn().mockResolvedValue({ ok: true }),
+  setProjectApprovers: vi.fn().mockResolvedValue({}),
+  searchRegistryCompanies: vi.fn().mockResolvedValue({ items: [] }),
+  downloadParConfigTemplate: vi.fn(),
+  previewParConfigExcel: vi.fn(),
+  importParConfigExcel: vi.fn(),
 }));
+
+import { previewParConfigExcel, importParConfigExcel } from "@/lib/api/par";
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -152,5 +167,103 @@ describe("ParAdmin — PAR-116", () => {
   it("non-admin 403 has alert role for a11y", () => {
     render(<ParAdmin isAdmin={false} />);
     expect(screen.getByRole("alert")).toBeDefined();
+  });
+});
+
+// ─── Excel import: preview → mapping dialog → import (VM1-02b) ────────────────
+
+describe("ParAdmin — import Excel cu mapare de coloane", () => {
+  const preview = {
+    sheets: [
+      {
+        name: "Sheet1",
+        headers: ["Cod", "Denumire"],
+        totalRows: 2,
+        sampleRows: [["1.1 Director", "1.1 Director"]],
+        detectedKind: "budgetCodes" as const,
+        suggestedKind: "budgetCodes" as const,
+        suggestedMapping: { code: "Cod", name: "Denumire", allocated: null, project: null, payer: null },
+      },
+    ],
+    fields: {
+      payers: [{ key: "name", label: "Denumire plătitor", required: true }],
+      projects: [{ key: "name", label: "Denumire proiect", required: true }],
+      departments: [{ key: "name", label: "Denumire departament", required: true }],
+      budgetCodes: [
+        { key: "code", label: "Cod", required: true },
+        { key: "name", label: "Denumire", required: false },
+        { key: "allocated", label: "Sumă alocată (MDL)", required: false },
+        { key: "project", label: "Proiect / Program", required: false },
+        { key: "payer", label: "Plătitor / Organizație", required: false },
+      ],
+    },
+    kindLabels: {
+      payers: "Plătitori / Organizații",
+      projects: "Proiecte/Programe",
+      departments: "Departamente",
+      budgetCodes: "Coduri bugetare",
+    },
+  };
+
+  const xlsx = () =>
+    new File(["x"], "LED.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(previewParConfigExcel).mockResolvedValue(preview);
+    vi.mocked(importParConfigExcel).mockResolvedValue({
+      payers: { created: 0, updated: 0, errors: [] },
+      projects: { created: 0, updated: 0, errors: [] },
+      departments: { created: 0, updated: 0, errors: [] },
+      budgetCodes: { created: 2, updated: 0, errors: [] },
+      warnings: ["Foaia „Sheet1\" a fost importată ca „Coduri bugetare\" (2 rânduri)."],
+    });
+  });
+
+  // [blocant] Choosing a file must NOT import straight away — it opens the mapping dialog.
+  it("deschide dialogul de mapare în loc să importe direct", async () => {
+    render(<ParAdmin isAdmin={true} />);
+    await screen.findByText("Date referință");
+    fireEvent.click(screen.getByText("Date referință"));
+
+    await userEvent.upload(await screen.findByLabelText("Alege fișier Excel"), xlsx());
+
+    await screen.findByRole("dialog", { name: "Ce importăm din fișier?" });
+    expect(previewParConfigExcel).toHaveBeenCalledTimes(1);
+    expect(importParConfigExcel).not.toHaveBeenCalled();
+  });
+
+  // [blocant] The mapping the user confirmed is what reaches the API.
+  it("trimite fișierul împreună cu maparea confirmată", async () => {
+    render(<ParAdmin isAdmin={true} />);
+    fireEvent.click(await screen.findByText("Date referință"));
+    await userEvent.upload(await screen.findByLabelText("Alege fișier Excel"), xlsx());
+    await screen.findByRole("dialog", { name: "Ce importăm din fișier?" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Importă" }));
+
+    await waitFor(() => expect(importParConfigExcel).toHaveBeenCalledTimes(1));
+    const [file, mapping] = vi.mocked(importParConfigExcel).mock.calls[0];
+    expect((file as File).name).toBe("LED.xlsx");
+    expect(mapping).toEqual({
+      sheets: [{ name: "Sheet1", kind: "budgetCodes", columns: { code: "Cod", name: "Denumire", allocated: null, project: null, payer: null } }],
+    });
+
+    // Result + the "read as" note are shown after the import.
+    expect(await screen.findByText(/Rezultat import/)).toBeInTheDocument();
+    expect(screen.getByText(/a fost importată ca/)).toBeInTheDocument();
+  });
+
+  it("nu importă nimic dacă anulezi dialogul", async () => {
+    render(<ParAdmin isAdmin={true} />);
+    fireEvent.click(await screen.findByText("Date referință"));
+    await userEvent.upload(await screen.findByLabelText("Alege fișier Excel"), xlsx());
+    await screen.findByRole("dialog", { name: "Ce importăm din fișier?" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Renunță" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(importParConfigExcel).not.toHaveBeenCalled();
   });
 });

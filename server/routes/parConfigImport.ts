@@ -1,25 +1,35 @@
 /**
- * VM1-02: PAR Config Import — import projects, departments, and budget codes from Excel.
+ * VM1-02: PAR Config Import — import payers, projects, departments, and budget codes from Excel.
  *
  * Routes:
  *   GET  /api/par/config-import/template  — download the .xlsx template
+ *   POST /api/par/config-import/preview   — read the sheets/columns WITHOUT writing anything
  *   POST /api/par/config-import           — upload + parse + upsert (par_admin only)
+ *
+ * The admin page previews the file first and shows a mapping dialog; the `mapping` field it
+ * sends back (per sheet: what kind of data + which column feeds which field) OVERRIDES the
+ * auto-detection below. Detection only pre-fills that dialog.
  *
  * CRITICAL: exceljs MUST be imported dynamically (lazy) — a top-level import
  * caused a prod outage (whole API down). Pattern from server/lib/docmerge/excelImport.ts.
  *
- * Schema:
- *   Sheet 1 "Proiecte":       col A = name (req), col B = donor
- *   Sheet 2 "Departamente":   col A = name (req)
- *   Sheet 3 "Coduri buget":   col A = code (req, unique), col B = name (req), col C = suma (MDL)
+ * Sheets are matched by their COLUMN HEADERS first, then by sheet name, and only by
+ * position for legacy files where nothing else matched — see server/lib/par/configImportSheets.ts
+ * for why (a real one-sheet file silently imported 0 budget codes and 41 duplicate projects).
+ *
+ * Recognised columns (diacritics/case/`*` insensitive):
+ *   Plătitori:      Denumire plătitor | Denumire juridică | IDNO
+ *   Proiecte:       Denumire proiect | Donor | Plătitor / Organizație
+ *   Departamente:   Denumire departament
+ *   Coduri buget:   Cod (or "Cod buget") | Denumire | Suma alocată (MDL) | Plătitor | Proiect
  *
  * Validation:
- *   - Required fields missing → row skipped + reported as error
- *   - Budget code: duplicate code → update existing (upsert by code)
- *   - Project: upsert by name
- *   - Department: upsert by name
+ *   - Required fields missing → row skipped + reported as a row error
+ *   - Upserts: payer by name, project by (payer, name), department by name, budget code by (payer, code)
+ *   - A project named on a budget-code row is created on the fly if it doesn't exist yet
  */
 import { Hono } from "hono";
+import { z } from "zod";
 import type ExcelJS from "exceljs";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "../db/client";
@@ -27,6 +37,26 @@ import { parProjects, parDepartments, parBudgetCodes, parPayers, parPayerModules
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { mayAccessPayer } from "../lib/par/projectScope";
+import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
+import {
+  ALLOCATED_ALIASES,
+  CODE_ALIASES,
+  DEPARTMENT_NAME_ALIASES,
+  NAME_ALIASES,
+  PAYER_ALIASES,
+  PAYER_NAME_ALIASES,
+  PROJECT_ALIASES,
+  PROJECT_NAME_ALIASES,
+  FIELD_DEFS,
+  type ImportRow,
+  type SheetKind,
+  applyMapping,
+  classifyWorkbook,
+  getField,
+  parseMdlAmount,
+  splitCodeAndName,
+  suggestMapping,
+} from "../lib/par/configImportSheets";
 
 /** Context threaded into the upsert helpers so each row honours the caller's scope (PARQA). */
 interface ImportCtx {
@@ -35,6 +65,10 @@ interface ImportCtx {
   role: string;
   /** Only a workspace admin/manager may create NEW payers (mirrors POST /api/par/payers). */
   canManagePayers: boolean;
+  /** Payers with the "par" module enabled — the only ones whose rows the PAR lists show. */
+  entitledPayers: Set<string>;
+  /** Payers the file actually wrote to, id → name, for the entitlement warning. */
+  usedPayers: Map<string, string>;
 }
 
 export const parConfigImportRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -42,29 +76,43 @@ parConfigImportRoutes.use("*", requireAuth);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface ImportRow {
-  row: number;
-  data: Record<string, string>;
-}
-
 interface RowError {
   row: number;
   column: string;
   message: string;
 }
 
-interface ImportResult {
-  payers: { created: number; updated: number; errors: RowError[] };
-  projects: { created: number; updated: number; errors: RowError[] };
-  departments: { created: number; updated: number; errors: RowError[] };
-  budgetCodes: { created: number; updated: number; errors: RowError[] };
+interface CategoryResult {
+  created: number;
+  updated: number;
+  errors: RowError[];
 }
+
+interface ImportResult {
+  payers: CategoryResult;
+  projects: CategoryResult;
+  departments: CategoryResult;
+  budgetCodes: CategoryResult;
+  /** Human-readable notes: which sheet was read as what, which sheets were ignored. */
+  warnings: string[];
+}
+
+/** DB column limits — exceeding them used to blow up the whole request with a 500. */
+const MAX_CODE_LEN = 50;
+const MAX_NAME_LEN = 200;
+
+const KIND_LABELS: Record<SheetKind, string> = {
+  payers: "Plătitori / Organizații",
+  projects: "Proiecte/Programe",
+  departments: "Departamente",
+  budgetCodes: "Coduri bugetare",
+};
 
 // ─── GET /template ────────────────────────────────────────────────────────────
 
 /**
  * Returns a ready-made .xlsx template the par_admin can fill and upload.
- * Three worksheets: Proiecte, Departamente, Coduri buget.
+ * Four worksheets: Plătitori, Proiecte, Departamente, Coduri buget.
  */
 parConfigImportRoutes.get(
   "/template",
@@ -120,11 +168,103 @@ parConfigImportRoutes.get(
   }
 );
 
+// ─── Column mapping payload ───────────────────────────────────────────────────
+
+const mappingSchema = z.object({
+  sheets: z
+    .array(
+      z.object({
+        name: z.string(),
+        kind: z.enum(["payers", "projects", "departments", "budgetCodes", "skip"]),
+        /** field key → the column header that feeds it (null = not mapped). */
+        columns: z.record(z.string(), z.string().nullable()).default({}),
+      })
+    )
+    .max(50),
+});
+
+type MappingPayload = z.infer<typeof mappingSchema>;
+
+/** Reads the optional `mapping` form field. Throws with a user-facing message when malformed. */
+function readMapping(raw: unknown): MappingPayload | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new Error("Maparea coloanelor nu este un JSON valid.");
+  }
+  const parsed = mappingSchema.safeParse(json);
+  if (!parsed.success) throw new Error("Maparea coloanelor are un format neașteptat.");
+  return parsed.data;
+}
+
+/** Read the uploaded .xlsx out of a multipart body. Returns a message instead of throwing. */
+async function loadWorkbook(file: File): Promise<{ wb: ExcelJS.Workbook } | { error: string; status: 400 | 422 }> {
+  if (!(file.name ?? "").toLowerCase().endsWith(".xlsx")) {
+    return { error: "Doar fișiere .xlsx sunt acceptate.", status: 400 };
+  }
+  const buffer = Buffer.from(await file.arrayBuffer());
+  // Lazy-load exceljs (critical — top-level import = prod outage)
+  const { default: ExcelJSRuntime } = (await import("exceljs")) as { default: typeof ExcelJS };
+  const wb = new ExcelJSRuntime.Workbook();
+  try {
+    await wb.xlsx.load(buffer);
+  } catch {
+    return { error: "Fișierul Excel nu poate fi citit. Verifică dacă este un .xlsx valid.", status: 422 };
+  }
+  return { wb };
+}
+
+// ─── POST /preview ────────────────────────────────────────────────────────────
+
+/**
+ * Parse the file WITHOUT writing anything: returns each worksheet's columns, a few sample rows,
+ * and a suggested kind + column mapping. The admin page turns this into the mapping dialog, so
+ * the user — not a heuristic — decides what each column means.
+ */
+parConfigImportRoutes.post(
+  "/preview",
+  requirePARRole("par_admin"),
+  async (c) => {
+    let formData: FormData;
+    try {
+      formData = await c.req.formData();
+    } catch {
+      return c.json({ error: "Cererea trebuie să fie multipart/form-data cu câmpul 'file'." }, 400);
+    }
+    const file = formData.get("file");
+    if (!file || typeof file === "string") {
+      return c.json({ error: "Câmpul 'file' lipsește sau nu este un fișier." }, 400);
+    }
+
+    const loaded = await loadWorkbook(file as File);
+    if ("error" in loaded) return c.json({ error: loaded.error }, loaded.status);
+
+    const sheets = classifyWorkbook(loaded.wb).map((sheet) => {
+      const headers = sheet.headers.filter(Boolean);
+      // Something has to be pre-selected in the dialog; budget codes is the common case.
+      const kind: SheetKind = sheet.kind ?? "budgetCodes";
+      return {
+        name: sheet.name,
+        headers,
+        totalRows: sheet.rows.length,
+        sampleRows: sheet.rows.slice(0, 5).map((r) => headers.map((h) => r.data[h] ?? "")),
+        detectedKind: sheet.kind,
+        suggestedKind: sheet.rows.length ? kind : ("skip" as const),
+        suggestedMapping: suggestMapping(kind, headers),
+      };
+    });
+
+    return c.json({ sheets, fields: FIELD_DEFS, kindLabels: KIND_LABELS });
+  }
+);
+
 // ─── POST / ───────────────────────────────────────────────────────────────────
 
 /**
  * Parse and import the uploaded .xlsx config file.
- * Returns { projects, departments, budgetCodes } each with created/updated/errors.
+ * Returns { payers, projects, departments, budgetCodes, warnings }.
  */
 parConfigImportRoutes.post(
   "/",
@@ -137,6 +277,8 @@ parConfigImportRoutes.post(
       userId: user.id,
       role: user.role,
       canManagePayers: user.role === "admin" || user.role === "manager",
+      entitledPayers: new Set(await enabledPayerIds(tenantId, "par")),
+      usedPayers: new Map(),
     };
 
     let formData: FormData;
@@ -151,43 +293,96 @@ parConfigImportRoutes.post(
       return c.json({ error: "Câmpul 'file' lipsește sau nu este un fișier." }, 400);
     }
 
-    const fileName = (file as File).name ?? "";
-    if (!fileName.toLowerCase().endsWith(".xlsx")) {
-      return c.json({ error: "Doar fișiere .xlsx sunt acceptate." }, 400);
-    }
+    const loaded = await loadWorkbook(file as File);
+    if ("error" in loaded) return c.json({ error: loaded.error }, loaded.status);
+    const wb = loaded.wb;
 
-    const arrayBuffer = await (file as File).arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Lazy-load exceljs (critical — top-level import = prod outage)
-    const { default: ExcelJSRuntime } = (await import("exceljs")) as {
-      default: typeof ExcelJS;
-    };
-
-    const wb = new ExcelJSRuntime.Workbook();
+    // An explicit mapping (from the preview dialog) always wins over auto-detection:
+    // the person looking at the file decides what each column is.
+    let mapping: MappingPayload | null;
     try {
-      await wb.xlsx.load(buffer);
-    } catch {
-      return c.json({ error: "Fișierul Excel nu poate fi citit. Verifică dacă este un .xlsx valid." }, 422);
+      mapping = readMapping(formData.get("mapping"));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "Maparea coloanelor este invalidă." }, 400);
     }
 
-    // Parse sheets by name or position
-    const payerRows = parseSheet(wb, "Plătitori", -1);
-    const projectRows = parseSheet(wb, "Proiecte", 0);
-    const deptRows = parseSheet(wb, "Departamente", 1);
-    const budgetRows = parseSheet(wb, "Coduri buget", 2);
+    const sheets = classifyWorkbook(wb);
+    const warnings: string[] = [];
+    const selected: { kind: SheetKind; rows: ImportRow[] }[] = [];
 
-    // Process each category
-    const payerResult = await upsertPayers(ctx, payerRows);
-    const projectResult = await upsertProjects(ctx, projectRows);
-    const deptResult = await upsertDepartments(tenantId, deptRows);
-    const budgetResult = await upsertBudgetCodes(ctx, budgetRows);
+    if (mapping) {
+      for (const chosen of mapping.sheets) {
+        const sheet = sheets.find((s) => s.name === chosen.name);
+        if (!sheet) {
+          warnings.push(`Foaia „${chosen.name}" nu există în fișier.`);
+          continue;
+        }
+        if (chosen.kind === "skip") continue;
+        const rows = applyMapping(sheet.rows, chosen.columns);
+        selected.push({ kind: chosen.kind, rows });
+        warnings.push(`Foaia „${sheet.name}" a fost importată ca „${KIND_LABELS[chosen.kind]}" (${rows.length} rânduri), conform mapării alese.`);
+      }
+      const named = new Set(mapping.sheets.map((s) => s.name));
+      for (const sheet of sheets) {
+        if (!named.has(sheet.name)) warnings.push(`Foaia „${sheet.name}" a fost sărită (neselectată).`);
+      }
+      if (selected.length === 0) {
+        return c.json({ error: "Nicio foaie nu a fost selectată pentru import." }, 400);
+      }
+    } else {
+      // No mapping: classify every worksheet by headers → name → (legacy) position.
+      const recognised = sheets.filter((s) => s.kind !== null);
+      if (recognised.length === 0) {
+        const found = sheets.map((s) => `„${s.name}" (${s.headers.filter(Boolean).join(", ") || "fără antet"})`).join("; ");
+        return c.json(
+          {
+            error:
+              "Nicio foaie din fișier nu a putut fi recunoscută. Prima linie a foii trebuie să conțină " +
+              "antetul coloanelor: „Cod\" + „Denumire\" pentru coduri bugetare, „Denumire proiect\" pentru " +
+              "proiecte, „Denumire departament\" pentru departamente, „Denumire plătitor\" pentru plătitori. " +
+              `Foi găsite: ${found}.`,
+          },
+          422
+        );
+      }
+      for (const sheet of sheets) {
+        if (sheet.kind === null) {
+          warnings.push(`Foaia „${sheet.name}" a fost ignorată — antetul coloanelor nu a putut fi recunoscut.`);
+          continue;
+        }
+        selected.push({ kind: sheet.kind, rows: sheet.rows });
+        if (sheet.via !== "name") {
+          warnings.push(`Foaia „${sheet.name}" a fost citită ca „${KIND_LABELS[sheet.kind]}" (${sheet.rows.length} rânduri).`);
+        }
+      }
+    }
+
+    const rowsFor = (kind: SheetKind): ImportRow[] =>
+      selected.filter((s) => s.kind === kind).flatMap((s) => s.rows);
+
+    // Payers and projects first — budget codes reference them.
+    const payerResult = await upsertPayers(ctx, rowsFor("payers"));
+    const projectResult = await upsertProjects(ctx, rowsFor("projects"));
+    const deptResult = await upsertDepartments(tenantId, rowsFor("departments"));
+    const budgetResult = await upsertBudgetCodes(ctx, rowsFor("budgetCodes"), projectResult);
+
+    // GET /api/par/budget-codes only lists codes of payers entitled to the "par" module, so a row
+    // can save correctly and still never show up on screen. Say it instead of leaving them hunting.
+    for (const [payerId, payerName] of ctx.usedPayers) {
+      if (!ctx.entitledPayers.has(payerId)) {
+        warnings.push(
+          `Modulul PAR nu este activat pentru plătitorul „${payerName}" — rândurile importate nu vor apărea în liste ` +
+            "până când modulul nu este activat pentru el (Platform Console → module pe plătitor)."
+        );
+      }
+    }
 
     const result: ImportResult = {
       payers: payerResult,
       projects: projectResult,
       departments: deptResult,
       budgetCodes: budgetResult,
+      warnings,
     };
 
     return c.json(result);
@@ -196,297 +391,271 @@ parConfigImportRoutes.post(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Extract rows from a worksheet (by name first, then by index).
- * Row 1 = headers; rows 2..N = data.
- */
-function parseSheet(
-  wb: ExcelJS.Workbook,
-  name: string,
-  fallbackIndex: number
-): ImportRow[] {
-  const ws = wb.getWorksheet(name) ?? (fallbackIndex >= 0 ? wb.worksheets[fallbackIndex] : undefined);
-  if (!ws) return [];
-
-  const allRows: ExcelJS.Row[] = [];
-  ws.eachRow({ includeEmpty: false }, (row) => allRows.push(row));
-  if (allRows.length < 2) return []; // header-only or empty
-
-  const headerRow = allRows[0];
-  const headers: string[] = [];
-  headerRow.eachCell({ includeEmpty: true }, (cell) =>
-    headers.push(String(cell.value ?? "").trim())
-  );
-
-  return allRows.slice(1).map((row, idx) => {
-    const data: Record<string, string> = {};
-    headers.forEach((h, i) => {
-      const cell = row.getCell(i + 1);
-      data[h] = cellToString(cell);
-    });
-    return { row: idx + 2, data }; // row index 1-based (row 1 = header)
-  });
+function emptyResult(): CategoryResult {
+  return { created: 0, updated: 0, errors: [] };
 }
 
-function cellToString(cell: ExcelJS.Cell): string {
-  const v = cell.value;
-  if (v === null || v === undefined) return "";
-  if (typeof v === "object") {
-    if (v instanceof Date) return v.toISOString().slice(0, 10);
-    if ("richText" in v) {
-      return (v as { richText: { text: string }[] }).richText.map((rt) => rt.text).join("");
-    }
-    if ("result" in v) {
-      const r = (v as { result: unknown }).result;
-      return r !== null && r !== undefined ? String(r) : "";
-    }
-  }
-  return String(v);
-}
-
-/**
- * Parse a Romanian/European MDL amount string → number (or null on error).
- * Handles: "45,000" (thousands) = 45000, "45.50" (decimal) = 45.5,
- *          "1.234,56" (EU thousands + decimal) = 1234.56, "45000" = 45000.
- */
-function parseMdlAmount(raw: string): number | null {
-  // Strip currency symbols and spaces
-  let s = raw.replace(/[^\d.,]/g, "").trim();
-  if (!s) return null;
-
-  const hasDot = s.includes(".");
-  const hasComma = s.includes(",");
-
-  if (hasDot && hasComma) {
-    // Both separators: detect which is thousands vs decimal.
-    // European: "1.234,56" → dot=thousands, comma=decimal
-    // US: "1,234.56" → comma=thousands, dot=decimal
-    const lastDot = s.lastIndexOf(".");
-    const lastComma = s.lastIndexOf(",");
-    if (lastComma > lastDot) {
-      // comma is decimal separator: "1.234,56" → strip dots, replace comma
-      s = s.replace(/\./g, "").replace(",", ".");
-    } else {
-      // dot is decimal separator: "1,234.56" → strip commas
-      s = s.replace(/,/g, "");
-    }
-  } else if (hasComma && !hasDot) {
-    // Only commas: could be thousands "45,000" or decimal "45,5"
-    const parts = s.split(",");
-    if (parts.length === 2 && parts[1].length === 3 && parts[0].length > 0) {
-      // "45,000" → thousands separator
-      s = s.replace(",", "");
-    } else {
-      // "45,5" → decimal comma
-      s = s.replace(",", ".");
-    }
-  } else if (hasDot && !hasComma) {
-    // Only dots: could be thousands "1.234" or decimal "45.5"
-    const parts = s.split(".");
-    if (parts.length === 2 && parts[1].length === 3) {
-      // "1.234" → thousands, remove dot
-      s = s.replace(".", "");
-    }
-    // "45.50" → normal decimal, keep as-is
-  }
-
-  const n = parseFloat(s);
-  return isNaN(n) ? null : n;
-}
-
-/** Case-insensitive key lookup in a row's data (handles column header variants) */
-function getField(data: Record<string, string>, ...keys: string[]): string {
-  for (const key of keys) {
-    for (const [k, v] of Object.entries(data)) {
-      if (k.toLowerCase().replace(/\s*\*\s*$/, "").trim() === key.toLowerCase()) {
-        return v.trim();
-      }
-    }
-  }
-  return "";
+/** Turn an unexpected DB failure on ONE row into a row error instead of a 500 for the file. */
+function rowFailure(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return `Rândul nu a putut fi salvat: ${message}`;
 }
 
 // ─── Upsert functions ─────────────────────────────────────────────────────────
 
-async function upsertPayers(ctx: ImportCtx, rows: ImportRow[]): Promise<{ created: number; updated: number; errors: RowError[] }> {
+async function upsertPayers(ctx: ImportCtx, rows: ImportRow[]): Promise<CategoryResult> {
   const { tenantId } = ctx;
-  let created = 0; let updated = 0; const errors: RowError[] = [];
+  const res = emptyResult();
+
   for (const { row, data } of rows) {
-    const name = getField(data, "Denumire plătitor", "Plătitor / Organizație", "name");
+    const name = getField(data, ...PAYER_NAME_ALIASES);
     const legalName = getField(data, "Denumire juridică", "legalName");
     const idno = getField(data, "IDNO", "idno");
-    if (!name) { errors.push({ row, column: "Denumire plătitor", message: "Câmpul 'Denumire plătitor' este obligatoriu." }); continue; }
-    const [existing] = await db.select({ id: parPayers.id }).from(parPayers).where(and(eq(parPayers.tenantId, tenantId), eq(parPayers.name, name)));
-    if (existing) {
-      // PARQA: only touch payers the caller may access.
-      if (!(await mayAccessPayer(ctx.userId, tenantId, existing.id, ctx.role))) {
-        errors.push({ row, column: "Denumire plătitor", message: `Nu ai acces la plătitorul '${name}'.` }); continue;
+    if (!name) {
+      res.errors.push({ row, column: "Denumire plătitor", message: "Câmpul 'Denumire plătitor' este obligatoriu." });
+      continue;
+    }
+    if (name.length > MAX_NAME_LEN) {
+      res.errors.push({ row, column: "Denumire plătitor", message: `Denumirea depășește ${MAX_NAME_LEN} de caractere.` });
+      continue;
+    }
+    try {
+      const [existing] = await db.select({ id: parPayers.id }).from(parPayers).where(and(eq(parPayers.tenantId, tenantId), eq(parPayers.name, name)));
+      if (existing) {
+        // PARQA: only touch payers the caller may access.
+        if (!(await mayAccessPayer(ctx.userId, tenantId, existing.id, ctx.role))) {
+          res.errors.push({ row, column: "Denumire plătitor", message: `Nu ai acces la plătitorul '${name}'.` });
+          continue;
+        }
+        await db.update(parPayers).set({ legalName: legalName || null, idno: idno || null, active: true, updatedAt: new Date() }).where(eq(parPayers.id, existing.id));
+        res.updated++;
+      } else {
+        // PARQA: creating a NEW legal entity is a workspace-admin action (mirrors POST /api/par/payers).
+        if (!ctx.canManagePayers) {
+          res.errors.push({ row, column: "Denumire plătitor", message: "Doar un administrator de workspace poate crea plătitori noi." });
+          continue;
+        }
+        const [payer] = await db.insert(parPayers).values({ tenantId, name, legalName: legalName || null, idno: idno || null }).returning();
+        await db.insert(parPayerModules).values({ tenantId, payerId: payer.id, moduleKey: "par", enabled: true });
+        res.created++;
       }
-      await db.update(parPayers).set({ legalName: legalName || null, idno: idno || null, active: true, updatedAt: new Date() }).where(eq(parPayers.id, existing.id));
-      updated++;
-    } else {
-      // PARQA: creating a NEW legal entity is a workspace-admin action (mirrors POST /api/par/payers).
-      if (!ctx.canManagePayers) {
-        errors.push({ row, column: "Denumire plătitor", message: "Doar un administrator de workspace poate crea plătitori noi." }); continue;
-      }
-      const [payer] = await db.insert(parPayers).values({ tenantId, name, legalName: legalName || null, idno: idno || null }).returning();
-      await db.insert(parPayerModules).values({ tenantId, payerId: payer.id, moduleKey: "par", enabled: true });
-      created++;
+    } catch (err) {
+      res.errors.push({ row, column: "Denumire plătitor", message: rowFailure(err) });
     }
   }
-  return { created, updated, errors };
+  return res;
 }
 
-async function resolvePayer(tenantId: string, name: string) {
-  const conditions = [eq(parPayers.tenantId, tenantId), eq(parPayers.active, true)];
+/**
+ * Find the payer a row belongs to. With no payer column the file means "the one we work in", so
+ * prefer a payer the PAR module is enabled for — writing to an un-entitled payer saves rows that
+ * the PAR lists then filter out, which reads exactly like "the import didn't work".
+ */
+async function resolvePayer(ctx: ImportCtx, name: string) {
+  const conditions = [eq(parPayers.tenantId, ctx.tenantId), eq(parPayers.active, true)];
   if (name) conditions.push(eq(parPayers.name, name));
-  const [payer] = await db.select({ id: parPayers.id }).from(parPayers).where(and(...conditions)).orderBy(asc(parPayers.createdAt)).limit(1);
-  return payer ?? null;
+  const payers = await db
+    .select({ id: parPayers.id, name: parPayers.name })
+    .from(parPayers)
+    .where(and(...conditions))
+    .orderBy(asc(parPayers.createdAt));
+  if (!payers.length) return null;
+  const payer = payers.find((p) => ctx.entitledPayers.has(p.id)) ?? payers[0];
+  ctx.usedPayers.set(payer.id, payer.name);
+  return payer;
 }
 
-async function upsertProjects(
-  ctx: ImportCtx,
-  rows: ImportRow[]
-): Promise<{ created: number; updated: number; errors: RowError[] }> {
+async function upsertProjects(ctx: ImportCtx, rows: ImportRow[]): Promise<CategoryResult> {
   const { tenantId } = ctx;
-  let created = 0;
-  let updated = 0;
-  const errors: RowError[] = [];
+  const res = emptyResult();
 
   for (const { row, data } of rows) {
-    const name = getField(data, "Denumire proiect", "name");
-    const donor = getField(data, "Donor / Finanțator", "donor", "Donor");
-    const payerName = getField(data, "Plătitor / Organizație", "Plătitor", "payer");
+    const name = getField(data, ...PROJECT_NAME_ALIASES);
+    const donor = getField(data, "Donor / Finanțator", "donor", "Donor", "Finanțator");
+    const payerName = getField(data, ...PAYER_ALIASES);
 
     if (!name) {
-      errors.push({ row, column: "Denumire proiect", message: "Câmpul 'Denumire proiect' este obligatoriu." });
+      res.errors.push({ row, column: "Denumire proiect", message: "Câmpul 'Denumire proiect' este obligatoriu." });
       continue;
     }
-    const payer = await resolvePayer(tenantId, payerName);
-    if (!payer) { errors.push({ row, column: "Plătitor / Organizație", message: payerName ? `Plătitorul '${payerName}' nu există.` : "Nu există un plătitor implicit. Adaugă foaia 'Plătitori'." }); continue; }
-    if (!(await mayAccessPayer(ctx.userId, tenantId, payer.id, ctx.role))) { errors.push({ row, column: "Plătitor / Organizație", message: `Nu ai acces la plătitorul '${payerName}'.` }); continue; }
+    if (name.length > MAX_NAME_LEN) {
+      res.errors.push({ row, column: "Denumire proiect", message: `Denumirea depășește ${MAX_NAME_LEN} de caractere.` });
+      continue;
+    }
 
-    // Upsert by name within tenant
-    const [existing] = await db
-      .select({ id: parProjects.id })
-      .from(parProjects)
-      .where(and(eq(parProjects.tenantId, tenantId), eq(parProjects.payerId, payer.id), eq(parProjects.name, name)));
+    try {
+      const payer = await resolvePayer(ctx, payerName);
+      if (!payer) {
+        res.errors.push({ row, column: "Plătitor / Organizație", message: payerName ? `Plătitorul '${payerName}' nu există.` : "Nu există un plătitor implicit. Adaugă foaia 'Plătitori'." });
+        continue;
+      }
+      if (!(await mayAccessPayer(ctx.userId, tenantId, payer.id, ctx.role))) {
+        res.errors.push({ row, column: "Plătitor / Organizație", message: `Nu ai acces la plătitorul '${payerName}'.` });
+        continue;
+      }
 
-    if (existing) {
-      await db
-        .update(parProjects)
-        .set({ donor: donor || null, payerId: payer.id, active: true, updatedAt: new Date() })
-        .where(and(eq(parProjects.id, existing.id), eq(parProjects.tenantId, tenantId)));
-      updated++;
-    } else {
-      await db.insert(parProjects).values({ tenantId, name, donor: donor || null, payerId: payer.id });
-      created++;
+      // Upsert by name within tenant + payer
+      const [existing] = await db
+        .select({ id: parProjects.id })
+        .from(parProjects)
+        .where(and(eq(parProjects.tenantId, tenantId), eq(parProjects.payerId, payer.id), eq(parProjects.name, name)));
+
+      if (existing) {
+        await db
+          .update(parProjects)
+          .set({ donor: donor || null, payerId: payer.id, active: true, updatedAt: new Date() })
+          .where(and(eq(parProjects.id, existing.id), eq(parProjects.tenantId, tenantId)));
+        res.updated++;
+      } else {
+        await db.insert(parProjects).values({ tenantId, name, donor: donor || null, payerId: payer.id });
+        res.created++;
+      }
+    } catch (err) {
+      res.errors.push({ row, column: "Denumire proiect", message: rowFailure(err) });
     }
   }
 
-  return { created, updated, errors };
+  return res;
 }
 
-async function upsertDepartments(
-  tenantId: string,
-  rows: ImportRow[]
-): Promise<{ created: number; updated: number; errors: RowError[] }> {
-  let created = 0;
-  let updated = 0;
-  const errors: RowError[] = [];
+async function upsertDepartments(tenantId: string, rows: ImportRow[]): Promise<CategoryResult> {
+  const res = emptyResult();
 
   for (const { row, data } of rows) {
-    const name = getField(data, "Denumire departament", "name");
+    const name = getField(data, ...DEPARTMENT_NAME_ALIASES);
 
     if (!name) {
-      errors.push({ row, column: "Denumire departament", message: "Câmpul 'Denumire departament' este obligatoriu." });
+      res.errors.push({ row, column: "Denumire departament", message: "Câmpul 'Denumire departament' este obligatoriu." });
+      continue;
+    }
+    if (name.length > MAX_NAME_LEN) {
+      res.errors.push({ row, column: "Denumire departament", message: `Denumirea depășește ${MAX_NAME_LEN} de caractere.` });
       continue;
     }
 
-    const [existing] = await db
-      .select({ id: parDepartments.id })
-      .from(parDepartments)
-      .where(and(eq(parDepartments.tenantId, tenantId), eq(parDepartments.name, name)));
+    try {
+      const [existing] = await db
+        .select({ id: parDepartments.id })
+        .from(parDepartments)
+        .where(and(eq(parDepartments.tenantId, tenantId), eq(parDepartments.name, name)));
 
-    if (existing) {
-      await db
-        .update(parDepartments)
-        .set({ active: true, updatedAt: new Date() })
-        .where(and(eq(parDepartments.id, existing.id), eq(parDepartments.tenantId, tenantId)));
-      updated++;
-    } else {
-      await db.insert(parDepartments).values({ tenantId, name });
-      created++;
+      if (existing) {
+        await db
+          .update(parDepartments)
+          .set({ active: true, updatedAt: new Date() })
+          .where(and(eq(parDepartments.id, existing.id), eq(parDepartments.tenantId, tenantId)));
+        res.updated++;
+      } else {
+        await db.insert(parDepartments).values({ tenantId, name });
+        res.created++;
+      }
+    } catch (err) {
+      res.errors.push({ row, column: "Denumire departament", message: rowFailure(err) });
     }
   }
 
-  return { created, updated, errors };
+  return res;
 }
 
 async function upsertBudgetCodes(
   ctx: ImportCtx,
-  rows: ImportRow[]
-): Promise<{ created: number; updated: number; errors: RowError[] }> {
+  rows: ImportRow[],
+  /** Projects created on the fly from a budget-code row are counted here. */
+  projectResult: CategoryResult
+): Promise<CategoryResult> {
   const { tenantId } = ctx;
-  let created = 0;
-  let updated = 0;
-  const errors: RowError[] = [];
+  const res = emptyResult();
 
   for (const { row, data } of rows) {
-    const code = getField(data, "Cod buget", "code");
-    const name = getField(data, "Denumire", "name");
-    const allocatedRaw = getField(data, "Suma alocată (MDL)", "Suma alocata (MDL)", "suma", "allocated");
-    const payerName = getField(data, "Plătitor / Organizație", "Plătitor", "payer");
-    const projectName = getField(data, "Proiect (opțional)", "Proiect", "project");
+    const rawCode = getField(data, ...CODE_ALIASES);
+    const rawName = getField(data, ...NAME_ALIASES);
+    // Real files put the whole label in the "Cod" column ("1.1 Project Coordinator (100%)").
+    const { code, name } = splitCodeAndName(rawCode, rawName);
+    const allocatedRaw = getField(data, ...ALLOCATED_ALIASES);
+    const payerName = getField(data, ...PAYER_ALIASES);
+    const projectName = getField(data, ...PROJECT_ALIASES);
 
     if (!code) {
-      errors.push({ row, column: "Cod buget", message: "Câmpul 'Cod buget' este obligatoriu." });
+      res.errors.push({ row, column: "Cod buget", message: "Câmpul 'Cod buget' este obligatoriu." });
+      continue;
+    }
+    if (code.length > MAX_CODE_LEN) {
+      res.errors.push({
+        row,
+        column: "Cod buget",
+        message: `Codul '${code.slice(0, 30)}…' are ${code.length} caractere (maxim ${MAX_CODE_LEN}). Pune doar codul în coloana „Cod" și denumirea în „Denumire".`,
+      });
       continue;
     }
     if (!name) {
-      errors.push({ row, column: "Denumire", message: "Câmpul 'Denumire' este obligatoriu." });
+      res.errors.push({ row, column: "Denumire", message: "Câmpul 'Denumire' este obligatoriu." });
       continue;
     }
-    const payer = await resolvePayer(tenantId, payerName);
-    if (!payer) { errors.push({ row, column: "Plătitor / Organizație", message: payerName ? `Plătitorul '${payerName}' nu există.` : "Nu există un plătitor implicit." }); continue; }
-    if (!(await mayAccessPayer(ctx.userId, tenantId, payer.id, ctx.role))) { errors.push({ row, column: "Plătitor / Organizație", message: `Nu ai acces la plătitorul '${payerName}'.` }); continue; }
-    let projectId: string | null = null;
-    if (projectName) {
-      const [project] = await db.select({ id: parProjects.id }).from(parProjects).where(and(
-        eq(parProjects.tenantId, tenantId), eq(parProjects.payerId, payer.id), eq(parProjects.name, projectName),
-      ));
-      if (!project) { errors.push({ row, column: "Proiect", message: `Proiectul '${projectName}' nu există la plătitorul selectat.` }); continue; }
-      projectId = project.id;
-    }
 
-    // Parse optional sum (MDL → cents).
-    // Handles Romanian/European numeric formats: "45,000" = 45000, "45.50" = 45.5, "1.234,56" = 1234.56
-    let allocatedCents = 0;
-    if (allocatedRaw) {
-      const parsed = parseMdlAmount(allocatedRaw);
-      if (parsed === null) {
-        errors.push({ row, column: "Suma alocată (MDL)", message: `Suma '${allocatedRaw}' nu este un număr valid.` });
+    try {
+      const payer = await resolvePayer(ctx, payerName);
+      if (!payer) {
+        res.errors.push({ row, column: "Plătitor / Organizație", message: payerName ? `Plătitorul '${payerName}' nu există.` : "Nu există un plătitor implicit." });
         continue;
       }
-      allocatedCents = Math.round(parsed * 100);
-    }
+      if (!(await mayAccessPayer(ctx.userId, tenantId, payer.id, ctx.role))) {
+        res.errors.push({ row, column: "Plătitor / Organizație", message: `Nu ai acces la plătitorul '${payerName}'.` });
+        continue;
+      }
 
-    const [existing] = await db
-      .select({ id: parBudgetCodes.id })
-      .from(parBudgetCodes)
-      .where(and(eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.payerId, payer.id), eq(parBudgetCodes.code, code)));
+      // The sheet may name a project that doesn't exist yet (this is how a grant budget
+      // arrives: one file, project name repeated on every line). Create it once.
+      let projectId: string | null = null;
+      if (projectName) {
+        if (projectName.length > MAX_NAME_LEN) {
+          res.errors.push({ row, column: "Proiect", message: `Denumirea proiectului depășește ${MAX_NAME_LEN} de caractere.` });
+          continue;
+        }
+        const [project] = await db.select({ id: parProjects.id }).from(parProjects).where(and(
+          eq(parProjects.tenantId, tenantId), eq(parProjects.payerId, payer.id), eq(parProjects.name, projectName),
+        ));
+        if (project) {
+          projectId = project.id;
+        } else {
+          const [created] = await db.insert(parProjects).values({ tenantId, name: projectName, payerId: payer.id }).returning({ id: parProjects.id });
+          projectId = created.id;
+          projectResult.created++;
+        }
+      }
 
-    if (existing) {
-      await db
-        .update(parBudgetCodes)
-        .set({ name, payerId: payer.id, projectId, allocatedCents, active: true, updatedAt: new Date() })
-        .where(and(eq(parBudgetCodes.id, existing.id), eq(parBudgetCodes.tenantId, tenantId)));
-      updated++;
-    } else {
-      await db.insert(parBudgetCodes).values({ tenantId, payerId: payer.id, projectId, code, name, allocatedCents, active: true });
-      created++;
+      // Parse optional sum (MDL → cents).
+      // Handles Romanian/European numeric formats: "45,000" = 45000, "45.50" = 45.5, "1.234,56" = 1234.56
+      let allocatedCents = 0;
+      if (allocatedRaw) {
+        const parsed = parseMdlAmount(allocatedRaw);
+        if (parsed === null) {
+          res.errors.push({ row, column: "Suma alocată (MDL)", message: `Suma '${allocatedRaw}' nu este un număr valid.` });
+          continue;
+        }
+        allocatedCents = Math.round(parsed * 100);
+      }
+
+      const storedName = name.slice(0, MAX_NAME_LEN);
+
+      const [existing] = await db
+        .select({ id: parBudgetCodes.id })
+        .from(parBudgetCodes)
+        .where(and(eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.payerId, payer.id), eq(parBudgetCodes.code, code)));
+
+      if (existing) {
+        await db
+          .update(parBudgetCodes)
+          .set({ name: storedName, payerId: payer.id, projectId, allocatedCents, active: true, updatedAt: new Date() })
+          .where(and(eq(parBudgetCodes.id, existing.id), eq(parBudgetCodes.tenantId, tenantId)));
+        res.updated++;
+      } else {
+        await db.insert(parBudgetCodes).values({ tenantId, payerId: payer.id, projectId, code, name: storedName, allocatedCents, active: true });
+        res.created++;
+      }
+    } catch (err) {
+      res.errors.push({ row, column: "Cod buget", message: rowFailure(err) });
     }
   }
 
-  return { created, updated, errors };
+  return res;
 }
