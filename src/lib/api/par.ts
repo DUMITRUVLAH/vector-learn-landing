@@ -1533,6 +1533,8 @@ export interface ParPrefillCandidate {
   name: string;
   idno: string | null;
   iban: string | null;
+  /** every valid account of this party — present only when the document listed 2+ */
+  ibans?: string[];
   /** true if a non-MD but ISO-13616-valid IBAN → UI shows "verificați (IBAN non-MD)" */
   ibanForeign?: boolean;
   bank: string | null;
@@ -1540,6 +1542,13 @@ export interface ParPrefillCandidate {
   legalAddress?: string | null;
   administratorName?: string | null;
   payeeType: "fizic" | "juridic" | null;
+}
+
+/** A candidate plus the context needed to render the "cine primește plata?" group list. */
+export interface ParPrefillPartyOption extends ParPrefillCandidate {
+  role: string;
+  recommended: boolean;
+  isPayer: boolean;
 }
 
 export interface ParPrefillResult {
@@ -1557,16 +1566,20 @@ export interface ParPrefillResult {
   payeeAdministrator: ParPrefillField;
   /** persoană fizică vs juridică (auto-detected; UI can override) */
   payeeType: { value: "fizic" | "juridic" | null; confidence: number };
+  /** informational only — the document type never blocks or warns any more */
   documentClass: {
     value: string | null;
     confidence: number;
     reason?: string;
-    not_financial?: boolean;
   };
   /** true when 2+ equally-plausible payees → UI must ask "Care companie e beneficiarul plății?" */
   needsClarification: boolean;
   /** the candidate payees to choose from (empty when resolved) */
   candidates: ParPrefillCandidate[];
+  /** every party found, grouped with its requisites; `recommended` marks the auto-filled one */
+  partyOptions?: ParPrefillPartyOption[];
+  /** set when the model was not reached — the UI explains why instead of a silent "(demo)" */
+  aiUnavailable?: "no_key" | "feature_disabled" | "budget_exceeded" | "api_error";
   /** the full party list the extractor found (debug / advanced UI) */
   parties?: Array<{ name: string; role: string; idno: string | null; iban: string | null }>;
   /** line items / services to pre-fill the "Articole" section (unit price in cents) */

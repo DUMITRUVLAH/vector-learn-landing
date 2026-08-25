@@ -4,7 +4,7 @@
  * T-VM1-13-1 [blocant] Extraction maps vendor_name → payeeName, amount_cents → totalCents, etc.
  * T-VM1-13-2 [blocant] Live API smoke: route mounted + exported
  * T-VM1-13-3 [normal] confidence < 0.7 → low_confidence: true on the field
- * T-VM1-13-4 [normal] not_invoice document class → not_financial: true, no crash
+ * T-VM1-13-4 [normal] document class is informational — any act type still extracts
  *
  * @vitest-environment node
  */
@@ -53,11 +53,11 @@ function mapExtractedToPrefill(fields: MockExtractedFields) {
     totalCents: fieldMap(fields.amount_cents),
     payeeIban: fieldMap(fields.iban),
     endUse: fieldMap(fields.purpose),
+    // Informational only — the class no longer gates or warns (any act type is extractable).
     documentClass: {
       value: dcValue,
       confidence: dcField?.confidence ?? 0,
       reason: dcField?.reason,
-      not_financial: dcValue === "not_invoice",
     },
   };
 }
@@ -90,7 +90,6 @@ describe("T-VM1-13-1 [blocant] Extracted fields map to PAR fields correctly", ()
     expect(result.endUse.confidence).toBe(0.85);
 
     expect(result.documentClass.value).toBe("invoice");
-    expect(result.documentClass.not_financial).toBe(false);
     expect(result.documentClass.reason).toBe("Factură cu furnizor și TVA");
   });
 
@@ -148,39 +147,27 @@ describe("T-VM1-13-3 [normal] confidence < 0.7 → low_confidence: true", () => 
   });
 });
 
-describe("T-VM1-13-4 [normal] not_invoice document class → not_financial: true", () => {
-  it("sets not_financial: true when documentClass is 'not_invoice'", () => {
+describe("T-VM1-13-4 [normal] document class is informational — it never blocks extraction", () => {
+  it("keeps the extracted fields for a non-invoice act (contract / act de primire-predare)", () => {
     const extracted: MockExtractedFields = {
-      document_class: { value: "not_invoice", confidence: 0.85, reason: "Pare un contract, nu o factură" },
+      vendor_name: { value: "Viorica Bordei", confidence: 0.9 },
+      amount_cents: { value: 47145, confidence: 0.9 },
+      iban: { value: "MD69ML000000022519094129", confidence: 0.9 },
+      document_class: { value: "not_invoice", confidence: 0.85, reason: "Act de primire-predare" },
     };
     const result = mapExtractedToPrefill(extracted);
-    expect(result.documentClass.not_financial).toBe(true);
-    expect(result.documentClass.reason).toBe("Pare un contract, nu o factură");
-    // Other fields are null — mapping still doesn't crash
-    expect(result.payeeName.value).toBeNull();
+    // The whole point of dropping the guard: a non-invoice act still prefills the form.
+    expect(result.payeeName.value).toBe("Viorica Bordei");
+    expect(result.totalCents.value).toBe(47145);
+    expect(result.payeeIban.value).toBe("MD69ML000000022519094129");
+    expect(result.documentClass.value).toBe("not_invoice");
   });
 
-  it("sets not_financial: false for 'invoice' class", () => {
-    const extracted: MockExtractedFields = {
-      document_class: { value: "invoice", confidence: 0.9 },
-    };
-    const result = mapExtractedToPrefill(extracted);
-    expect(result.documentClass.not_financial).toBe(false);
-  });
-
-  it("sets not_financial: false for 'receipt' class", () => {
-    const extracted: MockExtractedFields = {
-      document_class: { value: "receipt", confidence: 0.8 },
-    };
-    const result = mapExtractedToPrefill(extracted);
-    expect(result.documentClass.not_financial).toBe(false);
-  });
-
-  it("sets not_financial: false when document_class is null", () => {
-    const extracted: MockExtractedFields = {
-      document_class: { value: null, confidence: 0 },
-    };
-    const result = mapExtractedToPrefill(extracted);
-    expect(result.documentClass.not_financial).toBe(false);
+  it("exposes no not_financial flag any more (the warning it drove is gone)", () => {
+    for (const value of ["not_invoice", "invoice", "receipt", null]) {
+      const result = mapExtractedToPrefill({ document_class: { value, confidence: 0.8 } });
+      expect("not_financial" in result.documentClass).toBe(false);
+      expect(result.documentClass.value).toBe(value);
+    }
   });
 });

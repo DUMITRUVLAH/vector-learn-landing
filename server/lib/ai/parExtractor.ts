@@ -20,7 +20,11 @@ import type {
 const MAX_AI_TEXT_CHARS = 14000;
 
 export const PAR_MULTIPARTY_SYSTEM_PROMPT = `Ești un asistent care extrage TOATE părțile și rechizitele dintr-un document
-(contract, factură, ordin de plată, act, chitanță) pentru o cerere de plată (PAR).
+pentru o cerere de plată (PAR). Documentul poate fi ORICE tip de act: factură, cont de plată,
+contract, act de primire-predare a serviciilor, proces-verbal, deviz, ordin de plată, chitanță,
+bon, ofertă, invoice străin, formular PAR, scan/poză a oricăruia dintre ele.
+NU refuza și NU lăsa câmpurile goale doar pentru că actul nu este o factură — extrage tot ce
+apare în document, indiferent de tipul lui.
 Returnează STRICT un JSON valid, fără text adițional.
 
 REGULI ABSOLUTE:
@@ -85,6 +89,10 @@ REGULI ABSOLUTE:
    - iban: contul bancar (ex. MD.. sau IBAN străin DE..). Scrie-l fără spații dacă poți.
      Dacă în dreptul "IBAN"/"Cont" apare un număr de 13 cifre, acela e de fapt codul fiscal →
      pune-l în idno, NU în iban.
+   - ibans: dacă pentru ACEEAȘI parte documentul listează MAI MULTE conturi (ex. un cont în MDL și
+     unul în EUR/USD, sau două bănci), pune TOATE conturile acelei părți în lista "ibans" (inclusiv
+     cel din "iban", primul fiind cel principal). Nu amesteca conturile a două părți diferite —
+     fiecare cont merge la partea lângă care e tipărit. Dacă e un singur cont, "ibans" poate lipsi.
    - bank: numele băncii părții (ex. "BC Victoriabank S.A.", "Maib").
    - bic: codul SWIFT/BIC dacă există.
    - legalAddress: adresa juridică / sediul părții dacă există.
@@ -116,7 +124,9 @@ REGULI ABSOLUTE:
    redactarea și distribuirea a 3 comunicate de presă, administrarea paginilor de Facebook și
    Instagram ale evenimentului timp de o lună și acreditarea a 25 de jurnaliști."
 6. documentClass: "invoice" / "receipt" / "not_invoice" (contract/proces-verbal/poză = not_invoice).
-   NU forța "invoice" pe un document care nu e factură.
+   NU forța "invoice" pe un document care nu e factură. Eticheta e DOAR informativă și NU oprește
+   extragerea: chiar și pentru "not_invoice" completează părțile, rechizitele, suma și articolele,
+   dacă apar în document.
 7. NU decide tu cine e beneficiarul plății. Doar listează părțile cu rolul lor corect.
    Selecția finală a beneficiarului se face în alt pas.
 
@@ -125,7 +135,8 @@ Returnează DOAR JSON:
   "parties": [
     { "name": "...", "role": "executor|provider|client|bank|unknown",
       "idno": "..." sau null, "vatCode": "..." sau null,
-      "iban": "..." sau null, "bank": "..." sau null, "bic": "..." sau null,
+      "iban": "..." sau null, "ibans": ["...", "..."] sau [],
+      "bank": "..." sau null, "bic": "..." sau null,
       "legalAddress": "..." sau null, "administratorName": "..." sau null,
       "confidence": 0.0 }
   ],
@@ -178,6 +189,9 @@ export function normalizeParExtraction(json: Record<string, unknown>): ParPartie
       role,
       idno: asStringOrNull(p.idno),
       iban: asStringOrNull(p.iban),
+      ibans: Array.isArray(p.ibans)
+        ? (p.ibans.map((v) => asStringOrNull(v)).filter((v): v is string => v != null))
+        : null,
       bank: asStringOrNull(p.bank),
       bic: asStringOrNull(p.bic),
       legalAddress: asStringOrNull(p.legalAddress),
@@ -249,6 +263,9 @@ export function normalizeParExtraction(json: Record<string, unknown>): ParPartie
 
 export interface ExtractParPartiesOpts {
   imageDataUrl?: string;
+  /** Whole document (PDF) as a base64 data URL — used when the file has no usable text layer. */
+  fileDataUrl?: string;
+  fileName?: string;
   tenantId: string;
   userId?: string;
   prefillId: string;
@@ -301,13 +318,18 @@ export async function extractParParties(
 ): Promise<ParPartiesExtraction> {
   const aiText = buildAiText(text ?? "");
 
+  const hasAttachment = Boolean(opts.imageDataUrl || opts.fileDataUrl);
   const result = await callAi({
     action: "capture_extract", // reuse existing action → existing audit + stub plumbing
     systemPrompt: PAR_MULTIPARTY_SYSTEM_PROMPT,
-    userMessage: opts.imageDataUrl
-      ? "Extrage TOATE părțile din documentul din imagine."
+    userMessage: hasAttachment
+      ? aiText.trim().length > 0
+        ? `Extrage TOATE părțile din documentul atașat. Text parțial extras din el:\n\n${aiText}`
+        : "Extrage TOATE părțile din documentul atașat (scanat / fotografiat)."
       : `Extrage TOATE părțile din textul OCR:\n\n${aiText}`,
     imageDataUrl: opts.imageDataUrl,
+    fileDataUrl: opts.fileDataUrl,
+    fileName: opts.fileName,
     // 1600 (was 900): the detailed `scope` + up to 30 line items can overflow 900 tokens,
     // and a truncated JSON silently falls back to the regex stub (all extraction lost).
     maxTokens: 1600,
@@ -317,15 +339,21 @@ export async function extractParParties(
     userId: opts.userId,
   });
 
-  // STUB or non-JSON → deterministic regex parser over the SAME text.
+  // STUB (no key / disabled / budget) or API failure → deterministic regex parser over the SAME
+  // text. `unavailable` travels with the result so the UI can say WHY the AI didn't run instead
+  // of labelling a real outage "(demo)".
   if (result.isStub) {
-    return { ...parsePartiesFromText(text ?? ""), isStub: true };
+    return {
+      ...parsePartiesFromText(text ?? ""),
+      isStub: true,
+      unavailable: result.unavailable ?? "no_key",
+    };
   }
 
   try {
     const json = JSON.parse(extractJsonBlock(result.text)) as Record<string, unknown>;
     return normalizeParExtraction(json);
   } catch {
-    return { ...parsePartiesFromText(text ?? ""), isStub: true };
+    return { ...parsePartiesFromText(text ?? ""), isStub: true, unavailable: "api_error" };
   }
 }
