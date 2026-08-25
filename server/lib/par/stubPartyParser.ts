@@ -531,6 +531,8 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
       .map((l) => l.trim())
       .find((l) => isPayeeBank(l));
     const bank = bankLine ? cleanBankName(bankLine) : null;
+    const legalAddress = extractAddressSnippet(block);
+    const administratorName = extractAdministratorSnippet(block);
     const subAmt = extractSubAmount(block);
 
     const existing = partyMap.get(key);
@@ -545,6 +547,8 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
         usedIban.add(blockIban.index);
       }
       if (!existing.bank && bank) existing.bank = bank;
+      if (!existing.legalAddress && legalAddress) existing.legalAddress = legalAddress;
+      if (!existing.administratorName && administratorName) existing.administratorName = administratorName;
       if (!existing.vatCode && blockVat) existing.vatCode = blockVat.value;
       // Prefer a paid role if a later anchor disambiguates it (e.g. rechizite under "EXECUTOR").
       if (
@@ -569,6 +573,8 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
       idno: blockId?.value ?? null,
       iban: blockIban?.value ?? null,
       bank,
+      legalAddress,
+      administratorName,
       vatCode: blockVat?.value ?? null,
       isPayerHint: payerHint,
       // Lock a confidently-labelled role (a real anchor right before the name).
@@ -703,6 +709,48 @@ function cleanBankName(line: string): string {
     .trim();
   s = s.replace(/\s+/g, " ").trim();
   return (s || windowed.trim()).slice(0, MAX_BANK_NAME_LEN);
+}
+
+/** Address-context label anchors — only a LABELLED address is extracted (an unlabelled address
+ * line is too easy to confuse with something else); "prefer null over wrong" per the LLM prompt's
+ * own rule. */
+const ADDRESS_LABEL_RE =
+  /(?:cu\s+sediul(?:\s+social)?(?:\s*(?:în|in))?|sediul(?:\s+social)?(?:\s*(?:în|in))?|domiciliat[ăa]?\s*(?:în|in)|adresa(?:\s+juridic[ăa])?|registered\s*(?:address|office)|legal\s*address|beneficiary\s*address|юридическ\w*\s*адрес|\bадрес\b)\s*[:\.]?\s*/i;
+
+/** Requisites that mark the end of an address value — an address never runs into these. */
+const ADDRESS_STOP_RE =
+  /[,;]?\s*(?:IBAN\b|cod\s*fiscal\b|IDNO\b|IDNP\b|ИДНО\b|Banca\b|Bank\b|BIC\b|SWIFT\b|reprezentat\w*|denumit[ăa]?\s*în\s*continuare|в\s*лице)/i;
+
+/** Extract a bounded legal-address snippet from a party's requisite block. Windowed the same
+ * way cleanBankName is — a label match only ever pulls a short window forward, never the rest of
+ * a PDF-collapsed blob. */
+function extractAddressSnippet(block: string): string | null {
+  const m = ADDRESS_LABEL_RE.exec(block);
+  if (!m) return null;
+  const start = m.index + m[0].length;
+  const rest = block.slice(start, start + 160);
+  const stop = rest.search(ADDRESS_STOP_RE);
+  const cut = (stop >= 0 ? rest.slice(0, stop) : rest).replace(/\s+/g, " ").trim();
+  const snippet = cut.replace(/^[,:\-–\s]+/, "").replace(/[,;\s]+$/, "");
+  return snippet.length >= 4 ? snippet.slice(0, 200) : null;
+}
+
+/** Administrator/representative label anchors — same "labelled only" discipline as the address.
+ * "reprezentată de administrator dl. X" is the common MD-contract phrasing: an optional
+ * administrator/director role word can sit BETWEEN "reprezentat de" and the honorific+name. */
+const ADMINISTRATOR_LABEL_RE =
+  /(?:reprezentat[ăa]?\s+(?:de|prin)\s*(?:administrator(?:ul)?|director(?:ul)?(?:\s+general)?)?|administrator(?:ul)?|director(?:ul)?(?:\s+general)?|reprezentant(?:ul)?(?:\s+legal)?|în\s+persoana|в\s+лице)\s*[:\.]?\s*(?:dl\.|dna\.?|dnul|domnul|doamna|г-н|г-жа)?\s*/i;
+
+/** Extract a bounded "reprezentată de <Name>" style administrator name. Only accepts an
+ * immediately-following capitalized 2-3 word run (a real person name) — never a whole clause. */
+function extractAdministratorSnippet(block: string): string | null {
+  const m = ADMINISTRATOR_LABEL_RE.exec(block);
+  if (!m) return null;
+  const rest = block.slice(m.index + m[0].length, m.index + m[0].length + 60);
+  const name = rest.match(
+    /^[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+(?:\s+[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+){1,2}/,
+  );
+  return name ? name[0].trim() : null;
 }
 
 function extractScope(text: string): string | null {

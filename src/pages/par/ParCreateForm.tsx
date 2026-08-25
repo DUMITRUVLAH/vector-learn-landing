@@ -1605,6 +1605,8 @@ export function ParCreateForm() {
                 { label: "Beneficiar", field: aiPrefillResult.payeeName },
                 { label: "IDNO/IDNP", field: aiPrefillResult.payeeIdno },
                 { label: "IBAN", field: aiPrefillResult.payeeIban },
+                { label: "Bancă", field: aiPrefillResult.payeeBank },
+                { label: "Adresă", field: aiPrefillResult.payeeLegalAddress },
                 { label: "Scop", field: aiPrefillResult.endUse },
               ].map(({ label, field }) => (
                 field.value !== null && String(field.value) !== "" && (
