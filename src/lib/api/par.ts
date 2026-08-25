@@ -24,6 +24,10 @@ export type ParAttachmentKind =
   | "contract"
   | "quotation"
   | "invoice"
+  // Anexele standard din formularul PAR (listă de participanți / raport narativ / livrabile).
+  | "participants_list"
+  | "narrative_report"
+  | "deliverables"
   | "par_pdf"
   | "payment_order"
   | "other";
@@ -90,6 +94,8 @@ export interface ParAttachment {
   id: string;
   fileName: string;
   kind: ParAttachmentKind;
+  /** Numele scris de utilizator când `kind === "other"` (altfel null). */
+  kindOther?: string | null;
   uploadedBy: string | null;
   createdAt: string;
   fileUrl: string;
@@ -576,6 +582,8 @@ export interface UploadAttachmentPayload {
   file_url: string; // base64 data URL
   mime: string;
   kind?: ParAttachmentKind;
+  /** Obligatoriu în UI când `kind === "other"`: ce document e, în clar. */
+  kind_other?: string;
   size_bytes?: number;
 }
 
@@ -927,6 +935,18 @@ export async function updateParSettings(payload: Partial<Omit<ParSettings, "id" 
 
 export async function listParMembers(): Promise<{ members: ParMember[] }> {
   return api("/api/par/members");
+}
+
+/** A tenant user the admin can grant a PAR role to (PARQA-025 by-name picker). */
+export interface ParMemberCandidate {
+  id: string;
+  name: string | null;
+  email: string;
+  tenantRole: string;
+}
+
+export async function listParMemberCandidates(): Promise<{ candidates: ParMemberCandidate[] }> {
+  return api("/api/par/members/candidates");
 }
 
 export async function assignParMember(payload: {

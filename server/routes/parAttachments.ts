@@ -145,6 +145,11 @@ const parAttachmentKindValues = [
   "contract",
   "quotation",
   "invoice",
+  // Anexele standard din formularul PAR (migrarea 0140) — trebuie să rămână în sincron cu
+  // `parAttachmentKindEnum` (server/db/schema/par.ts) și cu `ParAttachmentKind` (src/lib/api/par.ts).
+  "participants_list",
+  "narrative_report",
+  "deliverables",
   "par_pdf",
   "payment_order",
   "other",
@@ -156,6 +161,8 @@ const uploadAttachmentSchema = z.object({
   file_url: z.string().min(1).max(MAX_FILE_URL_LEN),
   mime: z.string().max(100),
   kind: z.enum(parAttachmentKindValues).default("other"),
+  /** Doar pentru kind='other': ce document e, în clar. Ignorat pentru celelalte tipuri. */
+  kind_other: z.string().trim().max(200).optional(),
   size_bytes: z.number().int().min(0).default(0),
 });
 
@@ -196,6 +203,7 @@ parAttachmentsRoutes.get("/:parId/attachments", async (c) => {
       id: parAttachments.id,
       fileName: parAttachments.fileName,
       kind: parAttachments.kind,
+      kindOther: parAttachments.kindOther,
       uploadedBy: parAttachments.uploadedBy,
       createdAt: parAttachments.createdAt,
       // Note: fileUrl intentionally included for download
@@ -385,6 +393,8 @@ parAttachmentsRoutes.post(
         fileUrl: body.file_url,
         fileName: body.file_name,
         kind: body.kind,
+        // Numele liber are sens doar pentru „Altul" — pe restul tipurilor ar dubla eticheta.
+        kindOther: body.kind === "other" && body.kind_other ? body.kind_other : null,
         uploadedBy: user.id,
       })
       .returning();

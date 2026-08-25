@@ -69,6 +69,7 @@ import {
 import { downloadParPdf } from "@/lib/parPdf";
 import { openParAttachment } from "@/lib/parFiles";
 import { validateIban } from "@/lib/par/iban";
+import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
 import { cn } from "@/lib/utils";
 
 // ─── Label helpers ─────────────────────────────────────────────────────────────
@@ -1017,8 +1018,9 @@ export function ParDetailPage() {
                       <button type="button" onClick={() => openParAttachment(att.fileUrl, att.fileName, par.id, att.id)} className="max-w-full truncate text-left text-primary hover:underline" aria-label={`Deschide ${att.fileName} în browser`}>
                         {att.fileName}
                       </button>
-                      {att.kind === "par_pdf" && <span className="text-xs text-muted-foreground">(PDF generat)</span>}
-                      {att.kind === "payment_order" && <span className="text-xs text-muted-foreground">(Ordin de plată)</span>}
+                      <span className="text-xs text-muted-foreground">
+                        ({att.kind === "par_pdf" ? "PDF generat" : attachmentKindLabel(att.kind, att.kindOther)})
+                      </span>
                       {analysis && (
                         <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", analysis.status === "match" ? "bg-success/15 text-success" : "bg-warning/15 text-warning")}>
                           {analysis.status === "match" ? "Concordant" : `${analysis.warnings} diferențe`}

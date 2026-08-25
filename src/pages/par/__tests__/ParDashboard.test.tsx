@@ -20,8 +20,15 @@ vi.mock("@/router/HashRouter", () => ({
 }));
 
 vi.mock("@/components/app/AppShell", () => ({
-  AppShell: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="app-shell">{children}</div>
+  // HR365-005: the shell OWNS the page header — pageTitle and the header `actions`
+  // (incl. the "Cerere nouă" button) render through it. A mock that drops them makes
+  // every header assertion fail against a page that is actually fine.
+  AppShell: ({ children, pageTitle, actions }: { children: React.ReactNode; pageTitle?: React.ReactNode; actions?: React.ReactNode }) => (
+    <div data-testid="app-shell">
+      {pageTitle ? <h1>{pageTitle}</h1> : null}
+      {actions}
+      {children}
+    </div>
   ),
 }));
 
@@ -151,7 +158,7 @@ describe("PAR-106: Status filter (T-PAR-106-2)", () => {
 });
 
 describe("PAR-106: Role-aware sections (T-PAR-106-3)", () => {
-  it("T-PAR-106-3 [normal] shows Pending my approval section when approvals exist", async () => {
+  it("T-PAR-106-3 [normal] a pending_approval PAR appears in the single list", async () => {
     vi.spyOn(parApi, "listPar").mockResolvedValue({
       requests: [
         makeRequest({ status: "pending_approval", requestNo: "PAR-2026-0001" }),
@@ -159,13 +166,14 @@ describe("PAR-106: Role-aware sections (T-PAR-106-3)", () => {
       total: 1,
     });
     render(<ParDashboard />);
-    // Titlul secțiunii a fost redenumit în componentă („În proces de aprobare");
-    // asertarea veche („În așteptarea aprobării mele") rămăsese stale → test roșu pe main.
-    await screen.findByText("În proces de aprobare");
-    expect(screen.getByText("În proces de aprobare")).toBeInTheDocument();
+    // Secțiunile per-status („În proces de aprobare", „La finanțe") au fost scoase
+    // deliberat din dashboard — dublau lista unică (vezi comentariul din componentă).
+    // Contractul actual: cererea apare în lista unică, indiferent de status.
+    await screen.findByText("PAR-2026-0001");
+    expect(screen.getByText("PAR-2026-0001")).toBeInTheDocument();
   });
 
-  it("T-PAR-106-3 [normal] shows finance section when in_finance PAR exists", async () => {
+  it("T-PAR-106-3 [normal] an in_finance PAR appears in the single list", async () => {
     vi.spyOn(parApi, "listPar").mockResolvedValue({
       requests: [
         makeRequest({ status: "in_finance", requestNo: "PAR-2026-0005" }),
@@ -173,8 +181,8 @@ describe("PAR-106: Role-aware sections (T-PAR-106-3)", () => {
       total: 1,
     });
     render(<ParDashboard />);
-    await screen.findByText("La finanțe — în așteptarea plății");
-    expect(screen.getByText("La finanțe — în așteptarea plății")).toBeInTheDocument();
+    await screen.findByText("PAR-2026-0005");
+    expect(screen.getByText("PAR-2026-0005")).toBeInTheDocument();
   });
 
   it("T-PAR-106-3 [normal] summary cards show correct labels", () => {

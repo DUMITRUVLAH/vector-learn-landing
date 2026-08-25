@@ -1608,7 +1608,8 @@ parRoutes.post("/:id/reopen", async (c) => {
 // ─── GET /api/par/:id/dosar ─────────────────────────────────────────────────
 // VM1-12: Combined dosar PDF — PAR form pages + supporting attachments + payment order.
 // Uses pdf-lib via DYNAMIC import() only (never top-level — exceljs/PAR-port lesson).
-// Document order: par_pdf → contract → act_of_receipt → quotation → invoice → payment_order → other.
+// Document order: par_pdf → contract → act_of_receipt → quotation → invoice →
+// participants_list → narrative_report → deliverables → payment_order → other.
 // Non-PDF attachments (images, DOCX, XLSX) appear as separator pages only.
 // Romanian diacritics are preserved via pdf-lib UTF-8 support.
 
@@ -1618,6 +1619,9 @@ const DOSAR_ORDER: string[] = [
   "act_of_receipt",
   "quotation",
   "invoice",
+  "participants_list",
+  "narrative_report",
+  "deliverables",
   "payment_order",
   "other",
 ];
@@ -1628,7 +1632,10 @@ function kindLabel(kind: string): string {
     contract: "Contract",
     act_of_receipt: "Act de recepție",
     quotation: "Ofertă / Deviz",
-    invoice: "Factură",
+    invoice: "Factură fiscală",
+    participants_list: "Listă de participanți",
+    narrative_report: "Raport narativ",
+    deliverables: "Livrabile",
     payment_order: "Ordin de plată",
     other: "Altele",
   };
@@ -1834,15 +1841,19 @@ parRoutes.get("/:id/dosar", async (c) => {
     return c.body(Buffer.from(pdfBytes));
   }
 
-  let currentKind: string | null = null;
+  let currentSection: string | null = null;
 
   for (const att of attachments) {
     const kind = att.kind ?? "other";
+    // Pentru „Altul", separatorul poartă numele scris de solicitant („Certificat de
+    // conformitate"), nu genericul „Altele" — altfel dosarul nu spune ce e documentul.
+    const section =
+      kind === "other" && att.kindOther?.trim() ? att.kindOther.trim() : kindLabel(kind);
 
-    // Add a section separator when the kind changes
-    if (kind !== currentKind) {
-      currentKind = kind;
-      await addSeparator(kindLabel(kind));
+    // Add a section separator when the section changes
+    if (section !== currentSection) {
+      currentSection = section;
+      await addSeparator(section);
     }
 
     const fileUrl = att.fileUrl ?? "";

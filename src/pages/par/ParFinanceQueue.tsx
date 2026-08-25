@@ -57,6 +57,7 @@ import {
   type PayPayload,
 } from "@/lib/api/par";
 import { openParAttachment } from "@/lib/parFiles";
+import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
 import { useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
 
@@ -467,17 +468,6 @@ function CopyValue({ display, copyValue, label, mono, maxWidthClass }: CopyValue
 // The queue list carries only attachment METADATA; file bodies (data-URLs) are fetched
 // when the modal opens, via the existing GET /api/par/:id/attachments.
 
-// Same labels as server-side kindLabel() in server/routes/par.ts (dosar separators).
-const ATTACHMENT_KIND_LABELS: Record<string, string> = {
-  par_pdf: "Formularul PAR",
-  contract: "Contract",
-  act_of_receipt: "Act de recepție",
-  quotation: "Ofertă / Deviz",
-  invoice: "Factură",
-  payment_order: "Ordin de plată",
-  other: "Altele",
-};
-
 interface AttachmentsModalProps {
   par: ParFinanceQueueItem;
   onClose: () => void;
@@ -554,7 +544,7 @@ function AttachmentsModal({ par, onClose }: AttachmentsModalProps) {
                     {att.fileName}
                   </button>
                   <span className="text-xs text-muted-foreground">
-                    {ATTACHMENT_KIND_LABELS[att.kind] ?? att.kind}
+                    {attachmentKindLabel(att.kind, att.kindOther)}
                   </span>
                 </div>
               </li>
