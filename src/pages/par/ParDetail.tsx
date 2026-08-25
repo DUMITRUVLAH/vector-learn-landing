@@ -15,7 +15,7 @@
  *
  * CORE: backlog/par/PAR-CORE.md §4 (state machine), §6 (screens)
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   FileText,
   Download,
@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  AlertTriangle,
   ArrowLeft,
   Clock,
   Edit2,
@@ -67,6 +68,8 @@ import {
 } from "@/lib/api/par";
 import { downloadParPdf } from "@/lib/parPdf";
 import { openParAttachment } from "@/lib/parFiles";
+import { validateIban } from "@/lib/par/iban";
+import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
 import { cn } from "@/lib/utils";
 
 // ─── Label helpers ─────────────────────────────────────────────────────────────
@@ -738,6 +741,16 @@ export function ParDetailPage() {
     : "/business/par";
 
   const [par, setPar] = useState<ParDetailType | null>(null);
+  /**
+   * Verificarea IBAN-ului se face la AFIȘARE, nu se stochează: cererea poate fi trimisă cu
+   * rechizite care nu trec validarea (atenționăm, nu blocăm), deci semnalul trebuie recalculat
+   * din aceeași bibliotecă oriunde e arătat IBAN-ul.
+   */
+  const payeeIbanInfo = useMemo(
+    () => (par?.payeeIban ? validateIban(par.payeeIban) : null),
+    [par?.payeeIban]
+  );
+  const payeeIbanWarning = payeeIbanInfo && !payeeIbanInfo.ok ? payeeIbanInfo.message : null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
@@ -949,14 +962,39 @@ export function ParDetailPage() {
           </p>
         </Section>
 
-        {/* SECTION 12: Payee */}
+        {/* SECTION 12: Payee
+            Formularul lasă cererea să plece chiar dacă rechizitele nu trec verificarea (formatele
+            internaționale sunt prea variate ca să blocăm — decizie owner 2026-08-21). Semnalul nu
+            se pierde însă: apare AICI, unde îl văd aprobatorii și finanțele, adică exact oamenii
+            care pot opri o plată greșită. */}
         <Section num="12" title="Beneficiar plată (Vendor)">
           <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3">
             <Field label="Nume" value={par.payeeName} />
-            <Field label="IDNP" value={par.payeeIdnp ? <code className="text-xs">{par.payeeIdnp}</code> : null} />
-            <Field label="IBAN" value={par.payeeIban ? <code className="text-xs">{par.payeeIban}</code> : null} />
+            <Field
+              label={payeeIbanInfo?.isForeign ? "Cod fiscal / VAT" : "IDNP"}
+              value={par.payeeIdnp ? <code className="text-xs">{par.payeeIdnp}</code> : null}
+            />
+            <Field
+              label="IBAN"
+              value={par.payeeIban ? (
+                <span className="flex flex-col gap-0.5">
+                  <code className="text-xs">{par.payeeIban}</code>
+                  {payeeIbanInfo?.isForeign && (
+                    <span className="text-xs text-muted-foreground">
+                      internațional — {payeeIbanInfo.countryName} (SWIFT/SEPA)
+                    </span>
+                  )}
+                </span>
+              ) : null}
+            />
             <Field label="Bancă" value={par.payeeBank} />
           </dl>
+          {payeeIbanWarning && (
+            <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground" role="status">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
+              <span>Verifică IBAN-ul înainte de plată: {payeeIbanWarning}</span>
+            </p>
+          )}
         </Section>
 
         {/* SECTION 13: Attachments */}
@@ -980,8 +1018,9 @@ export function ParDetailPage() {
                       <button type="button" onClick={() => openParAttachment(att.fileUrl, att.fileName, par.id, att.id)} className="max-w-full truncate text-left text-primary hover:underline" aria-label={`Deschide ${att.fileName} în browser`}>
                         {att.fileName}
                       </button>
-                      {att.kind === "par_pdf" && <span className="text-xs text-muted-foreground">(PDF generat)</span>}
-                      {att.kind === "payment_order" && <span className="text-xs text-muted-foreground">(Ordin de plată)</span>}
+                      <span className="text-xs text-muted-foreground">
+                        ({att.kind === "par_pdf" ? "PDF generat" : attachmentKindLabel(att.kind, att.kindOther)})
+                      </span>
                       {analysis && (
                         <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", analysis.status === "match" ? "bg-success/15 text-success" : "bg-warning/15 text-warning")}>
                           {analysis.status === "match" ? "Concordant" : `${analysis.warnings} diferențe`}

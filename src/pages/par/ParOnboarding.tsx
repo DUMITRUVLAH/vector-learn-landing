@@ -18,10 +18,28 @@ import {
   getParSettings, updateParSettings,
   listDepartments, createDepartment,
   listBudgetCodes, createBudgetCode,
+  listPayers, createPayer,
+  createParInvite,
+  type ParRole,
 } from "@/lib/api/par";
 
 type Step = 1 | 2 | 3;
 const TOTAL_STEPS = 3;
+
+/** VF-003bis: team invites straight from the wizard (the API existed, the step said "coming soon"). */
+interface Invitee {
+  email: string;
+  role: ParRole;
+}
+
+const INVITE_ROLE_OPTIONS: Array<{ value: ParRole; label: string }> = [
+  { value: "requestor", label: "Solicitant — creează cereri" },
+  { value: "approver", label: "Aprobator — aprobă cereri" },
+  { value: "finance", label: "Finanțe — procesează plăți" },
+  { value: "par_admin", label: "Administrator — configurează tot" },
+];
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function ParOnboarding() {
   const { navigate } = useRouter();
@@ -41,6 +59,9 @@ export function ParOnboarding() {
   const [codes, setCodes] = useState<{ code: string; name: string }[]>([]);
   const [codeInput, setCodeInput] = useState("");
   const [codeNameInput, setCodeNameInput] = useState("");
+
+  // Step 3 — team invites (skippable, like everything else in the wizard)
+  const [invitees, setInvitees] = useState<Invitee[]>([]);
 
   // Load current settings (org name pre-fill) once.
   useEffect(() => {
@@ -76,7 +97,32 @@ export function ParOnboarding() {
         ...codes.filter((c) => !haveCode.has(c.code)).map((c) => createBudgetCode({ code: c.code, name: c.name })),
       ]);
 
-      // 3) Mark complete last, so a mid-way failure leaves the wizard re-runnable.
+      // 3) A payer must exist before anyone can be invited (payer scope is required) or
+      //    any PAR can be created. A brand-new org has none — make one from the org name.
+      let payerIds = (await listPayers()).items.filter((p) => p.active !== false).map((p) => p.id);
+      if (payerIds.length === 0) {
+        const created = await createPayer({ name: orgName.trim() || "Organizația mea" });
+        payerIds = [created.id];
+      }
+
+      // 4) Team invites — a re-invite for the same email just replaces the pending one, so
+      //    this is idempotent too. An email already in the org is reported, not fatal to the rest.
+      const failed: string[] = [];
+      for (const inv of invitees) {
+        try {
+          await createParInvite({ email: inv.email, par_role: inv.role, payer_ids: payerIds });
+        } catch (e) {
+          const already = e instanceof Error && e.message.includes("already_member");
+          if (!already) failed.push(inv.email);
+        }
+      }
+      if (failed.length > 0) {
+        setError(`Nu am putut trimite invitația pentru: ${failed.join(", ")}. Restul configurării e salvat — încearcă din nou sau invită mai târziu din Admin → Membri.`);
+        setFinishing(false);
+        return;
+      }
+
+      // 5) Mark complete last, so a mid-way failure leaves the wizard re-runnable.
       await updateParSettings({ onboardingComplete: true });
       navigate("/business/par");
     } catch (e) {
@@ -151,6 +197,7 @@ export function ParOnboarding() {
             {step === 3 && (
               <StepTeam
                 departments={departments} codes={codes} orgName={orgName}
+                invitees={invitees} setInvitees={setInvitees}
               />
             )}
 
@@ -320,16 +367,85 @@ function StepStructure(props: {
 
 // ─── Step 3: team ───────────────────────────────────────────────────────────────
 
-function StepTeam(props: { departments: string[]; codes: { code: string; name: string }[]; orgName: string }) {
+function StepTeam(props: {
+  departments: string[]; codes: { code: string; name: string }[]; orgName: string;
+  invitees: Invitee[]; setInvitees: (v: Invitee[]) => void;
+}) {
+  const [emailInput, setEmailInput] = useState("");
+  const [roleInput, setRoleInput] = useState<ParRole>("requestor");
+  const [inputError, setInputError] = useState<string | null>(null);
+
+  const addInvitee = () => {
+    const email = emailInput.trim().toLowerCase();
+    if (!email) return;
+    if (!EMAIL_RE.test(email)) {
+      setInputError("Adresa de email nu pare validă.");
+      return;
+    }
+    if (props.invitees.some((i) => i.email === email)) {
+      setInputError("Emailul e deja în listă.");
+      return;
+    }
+    setInputError(null);
+    props.setInvitees([...props.invitees, { email, role: roleInput }]);
+    setEmailInput("");
+  };
+
+  const roleLabel = (r: ParRole) => INVITE_ROLE_OPTIONS.find((o) => o.value === r)?.label.split(" — ")[0] ?? r;
+
   return (
     <div className="space-y-5">
       <SectionHeading icon={Users} title="Echipa"
-        subtitle="Invitarea colegilor vine în curând. Deocamdată, ești gata de pornit." />
+        subtitle="Invită-ți colegii pe email, cu rolul potrivit. Poți sări peste și invita mai târziu din Admin." />
+
+      <div>
+        <Label htmlFor="invite-email" className="mb-1.5 block">Invită un coleg</Label>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input id="invite-email" type="email" value={emailInput}
+            onChange={(e) => { setEmailInput(e.target.value); setInputError(null); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addInvitee(); } }}
+            placeholder="coleg@organizația-ta.md"
+            className="flex-1" />
+          <Select value={roleInput} onChange={(e) => setRoleInput(e.target.value as ParRole)}
+            aria-label="Rolul colegului invitat" className="sm:w-56">
+            {INVITE_ROLE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </Select>
+          <Button onClick={addInvitee} aria-label="Adaugă invitația"
+            variant="outline" size="lg" className="px-3">
+            <Plus className="h-4 w-4" aria-hidden />
+          </Button>
+        </div>
+        {inputError && <p className="mt-1 text-xs text-destructive" role="alert">{inputError}</p>}
+        {props.invitees.length > 0 && (
+          <ul className="mt-2 space-y-1.5" aria-label="Colegi de invitat">
+            {props.invitees.map((i) => (
+              <li key={i.email} className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                <span className="min-w-0 truncate text-foreground">{i.email}</span>
+                <span className="flex flex-shrink-0 items-center gap-2">
+                  <Badge variant="info">{roleLabel(i.role)}</Badge>
+                  <button type="button" aria-label={`Elimină invitația pentru ${i.email}`}
+                    onClick={() => props.setInvitees(props.invitees.filter((x) => x.email !== i.email))}
+                    className="rounded p-0.5 text-muted-foreground hover:text-destructive">
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          Invitațiile se trimit la Finalizare și rămân vizibile (cu link de copiat) în Admin → Membri.
+        </p>
+      </div>
+
       <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
         <p className="text-sm font-medium text-foreground">Rezumat configurare</p>
         <SummaryRow label="Organizație" value={props.orgName || "—"} />
         <SummaryRow label="Departamente" value={props.departments.length ? props.departments.join(", ") : "Niciunul (poți adăuga din Admin)"} />
         <SummaryRow label="Coduri de buget" value={props.codes.length ? props.codes.map((c) => c.code).join(", ") : "Niciunul (poți adăuga din Admin)"} />
+        <SummaryRow label="Invitații" value={props.invitees.length ? props.invitees.map((i) => i.email).join(", ") : "Niciuna (poți invita din Admin)"} />
       </div>
       <p className="text-sm text-muted-foreground">
         Apasă <strong className="text-foreground">Finalizează</strong> ca să salvezi configurarea și să intri în panoul de control.

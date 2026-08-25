@@ -25,8 +25,15 @@ vi.mock("@/router/HashRouter", () => ({
 }));
 
 vi.mock("@/components/app/AppShell", () => ({
-  AppShell: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="app-shell">{children}</div>
+  // HR365-005: the shell OWNS the page header — pageTitle and the header `actions`
+  // (incl. the Reîncarcă button) render through it. A mock that drops them makes
+  // every header assertion fail against a page that is actually fine.
+  AppShell: ({ children, pageTitle, actions }: { children: React.ReactNode; pageTitle?: React.ReactNode; actions?: React.ReactNode }) => (
+    <div data-testid="app-shell">
+      {pageTitle ? <h1>{pageTitle}</h1> : null}
+      {actions}
+      {children}
+    </div>
   ),
 }));
 
@@ -291,6 +298,7 @@ describe("ParFinanceQueue — VM3-01 (feedback Violeta)", () => {
       items: [
         { id: "att-1", fileName: "factura-42.pdf", kind: "invoice", uploadedBy: null, createdAt: "", fileUrl: "data:application/pdf;base64,x" },
         { id: "att-2", fileName: "contract-42.pdf", kind: "contract", uploadedBy: null, createdAt: "", fileUrl: "data:application/pdf;base64,y" },
+        { id: "att-3", fileName: "certificat.pdf", kind: "other", kindOther: "Certificat de conformitate", uploadedBy: null, createdAt: "", fileUrl: "data:application/pdf;base64,z" },
       ],
     });
 
@@ -304,7 +312,9 @@ describe("ParFinanceQueue — VM3-01 (feedback Violeta)", () => {
       expect(screen.getByText("factura-42.pdf")).toBeInTheDocument();
     });
     expect(screen.getByText("contract-42.pdf")).toBeInTheDocument();
-    expect(screen.getByText("Factură")).toBeInTheDocument(); // eticheta kind
+    expect(screen.getByText("Factură fiscală")).toBeInTheDocument(); // eticheta kind
+    // „Altul" e afișat cu numele scris de solicitant, nu cu genericul „Alt document".
+    expect(screen.getByText("Certificat de conformitate")).toBeInTheDocument();
   });
 
   it("fără documente → celula arată — și nu există buton de modal", async () => {

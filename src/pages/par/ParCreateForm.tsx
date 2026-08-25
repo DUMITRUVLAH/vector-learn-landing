@@ -7,11 +7,11 @@
  *
  * Design system: Vector 365 tokens only, light + dark, WCAG AA.
  */
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   FileText, Loader2, Plus, Trash2, Upload, X, AlertCircle, CheckCircle2, Paperclip, Save,
   Search, Building2, BookmarkPlus, BookOpen, Sparkles, Info, Pencil,
-  ClipboardList, ListChecks, AlignLeft, Wallet, ChevronDown,
+  ClipboardList, ListChecks, AlignLeft, Wallet, ChevronDown, Globe,
   type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
@@ -19,7 +19,10 @@ import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import { detectPayeeType, type PayeeType } from "@/lib/par/payeeTypeDetector";
 import { plusDays } from "@/lib/par/dates";
-import { isValidMoldovaIBAN } from "@/lib/par/ibanCheck";
+import { validateIban, validateFiscalId, isValidBic, type IbanValidation } from "@/lib/par/iban";
+import {
+  ATTACHMENT_KIND_ORDER, ATTACHMENT_KIND_LABELS, attachmentKindLabel, KIND_OTHER_MAX_LEN,
+} from "@/lib/par/attachmentKinds";
 import type { ParPayeeCandidate, ParPayeeOption } from "@/lib/par/parCandidateTypes";
 import { QuotesSection } from "@/components/par/QuotesSection";
 import { ApiError } from "@/lib/api";
@@ -43,11 +46,6 @@ import {
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
 import { Card, PastelIcon, Select, Textarea, chipToneFor } from "@/components/ds";
-
-const ATTACHMENT_KIND_LABELS: Record<ParAttachmentKind, string> = {
-  act_of_receipt: "Act de primire", contract: "Contract", quotation: "Ofertă",
-  invoice: "Factură", par_pdf: "PAR PDF", payment_order: "Ordin de plată", other: "Altul",
-};
 
 /** Why the AI could not be consulted — shown verbatim instead of a silent "(demo)" badge. */
 const AI_UNAVAILABLE_MESSAGE: Record<string, string> = {
@@ -210,6 +208,23 @@ function Field({ label, htmlFor, required, hint, error, children }: {
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Atenționare sub un câmp — galben, cu aceeași greutate vizuală ca hint-ul, nu ca eroarea roșie.
+ * Semnalează că valoarea nu se potrivește cu formatul așteptat, dar cererea poate fi trimisă
+ * oricum (decizie owner, 2026-08-21: formatele internaționale sunt prea variate ca să blocăm).
+ */
+function WarnNote({ text }: { text?: string }) {
+  if (!text) return null;
+  // Textul e pe `text-foreground` (contrast AA în ambele teme); ambra rămâne pe pictogramă și pe
+  // chenarul câmpului — `--warning` (38 92% 50%) nu trece 4.5:1 pe fundal deschis ca text mic.
+  return (
+    <p className="flex items-start gap-1 text-xs text-foreground">
+      <AlertCircle className="mt-0.5 h-3 w-3 flex-shrink-0 text-warning" aria-hidden />
+      <span>{text}</span>
+    </p>
   );
 }
 
@@ -376,6 +391,42 @@ export function ParCreateForm() {
   const [payeeAdministrator, setPayeeAdministrator] = useState("");
   // Feature 1: persoană fizică vs juridică toggle
   const [payeeType, setPayeeType] = useState<PayeeType>("juridic");
+  /**
+   * Analiza IBAN-ului tastat — o singură sursă pentru: eroarea de câmp, bifa de „valid",
+   * țara beneficiarului (care decide formatul codului fiscal) și cerințele de plată externă.
+   */
+  const ibanInfo: IbanValidation = useMemo(() => validateIban(payeeIban), [payeeIban]);
+  /** IBAN valid dintr-o altă țară → plata pleacă prin SWIFT/SEPA, nu prin transfer intern. */
+  const payeeIsForeign = ibanInfo.ok && ibanInfo.isForeign;
+  /**
+   * Codul fiscal: IDNO/IDNP e o noțiune MOLDOVENEASCĂ. Un beneficiar străin are alt format, deci
+   * câmpul acceptă orice identificator plauzibil; când nu arată a IDNO moldovenesc doar semnalăm.
+   */
+  const fiscalInfo = useMemo(
+    () => validateFiscalId(payeeIdnp, { country: ibanInfo.country ?? "MD" }),
+    [payeeIdnp, ibanInfo.country]
+  );
+  /**
+   * ATENȚIONĂRI, nu erori (decizie owner, 2026-08-21): datele beneficiarului sunt semnalate când
+   * nu se potrivesc, dar NU blochează trimiterea. Motivul: formatele internaționale sunt prea
+   * variate ca validatorul nostru să aibă mereu dreptate, iar un om cu rechizitele pe hârtie în
+   * față nu trebuie ținut în loc de o regulă. Aprobatorii și finanțele văd aceleași semnale pe
+   * cerere — acolo e gardul real, înainte de plată.
+   */
+  const payeeWarnings = useMemo(() => {
+    const w: Record<string, string> = {};
+    if (payeeIban && !ibanInfo.ok) w.payee_iban = ibanInfo.message ?? "IBAN neverificat.";
+    if (fiscalInfo.message) w.payee_idnp = fiscalInfo.message;
+    if (payeeIsForeign && purpose === "execute_payment" && !vendorId) {
+      if (!payeeBic.trim()) w.payee_bic = "Plată internațională fără BIC/SWIFT — băncile îl cer aproape întotdeauna.";
+      else if (!isValidBic(payeeBic)) w.payee_bic = "BIC/SWIFT are de obicei 8 sau 11 caractere (ex. HABAEE2X).";
+      if (!payeeLegalAddress.trim()) w.payee_address = "Plată internațională fără adresa beneficiarului — regulile SWIFT/SEPA o cer.";
+    }
+    return w;
+  }, [payeeIban, ibanInfo, fiscalInfo, payeeIsForeign, purpose, vendorId, payeeBic, payeeLegalAddress]);
+  const warningList = Object.values(payeeWarnings);
+  /** Prima apăsare pe „Trimite" cu avertismente doar le arată; a doua trimite oricum. */
+  const [warningsAcknowledged, setWarningsAcknowledged] = useState(false);
   // Beneficiary UX: pick ONE way to add the payee (manual / company registry / AI document / saved),
   // so the section isn't a wall of four tools stacked at once. `null` = show only the picker.
   const [payeeMethod, setPayeeMethod] = useState<"manual" | "registry" | "ai" | "saved" | null>(null);
@@ -383,6 +434,8 @@ export function ParCreateForm() {
   const [attachmentsPresent, setAttachmentsPresent] = useState(false);
   const [attachmentsNote, setAttachmentsNote] = useState("");
   const [uploadKind, setUploadKind] = useState<ParAttachmentKind>("contract");
+  /** Doar pentru „Altul": ce document e. Obligatoriu, altfel dosarul rămâne cu „Alt document". */
+  const [uploadKindOther, setUploadKindOther] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
   const [draftSavedMessage, setDraftSavedMessage] = useState<string | null>(null);
   const [eventSearch, setEventSearch] = useState("");
@@ -689,7 +742,8 @@ export function ParCreateForm() {
   /**
    * Fill the payee fields from a SINGLE resolved prefill result. The server already routed
    * IDNO-vs-IBAN authoritatively (choosePayee/routeIdAndIban), so the frontend no longer guesses;
-   * we keep one defensive `isValidMoldovaIBAN` guard so an invalid IBAN never lands in the box.
+   * we keep one defensive `validateIban` guard so an invalid IBAN never lands in the box. Orice
+   * țară trece — plățile pot fi internaționale, iar un IBAN estonian valid nu e o eroare.
    */
   const applyResolvedPayee = (result: ParPrefillResult) => {
     if (result.payeeName.value) {
@@ -708,10 +762,10 @@ export function ParCreateForm() {
     if (result.payeeBic?.value) setPayeeBic(String(result.payeeBic.value));
     if (result.payeeLegalAddress?.value) setPayeeLegalAddress(String(result.payeeLegalAddress.value));
     if (result.payeeAdministrator?.value) setPayeeAdministrator(String(result.payeeAdministrator.value));
-    // IBAN — defensive: only fill a structurally valid MD IBAN even though the server validated it.
+    // IBAN — defensive: umplem doar un IBAN valid ISO 13616 (orice țară), deși serverul l-a validat.
     if (result.payeeIban.value) {
       const ibanRaw = String(result.payeeIban.value).replace(/\s/g, "").toUpperCase();
-      if (isValidMoldovaIBAN(ibanRaw)) setPayeeIban(ibanRaw);
+      if (validateIban(ibanRaw).ok) setPayeeIban(ibanRaw);
     }
   };
 
@@ -749,13 +803,15 @@ export function ParCreateForm() {
   };
 
   /**
-   * The accounts of a party this form can actually submit. The PAR form accepts MD IBANs only
-   * (see validate(): payee_iban), so offering a foreign account would only produce a form error.
+   * The accounts of a party this form can actually submit. Filtered with `validateIban`, NOT with
+   * `isValidMoldovaIBAN`: de când plățile internaționale sunt acceptate (formularul și
+   * `POST /api/par` validează amândouă cu `validateIban`), un cont estonian sau german e perfect
+   * plătibil — filtrul MD-only l-ar fi ascuns tăcut din lista de conturi a beneficiarului.
    */
   const selectableAccounts = (c: { ibans?: string[]; iban: string | null }): string[] => {
     const all = c.ibans && c.ibans.length > 0 ? c.ibans : c.iban ? [c.iban] : [];
-    return [...new Set(all.map((i) => i.replace(/\s/g, "").toUpperCase()))].filter((i) =>
-      isValidMoldovaIBAN(i),
+    return [...new Set(all.map((i) => i.replace(/\s/g, "").toUpperCase()))].filter(
+      (i) => validateIban(i).ok,
     );
   };
 
@@ -772,8 +828,8 @@ export function ParCreateForm() {
     setPayeeBic(c.bic ?? "");
     setPayeeLegalAddress(c.legalAddress ?? "");
     setPayeeAdministrator(c.administratorName ?? "");
-    // Defensive IBAN guard — leave empty (→ "⚠ de verificat") if it isn't a valid MD IBAN.
-    if (c.iban && isValidMoldovaIBAN(c.iban)) {
+    // Defensive IBAN guard — lăsăm gol (→ "⚠ de verificat") dacă nu e IBAN valid (orice țară).
+    if (c.iban && validateIban(c.iban).ok) {
       setPayeeIban(c.iban.replace(/\s/g, "").toUpperCase());
     } else {
       setPayeeIban("");
@@ -938,6 +994,9 @@ export function ParCreateForm() {
     } catch { /* non-blocking */ }
   };
 
+  /** „Altul" fără nume = upload blocat (butonul rămâne inert până se completează). */
+  const uploadKindOtherMissing = uploadKind === "other" && !uploadKindOther.trim();
+
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
     // VM1-06: accept multiple files in one go (max 10 attachments per PAR).
@@ -964,6 +1023,11 @@ export function ParCreateForm() {
     ];
     const picked = Array.from(e.target.files);
     e.target.value = "";
+    // „Altul" fără nume ar ajunge în dosar ca „Alt document" — cere numele înainte de upload.
+    const kindOther = uploadKindOther.trim();
+    if (uploadKind === "other" && !kindOther) {
+      return setError("Scrie ce document este, în câmpul de lângă „Altul”, înainte de a-l încărca.");
+    }
     let slots = MAX_ATTACHMENTS - attachments.length;
     if (slots <= 0) return setError(`Maxim ${MAX_ATTACHMENTS} fișiere per cerere.`);
     if (picked.length > slots) {
@@ -982,6 +1046,7 @@ export function ParCreateForm() {
         const dataUrl = await fileToDataUrl(file);
         const att = await uploadAttachment(draftId, {
           file_name: file.name, file_url: dataUrl, mime: file.type, kind: uploadKind, size_bytes: file.size,
+          ...(uploadKind === "other" ? { kind_other: kindOther } : {}),
         });
         setAttachments((p) => [...p, att]);
         reconcileAttachment(draftId, att.id)
@@ -1037,8 +1102,8 @@ export function ParCreateForm() {
   function clientValidate(): boolean {
     const errs: Record<string, string> = {};
     if (lineItems.length === 0 || totalCents <= 0) errs.line_items = FIELD_MESSAGES.line_items;
-    if (payeeIban && !/^MD\d{2}[A-Z0-9]{20}$/.test(payeeIban)) errs.payee_iban = "IBAN invalid — format MD + 2 cifre + 20 caractere.";
-    if (payeeIdnp && !/^\d{13}$/.test(payeeIdnp)) errs.payee_idnp = "IDNP trebuie să aibă exact 13 cifre.";
+    // Formatul rechizitelor beneficiarului NU apare aici: e avertisment (payeeWarnings), nu
+    // eroare. Blocăm doar ce face cererea imposibil de procesat — articole, scop, un beneficiar.
     if (purpose === "execute_payment") {
       if (!endUse.trim()) errs.end_use = FIELD_MESSAGES.end_use;
       const hasPayee = !!vendorId || (!!payeeName.trim() && !!payeeIban.trim());
@@ -1069,6 +1134,14 @@ export function ParCreateForm() {
   const submit = async () => {
     setError(null); setFieldErrors({});
     if (!clientValidate()) return;
+    // Avertismentele nu blochează, dar nici nu trec neobservate: prima apăsare le scoate în
+    // față, a doua trimite cererea așa cum e. Un singur click în plus, fără dialog.
+    if (warningList.length > 0 && !warningsAcknowledged) {
+      setWarningsAcknowledged(true);
+      setError(null);
+      summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     setBusy(true);
     try {
       const draftId = await ensureDraft();
@@ -1141,6 +1214,22 @@ export function ParCreateForm() {
                   {summaryErrors.map(([k, v]) => <li key={k}>{v}</li>)}
                 </ul>
               )}
+            </div>
+          )}
+          {/* Atenționări: galben, nu roșu — se pot ignora conștient, spre deosebire de erori. */}
+          {warningList.length > 0 && (
+            <div role="status" className="rounded-lg border border-warning/40 bg-warning/10 text-sm text-foreground p-3 space-y-1">
+              <div className="flex items-start gap-2 font-medium">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-warning" aria-hidden />
+                <span>
+                  {warningsAcknowledged
+                    ? "Am notat — apasă din nou „Trimite pentru aprobare” ca să trimiți cererea așa cum e."
+                    : "Datele beneficiarului par incomplete. Poți trimite oricum — aprobatorii și finanțele văd aceleași semnale."}
+                </span>
+              </div>
+              <ul className="list-disc pl-9 space-y-0.5">
+                {Object.entries(payeeWarnings).map(([k, v]) => <li key={k}>{v}</li>)}
+              </ul>
             </div>
           )}
           {draftSavedMessage && (
@@ -1511,7 +1600,7 @@ export function ParCreateForm() {
         )}
 
         {/* 11 End-use */}
-        <Section n="11" title="Utilizare finală" icon={AlignLeft} hint="Descrie pe scurt ce s-a livrat sau prestat.">
+        <Section n="11" title="Utilizare finală" icon={AlignLeft} hint="Descrie detaliat și specific ce s-a livrat sau prestat — serviciul/bunul, cantitatea sau durata, perioada, locul și beneficiarii. Nu rezuma într-o singură frază generală.">
           <Field label="Descriere" htmlFor="endUse" required={purpose === "execute_payment"} error={fieldErrors.end_use}>
             <Textarea id="endUse" rows={4}
               placeholder="Descrie detaliat serviciile/bunurile primite — ex. „Servicii de consultanță psihologică de grup, organizate în cadrul proiectului Digital Safeguard, cu durata de 120–180 min, pe platforma Zoom, pentru beneficiarii proiectului.”"
@@ -1895,38 +1984,87 @@ export function ParCreateForm() {
                     }}
                   />
                 </Field>
+                {/* Codul fiscal: eticheta, hint-ul și lungimea urmează ȚARA beneficiarului.
+                    „IDNP, exact 13 cifre" e regula moldovenească — un furnizor estonian are 11
+                    cifre, unul german un VAT „DE123456789". */}
                 <Field
-                  label={payeeType === "fizic" ? "IDNP" : "IDNO"}
+                  label={payeeIsForeign ? "Cod fiscal / VAT" : payeeType === "fizic" ? "IDNP" : "IDNO"}
                   htmlFor="pi"
-                  hint="13 cifre"
+                  hint={payeeIsForeign
+                    ? `codul fiscal din ${ibanInfo.countryName ?? "țara beneficiarului"}`
+                    : "13 cifre (MD) sau codul fiscal al unui beneficiar străin"}
                   error={fieldErrors.payee_idnp}
                 >
-                  <input id="pi" type="text" maxLength={13} placeholder="2008001007903" value={payeeIdnp}
+                  {/* maxLength 50, nu 13: un cod străin poate fi tastat înaintea IBAN-ului, iar
+                      trunchierea la 13 ar strica tăcut valoarea. */}
+                  <input id="pi" type="text" maxLength={50}
+                    placeholder={payeeIsForeign ? "ex. DE123456789" : "2008001007903"} value={payeeIdnp}
                     className={cn(inputCls, fieldErrors.payee_idnp && "border-destructive")}
                     onChange={(e) => { setPayeeIdnp(e.target.value); setFieldErrors((p) => ({ ...p, payee_idnp: "" })); }} />
+                  <WarnNote text={payeeWarnings.payee_idnp} />
                 </Field>
-                <Field label="IBAN" htmlFor="pb" hint="MD + 2 cifre + 20 caractere" error={fieldErrors.payee_iban} required={purpose === "execute_payment" && !vendorId}>
+                {/* IBAN: acceptăm orice țară din registrul ISO 13616, nu doar MD — plățile pot fi
+                    internaționale. Hint-ul devine specific țării de îndată ce o recunoaștem. */}
+                <Field
+                  label="IBAN"
+                  htmlFor="pb"
+                  hint={ibanInfo.country && ibanInfo.expectedLength
+                    ? `${ibanInfo.country} — ${ibanInfo.expectedLength} caractere`
+                    : "orice țară (MD, RO, EE, DE…)"}
+                  required={purpose === "execute_payment" && !vendorId}
+                >
                   <div className="relative">
+                    {/* Chenar galben, nu roșu: un IBAN care nu trece verificarea e semnalat, dar
+                        nu oprește trimiterea — vezi payeeWarnings. */}
                     <input id="pb" type="text" maxLength={34} placeholder="MD48ML000002259A19498121" value={payeeIban}
                       aria-required={purpose === "execute_payment" && !vendorId ? true : undefined}
-                      className={cn(inputCls, "pr-9", fieldErrors.payee_iban && "border-destructive")}
-                      onChange={(e) => { setPayeeIban(e.target.value.toUpperCase()); setFieldErrors((p) => ({ ...p, payee_iban: "" })); }} />
-                    {isValidMoldovaIBAN(payeeIban) && (
+                      className={cn(inputCls, "pr-9", payeeWarnings.payee_iban && "border-warning")}
+                      onChange={(e) => setPayeeIban(e.target.value.toUpperCase())} />
+                    {ibanInfo.ok && (
                       <CheckCircle2 className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-success" aria-label="IBAN valid" />
                     )}
                   </div>
+                  <WarnNote text={payeeWarnings.payee_iban} />
                 </Field>
               </div>
+              {/* Plată internațională: spunem explicit ce se schimbă și cerem cele două requisite
+                  fără de care banca nu poate executa transferul (BIC + adresa beneficiarului). */}
+              {payeeIsForeign && (
+                <p className="flex items-start gap-1.5 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-xs text-foreground" role="status">
+                  <Globe className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                  <span>
+                    IBAN internațional ({ibanInfo.countryName ?? ibanInfo.country}) — plata pleacă prin SWIFT/SEPA.
+                    Completează <strong>BIC/SWIFT</strong> și <strong>adresa beneficiarului</strong>: băncile le cer aproape
+                    întotdeauna, iar comisionul e mai mare decât la un transfer intern.
+                  </span>
+                </p>
+              )}
               <Collapsible
                 summary="Detalii bancă & reprezentant"
                 defaultOpen
-                forceOpen={!!(payeeBank.trim() || payeeBic.trim() || payeeAdministrator.trim() || payeeLegalAddress.trim())}
+                forceOpen={payeeIsForeign || !!(payeeBank.trim() || payeeBic.trim() || payeeAdministrator.trim() || payeeLegalAddress.trim())}
               >
                 <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <Field label="Bancă" htmlFor="pbk"><input id="pbk" type="text" placeholder="ex. BC Moldindconbank S.A." className={inputCls} value={payeeBank} onChange={(e) => setPayeeBank(e.target.value)} /></Field>
-                  <Field label="BIC / SWIFT" htmlFor="pbic"><input id="pbic" type="text" placeholder="ex. MOLDMD2X" className={inputCls} value={payeeBic} onChange={(e) => setPayeeBic(e.target.value.toUpperCase())} /></Field>
+                  <Field label="Bancă" htmlFor="pbk"><input id="pbk" type="text" placeholder={payeeIsForeign ? "ex. Swedbank AS" : "ex. BC Moldindconbank S.A."} className={inputCls} value={payeeBank} onChange={(e) => setPayeeBank(e.target.value)} /></Field>
+                  <Field label="BIC / SWIFT" htmlFor="pbic" hint={payeeIsForeign ? "recomandat pentru plăți externe" : undefined}>
+                    <input id="pbic" type="text" maxLength={11} placeholder={payeeIsForeign ? "ex. HABAEE2X" : "ex. MOLDMD2X"}
+                      className={cn(inputCls, payeeWarnings.payee_bic && "border-warning")}
+                      value={payeeBic}
+                      onChange={(e) => setPayeeBic(e.target.value.toUpperCase())} />
+                    <WarnNote text={payeeWarnings.payee_bic} />
+                  </Field>
                   <Field label="Administrator / reprezentant" htmlFor="padmin"><input id="padmin" type="text" placeholder="Prenume Nume" className={inputCls} value={payeeAdministrator} onChange={(e) => setPayeeAdministrator(e.target.value)} /></Field>
-                  <Field label="Adresă juridică" htmlFor="paddr"><input id="paddr" type="text" placeholder="Localitate, stradă, număr" className={inputCls} value={payeeLegalAddress} onChange={(e) => setPayeeLegalAddress(e.target.value)} /></Field>
+                  <Field
+                    label={payeeIsForeign ? "Adresa beneficiarului" : "Adresă juridică"}
+                    htmlFor="paddr"
+                    hint={payeeIsForeign ? "stradă, oraș, țară" : undefined}
+                  >
+                    <input id="paddr" type="text" placeholder={payeeIsForeign ? "ex. Liivalaia 8, Tallinn, Estonia" : "Localitate, stradă, număr"}
+                      className={cn(inputCls, payeeWarnings.payee_address && "border-warning")}
+                      value={payeeLegalAddress}
+                      onChange={(e) => setPayeeLegalAddress(e.target.value)} />
+                    <WarnNote text={payeeWarnings.payee_address} />
+                  </Field>
                 </div>
               </Collapsible>
               {!vendorId && payeeName.trim() && payeeIban.trim() && (
@@ -1943,22 +2081,29 @@ export function ParCreateForm() {
         </Section>
 
         {/* 13 Attachments */}
-        <Section n="13" title="Documente" icon={Paperclip}>
+        <Section n="13" title="Documente" icon={Paperclip} hint="Anexează factura fiscală, contractul, actul de predare-primire, lista de participanți, raportul narativ, livrabilele — sau „Altul”, scriind ce document este.">
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Tip document" htmlFor="uk">
               <Select id="uk" className="w-full" value={uploadKind} onChange={(e) => setUploadKind(e.target.value as ParAttachmentKind)} aria-label="Tip document">
-                {(Object.entries(ATTACHMENT_KIND_LABELS) as [ParAttachmentKind, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                {ATTACHMENT_KIND_ORDER.map((k) => <option key={k} value={k}>{ATTACHMENT_KIND_LABELS[k]}</option>)}
               </Select>
             </Field>
+            {uploadKind === "other" && (
+              <Field label="Ce document este?" htmlFor="ukother" required>
+                <input id="ukother" type="text" className={inputCls} maxLength={KIND_OTHER_MAX_LEN}
+                  placeholder="ex. Certificat de conformitate"
+                  value={uploadKindOther} onChange={(e) => setUploadKindOther(e.target.value)} />
+              </Field>
+            )}
             <label className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium cursor-pointer hover:bg-secondary/80 transition-colors min-h-[44px]",
-              (uploadingFile || attachments.length >= 10) && "opacity-50 cursor-not-allowed"
+              (uploadingFile || attachments.length >= 10 || uploadKindOtherMissing) && "opacity-50 cursor-not-allowed"
             )}>
               {uploadingFile ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
               <span>Încarcă fișiere</span>
               <input type="file" multiple className="sr-only"
                 accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff,.heic,.heif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv,.rtf,.zip"
-                onChange={onUpload} disabled={uploadingFile || attachments.length >= 10} aria-label="Alege fișierele" />
+                onChange={onUpload} disabled={uploadingFile || attachments.length >= 10 || uploadKindOtherMissing} aria-label="Alege fișierele" />
             </label>
             <span className="text-xs text-muted-foreground">PDF, imagini, Word, Excel, PowerPoint, CSV, ZIP — max 10 MB · {attachments.length}/10 fișiere</span>
           </div>
@@ -1972,7 +2117,7 @@ export function ParCreateForm() {
                     <Paperclip className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-hidden />
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-foreground truncate">{a.fileName}</span>
-                      <span className="block text-xs text-muted-foreground">{ATTACHMENT_KIND_LABELS[a.kind]}</span>
+                      <span className="block text-xs text-muted-foreground">{attachmentKindLabel(a.kind, a.kindOther)}</span>
                       {analysis && <AttachmentAnalysisSummary analysis={analysis} currency={currency} />}
                     </span>
                   </span>

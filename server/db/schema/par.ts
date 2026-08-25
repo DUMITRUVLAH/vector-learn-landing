@@ -64,6 +64,11 @@ export const parAttachmentKindEnum = pgEnum("par_attachment_kind", [
   "contract",
   "quotation",
   "invoice",
+  // Anexele standard listate în formularul PAR (migrarea 0140). Enum-ul din Postgres se
+  // extinde cu ALTER TYPE … ADD VALUE, deci ordinea de aici e doar documentară.
+  "participants_list",
+  "narrative_report",
+  "deliverables",
   "par_pdf",
   "payment_order",
   "other",
@@ -323,8 +328,12 @@ export const parVendors = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 300 }).notNull(),
-    /** Moldova personal ID — 13 digits */
-    idnp: varchar("idnp", { length: 13 }),
+    /**
+     * Cod fiscal al beneficiarului. IDNO/IDNP moldovenesc = 13 cifre, dar registrul ține și
+     * beneficiari străini (personal code EE de 11 cifre, VAT DE…), deci varchar(50) + validare
+     * per țară în cod (src/lib/par/iban.ts → validateFiscalId). Migrare 0140.
+     */
+    idnp: varchar("idnp", { length: 50 }),
     /** IBAN: Moldova format MD + 22 chars */
     iban: varchar("iban", { length: 34 }),
     bank: varchar("bank", { length: 300 }),
@@ -461,7 +470,8 @@ export const parRequests = pgTable(
     /** Section 12 — payee block (vendor ref or inline snapshot) */
     vendorId: uuid("vendor_id").references(() => parVendors.id, { onDelete: "set null" }),
     payeeName: varchar("payee_name", { length: 300 }),
-    payeeIdnp: varchar("payee_idnp", { length: 13 }),
+    /** Cod fiscal beneficiar — 13 cifre la MD, alt format la beneficiari străini (migrare 0140). */
+    payeeIdnp: varchar("payee_idnp", { length: 50 }),
     payeeIban: varchar("payee_iban", { length: 34 }),
     payeeBank: varchar("payee_bank", { length: 300 }),
     /** Feature 1: persoană fizică ("fizic") sau juridică ("juridic"). Null = unset/legacy. */
@@ -582,6 +592,8 @@ export const parAttachments = pgTable(
     fileUrl: text("file_url").notNull(),
     fileName: varchar("file_name", { length: 500 }).notNull(),
     kind: parAttachmentKindEnum("kind").notNull().default("other"),
+    /** Pentru kind='other': ce document e, scris de utilizator ("Certificat de conformitate"). */
+    kindOther: varchar("kind_other", { length: 200 }),
     /** Latest non-blocking AI consistency analysis (JSON). */
     analysis: text("analysis"),
     uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
@@ -771,7 +783,8 @@ export const parPurchaseOrders = pgTable(
       .references(() => parRequests.id, { onDelete: "cascade" }),
     poNumber: varchar("po_number", { length: 50 }).notNull(),
     vendorName: varchar("vendor_name", { length: 300 }),
-    vendorIdnp: varchar("vendor_idnp", { length: 13 }),
+    /** Copiat din PAR — vezi par_requests.payee_idnp (migrare 0140). */
+    vendorIdnp: varchar("vendor_idnp", { length: 50 }),
     vendorIban: varchar("vendor_iban", { length: 34 }),
     totalCents: integer("total_cents").notNull(),
     currency: varchar("currency", { length: 3 }).notNull().default("MDL"),

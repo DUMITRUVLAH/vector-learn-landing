@@ -51,7 +51,7 @@ import {
   type ParProject,
 } from "@/lib/api/par";
 import {
-  ATTACHMENT_KIND_LABELS,
+  attachmentKindLabel,
   buildBreadcrumb,
   buildEventFolders,
   buildFolderHref,
@@ -583,7 +583,7 @@ function DocRow({ att, parId }: { att: ParAttachment; parId: string }) {
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium text-foreground">{att.fileName}</span>
         <span className="block text-xs text-muted-foreground">
-          {ATTACHMENT_KIND_LABELS[att.kind] ?? att.kind}
+          {attachmentKindLabel(att.kind, att.kindOther)}
           {att.createdAt ? ` · ${new Date(att.createdAt).toLocaleDateString("ro-MD")}` : ""}
         </span>
       </span>

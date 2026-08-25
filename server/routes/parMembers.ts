@@ -6,7 +6,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { parMembers } from "../db/schema/par";
 import { users } from "../db/schema";
@@ -18,6 +18,23 @@ import { parUuidGuard } from "../middleware/parUuidGuard";
 export const parMembersRoutes = new Hono<{ Variables: AuthVariables }>();
 
 parMembersRoutes.use("*", requireAuth);
+
+/**
+ * GET /api/par/members/candidates — tenant users an admin can grant a PAR role to.
+ * Registered BEFORE the `/:id` uuid-guard middleware: "candidates" is not a UUID, and the
+ * guard would otherwise 400 this path. Powers the by-name user picker in Admin › Membri —
+ * the old form demanded a raw UUID nobody knows (PARQA-025).
+ */
+parMembersRoutes.get("/candidates", requirePARRole("par_admin"), async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const rows = await db
+    .select({ id: users.id, name: users.name, email: users.email, tenantRole: users.role })
+    .from(users)
+    .where(eq(users.tenantId, tenantId))
+    .orderBy(asc(users.name));
+  return c.json({ candidates: rows });
+});
+
 parMembersRoutes.use("/:id", parUuidGuard("id"));
 
 const assignMemberSchema = z.object({

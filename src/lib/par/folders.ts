@@ -307,15 +307,9 @@ export function parentLocation(loc: FolderLocation): FolderLocation | null {
 
 // ─── Documents inside a PAR folder ────────────────────────────────────────────
 
-export const ATTACHMENT_KIND_LABELS: Record<string, string> = {
-  invoice: "Factură",
-  contract: "Contract",
-  quotation: "Ofertă",
-  act_of_receipt: "Act de predare-primire",
-  par_pdf: "Formular PAR (PDF)",
-  payment_order: "Ordin de plată",
-  other: "Alt document",
-};
+// O singură sursă de adevăr pentru etichete (dropdown-ul din formular, dosarele, coada de
+// finanțe) — vezi src/lib/par/attachmentKinds.ts.
+export { ATTACHMENT_KIND_LABELS, attachmentKindLabel } from "./attachmentKinds";
 
 /** Documents added by finance after approval vs. documents that justify the request. */
 export const FINANCE_KINDS = new Set(["payment_order"]);

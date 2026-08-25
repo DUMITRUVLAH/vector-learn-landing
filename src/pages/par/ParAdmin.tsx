@@ -56,6 +56,8 @@ import {
   createParDoaRow,
   deleteParDoaRow,
   listParMembers,
+  listParMemberCandidates,
+  type ParMemberCandidate,
   assignParMember,
   revokeParMember,
   getParMe,
@@ -119,6 +121,7 @@ import {
   type ParEvent,
   type RegistryCompany,
 } from "@/lib/api/par";
+import { ApiError } from "@/lib/api";
 import { useRouter } from "@/router/HashRouter";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -181,6 +184,14 @@ const ROLE_OPTIONS = [
   { value: "finance", label: "Finance" },
   { value: "par_admin", label: "PAR Admin" },
 ];
+
+/** PARQA-025: what each role can actually do — shown in the add-role form and the legend. */
+const ROLE_DESCRIPTIONS: Record<string, string> = {
+  requestor: "Creează și trimite cereri de plată; își vede doar propriile cereri.",
+  approver: "Aprobă / respinge cererile rutate către el prin matricea DOA.",
+  finance: "Procesează plățile aprobate: coada finanțe, marchează plătit, atașează dovada.",
+  par_admin: "Configurează tot: roluri, matrice DOA, date de referință, setări.",
+};
 
 // ─── Sub-tab: DOA Matrix Editor ───────────────────────────────────────────────
 
@@ -614,12 +625,24 @@ function RuleCard({ group, departments, payers, projects, members, onEdit, onDel
 
 // ─── Sub-tab: Settings ────────────────────────────────────────────────────────
 
+/** The four currencies the module actually supports (same list as the onboarding wizard). */
+const CURRENCY_OPTIONS = [
+  { value: "MDL", label: "MDL — Leu moldovenesc" },
+  { value: "EUR", label: "EUR — Euro" },
+  { value: "USD", label: "USD — Dolar american" },
+  { value: "RON", label: "RON — Leu românesc" },
+];
+
+const isHttpUrl = (v: string) => /^https?:\/\/\S+$/i.test(v);
+
 function ParSettingsForm() {
+  const { navigate } = useRouter();
   const [settings, setSettings] = useState<Partial<ParSettings>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [logoBroken, setLogoBroken] = useState(false);
 
   useEffect(() => {
     getParSettings().then((s) => {
@@ -629,6 +652,16 @@ function ParSettingsForm() {
   }, []);
 
   const handleSave = async () => {
+    // The server's zod gate rejects non-URLs with a raw 400 — say it in Romanian, before the trip.
+    for (const [val, label] of [
+      [settings.orgLogoUrl, "Logo URL"],
+      [settings.pdfHelpUrl, "URL Instrucțiuni"],
+    ] as const) {
+      if (val && !isHttpUrl(val)) {
+        setError(`${label} trebuie să fie un link complet (http:// sau https://).`);
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -661,6 +694,16 @@ function ParSettingsForm() {
 
   const thresholdMDL = (settings.microPurchaseThresholdCents ?? 1000000) / 100;
 
+  const section = (title: string, hint: string, children: React.ReactNode) => (
+    <section className="rounded-lg border border-border bg-card p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      </div>
+      {children}
+    </section>
+  );
+
   return (
     <div className="max-w-lg space-y-5">
       {error && (
@@ -670,107 +713,129 @@ function ParSettingsForm() {
         </div>
       )}
 
-      <div>
-        <label htmlFor="par-threshold" className="text-sm font-medium text-foreground block mb-1">
-          Prag micro-achiziție (MDL)
-        </label>
-        <p className="text-xs text-muted-foreground mb-2">
-          Cererile sub acest prag necesită o singură aprobare. Modificarea afectează cererile noi.
-        </p>
-        <Input
-          id="par-threshold"
-          type="number"
-          min={0}
-          step={100}
-          value={thresholdMDL}
-          onChange={(e) =>
-            setSettings((s) => ({
-              ...s,
-              microPurchaseThresholdCents: Math.round(parseFloat(e.target.value || "0") * 100),
-            }))
-          }
-          className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[44px]"
-          aria-label="Prag micro-achiziție MDL"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          Actual: {formatMDL(settings.microPurchaseThresholdCents ?? 1000000)}
-        </p>
-      </div>
+      {section("Organizație", "Apar pe formularele PAR generate și în antetul PDF-ului.", (
+        <>
+          <div>
+            <label htmlFor="par-legal-name" className="text-sm font-medium text-foreground block mb-1">
+              Denumire legală organizație
+            </label>
+            <Input
+              id="par-legal-name"
+              type="text"
+              value={settings.orgLegalName ?? ""}
+              onChange={(e) => setSettings((s) => ({ ...s, orgLegalName: e.target.value || null }))}
+              aria-label="Denumire legală organizație"
+            />
+          </div>
 
-      <div>
-        <label htmlFor="par-currency" className="text-sm font-medium text-foreground block mb-1">
-          Monedă implicită
-        </label>
-        <Input
-          id="par-currency"
-          type="text"
-          maxLength={3}
-          value={settings.defaultCurrency ?? "MDL"}
-          onChange={(e) => setSettings((s) => ({ ...s, defaultCurrency: e.target.value.toUpperCase() }))}
-          className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[44px]"
-          aria-label="Monedă implicită (cod ISO 4217)"
-        />
-      </div>
+          <div>
+            <label htmlFor="par-logo-url" className="text-sm font-medium text-foreground block mb-1">
+              Logo URL (opțional)
+            </label>
+            <div className="flex items-center gap-3">
+              <Input
+                id="par-logo-url"
+                type="url"
+                value={settings.orgLogoUrl ?? ""}
+                onChange={(e) => { setSettings((s) => ({ ...s, orgLogoUrl: e.target.value || null })); setLogoBroken(false); }}
+                placeholder="https://…/logo.png"
+                aria-label="Logo URL"
+                className="flex-1"
+              />
+              {settings.orgLogoUrl && isHttpUrl(settings.orgLogoUrl) && !logoBroken && (
+                <img
+                  src={settings.orgLogoUrl}
+                  alt="Previzualizare logo"
+                  className="h-10 w-10 flex-shrink-0 rounded-md border border-border object-contain bg-background"
+                  onError={() => setLogoBroken(true)}
+                />
+              )}
+            </div>
+            {logoBroken && (
+              <p className="mt-1 text-xs text-warning">Imaginea nu s-a putut încărca de la acest link.</p>
+            )}
+          </div>
 
-      <div>
-        <label htmlFor="par-legal-name" className="text-sm font-medium text-foreground block mb-1">
-          Denumire legală organizație
-        </label>
-        <Input
-          id="par-legal-name"
-          type="text"
-          value={settings.orgLegalName ?? ""}
-          onChange={(e) => setSettings((s) => ({ ...s, orgLegalName: e.target.value || null }))}
-          className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[44px]"
-          aria-label="Denumire legală organizație"
-        />
-      </div>
+          <div>
+            <label htmlFor="par-help-url" className="text-sm font-medium text-foreground block mb-1">
+              URL Instrucțiuni (help link PDF)
+            </label>
+            <Input
+              id="par-help-url"
+              type="url"
+              value={settings.pdfHelpUrl ?? ""}
+              onChange={(e) => setSettings((s) => ({ ...s, pdfHelpUrl: e.target.value || null }))}
+              placeholder="https://…/instrucțiuni.pdf"
+              aria-label="URL Instrucțiuni PDF"
+            />
+          </div>
+        </>
+      ))}
 
-      <div>
-        <label htmlFor="par-logo-url" className="text-sm font-medium text-foreground block mb-1">
-          Logo URL (opțional)
-        </label>
-        <Input
-          id="par-logo-url"
-          type="url"
-          value={settings.orgLogoUrl ?? ""}
-          onChange={(e) => setSettings((s) => ({ ...s, orgLogoUrl: e.target.value || null }))}
-          className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[44px]"
-          aria-label="Logo URL"
-        />
-      </div>
+      {section("Cereri de plată", "Cum se numerotează și se rutează cererile noi.", (
+        <>
+          <div>
+            <label htmlFor="par-prefix" className="text-sm font-medium text-foreground block mb-1">
+              Prefix număr cerere
+            </label>
+            <Input
+              id="par-prefix"
+              type="text"
+              value={settings.requestNoPrefix ?? "PAR"}
+              onChange={(e) => setSettings((s) => ({ ...s, requestNoPrefix: e.target.value || "PAR" }))}
+              aria-label="Prefix număr cerere (ex. PAR)"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Exemplu: {(settings.requestNoPrefix ?? "PAR").toUpperCase() || "PAR"} → {(settings.requestNoPrefix ?? "PAR").toUpperCase() || "PAR"}-2026-0001
+            </p>
+          </div>
 
-      <div>
-        <label htmlFor="par-help-url" className="text-sm font-medium text-foreground block mb-1">
-          URL Instrucțiuni (help link PDF)
-        </label>
-        <Input
-          id="par-help-url"
-          type="url"
-          value={settings.pdfHelpUrl ?? ""}
-          onChange={(e) => setSettings((s) => ({ ...s, pdfHelpUrl: e.target.value || null }))}
-          className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[44px]"
-          aria-label="URL Instrucțiuni PDF"
-        />
-      </div>
+          <div>
+            <label htmlFor="par-currency" className="text-sm font-medium text-foreground block mb-1">
+              Monedă implicită
+            </label>
+            <Select
+              id="par-currency"
+              value={settings.defaultCurrency ?? "MDL"}
+              onChange={(e) => setSettings((s) => ({ ...s, defaultCurrency: e.target.value }))}
+              aria-label="Monedă implicită"
+            >
+              {CURRENCY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </Select>
+          </div>
 
-      <div>
-        <label htmlFor="par-prefix" className="text-sm font-medium text-foreground block mb-1">
-          Prefix număr cerere
-        </label>
-        <Input
-          id="par-prefix"
-          type="text"
-          value={settings.requestNoPrefix ?? "PAR"}
-          onChange={(e) => setSettings((s) => ({ ...s, requestNoPrefix: e.target.value || "PAR" }))}
-          className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 min-h-[44px]"
-          aria-label="Prefix număr cerere (ex. PAR)"
-        />
-        <p className="text-xs text-muted-foreground mt-1">Exemplu: PAR → PAR-2026-0001</p>
-      </div>
+          <div>
+            <label htmlFor="par-threshold" className="text-sm font-medium text-foreground block mb-1">
+              Prag micro-achiziție (MDL)
+            </label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Cererile sub acest prag necesită o singură aprobare. Modificarea afectează cererile noi.
+            </p>
+            <Input
+              id="par-threshold"
+              type="number"
+              min={0}
+              step={100}
+              value={thresholdMDL}
+              onChange={(e) =>
+                setSettings((s) => ({
+                  ...s,
+                  microPurchaseThresholdCents: Math.round(parseFloat(e.target.value || "0") * 100),
+                }))
+              }
+              aria-label="Prag micro-achiziție MDL"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Actual: {formatMDL(settings.microPurchaseThresholdCents ?? 1000000)}
+            </p>
+          </div>
+        </>
+      ))}
 
-      {/* VF-505: enforce 3-way match toggle */}
-      <div>
+      {section("Control financiar", "Verificări suplimentare înainte de plată.", (
+        /* VF-505: enforce 3-way match toggle */
         <label className="flex items-start gap-2.5 cursor-pointer">
           <input
             type="checkbox"
@@ -784,23 +849,20 @@ function ParSettingsForm() {
             <span className="block text-xs text-muted-foreground">Blochează plata până când există PO, recepție completă și suma e în limita comenzii (±10%).</span>
           </span>
         </label>
-      </div>
+      ))}
 
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={saving}
-        className={cn(
-          "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] transition-colors",
-          saved
-            ? "bg-success text-success-foreground"
-            : "bg-primary text-primary-foreground hover:bg-primary/90",
-          saving && "opacity-70 cursor-not-allowed"
-        )}
-      >
-        {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : saved ? <Check className="h-4 w-4" aria-hidden /> : null}
-        {saving ? "Se salvează..." : saved ? "Salvat!" : "Salvează setări"}
-      </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Button onClick={handleSave} disabled={saving} size="lg"
+          className={cn(saved && "bg-success text-success-foreground hover:bg-success/90")}>
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : saved ? <Check className="h-4 w-4" aria-hidden /> : null}
+          {saving ? "Se salvează..." : saved ? "Salvat!" : "Salvează setări"}
+        </Button>
+        {/* The wizard is idempotent (skips what exists), so re-running it is always safe. */}
+        <Button variant="ghost" onClick={() => navigate("/business/par/onboarding")}
+          className="text-muted-foreground">
+          Reia configurarea inițială
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1376,8 +1438,8 @@ const ROLE_LABELS: Record<ParMember["role"], string> = {
 
 /**
  * Self-service role panel. The admin is an implicit par_admin but, to appear in approval chains, they
- * need an explicit `approver` (or finance/requestor) row — and the generic "Adaugă rol" form demands a
- * raw UUID nobody knows. This adds a one-click "give MYSELF role X" using getParMe().userId.
+ * need an explicit `approver` (or finance/requestor) row. This is the one-click "give MYSELF
+ * role X" shortcut (the general form covers colleagues via the by-name picker).
  * (Owner: "vreau să dau rol de aprobator și mie, dar nu pot".)
  */
 const SELF_ASSIGNABLE: Array<{ value: "approver" | "finance" | "requestor"; label: string }> = [
@@ -1586,16 +1648,112 @@ function MemberAccessEditor({
   );
 }
 
+/**
+ * PARQA-025: pick a colleague by NAME or EMAIL instead of pasting their UUID.
+ * Plain combobox on ds primitives — an Input that filters, a listbox of buttons.
+ */
+function CandidatePicker({
+  candidates, memberRoles, value, onPick,
+}: {
+  candidates: ParMemberCandidate[];
+  /** userId → role labels already held (shown as a hint in the list). */
+  memberRoles: Map<string, string[]>;
+  value: ParMemberCandidate | null;
+  onPick: (c: ParMemberCandidate | null) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const filtered = candidates
+    .filter((c) => `${c.name ?? ""} ${c.email}`.toLowerCase().includes(q.trim().toLowerCase()))
+    .slice(0, 8);
+
+  if (value) {
+    return (
+      <div className="flex min-h-[40px] items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-1.5">
+        <span className="min-w-0 text-sm">
+          <span className="block truncate font-medium text-foreground">{value.name ?? value.email}</span>
+          {value.name && <span className="block truncate text-xs text-muted-foreground">{value.email}</span>}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPick(null)}
+          aria-label="Schimbă utilizatorul ales"
+          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-4 w-4" aria-hidden />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Input
+          id="member-user-picker"
+          type="text"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls="member-user-picker-list"
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Caută după nume sau email…"
+          className="pl-8"
+          aria-label="Caută utilizator după nume sau email"
+        />
+      </div>
+      {open && (
+        <ul
+          id="member-user-picker-list"
+          role="listbox"
+          aria-label="Utilizatori găsiți"
+          className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover shadow-md divide-y divide-border"
+        >
+          {filtered.length === 0 && (
+            <li className="px-3 py-2 text-sm text-muted-foreground">Niciun utilizator găsit.</li>
+          )}
+          {filtered.map((c) => {
+            const held = memberRoles.get(c.id) ?? [];
+            return (
+              <li key={c.id} role="option" aria-selected="false">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { onPick(c); setQ(""); setOpen(false); }}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-foreground">{c.name ?? c.email}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{c.email}</span>
+                  </span>
+                  {held.length > 0 && (
+                    <span className="flex-shrink-0 text-xs text-muted-foreground">{held.join(", ")}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function ParMembersTab() {
   const [members, setMembers] = useState<ParMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addForm, setAddForm] = useState<{
-    userId: string;
     role: string;
     approvalLimitCents: string;
     payerIds: string[];
-  }>({ userId: "", role: "requestor", approvalLimitCents: "", payerIds: [] });
+  }>({ role: "requestor", approvalLimitCents: "", payerIds: [] });
+  const [pickedUser, setPickedUser] = useState<ParMemberCandidate | null>(null);
+  const [candidates, setCandidates] = useState<ParMemberCandidate[]>([]);
+  const [memberSearch, setMemberSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [accessUserId, setAccessUserId] = useState<string | null>(null);
@@ -1622,28 +1780,32 @@ function ParMembersTab() {
       setDepartments(d.items ?? []);
       setPayers(payerRows.items ?? []);
     }).catch(() => { /* editor will show empty reference lists */ });
+    listParMemberCandidates()
+      .then(({ candidates: c }) => setCandidates(c))
+      .catch(() => { /* picker shows an empty list; roles can still be granted via invite */ });
   }, []);
   useEffect(() => {
     if (payers.length === 1) setAddForm((form) => ({ ...form, payerIds: form.payerIds.length ? form.payerIds : [payers[0].id] }));
   }, [payers]);
 
   const handleAdd = async () => {
-    if (!addForm.userId.trim()) {
-      setError("User ID lipsă");
+    if (!pickedUser) {
+      setError("Alege un utilizator din listă (caută după nume sau email).");
       return;
     }
     setAdding(true);
     setError(null);
     try {
       await assignParMember({
-        userId: addForm.userId.trim(),
+        userId: pickedUser.id,
         role: addForm.role as "requestor" | "approver" | "finance" | "par_admin",
         approvalLimitCents: addForm.approvalLimitCents
           ? mdlToCents(addForm.approvalLimitCents)
           : null,
       });
-      await setParMemberPayers(addForm.userId.trim(), addForm.payerIds);
-      setAddForm({ userId: "", role: "requestor", approvalLimitCents: "", payerIds: payers.length === 1 ? [payers[0].id] : [] });
+      await setParMemberPayers(pickedUser.id, addForm.payerIds);
+      setPickedUser(null);
+      setAddForm({ role: "requestor", approvalLimitCents: "", payerIds: payers.length === 1 ? [payers[0].id] : [] });
       setShowAddForm(false);
       await load();
     } catch {
@@ -1658,8 +1820,11 @@ function ParMembersTab() {
     try {
       await revokeParMember(id);
       await load();
-    } catch {
-      setError("Eroare la revocare");
+    } catch (e) {
+      // The server refuses to orphan the module: surface ITS reason, not a generic one.
+      setError(e instanceof ApiError && e.code === "last_par_admin"
+        ? "Nu poți elimina ultimul administrator PAR. Acordă rolul altcuiva mai întâi."
+        : "Eroare la revocare");
     }
   };
 
@@ -1674,6 +1839,11 @@ function ParMembersTab() {
 
   // VM1-01: group by userId so one person with multiple roles shows as one row
   const grouped = groupMembers(members);
+  // PARQA-025: quick search over the member table (name/email), client-side.
+  const visibleGrouped = memberSearch.trim()
+    ? grouped.filter((g) =>
+        `${g.userName ?? ""} ${g.userEmail ?? ""}`.toLowerCase().includes(memberSearch.trim().toLowerCase()))
+    : grouped;
 
   return (
     <div className="space-y-6">
@@ -1686,21 +1856,51 @@ function ParMembersTab() {
       {/* VF-302: approver delegation */}
       <DelegationSection members={members} />
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Utilizatori cu roluri PAR ({grouped.length} persoan{grouped.length === 1 ? "ă" : "e"}, {members.length} rol{members.length === 1 ? "" : "uri"}).
         </p>
-        <button
-          type="button"
-          onClick={() => setShowAddForm((v) => !v)}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px]"
-          aria-label="Adaugă rol PAR"
-          aria-expanded={showAddForm}
-        >
-          <Plus className="h-4 w-4" aria-hidden />
-          Adaugă rol
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input
+              type="text"
+              value={memberSearch}
+              onChange={(e) => setMemberSearch(e.target.value)}
+              placeholder="Caută membru…"
+              aria-label="Caută membru după nume sau email"
+              className="w-48 pl-8"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddForm((v) => !v)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px]"
+            aria-label="Adaugă rol PAR"
+            aria-expanded={showAddForm}
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            Adaugă rol
+          </button>
+        </div>
       </div>
+
+      {/* PARQA-025: what each role means — visible where roles are handed out. */}
+      <details className="rounded-lg border border-border bg-muted/20 px-4 py-3">
+        <summary className="cursor-pointer text-sm font-medium text-foreground">
+          Ce poate fiecare rol?
+        </summary>
+        <dl className="mt-2 space-y-1.5">
+          {ROLE_OPTIONS.map((o) => (
+            <div key={o.value} className="flex gap-2 text-sm">
+              <dt className={cn("inline-flex h-fit items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0", ROLE_BADGE_COLORS[o.value as ParMember["role"]])}>
+                {ROLE_LABELS[o.value as ParMember["role"]]}
+              </dt>
+              <dd className="text-muted-foreground">{ROLE_DESCRIPTIONS[o.value]}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
 
       {error && (
         <div role="alert" className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
@@ -1712,17 +1912,14 @@ function ParMembersTab() {
       {showAddForm && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-lg border border-primary/30 bg-primary/5">
           <div>
-            <label htmlFor="member-user-id" className="text-xs font-medium text-muted-foreground block mb-1">
-              User ID (UUID)
+            <label htmlFor="member-user-picker" className="text-xs font-medium text-muted-foreground block mb-1">
+              Utilizator
             </label>
-            <Input
-              id="member-user-id"
-              type="text"
-              value={addForm.userId}
-              onChange={(e) => setAddForm((f) => ({ ...f, userId: e.target.value }))}
-              placeholder="uuid-ul utilizatorului"
-              className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]"
-              aria-label="User ID"
+            <CandidatePicker
+              candidates={candidates}
+              memberRoles={new Map(grouped.map((g) => [g.userId, g.roles.map((r) => ROLE_LABELS[r.role])]))}
+              value={pickedUser}
+              onPick={setPickedUser}
             />
           </div>
           <div>
@@ -1740,6 +1937,9 @@ function ParMembersTab() {
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {ROLE_DESCRIPTIONS[addForm.role]}
+            </p>
           </div>
           <div>
             <label htmlFor="member-limit" className="text-xs font-medium text-muted-foreground block mb-1">
@@ -1805,14 +2005,14 @@ function ParMembersTab() {
             </tr>
           </thead>
           <tbody>
-            {grouped.length === 0 && (
+            {visibleGrouped.length === 0 && (
               <tr>
                 <td colSpan={4} className="p-6 text-center text-sm text-muted-foreground">
-                  Niciun rol atribuit.
+                  {memberSearch.trim() ? `Niciun membru nu se potrivește cu „${memberSearch.trim()}".` : "Niciun rol atribuit."}
                 </td>
               </tr>
             )}
-            {grouped.map((g) => {
+            {visibleGrouped.map((g) => {
               // approvalLimitCents: show the approver's limit if present, else any non-null
               const approverRole = g.roles.find((r) => r.role === "approver");
               const limitEntry = approverRole ?? g.roles.find((r) => r.approvalLimitCents != null);
@@ -2723,6 +2923,7 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
   const emptyVendorForm = () => ({ name: "", idnp: "", iban: "", bank: "", bic_swift: "", legal_address: "", administrator_name: "", contact_name: "", contact_phone: "", contact_email: "" });
   const [form, setForm] = useState<Record<string, string>>(emptyVendorForm());
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const doSearch = useCallback((q: string) => {
     if (q.trim().length < 2) { setRegistryResults([]); return; }
@@ -2747,12 +2948,13 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
     setShowForm(true);
   };
 
-  const startAdd = () => { setForm(emptyVendorForm()); setShowForm(true); setEditingId(null); };
+  const startAdd = () => { setForm(emptyVendorForm()); setShowForm(true); setEditingId(null); setSaveError(null); };
   const startEdit = (v: ParVendor) => { setForm({ ...emptyVendorForm(), name: v.name, idnp: v.idnp ?? "", iban: v.iban ?? "", bank: v.bank ?? "", bic_swift: v.bicSwift ?? "", legal_address: v.legalAddress ?? "", administrator_name: v.administratorName ?? "", contact_name: v.contactName ?? "", contact_phone: v.contactPhone ?? "", contact_email: v.contactEmail ?? "" }); setEditingId(v.id); setShowForm(false); };
   const cancel = () => { setShowForm(false); setEditingId(null); setForm(emptyVendorForm()); };
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       if (editingId) {
         await updateVendor(editingId, { name: form.name, idnp: form.idnp || null, iban: form.iban || null, bank: form.bank || null, bic_swift: form.bic_swift || null, legal_address: form.legal_address || null, administrator_name: form.administrator_name || null, contact_name: form.contact_name || null, contact_phone: form.contact_phone || null, contact_email: form.contact_email || null });
@@ -2761,6 +2963,10 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
       }
       await onReload();
       cancel();
+    } catch (e) {
+      // Serverul validează IBAN-ul/codul fiscal și poate răspunde 400. Fără acest catch,
+      // eroarea se pierdea și butonul „Salvează" părea că nu face nimic.
+      setSaveError(e instanceof Error ? e.message : "Beneficiarul nu a putut fi salvat.");
     } finally {
       setSaving(false);
     }
@@ -2770,8 +2976,10 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
     <div className={cn("grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5", inline && "mt-2")}>
       {([
         { id: "name", label: "Nume", placeholder: "Daria Roitman" },
-        { id: "idnp", label: "IDNP (13 cifre)", placeholder: "2008001007903" },
-        { id: "iban", label: "IBAN", placeholder: "MD48ML000002259A19498121" },
+        // IDNO/IDNP e formatul MOLDOVENESC (13 cifre); registrul ține și beneficiari străini,
+        // al căror cod fiscal are alt format — de aceea eticheta nu mai promite „13 cifre".
+        { id: "idnp", label: "IDNO / IDNP sau cod fiscal străin", placeholder: "2008001007903" },
+        { id: "iban", label: "IBAN (orice țară)", placeholder: "MD48ML000002259A19498121" },
         { id: "bank", label: "Bancă", placeholder: 'BC "Moldindconbank" S.A.' },
         { id: "bic_swift", label: "BIC / SWIFT", placeholder: "MOLDMD2X" },
         { id: "administrator_name", label: "Administrator / reprezentant", placeholder: "Prenume Nume" },
@@ -2786,6 +2994,9 @@ function VendorSection({ vendors, onReload }: VendorSectionProps) {
             placeholder={field.placeholder} className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label={field.label} />
         </div>
       ))}
+      {saveError && (
+        <p className="col-span-1 sm:col-span-2 text-xs text-destructive" role="alert">{saveError}</p>
+      )}
       <div className="col-span-1 sm:col-span-2 flex gap-2">
         <button type="button" onClick={handleSave} disabled={saving}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px]">

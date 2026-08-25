@@ -44,7 +44,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { generateRequestNo } from "../lib/par/requestNo";
-import { isValidMoldovaIBAN, isValidIDNP } from "../lib/par/validators";
+import { validateIban } from "../lib/par/validators";
 import { recalcParTotal } from "../lib/par/totals";
 import { submitPAR, buildBodyForHash } from "../lib/par/submit";
 import { autosaveVendorFromPar } from "../lib/par/vendorAutoSave";
@@ -105,7 +105,9 @@ const updateParSchema = z.object({
   end_use: z.string().max(5000).optional().nullable(),
   vendor_id: z.string().uuid().optional().nullable(),
   payee_name: z.string().max(300).optional().nullable(),
-  payee_idnp: z.string().max(13).optional().nullable(),
+  // Cod fiscal: 13 cifre pentru MD, dar un beneficiar străin are alt format (VAT DE…,
+  // personal code EE de 11 cifre). Lățimea o dă validateFiscalId, nu zod-ul.
+  payee_idnp: z.string().max(50).optional().nullable(),
   payee_iban: z.string().max(34).optional().nullable(),
   payee_bank: z.string().max(300).optional().nullable(),
   /** Feature 1: "fizic" (persoană fizică) | "juridic" (persoană juridică) */
@@ -1104,21 +1106,18 @@ parRoutes.patch(
       }
     }
 
-    // PAR-103: IBAN / IDNP validation
+    // PAR-103: IBAN + cod fiscal — ATENȚIONĂM, NU BLOCĂM (decizie owner, 2026-08-21).
+    //
+    // Regulile de format nu pot fi un zid: plățile pot fi internaționale, iar formatele străine
+    // sunt prea variate ca să le garantăm pe toate. Un solicitant care are rechizitele pe hârtie
+    // în față nu trebuie să rămână blocat pentru că validatorul nostru nu recunoaște un caz.
+    // Avertismentul se calculează din aceeași bibliotecă și se afișează în formular ȘI pe cererea
+    // trimisă (ParDetail) — deci aprobatorii și finanțele văd semnalul acolo unde contează, iar
+    // ei sunt gardul real înainte de plată.
     if (body.payee_iban) {
-      if (!isValidMoldovaIBAN(body.payee_iban)) {
-        return c.json(
-          { error: "invalid_iban: must be a valid MD IBAN (mod-97 checksum)" },
-          400
-        );
-      }
-    }
-    if (body.payee_idnp) {
-      if (!isValidIDNP(body.payee_idnp)) {
-        return c.json(
-          { error: "invalid_idnp: must be exactly 13 digits" },
-          400
-        );
+      const check = validateIban(body.payee_iban);
+      if (!check.ok) {
+        console.warn(`[par] IBAN neverificat pe ${parId}: ${check.reason} — salvat oricum (atenționare, nu blocaj)`);
       }
     }
 
@@ -1609,7 +1608,8 @@ parRoutes.post("/:id/reopen", async (c) => {
 // ─── GET /api/par/:id/dosar ─────────────────────────────────────────────────
 // VM1-12: Combined dosar PDF — PAR form pages + supporting attachments + payment order.
 // Uses pdf-lib via DYNAMIC import() only (never top-level — exceljs/PAR-port lesson).
-// Document order: par_pdf → contract → act_of_receipt → quotation → invoice → payment_order → other.
+// Document order: par_pdf → contract → act_of_receipt → quotation → invoice →
+// participants_list → narrative_report → deliverables → payment_order → other.
 // Non-PDF attachments (images, DOCX, XLSX) appear as separator pages only.
 // Romanian diacritics are preserved via pdf-lib UTF-8 support.
 
@@ -1619,6 +1619,9 @@ const DOSAR_ORDER: string[] = [
   "act_of_receipt",
   "quotation",
   "invoice",
+  "participants_list",
+  "narrative_report",
+  "deliverables",
   "payment_order",
   "other",
 ];
@@ -1629,7 +1632,10 @@ function kindLabel(kind: string): string {
     contract: "Contract",
     act_of_receipt: "Act de recepție",
     quotation: "Ofertă / Deviz",
-    invoice: "Factură",
+    invoice: "Factură fiscală",
+    participants_list: "Listă de participanți",
+    narrative_report: "Raport narativ",
+    deliverables: "Livrabile",
     payment_order: "Ordin de plată",
     other: "Altele",
   };
@@ -1835,15 +1841,19 @@ parRoutes.get("/:id/dosar", async (c) => {
     return c.body(Buffer.from(pdfBytes));
   }
 
-  let currentKind: string | null = null;
+  let currentSection: string | null = null;
 
   for (const att of attachments) {
     const kind = att.kind ?? "other";
+    // Pentru „Altul", separatorul poartă numele scris de solicitant („Certificat de
+    // conformitate"), nu genericul „Altele" — altfel dosarul nu spune ce e documentul.
+    const section =
+      kind === "other" && att.kindOther?.trim() ? att.kindOther.trim() : kindLabel(kind);
 
-    // Add a section separator when the kind changes
-    if (kind !== currentKind) {
-      currentKind = kind;
-      await addSeparator(kindLabel(kind));
+    // Add a section separator when the section changes
+    if (section !== currentSection) {
+      currentSection = section;
+      await addSeparator(section);
     }
 
     const fileUrl = att.fileUrl ?? "";

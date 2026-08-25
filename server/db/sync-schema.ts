@@ -74,10 +74,27 @@ async function main() {
     ["par_attachments", "file_url"],
     ["par_payments", "proof_url"],
   ];
+  // Migrarea 0140 lărgește codul fiscal al beneficiarului de la varchar(13) (formatul MD) la
+  // varchar(50), ca plățile internaționale să poată păstra un cod estonian/german. Migrările nu
+  // se aplică fiabil pe prod (tracking desincronizat), deci vindecăm și aici — idempotent.
+  const VARCHAR_WIDEN: Array<[string, string, number]> = [
+    ["par_vendors", "idnp", 50],
+    ["par_requests", "payee_idnp", 50],
+    ["par_purchase_orders", "vendor_idnp", 50],
+  ];
   for (const [table, col] of TEXT_WIDEN) {
     try {
       await sql.unsafe(`ALTER TABLE "${table}" ALTER COLUMN "${col}" TYPE text`);
       console.log(`[sync-schema] ~${table}.${col} → text`);
+    } catch (e) {
+      // table/column may not exist yet on a given DB — non-fatal.
+      console.warn(`[sync-schema] widen ${table}.${col} skipped:`, e instanceof Error ? e.message : e);
+    }
+  }
+  for (const [table, col, len] of VARCHAR_WIDEN) {
+    try {
+      await sql.unsafe(`ALTER TABLE "${table}" ALTER COLUMN "${col}" TYPE varchar(${len})`);
+      console.log(`[sync-schema] ~${table}.${col} → varchar(${len})`);
     } catch (e) {
       // table/column may not exist yet on a given DB — non-fatal.
       console.warn(`[sync-schema] widen ${table}.${col} skipped:`, e instanceof Error ? e.message : e);
@@ -191,6 +208,11 @@ async function main() {
     // VM1-12: finance uploads the signed payment order; code writes kind='payment_order'.
     // Prod migrations lag deploys (see docs/solutions prod-migration-desync), so heal the enum here too.
     `ALTER TYPE "public"."par_attachment_kind" ADD VALUE IF NOT EXISTS 'payment_order'`,
+    // Migrarea 0140: anexele standard din formularul PAR. Fără heal, un upload cu unul din
+    // tipurile noi 500-ează pe prod ("invalid input value for enum") până aterizează migrarea.
+    `ALTER TYPE "public"."par_attachment_kind" ADD VALUE IF NOT EXISTS 'participants_list'`,
+    `ALTER TYPE "public"."par_attachment_kind" ADD VALUE IF NOT EXISTS 'narrative_report'`,
+    `ALTER TYPE "public"."par_attachment_kind" ADD VALUE IF NOT EXISTS 'deliverables'`,
     // PLATFORM-001 (migration 0138): Consola Platformă. `login_events` e scris pe FIECARE
     // login (business + learn + Google), iar `tenant_modules` e citit la fiecare hidratare a
     // shell-ului. Prod nu aplică fiabil migrările, deci fără heal login-ul ar loga o eroare la

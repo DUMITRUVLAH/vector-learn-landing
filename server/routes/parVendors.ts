@@ -2,7 +2,8 @@
  * PAR-003: Vendor / Payee registry CRUD
  * GET/POST/PATCH/DELETE /api/par/vendors
  * GDPR-sensitive: IDNP + IBAN.
- * Validates IBAN (mod-97) + IDNP (13 digits) on write.
+ * Verifică IBAN-ul (ISO 13616, orice țară — plățile pot fi internaționale) și codul fiscal
+ * DOAR ca atenționare: scrierea nu e blocată, semnalul ajunge în formular și pe cerere.
  */
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
@@ -12,7 +13,7 @@ import { db } from "../db/client";
 import { parVendors } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
-import { isValidMoldovaIBAN, isValidIDNP } from "../lib/par/validators";
+import { validateIban } from "../lib/par/validators";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 
 export const parVendorsRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -21,7 +22,8 @@ parVendorsRoutes.use("/:id", parUuidGuard("id"));
 
 const vendorSchema = z.object({
   name: z.string().min(1).max(300),
-  idnp: z.string().max(13).optional().nullable(),
+  // Cod fiscal: 13 cifre la MD, alt format la beneficiarii străini → lățimea o dă validateFiscalId.
+  idnp: z.string().max(50).optional().nullable(),
   iban: z.string().max(34).optional().nullable(),
   bank: z.string().max(300).optional().nullable(),
   bic_swift: z.string().max(32).optional().nullable(),
@@ -36,17 +38,21 @@ const vendorSchema = z.object({
   active: z.boolean().optional(),
 });
 
-function validateVendorFields(body: {
-  idnp?: string | null;
-  iban?: string | null;
-}): { ok: false; error: string } | { ok: true } {
-  if (body.idnp && !isValidIDNP(body.idnp)) {
-    return { ok: false, error: "invalid_idnp: must be exactly 13 digits" };
+/**
+ * ATENȚIONĂM, NU BLOCĂM (decizie owner, 2026-08-21).
+ *
+ * Registrul se completează automat din formularul PAR la fiecare trimitere; dacă am respinge aici
+ * un IBAN pe care PAR-ul l-a acceptat, beneficiarul pur și simplu n-ar mai fi salvat — o eșuare
+ * tăcută, cel mai prost rezultat posibil. Semnalăm în log și lăsăm datele să intre; formularul și
+ * pagina cererii afișează avertismentul acolo unde un om îl poate corecta.
+ */
+function warnOnVendorFields(body: { idnp?: string | null; iban?: string | null }): void {
+  if (body.iban) {
+    const check = validateIban(body.iban);
+    if (!check.ok) {
+      console.warn(`[par-vendors] IBAN neverificat (${check.reason}) — salvat oricum`);
+    }
   }
-  if (body.iban && !isValidMoldovaIBAN(body.iban)) {
-    return { ok: false, error: "invalid_iban: must be a valid MD IBAN (mod-97 checksum)" };
-  }
-  return { ok: true };
 }
 
 /** GET — list all active vendors */
@@ -81,8 +87,7 @@ parVendorsRoutes.post(
     const tenantId = c.get("user").tenantId;
     const body = c.req.valid("json");
 
-    const validation = validateVendorFields(body);
-    if (!validation.ok) return c.json({ error: validation.error }, 400);
+    warnOnVendorFields(body);
 
     // VM1-05: dedup by IBAN (normalized) so saving the same beneficiary repeatedly — whether typed
     // manually or filled by AI — links to the existing registry entry instead of creating duplicates.
@@ -156,8 +161,7 @@ parVendorsRoutes.patch(
     const id = c.req.param("id");
     const body = c.req.valid("json");
 
-    const validation = validateVendorFields(body);
-    if (!validation.ok) return c.json({ error: validation.error }, 400);
+    warnOnVendorFields(body);
 
     const update = {
       ...(body.name !== undefined ? { name: body.name } : {}),
