@@ -18,6 +18,7 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { parRequests, parVendors } from "../../db/schema/par";
+import { splitBankRequisites } from "./bankRequisites";
 
 // ─── VM1-05 pure helpers ──────────────────────────────────────────────────────
 // No DB, so the dedup + normalization logic stays unit-testable on its own
@@ -95,15 +96,21 @@ export async function autosaveVendorFromPar(
     if (!par) return { outcome: "skipped", vendorId: null };
 
     const name = (par.payeeName ?? "").trim();
-    const iban = par.payeeIban ? normalizeIban(par.payeeIban) : "";
-    const idnp = (par.payeeIdnp ?? "").trim();
-    const bank = (par.payeeBank ?? "").trim();
+    // Cererile mai vechi (și documentele cu rechizitele pe un singur rând) au banca, codul bancar,
+    // codul fiscal și nr. TVA lipite în `payee_bank`. Le despicăm ÎNAINTE de a le pune în registru,
+    // altfel beneficiarul se salvează cu tot blocul de text drept nume de bancă.
+    const split = splitBankRequisites(par.payeeBank);
+    const iban = normalizeIban(par.payeeIban || split.iban || "");
+    const idnp = (par.payeeIdnp || split.fiscalCode || "").trim();
+    const bank = (split.bank ?? "").trim();
+    const bicSwift = split.bankCode ?? "";
+    const vatCode = split.vatCode ?? "";
     // A nameless payee is not a registry entry — there'd be nothing to search for later.
     if (!name) return { outcome: "skipped", vendorId: par.vendorId ?? null };
 
     // Already linked to a saved vendor → top up whatever that record is missing.
     if (par.vendorId) {
-      const updated = await enrichVendor(par.vendorId, tenantId, { iban, idnp, bank });
+      const updated = await enrichVendor(par.vendorId, tenantId, { iban, idnp, bank, bicSwift, vatCode });
       return { outcome: updated ? "updated" : "matched", vendorId: par.vendorId };
     }
 
@@ -125,7 +132,7 @@ export async function autosaveVendorFromPar(
       candidates.find((v) => normalizeName(v.name) === wantedName);
 
     if (match) {
-      const updated = await enrichVendor(match.id, tenantId, { iban, idnp, bank });
+      const updated = await enrichVendor(match.id, tenantId, { iban, idnp, bank, bicSwift, vatCode });
       await linkVendor(parId, tenantId, match.id);
       return { outcome: updated ? "updated" : "matched", vendorId: match.id };
     }
@@ -138,6 +145,8 @@ export async function autosaveVendorFromPar(
         idnp: idnp || null,
         iban: iban || null,
         bank: bank || null,
+        bicSwift: bicSwift || null,
+        vatCode: vatCode || null,
         // par_requests stores "fizic"/"juridic"; par_vendors speaks individual/company.
         kind: par.payeeType === "fizic" ? "individual" : "company",
         active: true,
@@ -157,27 +166,27 @@ export async function autosaveVendorFromPar(
 async function enrichVendor(
   vendorId: string,
   tenantId: string,
-  incoming: { iban: string; idnp: string; bank: string }
+  incoming: { iban: string; idnp: string; bank: string; bicSwift: string; vatCode: string }
 ): Promise<boolean> {
+  const [row] = await db
+    .select({
+      iban: parVendors.iban,
+      idnp: parVendors.idnp,
+      bank: parVendors.bank,
+      bicSwift: parVendors.bicSwift,
+      vatCode: parVendors.vatCode,
+    })
+    .from(parVendors)
+    .where(and(eq(parVendors.id, vendorId), eq(parVendors.tenantId, tenantId)));
+  if (!row) return false;
+
   const patch: Record<string, string | Date> = {};
-  if (incoming.iban) {
-    const [row] = await db
-      .select({ iban: parVendors.iban, idnp: parVendors.idnp, bank: parVendors.bank })
-      .from(parVendors)
-      .where(and(eq(parVendors.id, vendorId), eq(parVendors.tenantId, tenantId)));
-    if (!row) return false;
-    if (!row.iban) patch.iban = incoming.iban;
-    if (!row.idnp && incoming.idnp) patch.idnp = incoming.idnp;
-    if (!row.bank && incoming.bank) patch.bank = incoming.bank;
-  } else {
-    const [row] = await db
-      .select({ idnp: parVendors.idnp, bank: parVendors.bank })
-      .from(parVendors)
-      .where(and(eq(parVendors.id, vendorId), eq(parVendors.tenantId, tenantId)));
-    if (!row) return false;
-    if (!row.idnp && incoming.idnp) patch.idnp = incoming.idnp;
-    if (!row.bank && incoming.bank) patch.bank = incoming.bank;
-  }
+  // Doar câmpurile goale se completează — ce a curat un om rămâne cum l-a lăsat.
+  if (!row.iban && incoming.iban) patch.iban = incoming.iban;
+  if (!row.idnp && incoming.idnp) patch.idnp = incoming.idnp;
+  if (!row.bank && incoming.bank) patch.bank = incoming.bank;
+  if (!row.bicSwift && incoming.bicSwift) patch.bicSwift = incoming.bicSwift;
+  if (!row.vatCode && incoming.vatCode) patch.vatCode = incoming.vatCode;
   if (Object.keys(patch).length === 0) return false;
   patch.updatedAt = new Date();
   await db

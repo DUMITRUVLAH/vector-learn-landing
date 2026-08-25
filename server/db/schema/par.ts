@@ -337,7 +337,15 @@ export const parVendors = pgTable(
     /** IBAN: Moldova format MD + 22 chars */
     iban: varchar("iban", { length: 34 }),
     bank: varchar("bank", { length: 300 }),
+    /** Cod bancar = BIC/SWIFT; în MD se tipărește cu sufixul de filială (AGRNMD2X885). */
     bicSwift: varchar("bic_swift", { length: 32 }),
+    /**
+     * Numărul de plătitor de TVA — coloană separată de codul fiscal, la cererea contabilei:
+     * pe documente se tipăresc lipite („c.f./ nr.TVA …"), dar în evidență sunt două coduri
+     * distincte. Se completează din `splitBankRequisites` (server/lib/par/bankRequisites.ts).
+     * Migrare 0142.
+     */
+    vatCode: varchar("vat_code", { length: 50 }),
     bankAccount: varchar("bank_account", { length: 100 }),
     bankAccountCurrency: varchar("bank_account_currency", { length: 3 }),
     legalAddress: text("legal_address"),
