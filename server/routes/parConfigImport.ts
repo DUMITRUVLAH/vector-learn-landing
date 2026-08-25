@@ -31,6 +31,7 @@ import { parProjects, parDepartments, parBudgetCodes, parPayers, parPayerModules
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { mayAccessPayer } from "../lib/par/projectScope";
+import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
 import {
   ALLOCATED_ALIASES,
   CODE_ALIASES,
@@ -55,6 +56,10 @@ interface ImportCtx {
   role: string;
   /** Only a workspace admin/manager may create NEW payers (mirrors POST /api/par/payers). */
   canManagePayers: boolean;
+  /** Payers with the "par" module enabled — the only ones whose rows the PAR lists show. */
+  entitledPayers: Set<string>;
+  /** Payers the file actually wrote to, id → name, for the entitlement warning. */
+  usedPayers: Map<string, string>;
 }
 
 export const parConfigImportRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -171,6 +176,8 @@ parConfigImportRoutes.post(
       userId: user.id,
       role: user.role,
       canManagePayers: user.role === "admin" || user.role === "manager",
+      entitledPayers: new Set(await enabledPayerIds(tenantId, "par")),
+      usedPayers: new Map(),
     };
 
     let formData: FormData;
@@ -241,6 +248,17 @@ parConfigImportRoutes.post(
     const deptResult = await upsertDepartments(tenantId, rowsFor("departments"));
     const budgetResult = await upsertBudgetCodes(ctx, rowsFor("budgetCodes"), projectResult);
 
+    // GET /api/par/budget-codes only lists codes of payers entitled to the "par" module, so a row
+    // can save correctly and still never show up on screen. Say it instead of leaving them hunting.
+    for (const [payerId, payerName] of ctx.usedPayers) {
+      if (!ctx.entitledPayers.has(payerId)) {
+        warnings.push(
+          `Modulul PAR nu este activat pentru plătitorul „${payerName}" — rândurile importate nu vor apărea în liste ` +
+            "până când modulul nu este activat pentru el (Platform Console → module pe plătitor)."
+        );
+      }
+    }
+
     const result: ImportResult = {
       payers: payerResult,
       projects: projectResult,
@@ -310,11 +328,23 @@ async function upsertPayers(ctx: ImportCtx, rows: ImportRow[]): Promise<Category
   return res;
 }
 
-async function resolvePayer(tenantId: string, name: string) {
-  const conditions = [eq(parPayers.tenantId, tenantId), eq(parPayers.active, true)];
+/**
+ * Find the payer a row belongs to. With no payer column the file means "the one we work in", so
+ * prefer a payer the PAR module is enabled for — writing to an un-entitled payer saves rows that
+ * the PAR lists then filter out, which reads exactly like "the import didn't work".
+ */
+async function resolvePayer(ctx: ImportCtx, name: string) {
+  const conditions = [eq(parPayers.tenantId, ctx.tenantId), eq(parPayers.active, true)];
   if (name) conditions.push(eq(parPayers.name, name));
-  const [payer] = await db.select({ id: parPayers.id }).from(parPayers).where(and(...conditions)).orderBy(asc(parPayers.createdAt)).limit(1);
-  return payer ?? null;
+  const payers = await db
+    .select({ id: parPayers.id, name: parPayers.name })
+    .from(parPayers)
+    .where(and(...conditions))
+    .orderBy(asc(parPayers.createdAt));
+  if (!payers.length) return null;
+  const payer = payers.find((p) => ctx.entitledPayers.has(p.id)) ?? payers[0];
+  ctx.usedPayers.set(payer.id, payer.name);
+  return payer;
 }
 
 async function upsertProjects(ctx: ImportCtx, rows: ImportRow[]): Promise<CategoryResult> {
@@ -336,7 +366,7 @@ async function upsertProjects(ctx: ImportCtx, rows: ImportRow[]): Promise<Catego
     }
 
     try {
-      const payer = await resolvePayer(tenantId, payerName);
+      const payer = await resolvePayer(ctx, payerName);
       if (!payer) {
         res.errors.push({ row, column: "Plătitor / Organizație", message: payerName ? `Plătitorul '${payerName}' nu există.` : "Nu există un plătitor implicit. Adaugă foaia 'Plătitori'." });
         continue;
@@ -445,7 +475,7 @@ async function upsertBudgetCodes(
     }
 
     try {
-      const payer = await resolvePayer(tenantId, payerName);
+      const payer = await resolvePayer(ctx, payerName);
       if (!payer) {
         res.errors.push({ row, column: "Plătitor / Organizație", message: payerName ? `Plătitorul '${payerName}' nu există.` : "Nu există un plătitor implicit." });
         continue;
