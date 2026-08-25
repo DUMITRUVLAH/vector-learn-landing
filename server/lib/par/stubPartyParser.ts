@@ -153,11 +153,49 @@ function detectCurrencyNear(snippet: string): "MDL" | "EUR" | "USD" | null {
 }
 
 /**
- * A money-shaped number: a decimal with grouping, OR followed by a currency word/symbol.
+ * A money-shaped number, in either printed order:
+ *   group 1 — currency BEFORE the number ("MDL 8,000.00", "EUR 1 200")
+ *   group 2 — currency (or a bracket) AFTER it ("8 000,00 lei", "45000.00)")
  * Avoids matching list prefixes ("3.1."), dates, article numbers, percentages.
  */
-const MONEY_NUM_RE =
-  /(\d{1,3}(?:[ .,]\d{3})+(?:[.,]\d{2})?|\d+[.,]\d{2}|\d{3,})\s*(?:lei|лей|леев|MDL|€|EUR|\$|USD|\)|$)/i;
+/** Grouped ("8 000,00", "8,000.00") or plainly decimal ("450.00") — unmistakably money. */
+const MONEY_STRONG = String.raw`\d{1,3}(?:[ .,]\d{3})+(?:[.,]\d{2})?|\d+[.,]\d{2}`;
+/** A bare digit run ("8000") — only money when a currency or bracket sits right next to it,
+ * otherwise it is a fiscal code, a document number or a year. */
+const MONEY_LOOSE = String.raw`\d{3,}`;
+const CURRENCY_AFTER = String.raw`lei|лей|леев|MDL|€|EUR|\$|USD`;
+
+const MONEY_NUM_RE = new RegExp(
+  // currency printed BEFORE the number: "MDL 8,000.00 (opt mii lei)"
+  String.raw`\b(?:MDL|EUR|USD|LEI)\s*(${MONEY_STRONG}|${MONEY_LOOSE})` +
+    // …or after it, incl. at end of line: "Preț total (inclusiv TVA) 8,000.00"
+    String.raw`|(${MONEY_STRONG})\s*(?:${CURRENCY_AFTER}|[)(]|\n|$)` +
+    // …a bare run needs an explicit currency/bracket next to it to count as money at all
+    String.raw`|(${MONEY_LOOSE})\s*(?:${CURRENCY_AFTER}|[)(])`,
+  "gi",
+);
+
+/**
+ * Find the first genuine money amount in `window`.
+ *
+ * Digits that are part of a longer alphanumeric token are NEVER money: an IBAN
+ * ("MD80VI000002224217675MDL") ends in a currency code, so without this guard it reads as
+ * "2 224 217 675,00 MDL" — which is exactly what the owner's contract prefilled before this
+ * check existed (a 2.2-billion-lei request instead of 8 000 lei).
+ */
+function findMoneyInWindow(window: string): number | null {
+  MONEY_NUM_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = MONEY_NUM_RE.exec(window)) !== null) {
+    const raw = m[1] ?? m[2] ?? m[3];
+    if (!raw) continue;
+    const numIndex = m.index + m[0].indexOf(raw);
+    if (/[A-Za-z]/.test(window[numIndex - 1] ?? "")) continue; // inside an IBAN / code token
+    const major = parseLocalizedAmount(raw);
+    if (major != null && major > 0) return major;
+  }
+  return null;
+}
 
 /** Extract the pay-total amount + currency by scanning anchor lines in priority order. */
 export function extractAmount(text: string): AmountResult {
@@ -171,10 +209,8 @@ export function extractAmount(text: string): AmountResult {
       const afterAnchor = line.slice(am.index + am[0].length);
       // Collapse OCR spaces around the decimal separator: "12 340 ,00" → "12 340,00".
       const window = `${afterAnchor}\n${lines[i + 1] ?? ""}`.replace(/(\d)\s+([.,]\d{2}\b)/g, "$1$2");
-      const numMatch = window.match(MONEY_NUM_RE);
-      if (!numMatch) continue;
-      const major = parseLocalizedAmount(numMatch[1]);
-      if (major == null || major <= 0) continue;
+      const major = findMoneyInWindow(window);
+      if (major == null) continue;
       const cur = detectCurrencyNear(window) ?? detectCurrencyNear(line) ?? detectCurrencyNear(text) ?? "MDL";
       return { amountCents: Math.round(major * 100), currency: cur };
     }
@@ -250,6 +286,107 @@ function findRoleAnchors(text: string): AnchorHit[] {
   return deduped;
 }
 
+/**
+ * Role words as they appear INSIDE a binding phrase or a signature-column header, mapped to the
+ * role they assign. Separate from ROLE_ANCHORS (which is proximity-based) because these two rules
+ * are positional and authoritative, not "nearest wins".
+ */
+const ROLE_WORDS: Array<{ re: RegExp; role: ParRole; payerHint: boolean }> = [
+  { re: /^executor/i, role: "executor", payerHint: false },
+  {
+    re: /^(?:prestator|furnizor|v[âa]nz[ăa]tor|antreprenor|subantreprenor|contractor|supplier|seller|исполнитель|поставщик|подрядчик)/i,
+    role: "provider",
+    payerHint: false,
+  },
+  // "Beneficiar" in an MD contract is the party that PAYS — but it is deliberately not marked
+  // isPayerHint: that flag drops a party from the payee pool entirely, and when the tenant's own
+  // org is the provider the Beneficiar is exactly who they raise the request against.
+  { re: /^(?:beneficiar|client|cump[ăa]r[ăa]tor|buyer|заказчик|покупатель)/i, role: "client", payerHint: false },
+  { re: /^(?:pl[ăa]titor|ordonator|плательщик)/i, role: "client", payerHint: true },
+];
+
+function roleForWord(word: string): { role: ParRole; payerHint: boolean } | null {
+  for (const w of ROLE_WORDS) if (w.re.test(word)) return { role: w.role, payerHint: w.payerHint };
+  return null;
+}
+
+/** A signature-block column header: a whole line that is nothing but two DIFFERENT role words
+ * ("BENEFICIAR   PRESTATOR", "EXECUTOR BENEFICIAR"). */
+const COLUMN_HEADER_RE =
+  /^\s*(EXECUTOR|PRESTATOR|FURNIZOR|ANTREPRENOR|BENEFICIAR|CLIENT|CUMP[ĂA]R[ĂA]TOR|PL[ĂA]TITOR|ORDONATOR)\s+(EXECUTOR|PRESTATOR|FURNIZOR|ANTREPRENOR|BENEFICIAR|CLIENT|CUMP[ĂA]R[ĂA]TOR|PL[ĂA]TITOR|ORDONATOR)\s*:?\s*$/i;
+
+/**
+ * Positional role assignment — two rules that beat nearest-anchor proximity, because both state
+ * the role EXPLICITLY rather than by adjacency:
+ *
+ *  A. "…denumită în continuare „Beneficiar”" / "…numit în continuare „Prestator”" binds the role
+ *     to the party named just before it. This is the canonical MD-contract phrasing.
+ *  B. A two-column signature header ("BENEFICIAR   PRESTATOR") assigns its roles to the next two
+ *     party names IN ORDER (left column first). Proximity gets this exactly backwards: both
+ *     header words sit on the same line, so the first party's nearest anchor is whichever word
+ *     happens to be closer — which is how the owner's contract came out with the payer (CRJM)
+ *     labelled `provider` and the payee (Vector Academy) labelled `client`.
+ *
+ * Returns a map keyed by the name-hit index, so the caller can lock those roles.
+ */
+function bindRolesPositionally(
+  text: string,
+  nameHits: NameHit[],
+): Map<number, { role: ParRole; payerHint: boolean }> {
+  const bound = new Map<number, { role: ParRole; payerHint: boolean }>();
+  /** Parties bound by rule A. Rule B must not contradict them at a later occurrence: the
+   * contract's own wording outranks the column order of a signature block. */
+  const boundByPhrase = new Set<string>();
+
+  // Rule A — "denumit(ă)/numit(ă) în continuare «ROLE»" refers back to the nearest preceding name.
+  const bindRe =
+    /(?:denumit|numit|referit)\w*\s+(?:în|in)\s+continuare\s*[„"“«]?\s*([\p{L}]+)/giu;
+  let m: RegExpExecArray | null;
+  while ((m = bindRe.exec(text)) !== null) {
+    const r = roleForWord(m[1]);
+    if (!r) continue;
+    let best: NameHit | null = null;
+    for (const h of nameHits) {
+      if (h.index >= m.index) break;
+      if (m.index - h.index > 400) continue;
+      best = h; // nameHits are sorted, so the last one before the phrase is the nearest
+    }
+    if (best && !bound.has(best.index)) {
+      bound.set(best.index, r);
+      boundByPhrase.add(partyKey(best.name));
+    }
+  }
+
+  // Rule B — two-column signature header assigns roles to the next two distinct names in order.
+  let offset = 0;
+  for (const line of text.split(/\r?\n/)) {
+    const lineStart = offset;
+    offset += line.length + 1;
+    const hm = line.match(COLUMN_HEADER_RE);
+    if (!hm) continue;
+    const first = roleForWord(hm[1]);
+    const second = roleForWord(hm[2]);
+    if (!first || !second || first.role === second.role) continue;
+    const seen = new Set<string>();
+    const following: NameHit[] = [];
+    for (const h of nameHits) {
+      if (h.index < lineStart) continue;
+      const k = h.name.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      following.push(h);
+      if (following.length === 2) break;
+    }
+    for (const [i, r] of [first, second].entries()) {
+      const hit = following[i];
+      if (following.length !== 2 || bound.has(hit.index) || boundByPhrase.has(partyKey(hit.name))) continue;
+      bound.set(hit.index, r);
+    }
+  }
+
+  return bound;
+}
+
 // ─── Name extraction ──────────────────────────────────────────────────────────
 
 const HONORIFICS_RE = /(?:^|\s)(?:dl\.|dna\.?|dnul|d-l|d-na|domnul|doamna|г-н|г-жа|cet[ăa][țt]ean(?:ul)?\s+al\s+Republicii\s+Moldova)(?=\s|$)/gi;
@@ -282,6 +419,22 @@ interface NameHit {
 }
 
 /**
+ * Identity key for merging the SAME company's several mentions. Legal-form tokens and punctuation
+ * are printed inconsistently across a single document — the intro says `„Vector Academy" S.R.L`
+ * and the signature block says `S.C. „Vector Academy" S.R.L.` — which split one party into two
+ * half-filled entries (one with the IDNO, the other with the IBAN + bank + address) and offered
+ * both to the user as separate payees.
+ */
+function partyKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/["“”„«».,]/g, " ")
+    .replace(/\b(?:s\s?c|s\s?r\s?l|s\s?a|a\s?o|î\s?i|i\s?i|ооо|оао|зао|gmbh|llc|ltd)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Find all party-name occurrences in the text (companies + persons), each with its offset.
  * Discovery order doesn't matter — callers sort by index.
  */
@@ -309,15 +462,21 @@ function findNameHits(text: string): NameHit[] {
     // «Ремонт учебного центра») — that's the object of the contract, not a party.
     const before = text.slice(Math.max(0, m.index - 50), m.index);
     if (/проект\w*|основани\w*|obiectul|предмет|проекту/i.test(before) && !LEGAL_FORM_RE.test(raw)) continue;
+    // Reject the contract's own defined terms in quotes — "…denumită în continuare „Beneficiar”"
+    // names a ROLE, not a company, yet it was being extracted as a party called "Beneficiar" (and
+    // one called "Prestator"), which then showed up as pickable payees with no requisites at all.
+    const hasLegalForm = LEGAL_FORM_RE.test(raw);
+    if (!hasLegalForm && /(?:denumit|numit|referit)\w*\s+(?:în|in)\s+continuare\s*$/i.test(before)) continue;
     // Reject single-word defined-term labels in quotes ("Clientul", "Antreprenorul", «наш фонд»)
     // that carry NO legal form and aren't multi-word company names.
     const inner = raw.replace(/^[^"“„«]*["“„«]/, "").replace(/["”»].*$/, "").trim();
-    const hasLegalForm = LEGAL_FORM_RE.test(raw);
     const innerWords = inner.split(/\s+/).filter(Boolean);
     const isDefinedTerm =
       innerWords.length === 1 &&
       !hasLegalForm &&
-      /^(Clientul|Antreprenorul|Subantreprenorul|Prestatorul|Executorul|Beneficiarul|Furnizorul|наш\b)/i.test(inner);
+      /^(Client|Antreprenor|Subantreprenor|Prestator|Executor|Beneficiar|Furnizor|Cump[ăa]r[ăa]tor|Pl[ăa]titor)(?:ul)?$/i.test(
+        inner,
+      );
     if (isDefinedTerm) continue;
     push(raw, m.index);
   }
@@ -499,6 +658,7 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
   // Discover party names, sorted by position; dedupe by normalized name (keep first occurrence,
   // which is usually the labelled header, then merge requisites from later occurrences).
   const nameHits = findNameHits(text).sort((a, b) => a.index - b.index);
+  const boundRoles = bindRolesPositionally(text, nameHits);
 
   // Build, per distinct name, the role + windowed requisites.
   type WorkingParty = ParExtractedParty & { _roleLocked?: boolean };
@@ -508,8 +668,9 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
   const subAmountByParty = new Map<string, number>();
 
   for (const hit of nameHits) {
-    const key = hit.name.toLowerCase();
-    const { role, payerHint } = roleForName(hit.index, anchors);
+    const key = partyKey(hit.name);
+    const bound = boundRoles.get(hit.index);
+    const { role, payerHint } = bound ?? roleForName(hit.index, anchors);
 
     // Requisite window: from this name to the next name occurrence (or +400 chars).
     const nextIdx = nameHits
@@ -532,6 +693,7 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
       .map((l) => l.trim())
       .find((l) => isPayeeBank(l));
     const bank = bankLine ? cleanBankName(bankLine) : null;
+    const bic = extractBicSnippet(block);
     const legalAddress = extractAddressSnippet(block);
     const administratorName = extractAdministratorSnippet(block);
     const subAmt = extractSubAmount(block);
@@ -548,11 +710,18 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
         usedIban.add(blockIban.index);
       }
       if (!existing.bank && bank) existing.bank = bank;
+      if (!existing.bic && bic) existing.bic = bic;
       if (!existing.legalAddress && legalAddress) existing.legalAddress = legalAddress;
       if (!existing.administratorName && administratorName) existing.administratorName = administratorName;
       if (!existing.vatCode && blockVat) existing.vatCode = blockVat.value;
-      // Prefer a paid role if a later anchor disambiguates it (e.g. rechizite under "EXECUTOR").
-      if (
+      // An explicitly BOUND role (a "denumit în continuare …" phrase or a signature-column header)
+      // always wins over whatever proximity guessed at another occurrence.
+      if (bound) {
+        existing.role = bound.role;
+        existing.isPayerHint = bound.payerHint;
+        existing._roleLocked = true;
+      } else if (
+        // Prefer a paid role if a later anchor disambiguates it (e.g. rechizite under "EXECUTOR").
         (existing.role === "unknown" || existing.role === "client") &&
         (role === "executor" || role === "provider") &&
         !existing._roleLocked
@@ -574,12 +743,14 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
       idno: blockId?.value ?? null,
       iban: blockIban?.value ?? null,
       bank,
+      bic,
       legalAddress,
       administratorName,
       vatCode: blockVat?.value ?? null,
       isPayerHint: payerHint,
-      // Lock a confidently-labelled role (a real anchor right before the name).
-      _roleLocked: role !== "unknown",
+      // Lock an explicitly bound role, or a confidently-labelled one (a real anchor right
+      // before the name).
+      _roleLocked: bound != null || role !== "unknown",
     };
     partyMap.set(key, party);
   }
@@ -692,19 +863,22 @@ function cleanBankName(line: string): string {
   // line as the payee's requisites) swallowed the payee's quoted name + legal address whole
   // into the "Bancă" field.
   const m = findBankKeywordMatch(line);
+  // Snap the window's start BACK to a word boundary: slicing at a fixed offset cut
+  // "Banca Beneficiară:" into "iciară:", which then no longer looked like a label to the
+  // strip below and shipped verbatim into the form's "Bancă" field (owner report 2026-08-25).
+  const rawStart = Math.max(0, (m?.index ?? 0) - 20);
+  const start = m ? (rawStart === 0 ? 0 : line.lastIndexOf(" ", rawStart) + 1) : 0;
   const windowed = m
-    ? line.slice(Math.max(0, (m.index ?? 0) - 20), Math.min(line.length, (m.index ?? 0) + m[0].length + 80))
+    ? line.slice(start, Math.min(line.length, (m.index ?? 0) + m[0].length + 80))
     : line;
-  // Drop leading "Banca:", "Банк:", "Bank:", "Banca benef.:", "Beneficiary bank:" labels.
-  let s = windowed.replace(
-    /^.*?(?:Banca(?:\s*(?:plătitorului|beneficiarului|benef\.?))?|Банк|Bank|Beneficiary\s*bank|Банк)\s*:?\s*/i,
-    "",
-  );
+  // Drop a leading "Banca …:" label in any of its printed variants — "Banca:", "Banca
+  // Beneficiară:", "Banca plătitorului:", "Банк:", "Beneficiary bank:" — up to its colon.
+  let s = windowed.replace(/^[^:\n]{0,40}?\b(?:Banca|Банк|Bank)\b[^:\n]{0,30}:\s*/i, "");
   s = s.replace(/^[,;:\-–\s]+/, "").trim();
   // A bank name never runs into the next requisite/address field — cut there too.
   s = s
     .replace(
-      /,?\s*(?:cod\s*banc\w*|код\s*банка|BIC|SWIFT|IBAN|cod\s*fiscal|IDNO|IDNP|ИДНО|mun\.|or\.|sat\.|str\.|bd\.|sediul\w*|adres[ăa]).*$/i,
+      /,?\s*(?:cod(?:ul)?\s*b[ăa]nc\w*|cod\s*banc\w*|код\s*банка|BIC|SWIFT|IBAN|cod(?:ul)?\s*fiscal|IDNO|IDNP|ИДНО|mun\.|or\.|sat\.|str\.|bd\.|sediul\w*|adres[ăa]).*$/i,
       "",
     )
     .trim();
@@ -741,22 +915,50 @@ function extractAddressSnippet(block: string): string | null {
   return snippet.length >= 4 ? snippet.slice(0, 200) : null;
 }
 
+/** The role nouns a signatory is introduced by, in every declension the documents print
+ * ("Administrator," / "în persoana Administratorului," / "Președintelui" / "Director general"). */
+// Longest suffix FIRST in every alternation: `(?:ul|ului)` would match "Directorul" inside
+// "Directorului" and stop, leaving "ui, Elena Roșca" — and because everything after the label is
+// optional, the regex has no reason to backtrack, so the name is silently lost.
+const ADMIN_ROLE_NOUN =
+  "(?:administrator(?:ului|ul)?|director(?:ului|ul)?(?:\\s+general)?|pre[șşs]edinte(?:lui|le)?|reprezentant(?:ului|ul)?(?:\\s+legal)?|gerant(?:ului|ul)?)";
+
 /** Administrator/representative label anchors — same "labelled only" discipline as the address.
- * "reprezentată de administrator dl. X" is the common MD-contract phrasing: an optional
- * administrator/director role word can sit BETWEEN "reprezentat de" and the honorific+name. */
-const ADMINISTRATOR_LABEL_RE =
-  /(?:reprezentat[ăa]?\s+(?:de|prin)\s*(?:administrator(?:ul)?|director(?:ul)?(?:\s+general)?)?|administrator(?:ul)?|director(?:ul)?(?:\s+general)?|reprezentant(?:ul)?(?:\s+legal)?|în\s+persoana|в\s+лице)\s*[:\.]?\s*(?:dl\.|dna\.?|dnul|domnul|doamna|г-н|г-жа)?\s*/i;
+ * Either an introducing phrase ("reprezentată de", "în persoana", "в лице") optionally followed by
+ * the role noun, or the bare role noun on a signature line ("Preşedinte, Ilie CHIRTOACĂ"). The
+ * separator allows a COMMA: that is how every signature block prints it. */
+const ADMINISTRATOR_LABEL_RE = new RegExp(
+  `(?:(?:reprezentat[ăa]?\\s+(?:de|prin)|[iî]n\\s+persoana|в\\s+лице)\\s*(?:${ADMIN_ROLE_NOUN})?|${ADMIN_ROLE_NOUN})` +
+    `\\s*[:,.\\-–]?\\s*(?:dl\\.|dna\\.?|dnul|domnul|doamna|г-н|г-жа)?\\s*`,
+  "i",
+);
 
 /** Extract a bounded "reprezentată de <Name>" style administrator name. Only accepts an
- * immediately-following capitalized 2-3 word run (a real person name) — never a whole clause. */
+ * immediately-following capitalized 2-3 word run (a real person name) — never a whole clause.
+ * A surname printed in CAPS ("Ilie CHIRTOACĂ", "Dumitru VLAH") is the MD-contract norm, so
+ * every word after the first may be either Titlecase or ALLCAPS. */
 function extractAdministratorSnippet(block: string): string | null {
   const m = ADMINISTRATOR_LABEL_RE.exec(block);
   if (!m) return null;
   const rest = block.slice(m.index + m[0].length, m.index + m[0].length + 60);
   const name = rest.match(
-    /^[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+(?:\s+[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё]+){1,2}/,
+    /^[A-ZĂÂÎȘȚА-ЯЁ][a-zăâîșțа-яё'’-]+(?:\s+[A-ZĂÂÎȘȚА-ЯЁ](?:[a-zăâîșțа-яё'’-]+|[A-ZĂÂÎȘȚА-ЯЁ]+)){1,2}/,
   );
   return name ? name[0].trim() : null;
+}
+
+/** A SWIFT/BIC is 8 or 11 chars: 6 letters (bank+country) + 2 alnum + optional 3-alnum branch. */
+const BIC_SHAPE_RE = /^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/;
+
+/** Extract a labelled SWIFT/BIC ("Codul Băncii: VICBMD2X457", "BIC: AGRNMD2X"). The stub never
+ * filled this field at all, so the form's "BIC / SWIFT" box stayed empty on documents that
+ * print it plainly. Labelled-only + strict shape, so an IBAN or a bank code can't land here. */
+function extractBicSnippet(block: string): string | null {
+  const re = /(?:cod(?:ul)?\s*b[ăa]nc\w*|cod\s*banc\w*|код\s*банка|BIC|SWIFT|S\.W\.I\.F\.T\.?)[^A-Za-z0-9]{0,10}([A-Za-z0-9]{8,11})\b/i;
+  const m = re.exec(block);
+  if (!m) return null;
+  const v = m[1].toUpperCase();
+  return BIC_SHAPE_RE.test(v) ? v : null;
 }
 
 function extractScope(text: string): string | null {
@@ -764,7 +966,13 @@ function extractScope(text: string): string | null {
     /(?:OBIECTUL(?:\s*CONTRACTULUI)?|Denumire(?:a)?\s*(?:m[ăa]rfii)?[\/]?(?:serviciu(?:lui)?)?|Description|Destina[țt]ia\s*pl[ăa][țt]ii|Reprezent[âa]nd|Наименование\s*работ|ПРЕДМЕТ\s*ДОГОВОРА|Основание|Obiectul)\s*[:\.]?\s*([^\n]{3,90})/i;
   const m = text.match(re);
   if (m) {
-    const s = m[1].replace(/\s+/g, " ").trim().replace(/[.;]+$/, "");
+    const s = m[1]
+      .replace(/\s+/g, " ")
+      .trim()
+      // Drop a leading clause number ("1.1 Prestatorul este contractat…") — it belongs to the
+      // contract's numbering, not to the description of what is being paid for.
+      .replace(/^\d+(?:\.\d+)*\.?\s+/, "")
+      .replace(/[.;]+$/, "");
     if (s) return s.slice(0, 90);
   }
   return null;
