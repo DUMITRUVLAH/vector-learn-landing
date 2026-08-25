@@ -1,0 +1,11 @@
+CONT DE PLATĂ Nr. 251 din 09.09.2026
+
+Furnizor: S.R.L. "MIXBOOK", IDNO 1015600011223
+Adresa: mun. Chișinău, bd. Ștefan cel Mare 132, of. 4
+c/d MD87MO2224ASV12345678901 în BC "Mobiasbanca" S.A.
+
+Cumpărător: VECTOR ACADEMY S.R.L.
+
+Nr  Denumirea serviciului              Cant  Preț    Suma
+1   Tipar broșuri A5, 500 ex.           1    3250,00 3250,00
+                                      Total: 3250,00 lei

@@ -1,0 +1,14 @@
+{
+  "name": "Formular PAR — beneficiar persoană fizică",
+  "sursa": "Caz real recurent (onorarii persoane fizice)",
+  "deCeConteaza": "Beneficiarul e un OM, nu o firmă; valorile stau sub etichete greșite (IBAN sub „IDNP:”) și trebuie recunoscute după FORMAT.",
+  "asteptari": {
+    "payeeName": "Daria Roitman",
+    "payeeIdno": "2008001007903",
+    "payeeIban": "MD48ML000002259A19498121",
+    "payeeBankContains": "Moldindconbank",
+    "amountCents": 700000,
+    "currency": "MDL",
+    "needsClarification": false
+  }
+}

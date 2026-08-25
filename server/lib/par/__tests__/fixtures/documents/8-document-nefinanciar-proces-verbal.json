@@ -1,0 +1,10 @@
+{
+  "name": "Document NEFINANCIAR (proces-verbal de ședință)",
+  "sursa": "Fixture sintetic",
+  "deCeConteaza": "Nu e act de plată: nu trebuie propus NICIUN beneficiar și nicio sumă — „mai bine nimic decât greșit”.",
+  "asteptari": {
+    "payeeIsNull": true,
+    "amountCents": null,
+    "documentClass": "not_invoice"
+  }
+}

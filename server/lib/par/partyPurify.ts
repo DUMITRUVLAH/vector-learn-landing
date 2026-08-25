@@ -19,6 +19,7 @@
 
 import type { ParExtractedParty } from "./parPartyTypes";
 import { isPayeeBank, findBankKeywordMatch } from "./payeeBankClassifier";
+import { normalizeRoDiacritics } from "./stubPartyParser";
 
 // ─── Format recognizers ───────────────────────────────────────────────────────
 
@@ -79,7 +80,9 @@ export interface RepairedFlags {
  */
 export function purifyParty(p: ParExtractedParty): ParExtractedParty {
   const repaired: RepairedFlags = { ...(p.repaired ?? {}) };
-  let name = p.name ?? "";
+  // Documentele vechi ies din PDF cu diacritice cu sedilă; normalizează și pe calea LLM,
+  // ca regulile de mai jos (adresă, etichete) să nu fie oarbe la ele.
+  let name = normalizeRoDiacritics(p.name ?? "");
   let idno = p.idno ?? null;
   let iban = p.iban ?? null;
   let bank = p.bank ?? null;

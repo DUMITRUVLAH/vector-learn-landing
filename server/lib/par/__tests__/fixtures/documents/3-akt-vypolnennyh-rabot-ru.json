@@ -1,0 +1,15 @@
+{
+  "name": "Акт выполненных работ (RU)",
+  "sursa": "Fixture sintetic — act de îndeplinire a lucrărilor în limba rusă",
+  "deCeConteaza": "Исполнитель = beneficiarul plății; etichete și sume în rusă („Всего к оплате”, „лей”).",
+  "asteptari": {
+    "payeeNameContains": "Клинсервис",
+    "payeeIdno": "1010600012345",
+    "payeeIban": "MD24AG000225100013104168",
+    "payeeBankContains": "Agroindbank",
+    "amountCents": 4500000,
+    "currency": "MDL",
+    "documentClass": "invoice",
+    "needsClarification": false
+  }
+}

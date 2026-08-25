@@ -1,0 +1,13 @@
+{
+  "name": "Contract de prestări servicii RO (rechizite pe două coloane la final)",
+  "sursa": "Fixture sintetic — forma standard a contractelor din MD",
+  "deCeConteaza": "Blocul „DATELE JURIDICE ȘI BANCARE” e un tabel pe 2 coloane: fiecare rechizit trebuie legat de partea corectă.",
+  "asteptari": {
+    "payeeNameContains": "LINGVO-PLUS",
+    "payeeIdno": "1009600045678",
+    "amountCents": 1200000,
+    "currency": "MDL",
+    "documentClass": "invoice",
+    "needsClarification": false
+  }
+}

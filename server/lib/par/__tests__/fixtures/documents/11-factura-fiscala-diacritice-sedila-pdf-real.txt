@@ -1,0 +1,27 @@
+FACTURĂ FISCALĂ 
+НАЛОГОВАЯ НАКЛАДНАЯ 
+Серия, № EBC000579678
+ Data eliberării /data livrării 04.11.2025 / 04.11.2025
+1. Furnizor:
+ Поставщик
+"DAIKIRI STUDIO" S.R.L., SEC.CENTRU Grenoble nr.159 bl.6 of.12 Cont MD05ML022510000000001296, 
+BC'Moldindconbank'S.A., MOLDMD2X
+c.f./ nr.TVA 1024600006236 /
+ф.к./ код НДС 
+2. Cumpărător/beneficiar: 
+ Покупатель/получатель
+VECTOR ACADEMY S.R.L., SEC.CENTRU 31 August 1989 nr.78 c.f./ nr.TVA 1024600035737 /
+ф.к./ код НДС 
+4. Documente anexate
+Act de indeplinirea lucrarilor nr.2/11 din 04.11.2025 
+10.1
+Denumirea mărfurilor/activelor, serviciilor şi codul poziţiei 
+tarifare al mărfii/activului
+Наименование товаров/активов, услуг и код товарной 
+позиции товара/астива.
+10.2
+Unitate 
+de 
+măsură
+Servicii predare curs "Productie si editare video" serv 1 17000.00 17000,00 - 0,00 17000,00
+12. TOTAL (pe factura fiscală) / Всего (по налоговой накладной) 17000,00 X 0,00 17000,00 X X X 0,00

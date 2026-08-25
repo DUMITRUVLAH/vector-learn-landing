@@ -1,0 +1,19 @@
+{
+  "name": "Contract cu ONG fără formă juridică + rechizite etichetate",
+  "sursa": "Document real al owner-ului, 2026-08-25 (Centrul de Resurse Juridice)",
+  "deCeConteaza": "Numele nu are SRL/SA — partea nu era descoperită DELOC, deci IBAN/BIC/administratorul se pierdeau integral.",
+  "asteptari": {
+    "payeeName": "Centrul de Resurse Juridice",
+    "payeeIdno": "1010620008129",
+    "payeeIban": "MD80VI000002224217675MDL",
+    "payeeBic": "VICBMD2X457",
+    "payeeBankContains": "VictoriaBank",
+    "payeeLegalAddressContains": "A.Șciusev 33",
+    "payeeAdministrator": "Ilie CHIRTOACĂ",
+    "amountCents": 2400000,
+    "currency": "MDL",
+    "scopeMatches": "consultanță juridică",
+    "documentClass": "invoice",
+    "needsClarification": false
+  }
+}

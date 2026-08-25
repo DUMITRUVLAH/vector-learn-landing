@@ -1,0 +1,15 @@
+PAYMENT ACTION REQUEST (PAR) FORM
+Requested By: Ana Munteanu (Programme Officer)
+
+Payment Details
+Name, Surname: Daria Roitman
+IDNP:
+MD48ML000002259A19498121
+IBAN:
+Bank: BC Moldindconbank S.A.
+2008001007903
+
+Purpose: Honorarium for 3 psychological counselling sessions, June 2026
+Amount: 7 000,00 MDL
+
+Approved by: Executive Director

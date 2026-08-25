@@ -1,0 +1,18 @@
+{
+  "name": "Factură fiscală MD — diacritice LEGACY cu sedilă (PDF real)",
+  "sursa": "Document real al owner-ului, 2026-08-25 (raportarea a treia)",
+  "deCeConteaza": "PDF-ul conține ş (U+015F) și ţ (U+0163), nu ș/ț. Toate regexurile românești erau oarbe la ele, așa că antetul de tabel ajungea în „Scop” chiar și după ce filtrul de antete exista.",
+  "asteptari": {
+    "payeeName": "DAIKIRI STUDIO S.R.L.",
+    "payeeIdno": "1024600006236",
+    "payeeIban": "MD05ML022510000000001296",
+    "payeeBic": "MOLDMD2X",
+    "payeeBankContains": "Moldindconbank",
+    "payeeLegalAddressContains": "Grenoble nr.159",
+    "amountCents": 1700000,
+    "currency": "MDL",
+    "scopeMatches": "Servicii predare curs",
+    "documentClass": "invoice",
+    "needsClarification": false
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Invoice internațional EN (layout US/UE)",
+  "sursa": "Fixture sintetic — formă standard „Bill From / Bill To”",
+  "deCeConteaza": "Verifică direcția corectă (Bill From = beneficiarul plății) și IBAN străin + valută non-MDL.",
+  "asteptari": {
+    "payeeName": "Northwind Design Ltd",
+    "payeeIban": "GB29NWBK60161331926819",
+    "payeeBic": "NWBKGB2L",
+    "payeeBankContains": "NatWest",
+    "amountCents": 240000,
+    "currency": "EUR",
+    "documentClass": "invoice",
+    "needsClarification": false
+  }
+}

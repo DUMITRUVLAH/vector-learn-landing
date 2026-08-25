@@ -20,6 +20,27 @@ import { purifyExtraction } from "./partyPurify";
 
 // ─── Low-level token extractors (exported for unit tests) ─────────────────────
 
+/**
+ * Normalizează diacriticele românești LEGACY (cu sedilă) la forma corectă (cu virgulă).
+ *
+ * Multe documente din Moldova — inclusiv formularul tipizat de factură fiscală — sunt
+ * generate cu fonturi vechi și ies din PDF cu `ş` (U+015F) și `ţ` (U+0163) în loc de
+ * `ș` (U+0219) și `ț` (U+021B). Sunt caractere DIFERITE: orice regex scris cu forma
+ * corectă nu se potrivește pe cea veche, în tăcere. Așa a scăpat antetul de tabel în
+ * câmpul „Scop" chiar DUPĂ ce filtrul de antete exista — „poziţiei" nu se potrivea cu
+ * `pozi[țt]iei` (owner, 2026-08-25 #3).
+ *
+ * Înlocuirea e 1:1 pe caracter, deci NU schimbă lungimile și nu invalidează niciunul
+ * dintre offset-urile pe care se bazează asocierea rechizit→parte.
+ */
+export function normalizeRoDiacritics(text: string): string {
+  return text
+    .replace(/\u015F/g, "\u0219") // ş → ș
+    .replace(/\u015E/g, "\u0218") // Ş → Ș
+    .replace(/\u0163/g, "\u021B") // ţ → ț
+    .replace(/\u0162/g, "\u021A"); // Ţ → Ț
+}
+
 /** Strip all whitespace, uppercase. */
 export function stripIbanSpaces(raw: string): string {
   return raw.replace(/\s+/g, "").toUpperCase();
@@ -687,7 +708,8 @@ function tryParseColumnarContract(text: string): ParExtractedParty[] | null {
  * Deterministic & pure.
  */
 export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction, "isStub"> {
-  const text = docText ?? "";
+  // Length-preserving, so every offset below stays valid (see normalizeRoDiacritics).
+  const text = normalizeRoDiacritics(docText ?? "");
 
   const ibans = findIbanCandidates(text);
   const ids = findIdCandidates(text);

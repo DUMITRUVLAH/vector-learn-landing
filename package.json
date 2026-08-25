@@ -25,7 +25,9 @@
     "docker:build": "docker build -t vector-learn .",
     "docker:up": "docker compose up -d --build",
     "docker:logs": "docker compose logs -f app",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "par:corpus": "vitest run server/lib/par/__tests__/documentCorpus.test.ts",
+    "par:extract": "node scripts/par-extract.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.4.6",

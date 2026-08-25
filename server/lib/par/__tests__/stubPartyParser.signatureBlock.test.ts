@@ -81,7 +81,10 @@ describe("stubPartyParser — signed MD services contract with a 2-column signat
     expect(crjm?.iban).toBe("MD80VI000002224217675MDL");
     expect(crjm?.bank).toBe("VictoriaBank S.A. fil. Nr. 17");
     expect(crjm?.bic).toBe("VICBMD2X457");
-    expect(crjm?.legalAddress).toBe("str. A.Şciusev 33, MD-2001, mun. Chişinău");
+    // Diacriticele legacy cu sedilă din document (`ş`/`ţ`) sunt normalizate la forma corectă
+    // (`ș`/`ț`) la intrarea în parser — vezi normalizeRoDiacritics. Fără normalizare, orice
+    // regex scris cu diacritice corecte e orb, în tăcere, pe documentele generate cu fonturi vechi.
+    expect(crjm?.legalAddress).toBe("str. A.Șciusev 33, MD-2001, mun. Chișinău");
 
     expect(vector?.idno).toBe("1024600035737");
     expect(vector?.iban).toBe("MD87AG000000022516065719");

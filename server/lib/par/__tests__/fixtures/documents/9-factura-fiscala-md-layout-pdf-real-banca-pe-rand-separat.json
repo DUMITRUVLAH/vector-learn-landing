@@ -1,0 +1,18 @@
+{
+  "name": "Factură fiscală MD — layout PDF real (banca pe rând separat)",
+  "sursa": "Textul exact produs de unpdf pe PDF-ul owner-ului, 2026-08-25 (raportarea a doua)",
+  "deCeConteaza": "Aici BIC-ul era găsit și ARUNCAT, iar adresa de pe rândul numelui era abandonată — nu intra în niciun câmp.",
+  "asteptari": {
+    "payeeName": "DAIKIRI STUDIO S.R.L.",
+    "payeeIdno": "1024600006236",
+    "payeeIban": "MD05ML022510000000001296",
+    "payeeBic": "MOLDMD2X",
+    "payeeBankContains": "Moldindconbank",
+    "payeeBankNotContains": "MOLDMD2X",
+    "payeeLegalAddressContains": "Grenoble nr.159",
+    "amountCents": 1700000,
+    "currency": "MDL",
+    "documentClass": "invoice",
+    "needsClarification": false
+  }
+}

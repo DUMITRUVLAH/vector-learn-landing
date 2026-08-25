@@ -1,0 +1,17 @@
+{
+  "name": "Factură fiscală tipizată MD (Anexa 1, Ordin MF 118/2017)",
+  "sursa": "Document real al owner-ului, 2026-08-25 (EBC000579678)",
+  "deCeConteaza": "Cel mai frecvent document din Moldova; formularul bilingv cu etichete fără „:” și total urmat de coloane X.",
+  "asteptari": {
+    "payeeName": "DAIKIRI STUDIO S.R.L.",
+    "payeeIdno": "1024600006236",
+    "payeeIban": "MD05ML022510000000001296",
+    "payeeBic": "MOLDMD2X",
+    "payeeBankContains": "Moldindconbank",
+    "amountCents": 1700000,
+    "currency": "MDL",
+    "scopeMatches": "Servicii predare curs",
+    "documentClass": "invoice",
+    "needsClarification": false
+  }
+}

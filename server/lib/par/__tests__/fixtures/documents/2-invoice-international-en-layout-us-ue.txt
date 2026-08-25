@@ -1,0 +1,20 @@
+INVOICE
+Invoice No: INV-2026-0042        Date: 12 August 2026
+
+Bill From:
+Northwind Design Ltd
+14 Kingsway, London WC2B 6LH, United Kingdom
+Company Reg 09876543
+IBAN: GB29NWBK60161331926819
+SWIFT: NWBKGB2L
+Bank: NatWest Bank plc
+
+Bill To:
+VECTOR ACADEMY S.R.L.
+31 August 1989 str. 78, Chisinau, Moldova
+
+Description                          Qty   Unit Price    Amount
+Brand identity design package         1     2,400.00     2,400.00
+
+TOTAL DUE: EUR 2,400.00
+Payment terms: 14 days

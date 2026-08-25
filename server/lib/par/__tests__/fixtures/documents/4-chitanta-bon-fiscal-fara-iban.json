@@ -1,0 +1,15 @@
+{
+  "name": "Chitanță / bon fiscal (fără IBAN)",
+  "sursa": "Fixture sintetic — plată în numerar",
+  "deCeConteaza": "Document fără IBAN: trebuie clasificat „receipt”, iar lipsa IBAN-ului nu e o eroare.",
+  "asteptari": {
+    "payeeNameContains": "Andronic",
+    "payeeIdno": "1013600098765",
+    "payeeIban": null,
+    "amountCents": 85000,
+    "currency": "MDL",
+    "scopeMatches": "repara",
+    "documentClass": "receipt",
+    "needsClarification": false
+  }
+}

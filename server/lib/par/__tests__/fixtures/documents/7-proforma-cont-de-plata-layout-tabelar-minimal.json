@@ -1,0 +1,15 @@
+{
+  "name": "Proformă / cont de plată (layout tabelar minimal)",
+  "sursa": "Fixture sintetic — „Cont de plată” cu tabel de articole",
+  "deCeConteaza": "Forma juridică e scrisă ÎNAINTE de nume (S.R.L. „MIXBOOK”), iar IBAN-ul stă lipit de bancă („c/d MD… în BC…”).",
+  "asteptari": {
+    "payeeNameMatches": "S\\.R\\.L\\..*MIXBOOK|MIXBOOK.*S\\.R\\.L\\.",
+    "payeeIdno": "1015600011223",
+    "payeeBankContains": "Mobiasbanca",
+    "payeeLegalAddressContains": "Ștefan cel Mare",
+    "amountCents": 325000,
+    "currency": "MDL",
+    "documentClass": "invoice",
+    "needsClarification": false
+  }
+}
