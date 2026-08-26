@@ -554,6 +554,11 @@ export function ParCreateForm() {
           setParId(existing.id);
           setPar(existing);
           setLineItems(existing.line_items ?? []);
+          // Totalul vine din server, nu se recalculează în formular: fără el, o ciornă salvată se
+          // deschidea cu articolele pe ecran dar cu „TOTAL ESTIMAT 0,00", iar validarea de trimitere
+          // cerea „adaugă cel puțin un articol" — ciorna nu mai putea fi trimisă deloc din interfață.
+          setTotalCents(existing.totalEstimatedCents ?? 0);
+          setAboveThreshold(!!existing.above_micro_threshold);
           setAttachments(existing.attachments ?? []);
           if (existing.dateOfRequest) setDateOfRequest(existing.dateOfRequest.slice(0, 10));
           setRequestorTitle(existing.requestorTitle ?? "");

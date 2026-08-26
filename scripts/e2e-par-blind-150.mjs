@@ -558,6 +558,20 @@ await T("the approver inbox lists the PAR waiting on step 1", async () => {
   const items = coll(r.body);
   assert(items.some((i) => i.id === submittedBig.id), "submitted PAR missing from inbox");
 });
+await T("an approver's OWN request is not queued in their approval inbox", async () => {
+  // Segregation of duties: approve/reject answer 403 on your own PAR, so an inbox row with an
+  // "Aprobă" button next to it is a promise the server refuses. (Journey 11.)
+  const { par } = await submitPar("approver", { amount: 100000 });
+  const items = coll((await GET("approver", "/api/par/inbox")).body);
+  assert(!items.some((i) => i.id === par.id), "propria cerere a aprobatorului apare în inboxul lui");
+  const r = await POST("approver", `/api/par/${par.id}/approve`, { comment: "self" });
+  inSet(r.status, [400, 403, 409], "status la aprobarea propriei cereri");
+});
+await T("someone else's request is still queued for the approver", async () => {
+  const { par } = await submitPar("requestor", { amount: 100000 });
+  const items = coll((await GET("approver", "/api/par/inbox")).body);
+  assert(items.some((i) => i.id === par.id), "cererea altcuiva lipsește din inbox");
+});
 await T("a draft never appears in the approver inbox", async () => {
   const p = await readyPar("requestor", {});
   const r = await GET("approver", "/api/par/inbox");
