@@ -9,7 +9,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ParExchange } from "../ParExchange";
 import * as fxApi from "@/lib/api/parFx";
@@ -60,8 +60,10 @@ beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(fxApi, "getFxSeries").mockResolvedValue({
     codes: ["EUR", "USD"],
-    days: 30,
-    end_date: "2026-08-28",
+    from: "2026-07-30",
+    to: "2026-08-28",
+    step_days: 1,
+    partial: false,
     points: [],
   });
   vi.spyOn(fxApi, "getFxRates").mockResolvedValue({
@@ -81,6 +83,15 @@ describe("ParExchange", () => {
     await waitFor(() => expect(screen.getAllByText("EUR").length).toBeGreaterThan(0));
     expect(screen.getAllByText(/20,1000/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/17,2800/).length).toBeGreaterThan(0);
+  });
+
+  it("pune steagul lângă fiecare valută", async () => {
+    render(<ParExchange />);
+    await waitFor(() => expect(screen.getAllByText("EUR").length).toBeGreaterThan(0));
+    // Steagul e decorativ, dar prezența lui e ce a cerut owner-ul — deci o verificăm.
+    expect(screen.getAllByText("🇪🇺").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("🇺🇸").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("🇷🇴").length).toBeGreaterThan(0);
   });
 
   it("calculează conversia implicită EUR → MDL", async () => {
@@ -115,6 +126,59 @@ describe("ParExchange", () => {
     await user.click(screen.getByRole("button", { name: "Inversează valutele" }));
     expect(screen.getByLabelText("Din")).toHaveValue("MDL");
     expect(screen.getByLabelText("În")).toHaveValue("EUR");
+  });
+
+  it("cere de la server perioada aleasă din chips", async () => {
+    const user = userEvent.setup();
+    const spy = vi.spyOn(fxApi, "getFxSeries").mockResolvedValue({
+      codes: ["EUR", "USD"],
+      from: "2023-08-29",
+      to: "2026-08-28",
+      step_days: 9,
+      partial: false,
+      points: [],
+    });
+    render(<ParExchange />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "3 ani" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "3 ani" }));
+
+    await waitFor(() => {
+      const last = spy.mock.calls[spy.mock.calls.length - 1];
+      const range = last?.[1] as { from?: string; to?: string } | undefined;
+      expect(range?.from).toBeDefined();
+      // ~3 ani în urmă, nu 30 de zile.
+      const spanDays = (Date.parse(range!.to!) - Date.parse(range!.from!)) / 86_400_000;
+      expect(spanDays).toBeGreaterThan(1000);
+    });
+  });
+
+  it("permite un interval propriu, cu două date", async () => {
+    const user = userEvent.setup();
+    const spy = vi.spyOn(fxApi, "getFxSeries");
+    render(<ParExchange />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Interval" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Interval" }));
+
+    // `<input type="date">` nu se completează prin tastare în jsdom — se schimbă valoarea direct.
+    fireEvent.change(screen.getByLabelText("De la"), { target: { value: "2024-01-15" } });
+
+    await waitFor(() => {
+      const last = spy.mock.calls[spy.mock.calls.length - 1];
+      expect((last?.[1] as { from?: string })?.from).toBe("2024-01-15");
+    });
+  });
+
+  it("explică eșantionarea când perioada e lungă", async () => {
+    vi.spyOn(fxApi, "getFxSeries").mockResolvedValue({
+      codes: ["EUR", "USD"],
+      from: "2023-08-29",
+      to: "2026-08-28",
+      step_days: 9,
+      partial: false,
+      points: [{ date: "2026-08-28", rates: { EUR: 20.1, USD: 17.28 } }],
+    });
+    render(<ParExchange />);
+    await waitFor(() => expect(screen.getByText(/un punct la 9 zile/i)).toBeInTheDocument());
   });
 
   it("spune din ce zi provine cursul când ziua cerută n-are publicare", async () => {

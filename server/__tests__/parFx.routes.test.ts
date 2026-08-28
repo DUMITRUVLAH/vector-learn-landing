@@ -51,8 +51,23 @@ function xmlFor(dateDdMmYyyy: string, eur: number, usd: number): string {
 </ValCurs>`;
 }
 
-/** Zilele pe care „BNM" le publică în test; restul întorc XML gol (zi nepublicată). */
-const published = new Map<string, string>();
+/** Exportul CSV al BNM — forma arhivei: zecimala virgulă, nume între ghilimele, subsol. */
+function csvFor(dateDdMmYyyy: string, eur: number, usd: number): string {
+  return [
+    `"Official exchange rate:";${dateDdMmYyyy};;;`,
+    ";;;;",
+    "Valuta;Cod;Abr;Rata;Cursul",
+    `Euro;978;EUR;1;${String(eur).replace(".", ",")}`,
+    `"Dolar S.U.A.";840;USD;1;${String(usd).replace(".", ",")}`,
+    "",
+    '"Sursa datelor:";BNM',
+  ].join("\n");
+}
+
+/** Zilele pe care „BNM" le publică în test, ca pereche EUR/USD. */
+const published = new Map<string, [number, number]>();
+/** Zile pe care DOAR arhiva CSV le are (XML-ul întoarce gol) — exact ca la BNM. */
+const archiveOnly = new Set<string>();
 let fetchCalls: string[] = [];
 
 async function applyMigrations(pg: PGlite) {
@@ -98,18 +113,32 @@ afterAll(async () => {
 beforeEach(async () => {
   await testDb.delete(bnmRates);
   published.clear();
+  archiveOnly.clear();
   fetchCalls = [];
   // Azi 20.10 / ieri 20.00 la EUR — o creștere pe care testul o verifică explicit.
-  published.set(ddmmyyyy(iso(0)), xmlFor(ddmmyyyy(iso(0)), 20.1, 17.28));
-  published.set(ddmmyyyy(iso(-1)), xmlFor(ddmmyyyy(iso(-1)), 20.0, 17.2));
+  published.set(ddmmyyyy(iso(0)), [20.1, 17.28]);
+  published.set(ddmmyyyy(iso(-1)), [20.0, 17.2]);
+  archiveOnly.clear();
 
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      fetchCalls.push(String(url));
-      const date = String(url).split("date=")[1] ?? "";
-      const body = published.get(date) ?? `<?xml version="1.0"?><ValCurs Date="${date}"></ValCurs>`;
-      return { ok: true, text: async () => body } as unknown as Response;
+      const u = String(url);
+      fetchCalls.push(u);
+      const date = u.split("date=")[1] ?? "";
+      const quote = published.get(date);
+      const isXml = u.includes("get_xml=1");
+
+      if (isXml) {
+        // XML-ul BNM nu servește arhiva: pentru o zi veche întoarce un ValCurs GOL, nu 404.
+        const body =
+          quote && !archiveOnly.has(date)
+            ? xmlFor(date, quote[0], quote[1])
+            : `<?xml version="1.0"?><ValCurs Date="${date}"></ValCurs>`;
+        return { ok: true, text: async () => body } as unknown as Response;
+      }
+      if (!quote) return { ok: false, status: 404, text: async () => "No data found." } as unknown as Response;
+      return { ok: true, text: async () => csvFor(date, quote[0], quote[1]) } as unknown as Response;
     })
   );
 });
@@ -220,19 +249,100 @@ describe("GET /api/par/fx/convert", () => {
 
 describe("GET /api/par/fx/series", () => {
   it("întoarce doar zilele publicate, cu cursul pe unitate", async () => {
-    const res = await app.request(`/api/par/fx/series?codes=EUR,USD&days=5&date=${iso(0)}`);
+    const res = await app.request(`/api/par/fx/series?codes=EUR,USD&days=5&to=${iso(0)}`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.points.length).toBe(2); // doar azi și ieri sunt publicate
+    expect(body.step_days).toBe(1);
     const last = body.points[body.points.length - 1];
     expect(last.date).toBe(iso(0));
     expect(last.rates.EUR).toBeCloseTo(20.1, 6);
     expect(last.rates.USD).toBeCloseTo(17.28, 6);
   });
 
-  it("plafonează intervalul cerut (nu descarcă un an la o cerere)", async () => {
-    const res = await app.request(`/api/par/fx/series?codes=EUR&days=9999&date=${iso(0)}`);
+  it("acceptă un interval explicit from/to", async () => {
+    const res = await app.request(`/api/par/fx/series?codes=EUR&from=${iso(-1)}&to=${iso(0)}`);
     expect(res.status).toBe(200);
-    expect((await res.json()).days).toBe(90);
+    const body = await res.json();
+    expect(body.from).toBe(iso(-1));
+    expect(body.to).toBe(iso(0));
+    expect(body.points.map((p: { date: string }) => p.date)).toEqual([iso(-1), iso(0)]);
+  });
+
+  it("eșantionează perioadele lungi în loc să descarce fiecare zi", async () => {
+    // 3 ani = ~1096 de zile. BNM servește o singură zi per cerere, deci un grafic zilnic ar
+    // însemna ~1100 de descărcări; pasul trebuie să le reducă sub plafonul de puncte.
+    const res = await app.request(`/api/par/fx/series?codes=EUR&from=${iso(-1095)}&to=${iso(0)}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.step_days).toBeGreaterThan(1);
+    // O zi descărcată = o pereche de cereri în cel mai rău caz (XML + CSV); numărul de zile
+    // ATINSE trebuie să rămână de ordinul punctelor, nu al zilelor din perioadă.
+    const distinctDays = new Set(fetchCalls.map((u) => u.split("date=")[1])).size;
+    expect(distinctDays).toBeLessThanOrEqual(140);
+  });
+
+  it("include mereu ultima zi a perioadei", async () => {
+    const res = await app.request(`/api/par/fx/series?codes=EUR&from=${iso(-400)}&to=${iso(0)}`);
+    const body = await res.json();
+    expect(body.points[body.points.length - 1].date).toBe(iso(0));
+  });
+
+  it("completează dinspre prezent, nu dinspre capătul vechi", async () => {
+    // Cu plafonul de descărcări pe cerere, o perioadă lungă cerută prima dată se umple în runde.
+    // Prima rundă trebuie să aducă zilele recente — un grafic care arată 2023 fără 2026 e inutil.
+    const res = await app.request(`/api/par/fx/series?codes=EUR&from=${iso(-400)}&to=${iso(0)}`);
+    const body = await res.json();
+    expect(body.partial).toBe(true);
+    expect(body.points.some((p: { date: string }) => p.date === iso(0))).toBe(true);
+  });
+
+  it("refuză o perioadă mai lungă de 5 ani", async () => {
+    const res = await app.request(`/api/par/fx/series?codes=EUR&from=${iso(-3000)}&to=${iso(0)}`);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("range_too_long");
+  });
+
+  it("refuză un interval inversat", async () => {
+    const res = await app.request(`/api/par/fx/series?codes=EUR&from=${iso(0)}&to=${iso(-10)}`);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_range");
+  });
+});
+
+describe("arhiva BNM (CSV)", () => {
+  it("citește o zi veche din CSV, când XML-ul întoarce gol", async () => {
+    // Comportamentul real al BNM: `get_xml=1` pe o dată din 2023 dă un ValCurs GOL, nu 404.
+    // Fără căderea pe CSV, selectorul de dată ar raporta „curs indisponibil" pentru tot istoricul.
+    const old = iso(-800);
+    published.set(ddmmyyyy(old), [19.4, 17.6]);
+    archiveOnly.add(ddmmyyyy(old));
+
+    const res = await app.request(`/api/par/fx/rates?date=${old}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.effective_date).toBe(old);
+    const eur = body.rates.find((r: { code: string }) => r.code === "EUR");
+    expect(eur.mdl_per_unit).toBeCloseTo(19.4, 6);
+    expect(eur.name).toBe("Euro");
+  });
+
+  it("nu mai cere XML pentru zilele vechi (merge direct la arhivă)", async () => {
+    const old = iso(-800);
+    published.set(ddmmyyyy(old), [19.4, 17.6]);
+    archiveOnly.add(ddmmyyyy(old));
+    fetchCalls = [];
+    await app.request(`/api/par/fx/rates?date=${old}`);
+    expect(fetchCalls.some((u) => u.includes("get_xml=1") && u.includes(ddmmyyyy(old)))).toBe(false);
+  });
+
+  it("parsează zecimala cu virgulă și numele în ghilimele din CSV", async () => {
+    const old = iso(-800);
+    published.set(ddmmyyyy(old), [19.4567, 17.6543]);
+    archiveOnly.add(ddmmyyyy(old));
+    const res = await app.request(`/api/par/fx/convert?from=USD&to=MDL&amount=10&date=${old}`);
+    const body = await res.json();
+    expect(body.rate).toBeCloseTo(17.6543, 6);
+    expect(body.result).toBeCloseTo(176.543, 4);
   });
 });

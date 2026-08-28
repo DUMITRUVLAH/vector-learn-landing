@@ -19,6 +19,7 @@ import { Hono } from "hono";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import {
   convertVia,
+  fromIso,
   getEffectiveQuotes,
   getSeries,
   isValidIso,
@@ -34,6 +35,9 @@ parFxRoutes.use("*", requireAuth);
 const PINNED = ["EUR", "USD", "RON", "GBP", "UAH", "RUB"];
 
 const SOURCE_URL = "https://www.bnm.md/ro/official_exchange_rates";
+
+/** Cea mai lungă perioadă pe care o servește un singur grafic: 5 ani. */
+const MAX_RANGE_DAYS = 366 * 5;
 
 function serialize(q: BnmQuote, prev?: BnmQuote) {
   const change = prev ? q.mdlPerUnit - prev.mdlPerUnit : null;
@@ -112,16 +116,44 @@ parFxRoutes.get("/series", async (c) => {
     .slice(0, 5);
   if (codes.length === 0) return c.json({ error: "invalid_codes" }, 400);
 
-  const daysRaw = Number(c.req.query("days") ?? "30");
-  const days = Number.isFinite(daysRaw) ? Math.min(Math.max(Math.trunc(daysRaw), 2), 90) : 30;
+  const today = isoDate(new Date());
+  const toParam = c.req.query("to") ?? c.req.query("date");
+  const to = toParam && toParam.length > 0 ? toParam : today;
+  if (!isValidIso(to)) return c.json({ error: "invalid_date", expected: "YYYY-MM-DD" }, 400);
 
-  const endParam = c.req.query("date");
-  const end = endParam && endParam.length > 0 ? endParam : isoDate(new Date());
-  if (!isValidIso(end)) return c.json({ error: "invalid_date", expected: "YYYY-MM-DD" }, 400);
+  // `from` explicit, sau derivat din `days` (forma veche a rutei, păstrată).
+  let from = c.req.query("from") ?? "";
+  if (!from) {
+    const daysRaw = Number(c.req.query("days") ?? "30");
+    const days = Number.isFinite(daysRaw) ? Math.min(Math.max(Math.trunc(daysRaw), 2), MAX_RANGE_DAYS) : 30;
+    const d = new Date(fromIso(to));
+    d.setDate(d.getDate() - (days - 1));
+    from = isoDate(d);
+  }
+  if (!isValidIso(from)) return c.json({ error: "invalid_date", expected: "YYYY-MM-DD" }, 400);
+  if (from > to) return c.json({ error: "invalid_range", from, to }, 400);
+
+  // Plafon de 5 ani: peste atât nu e o întrebare de grafic, ci un export — și ar însemna un
+  // număr de descărcări pe care nu-l cerem unui site public într-o singură cerere.
+  const spanDays = Math.round((fromIso(to).getTime() - fromIso(from).getTime()) / 86_400_000) + 1;
+  if (spanDays > MAX_RANGE_DAYS) {
+    return c.json({ error: "range_too_long", max_days: MAX_RANGE_DAYS, requested_days: spanDays }, 400);
+  }
 
   try {
-    const points = await getSeries(codes, days, end);
-    return c.json({ codes, days, end_date: end, base: "MDL", source: "BNM", points });
+    const series = await getSeries(codes, from, to);
+    return c.json({
+      codes,
+      from: series.from,
+      to: series.to,
+      /** Pasul în zile: 1 = zilnic; peste ~4 luni graficul se eșantionează. */
+      step_days: series.step,
+      /** true = perioada e încă în curs de completat; reîncarcă pentru restul punctelor. */
+      partial: series.partial,
+      base: "MDL",
+      source: "BNM",
+      points: series.points,
+    });
   } catch {
     return c.json({ error: "bnm_unavailable", source_url: SOURCE_URL }, 503);
   }
