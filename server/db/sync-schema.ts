@@ -363,6 +363,22 @@ async function main() {
     // default și FĂRĂ NOT NULL, deci rândurile existente ar rămâne cu currency = NULL, iar
     // inserturile care omit câmpul ar scrie NULL. Aici o punem cu tot cu default.
     `ALTER TABLE "par_budget_codes" ADD COLUMN IF NOT EXISTS "currency" varchar(3) DEFAULT 'MDL' NOT NULL`,
+    // Migrarea 0148: cache-ul de curs BNM. E o tabelă NOUĂ pe calea unei cereri (pagina de curs
+    // valutar din PAR o citește la fiecare deschidere), iar prod-ul primește codul înaintea
+    // migrării — fără heal, secțiunea ar da „relation bnm_rates does not exist".
+    `CREATE TABLE IF NOT EXISTS "bnm_rates" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "rate_date" date NOT NULL,
+      "code" varchar(3) NOT NULL,
+      "name" varchar(120) NOT NULL DEFAULT '',
+      "nominal" numeric(12,4) NOT NULL DEFAULT '1',
+      "value" numeric(18,6) NOT NULL,
+      "mdl_per_unit" numeric(18,8) NOT NULL,
+      "fetched_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "bnm_rates_date_code_idx" ON "bnm_rates" ("rate_date","code")`,
+    `CREATE INDEX IF NOT EXISTS "bnm_rates_date_idx" ON "bnm_rates" ("rate_date")`,
+    `CREATE INDEX IF NOT EXISTS "bnm_rates_code_idx" ON "bnm_rates" ("code")`,
   ];
   for (const stmt of ENSURE_STATEMENTS) {
     try {

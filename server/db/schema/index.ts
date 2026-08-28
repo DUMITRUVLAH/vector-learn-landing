@@ -69,3 +69,5 @@ export * from "./docmergeTemplates";
 export * from "./platform";
 // Telemetrie de erori + semnale de creștere (PLATFORM-002)
 export * from "./telemetry";
+// Curs oficial BNM — cache global, date publice (FX-001)
+export * from "./bnmRates";

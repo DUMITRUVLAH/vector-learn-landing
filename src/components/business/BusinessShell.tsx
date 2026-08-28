@@ -26,6 +26,7 @@ import {
   Home,
   Receipt,
   ReceiptText,
+  ArrowLeftRight,
   Banknote,
   Settings,
   FileSpreadsheet,
@@ -56,6 +57,9 @@ import { NotificationBell } from "@/components/app/NotificationBell";
 import { api } from "@/lib/api";
 import { cachedOnce, peekResolved } from "@/lib/sessionCache";
 import { Avatar, PageHeader, SidebarNavItem, type ChipTone } from "@/components/ds";
+
+/** Titlul din `index.html` — la care revenim când shell-ul iese din ecran (ex. logout). */
+const DEFAULT_DOCUMENT_TITLE = "FinFlow — Controlul financiar complet";
 
 interface BusinessShellProps {
   children: ReactNode;
@@ -115,6 +119,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Cereri", href: "/business/par", icon: ClipboardList, tone: "indigo" },
       { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, tone: "emerald", roles: ["approver", "par_admin"] },
       { label: "Rapoarte PAR", href: "/business/par/reports", icon: FileText, tone: "sky", roles: ["approver", "finance", "par_admin"] },
+      { label: "Curs valutar", href: "/business/par/exchange", icon: ArrowLeftRight, tone: "teal" },
     ],
   },
   {
@@ -181,6 +186,9 @@ const PAR_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Foldere proiecte", href: "/business/par/folders", icon: FolderOpen, tone: "teal", roles: ["approver", "finance", "par_admin"] },
       { label: "Rapoarte & statistici", href: "/business/par/reports", icon: BarChart3, tone: "sky", roles: ["approver", "finance", "par_admin"] },
+      // Cursul oficial e informație publică — fără restricție de rol; îl folosește oricine
+      // completează o cerere în valută.
+      { label: "Curs valutar", href: "/business/par/exchange", icon: ArrowLeftRight, tone: "teal" },
     ],
   },
   {
@@ -452,6 +460,15 @@ export function BusinessShell({
 }: BusinessShellProps) {
   const { path, navigate } = useRouter();
   const session = useBusinessSession();
+
+  // Fila de browser trebuie să spună CE pagină e deschisă: cu 3–4 taburi FinFlow deschise,
+  // un titlu identic peste tot le face imposibil de deosebit (și la hover, în tooltip).
+  useEffect(() => {
+    document.title = pageTitle ? `${pageTitle} · FinFlow` : "FinFlow";
+    return () => {
+      document.title = DEFAULT_DOCUMENT_TITLE;
+    };
+  }, [pageTitle]);
 
   // VM1-01: fetch PAR roles to gate the PAR navigation section.
   const { roles: parRoles, status: parRolesStatus } = useParRoles();

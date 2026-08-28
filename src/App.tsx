@@ -38,6 +38,8 @@ const ParDetailPage = lazyWithTimeout(() => import("./pages/par/ParDetail").then
 const ParAdmin = lazyWithTimeout(() => import("./pages/par/ParAdmin").then((m) => ({ default: m.ParAdmin })));
 const ParReports = lazyWithTimeout(() => import("./pages/par/ParReports").then((m) => ({ default: m.ParReports })));
 const ParFolders = lazyWithTimeout(() => import("./pages/par/ParFolders").then((m) => ({ default: m.ParFolders })));
+// FX-001: curs valutar BNM — lazy, ca recharts să nu intre în bundle-ul de login.
+const ParExchange = lazyWithTimeout(() => import("./pages/par/ParExchange").then((m) => ({ default: m.ParExchange })));
 const ParEfacturaQueue = lazyWithTimeout(() => import("./pages/par/ParEfacturaQueue"));
 
 // DOCMERGE
@@ -248,6 +250,7 @@ function Routes() {
   if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParGuardPage requiredRoles={["finance", "par_admin"]}><ParFinanceQueue /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParGuardPage requiredRoles={["par_admin"]}><ParAdminPage /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/efactura")) return <BusinessGuardPage><ParGuardPage requiredRoles={["finance", "par_admin"]}><ParEfacturaQueue /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/exchange")) return <BusinessGuardPage><ParGuardPage><ParExchange /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/folders")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "finance", "par_admin"]}><ParFolders /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "finance", "par_admin"]}><ParReports /></ParGuardPage></BusinessGuardPage>;
   // PARQA-001: edit an existing draft / changes_requested PAR (ParCreateForm loads it by :id).

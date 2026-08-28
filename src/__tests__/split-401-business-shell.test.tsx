@@ -56,17 +56,17 @@ describe("SPLIT-401 — AppShell on /business/* routes", () => {
     vi.clearAllMocks();
   });
 
-  it("T-SPLIT-401-1 [blocant] shows Business Suite branding, not CRM tenant name", () => {
+  it("T-SPLIT-401-1 [blocant] shows FinFlow branding, not CRM tenant name", () => {
     render(
       <AppShell>
         <div>content</div>
       </AppShell>
     );
 
-    // Should show Business Suite, not Vector Learn logo
+    // Should show the FinFlow lockup, not the CRM (Vector Learn) logo
     expect(screen.queryByTestId("crm-logo")).toBeNull();
     // Should show business identity (at least once in the header)
-    expect(screen.getAllByText(/Business Suite/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/FinFlow/i).length).toBeGreaterThan(0);
     // Should NOT show CRM tenant
     expect(screen.queryByText("Demo Lingua School")).toBeNull();
   });
@@ -86,7 +86,7 @@ describe("SPLIT-401 — AppShell on /business/* routes", () => {
         <div>content</div>
       </AppShell>
     );
-    expect(screen.getByLabelText(/Deconectare Business Suite/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Deconectare FinFlow/i)).toBeInTheDocument();
   });
 
   it("T-SPLIT-401-2b CRM logo is NOT rendered when on /business/* route", () => {

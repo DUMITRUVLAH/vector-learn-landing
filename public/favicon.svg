@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="FinFlow">
+  <title>FinFlow</title>
+  <rect width="32" height="32" rx="7" fill="#1a1aff"/>
+  <!-- "FF" monogram drawn as rects: a favicon cannot rely on a font being present -->
+  <g fill="#fff">
+    <rect x="5" y="8" width="3.5" height="16"/>
+    <rect x="5" y="8" width="9" height="3.5"/>
+    <rect x="5" y="14.5" width="7" height="3.5"/>
+    <rect x="17.5" y="8" width="3.5" height="16"/>
+    <rect x="17.5" y="8" width="9" height="3.5"/>
+    <rect x="17.5" y="14.5" width="7" height="3.5"/>
+  </g>
+</svg>

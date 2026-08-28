@@ -68,8 +68,14 @@ const AREAS = {
       // consumul să vină convertit în lei — altfel un plafon în EUR e citit ca lei (de ~20× mai mic).
       ["GET", "/api/par/budget-codes", (j) => Array.isArray(j?.budgetCodes)],
       ["GET", "/api/par/budget-codes/usage", (j) => Array.isArray(j?.usage) && j.usage.every((u) => typeof u.currency === "string" && typeof u.allocatedCents === "number")],
+      // Cursul BNM (FX-001): tabloul zilei, conversia și seria pentru grafic. Verificăm FORMA,
+      // nu doar 200: `mdl_per_unit` e cursul pe O unitate, iar `value` cel publicat de BNM
+      // pentru `nominal` unități — confundate, un calcul cu ALL/JPY iese de 10–100× greșit.
+      ["GET", "/api/par/fx/rates", (j) => Array.isArray(j?.rates) && j.rates.some((r) => r.code === "EUR" && r.mdl_per_unit > 0) && typeof j.effective_date === "string"],
+      ["GET", "/api/par/fx/convert?from=EUR&to=MDL&amount=100", (j) => typeof j?.rate === "number" && Math.abs(j.result - j.amount * j.rate) < 0.01],
+      ["GET", "/api/par/fx/series?codes=EUR,USD&days=7", (j) => Array.isArray(j?.points) && j.points.every((p) => typeof p.date === "string")],
     ],
-    routes: ["/business/par", "/business/par/inbox", "/business/par/new", "/business/par/folders", "/business/par/finance", "/business/par/reports", "/business/par/admin"],
+    routes: ["/business/par", "/business/par/inbox", "/business/par/new", "/business/par/folders", "/business/par/finance", "/business/par/reports", "/business/par/exchange", "/business/par/admin"],
     deep: ["e2e-par-sweep.mjs", "e2e-par-write-sweep.mjs", "e2e-par-scope.mjs"],
   },
   fin: {

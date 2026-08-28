@@ -104,3 +104,65 @@ export function __resetFxCache(): void {
   cache.clear();
   lastKnown.clear();
 }
+
+// ─── Tabloul complet al zilei ────────────────────────────────────────────────
+
+/** O valută publicată de BNM pentru o dată. */
+export interface BnmQuote {
+  /** Cod ISO 4217, ex. "EUR". */
+  code: string;
+  /** Denumirea publicată de BNM ("Euro", "Dolar S.U.A."). */
+  name: string;
+  /** Câte unități valutare acoperă `value` (10 pentru ALL, 100 pentru JPY etc.). */
+  nominal: number;
+  /** Cursul așa cum îl publică BNM: lei pentru `nominal` unități. */
+  value: number;
+  /** Lei pentru O unitate — `value / nominal`. Asta se folosește la calcule. */
+  mdlPerUnit: number;
+}
+
+/**
+ * Parsează TOATE valutele dintr-un XML BNM, nu doar una.
+ *
+ * `parseBnmRate` extrage un singur cod și e calea fierbinte a conversiilor; aici avem nevoie de
+ * tabloul întreg (pagina de curs valutar + convertorul, care face cross-rate prin MDL). Același
+ * regex, o singură trecere — fără dependență de XML.
+ */
+export function parseBnmRates(xml: string): BnmQuote[] {
+  const out: BnmQuote[] = [];
+  const blockRe = /<Valute\b[^>]*>([\s\S]*?)<\/Valute>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(xml)) !== null) {
+    const body = m[1];
+    const code = /<CharCode>\s*([A-Za-z]{3})\s*<\/CharCode>/i.exec(body)?.[1]?.toUpperCase();
+    if (!code) continue;
+    const nominal = Number(/<Nominal>([\d.]+)<\/Nominal>/i.exec(body)?.[1] ?? "1");
+    const value = Number(/<Value>([\d.,]+)<\/Value>/i.exec(body)?.[1]?.replace(",", "."));
+    if (!Number.isFinite(value) || !Number.isFinite(nominal) || nominal <= 0 || value <= 0) continue;
+    const name = (/<Name>([\s\S]*?)<\/Name>/i.exec(body)?.[1] ?? code).trim();
+    out.push({ code, name, nominal, value, mdlPerUnit: value / nominal });
+  }
+  return out;
+}
+
+/** URL-ul oficial BNM pentru o zi (XML, gratuit, fără cheie). */
+export function bnmXmlUrl(date: Date): string {
+  return `https://www.bnm.md/ro/official_exchange_rates?get_xml=1&date=${bnmDate(date)}`;
+}
+
+/**
+ * Descarcă tabloul complet al unei zile. Returnează [] dacă BNM n-are curs pentru acea dată
+ * (zi viitoare, sau înainte de arhivă) — absența nu e o eroare, e „încă nepublicat".
+ */
+export async function fetchBnmQuotes(
+  date: Date,
+  opts: { fetchImpl?: FxFetch; timeoutMs?: number } = {}
+): Promise<BnmQuote[]> {
+  const doFetch: FxFetch =
+    opts.fetchImpl ??
+    ((url) =>
+      fetch(url, { signal: AbortSignal.timeout(opts.timeoutMs ?? 8000) }) as unknown as ReturnType<FxFetch>);
+  const res = await doFetch(bnmXmlUrl(date));
+  if (!res.ok) throw new Error("bnm_http_error");
+  return parseBnmRates(await res.text());
+}
