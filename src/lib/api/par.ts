@@ -1143,6 +1143,39 @@ export async function deleteVendor(id: string): Promise<{ ok: boolean }> {
 export interface ParReportFilters {
   period_from?: string;  // ISO date
   period_to?: string;    // ISO date
+  /** Una sau mai multe stări, separate prin virgulă ("approved,paid"). */
+  status?: string;
+  payer_id?: string;
+  project_id?: string;
+  department_id?: string;
+  budget_code_id?: string;
+  purpose?: string;
+  charge_to?: string;
+  currency?: string;
+  /** Căutare liberă în numărul cererii și în beneficiar. */
+  q?: string;
+}
+
+/**
+ * Un SINGUR loc construiește query string-ul rapoartelor. Înainte, fiecare funcție îl repeta,
+ * iar exporturile îl repetau din nou — de aceea un filtru nou (proiect, status) ar fi ajuns în
+ * grafic dar nu și în fișierul exportat, adică două cifre diferite pentru aceeași întrebare.
+ */
+export function parReportQuery(filters?: ParReportFilters): string {
+  const params = new URLSearchParams();
+  if (filters?.period_from) params.set("from", filters.period_from);
+  if (filters?.period_to) params.set("to", filters.period_to);
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.payer_id) params.set("payer_id", filters.payer_id);
+  if (filters?.project_id) params.set("project_id", filters.project_id);
+  if (filters?.department_id) params.set("department_id", filters.department_id);
+  if (filters?.budget_code_id) params.set("budget_code_id", filters.budget_code_id);
+  if (filters?.purpose) params.set("purpose", filters.purpose);
+  if (filters?.charge_to) params.set("charge_to", filters.charge_to);
+  if (filters?.currency) params.set("currency", filters.currency);
+  if (filters?.q?.trim()) params.set("q", filters.q.trim());
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
 }
 
 export interface ParSpendByItem {
@@ -1170,11 +1203,7 @@ export interface ParCycleTimeItem {
 }
 
 export async function getParReportByBudget(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
-  const params = new URLSearchParams();
-  if (filters?.period_from) params.set("from", filters.period_from);
-  if (filters?.period_to) params.set("to", filters.period_to);
-  const qs = params.toString();
-  return api(`/api/par/reports/by-budget${qs ? `?${qs}` : ""}`);
+  return api(`/api/par/reports/by-budget${parReportQuery(filters)}`);
 }
 
 // VF-302: delegations
@@ -1273,57 +1302,35 @@ export async function listParEmailLog(onlyFailed?: boolean): Promise<{ emails: P
 }
 
 export async function getParReportByDepartment(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
-  const params = new URLSearchParams();
-  if (filters?.period_from) params.set("from", filters.period_from);
-  if (filters?.period_to) params.set("to", filters.period_to);
-  const qs = params.toString();
-  return api(`/api/par/reports/by-department${qs ? `?${qs}` : ""}`);
+  return api(`/api/par/reports/by-department${parReportQuery(filters)}`);
 }
 
 export async function getParReportByProject(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
-  const params = new URLSearchParams();
-  if (filters?.period_from) params.set("from", filters.period_from);
-  if (filters?.period_to) params.set("to", filters.period_to);
-  const qs = params.toString();
-  return api(`/api/par/reports/by-project${qs ? `?${qs}` : ""}`);
+  return api(`/api/par/reports/by-project${parReportQuery(filters)}`);
 }
 
 export async function getParReportByPayer(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
-  const params = new URLSearchParams();
-  if (filters?.period_from) params.set("from", filters.period_from);
-  if (filters?.period_to) params.set("to", filters.period_to);
-  const qs = params.toString();
-  return api(`/api/par/reports/by-payer${qs ? `?${qs}` : ""}`);
+  return api(`/api/par/reports/by-payer${parReportQuery(filters)}`);
 }
 
 /** PARQA-019: spend per payee/beneficiary */
 export async function getParReportByVendor(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
-  const params = new URLSearchParams();
-  if (filters?.period_from) params.set("from", filters.period_from);
-  if (filters?.period_to) params.set("to", filters.period_to);
-  const qs = params.toString();
-  return api(`/api/par/reports/by-vendor${qs ? `?${qs}` : ""}`);
+  return api(`/api/par/reports/by-vendor${parReportQuery(filters)}`);
 }
 
 /** Feature 2: spend per event (calls existing /api/par/reports/by-event) */
 export async function getParReportByEvent(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
-  const params = new URLSearchParams();
-  if (filters?.period_from) params.set("from", filters.period_from);
-  if (filters?.period_to) params.set("to", filters.period_to);
-  const qs = params.toString();
-  return api(`/api/par/reports/by-event${qs ? `?${qs}` : ""}`);
+  return api(`/api/par/reports/by-event${parReportQuery(filters)}`);
 }
 
 export async function getParReportByChargeTo(filters?: ParReportFilters): Promise<{ items: ParSpendByItem[] }> {
-  const params = new URLSearchParams();
-  if (filters?.period_from) params.set("from", filters.period_from);
-  if (filters?.period_to) params.set("to", filters.period_to);
-  const qs = params.toString();
-  return api(`/api/par/reports/by-charge-to${qs ? `?${qs}` : ""}`);
+  return api(`/api/par/reports/by-charge-to${parReportQuery(filters)}`);
 }
 
-export async function getParReportAging(): Promise<{ items: ParAgingItem[] }> {
-  return api("/api/par/reports/aging");
+/** Aging și cycle-time respectă ACELEAȘI filtre ca restul raportului — altfel „vechimea
+ *  cererilor" ar fi vorbit despre alt set de cereri decât graficul de deasupra. */
+export async function getParReportAging(filters?: ParReportFilters): Promise<{ items: ParAgingItem[] }> {
+  return api(`/api/par/reports/aging${parReportQuery(filters)}`);
 }
 
 // VM1-03: currency breakdown — per-currency native totals + MDL aggregate
@@ -1337,32 +1344,20 @@ export interface ParCurrencyBreakdownItem {
 export async function getParReportCurrencyBreakdown(
   filters?: ParReportFilters
 ): Promise<{ byCurrency: ParCurrencyBreakdownItem[]; totalMdlCents: number }> {
-  const params = new URLSearchParams();
-  if (filters?.period_from) params.set("from", filters.period_from);
-  if (filters?.period_to) params.set("to", filters.period_to);
-  const qs = params.toString();
-  return api(`/api/par/reports/currency-breakdown${qs ? `?${qs}` : ""}`);
+  return api(`/api/par/reports/currency-breakdown${parReportQuery(filters)}`);
 }
 
-export async function getParReportCycleTime(): Promise<ParCycleTimeItem> {
-  return api("/api/par/reports/cycle-time");
+export async function getParReportCycleTime(filters?: ParReportFilters): Promise<ParCycleTimeItem> {
+  return api(`/api/par/reports/cycle-time${parReportQuery(filters)}`);
 }
 
 export function getParReportExportUrl(filters?: ParReportFilters): string {
-  const params = new URLSearchParams();
-  if (filters?.period_from) params.set("from", filters.period_from);
-  if (filters?.period_to) params.set("to", filters.period_to);
-  const qs = params.toString();
-  return `/api/par/reports/export.csv${qs ? `?${qs}` : ""}`;
+  return `/api/par/reports/export.csv${parReportQuery(filters)}`;
 }
 
 /** VF-201: same filters, Excel workbook. */
 export function getParReportExportXlsxUrl(filters?: ParReportFilters): string {
-  const params = new URLSearchParams();
-  if (filters?.period_from) params.set("from", filters.period_from);
-  if (filters?.period_to) params.set("to", filters.period_to);
-  const qs = params.toString();
-  return `/api/par/reports/export.xlsx${qs ? `?${qs}` : ""}`;
+  return `/api/par/reports/export.xlsx${parReportQuery(filters)}`;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

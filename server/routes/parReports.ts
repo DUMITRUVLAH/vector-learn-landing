@@ -70,21 +70,72 @@ parReportsRoutes.use("*", async (c, next) => {
   await next();
 });
 
-const periodSchema = z.object({
+/**
+ * Filtrele raportului. Perioada exista de la început; restul sunt cele pe care le are deja lista
+ * de cereri — fără ele, „Rapoarte" răspundea la o singură întrebare („cât, în perioada asta"),
+ * nu la întrebările pe care le pune de fapt un manager de proiect („cât pe proiectul X, doar
+ * plătite, doar în EUR").
+ *
+ * Toate merg printr-un SINGUR `buildReportWhere`, folosit de toate cele 10 rapoarte ȘI de
+ * exporturi — altfel exportul ar fi ieșit cu alt set de rânduri decât graficul de deasupra lui,
+ * iar asta e cel mai scump fel de raport greșit: unul care pare corect.
+ */
+const reportQuerySchema = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
+  /** Una sau mai multe stări, separate prin virgulă: "approved,in_finance,paid". */
+  status: z.string().optional(),
+  payer_id: z.string().uuid().optional(),
+  project_id: z.string().uuid().optional(),
+  department_id: z.string().uuid().optional(),
+  budget_code_id: z.string().uuid().optional(),
+  purpose: z.string().optional(),
+  charge_to: z.string().optional(),
+  /** Moneda cererii (MDL/EUR/USD) — sumele rămân agregate în MDL. */
+  currency: z.string().optional(),
+  /** Căutare liberă în numărul cererii și în beneficiar. */
+  q: z.string().optional(),
 });
 
-function buildPeriodWhere(tenantId: string, from?: string, to?: string, scope?: SQL) {
+export type ReportQuery = z.infer<typeof reportQuerySchema>;
+
+/** Citește filtrele din query string. Un parametru invalid e ignorat, nu prăbușește raportul. */
+function parseReportQuery(c: { req: { query: () => Record<string, string> } }): ReportQuery {
+  const parsed = reportQuerySchema.safeParse(c.req.query());
+  return parsed.success ? parsed.data : {};
+}
+
+const STATUS_VALUES = [
+  "draft", "pending_approval", "changes_requested", "rejected",
+  "approved", "in_finance", "reapproval_required", "paid", "cancelled",
+] as const;
+
+function buildReportWhere(tenantId: string, q: ReportQuery, scope?: SQL) {
   const conditions: SQL[] = [eq(parRequests.tenantId, tenantId)];
   if (scope) conditions.push(scope);
   // PARQA-019: dateOfRequest is a timestamp column — drizzle needs a Date, not a "YYYY-MM-DD" string
   // (passing a string 500'd the query). This also fixes the period filter for every other report,
   // where the same helper silently broke whenever a date range was actually supplied.
-  const fromDate = from ? new Date(from) : null;
-  const toDate = to ? new Date(to) : null;
+  const fromDate = q.from ? new Date(q.from) : null;
+  const toDate = q.to ? new Date(q.to) : null;
   if (fromDate && !isNaN(fromDate.getTime())) conditions.push(gte(parRequests.dateOfRequest, fromDate));
   if (toDate && !isNaN(toDate.getTime())) conditions.push(lte(parRequests.dateOfRequest, toDate));
+
+  // Statusuri: doar valorile cunoscute ajung în SQL — un `status=;drop` nu are ce filtra.
+  const statuses = (q.status ?? "").split(",").map((s) => s.trim()).filter((s) => (STATUS_VALUES as readonly string[]).includes(s));
+  if (statuses.length) conditions.push(sql`${parRequests.status}::text in (${sql.join(statuses.map((s) => sql`${s}`), sql`, `)})`);
+
+  if (q.payer_id) conditions.push(eq(parRequests.payerId, q.payer_id));
+  if (q.project_id) conditions.push(eq(parRequests.projectId, q.project_id));
+  if (q.department_id) conditions.push(eq(parRequests.departmentId, q.department_id));
+  if (q.budget_code_id) conditions.push(eq(parRequests.budgetCodeId, q.budget_code_id));
+  if (q.purpose) conditions.push(sql`${parRequests.purpose}::text = ${q.purpose}`);
+  if (q.charge_to) conditions.push(sql`${parRequests.chargeTo}::text = ${q.charge_to}`);
+  if (q.currency) conditions.push(eq(parRequests.currency, q.currency));
+  if (q.q && q.q.trim()) {
+    const needle = `%${q.q.trim().toLowerCase()}%`;
+    conditions.push(sql`(lower(${parRequests.requestNo}) like ${needle} or lower(coalesce(${parRequests.payeeName}, '')) like ${needle})`);
+  }
   return and(...conditions);
 }
 
@@ -94,7 +145,7 @@ function buildPeriodWhere(tenantId: string, from?: string, to?: string, scope?: 
  */
 parReportsRoutes.get("/by-budget", async (c) => {
   const tenantId = c.get("user").tenantId;
-  const { from, to } = periodSchema.parse(c.req.query());
+  const q = parseReportQuery(c);
 
   const rows = await db
     .select({
@@ -113,12 +164,13 @@ parReportsRoutes.get("/by-budget", async (c) => {
       eq(parBudgetCodes.tenantId, tenantId)
     ))
     .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
-    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
+    .where(buildReportWhere(tenantId, q, c.get("parReportScope")))
     .groupBy(parRequests.budgetCodeId, parBudgetCodes.code, parBudgetCodes.name, parBudgetCodes.allocatedCents);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
     id: r.id as string | null,
-    label: ((r.label as string | null) ?? (r.name as string | null) ?? r.id ?? "unknown") as string,
+    // „unknown" nu spune nimic într-un raport: rândul e format din cererile care N-AU cod bugetar.
+    label: ((r.label as string | null) ?? (r.name as string | null) ?? "Fără cod bugetar") as string,
     totalCents: Number(r.totalCents ?? 0),
     allocatedCents: Number(r.allocatedCents ?? 0),
     committedCents: Number(r.committedCents ?? 0),
@@ -133,7 +185,7 @@ parReportsRoutes.get("/by-budget", async (c) => {
 /** GET /api/par/reports/by-payer — consolidated execution per legal entity. */
 parReportsRoutes.get("/by-payer", async (c) => {
   const tenantId = c.get("user").tenantId;
-  const { from, to } = periodSchema.parse(c.req.query());
+  const q = parseReportQuery(c);
   const rows = await db.select({
     id: parRequests.payerId,
     label: parPayers.name,
@@ -145,7 +197,7 @@ parReportsRoutes.get("/by-payer", async (c) => {
   }).from(parRequests)
     .leftJoin(parPayers, and(eq(parPayers.id, parRequests.payerId!), eq(parPayers.tenantId, tenantId)))
     .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
-    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
+    .where(buildReportWhere(tenantId, q, c.get("parReportScope")))
     .groupBy(parRequests.payerId, parPayers.name);
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => {
     const allocatedCents = Number(r.allocatedCents ?? 0);
@@ -159,7 +211,7 @@ parReportsRoutes.get("/by-payer", async (c) => {
 /** GET /api/par/reports/by-department — VM1-03: MDL totals */
 parReportsRoutes.get("/by-department", async (c) => {
   const tenantId = c.get("user").tenantId;
-  const { from, to } = periodSchema.parse(c.req.query());
+  const q = parseReportQuery(c);
 
   const rows = await db
     .select({
@@ -176,12 +228,12 @@ parReportsRoutes.get("/by-department", async (c) => {
       eq(parDepartments.tenantId, tenantId)
     ))
     .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
-    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
+    .where(buildReportWhere(tenantId, q, c.get("parReportScope")))
     .groupBy(parRequests.departmentId, parDepartments.name);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
     id: r.id as string | null,
-    label: ((r.label as string | null) ?? r.id ?? "unknown") as string,
+    label: ((r.label as string | null) ?? "Fără departament") as string,
     totalCents: Number(r.totalCents ?? 0),
     // CORE §8: every dimension answers "paid vs estimated", not just the budget-code one.
     committedCents: Number(r.committedCents ?? 0),
@@ -195,7 +247,7 @@ parReportsRoutes.get("/by-department", async (c) => {
 /** GET /api/par/reports/by-project — VM1-03: MDL totals */
 parReportsRoutes.get("/by-project", async (c) => {
   const tenantId = c.get("user").tenantId;
-  const { from, to } = periodSchema.parse(c.req.query());
+  const q = parseReportQuery(c);
 
   const rows = await db
     .select({
@@ -213,14 +265,14 @@ parReportsRoutes.get("/by-project", async (c) => {
       eq(parProjects.tenantId, tenantId)
     ))
     .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
-    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
+    .where(buildReportWhere(tenantId, q, c.get("parReportScope")))
     .groupBy(parRequests.projectId, parProjects.name);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => {
     const allocatedCents = Number(r.allocatedCents ?? 0);
     const committedCents = Number(r.committedCents ?? 0);
     const paidCents = Number(r.paidCents ?? 0);
-    return { id: r.id as string | null, label: String(r.label ?? r.id ?? "unknown"), totalCents: Number(r.totalCents ?? 0), count: Number(r.count ?? 0), allocatedCents, committedCents, paidCents, availableCents: allocatedCents - committedCents - paidCents };
+    return { id: r.id as string | null, label: String(r.label ?? "Fără proiect"), totalCents: Number(r.totalCents ?? 0), count: Number(r.count ?? 0), allocatedCents, committedCents, paidCents, availableCents: allocatedCents - committedCents - paidCents };
   });
 
   return c.json({ items });
@@ -229,7 +281,7 @@ parReportsRoutes.get("/by-project", async (c) => {
 /** GET /api/par/reports/by-event — VM1-04: spend per event */
 parReportsRoutes.get("/by-event", async (c) => {
   const tenantId = c.get("user").tenantId;
-  const { from, to } = periodSchema.parse(c.req.query());
+  const q = parseReportQuery(c);
 
   const rows = await db
     .select({
@@ -247,7 +299,7 @@ parReportsRoutes.get("/by-event", async (c) => {
       eq(parEvents.tenantId, tenantId)
     ))
     .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
-    .where(and(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")), isNotNull(parRequests.eventId)))
+    .where(and(buildReportWhere(tenantId, q, c.get("parReportScope")), isNotNull(parRequests.eventId)))
     .groupBy(parRequests.eventId, parEvents.name);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => {
@@ -262,7 +314,7 @@ parReportsRoutes.get("/by-event", async (c) => {
 /** GET /api/par/reports/by-charge-to — VM1-03: MDL totals */
 parReportsRoutes.get("/by-charge-to", async (c) => {
   const tenantId = c.get("user").tenantId;
-  const { from, to } = periodSchema.parse(c.req.query());
+  const q = parseReportQuery(c);
 
   const rows = await db
     .select({
@@ -274,7 +326,7 @@ parReportsRoutes.get("/by-charge-to", async (c) => {
     })
     .from(parRequests)
     .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
-    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
+    .where(buildReportWhere(tenantId, q, c.get("parReportScope")))
     .groupBy(parRequests.chargeTo);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
@@ -295,7 +347,7 @@ parReportsRoutes.get("/by-charge-to", async (c) => {
  * are GDPR-sensitive; this router already requires an elevated role). */
 parReportsRoutes.get("/by-vendor", async (c) => {
   const tenantId = c.get("user").tenantId;
-  const { from, to } = periodSchema.parse(c.req.query());
+  const q = parseReportQuery(c);
 
   const rows = await db
     .select({
@@ -307,7 +359,7 @@ parReportsRoutes.get("/by-vendor", async (c) => {
     })
     .from(parRequests)
     .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
-    .where(and(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")), isNotNull(parRequests.payeeName)))
+    .where(and(buildReportWhere(tenantId, q, c.get("parReportScope")), isNotNull(parRequests.payeeName)))
     .groupBy(parRequests.payeeName);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
@@ -325,7 +377,7 @@ parReportsRoutes.get("/by-vendor", async (c) => {
 /** GET /api/par/reports/currency-breakdown — VM1-03: per-currency native totals + aggregated MDL total */
 parReportsRoutes.get("/currency-breakdown", async (c) => {
   const tenantId = c.get("user").tenantId;
-  const { from, to } = periodSchema.parse(c.req.query());
+  const q = parseReportQuery(c);
 
   const rows = await db
     .select({
@@ -335,7 +387,7 @@ parReportsRoutes.get("/currency-breakdown", async (c) => {
       count: sql<number>`cast(count(*) as integer)`,
     })
     .from(parRequests)
-    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
+    .where(buildReportWhere(tenantId, q, c.get("parReportScope")))
     .groupBy(parRequests.currency);
 
   const data = Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? [];
@@ -353,7 +405,7 @@ parReportsRoutes.get("/currency-breakdown", async (c) => {
 /** GET /api/par/reports/aging — count/sum per status + avg age — VM1-03: MDL totals */
 parReportsRoutes.get("/aging", async (c) => {
   const tenantId = c.get("user").tenantId;
-  const { from, to } = periodSchema.parse(c.req.query()); // PARQA-019: honor the period filter
+  const q = parseReportQuery(c); // PARQA-019: honor the period filter
 
   const rows = await db
     .select({
@@ -367,7 +419,7 @@ parReportsRoutes.get("/aging", async (c) => {
       `,
     })
     .from(parRequests)
-    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
+    .where(buildReportWhere(tenantId, q, c.get("parReportScope")))
     .groupBy(parRequests.status);
 
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => ({
@@ -383,7 +435,7 @@ parReportsRoutes.get("/aging", async (c) => {
 /** GET /api/par/reports/cycle-time — avg submit→approved and submit→paid */
 parReportsRoutes.get("/cycle-time", async (c) => {
   const tenantId = c.get("user").tenantId;
-  const { from, to } = periodSchema.parse(c.req.query()); // PARQA-019: honor the period filter
+  const q = parseReportQuery(c); // PARQA-019: honor the period filter
 
   const rows = await db
     .select({
@@ -405,7 +457,7 @@ parReportsRoutes.get("/cycle-time", async (c) => {
     })
     .from(parRequests)
     .where(and(
-      buildPeriodWhere(tenantId, from, to, c.get("parReportScope")),
+      buildReportWhere(tenantId, q, c.get("parReportScope")),
       isNotNull(parRequests.submittedAt)
     ));
 
@@ -420,7 +472,7 @@ parReportsRoutes.get("/cycle-time", async (c) => {
 /** GET /api/par/reports/export.csv — raw CSV export */
 parReportsRoutes.get("/export.csv", async (c) => {
   const tenantId = c.get("user").tenantId;
-  const { from, to } = periodSchema.parse(c.req.query());
+  const q = parseReportQuery(c);
 
   const rows = await db
     .select({
@@ -436,7 +488,7 @@ parReportsRoutes.get("/export.csv", async (c) => {
       paidAt: parRequests.paidAt,
     })
     .from(parRequests)
-    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
+    .where(buildReportWhere(tenantId, q, c.get("parReportScope")))
     .orderBy(parRequests.dateOfRequest);
 
   const data = Array.isArray(rows) ? rows : (rows as { rows?: typeof rows }).rows ?? [];
@@ -467,7 +519,7 @@ parReportsRoutes.get("/export.csv", async (c) => {
 /** VF-201: GET /api/par/reports/export.xlsx — Excel workbook (3 sheets, resolved names). */
 parReportsRoutes.get("/export.xlsx", async (c) => {
   const tenantId = c.get("user").tenantId;
-  const { from, to } = periodSchema.parse(c.req.query());
+  const q = parseReportQuery(c);
 
   // PARs with names resolved via joins (not UUIDs).
   const parRows = await db
@@ -493,7 +545,7 @@ parReportsRoutes.get("/export.xlsx", async (c) => {
     .leftJoin(parDepartments, eq(parDepartments.id, parRequests.departmentId))
     .leftJoin(parProjects, eq(parProjects.id, parRequests.projectId))
     .leftJoin(parBudgetCodes, eq(parBudgetCodes.id, parRequests.budgetCodeId))
-    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
+    .where(buildReportWhere(tenantId, q, c.get("parReportScope")))
     .orderBy(parRequests.dateOfRequest);
 
   const pars = Array.isArray(parRows) ? parRows : (parRows as { rows?: typeof parRows }).rows ?? [];
@@ -512,7 +564,7 @@ parReportsRoutes.get("/export.xlsx", async (c) => {
     })
     .from(parLineItems)
     .innerJoin(parRequests, eq(parRequests.id, parLineItems.parId))
-    .where(buildPeriodWhere(tenantId, from, to, c.get("parReportScope")))
+    .where(buildReportWhere(tenantId, q, c.get("parReportScope")))
     .orderBy(parRequests.requestNo, parLineItems.position);
 
   const lines = Array.isArray(lineRows) ? lineRows : (lineRows as { rows?: typeof lineRows }).rows ?? [];
