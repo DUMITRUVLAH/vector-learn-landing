@@ -188,12 +188,16 @@ beforeAll(async () => {
     projectId: vectorProject.id,
   });
 
-  // Un plătitor din Vector fără modulul PAR activat, cu utilizatorul alocat pe proiectul lui
-  // (deci trece de aria de acces și pică exact pe entitlement).
+  // Un plătitor din Vector cu modulul PAR OPRIT explicit, cu utilizatorul alocat pe proiectul
+  // lui (deci trece de aria de acces și pică exact pe entitlement). Oprirea trebuie să fie un
+  // rând `enabled = false`: PAR e implicitul produsului, lipsa rândului înseamnă „activ".
   const [payerFaraModul] = await testDb
     .insert(parPayers)
     .values({ tenantId: vectorTenant, name: "Vector fără modul" })
     .returning();
+  await testDb
+    .insert(parPayerModules)
+    .values({ tenantId: vectorTenant, payerId: payerFaraModul.id, moduleKey: "par", enabled: false });
   const [proiectFaraModul] = await testDb
     .insert(parProjects)
     .values({ tenantId: vectorTenant, name: "Proiect fără modul", payerId: payerFaraModul.id, active: true })

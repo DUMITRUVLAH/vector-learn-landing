@@ -198,7 +198,7 @@ export function WorkspaceSheet({ tenantId, modules, onClose, onChanged }: Worksp
                     <p className="text-xs text-muted-foreground">{m.description}</p>
                   </div>
                   <Switch
-                    checked={workspace.modules[m.key] !== false}
+                    checked={workspace.modules[m.key] === true}
                     disabled={busy === `module:${m.key}`}
                     onChange={(next) => toggleModule(m.key, next)}
                     aria-label={`${m.label} pentru ${workspace.name}`}

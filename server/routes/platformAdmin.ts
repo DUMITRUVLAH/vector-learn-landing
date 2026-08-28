@@ -27,7 +27,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePlatformAdmin } from "../middleware/requirePlatformAdmin";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { clientIp } from "../lib/loginEvents";
-import { MODULE_CATALOG, MODULE_KEYS, isKnownModule } from "../lib/platformModules";
+import { MODULE_CATALOG, MODULE_KEYS, defaultModuleMap, isKnownModule } from "../lib/platformModules";
 
 export const platformAdminRoutes = new Hono<{ Variables: AuthVariables }>();
 platformAdminRoutes.use("*", requireAuth);
@@ -83,8 +83,7 @@ function csv(rows: (string | number | null | undefined)[][]): string {
 /** GET /api/platform/catalog — modulele existente + ce primește un workspace nou. */
 platformAdminRoutes.get("/catalog", async (c) => {
   const rows = await db.select().from(platformModuleDefaults);
-  const defaults: Record<string, boolean> = {};
-  for (const m of MODULE_CATALOG) defaults[m.key] = true;
+  const defaults = defaultModuleMap();
   for (const row of rows) defaults[row.moduleKey] = row.enabled;
   return c.json({ modules: MODULE_CATALOG, defaults });
 });
@@ -133,8 +132,7 @@ platformAdminRoutes.post(
     const { overwrite } = c.req.valid("json");
 
     const defaultRows = await db.select().from(platformModuleDefaults);
-    const defaults: Record<string, boolean> = {};
-    for (const m of MODULE_CATALOG) defaults[m.key] = true;
+    const defaults = defaultModuleMap();
     for (const row of defaultRows) defaults[row.moduleKey] = row.enabled;
 
     const allTenants = await db.select({ id: tenants.id }).from(tenants);
@@ -147,7 +145,7 @@ platformAdminRoutes.post(
     let updated = 0;
     for (const t of allTenants) {
       for (const m of MODULE_CATALOG) {
-        const enabled = defaults[m.key] !== false;
+        const enabled = defaults[m.key] === true;
         if (!known.has(`${t.id}:${m.key}`)) {
           await db
             .insert(tenantModules)
@@ -202,9 +200,11 @@ platformAdminRoutes.get("/overview", async (c) => {
   const total = allTenants.length;
   const adoption = MODULE_CATALOG.map((m) => {
     const rows = moduleRows.filter((r) => r.moduleKey === m.key);
-    const disabled = rows.filter((r) => !r.enabled).length;
-    // Fail-open: cine n-are rând vede modulul, deci „activ" = total − cei opriți explicit.
-    return { key: m.key, label: m.label, enabled: total - disabled, total };
+    // Cine n-are rând cade pe implicitul din cod: PAR pornit, restul oprite.
+    const explicitlyOn = rows.filter((r) => r.enabled).length;
+    const withoutRow = total - rows.length;
+    const enabled = explicitlyOn + (m.defaultEnabled ? withoutRow : 0);
+    return { key: m.key, label: m.label, enabled, total };
   });
 
   const plans = ["starter", "growth", "pro", "enterprise"].map((plan) => ({
@@ -306,8 +306,7 @@ async function loadWorkspaces(): Promise<WorkspaceRow[]> {
   const churnCutoff = daysAgo(CHURN_RISK_DAYS);
 
   return tenantRows.map((t) => {
-    const modules: Record<string, boolean> = {};
-    for (const m of MODULE_CATALOG) modules[m.key] = true;
+    const modules = defaultModuleMap();
     for (const row of moduleRows) if (row.tenantId === t.id) modules[row.moduleKey] = row.enabled;
 
     const lastRaw = lastMap.get(t.id) ?? null;

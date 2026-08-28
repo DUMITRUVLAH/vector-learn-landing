@@ -2,14 +2,15 @@
  * PLATFORM-001 — meniul clientului respectă comutatoarele din Consola Platformă.
  *
  * Ce dovedesc testele astea: un modul oprit de proprietar chiar DISPARE din navigația
- * clientului, iar când starea modulelor nu poate fi citită deloc, meniul rămâne ÎNTREG
- * (fail-open). A doua parte e regresia care contează — un gating fail-closed ar fi golit
- * aplicația fiecărui client la primul deploy fără migrare.
+ * clientului, iar când starea modulelor nu poate fi citită deloc rămâne implicitul
+ * produsului — PAR, pe care îl are orice organizație. A doua parte e regresia care contează:
+ * o eroare de rețea nu are voie nici să golească meniul, nici să arate module pe care
+ * serverul le refuză oricum cu 403.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { useParRoles } from "@/hooks/useParRoles";
-import { useEnabledModules, ALL_MODULE_KEYS, type ModuleKey } from "@/hooks/useEnabledModules";
+import { useEnabledModules, DEFAULT_MODULE_KEYS, type ModuleKey } from "@/hooks/useEnabledModules";
 import { BusinessShell } from "@/components/business/BusinessShell";
 
 vi.mock("@/hooks/useParRoles");
@@ -83,11 +84,11 @@ describe("gating-ul modulelor în navigația clientului", () => {
     expect(await screen.findByText("PAR — Cereri de plată")).toBeInTheDocument();
   });
 
-  it("FAIL-OPEN: când nu se poate citi starea modulelor, meniul rămâne întreg", async () => {
+  it("când nu se poate citi starea modulelor, rămâne implicitul: PAR în meniu, restul nu", async () => {
     // Exact ce întoarce hook-ul real la eroare de rețea / tabelă lipsă.
-    setEnabled(ALL_MODULE_KEYS);
+    setEnabled([...DEFAULT_MODULE_KEYS]);
     renderShell();
-    expect(await screen.findByText("FinDesk — Finanțe")).toBeInTheDocument();
     expect(await screen.findByText("PAR — Cereri de plată")).toBeInTheDocument();
+    expect(screen.queryByText("FinDesk — Finanțe")).not.toBeInTheDocument();
   });
 });

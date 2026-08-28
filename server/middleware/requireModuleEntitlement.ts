@@ -1,8 +1,8 @@
 import type { MiddlewareHandler } from "hono";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { parPayerModules, parRequests, platformAdmins } from "../db/schema/par";
-import { isModuleEnabledForTenant } from "../lib/platformModules";
+import { parPayerModules, parPayers, parRequests, platformAdmins } from "../db/schema/par";
+import { isModuleDefaultEnabled, isModuleEnabledForTenant } from "../lib/platformModules";
 import type { AuthVariables } from "./requireAuth";
 
 export function requireModuleEntitlement(moduleKey: string): MiddlewareHandler<{ Variables: AuthVariables }> {
@@ -23,10 +23,13 @@ export function requireModuleEntitlement(moduleKey: string): MiddlewareHandler<{
         .where(and(eq(parRequests.id, match[1]), eq(parRequests.tenantId, user.tenantId)));
       payerId = request?.payerId ?? null;
     }
-    const conditions = [eq(parPayerModules.tenantId, user.tenantId), eq(parPayerModules.moduleKey, moduleKey), eq(parPayerModules.enabled, true)];
+    // Verificarea per entitate juridică. Lipsa rândului cade pe implicitul din cod (PAR pornit),
+    // altfel o organizație creată înainte de consolă ar primi 403 la un modul „implicit".
+    const conditions = [eq(parPayerModules.tenantId, user.tenantId), eq(parPayerModules.moduleKey, moduleKey)];
     if (payerId) conditions.push(eq(parPayerModules.payerId, payerId));
-    const [enabled] = await db.select({ id: parPayerModules.id }).from(parPayerModules).where(and(...conditions)).limit(1);
-    if (!enabled) return c.json({ error: "module_disabled", module: moduleKey }, 403);
+    const rows = await db.select({ enabled: parPayerModules.enabled }).from(parPayerModules).where(and(...conditions));
+    const allowed = rows.length ? rows.some((r) => r.enabled) : isModuleDefaultEnabled(moduleKey);
+    if (!allowed) return c.json({ error: "module_disabled", module: moduleKey }, 403);
     await next();
   };
 }
@@ -41,20 +44,29 @@ export async function hasPayerModuleEntitlement(
   const [superadmin] = await db.select({ id: platformAdmins.id }).from(platformAdmins)
     .where(eq(platformAdmins.userId, userId));
   if (superadmin) return true;
-  const [enabled] = await db.select({ id: parPayerModules.id }).from(parPayerModules).where(and(
+  const [row] = await db.select({ enabled: parPayerModules.enabled }).from(parPayerModules).where(and(
     eq(parPayerModules.tenantId, tenantId),
     eq(parPayerModules.payerId, payerId),
     eq(parPayerModules.moduleKey, moduleKey),
-    eq(parPayerModules.enabled, true),
   )).limit(1);
-  return !!enabled;
+  // Fără rând = implicitul produsului: PAR îl are orice organizație, restul nu.
+  return row ? row.enabled : isModuleDefaultEnabled(moduleKey);
 }
 
+/**
+ * Organizațiile (entitățile juridice) pentru care modulul e activ.
+ * Pentru un modul implicit (PAR) înseamnă TOATE organizațiile workspace-ului, mai puțin cele
+ * oprite explicit — altfel lista ar ascunde exact organizațiile care nu au fost niciodată
+ * configurate, deși ele au acces la modul.
+ */
 export async function enabledPayerIds(tenantId: string, moduleKey: string): Promise<string[]> {
-  const rows = await db.select({ payerId: parPayerModules.payerId }).from(parPayerModules).where(and(
-    eq(parPayerModules.tenantId, tenantId),
-    eq(parPayerModules.moduleKey, moduleKey),
-    eq(parPayerModules.enabled, true),
-  ));
-  return rows.map((row) => row.payerId);
+  const rows = await db.select({ payerId: parPayerModules.payerId, enabled: parPayerModules.enabled })
+    .from(parPayerModules)
+    .where(and(eq(parPayerModules.tenantId, tenantId), eq(parPayerModules.moduleKey, moduleKey)));
+  if (!isModuleDefaultEnabled(moduleKey)) {
+    return rows.filter((row) => row.enabled).map((row) => row.payerId);
+  }
+  const disabled = new Set(rows.filter((row) => !row.enabled).map((row) => row.payerId));
+  const all = await db.select({ id: parPayers.id }).from(parPayers).where(eq(parPayers.tenantId, tenantId));
+  return all.map((p) => p.id).filter((id) => !disabled.has(id));
 }

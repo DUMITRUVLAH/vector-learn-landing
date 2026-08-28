@@ -9,10 +9,25 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { useParRoles } from "@/hooks/useParRoles";
+import { ALL_MODULE_KEYS, type ModuleKey } from "@/hooks/useEnabledModules";
 import { BusinessShell } from "@/components/business/BusinessShell";
 
 // Mock the hooks/modules that require full app context
 vi.mock("@/hooks/useParRoles");
+// Subiectul acestui fișier sunt ROLURILE PAR, nu drepturile de modul: fixăm un workspace
+// cu toate modulele pornite, altfel hook-ul real ar cădea pe implicit (doar PAR) în jsdom
+// și testele ar pica din alt motiv decât cel testat.
+vi.mock("@/hooks/useEnabledModules", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/hooks/useEnabledModules")>();
+  return {
+    ...actual,
+    useEnabledModules: () => ({
+      enabled: actual.ALL_MODULE_KEYS,
+      isEnabled: (key: ModuleKey) => actual.ALL_MODULE_KEYS.includes(key),
+      status: "resolved" as const,
+    }),
+  };
+});
 vi.mock("@/hooks/useBusinessSession", () => ({
   useBusinessSession: () => ({
     status: "authenticated",

@@ -10,7 +10,7 @@
  * Acoperă și cele trei comportamente pe care ușor le-am fi stricat în tăcere:
  *   1. logările (reușite ȘI eșuate) chiar ajung în `login_events`
  *   2. un workspace suspendat nu se mai poate autentifica — și nici sesiunea deschisă nu trece
- *   3. gating-ul de module e FAIL-OPEN: fără rând în `tenant_modules`, modulul rămâne vizibil
+ *   3. implicitul de module: fără rând în `tenant_modules` o organizație vede PAR și doar PAR
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
@@ -51,12 +51,28 @@ vi.mock("../auth/session", () => ({
 import { platformAdminRoutes } from "../routes/platformAdmin";
 import { myModulesRoutes } from "../routes/myModules";
 import { businessAuthRoutes } from "../routes/businessAuth";
+import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requireModuleEntitlement } from "../middleware/requireModuleEntitlement";
 import { Hono } from "hono";
 
 const app = new Hono();
 app.route("/api/platform", platformAdminRoutes);
 app.route("/api/modules", myModulesRoutes);
 app.route("/api/business", businessAuthRoutes);
+
+// Două rute de probă păzite exact ca cele reale, ca să testăm ACȚIUNEA (trece / 403),
+// nu doar ce raportează /api/modules. PAR e montat pe /api/par fiindcă middleware-ul
+// deduce organizația din calea aceea.
+const parProbe = new Hono<{ Variables: AuthVariables }>();
+parProbe.use("*", requireAuth);
+parProbe.use("*", requireModuleEntitlement("par"));
+parProbe.get("/ping", (c) => c.json({ ok: true }));
+app.route("/api/par", parProbe);
+const finProbe = new Hono<{ Variables: AuthVariables }>();
+finProbe.use("*", requireAuth);
+finProbe.use("*", requireModuleEntitlement("findesk"));
+finProbe.get("/ping", (c) => c.json({ ok: true }));
+app.route("/api/fin-probe", finProbe);
 
 async function applyMigrations(pg: PGlite) {
   const drizzleDir = path.resolve(__dirname, "../../drizzle");
@@ -125,14 +141,54 @@ describe("acces", () => {
   });
 });
 
+describe("implicitul de module (PAR pentru toată lumea)", () => {
+  it("o organizație fără niciun rând de drepturi poate folosi PAR", async () => {
+    // Cazul real: workspace-uri create înainte de consolă, care n-au nici `tenant_modules`,
+    // nici `par_payer_modules`. Cerem chiar ruta păzită — un 403 aici înseamnă client blocat.
+    const res = await asClient("/api/par/ping");
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { ok: boolean }).toEqual({ ok: true });
+  });
+
+  it("aceeași organizație NU poate folosi FinDesk până nu i-l aprinde proprietarul", async () => {
+    const res = await asClient("/api/fin-probe/ping");
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: string }).error).toBe("module_disabled");
+  });
+
+  it("proprietarul aprinde FinDesk din consolă și ruta începe să răspundă", async () => {
+    const toggled = await asOwner(
+      `/api/platform/workspaces/${clientTenantId}/modules`,
+      put({ module: "findesk", enabled: true }),
+    );
+    expect(toggled.status).toBe(200);
+    expect((await asClient("/api/fin-probe/ping")).status).toBe(200);
+    // …și îl poate lua înapoi, tot dintr-un singur comutator.
+    await asOwner(`/api/platform/workspaces/${clientTenantId}/modules`, put({ module: "findesk", enabled: false }));
+    expect((await asClient("/api/fin-probe/ping")).status).toBe(403);
+  });
+
+  it("PAR oprit EXPLICIT pentru un workspace chiar blochează ruta", async () => {
+    await asOwner(`/api/platform/workspaces/${clientTenantId}/modules`, put({ module: "par", enabled: false }));
+    expect((await asClient("/api/par/ping")).status).toBe(403);
+    await asOwner(`/api/platform/workspaces/${clientTenantId}/modules`, put({ module: "par", enabled: true }));
+    expect((await asClient("/api/par/ping")).status).toBe(200);
+  });
+});
+
 describe("catalog + implicitele pentru workspace-uri noi", () => {
   it("GET /catalog întoarce modulele și implicitele", async () => {
     const res = await asOwner("/api/platform/catalog");
     expect(res.status).toBe(200);
-    const json = (await res.json()) as { modules: { key: string }[]; defaults: Record<string, boolean> };
+    const json = (await res.json()) as {
+      modules: { key: string; defaultEnabled: boolean }[];
+      defaults: Record<string, boolean>;
+    };
     expect(json.modules.map((m) => m.key)).toEqual(["findesk", "par", "itpark", "docmerge"]);
-    // Migrarea 0138 pornește totul activat, ca activarea funcționalității să nu ia acces nimănui.
-    expect(json.defaults.findesk).toBe(true);
+    // Implicitul produsului: PAR îl are oricine, restul le aprinde proprietarul din consolă.
+    expect(json.defaults.par).toBe(true);
+    expect(json.defaults.findesk).toBe(false);
+    expect(json.modules.find((m) => m.key === "par")?.defaultEnabled).toBe(true);
   });
 
   it("PUT /catalog/defaults schimbă ce primește un client NOU", async () => {
@@ -158,7 +214,8 @@ describe("catalog + implicitele pentru workspace-uri noi", () => {
     const rows = await testDb.select().from(tenantModules).where(eq(tenantModules.tenantId, tenant.id));
     const map = Object.fromEntries(rows.map((r) => [r.moduleKey, r.enabled]));
     expect(map.docmerge).toBe(false); // implicita schimbată mai sus
-    expect(map.findesk).toBe(true);
+    expect(map.par).toBe(true); // implicitul produsului — orice organizație are PAR
+    expect(map.findesk).toBe(false); // se aprinde din consolă, nu din start
   });
 
   it("POST /catalog/apply-defaults completează lipsurile fără să rescrie alegerile", async () => {
@@ -237,13 +294,30 @@ describe("ce vede clientul (/api/modules)", () => {
     const res = await asClient("/api/modules");
     expect(res.status).toBe(200);
     const json = (await res.json()) as { enabled: string[] };
-    expect(json.enabled).not.toContain("itpark"); // oprit în testul de mai sus
-    expect(json.enabled).toContain("findesk");
+    expect(json.enabled).not.toContain("itpark"); // oprit explicit în testul de mai sus
+    expect(json.enabled).toContain("par");
   });
 
-  it("FAIL-OPEN: un workspace fără niciun rând de module vede tot", async () => {
-    // Regresie pentru lecția din 0137: dacă migrarea nu ajunge pe prod, gating-ul nu are
-    // voie să golească aplicația clientului.
+  it("IMPLICIT: o organizație fără niciun rând de module vede PAR și doar PAR", async () => {
+    // Decizia owner-ului: PAR e baza produsului, restul se aprind din consolă. Testul
+    // acoperă și cazul în care migrarea nu a ajuns pe prod — implicitul stă în cod, deci
+    // clientul nu rămâne nici cu meniul gol, nici cu module pe care serverul le refuză.
+    await testDb.delete(tenantModules).where(eq(tenantModules.tenantId, clientTenantId));
+    const res = await asClient("/api/modules");
+    const json = (await res.json()) as { enabled: string[]; modules: { key: string; enabled: boolean }[] };
+    expect(json.enabled).toEqual(["par"]);
+    expect(json.modules.find((m) => m.key === "findesk")?.enabled).toBe(false);
+  });
+
+  it("un modul aprins explicit din consolă devine vizibil clientului", async () => {
+    const toggled = await asOwner(`/api/platform/workspaces/${clientTenantId}/modules`, put({ module: "findesk", enabled: true }));
+    expect(toggled.status).toBe(200);
+    const json = (await (await asClient("/api/modules")).json()) as { enabled: string[] };
+    expect(json.enabled).toContain("findesk");
+    expect(json.enabled).toContain("par");
+  });
+
+  it("superadminul vede tot catalogul, ca să poată testa modulele înainte să le dea clienților", async () => {
     await testDb.delete(tenantModules).where(eq(tenantModules.tenantId, ownerTenantId));
     const res = await asOwner("/api/modules");
     const json = (await res.json()) as { enabled: string[] };

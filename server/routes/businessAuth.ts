@@ -123,8 +123,8 @@ businessAuthRoutes.post("/auth/signup", zValidator("json", signupSchema), async 
     // per entitate juridică) să spună același lucru ca `tenant_modules`. Un singur set de
     // implicite, două locuri de citire — nu două sisteme concurente.
     await tx.insert(parPayerModules).values([
-      { tenantId: t.id, payerId: payer.id, moduleKey: "findesk", enabled: moduleDefaults.findesk !== false, updatedByUserId: u.id },
-      { tenantId: t.id, payerId: payer.id, moduleKey: "par", enabled: moduleDefaults.par !== false, updatedByUserId: u.id },
+      { tenantId: t.id, payerId: payer.id, moduleKey: "findesk", enabled: moduleDefaults.findesk === true, updatedByUserId: u.id },
+      { tenantId: t.id, payerId: payer.id, moduleKey: "par", enabled: moduleDefaults.par === true, updatedByUserId: u.id },
     ]);
     await tx.insert(parPayerMembers).values({ tenantId: t.id, payerId: payer.id, userId: u.id });
     // Workspace creator is the FinDesk owner too; best-effort so a missing table never fails signup.

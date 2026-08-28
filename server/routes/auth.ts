@@ -1241,8 +1241,8 @@ authRoutes.post("/google/create-workspace", zValidator("json", createWorkspaceSc
   // ce module primește un workspace nou (Consola Platformă), indiferent de calea de intrare.
   const moduleDefaults = await getModuleDefaults();
   await db.insert(parPayerModules).values([
-    { tenantId: tenant.id, payerId: payer.id, moduleKey: "findesk", enabled: moduleDefaults.findesk !== false, updatedByUserId: created.id },
-    { tenantId: tenant.id, payerId: payer.id, moduleKey: "par", enabled: moduleDefaults.par !== false, updatedByUserId: created.id },
+    { tenantId: tenant.id, payerId: payer.id, moduleKey: "findesk", enabled: moduleDefaults.findesk === true, updatedByUserId: created.id },
+    { tenantId: tenant.id, payerId: payer.id, moduleKey: "par", enabled: moduleDefaults.par === true, updatedByUserId: created.id },
   ]);
   await applyDefaultsToTenant(tenant.id, created.id);
   await db.insert(parPayerMembers).values({ tenantId: tenant.id, payerId: payer.id, userId: created.id });

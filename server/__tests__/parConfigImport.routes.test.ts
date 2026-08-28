@@ -203,14 +203,22 @@ describe("POST /api/par/config-import — LED.xlsx (one sheet, 'Cod | Denumire |
   it("warns when the PAR module is not enabled for the payer the rows landed on", async () => {
     // A saved row that the PAR lists filter out reads exactly like "the import didn't work" —
     // GET /api/par/budget-codes only returns codes of payers entitled to the "par" module.
-    await testDb.delete(parPayerModules).where(eq(parPayerModules.payerId, payerId));
+    // PAR is the product default, so "not enabled" has to be an explicit enabled=false row;
+    // deleting the row now means "on", which is a different scenario entirely.
+    await testDb
+      .update(parPayerModules)
+      .set({ enabled: false })
+      .where(and(eq(parPayerModules.payerId, payerId), eq(parPayerModules.moduleKey, "par")));
     try {
       const res = await postImport(await ledFile());
       const body = (await res.json()) as ImportBody;
       expect(body.budgetCodes.created).toBe(LED_LINES.length);
       expect(body.warnings.join(" ")).toContain("Modulul PAR nu este activat");
     } finally {
-      await testDb.insert(parPayerModules).values({ tenantId, payerId, moduleKey: "par", enabled: true });
+      await testDb
+        .update(parPayerModules)
+        .set({ enabled: true })
+        .where(and(eq(parPayerModules.payerId, payerId), eq(parPayerModules.moduleKey, "par")));
     }
   });
 });

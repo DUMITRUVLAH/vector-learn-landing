@@ -9,6 +9,8 @@ export interface PlatformModule {
   label: string;
   description: string;
   route: string;
+  /** Modulul pe care îl are orice organizație fără setare explicită (azi: doar PAR). */
+  defaultEnabled: boolean;
 }
 
 export interface PlatformOverview {

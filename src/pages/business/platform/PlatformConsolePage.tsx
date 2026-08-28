@@ -351,7 +351,7 @@ function WorkspacesTab({ modules }: { modules: PlatformModule[] }) {
               <TableCell>
                 <span className="flex flex-wrap gap-1">
                   {modules
-                    .filter((m) => w.modules[m.key] !== false)
+                    .filter((m) => w.modules[m.key] === true)
                     .map((m) => (
                       <Badge key={m.key} variant="secondary">
                         {m.key}
@@ -450,7 +450,8 @@ function ModulesTab({ modules }: { modules: PlatformModule[] }) {
         <h2 className="text-sm font-semibold text-foreground">Ce vede un client NOU</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Se aplică în momentul în care cineva își creează un workspace — cu parolă sau prin Google.
-          Nu schimbă nimic la clienții existenți.
+          Nu schimbă nimic la clienții existenți. PAR e pornit din start pentru orice organizație;
+          restul modulele le aprinzi tu, aici pentru clienții noi sau per client din lista de workspace-uri.
         </p>
         <div className="mt-4 space-y-2">
           {modules.map((m) => (
@@ -459,11 +460,18 @@ function ModulesTab({ modules }: { modules: PlatformModule[] }) {
               className="flex items-start justify-between gap-4 rounded-lg border border-border p-3"
             >
               <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">{m.label}</p>
+                <p className="text-sm font-medium text-foreground">
+                  {m.label}
+                  {m.defaultEnabled && (
+                    <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-normal text-muted-foreground">
+                      implicit în produs
+                    </span>
+                  )}
+                </p>
                 <p className="text-xs text-muted-foreground">{m.description}</p>
               </div>
               <Switch
-                checked={defaults[m.key] !== false}
+                checked={defaults[m.key] === true}
                 disabled={busy === m.key}
                 onChange={(next) => toggle(m.key, next)}
                 aria-label={`${m.label} implicit pentru clienți noi`}
