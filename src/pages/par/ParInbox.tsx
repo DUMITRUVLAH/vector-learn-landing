@@ -703,7 +703,7 @@ export default function ParInbox() {
           visibleRowsRef.current = rows;
           const arrow = (key: InboxSortKey) => (sort.key === key ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
           const Th = ({ k, label, align = "left", className }: { k: InboxSortKey; label: string; align?: "left" | "right"; className?: string }) => (
-            <th className={cn("px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap", align === "right" ? "text-right" : "text-left", className)}>
+            <th className={cn("px-3 py-3 font-medium text-muted-foreground whitespace-nowrap", align === "right" ? "text-right" : "text-left", className)}>
               <button type="button" onClick={() => toggleSort(k)} className="hover:text-foreground inline-flex items-center" aria-label={`Sortează după ${label}`}>
                 {label}<span className="text-primary">{arrow(k)}</span>
               </button>
@@ -757,12 +757,13 @@ export default function ParInbox() {
                 ))}
               </p>
 
-              {/* Excel-style table */}
-              <div className="overflow-x-auto rounded-lg border border-border pb-20">
-                <table className="w-full text-sm">
+              {/* Excel-style table — same wrapper/padding as the Coadă finanțe table (ds/Table) so
+                  the two screens an approver moves between don't read as two different products. */}
+              <div className="overflow-x-auto rounded-lg border border-border bg-card pb-20">
+                <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="bg-muted/50 border-b border-border">
-                      <th className="w-8 px-2 py-2.5">
+                      <th className="w-8 px-3 py-3">
                         <Checkbox checked={allSelected} onChange={toggleSelectAll} aria-label="Selectează tot" />
                       </th>
                       {/* The three decision buttons lead the row. They used to sit last,
@@ -770,15 +771,15 @@ export default function ParInbox() {
                           exists to do was the one thing you could not see. Everything to
                           the right of them is evidence for that decision, in the order an
                           approver reads it: WHO, HOW MUCH, WHAT FOR. */}
-                      <th className="w-[104px] whitespace-nowrap px-2 py-2.5 text-left font-medium text-muted-foreground">Acțiuni</th>
+                      <th className="w-[104px] whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">Acțiuni</th>
                       <Th k="requestNo" label="Nr." />
                       <Th k="payeeName" label="Beneficiar" />
                       <Th k="totalEstimatedCents" label="Sumă" align="right" />
-                      <th className="whitespace-nowrap px-2 py-2.5 text-left font-medium text-muted-foreground">Servicii / descriere</th>
+                      <th className="whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">Servicii / descriere</th>
                       <Th k="projectName" label="Proiect" />
                       <Th k="requestedByName" label="Solicitat de" />
-                      <th className="whitespace-nowrap px-2 py-2.5 text-left font-medium text-muted-foreground">Aprobări</th>
-                      <th className="whitespace-nowrap px-2 py-2.5 text-left font-medium text-muted-foreground">Documente</th>
+                      <th className="whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">Aprobări</th>
+                      <th className="whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">Documente</th>
                       <Th k="submittedAt" label="Depus" />
                     </tr>
                   </thead>
@@ -793,17 +794,17 @@ export default function ParInbox() {
                           idx === Math.min(cursor, rows.length - 1) && "bg-primary/5 ring-1 ring-inset ring-primary/30",
                         )}
                       >
-                        <td className="px-2 py-3 align-middle">
+                        <td className="px-3 py-3 align-middle">
                           <Checkbox checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} aria-label={`Selectează ${item.requestNo}`} />
                         </td>
-                        <td className="px-2 py-3 align-middle">
+                        <td className="px-3 py-3 align-middle">
                           <div className="flex items-center gap-0.5">
                             <button onClick={() => handleAction(item, "approve")} title="Aprobă" aria-label={`Aprobă ${item.requestNo}`} className="rounded-md p-1.5 text-success hover:bg-success/10"><CheckCircle className="h-4 w-4" aria-hidden="true" /></button>
                             <button onClick={() => handleAction(item, "request_changes")} title="Solicită modificări" aria-label={`Solicită modificări la ${item.requestNo}`} className="rounded-md p-1.5 text-warning hover:bg-warning/10"><MessageSquare className="h-4 w-4" aria-hidden="true" /></button>
                             <button onClick={() => handleAction(item, "reject")} title="Respinge" aria-label={`Respinge ${item.requestNo}`} className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"><XCircle className="h-4 w-4" aria-hidden="true" /></button>
                           </div>
                         </td>
-                        <td className="px-2 py-3 align-middle">
+                        <td className="px-3 py-3 align-middle">
                           <button onClick={() => navigate(`/business/par/${item.id}`)} className="whitespace-nowrap font-mono text-xs text-foreground hover:text-primary hover:underline">{item.requestNo}</button>
                           {/* The Scop column is gone — it said "Execută plata" on every row.
                               The two purposes that are NOT the default still change how you
@@ -813,9 +814,11 @@ export default function ParInbox() {
                               {PURPOSE_LABEL[item.purpose] ?? item.purpose}
                             </div>
                           )}
-                          {/* Al câtelea pas semnezi din câți. Un "Pasul 2 din 2" pe rând este
-                              diferența dintre "aprob și pleacă la finanțe" și "aprob degeaba". */}
-                          {item.my_step != null && (item.steps_total ?? 0) > 1 && (
+                          {/* Doar pe un pas INTERMEDIAR — pe ultimul pas, "Pasul 2 din 2" nu spune
+                              nimic util (aprobarea oricum trimite la finanțe) și era zgomot pe
+                              fiecare rând. Pe un pas intermediar rămâne esențial: e diferența dintre
+                              "aprob și pleacă la finanțe" și "aprob degeaba" (regresie ATIC, 2026-08-28). */}
+                          {item.my_step != null && (item.steps_total ?? 0) > 1 && item.my_step < (item.steps_total ?? 0) && (
                             <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">
                               Pasul {item.my_step} din {item.steps_total}
                               {item.my_step_label ? ` · ${item.my_step_label}` : ""}
@@ -831,15 +834,15 @@ export default function ParInbox() {
                             </div>
                           )}
                         </td>
-                        <td className="min-w-[130px] max-w-[190px] px-2 py-3 align-middle font-medium text-foreground"><span className="line-clamp-3" title={item.payeeName ?? ""}>{item.payeeName ?? "—"}</span></td>
-                        <td className="whitespace-nowrap px-2 py-3 text-right align-middle font-mono font-semibold text-foreground">{formatMDL(item.totalEstimatedCents)}</td>
-                        <td className="min-w-[150px] max-w-[220px] px-2 py-3 align-middle text-xs text-foreground"><span className="line-clamp-3" title={item.endUse ?? ""}>{item.endUse || "—"}</span></td>
-                        <td className="max-w-[110px] px-2 py-3 align-middle text-foreground"><span className="line-clamp-2" title={item.projectName ?? ""}>{item.projectName ?? "—"}</span></td>
-                        <td className="max-w-[110px] px-2 py-3 align-middle text-foreground"><span className="line-clamp-2" title={item.requestedByName ?? ""}>{item.requestedByName ?? "—"}</span></td>
-                        <td className="min-w-[150px] max-w-[210px] px-2 py-3 align-middle">
+                        <td className="min-w-[130px] max-w-[190px] px-3 py-3 align-middle font-medium text-foreground"><span className="line-clamp-3" title={item.payeeName ?? ""}>{item.payeeName ?? "—"}</span></td>
+                        <td className="whitespace-nowrap px-3 py-3 text-right align-middle font-mono font-semibold text-foreground">{formatMDL(item.totalEstimatedCents)}</td>
+                        <td className="min-w-[150px] max-w-[220px] px-3 py-3 align-middle text-xs text-foreground"><span className="line-clamp-3" title={item.endUse ?? ""}>{item.endUse || "—"}</span></td>
+                        <td className="max-w-[110px] px-3 py-3 align-middle text-foreground"><span className="line-clamp-2" title={item.projectName ?? ""}>{item.projectName ?? "—"}</span></td>
+                        <td className="max-w-[110px] px-3 py-3 align-middle text-foreground"><span className="line-clamp-2" title={item.requestedByName ?? ""}>{item.requestedByName ?? "—"}</span></td>
+                        <td className="min-w-[150px] max-w-[210px] px-3 py-3 align-middle">
                           <ApprovalsCell item={item} />
                         </td>
-                        <td className="max-w-[150px] px-2 py-3 align-middle">
+                        <td className="max-w-[150px] px-3 py-3 align-middle">
                           {item.attachments?.length ? (
                             <div className="flex flex-col items-start gap-1">
                               {item.attachments.map((attachment) => (
@@ -857,7 +860,7 @@ export default function ParInbox() {
                             </div>
                           ) : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="whitespace-nowrap px-2 py-3 align-middle text-xs text-muted-foreground">
+                        <td className="whitespace-nowrap px-3 py-3 align-middle text-xs text-muted-foreground">
                           {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"}
                         </td>
                       </tr>
