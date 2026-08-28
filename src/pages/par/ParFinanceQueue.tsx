@@ -725,65 +725,75 @@ export default function ParFinanceQueue() {
                     )}
                   >
                     <td className="px-3 py-3">
-                      <div className="flex items-center gap-2 justify-start flex-wrap">
+                      {/* Toate acțiunile pe UN rând, la aceeași înălțime și aceeași greutate de text.
+                          Înainte fiecare buton își scria singur clasele (px-3/px-2, py-1.5, text-xs,
+                          font-medium doar pe unul) și se împachetau pe trei rânduri — de aici
+                          impresia de „trei design-uri într-o singură celulă". Acum toate trec prin
+                          DS Button, deci diferă doar prin variantă, nu prin dimensiune. */}
+                      <div className="flex flex-nowrap items-center justify-start gap-2">
                         {/* Section 16 button — available on approved / in_finance */}
                         {["approved", "in_finance"].includes(par.status) && (
-                          <button
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => setS16Par(par)}
                             aria-label={`Completează secțiunea 16 pentru ${par.requestNo}`}
-                            className="px-3 py-1.5 rounded-md border border-input bg-background text-xs text-foreground hover:bg-accent transition-colors whitespace-nowrap"
                           >
                             Secț. 16
-                          </button>
+                          </Button>
                         )}
                         {/* Pay button — available on in_finance */}
                         {par.status === "in_finance" && (
-                          <button
+                          <Button
+                            size="sm"
                             onClick={() => setPayPar(par)}
                             aria-label={`Înregistrează plata pentru ${par.requestNo}`}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors whitespace-nowrap"
                           >
-                            <BanknoteIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                            <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
                             Înregistrează plata
-                          </button>
+                          </Button>
                         )}
                         {/* Note for reapproval_required — after re-approval the pay button re-enables */}
                         {par.status === "reapproval_required" && par.payment?.overageReapproved && (
-                          <button
+                          <Button
+                            size="sm"
                             onClick={() => setPayPar(par)}
                             aria-label={`Reîncearcă plata pentru ${par.requestNo} (re-aprobare acordată)`}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors whitespace-nowrap"
                           >
-                            <BanknoteIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                            <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
                             Plătește (re-aprobat)
-                          </button>
+                          </Button>
                         )}
                         {par.status === "reapproval_required" && !par.payment?.overageReapproved && (
-                          <span className="whitespace-nowrap text-xs text-warning">
+                          <span className="whitespace-nowrap text-sm text-warning">
                             Așteptare re-aprobare…
                           </span>
                         )}
                         {/* VM1-12: Dosar complet PDF — visible for all statuses */}
-                        <button
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={async () => {
                             try { await downloadDosar(par.id, par.requestNo); }
                             catch { /* silent — user can retry */ }
                           }}
                           aria-label={`Descarcă dosarul complet PDF pentru ${par.requestNo}`}
                           title="Descarcă dosarul complet (PDF)"
-                          className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-border bg-background text-xs text-foreground hover:bg-accent transition-colors whitespace-nowrap"
                         >
-                          <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+                          <Paperclip className="h-4 w-4" aria-hidden="true" />
                           Dosar PDF
-                        </button>
+                        </Button>
                       </div>
                     </td>
                     <td className="px-3 py-3">
                       {/* VM3-01: deschide PAR-ul direct din coadă ("tu nu poți să deschizi aici") */}
+                      {/* Aceeași tratare ca în inbox: numărul e text normal care devine albastru la
+                          hover. Albastru permanent aici se bătea cu chip-ul de status și cu butonul
+                          primar — trei albastruri diferite pe același rând. */}
                       <button
                         type="button"
                         onClick={() => navigate(`/business/par/${par.id}`)}
-                        className="font-mono text-xs text-primary hover:underline whitespace-nowrap"
+                        className="whitespace-nowrap font-mono text-foreground hover:text-primary hover:underline"
                         aria-label={`Deschide cererea ${par.requestNo}`}
                       >
                         {par.requestNo}
@@ -804,17 +814,17 @@ export default function ParFinanceQueue() {
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-foreground text-xs">
+                    <td className="px-3 py-3 text-foreground">
                       <CopyValue
                         display={par.payeeName ?? ""}
                         label="Copiază beneficiarul"
                         maxWidthClass="max-w-[150px]"
                       />
                     </td>
-                    <td className="px-3 py-3 text-foreground text-xs">
+                    <td className="px-3 py-3 text-foreground">
                       <CopyValue display={par.payeeIdnp ?? ""} label="Copiază IDNO" mono />
                     </td>
-                    <td className="px-3 py-3 text-foreground text-xs">
+                    <td className="px-3 py-3 text-foreground">
                       <CopyValue
                         display={par.payeeIban ?? ""}
                         label="Copiază IBAN"
@@ -834,24 +844,24 @@ export default function ParFinanceQueue() {
                         mono
                       />
                     </td>
-                    <td className="px-3 py-3 text-foreground text-xs">
+                    <td className="px-3 py-3 text-foreground">
                       <CopyValue
                         display={par.endUse ?? ""}
                         label="Copiază destinația plății"
                         maxWidthClass="max-w-[200px]"
                       />
                     </td>
-                    <td className="px-3 py-3 text-foreground text-xs max-w-[130px] truncate" title={par.projectName ?? ""}>
+                    <td className="px-3 py-3 text-foreground max-w-[130px] truncate" title={par.projectName ?? ""}>
                       {par.projectName ?? "—"}
                     </td>
-                    <td className="px-3 py-3 text-foreground text-xs">
+                    <td className="px-3 py-3 text-foreground">
                       <CopyValue
                         display={par.budgetCodeLabel ?? (par.payment?.parBl || "")}
                         label="Copiază budget line"
                         maxWidthClass="max-w-[150px]"
                       />
                     </td>
-                    <td className="px-3 py-3 text-foreground text-xs">
+                    <td className="px-3 py-3 text-foreground">
                       {/* VM3-01: audit — "două persoane au aprobat la ce dată" */}
                       {par.approverDecisions && par.approverDecisions.length > 0 ? (
                         <ul className="space-y-0.5">
@@ -870,38 +880,38 @@ export default function ParFinanceQueue() {
                     </td>
                     <td className="px-3 py-3">
                       {par.payment ? (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <CheckCircle2 className="h-4 w-4 text-success" aria-hidden="true" />
                           <span>
                             {par.payment.parBl ? (
-                              <><ClipboardList className="inline h-3 w-3 mr-0.5" aria-hidden="true" />{par.payment.parBl}</>
+                              <><ClipboardList className="inline h-4 w-4 mr-0.5" aria-hidden="true" />{par.payment.parBl}</>
                             ) : "Fără BL"}
                           </span>
                           {par.payment.assignedToUserId && (
                             <span className="ml-1">
-                              <User className="inline h-3 w-3 mr-0.5" aria-hidden="true" />
+                              <User className="inline h-4 w-4 mr-0.5" aria-hidden="true" />
                               asignat
                             </span>
                           )}
                         </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground italic">Necompletat</span>
+                        <span className="text-muted-foreground italic">Necompletat</span>
                       )}
                     </td>
                     <td className="px-3 py-3">
                       {/* VM3-01: documentele atașate, vizibile din coadă (nu doar Dosarul PDF) */}
                       {par.attachmentsMeta && par.attachmentsMeta.length > 0 ? (
-                        <button
-                          type="button"
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => setAttPar(par)}
                           aria-label={`Vezi ${par.attachmentsMeta.length} documente pentru ${par.requestNo}`}
-                          className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-input bg-background text-xs text-foreground hover:bg-accent transition-colors whitespace-nowrap"
                         >
-                          <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                          <FileText className="h-4 w-4" aria-hidden="true" />
                           {par.attachmentsMeta.length} doc.
-                        </button>
+                        </Button>
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </td>
                   </tr>
