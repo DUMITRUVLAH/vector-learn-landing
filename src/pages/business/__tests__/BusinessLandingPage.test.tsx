@@ -79,12 +79,25 @@ describe("BusinessLandingPage (FinFlow)", () => {
     expect(screen.getByRole("heading", { name: /pragurile decid cine semnează/i })).toBeTruthy();
   });
 
-  it("traseul cererii e interactiv: click pe un pas schimbă explicația", async () => {
+  it("traseul cererii stă în prima jumătate, înaintea funcționalităților", () => {
+    renderPage();
+    const flow = document.getElementById("flux") as HTMLElement;
+    const ai = document.getElementById("ai") as HTMLElement;
+    expect(flow).not.toBeNull();
+    expect(ai).not.toBeNull();
+    // DOCUMENT_POSITION_FOLLOWING = `ai` vine DUPĂ `flux` în document.
+    expect(flow.compareDocumentPosition(ai) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("fiecare pas al traseului arată ce dovadă rămâne", async () => {
     const user = userEvent.setup();
     renderPage();
     const flow = document.getElementById("flux") as HTMLElement;
+    expect(within(flow).getByText(/contractul și oferta rămân atașate/i)).toBeTruthy();
+
     await user.click(within(flow).getByRole("button", { name: /pasul 5: plată/i }));
     expect(within(flow).getByText(/sumă reală/i)).toBeTruthy();
+    expect(within(flow).getByText(/ordinul de plată și dovada/i)).toBeTruthy();
   });
 
   it("nu publică date reale din cererile clienților", () => {
