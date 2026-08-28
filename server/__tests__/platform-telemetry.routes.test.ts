@@ -72,6 +72,9 @@ app.get("/api/boom", () => {
   throw new Error("Ceva s-a rupt în handler");
 });
 app.get("/api/guarded-boom", requireAuth, (c) => c.json({ error: "internal_disaster" }, 500));
+// Cobai pentru "not_found" de business, ca cel real de la GET /api/par/:id/purchase-order
+// înainte de emitere — o rută care EXISTĂ și răspunde 404 cu alt cod decât route_not_found.
+app.get("/api/some-resource/:id", (c) => c.json({ error: "not_found" }, 404));
 
 async function applyMigrations(pg: PGlite) {
   const drizzleDir = path.resolve(__dirname, "../../drizzle");
@@ -167,6 +170,19 @@ describe("captarea automată pe server", () => {
     await settle();
     const groups = await testDb.select().from(errorGroups).where(eq(errorGroups.kind, "api_route_missing"));
     expect(groups.length).toBeGreaterThan(0);
+  });
+
+  it("un 404 de business pe o rută care EXISTĂ nu e tratat ca rută lipsă", async () => {
+    // Bug real (2026-08-28): GET /api/par/:id/purchase-order înainte de emitere, sau
+    // GET /api/par/:id cu un id necunoscut, răspund 404 cu `{error:"not_found"}` — ruta EXISTĂ
+    // și funcționează corect. errorCapture le clasifica drept `api_route_missing` doar pentru
+    // că statusul era 404 pe /api/*, umplând Consola Platformă cu "rută API lipsă" false.
+    const before = (await testDb.select().from(errorGroups).where(eq(errorGroups.kind, "api_route_missing"))).length;
+    const res = await app.request("/api/some-resource/xyz");
+    expect(res.status).toBe(404);
+    await settle();
+    const after = (await testDb.select().from(errorGroups).where(eq(errorGroups.kind, "api_route_missing"))).length;
+    expect(after).toBe(before);
   });
 
   it("aceeași eroare de două ori = UN grup cu două apariții, nu două grupuri", async () => {
