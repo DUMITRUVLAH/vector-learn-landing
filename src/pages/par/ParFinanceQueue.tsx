@@ -700,6 +700,7 @@ export default function ParFinanceQueue() {
           <Table className="min-w-[1280px]" aria-label="Coadă finanțe">
               <thead>
                 <tr className="bg-muted/50 border-b border-border">
+                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">Acțiuni</th>
                   <th className="text-left px-3 py-3 font-medium text-muted-foreground">Nr.</th>
                   <th className="text-left px-3 py-3 font-medium text-muted-foreground">Status</th>
                   <th className="text-left px-3 py-3 font-medium text-muted-foreground">Beneficiar</th>
@@ -712,7 +713,6 @@ export default function ParFinanceQueue() {
                   <th className="text-left px-3 py-3 font-medium text-muted-foreground">Aprobat de</th>
                   <th className="text-left px-3 py-3 font-medium text-muted-foreground">Secț. 16</th>
                   <th className="text-left px-3 py-3 font-medium text-muted-foreground">Documente</th>
-                  <th className="text-right px-3 py-3 font-medium text-muted-foreground">Acțiuni</th>
                 </tr>
               </thead>
               <tbody>
@@ -724,6 +724,60 @@ export default function ParFinanceQueue() {
                       idx % 2 === 0 ? "bg-background" : "bg-muted/10"
                     )}
                   >
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2 justify-start flex-wrap">
+                        {/* Section 16 button — available on approved / in_finance */}
+                        {["approved", "in_finance"].includes(par.status) && (
+                          <button
+                            onClick={() => setS16Par(par)}
+                            aria-label={`Completează secțiunea 16 pentru ${par.requestNo}`}
+                            className="px-3 py-1.5 rounded-md border border-input bg-background text-xs text-foreground hover:bg-accent transition-colors whitespace-nowrap"
+                          >
+                            Secț. 16
+                          </button>
+                        )}
+                        {/* Pay button — available on in_finance */}
+                        {par.status === "in_finance" && (
+                          <button
+                            onClick={() => setPayPar(par)}
+                            aria-label={`Înregistrează plata pentru ${par.requestNo}`}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors whitespace-nowrap"
+                          >
+                            <BanknoteIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                            Înregistrează plata
+                          </button>
+                        )}
+                        {/* Note for reapproval_required — after re-approval the pay button re-enables */}
+                        {par.status === "reapproval_required" && par.payment?.overageReapproved && (
+                          <button
+                            onClick={() => setPayPar(par)}
+                            aria-label={`Reîncearcă plata pentru ${par.requestNo} (re-aprobare acordată)`}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors whitespace-nowrap"
+                          >
+                            <BanknoteIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                            Plătește (re-aprobat)
+                          </button>
+                        )}
+                        {par.status === "reapproval_required" && !par.payment?.overageReapproved && (
+                          <span className="whitespace-nowrap text-xs text-warning">
+                            Așteptare re-aprobare…
+                          </span>
+                        )}
+                        {/* VM1-12: Dosar complet PDF — visible for all statuses */}
+                        <button
+                          onClick={async () => {
+                            try { await downloadDosar(par.id, par.requestNo); }
+                            catch { /* silent — user can retry */ }
+                          }}
+                          aria-label={`Descarcă dosarul complet PDF pentru ${par.requestNo}`}
+                          title="Descarcă dosarul complet (PDF)"
+                          className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-border bg-background text-xs text-foreground hover:bg-accent transition-colors whitespace-nowrap"
+                        >
+                          <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+                          Dosar PDF
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-3 py-3">
                       {/* VM3-01: deschide PAR-ul direct din coadă ("tu nu poți să deschizi aici") */}
                       <button
@@ -849,60 +903,6 @@ export default function ParFinanceQueue() {
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-2 justify-end flex-wrap">
-                        {/* Section 16 button — available on approved / in_finance */}
-                        {["approved", "in_finance"].includes(par.status) && (
-                          <button
-                            onClick={() => setS16Par(par)}
-                            aria-label={`Completează secțiunea 16 pentru ${par.requestNo}`}
-                            className="px-3 py-1.5 rounded-md border border-input bg-background text-xs text-foreground hover:bg-accent transition-colors whitespace-nowrap"
-                          >
-                            Secț. 16
-                          </button>
-                        )}
-                        {/* Pay button — available on in_finance */}
-                        {par.status === "in_finance" && (
-                          <button
-                            onClick={() => setPayPar(par)}
-                            aria-label={`Înregistrează plata pentru ${par.requestNo}`}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors whitespace-nowrap"
-                          >
-                            <BanknoteIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                            Înregistrează plata
-                          </button>
-                        )}
-                        {/* Note for reapproval_required — after re-approval the pay button re-enables */}
-                        {par.status === "reapproval_required" && par.payment?.overageReapproved && (
-                          <button
-                            onClick={() => setPayPar(par)}
-                            aria-label={`Reîncearcă plata pentru ${par.requestNo} (re-aprobare acordată)`}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors whitespace-nowrap"
-                          >
-                            <BanknoteIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                            Plătește (re-aprobat)
-                          </button>
-                        )}
-                        {par.status === "reapproval_required" && !par.payment?.overageReapproved && (
-                          <span className="whitespace-nowrap text-xs text-warning">
-                            Așteptare re-aprobare…
-                          </span>
-                        )}
-                        {/* VM1-12: Dosar complet PDF — visible for all statuses */}
-                        <button
-                          onClick={async () => {
-                            try { await downloadDosar(par.id, par.requestNo); }
-                            catch { /* silent — user can retry */ }
-                          }}
-                          aria-label={`Descarcă dosarul complet PDF pentru ${par.requestNo}`}
-                          title="Descarcă dosarul complet (PDF)"
-                          className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-border bg-background text-xs text-foreground hover:bg-accent transition-colors whitespace-nowrap"
-                        >
-                          <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
-                          Dosar PDF
-                        </button>
-                      </div>
                     </td>
                   </tr>
                 ))}
