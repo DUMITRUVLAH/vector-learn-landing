@@ -79,7 +79,14 @@ describe("parsarea XML-ului de factură SFS", () => {
 
   it("nu inventează date când XML-ul lipsește", () => {
     const parsed = parseSfsInvoiceXml(null);
-    expect(parsed).toEqual({ supplierIdno: null, buyerIdno: null, invoiceDate: null, totalCents: null });
+    expect(parsed).toEqual({ supplierIdno: null, supplierName: null, buyerIdno: null, invoiceDate: null, totalCents: null });
+  });
+
+  it("citește denumirea furnizorului când formularul o expune", () => {
+    const xml = INVOICE_XML.replace(`<Supplier IDNO="${SUPPLIER}">`, `<Supplier IDNO="${SUPPLIER}" Name="Consultanți SRL">`);
+    expect(parseSfsInvoiceXml(xml).supplierName).toBe("Consultanți SRL");
+    // …și nu inventează una când lipsește.
+    expect(parseSfsInvoiceXml(INVOICE_XML).supplierName).toBeNull();
   });
 
   it("combină antetul listei cu detaliile din XML", () => {

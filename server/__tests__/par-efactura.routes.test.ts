@@ -297,3 +297,22 @@ describe("marcarea manuală", () => {
     session = saved;
   });
 });
+
+describe("tabul cu toate e-Facturile", () => {
+  it("răspunde 200 și explică de ce lista e goală când SFS nu e configurat", async () => {
+    const res = await app.request("/api/par/efactura/invoices");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { available: boolean; invoices: unknown[]; message: string };
+    expect(body.available).toBe(false);
+    expect(body.invoices).toHaveLength(0);
+    expect(body.message).toMatch(/nu este configurat|simulat/i);
+  });
+
+  it("nu e vizibil pentru cineva fără rol de finanțe sau administrator PAR", async () => {
+    const saved = session;
+    session = { id: requestorUser, tenantId, role: "teacher", email: "solicitant@atic.example" };
+    const res = await app.request("/api/par/efactura/invoices");
+    expect(res.status).toBe(403);
+    session = saved;
+  });
+});

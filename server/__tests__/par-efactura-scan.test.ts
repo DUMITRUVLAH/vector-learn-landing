@@ -55,6 +55,7 @@ function stubClient(invoices: { seria: string; number: string; invoiceStatus: nu
   return {
     getInvoicesForSigning: async () => heads,
     getAcceptedInvoices: async () => [],
+    getRejectedInvoices: async () => [],
     getInvoicesBySeriaNumber: async (ids: Array<{ seria: string; number: string }>) =>
       ids
         .map((id) => invoices.find((i) => i.seria === id.seria && i.number === id.number))
@@ -245,5 +246,49 @@ describe("scanarea SFS pentru facturile prestatorilor", () => {
     const [row] = await testDb.select().from(parEinvoices).where(eq(parEinvoices.parId, parId));
     expect(row.status).toBe("expected");
     expect(row.lastScanAt).toBeNull();
+  });
+});
+
+describe("lista brută a facturilor primite (tabul Toate e-Facturile)", () => {
+  it("arată facturile din SFS și le leagă de cererea potrivită", async () => {
+    const { scanEfacturasForTenant, listBuyerInvoicesForTenant } = await import("../services/par/efacturaScan");
+    const parId = await paidPar({ requestNo: "PAR-7", idno: SUPPLIER, amountCents: 120000, paidAt: "2026-08-12" });
+    const client = stubClient([
+      {
+        seria: "EFMD",
+        number: "000000123",
+        invoiceStatus: 7,
+        xml: invoiceXml({ supplier: SUPPLIER, buyer: BUYER, date: "2026-08-13T00:00:00.000Z", total: "1200.00" }),
+      },
+      {
+        // Factură fără PAR în spate (abonament) — trebuie să apară oricum în listă.
+        seria: "EFMD",
+        number: "000000777",
+        invoiceStatus: 3,
+        xml: invoiceXml({ supplier: "1009999999999", buyer: BUYER, date: "2026-08-20T00:00:00.000Z", total: "300.00" }),
+      },
+    ]);
+
+    await scanEfacturasForTenant(tenantId, undefined, client);
+    const list = await listBuyerInvoicesForTenant(tenantId, client);
+
+    expect(list.available).toBe(true);
+    expect(list.invoices).toHaveLength(2);
+    // Cele mai noi primele.
+    expect(list.invoices[0].number).toBe("000000777");
+    const legata = list.invoices.find((i) => i.number === "000000123")!;
+    expect(legata.linkedParId).toBe(parId);
+    expect(legata.linkedRequestNo).toBe("PAR-7");
+    expect(legata.totalCents).toBe(120000);
+    const fara = list.invoices.find((i) => i.number === "000000777")!;
+    expect(fara.linkedParId).toBeNull();
+  });
+
+  it("fără credențiale SFS spune că nu poate citi, în loc să arate o listă goală ca adevăr", async () => {
+    const { listBuyerInvoicesForTenant } = await import("../services/par/efacturaScan");
+    const list = await listBuyerInvoicesForTenant(tenantId);
+    expect(list.available).toBe(false);
+    expect(list.invoices).toHaveLength(0);
+    expect(list.message).toMatch(/nu este configurat|simulat/i);
   });
 });

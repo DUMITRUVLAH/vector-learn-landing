@@ -4,6 +4,7 @@
  * Rute (montate la /api/par/efactura în server/app.ts):
  *   GET  /api/par/efactura                              → coada cererilor plătite + starea facturii
  *   POST /api/par/efactura/scan                         → scanează SFS pentru toate cererile în așteptare
+ *   GET  /api/par/efactura/invoices                     → TOATE facturile primite în SFS (brut)
  *   GET  /api/par/efactura/settings                     → configurarea SFS (par_admin)
  *   PUT  /api/par/efactura/settings                     → salvează configurarea SFS (par_admin)
  *   POST /api/par/efactura/settings/test                → test de conexiune la SFS (par_admin)
@@ -42,7 +43,11 @@ import { encrypt } from "../lib/crypto";
 import { loadSfsConfig } from "../lib/fin/sfsConfig";
 import { EfacturaMdClient, EFACTURA_MD_STATUS } from "../lib/efacturaMoldova";
 import { notifyEfacturaMissing } from "../services/par/notify";
-import { scanEfacturasForTenant, syncEfacturaCandidates } from "../services/par/efacturaScan";
+import {
+  scanEfacturasForTenant,
+  syncEfacturaCandidates,
+  listBuyerInvoicesForTenant,
+} from "../services/par/efacturaScan";
 
 export const parEfacturaRoutes = new Hono<{ Variables: AuthVariables }>();
 parEfacturaRoutes.use("*", requireAuth);
@@ -233,6 +238,22 @@ parEfacturaRoutes.post("/scan", async (c) => {
   }
   const result = await scanEfacturasForTenant(user.tenantId);
   return c.json({ result, sfs: await sfsSummary(user.tenantId) });
+});
+
+// ─── GET /api/par/efactura/invoices — toate facturile primite din SFS ────────
+
+/**
+ * Lista brută: ce facturi are organizația în SFS ca CUMPĂRĂTOR, indiferent dacă sunt legate de o
+ * cerere PAR. Răspunde la „ce mi-a emis lumea", nu la „cererea X are factură" — inclusiv facturile
+ * pentru care nu există niciun PAR (abonamente, livrări directe) și cele respinse.
+ */
+parEfacturaRoutes.get("/invoices", async (c) => {
+  const user = c.get("user");
+  if (!(await isElevated(user.id, user.tenantId))) {
+    return c.json({ error: "forbidden", detail: "Necesită rol finance sau par_admin." }, 403);
+  }
+  const result = await listBuyerInvoicesForTenant(user.tenantId);
+  return c.json({ ...result, sfs: await sfsSummary(user.tenantId) });
 });
 
 // ─── Configurarea SFS (par_admin) ─────────────────────────────────────────────

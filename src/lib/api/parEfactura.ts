@@ -139,6 +139,36 @@ export async function testParSfsConnection(): Promise<{ ok: boolean; message: st
   return api<{ ok: boolean; message: string }>("/api/par/efactura/settings/test", { method: "POST" });
 }
 
+// ─── Lista brută a facturilor primite în SFS ─────────────────────────────────
+
+export interface BuyerInvoiceItem {
+  seria: string;
+  number: string;
+  invoiceStatus: number;
+  invoiceStatusLabel: string;
+  supplierIdno: string | null;
+  supplierName: string | null;
+  buyerIdno: string | null;
+  invoiceDate: string | null;
+  totalCents: number | null;
+  /** Cererea PAR de care e legată factura (dacă a fost potrivită sau marcată manual). */
+  linkedParId: string | null;
+  linkedRequestNo: string | null;
+}
+
+export interface BuyerInvoiceList {
+  available: boolean;
+  source: "sfs" | "mock";
+  message: string;
+  invoices: BuyerInvoiceItem[];
+  sfs: ParSfsSummary;
+}
+
+/** Toate facturile în care organizația e cumpărător — nu doar cele legate de o plată PAR. */
+export async function getParEfacturaInvoices(): Promise<BuyerInvoiceList> {
+  return api<BuyerInvoiceList>("/api/par/efactura/invoices");
+}
+
 // ─── Etichete ─────────────────────────────────────────────────────────────────
 
 export const PAR_EFACTURA_STATUS_LABELS: Record<ParEfacturaStatus, string> = {

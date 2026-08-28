@@ -170,6 +170,14 @@ await T("marcarea manuală scoate cererea din coadă", async () => {
   must(!q.json.items.some((i) => i.parId === parJuridic), "cererea a rămas în coada „lipsă”");
 });
 
+await T("tabul cu toate e-Facturile răspunde și explică lipsa credențialelor", async () => {
+  const r = await GET("finance", "/api/par/efactura/invoices");
+  must(r.status === 200, `lista de facturi a răspuns ${r.status}`);
+  must(r.json.available === false, "lista se declară disponibilă deși SFS nu e configurat");
+  must(Array.isArray(r.json.invoices) && r.json.invoices.length === 0, "lista ar trebui să fie goală");
+  return r.json.message;
+});
+
 // ── Partea de browser: paginile chiar se randează ────────────────────────────
 
 const browser = await chromium.launch();
@@ -191,6 +199,14 @@ await T("pagina /business/par/efactura se randează", async () => {
   await page.waitForTimeout(1500);
   const body = await page.textContent("body");
   must(/e-Factura prestatori/i.test(body ?? ""), "titlul paginii lipsește");
+  must(consoleErrors.length === 0, `erori JS: ${consoleErrors.join(" | ")}`);
+});
+
+await T("tabul „Toate e-Facturile” se deschide în browser", async () => {
+  await page.click('[role="tab"]:has-text("Toate e-Facturile")');
+  await page.waitForTimeout(1500);
+  const body = await page.textContent("body");
+  must(/Nu putem citi facturile din SFS|facturi primite/i.test(body ?? ""), "tabul nu a afișat nici listă, nici explicație");
   must(consoleErrors.length === 0, `erori JS: ${consoleErrors.join(" | ")}`);
 });
 
