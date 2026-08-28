@@ -55,8 +55,12 @@ export async function getMdlRate(
   const cached = cache.get(key);
   if (cached != null) return cached;
 
+  // Timeout explicit: BNM e un serviciu extern pe calea unei cereri de API (soldul unui cod de
+  // buget). Fără el, o pauză la bnm.md ar ține cererea deschisă până la timeout-ul platformei;
+  // cu el, cădem pe ultimul curs știut (sau pe „curs indisponibil") în câteva secunde.
   const doFetch: FxFetch =
-    opts.fetchImpl ?? ((url) => fetch(url) as unknown as ReturnType<FxFetch>);
+    opts.fetchImpl ??
+    ((url) => fetch(url, { signal: AbortSignal.timeout(6000) }) as unknown as ReturnType<FxFetch>);
   const url = `https://www.bnm.md/ro/official_exchange_rates?get_xml=1&date=${bnmDate(date)}`;
 
   try {
@@ -83,6 +87,16 @@ export async function toMdlCents(
 ): Promise<{ mdlCents: number; rate: number }> {
   const rate = await getMdlRate(currency, opts);
   return { mdlCents: Math.round(amountCents * rate), rate };
+}
+
+/**
+ * Test-only: seed a rate so a test never touches the network (and gets a deterministic number).
+ * Populates both the day cache and the last-known fallback.
+ */
+export function __primeFxRate(currency: string, rate: number, date: Date = new Date()): void {
+  const code = currency.toUpperCase();
+  cache.set(`${bnmDate(date)}:${code}`, rate);
+  lastKnown.set(code, rate);
 }
 
 /** Test-only: clear caches so each test starts clean. */

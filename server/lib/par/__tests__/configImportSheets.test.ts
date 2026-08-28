@@ -218,6 +218,7 @@ describe("suggestMapping — what the mapping dialog pre-selects", () => {
     expect(m).toEqual({
       code: "Cod",
       name: "Denumire",
+      currency: null,
       allocated: null,
       project: "Denumire proiect",
       payer: null,

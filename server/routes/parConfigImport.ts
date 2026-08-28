@@ -44,6 +44,7 @@ import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
 import {
   ALLOCATED_ALIASES,
   CODE_ALIASES,
+  CURRENCY_ALIASES,
   DEPARTMENT_NAME_ALIASES,
   NAME_ALIASES,
   PAYER_ALIASES,
@@ -188,7 +189,8 @@ parConfigImportRoutes.get(
     ws3.columns = [
       { header: "Cod buget *", key: "code", width: 20 },
       { header: "Denumire *", key: "name", width: 35 },
-      { header: "Suma alocată (MDL)", key: "allocated", width: 22 },
+      { header: "Suma alocată", key: "allocated", width: 22 },
+      { header: "Valută", key: "currency", width: 10 },
       { header: "Plătitor / Organizație *", key: "payer", width: 35 },
       { header: "Proiect (opțional)", key: "project", width: 35 },
     ];
@@ -227,6 +229,10 @@ const mappingSchema = z.object({
         kind: z.enum(["payers", "projects", "departments", "budgetCodes", "vendors", "skip"]),
         /** field key → the column header that feeds it (null = not mapped). */
         columns: z.record(z.string(), z.string().nullable()).default({}),
+        /** Opțiuni pe foaie alese în dialog — deocamdată valuta implicită a codurilor bugetare. */
+        options: z
+          .object({ currency: z.enum(["MDL", "EUR", "USD"]).optional() })
+          .optional(),
       })
     )
     .max(50),
@@ -368,6 +374,12 @@ parConfigImportRoutes.post(
         }
         if (chosen.kind === "skip") continue;
         const rows = applyMapping(sheet.rows, chosen.columns);
+        // Valuta aleasă pentru foaie completează rândurile care nu au o coloană de valută proprie
+        // (cazul obișnuit: un buget de grant întreg în EUR, fără nicio coloană „Valută" în fișier).
+        const sheetCurrency = chosen.options?.currency;
+        if (sheetCurrency && chosen.kind === "budgetCodes") {
+          for (const r of rows) if (!r.data.currency?.trim()) r.data.currency = sheetCurrency;
+        }
         selected.push({ kind: chosen.kind, rows });
         warnings.push(`Foaia „${sheet.name}" a fost importată ca „${KIND_LABELS[chosen.kind]}" (${rows.length} rânduri), conform mapării alese.`);
       }
@@ -844,6 +856,16 @@ async function upsertDepartments(tenantId: string, rows: ImportRow[]): Promise<C
   return res;
 }
 
+/** "eur" / "€" / "Euro" → "EUR". Returnează null pentru un text nerecunoscut (≠ celulă goală). */
+function normalizeImportCurrency(raw: string): "MDL" | "EUR" | "USD" | null {
+  const v = raw.trim().toUpperCase();
+  if (!v) return "MDL";
+  if (["MDL", "LEI", "L", "LEU", "MDL."].includes(v)) return "MDL";
+  if (["EUR", "€", "EURO"].includes(v)) return "EUR";
+  if (["USD", "$", "DOLAR", "DOLARI", "US$"].includes(v)) return "USD";
+  return null;
+}
+
 async function upsertBudgetCodes(
   ctx: ImportCtx,
   rows: ImportRow[],
@@ -859,6 +881,7 @@ async function upsertBudgetCodes(
     // Real files put the whole label in the "Cod" column ("1.1 Project Coordinator (100%)").
     const { code, name } = splitCodeAndName(rawCode, rawName);
     const allocatedRaw = getField(data, ...ALLOCATED_ALIASES);
+    const currencyRaw = getField(data, "currency", ...CURRENCY_ALIASES);
     const payerName = getField(data, ...PAYER_ALIASES);
     const projectName = getField(data, ...PROJECT_ALIASES);
 
@@ -916,10 +939,17 @@ async function upsertBudgetCodes(
       if (allocatedRaw) {
         const parsed = parseMdlAmount(allocatedRaw);
         if (parsed === null) {
-          res.errors.push({ row, column: "Suma alocată (MDL)", message: `Suma '${allocatedRaw}' nu este un număr valid.` });
+          res.errors.push({ row, column: "Suma alocată", message: `Suma '${allocatedRaw}' nu este un număr valid.` });
           continue;
         }
         allocatedCents = Math.round(parsed * 100);
+      }
+
+      // Valuta liniei: coloana proprie → valuta aleasă pentru foaie (pusă deja în rând) → MDL.
+      const currency = normalizeImportCurrency(currencyRaw);
+      if (currencyRaw && !currency) {
+        res.errors.push({ row, column: "Valută", message: `Valuta '${currencyRaw}' nu este acceptată (MDL, EUR sau USD).` });
+        continue;
       }
 
       const storedName = name.slice(0, MAX_NAME_LEN);
@@ -932,11 +962,11 @@ async function upsertBudgetCodes(
       if (existing) {
         await db
           .update(parBudgetCodes)
-          .set({ name: storedName, payerId: payer.id, projectId, allocatedCents, active: true, updatedAt: new Date() })
+          .set({ name: storedName, payerId: payer.id, projectId, allocatedCents, currency: currency ?? "MDL", active: true, updatedAt: new Date() })
           .where(and(eq(parBudgetCodes.id, existing.id), eq(parBudgetCodes.tenantId, tenantId)));
         res.updated++;
       } else {
-        await db.insert(parBudgetCodes).values({ tenantId, payerId: payer.id, projectId, code, name: storedName, allocatedCents, active: true });
+        await db.insert(parBudgetCodes).values({ tenantId, payerId: payer.id, projectId, code, name: storedName, allocatedCents, currency: currency ?? "MDL", active: true });
         res.created++;
       }
     } catch (err) {

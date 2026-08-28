@@ -64,6 +64,10 @@ const AREAS = {
       ["GET", "/api/par/vendors", (j) => Array.isArray(j?.vendors)],
       ["GET", "/api/par/departments", (j) => !!j],
       ["GET", "/api/par/activity", (j) => Array.isArray(j?.items)],
+      // Codurile bugetare au monedă proprie (MDL/EUR/USD): răspunsul trebuie să o poarte, iar
+      // consumul să vină convertit în lei — altfel un plafon în EUR e citit ca lei (de ~20× mai mic).
+      ["GET", "/api/par/budget-codes", (j) => Array.isArray(j?.budgetCodes)],
+      ["GET", "/api/par/budget-codes/usage", (j) => Array.isArray(j?.usage) && j.usage.every((u) => typeof u.currency === "string" && typeof u.allocatedCents === "number")],
     ],
     routes: ["/business/par", "/business/par/inbox", "/business/par/new", "/business/par/folders", "/business/par/finance", "/business/par/reports", "/business/par/admin"],
     deep: ["e2e-par-sweep.mjs", "e2e-par-write-sweep.mjs", "e2e-par-scope.mjs"],

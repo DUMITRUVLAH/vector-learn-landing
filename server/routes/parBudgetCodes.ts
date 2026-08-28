@@ -19,6 +19,7 @@ import { parUuidGuard } from "../middleware/parUuidGuard";
 import { accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { enabledPayerIds, hasPayerModuleEntitlement } from "../middleware/requireModuleEntitlement";
 import { writeAuditLog } from "../lib/auditLogger";
+import { getMdlRate } from "../lib/fx";
 
 export const parBudgetCodesRoutes = new Hono<{ Variables: AuthVariables }>();
 parBudgetCodesRoutes.use("*", requireAuth);
@@ -26,14 +27,55 @@ parBudgetCodesRoutes.use("*", requireAuth);
 // level so the literal `/usage` route is never shadowed by a wildcard guard.
 parBudgetCodesRoutes.use("/:id/:action/*", parUuidGuard("id"));
 
+const BUDGET_CURRENCIES = ["MDL", "EUR", "USD"] as const;
+type BudgetCurrency = (typeof BUDGET_CURRENCIES)[number];
+
 const codeSchema = z.object({
   code: z.string().min(1).max(50),
   name: z.string().min(1).max(200),
   active: z.boolean().optional(),
   allocatedCents: z.number().int().min(0).optional(),
+  /** Moneda alocării. Lipsă = MDL (compatibil cu codurile create înainte de migrarea 0147). */
+  currency: z.enum(BUDGET_CURRENCIES).optional(),
   payer_id: z.string().uuid().optional().nullable(),
   project_id: z.string().uuid().optional().nullable(),
 });
+
+/** Normalizează ce vine din DB (poate fi NULL pe rândurile vechi) la o monedă cunoscută. */
+function asCurrency(value: string | null | undefined): BudgetCurrency {
+  const up = String(value ?? "").toUpperCase();
+  return (BUDGET_CURRENCIES as readonly string[]).includes(up) ? (up as BudgetCurrency) : "MDL";
+}
+
+/**
+ * Curs BNM (MDL pentru o unitate) pentru fiecare monedă cerută. Nu aruncă niciodată: dacă BNM nu
+ * răspunde și nu există un curs memorat, moneda primește `null` — apelantul raportează „curs
+ * indisponibil" în loc să compare EUR cu MDL (ar da un plafon de ~20× mai mic decât cel real).
+ */
+async function mdlRates(currencies: Iterable<string | null | undefined>): Promise<Map<BudgetCurrency, number | null>> {
+  const out = new Map<BudgetCurrency, number | null>();
+  for (const raw of currencies) {
+    const cur = asCurrency(raw);
+    if (out.has(cur)) continue;
+    if (cur === "MDL") { out.set(cur, 1); continue; }
+    try {
+      out.set(cur, await getMdlRate(cur));
+    } catch {
+      out.set(cur, null);
+    }
+  }
+  return out;
+}
+
+/**
+ * Alocarea unui cod, exprimată în MDL — baza de comparație cu cheltuielile (care sunt însumate în
+ * MDL). `null` = nu se poate compara (curs indisponibil pentru o alocare în valută).
+ */
+function allocationInMdl(allocatedCents: number, rate: number | null): number | null {
+  if (!allocatedCents) return 0;
+  if (rate == null) return null;
+  return Math.round(allocatedCents * rate);
+}
 
 /** GET — list all active budget codes */
 parBudgetCodesRoutes.get("/", async (c) => {
@@ -120,10 +162,12 @@ parBudgetCodesRoutes.get("/usage", requirePARRole("par_admin", "finance", "appro
     .where(and(...codeConditions))
     .orderBy(asc(parBudgetCodes.code));
 
+  // Sumele se însumează în MDL: o cerere în EUR are `totalMdlCents` completat la trimitere, deci
+  // comparația cu alocarea (convertită și ea în MDL) rămâne corectă indiferent de monede.
   const committedRows = await db
     .select({
       budgetCodeId: parRequests.budgetCodeId,
-      total: sql<number>`coalesce(sum(${parRequests.totalEstimatedCents}), 0)`,
+      total: sql<number>`coalesce(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})), 0)`,
     })
     .from(parRequests)
     .where(and(
@@ -136,7 +180,7 @@ parBudgetCodesRoutes.get("/usage", requirePARRole("par_admin", "finance", "appro
   const paidRows = await db
     .select({
       budgetCodeId: parRequests.budgetCodeId,
-      total: sql<number>`coalesce(sum(coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents})), 0)`,
+      total: sql<number>`coalesce(sum(coalesce(round(${parPayments.actualAmountCents} * coalesce(${parRequests.exchangeRate}, 1)), ${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})), 0)`,
     })
     .from(parRequests)
     .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
@@ -152,8 +196,16 @@ parBudgetCodesRoutes.get("/usage", requirePARRole("par_admin", "finance", "appro
   const paidBy = new Map<string, number>();
   for (const r of paidRows) if (r.budgetCodeId) paidBy.set(r.budgetCodeId, Number(r.total ?? 0));
 
+  const rates = await mdlRates(codes.map((code) => code.currency));
+
   const usage = codes.map((code) => {
-    const allocatedCents = code.allocatedCents ?? 0;
+    const currency = asCurrency(code.currency);
+    const rate = rates.get(currency) ?? null;
+    const allocatedOriginalCents = code.allocatedCents ?? 0;
+    const allocatedMdl = allocationInMdl(allocatedOriginalCents, rate);
+    // Curs indisponibil pentru o alocare în valută: raportăm 0 („fără plafon cunoscut") și
+    // marcăm `fxUnavailable`, ca să nu apară un „buget depășit" inventat dintr-o comparație greșită.
+    const allocatedCents = allocatedMdl ?? 0;
     const committedCents = committedBy.get(code.id) ?? 0;
     const paidCents = paidBy.get(code.id) ?? 0;
     const usedCents = committedCents + paidCents;
@@ -161,6 +213,10 @@ parBudgetCodesRoutes.get("/usage", requirePARRole("par_admin", "finance", "appro
       id: code.id,
       code: code.code,
       name: code.name,
+      currency,
+      rate,
+      fxUnavailable: allocatedMdl === null,
+      allocatedOriginalCents,
       allocatedCents,
       committedCents,
       paidCents,
@@ -201,7 +257,7 @@ parBudgetCodesRoutes.get("/:id/balance", async (c) => {
 
   // Committed: sum of estimated amounts for in-flight PARs
   const committedRows = await db
-    .select({ total: sql<number>`coalesce(sum(${parRequests.totalEstimatedCents}), 0)` })
+    .select({ total: sql<number>`coalesce(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})), 0)` })
     .from(parRequests)
     .where(
       and(
@@ -217,7 +273,7 @@ parBudgetCodesRoutes.get("/:id/balance", async (c) => {
 
   // Spent: sum of estimated amounts for paid PARs
   const spentRows = await db
-    .select({ total: sql<number>`coalesce(sum(coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents})), 0)` })
+    .select({ total: sql<number>`coalesce(sum(coalesce(round(${parPayments.actualAmountCents} * coalesce(${parRequests.exchangeRate}, 1)), ${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})), 0)` })
     .from(parRequests)
     .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
     .where(
@@ -232,10 +288,31 @@ parBudgetCodesRoutes.get("/:id/balance", async (c) => {
       ? spentRows[0].total
       : Number(spentRows[0]?.total ?? 0);
 
-  const allocatedCents = code.allocatedCents ?? 0;
+  // Alocarea se ține în moneda liniei de buget, cheltuielile sunt însumate în MDL — comparația se
+  // face după conversia alocării la cursul BNM. `?currency=` (moneda cererii care se completează)
+  // primește și ea cursul, ca formularul să-și convertească propriul total fără un al doilea apel.
+  const currency = asCurrency(code.currency);
+  const requestCurrencyRaw = c.req.query("currency");
+  const rates = await mdlRates([currency, ...(requestCurrencyRaw ? [requestCurrencyRaw] : [])]);
+  const rate = rates.get(currency) ?? null;
+  const allocatedOriginalCents = code.allocatedCents ?? 0;
+  const allocatedMdl = allocationInMdl(allocatedOriginalCents, rate);
+  const allocatedCents = allocatedMdl ?? 0;
   const availableCents = allocatedCents - committedCents - spentCents;
 
-  return c.json({ allocatedCents, committedCents, spentCents, availableCents });
+  return c.json({
+    currency,
+    rate,
+    fxUnavailable: allocatedMdl === null,
+    allocatedOriginalCents,
+    /** Alocarea rămasă, exprimată în moneda liniei (pentru afișare lângă suma alocată). */
+    availableOriginalCents: rate ? Math.round(availableCents / rate) : availableCents,
+    requestRate: requestCurrencyRaw ? rates.get(asCurrency(requestCurrencyRaw)) ?? null : null,
+    allocatedCents,
+    committedCents,
+    spentCents,
+    availableCents,
+  });
 });
 
 /** POST — create */
@@ -288,6 +365,7 @@ parBudgetCodesRoutes.post(
         name: body.name,
         active: body.active ?? true,
         allocatedCents: body.allocatedCents ?? 0,
+        currency: body.currency ?? "MDL",
         payerId,
         projectId: body.project_id ?? null,
       })
@@ -338,6 +416,7 @@ parBudgetCodesRoutes.patch(
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.active !== undefined ? { active: body.active } : {}),
       ...(body.allocatedCents !== undefined ? { allocatedCents: body.allocatedCents } : {}),
+      ...(body.currency !== undefined ? { currency: body.currency } : {}),
       ...(body.payer_id !== undefined || (!!projectId && !existing.payerId) ? { payerId } : {}),
       ...(body.project_id !== undefined ? { projectId: body.project_id } : {}),
       updatedAt: new Date(),

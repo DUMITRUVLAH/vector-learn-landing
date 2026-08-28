@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import type {
   ParConfigImportMapping,
   ParConfigImportPreview,
+  ParCurrency,
   ParImportKind,
   ParImportSheetMapping,
 } from "@/lib/api/par";
@@ -33,13 +34,18 @@ export interface ParImportMappingDialogProps {
   onConfirm: (mapping: ParConfigImportMapping) => void;
 }
 
-type SheetChoice = { kind: ParImportKind | typeof SKIP; columns: Record<string, string | null> };
+type SheetChoice = {
+  kind: ParImportKind | typeof SKIP;
+  columns: Record<string, string | null>;
+  /** Valuta implicită a sumelor din foaie — bugetele de grant vin în EUR/USD, nu în lei. */
+  currency: ParCurrency;
+};
 
 /** Initial state = the server's suggestion, which the user then overrides at will. */
 function initialChoices(preview: ParConfigImportPreview | null): Record<string, SheetChoice> {
   const state: Record<string, SheetChoice> = {};
   for (const sheet of preview?.sheets ?? []) {
-    state[sheet.name] = { kind: sheet.suggestedKind, columns: { ...sheet.suggestedMapping } };
+    state[sheet.name] = { kind: sheet.suggestedKind, columns: { ...sheet.suggestedMapping }, currency: "MDL" };
   }
   return state;
 }
@@ -90,6 +96,7 @@ export function ParImportMappingDialog({
       // Switching the kind re-suggests columns for it: the old field keys don't apply.
       [sheetName]: {
         kind,
+        currency: prev[sheetName]?.currency ?? "MDL",
         columns:
           kind === SKIP || !sheet
             ? {}
@@ -97,6 +104,13 @@ export function ParImportMappingDialog({
               ? { ...sheet.suggestedMapping }
               : autoPick(preview!, kind, sheet.headers),
       },
+    }));
+  };
+
+  const setCurrency = (sheetName: string, currency: ParCurrency) => {
+    setChoices((prev) => ({
+      ...prev,
+      [sheetName]: { ...(prev[sheetName] ?? { kind: SKIP, columns: {} }), currency },
     }));
   };
 
@@ -119,6 +133,7 @@ export function ParImportMappingDialog({
       name: sheet.name,
       kind: choices[sheet.name]?.kind ?? SKIP,
       columns: choices[sheet.name]?.columns ?? {},
+      options: { currency: choices[sheet.name]?.currency ?? "MDL" },
     }));
     onConfirm({ sheets });
   };
@@ -150,7 +165,8 @@ export function ParImportMappingDialog({
       ) : (
         <div className="space-y-6">
           {preview.sheets.map((sheet) => {
-            const choice = choices[sheet.name] ?? { kind: SKIP, columns: {} };
+            const choice = choices[sheet.name] ?? { kind: SKIP, columns: {}, currency: "MDL" as ParCurrency };
+            const currencyId = `import-currency-${slug(sheet.name)}`;
             const fields = choice.kind === SKIP ? [] : preview.fields[choice.kind];
             const selectId = `import-kind-${slug(sheet.name)}`;
             return (
@@ -179,6 +195,30 @@ export function ParImportMappingDialog({
                     </Select>
                   </div>
                 </div>
+
+                {/* Un buget de grant e adesea integral în EUR/USD și fișierul nu are nicio coloană
+                    de valută — atunci se alege aici, o dată pentru toată foaia. O coloană „Valută"
+                    mapată explicit are prioritate, rând cu rând. */}
+                {choice.kind === "budgetCodes" && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label htmlFor={currencyId} className="text-xs text-muted-foreground">
+                      Valuta sumelor din foaie
+                    </label>
+                    <Select
+                      id={currencyId}
+                      className="w-40"
+                      value={choice.currency}
+                      onChange={(e) => setCurrency(sheet.name, e.target.value as ParCurrency)}
+                    >
+                      <option value="MDL">MDL (lei)</option>
+                      <option value="EUR">EUR (euro)</option>
+                      <option value="USD">USD (dolari)</option>
+                    </Select>
+                    <span className="text-xs text-muted-foreground">
+                      se aplică rândurilor fără coloană „Valută"
+                    </span>
+                  </div>
+                )}
 
                 {sheet.headers.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Foaia nu are un rând de antet — nu poate fi mapată.</p>

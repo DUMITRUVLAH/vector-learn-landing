@@ -1023,6 +1023,13 @@
       "when": 1787000200003,
       "tag": "0146_par_einvoices",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1787000200004,
+      "tag": "0147_par_budget_code_currency",
+      "breakpoints": true
     }
   ]
 }

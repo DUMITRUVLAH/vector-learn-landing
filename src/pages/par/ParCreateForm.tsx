@@ -644,11 +644,13 @@ export function ParCreateForm() {
   useEffect(() => {
     if (!budgetCodeId) { setBudgetBalance(null); return; }
     setBudgetBalanceLoading(true);
-    getBudgetCodeBalance(budgetCodeId)
+    // Trimitem și moneda cererii: răspunsul aduce cursul ei, ca totalul (EUR/USD) să fie comparat
+    // cu bugetul în aceeași monedă — altfel 1.000 EUR ar părea că încap într-un rest de 1.500 MDL.
+    getBudgetCodeBalance(budgetCodeId, currency)
       .then((b) => setBudgetBalance(b))
       .catch(() => setBudgetBalance(null))
       .finally(() => setBudgetBalanceLoading(false));
-  }, [budgetCodeId]);
+  }, [budgetCodeId, currency]);
 
   // Keep the budget selection inside the selected payer/project scope and remove one
   // unnecessary click when that scope has exactly one eligible code.
@@ -1199,12 +1201,17 @@ export function ParCreateForm() {
   const isAdmin = session?.user?.role === "admin";
   const summaryErrors = Object.entries(fieldErrors).filter(([, v]) => v);
 
-  // Feature 2: non-blocking budget overage warning
+  // Feature 2: non-blocking budget overage warning.
+  // Soldul vine în MDL; totalul cererii e în moneda ei — convertim înainte de a compara. Fără curs
+  // (BNM indisponibil) nu avertizăm deloc: o comparație greșită ar fi mai rea decât tăcerea.
+  const requestRate = currency === "MDL" ? 1 : budgetBalance?.requestRate ?? null;
+  const totalMdlCents = requestRate != null ? Math.round(totalCents * requestRate) : null;
   const budgetOverageWarn =
     budgetBalance &&
     budgetBalance.allocatedCents > 0 &&
+    totalMdlCents != null &&
     totalCents > 0 &&
-    totalCents > budgetBalance.availableCents;
+    totalMdlCents > budgetBalance.availableCents;
 
   return (
     <AppShell>
@@ -1409,13 +1416,17 @@ export function ParCreateForm() {
                   ) : budgetBalance ? (
                     <span className={cn(
                       "text-xs font-medium flex items-center gap-1",
-                      budgetBalance.availableCents <= 0 && budgetBalance.allocatedCents > 0
-                        ? "text-destructive"
-                        : "text-success"
+                      budgetBalance.fxUnavailable
+                        ? "text-muted-foreground"
+                        : budgetBalance.availableCents <= 0 && budgetBalance.allocatedCents > 0
+                          ? "text-destructive"
+                          : "text-success"
                     )}>
-                      {budgetBalance.allocatedCents > 0
-                        ? `Disponibil: ${formatMDL(budgetBalance.availableCents)} din ${formatMDL(budgetBalance.allocatedCents)}`
-                        : "Fără plafon alocat"}
+                      {budgetBalance.fxUnavailable
+                        ? "Plafon în valută — curs BNM indisponibil, soldul nu poate fi calculat"
+                        : budgetBalance.allocatedCents > 0
+                          ? `Disponibil: ${fmtMoney(budgetBalance.availableOriginalCents ?? budgetBalance.availableCents, budgetBalance.currency ?? "MDL")} din ${fmtMoney(budgetBalance.allocatedOriginalCents ?? budgetBalance.allocatedCents, budgetBalance.currency ?? "MDL")}`
+                          : "Fără plafon alocat"}
                     </span>
                   ) : null
                 )}
@@ -2168,7 +2179,7 @@ export function ParCreateForm() {
           {budgetOverageWarn && (
             <div role="status" className="flex items-center gap-2 p-2 rounded-md border border-warning/40 bg-warning/[0.08] text-xs text-warning">
               <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
-              <span>Depășește bugetul disponibil pentru acest cod ({formatMDL(budgetBalance!.availableCents)} disponibil)</span>
+              <span>Depășește bugetul disponibil pentru acest cod ({fmtMoney(budgetBalance!.availableOriginalCents ?? budgetBalance!.availableCents, budgetBalance!.currency ?? "MDL")} disponibil)</span>
             </div>
           )}
           <div className="flex items-center justify-between gap-3">

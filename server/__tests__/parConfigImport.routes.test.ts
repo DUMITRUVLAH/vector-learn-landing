@@ -535,3 +535,92 @@ describe("POST /api/par/config-import — foaie de furnizori (par_vendors)", () 
     expect(body.vendors!.errors[0].column).toBe("Denumire beneficiar");
   });
 });
+
+/**
+ * Valuta liniilor de buget. Un buget de grant (LED) e integral în EUR, iar fișierul primit nu are
+ * nicio coloană de valută: dacă importul presupune MDL, 180.973,82 EUR devin lei — un plafon de
+ * ~20× mai mic decât bugetul real, iar cererile ar părea că-l depășesc imediat.
+ */
+describe("POST /api/par/config-import — valuta codurilor bugetare", () => {
+  /** Fișier fără coloană de valută: valuta vine din opțiunea aleasă în dialog. */
+  async function sumeFile(): Promise<File> {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Sheet1");
+    ws.addRow(["Cod", "Denumire", "Suma alocată"]);
+    ws.addRow(["1.1", "Director/Project Manager (50%)", "30735.28"]);
+    ws.addRow(["1.2", "Project Coordinator (100%)", "37630"]);
+    const buf = await wb.xlsx.writeBuffer();
+    return new File([buf], "buget-eur.xlsx");
+  }
+
+  const mappingFor = (currency?: string) => ({
+    sheets: [
+      {
+        name: "Sheet1",
+        kind: "budgetCodes",
+        columns: { code: "Cod", name: "Denumire", allocated: "Suma alocată" },
+        ...(currency ? { options: { currency } } : {}),
+      },
+    ],
+  });
+
+  it("[blocant] valuta aleasă pentru foaie se aplică rândurilor fără coloană de valută", async () => {
+    const res = await postImport(await sumeFile(), mappingFor("EUR"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ImportBody;
+    expect(body.budgetCodes.errors).toEqual([]);
+    expect(body.budgetCodes.created).toBe(2);
+
+    const stored = await testDb.select().from(parBudgetCodes).where(eq(parBudgetCodes.tenantId, tenantId));
+    expect(stored.map((c) => c.currency)).toEqual(["EUR", "EUR"]);
+    // Suma rămâne cea din fișier — se schimbă doar moneda în care este citită.
+    expect(stored.find((c) => c.code === "1.1")?.allocatedCents).toBe(3073528);
+  });
+
+  it("fără alegere explicită, valuta rămâne MDL", async () => {
+    await postImport(await sumeFile(), mappingFor());
+    const stored = await testDb.select().from(parBudgetCodes).where(eq(parBudgetCodes.tenantId, tenantId));
+    expect(stored.every((c) => c.currency === "MDL")).toBe(true);
+  });
+
+  it("[blocant] o coloană Valută din fișier bate valuta aleasă pentru foaie", async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Sheet1");
+    ws.addRow(["Cod", "Denumire", "Suma alocată", "Valută"]);
+    ws.addRow(["1.1", "Salarii", "1000", "EUR"]);
+    ws.addRow(["2.1", "Comisioane bancare", "500", "lei"]);
+    const buf = await wb.xlsx.writeBuffer();
+
+    const res = await postImport(new File([buf], "mixt.xlsx"), {
+      sheets: [
+        {
+          name: "Sheet1",
+          kind: "budgetCodes",
+          columns: { code: "Cod", name: "Denumire", allocated: "Suma alocată", currency: "Valută" },
+          options: { currency: "USD" },
+        },
+      ],
+    });
+    expect(res.status).toBe(200);
+    const stored = await testDb.select().from(parBudgetCodes).where(eq(parBudgetCodes.tenantId, tenantId));
+    expect(stored.find((c) => c.code === "1.1")?.currency).toBe("EUR");
+    expect(stored.find((c) => c.code === "2.1")?.currency).toBe("MDL");
+  });
+
+  it("o valută necunoscută este raportată, nu salvată tăcut ca MDL", async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Sheet1");
+    ws.addRow(["Cod", "Denumire", "Suma alocată", "Valută"]);
+    ws.addRow(["1.1", "Salarii", "1000", "GBP"]);
+    const buf = await wb.xlsx.writeBuffer();
+
+    const res = await postImport(new File([buf], "gbp.xlsx"), {
+      sheets: [{ name: "Sheet1", kind: "budgetCodes", columns: { code: "Cod", name: "Denumire", allocated: "Suma alocată", currency: "Valută" } }],
+    });
+    const body = (await res.json()) as ImportBody;
+    expect(body.budgetCodes.created).toBe(0);
+    expect(body.budgetCodes.errors[0].column).toBe("Valută");
+    const stored = await testDb.select().from(parBudgetCodes).where(eq(parBudgetCodes.tenantId, tenantId));
+    expect(stored).toHaveLength(0);
+  });
+});

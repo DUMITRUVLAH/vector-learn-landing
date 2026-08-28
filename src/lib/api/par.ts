@@ -225,7 +225,9 @@ export interface ParPayerDetailsInput {
   notes?: string | null;
 }
 export interface ParProject { id: string; payerId: string | null; name: string; donor: string | null; active: boolean; approverUserIds?: string[]; }
-export interface ParBudgetCode { id: string; payerId: string | null; projectId: string | null; code: string; name: string; active: boolean; allocatedCents?: number; }
+export type ParCurrency = "MDL" | "EUR" | "USD";
+/** `currency` = moneda alocării; lipsă pe rândurile create înainte de migrarea 0147 ⇒ MDL. */
+export interface ParBudgetCode { id: string; payerId: string | null; projectId: string | null; code: string; name: string; active: boolean; allocatedCents?: number; currency?: ParCurrency; }
 /** VM1-04: Event — sub-entity of a project */
 export interface ParEvent {
   id: string;
@@ -1096,10 +1098,10 @@ export async function deleteProject(id: string): Promise<{ ok: boolean }> {
   return api(`/api/par/projects/${id}`, { method: "DELETE" });
 }
 
-export async function createBudgetCode(payload: { code: string; name: string; payer_id?: string | null; project_id?: string | null; allocatedCents?: number }): Promise<ParBudgetCode> {
+export async function createBudgetCode(payload: { code: string; name: string; payer_id?: string | null; project_id?: string | null; allocatedCents?: number; currency?: ParCurrency }): Promise<ParBudgetCode> {
   return api("/api/par/budget-codes", { method: "POST", body: JSON.stringify(payload) });
 }
-export async function updateBudgetCode(id: string, payload: Partial<{ code: string; name: string; payer_id?: string | null; project_id?: string | null; allocatedCents: number; active: boolean }>): Promise<ParBudgetCode> {
+export async function updateBudgetCode(id: string, payload: Partial<{ code: string; name: string; payer_id?: string | null; project_id?: string | null; allocatedCents: number; currency: ParCurrency; active: boolean }>): Promise<ParBudgetCode> {
   return api(`/api/par/budget-codes/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 export async function deleteBudgetCode(id: string): Promise<{ ok: boolean }> {
@@ -1468,18 +1470,33 @@ export async function getRegistryCompanyByIdno(
 
 // ─── Feature 2: Budget code balance ──────────────────────────────────────────
 
+/**
+ * Sumele `…Cents` sunt în MDL — baza comună de comparație, pentru că alocarea poate fi în EUR/USD
+ * iar cererile în altă monedă. `allocatedOriginalCents`/`availableOriginalCents` sunt în moneda
+ * liniei (`currency`), pentru afișare. `fxUnavailable` = nu s-a putut lua cursul BNM, deci nu
+ * comparăm nimic (allocatedCents = 0) în loc să inventăm o depășire de buget.
+ */
 export interface BudgetCodeBalance {
   allocatedCents: number;
   committedCents: number;
   spentCents: number;
   availableCents: number;
+  currency?: ParCurrency;
+  rate?: number | null;
+  fxUnavailable?: boolean;
+  allocatedOriginalCents?: number;
+  availableOriginalCents?: number;
+  /** Cursul MDL pentru moneda cerută prin `requestCurrency` (ca să convertești totalul cererii). */
+  requestRate?: number | null;
 }
 
 /** Get balance (allocated / committed / spent / available) for a budget code */
 export async function getBudgetCodeBalance(
-  budgetCodeId: string
+  budgetCodeId: string,
+  requestCurrency?: ParCurrency
 ): Promise<BudgetCodeBalance> {
-  return api<BudgetCodeBalance>(`/api/par/budget-codes/${budgetCodeId}/balance`);
+  const qs = requestCurrency ? `?currency=${encodeURIComponent(requestCurrency)}` : "";
+  return api<BudgetCodeBalance>(`/api/par/budget-codes/${budgetCodeId}/balance${qs}`);
 }
 
 // VF-202: bulk budget usage
@@ -1487,6 +1504,11 @@ export interface BudgetCodeUsage {
   id: string;
   code: string;
   name: string;
+  /** Moneda alocării; sumele de mai jos sunt în MDL (vezi BudgetCodeBalance). */
+  currency?: ParCurrency;
+  rate?: number | null;
+  fxUnavailable?: boolean;
+  allocatedOriginalCents?: number;
   allocatedCents: number;
   committedCents: number;
   paidCents: number;
@@ -1618,6 +1640,8 @@ export interface ParImportSheetMapping {
   name: string;
   kind: ParImportKind | "skip";
   columns: Record<string, string | null>;
+  /** Opțiuni pe foaie — valuta implicită a codurilor bugetare din ea. */
+  options?: { currency?: ParCurrency };
 }
 
 export interface ParConfigImportMapping {

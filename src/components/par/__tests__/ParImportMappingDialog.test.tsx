@@ -39,7 +39,8 @@ const preview: ParConfigImportPreview = {
     budgetCodes: [
       { key: "code", label: "Cod", required: true },
       { key: "name", label: "Denumire", required: false },
-      { key: "allocated", label: "Sumă alocată (MDL)", required: false },
+      { key: "allocated", label: "Sumă alocată", required: false },
+      { key: "currency", label: "Valută", required: false },
       { key: "project", label: "Proiect / Program", required: false },
       { key: "payer", label: "Plătitor / Organizație", required: false },
     ],
@@ -108,9 +109,20 @@ describe("ParImportMappingDialog", () => {
           name: "Sheet1",
           kind: "budgetCodes",
           columns: { code: "Cod", name: "Denumire", allocated: null, project: null, payer: null },
+          options: { currency: "MDL" },
         },
       ],
     });
+  });
+
+  // Bugetul unui grant vine integral în EUR și fișierul nu are nicio coloană de valută — alegerea
+  // de pe foaie trebuie să ajungă la server, altfel sumele s-ar salva ca lei (de ~20× mai mici).
+  it("[blocant] trimite valuta aleasă pentru foaie", () => {
+    const { onConfirm } = setup();
+    fireEvent.change(screen.getByLabelText("Valuta sumelor din foaie"), { target: { value: "EUR" } });
+    fireEvent.click(screen.getByRole("button", { name: "Importă" }));
+
+    expect(onConfirm.mock.calls[0][0].sheets[0].options).toEqual({ currency: "EUR" });
   });
 
   it("never lets one column feed two fields", () => {

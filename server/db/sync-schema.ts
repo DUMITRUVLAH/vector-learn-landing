@@ -359,6 +359,10 @@ async function main() {
     `CREATE UNIQUE INDEX IF NOT EXISTS "par_einvoices_par_unique" ON "par_einvoices" ("par_id")`,
     `CREATE INDEX IF NOT EXISTS "par_einvoices_tenant_status_idx" ON "par_einvoices" ("tenant_id","status")`,
     `CREATE INDEX IF NOT EXISTS "par_einvoices_par_idx" ON "par_einvoices" ("par_id")`,
+    // Migrarea 0147: moneda liniei de buget. Healul generic de mai sus ar adăuga coloana FĂRĂ
+    // default și FĂRĂ NOT NULL, deci rândurile existente ar rămâne cu currency = NULL, iar
+    // inserturile care omit câmpul ar scrie NULL. Aici o punem cu tot cu default.
+    `ALTER TABLE "par_budget_codes" ADD COLUMN IF NOT EXISTS "currency" varchar(3) DEFAULT 'MDL' NOT NULL`,
   ];
   for (const stmt of ENSURE_STATEMENTS) {
     try {

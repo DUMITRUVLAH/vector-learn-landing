@@ -55,6 +55,7 @@ vi.mock("@/lib/api/par", () => ({
   updateVendor: vi.fn().mockResolvedValue({}),
   deleteVendor: vi.fn().mockResolvedValue({ ok: true }),
   formatMDL: (cents: number) => `${(cents / 100).toLocaleString()} MDL`,
+  formatCurrency: (cents: number, currency: string) => `${(cents / 100).toLocaleString()} ${currency}`,
   listEvents: vi.fn().mockResolvedValue({ events: [] }),
   getBudgetCodesUsage: vi.fn().mockResolvedValue({ usage: [] }),
   createPayer: vi.fn().mockResolvedValue({}),
@@ -70,7 +71,7 @@ vi.mock("@/lib/api/par", () => ({
   importParConfigExcel: vi.fn(),
 }));
 
-import { previewParConfigExcel, importParConfigExcel } from "@/lib/api/par";
+import { previewParConfigExcel, importParConfigExcel, listBudgetCodes, listPayers } from "@/lib/api/par";
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -258,7 +259,12 @@ describe("ParAdmin — import Excel cu mapare de coloane", () => {
     const [file, mapping] = vi.mocked(importParConfigExcel).mock.calls[0];
     expect((file as File).name).toBe("LED.xlsx");
     expect(mapping).toEqual({
-      sheets: [{ name: "Sheet1", kind: "budgetCodes", columns: { code: "Cod", name: "Denumire", allocated: null, project: null, payer: null } }],
+      sheets: [{
+        name: "Sheet1",
+        kind: "budgetCodes",
+        columns: { code: "Cod", name: "Denumire", allocated: null, project: null, payer: null },
+        options: { currency: "MDL" },
+      }],
     });
 
     // Result + the "read as" note are shown after the import.
@@ -275,5 +281,41 @@ describe("ParAdmin — import Excel cu mapare de coloane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Renunță" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(importParConfigExcel).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Moneda liniei de buget. Bugetul unui grant e în EUR: dacă tabelul îl afișează ca lei, cifra e
+ * corectă dar înseamnă altceva — de ~20× mai puțin — și nimeni nu observă până la depășirea reală.
+ */
+describe("ParAdmin — coduri bugetare în valută", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(listPayers).mockResolvedValue({ items: [{ id: "p1", name: "ATIC", active: true }] } as never);
+    vi.mocked(listBudgetCodes).mockResolvedValue({
+      items: [
+        { id: "b1", payerId: "p1", projectId: null, code: "1.1", name: "Director/Project Manager (50%)", active: true, allocatedCents: 3073528, currency: "EUR" },
+        { id: "b2", payerId: "p1", projectId: null, code: "2.1", name: "Consumabile", active: true, allocatedCents: 500000 },
+      ],
+    } as never);
+  });
+
+  it("[blocant] afișează alocarea în moneda liniei, nu în lei", async () => {
+    render(<ParAdmin isAdmin={true} />);
+    fireEvent.click(await screen.findByText("Date de referință"));
+
+    expect(await screen.findByText("30,735.28 EUR")).toBeInTheDocument();
+    // Linia fără valută rămâne în lei (compatibil cu rândurile de dinaintea migrării 0147).
+    expect(screen.getByText("5,000 MDL")).toBeInTheDocument();
+  });
+
+  it("formularul cere valuta, ca suma să nu fie presupusă în lei", async () => {
+    render(<ParAdmin isAdmin={true} />);
+    fireEvent.click(await screen.findByText("Date de referință"));
+    fireEvent.click(await screen.findByRole("button", { name: "Adaugă cod bugetar" }));
+
+    const select = await screen.findByLabelText("Valută");
+    expect(select).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "EUR (euro)" })).toBeInTheDocument();
   });
 });

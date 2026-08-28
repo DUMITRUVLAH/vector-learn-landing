@@ -297,6 +297,12 @@ export const parBudgetCodes = pgTable(
     active: boolean("active").notNull().default(true),
     /** Feature 2: total budget allocated to this code (minor units, default 0 = uncapped) */
     allocatedCents: integer("allocated_cents").notNull().default(0),
+    /**
+     * Moneda alocării. Un grant vine în EUR/USD, iar linia de buget trebuie păstrată în moneda
+     * lui — altfel 180.973,82 EUR ar fi citiți ca lei și plafonul ar fi de ~20× mai mic decât
+     * bugetul real. Comparațiile cu cheltuielile se fac convertind ambele părți în MDL (BNM).
+     */
+    currency: varchar("currency", { length: 3 }).notNull().default("MDL"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -112,6 +112,17 @@ export const ALLOCATED_ALIASES = [
   "allocated",
   "amount",
 ];
+/** Moneda liniei de buget: un grant vine în EUR/USD, nu doar în lei. */
+export const CURRENCY_ALIASES = [
+  "valuta",
+  "moneda",
+  "currency",
+  "curr",
+  "cur",
+  "valuta alocare",
+  "moneda alocare",
+  "valuta buget",
+];
 export const PROJECT_ALIASES = ["proiect optional", "proiect", "denumire proiect", "program", "denumire program", "project"];
 export const PAYER_ALIASES = [
   "platitor organizatie",
@@ -315,7 +326,8 @@ export const FIELD_DEFS: Record<SheetKind, FieldDef[]> = {
   budgetCodes: [
     { key: "code", label: "Cod", required: true, hint: "Dacă celula conține și denumirea, este separată automat" },
     { key: "name", label: "Denumire", required: false, hint: "Implicit: textul rămas din coloana Cod" },
-    { key: "allocated", label: "Sumă alocată (MDL)", required: false },
+    { key: "allocated", label: "Sumă alocată", required: false },
+    { key: "currency", label: "Valută", required: false, hint: "MDL, EUR sau USD. Implicit: valuta aleasă mai sus pentru foaie" },
     { key: "project", label: "Proiect / Program", required: false, hint: "Se creează dacă nu există" },
     { key: "payer", label: "Plătitor / Organizație", required: false, hint: "Implicit: plătitorul curent" },
   ],
@@ -326,6 +338,7 @@ const FIELD_ALIASES: Record<string, string[]> = {
   code: CODE_ALIASES,
   name: NAME_ALIASES,
   allocated: ALLOCATED_ALIASES,
+  currency: CURRENCY_ALIASES,
   project: PROJECT_ALIASES,
   payer: PAYER_ALIASES,
   donor: ["donor", "donor finantator", "finantator"],

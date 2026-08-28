@@ -111,9 +111,11 @@ import {
   getParReportByEvent,
   searchRegistryCompanies,
   formatMDL,
+  formatCurrency,
   importParConfigExcel,
   previewParConfigExcel,
   downloadParConfigTemplate,
+  type ParCurrency,
   type ParConfigImportResult,
   type ParConfigImportMapping,
   type ParConfigImportPreview,
@@ -2406,7 +2408,8 @@ function ParReferenceData({ initialSection }: ParReferenceDataProps) {
               payer_id: String(payload.payer_id || "") || null,
               project_id: String(payload.project_id || "") || null,
               allocatedCents: payload.allocatedCents ?? 0,
-            } as { code: string; name: string; allocatedCents?: number }).then(load)
+              currency: (payload.currency as ParCurrency) ?? "MDL",
+            } as { code: string; name: string; allocatedCents?: number; currency?: ParCurrency }).then(load)
           }
           onEdit={(id, payload) =>
             updateBudgetCode(id, {
@@ -2415,7 +2418,8 @@ function ParReferenceData({ initialSection }: ParReferenceDataProps) {
               payer_id: String(payload.payer_id || "") || null,
               project_id: String(payload.project_id || "") || null,
               allocatedCents: payload.allocatedCents,
-            } as Partial<{ code: string; name: string; allocatedCents: number }>).then(load)
+              currency: payload.currency as ParCurrency | undefined,
+            } as Partial<{ code: string; name: string; allocatedCents: number; currency: ParCurrency }>).then(load)
           }
           onDelete={(id) => deleteBudgetCode(id).then(load)}
         />
@@ -2814,8 +2818,22 @@ interface BudgetCodeItem extends ParBudgetCode {
   allocatedCents?: number;
 }
 
+type BudgetCodeForm = {
+  code: string;
+  name: string;
+  allocatedMDL: string;
+  currency: ParCurrency;
+  payerId: string;
+  projectId: string;
+};
+
 // VF-202: per-code budget progress bar (verde <80%, galben 80–100%, roșu >100%).
 function BudgetProgress({ usage }: { usage?: BudgetCodeUsage }) {
+  // Curs BNM indisponibil pentru o alocare în valută: spunem asta, în loc să arătăm o bară
+  // calculată dintr-o comparație EUR-vs-MDL (ar fi de ~20× ori greșită).
+  if (usage?.fxUnavailable) {
+    return <div className="text-[11px] mt-0.5 text-muted-foreground">Curs BNM indisponibil — consumul nu poate fi calculat</div>;
+  }
   if (!usage || usage.allocatedCents <= 0 || usage.usedPct == null) return null;
   const pct = usage.usedPct;
   const barColor = pct > 100 ? "bg-destructive" : pct >= 80 ? "bg-warning" : "bg-success";
@@ -2845,8 +2863,8 @@ interface BudgetCodesTableProps {
 function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: BudgetCodesTableProps) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<{ code: string; name: string; allocatedMDL: string; payerId: string; projectId: string }>({
-    code: "", name: "", allocatedMDL: "", payerId: payers.length === 1 ? payers[0].id : "", projectId: "",
+  const [form, setForm] = useState<BudgetCodeForm>({
+    code: "", name: "", allocatedMDL: "", currency: "MDL", payerId: payers.length === 1 ? payers[0].id : "", projectId: "",
   });
   const [saving, setSaving] = useState(false);
   // VF-202: usage per code (progress bars). Reloads when the list changes.
@@ -2858,7 +2876,7 @@ function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: 
   }, [items]);
 
   const startAdd = () => {
-    setForm({ code: "", name: "", allocatedMDL: "", payerId: payers.length === 1 ? payers[0].id : "", projectId: "" });
+    setForm({ code: "", name: "", allocatedMDL: "", currency: "MDL", payerId: payers.length === 1 ? payers[0].id : "", projectId: "" });
     setShowForm(true);
     setEditingId(null);
   };
@@ -2868,6 +2886,7 @@ function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: 
       code: item.code,
       name: item.name,
       allocatedMDL: item.allocatedCents ? String((item.allocatedCents / 100).toFixed(0)) : "",
+      currency: item.currency ?? "MDL",
       payerId: item.payerId ?? "",
       projectId: item.projectId ?? "",
     });
@@ -2875,7 +2894,7 @@ function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: 
     setShowForm(false);
   };
 
-  const cancel = () => { setShowForm(false); setEditingId(null); setForm({ code: "", name: "", allocatedMDL: "", payerId: payers.length === 1 ? payers[0].id : "", projectId: "" }); };
+  const cancel = () => { setShowForm(false); setEditingId(null); setForm({ code: "", name: "", allocatedMDL: "", currency: "MDL", payerId: payers.length === 1 ? payers[0].id : "", projectId: "" }); };
 
   const handleSave = async () => {
     setSaving(true);
@@ -2884,9 +2903,9 @@ function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: 
       : 0;
     try {
       if (editingId) {
-        await onEdit(editingId, { code: form.code, name: form.name, allocatedCents, payer_id: form.payerId, project_id: form.projectId || undefined });
+        await onEdit(editingId, { code: form.code, name: form.name, allocatedCents, currency: form.currency, payer_id: form.payerId, project_id: form.projectId || undefined });
       } else {
-        await onAdd({ code: form.code, name: form.name, allocatedCents, payer_id: form.payerId, project_id: form.projectId || undefined });
+        await onAdd({ code: form.code, name: form.name, allocatedCents, currency: form.currency, payer_id: form.payerId, project_id: form.projectId || undefined });
       }
       cancel();
     } finally {
@@ -2895,7 +2914,7 @@ function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: 
   };
 
   const renderForm = (inline?: boolean) => (
-    <div className={cn("grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5", inline && "mt-2")}>
+    <div className={cn("grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 p-3 rounded-lg border border-primary/30 bg-primary/5", inline && "mt-2")}>
       <div>
         <label htmlFor="bc-code" className="text-xs font-medium text-muted-foreground block mb-1">Cod</label>
         <Input id="bc-code" type="text" value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
@@ -2907,10 +2926,21 @@ function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: 
           placeholder="ex. Cheltuieli operaționale" className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Denumire cod bugetar" />
       </div>
       <div>
-        <label htmlFor="bc-alloc" className="text-xs font-medium text-muted-foreground block mb-1">Alocare (MDL, 0 = fără plafon)</label>
+        <label htmlFor="bc-alloc" className="text-xs font-medium text-muted-foreground block mb-1">Alocare (0 = fără plafon)</label>
         <Input id="bc-alloc" type="number" min={0} step={100} value={form.allocatedMDL}
           onChange={(e) => setForm((f) => ({ ...f, allocatedMDL: e.target.value }))}
-          placeholder="ex. 50000" className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Alocare MDL" />
+          placeholder="ex. 50000" className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label="Sumă alocată" />
+      </div>
+      <div>
+        {/* Bugetul unui grant vine în EUR/USD — moneda se ține pe linie, nu se presupune MDL. */}
+        <label htmlFor="bc-currency" className="text-xs font-medium text-muted-foreground block mb-1">Valută</label>
+        <Select id="bc-currency" value={form.currency}
+          onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value as ParCurrency }))}
+          className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]">
+          <option value="MDL">MDL (lei)</option>
+          <option value="EUR">EUR (euro)</option>
+          <option value="USD">USD (dolari)</option>
+        </Select>
       </div>
       <div>
         <label htmlFor="bc-payer" className="text-xs font-medium text-muted-foreground block mb-1">Plătitor / Organizație</label>
@@ -2928,7 +2958,7 @@ function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: 
           {projects.filter((project) => !form.payerId || project.payerId === form.payerId).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
         </Select>
       </div>
-      <div className="col-span-1 sm:col-span-2 lg:col-span-5 flex gap-2">
+      <div className="col-span-1 sm:col-span-2 lg:col-span-6 flex gap-2">
         <button type="button" onClick={handleSave} disabled={saving || !form.code.trim() || !form.name.trim() || !form.payerId}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px]">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}Salvează
@@ -2959,7 +2989,7 @@ function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: 
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Cod</th>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Denumire</th>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Scope</th>
-              <th className="text-right p-3 text-xs font-semibold text-muted-foreground">Alocare (MDL)</th>
+              <th className="text-right p-3 text-xs font-semibold text-muted-foreground">Alocare</th>
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground sr-only">Acțiuni</th>
             </tr>
           </thead>
@@ -2980,7 +3010,13 @@ function BudgetCodesTable({ items, payers, projects, onAdd, onEdit, onDelete }: 
                       <span className="text-muted-foreground">{item.projectId ? projects.find((project) => project.id === item.projectId)?.name ?? "Proiect necunoscut" : "Toate proiectele"}</span>
                     </td>
                     <td className="p-3 text-right text-foreground align-top">
-                      {item.allocatedCents ? formatMDL(item.allocatedCents) : <span className="text-muted-foreground">Fără plafon</span>}
+                      {item.allocatedCents
+                        ? formatCurrency(item.allocatedCents, item.currency ?? "MDL")
+                        : <span className="text-muted-foreground">Fără plafon</span>}
+                      {/* Alocarea în valută: echivalentul în lei, ca să se vadă în ce se compară consumul. */}
+                      {!!item.allocatedCents && (item.currency ?? "MDL") !== "MDL" && usage[item.id]?.allocatedCents ? (
+                        <div className="text-[11px] text-muted-foreground tabular-nums">≈ {formatMDL(usage[item.id].allocatedCents)}</div>
+                      ) : null}
                       <BudgetProgress usage={usage[item.id]} />
                     </td>
                     <td className="p-3 text-right align-top">
