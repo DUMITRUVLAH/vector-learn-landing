@@ -20,7 +20,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as schema from "../db/schema/index";
 import { tenants, users } from "../db/schema";
-import { parBudgetCodes, parPayerModules, parPayers, parProjects } from "../db/schema/par";
+import { parBudgetCodes, parPayerModules, parPayers, parProjects, parVendors } from "../db/schema/par";
 
 let pglite: PGlite;
 let testDb: ReturnType<typeof drizzle<typeof schema>>;
@@ -92,7 +92,7 @@ interface PreviewBody {
 
 interface Category { created: number; updated: number; errors: { row: number; column: string; message: string }[] }
 interface ImportBody {
-  payers: Category; projects: Category; departments: Category; budgetCodes: Category; warnings: string[];
+  payers: Category; projects: Category; departments: Category; budgetCodes: Category; vendors?: Category; warnings: string[];
 }
 
 async function applyMigrations(pg: PGlite) {
@@ -387,5 +387,88 @@ describe("POST /api/par/config-import — an explicit mapping overrides detectio
 
     const stored = await testDb.select().from(parBudgetCodes).where(eq(parBudgetCodes.tenantId, tenantId));
     expect(stored.map((r) => r.code).sort()).toEqual(["7.1", "7.2"]);
+  });
+});
+
+/**
+ * 2026-08-28: un client a încărcat furnizori_dima_iban_banca.xlsx (332 de rânduri
+ * `Nume | Cod fiscal/IDNO | IBAN | Banca`) și nu avea ce alege la „Importă ca" — importul
+ * știa doar de plătitori/proiecte/departamente/coduri, iar lista „Beneficiar salvat" din
+ * formularul PAR (par_vendors) rămânea goală. Aici se blochează comportamentul corect.
+ */
+describe("POST /api/par/config-import — foaie de furnizori (par_vendors)", () => {
+  async function furnizoriFile(): Promise<File> {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Furnizori");
+    ws.addRow(["Nume", "Cod fiscal/IDNO", "IBAN", "Banca"]);
+    ws.addRow(['BC "Moldindconbank" S.A. filiala centru', "1002600028096", "MD68ML000000000467760943", "BC'Moldindconbank'S.A."]);
+    ws.addRow(["MF - Trezoreria de Stat", "1006601000037", "MD83TRGAAA11122001500000", "Ministerul Finantelor"]);
+    ws.addRow(["Boghean Natalia", "2005036037383", "MD49MO2259ASV55955757100", "OTP Bank S.A."]);
+    const buf = await wb.xlsx.writeBuffer();
+    return new File([buf], "furnizori.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+  }
+
+  beforeEach(async () => {
+    await testDb.delete(parVendors).where(eq(parVendors.tenantId, tenantId));
+  });
+
+  it("[blocant] recunoaște foaia după coloana IBAN, fără mapare manuală", async () => {
+    const res = await postPreview(await furnizoriFile());
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PreviewBody;
+    expect(body.sheets[0].detectedKind).toBe("vendors");
+    expect(body.kindLabels.vendors).toBe("Beneficiari / Furnizori");
+    // Coloanele fișierului real trebuie pre-selectate, altfel omul le alege pe toate manual.
+    expect(body.sheets[0].suggestedMapping).toMatchObject({
+      name: "Nume",
+      idnp: "Cod fiscal/IDNO",
+      iban: "IBAN",
+      bank: "Banca",
+    });
+  });
+
+  it("[blocant] scrie beneficiarii în registru, cu IBAN, cod fiscal și bancă", async () => {
+    const res = await postImport(await furnizoriFile());
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ImportBody;
+    expect(body.vendors!.errors).toEqual([]);
+    expect(body.vendors!.created).toBe(3);
+
+    const stored = await testDb.select().from(parVendors).where(eq(parVendors.tenantId, tenantId));
+    expect(stored).toHaveLength(3);
+    const trezoreria = stored.find((v) => v.name === "MF - Trezoreria de Stat");
+    expect(trezoreria).toMatchObject({
+      idnp: "1006601000037",
+      iban: "MD83TRGAAA11122001500000",
+      bank: "Ministerul Finantelor",
+      active: true,
+    });
+  });
+
+  it("[blocant] re-importul aceluiași fișier actualizează, nu dublează (dedup pe IBAN)", async () => {
+    await postImport(await furnizoriFile());
+    const res = await postImport(await furnizoriFile());
+    const body = (await res.json()) as ImportBody;
+    expect(body.vendors!.created).toBe(0);
+    expect(body.vendors!.updated).toBe(3);
+
+    const stored = await testDb.select().from(parVendors).where(eq(parVendors.tenantId, tenantId));
+    expect(stored).toHaveLength(3);
+  });
+
+  it("raportează rândul fără denumire în loc să-l scrie gol", async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Furnizori");
+    ws.addRow(["Nume", "IBAN"]);
+    ws.addRow(["", "MD11ML000000000000000001"]);
+    const buf = await wb.xlsx.writeBuffer();
+
+    const res = await postImport(new File([buf], "furnizori-goale.xlsx"));
+    const body = (await res.json()) as ImportBody;
+    expect(body.vendors!.created).toBe(0);
+    expect(body.vendors!.errors).toHaveLength(1);
+    expect(body.vendors!.errors[0].column).toBe("Denumire beneficiar");
   });
 });

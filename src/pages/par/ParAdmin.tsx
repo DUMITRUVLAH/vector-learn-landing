@@ -2304,9 +2304,15 @@ function ParReferenceData() {
           {(importResult.warnings ?? []).map((w, i) => (
             <p key={`w-${i}`} className="text-muted-foreground text-xs">{w}</p>
           ))}
-          {(["payers", "projects", "departments", "budgetCodes"] as const).map((key) => {
+          {(["payers", "projects", "departments", "budgetCodes", "vendors"] as const).map((key) => {
             const cat = importResult[key];
-            const label = key === "payers" ? "Plătitori" : key === "projects" ? "Proiecte" : key === "departments" ? "Departamente" : "Coduri buget";
+            if (!cat) return null;
+            const label =
+              key === "payers" ? "Plătitori"
+              : key === "projects" ? "Proiecte"
+              : key === "departments" ? "Departamente"
+              : key === "budgetCodes" ? "Coduri buget"
+              : "Beneficiari / Furnizori";
             return (
               <div key={key} className="space-y-1">
                 <p className="text-muted-foreground">

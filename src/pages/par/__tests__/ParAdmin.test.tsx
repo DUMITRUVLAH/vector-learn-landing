@@ -196,12 +196,17 @@ describe("ParAdmin — import Excel cu mapare de coloane", () => {
         { key: "project", label: "Proiect / Program", required: false },
         { key: "payer", label: "Plătitor / Organizație", required: false },
       ],
+      vendors: [
+        { key: "name", label: "Denumire beneficiar", required: true },
+        { key: "iban", label: "IBAN", required: false },
+      ],
     },
     kindLabels: {
       payers: "Plătitori / Organizații",
       projects: "Proiecte/Programe",
       departments: "Departamente",
       budgetCodes: "Coduri bugetare",
+      vendors: "Beneficiari / Furnizori",
     },
   };
 

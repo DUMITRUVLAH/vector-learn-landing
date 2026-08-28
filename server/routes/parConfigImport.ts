@@ -33,10 +33,11 @@ import { z } from "zod";
 import type ExcelJS from "exceljs";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { parProjects, parDepartments, parBudgetCodes, parPayers, parPayerModules } from "../db/schema/par";
+import { parProjects, parDepartments, parBudgetCodes, parPayers, parPayerModules, parVendors } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { mayAccessPayer } from "../lib/par/projectScope";
+import { detectPayeeType } from "../lib/par/payeeTypeDetectorServer";
 import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
 import {
   ALLOCATED_ALIASES,
@@ -47,6 +48,11 @@ import {
   PAYER_NAME_ALIASES,
   PROJECT_ALIASES,
   PROJECT_NAME_ALIASES,
+  VENDOR_NAME_ALIASES,
+  FISCAL_ID_ALIASES,
+  IBAN_ALIASES,
+  BANK_ALIASES,
+  BIC_ALIASES,
   FIELD_DEFS,
   type ImportRow,
   type SheetKind,
@@ -93,6 +99,7 @@ interface ImportResult {
   projects: CategoryResult;
   departments: CategoryResult;
   budgetCodes: CategoryResult;
+  vendors: CategoryResult;
   /** Human-readable notes: which sheet was read as what, which sheets were ignored. */
   warnings: string[];
 }
@@ -106,6 +113,7 @@ const KIND_LABELS: Record<SheetKind, string> = {
   projects: "Proiecte/Programe",
   departments: "Departamente",
   budgetCodes: "Coduri bugetare",
+  vendors: "Beneficiari / Furnizori",
 };
 
 // ─── GET /template ────────────────────────────────────────────────────────────
@@ -161,6 +169,18 @@ parConfigImportRoutes.get(
     ];
     ws3.getRow(1).font = { bold: true };
 
+    // Sheet 4: Vendors / payees — the registry the PAR form's "Beneficiar salvat" reads from
+    const ws4 = wb.addWorksheet("Furnizori");
+    ws4.columns = [
+      { header: "Denumire beneficiar *", key: "name", width: 40 },
+      { header: "IDNO / IDNP", key: "idnp", width: 20 },
+      { header: "IBAN", key: "iban", width: 30 },
+      { header: "Bancă", key: "bank", width: 30 },
+      { header: "Cod bancar (BIC / SWIFT)", key: "bicSwift", width: 22 },
+      { header: "Adresă juridică", key: "legalAddress", width: 40 },
+    ];
+    ws4.getRow(1).font = { bold: true };
+
     const buffer = await wb.xlsx.writeBuffer();
     c.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     c.header("Content-Disposition", "attachment; filename=\"par-config-template.xlsx\"");
@@ -175,7 +195,7 @@ const mappingSchema = z.object({
     .array(
       z.object({
         name: z.string(),
-        kind: z.enum(["payers", "projects", "departments", "budgetCodes", "skip"]),
+        kind: z.enum(["payers", "projects", "departments", "budgetCodes", "vendors", "skip"]),
         /** field key → the column header that feeds it (null = not mapped). */
         columns: z.record(z.string(), z.string().nullable()).default({}),
       })
@@ -339,7 +359,8 @@ parConfigImportRoutes.post(
             error:
               "Nicio foaie din fișier nu a putut fi recunoscută. Prima linie a foii trebuie să conțină " +
               "antetul coloanelor: „Cod\" + „Denumire\" pentru coduri bugetare, „Denumire proiect\" pentru " +
-              "proiecte, „Denumire departament\" pentru departamente, „Denumire plătitor\" pentru plătitori. " +
+              "proiecte, „Denumire departament\" pentru departamente, „Denumire plătitor\" pentru plătitori, " +
+              "„IBAN\" (sau „Denumire beneficiar\") pentru beneficiari/furnizori. " +
               `Foi găsite: ${found}.`,
           },
           422
@@ -365,6 +386,7 @@ parConfigImportRoutes.post(
     const projectResult = await upsertProjects(ctx, rowsFor("projects"));
     const deptResult = await upsertDepartments(tenantId, rowsFor("departments"));
     const budgetResult = await upsertBudgetCodes(ctx, rowsFor("budgetCodes"), projectResult);
+    const vendorResult = await upsertVendors(tenantId, rowsFor("vendors"));
 
     // GET /api/par/budget-codes only lists codes of payers entitled to the "par" module, so a row
     // can save correctly and still never show up on screen. Say it instead of leaving them hunting.
@@ -382,6 +404,7 @@ parConfigImportRoutes.post(
       projects: projectResult,
       departments: deptResult,
       budgetCodes: budgetResult,
+      vendors: vendorResult,
       warnings,
     };
 
@@ -402,6 +425,85 @@ function rowFailure(err: unknown): string {
 }
 
 // ─── Upsert functions ─────────────────────────────────────────────────────────
+
+/**
+ * Registrul de beneficiari (par_vendors) — sursa listei „Beneficiar salvat" din formularul PAR.
+ *
+ * De ce există: un client are sute de furnizori într-un fișier Excel (nume, cod fiscal, IBAN,
+ * bancă). Până acum importul știa doar de plătitori/proiecte/departamente/coduri, deci lista
+ * de beneficiari rămânea goală și fiecare cerere se scria de mână.
+ *
+ * Dedup ca la POST /api/par/vendors: IBAN normalizat mai întâi (același cont = același
+ * beneficiar), altfel denumirea. Câmpurile existente NU sunt suprascrise — un import completează
+ * doar ce lipsește, ca să nu strice date verificate de om.
+ */
+async function upsertVendors(tenantId: string, rows: ImportRow[]): Promise<CategoryResult> {
+  const res = emptyResult();
+
+  for (const { row, data } of rows) {
+    const name = getField(data, ...VENDOR_NAME_ALIASES).replace(/\s+/g, " ").trim();
+    const idnp = getField(data, "idnp", ...FISCAL_ID_ALIASES).replace(/\s+/g, "") || null;
+    const iban = getField(data, "iban", ...IBAN_ALIASES).replace(/\s+/g, "").toUpperCase() || null;
+    const bank = getField(data, "bank", ...BANK_ALIASES) || null;
+    const bicSwift = getField(data, "bicSwift", ...BIC_ALIASES).replace(/\s+/g, "") || null;
+    const legalAddress = getField(data, "legalAddress", "adresă juridică", "adresa") || null;
+
+    if (!name) {
+      res.errors.push({ row, column: "Denumire beneficiar", message: "Câmpul 'Denumire beneficiar' este obligatoriu." });
+      continue;
+    }
+    if (name.length > 300) {
+      res.errors.push({ row, column: "Denumire beneficiar", message: "Denumirea depășește 300 de caractere." });
+      continue;
+    }
+
+    try {
+      const [existing] = await db
+        .select()
+        .from(parVendors)
+        .where(
+          and(
+            eq(parVendors.tenantId, tenantId),
+            iban ? eq(parVendors.iban, iban) : eq(parVendors.name, name)
+          )
+        )
+        .limit(1);
+
+      if (existing) {
+        const patch: Record<string, unknown> = {};
+        if (!existing.idnp && idnp) patch.idnp = idnp;
+        if (!existing.iban && iban) patch.iban = iban;
+        if (!existing.bank && bank) patch.bank = bank;
+        if (!existing.bicSwift && bicSwift) patch.bicSwift = bicSwift;
+        if (!existing.legalAddress && legalAddress) patch.legalAddress = legalAddress;
+        if (!existing.active) patch.active = true;
+        if (Object.keys(patch).length) {
+          await db
+            .update(parVendors)
+            .set({ ...patch, updatedAt: new Date() })
+            .where(and(eq(parVendors.id, existing.id), eq(parVendors.tenantId, tenantId)));
+        }
+        res.updated++;
+        continue;
+      }
+
+      await db.insert(parVendors).values({
+        tenantId,
+        name,
+        idnp: idnp?.slice(0, 50) ?? null,
+        iban: iban?.slice(0, 34) ?? null,
+        bank: bank?.slice(0, 300) ?? null,
+        bicSwift: bicSwift?.slice(0, 32) ?? null,
+        legalAddress,
+        kind: detectPayeeType(name) === "fizic" ? "individual" : "company",
+      });
+      res.created++;
+    } catch (err) {
+      res.errors.push({ row, column: "Denumire beneficiar", message: rowFailure(err) });
+    }
+  }
+  return res;
+}
 
 async function upsertPayers(ctx: ImportCtx, rows: ImportRow[]): Promise<CategoryResult> {
   const { tenantId } = ctx;

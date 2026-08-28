@@ -1507,6 +1507,8 @@ export interface ParConfigImportResult {
   projects: { created: number; updated: number; errors: ParConfigImportRowError[] };
   departments: { created: number; updated: number; errors: ParConfigImportRowError[] };
   budgetCodes: { created: number; updated: number; errors: ParConfigImportRowError[] };
+  /** Registrul de beneficiari — lipsește la un server mai vechi. */
+  vendors?: { created: number; updated: number; errors: ParConfigImportRowError[] };
   /** Which sheet was read as what, and which sheets were ignored. Optional for older servers. */
   warnings?: string[];
 }
@@ -1519,7 +1521,7 @@ export interface ParImportFieldDef {
   hint?: string;
 }
 
-export type ParImportKind = "payers" | "projects" | "departments" | "budgetCodes";
+export type ParImportKind = "payers" | "projects" | "departments" | "budgetCodes" | "vendors";
 
 export interface ParImportSheetPreview {
   name: string;

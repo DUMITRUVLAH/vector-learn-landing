@@ -19,7 +19,7 @@
  */
 import type ExcelJS from "exceljs";
 
-export type SheetKind = "payers" | "projects" | "departments" | "budgetCodes";
+export type SheetKind = "payers" | "projects" | "departments" | "budgetCodes" | "vendors";
 
 export interface ImportRow {
   /** 1-based worksheet row number, as shown in Excel — used in error messages. */
@@ -123,6 +123,29 @@ export const PAYER_ALIASES = [
 export const DEPARTMENT_NAME_ALIASES = ["denumire departament", "departament", "denumire", "nume", "name"];
 export const PROJECT_NAME_ALIASES = ["denumire proiect", "proiect", "denumire program", "program", "denumire", "nume", "name"];
 export const PAYER_NAME_ALIASES = ["denumire platitor", "platitor organizatie", "platitor", "organizatie", "denumire", "nume", "name"];
+export const VENDOR_NAME_ALIASES = [
+  "denumire beneficiar",
+  "beneficiar",
+  "denumire furnizor",
+  "furnizor",
+  "denumire",
+  "nume",
+  "name",
+  "denumire companie",
+];
+export const IBAN_ALIASES = ["iban", "cont iban", "cont bancar", "iban beneficiar", "cont"];
+export const BANK_ALIASES = ["banca", "denumire banca", "bank", "banca beneficiarului"];
+export const BIC_ALIASES = ["bic", "swift", "bic swift", "cod bancar", "cod banca", "cod bic"];
+export const FISCAL_ID_ALIASES = [
+  "idno",
+  "idnp",
+  "idno idnp",
+  "cod fiscal",
+  "cod fiscal idno",
+  "cod fiscal idnp",
+  "codul fiscal",
+  "c f",
+];
 
 function hasHeader(headers: string[], aliases: string[]): boolean {
   const set = new Set(headers.map(normalizeHeader));
@@ -141,6 +164,9 @@ function hasHeader(headers: string[], aliases: string[]): boolean {
 export function detectKindFromHeaders(headers: string[]): SheetKind | null {
   if (!headers.length) return null;
   if (hasHeader(headers, CODE_ALIASES)) return "budgetCodes";
+  // Un IBAN nu apare pe nicio altă foaie de configurare — e semnătura registrului de beneficiari.
+  if (hasHeader(headers, [...IBAN_ALIASES, "denumire beneficiar", "beneficiar", "denumire furnizor", "furnizor"]))
+    return "vendors";
   if (hasHeader(headers, ["denumire departament", "departament", "departamente"])) return "departments";
   if (hasHeader(headers, ["denumire proiect", "proiect", "proiecte", "program", "programe", "donor", "donor finantator"]))
     return "projects";
@@ -153,6 +179,7 @@ export function detectKindFromName(sheetName: string): SheetKind | null {
   const n = normalizeHeader(sheetName);
   if (!n) return null;
   if (n.includes("cod") || n.includes("buget")) return "budgetCodes";
+  if (n.includes("furnizor") || n.includes("beneficiar")) return "vendors";
   if (n.includes("departament")) return "departments";
   if (n.includes("proiect") || n.includes("program")) return "projects";
   if (n.includes("platitor") || n.includes("organizat")) return "payers";
@@ -240,6 +267,14 @@ export const FIELD_DEFS: Record<SheetKind, FieldDef[]> = {
     { key: "payer", label: "Plătitor / Organizație", required: false, hint: "Implicit: plătitorul curent" },
   ],
   departments: [{ key: "name", label: "Denumire departament", required: true }],
+  vendors: [
+    { key: "name", label: "Denumire beneficiar", required: true },
+    { key: "idnp", label: "IDNO / IDNP (cod fiscal)", required: false },
+    { key: "iban", label: "IBAN", required: false, hint: "Beneficiarii cu același IBAN sunt actualizați, nu dublați" },
+    { key: "bank", label: "Bancă", required: false },
+    { key: "bicSwift", label: "Cod bancar (BIC / SWIFT)", required: false },
+    { key: "legalAddress", label: "Adresă juridică", required: false },
+  ],
   budgetCodes: [
     { key: "code", label: "Cod", required: true, hint: "Dacă celula conține și denumirea, este separată automat" },
     { key: "name", label: "Denumire", required: false, hint: "Implicit: textul rămas din coloana Cod" },
@@ -258,7 +293,12 @@ const FIELD_ALIASES: Record<string, string[]> = {
   payer: PAYER_ALIASES,
   donor: ["donor", "donor finantator", "finantator"],
   legalName: ["denumire juridica", "legalname", "denumire legala"],
-  idno: ["idno", "cod fiscal", "codul fiscal"],
+  idno: FISCAL_ID_ALIASES,
+  idnp: FISCAL_ID_ALIASES,
+  iban: IBAN_ALIASES,
+  bank: BANK_ALIASES,
+  bicSwift: BIC_ALIASES,
+  legalAddress: ["adresa juridica", "adresa", "sediu", "adresa sediu"],
 };
 
 /** Field aliases that only make sense for one kind (a payers sheet's "Denumire" is its name). */
@@ -267,6 +307,7 @@ const KIND_NAME_ALIASES: Record<SheetKind, string[]> = {
   projects: PROJECT_NAME_ALIASES,
   departments: DEPARTMENT_NAME_ALIASES,
   budgetCodes: NAME_ALIASES,
+  vendors: VENDOR_NAME_ALIASES,
 };
 
 /**
