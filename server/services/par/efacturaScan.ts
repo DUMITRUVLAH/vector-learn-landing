@@ -204,19 +204,78 @@ const DETAIL_MAX = 200;
  * plus cele deja acceptate. Fiecare apel e izolat — dacă SFS refuză o metodă (drepturi lipsă),
  * scanarea continuă cu ce a obținut și raportează diferența.
  */
+/**
+ * Cache scurt al listei de facturi, per workspace.
+ *
+ * De ce: o citire completă înseamnă 4 liste + paginile de arhivă + XML/QR pe loturi — vreo zece
+ * apeluri SOAP. SFS-ul REAL se supără la rafale: după o serie de cereri, aceleași credențiale care
+ * funcționau primesc HTTP 500 la orice metodă timp de câteva minute (măsurat 2026-08-28). Deschiderea
+ * repetată a tabului nu are voie să consume acest buget. TTL mic: datele oricum se schimbă lent.
+ */
+const INVOICE_CACHE_TTL_MS = 5 * 60_000;
+/** Câte coduri fiscale cerem odată la registrul SFS pentru denumiri (un singur apel). */
+const TAXPAYER_LOOKUP_MAX = 60;
+const invoiceCache = new Map<string, { at: number; value: { invoices: SfsInvoiceSummary[]; errors: string[]; ok: boolean } }>();
+
+/** Golește cache-ul (folosit de teste și de reîncărcarea explicită). */
+export function clearBuyerInvoiceCache(tenantId?: string): void {
+  if (tenantId) invoiceCache.delete(tenantId);
+  else invoiceCache.clear();
+}
+
+/** Cât de departe în trecut cerem istoricul de facturi arhivate (SFS cere un interval explicit). */
+const ARCHIVE_MONTHS = 24;
+/** Plafon de pagini la istoric — SFS paginează, iar o buclă fără capăt ar putea rula la nesfârșit. */
+const ARCHIVE_MAX_PAGES = 10;
+
+/**
+ * Toate facturile în care organizația e CUMPĂRĂTOR, din întreg ciclul de viață:
+ *   • de semnat  — abia sosite de la furnizor;
+ *   • acceptate  — semnate de noi;
+ *   • respinse   — refuzate (doar pentru lista brută, nu contează ca dovadă);
+ *   • ARHIVATE   — istoricul; pe un cont real, aici stă aproape tot.
+ *
+ * De ce arhivele sunt obligatorii: contul VECTOR ACADEMY avea 0 facturi în primele două liste și 45
+ * în arhivă (verificat live 2026-08-28). Fără ele, ecranul „Toate e-Facturile" arăta gol pe un cont
+ * plin, iar scanarea n-ar fi găsit niciodată factura unui prestator.
+ *
+ * Fiecare apel e izolat: dacă SFS refuză o metodă, restul continuă și diferența e raportată. Dacă
+ * pică TOATE, `ok` devine false — atunci nu avem voie să spunem „nu există facturi".
+ */
 async function fetchBuyerInvoices(
   client: EfacturaMdClient,
   requestId: string,
-  options: { includeRejected?: boolean } = {}
-): Promise<{ invoices: SfsInvoiceSummary[]; errors: string[] }> {
+  options: { includeRejected?: boolean; now?: Date } = {}
+): Promise<{ invoices: SfsInvoiceSummary[]; errors: string[]; ok: boolean }> {
   const errors: string[] = [];
   const heads: InvoiceListItem[] = [];
+  let anySucceeded = false;
 
-  // Potrivirea are nevoie doar de facturile „vii"; lista brută (ecranul „Toate e-Facturile") le
-  // arată și pe cele respinse, pentru că omul trebuie să le vadă ca să știe ce s-a întâmplat.
+  const now = options.now ?? new Date();
+  const from = new Date(now.getTime());
+  from.setMonth(from.getMonth() - ARCHIVE_MONTHS);
+
   const sources: Array<readonly [string, () => Promise<InvoiceListItem[]>]> = [
     ["facturi de semnat", () => client.getInvoicesForSigning(`${requestId}-sign`, EFACTURA_MD_ACTOR.CUMPARATOR)],
     ["facturi acceptate", () => client.getAcceptedInvoices(`${requestId}-acc`, EFACTURA_MD_ACTOR.CUMPARATOR)],
+    [
+      "facturi arhivate",
+      async () => {
+        const all: InvoiceListItem[] = [];
+        for (let page = 1; page <= ARCHIVE_MAX_PAGES; page++) {
+          const batch = await client.getArchivedInvoices(
+            `${requestId}-arch-${page}`,
+            EFACTURA_MD_ACTOR.CUMPARATOR,
+            from,
+            now,
+            page
+          );
+          if (batch.length === 0) break;
+          all.push(...batch);
+        }
+        return all;
+      },
+    ],
   ];
   if (options.includeRejected) {
     sources.push([
@@ -228,18 +287,20 @@ async function fetchBuyerInvoices(
   for (const [label, call] of sources) {
     try {
       heads.push(...(await call()));
+      anySucceeded = true;
     } catch (e) {
       errors.push(`${label}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
-  // Deduplicare pe serie+număr (o factură poate apărea în ambele liste).
+  // Deduplicare pe serie+număr (o factură poate apărea în mai multe liste).
   const uniqueHeads = new Map<string, InvoiceListItem>();
   for (const h of heads) {
     if (h.seria || h.number) uniqueHeads.set(invoiceKey(h), h);
   }
 
-  // Detaliile (furnizor, cumpărător, dată, sumă) vin doar cu XML-ul facturii.
+  // Detaliile (furnizor, cumpărător, dată, sumă) vin din XML-ul facturii — iar pentru facturile
+  // arhivate, unde XML-ul vine gol, din textul QR (furnizor + cumpărător + sumă + link în portal).
   const allIdentifiers = [...uniqueHeads.values()].map((h) => ({ seria: h.seria, number: h.number }));
   const identifiers = allIdentifiers.slice(0, DETAIL_MAX);
   if (allIdentifiers.length > identifiers.length) {
@@ -247,21 +308,57 @@ async function fetchBuyerInvoices(
       `am citit detaliile doar pentru primele ${DETAIL_MAX} din ${allIdentifiers.length} facturi (limită de timp)`
     );
   }
+
   const xmlByKey = new Map<string, string>();
   for (let i = 0; i < identifiers.length; i += DETAIL_CHUNK) {
     const chunk = identifiers.slice(i, i + DETAIL_CHUNK);
     try {
       const detailed = await client.getInvoicesBySeriaNumber(chunk, `${requestId}-xml-${i}`);
-      for (const d of detailed) if (d.xml) xmlByKey.set(invoiceKey(d), d.xml);
+      for (const d of detailed) if (d.xml && d.xml.trim()) xmlByKey.set(invoiceKey(d), d.xml);
     } catch (e) {
       errors.push(`detalii facturi: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
+  const missingDetails = identifiers.filter((id) => !xmlByKey.has(invoiceKey(id)));
+  const qrByKey = new Map<string, string>();
+  for (let i = 0; i < missingDetails.length; i += DETAIL_CHUNK) {
+    const chunk = missingDetails.slice(i, i + DETAIL_CHUNK);
+    try {
+      const qrs = await client.getInvoiceQrTexts(chunk, `${requestId}-qr-${i}`);
+      for (const q of qrs) if (q.text) qrByKey.set(invoiceKey(q), q.text);
+    } catch (e) {
+      errors.push(`date din codul QR: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   const invoices = [...uniqueHeads.values()].map((h) =>
-    summarizeSfsInvoice({ ...h, xml: xmlByKey.get(invoiceKey(h)) ?? h.xml ?? null })
+    summarizeSfsInvoice({
+      ...h,
+      xml: xmlByKey.get(invoiceKey(h)) ?? null,
+      qrText: qrByKey.get(invoiceKey(h)) ?? null,
+    })
   );
-  return { invoices, errors };
+  return { invoices, errors, ok: anySucceeded };
+}
+
+/**
+ * `fetchBuyerInvoices` + cache per workspace. `force` ocolește cache-ul (butonul „Reîncarcă din SFS"
+ * și scanarea explicită), dar un rezultat NEREUȘIT nu se pune niciodată în cache — altfel o eroare
+ * temporară ar îngheța ecranul pe „nu am putut citi" timp de cinci minute.
+ */
+async function fetchBuyerInvoicesCached(
+  tenantId: string,
+  client: EfacturaMdClient,
+  requestId: string,
+  options: { includeRejected?: boolean; force?: boolean } = {}
+): Promise<{ invoices: SfsInvoiceSummary[]; errors: string[]; ok: boolean }> {
+  const cached = invoiceCache.get(tenantId);
+  if (!options.force && cached && Date.now() - cached.at < INVOICE_CACHE_TTL_MS) return cached.value;
+
+  const value = await fetchBuyerInvoices(client, requestId, { includeRejected: options.includeRejected });
+  if (value.ok) invoiceCache.set(tenantId, { at: Date.now(), value });
+  return value;
 }
 
 /** IDNO-ul organizației plătitoare a cererii (noi, cumpărătorul), cu rezervă pe setările SFS. */
@@ -311,7 +408,24 @@ export async function scanEfacturasForTenant(
 
   const client = clientOverride ?? new EfacturaMdClient(sfs!.config);
   const requestId = `par-efp-${Date.now()}`;
-  const { invoices, errors } = await fetchBuyerInvoices(client, requestId);
+  const { invoices, errors, ok } = await fetchBuyerInvoicesCached(tenantId, client, requestId, {
+    includeRejected: true,
+    force: true,
+  });
+
+  // SFS a refuzat TOATE listele (credențiale expirate, serviciu picat, drepturi retrase). A scrie
+  // acum „am verificat, nu există factură" ar fi o minciună care produce remindere nedrepte.
+  if (!ok) {
+    return {
+      available: false,
+      source: "sfs",
+      checked: 0,
+      found: 0,
+      missing: 0,
+      invoicesFetched: 0,
+      message: `Nu am putut interoga SFS: ${errors.join("; ") || "serviciul nu a răspuns"}.`,
+    };
+  }
 
   // Cererile care așteaptă factură (după sincronizarea de mai sus).
   const trackedWhere = parIds?.length
@@ -448,6 +562,8 @@ export interface BuyerInvoiceItem {
   buyerIdno: string | null;
   invoiceDate: string | null;
   totalCents: number | null;
+  /** Linkul către factura din portalul SFS (din codul QR), ca omul să o poată deschide. */
+  portalUrl: string | null;
   /** Cererea PAR de care e legată factura, dacă a fost potrivită sau marcată manual. */
   linkedParId: string | null;
   linkedRequestNo: string | null;
@@ -469,7 +585,8 @@ export interface BuyerInvoiceListResult {
  */
 export async function listBuyerInvoicesForTenant(
   tenantId: string,
-  clientOverride?: EfacturaMdClient
+  clientOverride?: EfacturaMdClient,
+  force = false
 ): Promise<BuyerInvoiceListResult> {
   const sfs = clientOverride ? null : await loadSfsConfig(tenantId);
   if (!clientOverride && (!sfs || sfs.config.mock)) {
@@ -484,9 +601,23 @@ export async function listBuyerInvoicesForTenant(
   }
 
   const client = clientOverride ?? new EfacturaMdClient(sfs!.config);
-  const { invoices, errors } = await fetchBuyerInvoices(client, `par-efp-list-${Date.now()}`, {
-    includeRejected: true,
-  });
+  const { invoices, errors, ok } = await fetchBuyerInvoicesCached(
+    tenantId,
+    client,
+    `par-efp-list-${Date.now()}`,
+    { includeRejected: true, force }
+  );
+
+  // Toate listele au picat → lista goală NU e un răspuns; e o necunoscută (vezi
+  // docs/solutions/architecture-patterns/unavailable-is-not-absent.md).
+  if (!ok) {
+    return {
+      available: false,
+      source: "sfs",
+      message: `Nu am putut citi facturile din SFS: ${errors.join("; ") || "serviciul nu a răspuns"}.`,
+      invoices: [],
+    };
+  }
 
   // Legătura cu cererile: rândurile de urmărire care poartă deja seria+numărul facturii.
   const tracked = await db
@@ -505,7 +636,7 @@ export async function listBuyerInvoicesForTenant(
       .map((t) => [invoiceKey({ seria: t.seria!, number: t.number! }), t])
   );
 
-  // Denumirea furnizorului, când XML-ul nu o dă: din registrul propriu, după codul fiscal.
+  // Denumirea furnizorului, când XML-ul nu o dă: întâi din registrul propriu de prestatori…
   const vendors = await db
     .select({ name: parVendors.name, idnp: parVendors.idnp })
     .from(parVendors)
@@ -513,6 +644,26 @@ export async function listBuyerInvoicesForTenant(
   const nameByIdno = new Map(
     vendors.filter((v) => v.idnp).map((v) => [normalizeFiscalId(v.idnp), v.name])
   );
+
+  // …iar pentru restul, din registrul fiscal, într-un SINGUR apel. Fără el, tabelul ar arăta doar
+  // coduri fiscale — corect, dar de necitit pentru omul de la finanțe.
+  const unknownIdnos = [
+    ...new Set(
+      invoices
+        .map((inv) => normalizeFiscalId(inv.supplierIdno))
+        .filter((idno) => idno && !nameByIdno.has(idno))
+    ),
+  ].slice(0, TAXPAYER_LOOKUP_MAX);
+  if (unknownIdnos.length > 0) {
+    try {
+      const taxpayers = await client.getTaxpayersInfo(unknownIdnos, `par-efp-names-${Date.now()}`);
+      for (const t of taxpayers) {
+        if (t.idno && t.name) nameByIdno.set(normalizeFiscalId(t.idno), t.name);
+      }
+    } catch {
+      // Denumirile sunt un lux: fără ele rămân codurile fiscale, lista tot funcționează.
+    }
+  }
 
   const items: BuyerInvoiceItem[] = invoices
     .map((inv) => {
@@ -527,6 +678,7 @@ export async function listBuyerInvoicesForTenant(
         buyerIdno: inv.buyerIdno,
         invoiceDate: inv.invoiceDate?.toISOString() ?? null,
         totalCents: inv.totalCents,
+        portalUrl: inv.portalUrl ?? null,
         linkedParId: link?.parId ?? null,
         linkedRequestNo: link?.requestNo ?? null,
       };

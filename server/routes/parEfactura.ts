@@ -252,7 +252,10 @@ parEfacturaRoutes.get("/invoices", async (c) => {
   if (!(await isElevated(user.id, user.tenantId))) {
     return c.json({ error: "forbidden", detail: "Necesită rol finance sau par_admin." }, 403);
   }
-  const result = await listBuyerInvoicesForTenant(user.tenantId);
+  // `?refresh=1` = omul a apăsat „Reîncarcă din SFS"; altfel se poate servi cache-ul scurt, ca
+  // deschiderea repetată a tabului să nu consume bugetul de cereri al SFS-ului.
+  const force = c.req.query("refresh") === "1";
+  const result = await listBuyerInvoicesForTenant(user.tenantId, undefined, force);
   return c.json({ ...result, sfs: await sfsSummary(user.tenantId) });
 });
 

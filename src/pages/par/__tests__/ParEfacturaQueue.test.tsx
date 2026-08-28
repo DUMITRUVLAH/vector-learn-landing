@@ -92,6 +92,7 @@ function invoiceList(overrides: Partial<BuyerInvoiceList> = {}): BuyerInvoiceLis
         buyerIdno: "1003600009999",
         invoiceDate: "2026-08-20T00:00:00.000Z",
         totalCents: 30000,
+        portalUrl: "https://efactura.sfs.md:443/EFactura.aspx?id=aaa",
         linkedParId: null,
         linkedRequestNo: null,
       },
@@ -105,6 +106,7 @@ function invoiceList(overrides: Partial<BuyerInvoiceList> = {}): BuyerInvoiceLis
         buyerIdno: "1003600009999",
         invoiceDate: "2026-08-13T00:00:00.000Z",
         totalCents: 120000,
+        portalUrl: null,
         linkedParId: "11111111-1111-4111-8111-111111111111",
         linkedRequestNo: "PAR-2026-0025",
       },
@@ -147,6 +149,11 @@ describe("ParEfacturaQueue — taburi", () => {
     // Cea legată duce la cererea ei.
     expect(screen.getByRole("button", { name: "PAR-2026-0025" })).toBeInTheDocument();
     expect(screen.getByText("Trimis la Cumpărător")).toBeInTheDocument();
+    // Factura cu link se deschide în portalul SFS.
+    expect(screen.getByRole("link", { name: "EFMD 000000777" })).toHaveAttribute(
+      "href",
+      "https://efactura.sfs.md:443/EFactura.aspx?id=aaa"
+    );
   });
 
   it("când SFS nu poate fi citit, tabul explică — nu arată o listă goală ca adevăr", async () => {

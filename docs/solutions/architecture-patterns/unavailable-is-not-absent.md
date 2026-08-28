@@ -43,6 +43,23 @@ Regresiile care apără regula: `server/__tests__/par-efactura-scan.test.ts` (�
 atinge starea"), `server/__tests__/par-efactura.routes.test.ts` și pasul 3 din
 `scripts/e2e-par-efactura.mjs`.
 
+## Recidiva din aceeași zi (de ce regula are nevoie de teste, nu de bune intenții)
+
+Câteva ore mai târziu, ecranul „Toate e-Facturile" arăta „Nicio factură primită în SFS" pe un cont cu
+45 de facturi. Două cauze, ambele exact tiparul de mai sus:
+
+1. **Interogam listele greșite.** Facturile procesate trec în starea „Arhivat" și dispar din
+   `GetInvoicesForSigning` / `GetAcceptedInvoices`. Lista goală era adevărată pentru acele două
+   metode și complet falsă pentru întrebarea pusă de om. Fix: `GetArchivedInvoices` (interval +
+   paginare), plus textul codului QR ca sursă de furnizor/sumă, fiindcă XML-ul vine gol la arhivate.
+2. **Interfața ascundea eroarea.** Când toate apelurile SFS picau, serviciul returna o listă goală cu
+   mesajul de eroare atașat — dar ecranul afișa mesajul DOAR când lista avea rânduri. „Gol" și
+   „n-am putut citi" arătau identic. Fix: `ok=false` la eșec total → `available:false`, iar mesajul
+   se afișează și pe starea goală.
+
+Regresiile: „facturile arhivate — cazul contului real" și „când SFS refuză toate listele" din
+`server/__tests__/par-efactura-scan.test.ts`.
+
 ## Cum se aplică în altă parte
 
 - Sincronizări bancare, verificări de registru (contafirm), statusuri de plată, orice `GET` extern:

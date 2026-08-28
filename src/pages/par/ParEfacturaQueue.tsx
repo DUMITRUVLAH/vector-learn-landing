@@ -232,10 +232,10 @@ export default function ParEfacturaQueuePage() {
     }
   }, []);
 
-  const loadInvoices = useCallback(async () => {
+  const loadInvoices = useCallback(async (refresh = false) => {
     setInvoicesLoading(true);
     try {
-      setInvoices(await getParEfacturaInvoices());
+      setInvoices(await getParEfacturaInvoices(refresh));
       setInvoicesError(null);
     } catch (e) {
       setInvoicesError(
@@ -506,6 +506,9 @@ export default function ParEfacturaQueuePage() {
               <Card className="p-8 text-center">
                 <ReceiptText className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden />
                 <p className="mt-2 text-sm text-muted-foreground">Nicio factură primită în SFS.</p>
+                {/* Mesajul serverului rămâne vizibil și pe gol: acolo se vede dacă vreo listă SFS a
+                    picat, altfel „gol" ar putea însemna, de fapt, „n-am putut citi". */}
+                <p className="mt-1 text-xs text-muted-foreground">{invoices.message}</p>
               </Card>
             )}
 
@@ -528,7 +531,20 @@ export default function ParEfacturaQueuePage() {
                       {invoices.invoices.map((inv) => (
                         <TableRow key={`${inv.seria}-${inv.number}`}>
                           <TableCell className="whitespace-nowrap text-sm font-medium text-foreground">
-                            {inv.seria} {inv.number}
+                            {inv.portalUrl ? (
+                              <a
+                                href={inv.portalUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline"
+                              >
+                                {inv.seria} {inv.number}
+                              </a>
+                            ) : (
+                              <>
+                                {inv.seria} {inv.number}
+                              </>
+                            )}
                           </TableCell>
                           <TableCell>
                             <span className="text-sm text-foreground">{inv.supplierName ?? "—"}</span>

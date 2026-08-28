@@ -280,8 +280,18 @@ async function httpTransport(
   });
   const text = await res.text();
   if (!res.ok) {
-    const fault = xmlText(text, "faultstring") ?? `HTTP ${res.status}`;
-    throw new EfacturaMdError(method, fault);
+    // SFS întoarce uneori PAGINA HTML de eroare a portalului în loc de un SOAP fault — se întâmplă
+    // la indisponibilitate și, măsurat pe cont real (2026-08-28), după o rafală de cereri: aceleași
+    // credențiale care funcționau acum 10 minute primesc HTTP 500 la fiecare metodă. Mesajul trebuie
+    // să spună asta, altfel omul crede că i-au expirat credențialele și le tot reintroduce.
+    const fault = xmlText(text, "faultstring");
+    const looksHtml = /<!DOCTYPE html|<html/i.test(text.slice(0, 200));
+    const message =
+      fault ??
+      (looksHtml && res.status >= 500
+        ? `HTTP ${res.status} — SFS a răspuns cu pagina lui de eroare (serviciu indisponibil sau prea multe cereri într-un timp scurt; încearcă din nou peste câteva minute)`
+        : `HTTP ${res.status}`);
+    throw new EfacturaMdError(method, message);
   }
   return text;
 }
@@ -433,6 +443,23 @@ export function createMockTransport(): SoapTransport {
           <TimeStamp>${now}</TimeStamp>
           <Status>2</Status>
         </PostInvoicesWithAttachmentResult></PostInvoicesWithAttachmentResponse>`;
+      }
+      case "GetArchivedInvoices": {
+        // Mock: două facturi arhivate (status 6), ca fluxul „istoric" să poată fi parcurs local.
+        const page = Number(xmlText(envelope, "Page") ?? 1);
+        if (page > 1) {
+          return `<GetArchivedInvoicesResponse><GetArchivedInvoicesResult>
+            <RequestId>${requestId}</RequestId><TimeStamp>${now}</TimeStamp><Status>2</Status>
+            <Results></Results>
+          </GetArchivedInvoicesResult></GetArchivedInvoicesResponse>`;
+        }
+        return `<GetArchivedInvoicesResponse><GetArchivedInvoicesResult>
+          <RequestId>${requestId}</RequestId><TimeStamp>${now}</TimeStamp><Status>2</Status>
+          <Results>
+            <Invoice><Seria>EAW</Seria><Number>000504087</Number><Status>2</Status><InvoiceStatus>6</InvoiceStatus><TimeStamp>${now}</TimeStamp></Invoice>
+            <Invoice><Seria>EAS</Seria><Number>000363958</Number><Status>2</Status><InvoiceStatus>6</InvoiceStatus><TimeStamp>${now}</TimeStamp></Invoice>
+          </Results>
+        </GetArchivedInvoicesResult></GetArchivedInvoicesResponse>`;
       }
       case "GetAcceptedInvoices":
       case "GetRejectedInvoices": {
@@ -692,6 +719,30 @@ export class EfacturaMdClient {
   }
 
   /**
+   * §5.9 GetTaxpayersInfo, în lot — denumirile mai multor contribuabili dintr-un singur apel.
+   *
+   * Lista de facturi primite conține doar coduri fiscale; un IDNO nu spune nimic unui om. Cererea
+   * acceptă un ArrayOfstring, deci toate denumirile vin într-o singură cerere — important, pentru
+   * că SFS-ul real limitează rafalele de apeluri.
+   */
+  async getTaxpayersInfo(idnos: string[], requestId: string): Promise<TaxpayerInfo[]> {
+    if (idnos.length === 0) return [];
+    const items = idnos.map((i) => `<a:string>${escapeXml(i)}</a:string>`).join("");
+    const inner =
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:FiscalCodes>${items}</d:FiscalCodes>`;
+    const xml = await this.call("GetTaxpayersInfo", inner);
+    return xmlBlocks(xml, "Taxpayer").map((block) => ({
+      idno: xmlText(block, "IDNO") ?? "",
+      name: xmlText(block, "Name") ?? "",
+      address: xmlText(block, "Address"),
+      taxpayerType: Number(xmlText(block, "TaxpayerType") ?? 0),
+      isEfacturaActor: xmlText(block, "IsEFacturaActor") === "true",
+      existsInTaxRegistry: xmlText(block, "ExistInTaxRegistry") === "true",
+    }));
+  }
+
+  /**
    * §5.15 SearchInvoices — caută factura după identificatorul intern
    * (APIeInvoiceId din AdditionalInformation). Folosit la reconciliere: după
    * PostInvoices, SFS atribuie seria/numărul, pe care le aflăm cu această metodă.
@@ -875,6 +926,68 @@ export class EfacturaMdClient {
       `<d:ActorRole>${actorRole}</d:ActorRole>`;
     const xml = await this.call("GetRejectedInvoices", inner);
     return this.parseInvoiceList(xml);
+  }
+
+  /**
+   * §5.10 GetArchivedInvoices — istoricul facturilor ARHIVATE ale actorului, pe interval de emitere.
+   *
+   * De ce e metoda care contează pentru „ce facturi am primit": pe un cont real, facturile procesate
+   * trec în starea 6 (Arhivat) și DISPAR din GetInvoicesForSigning / GetAcceptedInvoices. Contul
+   * VECTOR ACADEMY are 0 facturi în acele două liste și 45 aici — fără această metodă, ecranul
+   * „Toate e-Facturile" ar arăta gol pe un cont plin (verificat live, 2026-08-28).
+   *
+   * Contractul (ArchivedRequest din XSD): RequestId, ActorRole, IssuedOn{EndDate,StartDate}, Page.
+   * ORDINEA elementelor e cea din `xs:sequence` — DataContractSerializer o cere alfabetică, deci
+   * `EndDate` vine ÎNAINTEA lui `StartDate`. Inversarea lor întoarce tăcut zero rezultate.
+   */
+  async getArchivedInvoices(
+    requestId: string,
+    actorRole: number,
+    issuedFrom: Date,
+    issuedTo: Date,
+    page = 1
+  ): Promise<InvoiceListItem[]> {
+    const inner =
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:ActorRole>${actorRole}</d:ActorRole>` +
+      `<d:IssuedOn>` +
+      `<d:EndDate>${issuedTo.toISOString()}</d:EndDate>` +
+      `<d:StartDate>${issuedFrom.toISOString()}</d:StartDate>` +
+      `</d:IssuedOn>` +
+      `<d:Page>${page}</d:Page>`;
+    const xml = await this.call("GetArchivedInvoices", inner);
+    return this.parseInvoiceList(xml);
+  }
+
+  /**
+   * §5.6 GetInvoicesQRcodes, în lot — textul QR al fiecărei facturi.
+   *
+   * Pentru facturile arhivate, `GetInvoicesBySeriaNumber` întoarce `<XML>` GOL (verificat live), deci
+   * furnizorul, cumpărătorul și suma nu se pot afla de acolo. Textul QR le conține pe toate, plus
+   * linkul către factura din portalul SFS:
+   *   „EAW 000504087 Furn-1024600080726 Cump-1024600035737 Suma totala-16667.00lei … https://efactura.sfs.md…"
+   */
+  async getInvoiceQrTexts(
+    identifiers: Array<{ seria: string; number: string }>,
+    requestId: string
+  ): Promise<Array<{ seria: string; number: string; text: string }>> {
+    if (identifiers.length === 0) return [];
+    const items = identifiers
+      .map(
+        (i) =>
+          `<d:InvoiceIndentificator><d:Number>${escapeXml(i.number)}</d:Number>` +
+          `<d:Seria>${escapeXml(i.seria)}</d:Seria></d:InvoiceIndentificator>`
+      )
+      .join("");
+    const inner =
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:SeriaAndNumbers>${items}</d:SeriaAndNumbers>`;
+    const xml = await this.call("GetInvoicesQRcodes", inner);
+    return xmlBlocks(xml, "InvoiceQRCode").map((block) => ({
+      seria: xmlText(block, "Seria") ?? "",
+      number: xmlText(block, "Number") ?? "",
+      text: unescapeXml(xmlText(block, "QRCodeText") ?? ""),
+    }));
   }
 
   /**

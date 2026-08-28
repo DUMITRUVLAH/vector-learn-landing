@@ -55,6 +55,8 @@ export interface SfsInvoiceSummary {
   invoiceDate: Date | null;
   /** Totalul cu TVA, în unități minore (bani). Null dacă XML-ul nu l-a expus. */
   totalCents: number | null;
+  /** Linkul către factura din portalul SFS (din textul QR), dacă îl avem. */
+  portalUrl?: string | null;
 }
 
 /** Cheie stabilă a unei facturi — o factură nu poate acoperi două cereri diferite. */
@@ -140,6 +142,41 @@ export function parseSfsInvoiceXml(xml: string | null | undefined): {
   };
 }
 
+/**
+ * Textul QR al unei facturi SFS — singura sursă de furnizor/cumpărător/sumă pentru facturile
+ * ARHIVATE (acolo `GetInvoicesBySeriaNumber` întoarce `<XML>` gol; verificat live 2026-08-28).
+ *
+ * Formatul, așa cum îl întoarce SFS-ul real:
+ *   „EAW 000504087 Furn-1024600080726 Cump-1024600035737 Suma totala-16667.00lei Suma TVA- 0lei
+ *    https://efactura.sfs.md:443/EFactura.aspx?id=2f6593e6-…"
+ * Sumele apar și fără zecimale („1248lei"), iar TVA-ul poate avea spațiu după liniuță.
+ */
+export interface SfsQrInfo {
+  supplierIdno: string | null;
+  buyerIdno: string | null;
+  totalCents: number | null;
+  vatCents: number | null;
+  /** Linkul către factura din portalul SFS, ca omul să o poată deschide. */
+  portalUrl: string | null;
+}
+
+export function parseSfsQrText(text: string | null | undefined): SfsQrInfo {
+  const empty: SfsQrInfo = { supplierIdno: null, buyerIdno: null, totalCents: null, vatCents: null, portalUrl: null };
+  if (!text) return empty;
+  const supplier = text.match(/Furn-\s*([0-9A-Za-z]+)/i);
+  const buyer = text.match(/Cump-\s*([0-9A-Za-z]+)/i);
+  const total = text.match(/Suma\s+totala-\s*([0-9.,\s]+?)\s*lei/i);
+  const vat = text.match(/Suma\s+TVA-\s*([0-9.,\s]+?)\s*lei/i);
+  const url = text.match(/https?:\/\/\S+/);
+  return {
+    supplierIdno: supplier?.[1] ?? null,
+    buyerIdno: buyer?.[1] ?? null,
+    totalCents: moneyToCents(total?.[1]),
+    vatCents: moneyToCents(vat?.[1]),
+    portalUrl: url?.[0] ?? null,
+  };
+}
+
 /** Combină antetul listei SFS (serie/număr/status) cu datele din XML-ul facturii. */
 export function summarizeSfsInvoice(item: {
   seria: string;
@@ -147,14 +184,22 @@ export function summarizeSfsInvoice(item: {
   invoiceStatus: number;
   invoiceStatusLabel?: string;
   xml?: string | null;
+  /** Textul QR, folosit ca sursă de rezervă când XML-ul lipsește (facturi arhivate). */
+  qrText?: string | null;
 }): SfsInvoiceSummary {
   const parsed = parseSfsInvoiceXml(item.xml);
+  const qr = parseSfsQrText(item.qrText);
   return {
     seria: item.seria,
     number: item.number,
     invoiceStatus: item.invoiceStatus,
     invoiceStatusLabel: item.invoiceStatusLabel ?? "",
-    ...parsed,
+    supplierIdno: parsed.supplierIdno ?? qr.supplierIdno,
+    supplierName: parsed.supplierName,
+    buyerIdno: parsed.buyerIdno ?? qr.buyerIdno,
+    invoiceDate: parsed.invoiceDate,
+    totalCents: parsed.totalCents ?? qr.totalCents,
+    portalUrl: qr.portalUrl,
   };
 }
 

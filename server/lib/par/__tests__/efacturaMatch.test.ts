@@ -10,6 +10,7 @@
 import { describe, it, expect } from "vitest";
 import {
   expectsEfactura,
+  parseSfsQrText,
   matchInvoiceForPar,
   parseSfsInvoiceXml,
   summarizeSfsInvoice,
@@ -181,5 +182,42 @@ describe("potrivirea facturii cu plata", () => {
 
   it("fără cod fiscal la beneficiar nu se potrivește nimic", () => {
     expect(matchInvoiceForPar({ ...target, supplierIdno: null }, [invoice()], { now: NOW })).toBeNull();
+  });
+});
+
+describe("textul QR al facturii (singura sursă pentru facturile arhivate)", () => {
+  // Textul real întors de SFS pentru contul VECTOR ACADEMY (2026-08-28).
+  const REAL =
+    "EAW 000504087 Furn-1024600080726 Cump-1024600035737 Suma totala-16667.00lei Suma TVA- 0lei " +
+    "https://efactura.sfs.md:443/EFactura.aspx?id=2f6593e6-09cf-4e30-9c11-02993a93c6d6";
+
+  it("scoate furnizorul, cumpărătorul, suma și linkul din portal", () => {
+    const qr = parseSfsQrText(REAL);
+    expect(qr.supplierIdno).toBe("1024600080726");
+    expect(qr.buyerIdno).toBe("1024600035737");
+    expect(qr.totalCents).toBe(1666700);
+    expect(qr.vatCents).toBe(0);
+    expect(qr.portalUrl).toBe("https://efactura.sfs.md:443/EFactura.aspx?id=2f6593e6-09cf-4e30-9c11-02993a93c6d6");
+  });
+
+  it("citește și sumele scrise fără zecimale", () => {
+    const qr = parseSfsQrText("EAS 000363958 Furn-1020600034721 Cump-1024600035737 Suma totala-1248lei Suma TVA- 208.00lei https://efactura.sfs.md/x");
+    expect(qr.totalCents).toBe(124800);
+    expect(qr.vatCents).toBe(20800);
+  });
+
+  it("nu inventează nimic dintr-un text lipsă", () => {
+    expect(parseSfsQrText(null)).toEqual({
+      supplierIdno: null, buyerIdno: null, totalCents: null, vatCents: null, portalUrl: null,
+    });
+  });
+
+  it("completează factura arhivată din QR când XML-ul lipsește", () => {
+    const s = summarizeSfsInvoice({ seria: "EAW", number: "000504087", invoiceStatus: 6, xml: null, qrText: REAL });
+    expect(s.supplierIdno).toBe("1024600080726");
+    expect(s.totalCents).toBe(1666700);
+    expect(s.portalUrl).toContain("EFactura.aspx");
+    // Data nu vine în QR — rămâne necunoscută, nu inventată.
+    expect(s.invoiceDate).toBeNull();
   });
 });

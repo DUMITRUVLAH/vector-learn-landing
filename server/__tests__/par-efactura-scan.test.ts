@@ -43,31 +43,68 @@ function invoiceXml(params: { supplier: string; buyer: string; date: string; tot
   </SupplierInfo></Document></Documents>`;
 }
 
-/** Client SFS simulat: întoarce facturile date, exact ca listele reale + XML pe serie/număr. */
-function stubClient(invoices: { seria: string; number: string; invoiceStatus: number; xml: string }[]): EfacturaMdClient {
-  const heads: InvoiceListItem[] = invoices.map((i) => ({
+interface StubInvoice {
+  seria: string;
+  number: string;
+  invoiceStatus: number;
+  /** XML-ul facturii; gol/absent = cazul real al facturilor ARHIVATE. */
+  xml?: string;
+  /** Textul QR — singura sursă de furnizor/sumă pentru arhivate. */
+  qrText?: string;
+  /** În ce listă SFS apare factura. */
+  bucket?: "signing" | "archived";
+}
+
+/** Client SFS simulat: întoarce facturile date pe listele reale + XML/QR pe serie/număr. */
+function stubClient(invoices: StubInvoice[]): EfacturaMdClient {
+  const head = (i: StubInvoice): InvoiceListItem => ({
     seria: i.seria,
     number: i.number,
     invoiceStatus: i.invoiceStatus,
     invoiceStatusLabel: "",
     message: null,
-  }));
+  });
+  const find = (ids: Array<{ seria: string; number: string }>) =>
+    ids
+      .map((id) => invoices.find((i) => i.seria === id.seria && i.number === id.number))
+      .filter((i): i is StubInvoice => !!i);
   return {
-    getInvoicesForSigning: async () => heads,
+    getInvoicesForSigning: async () => invoices.filter((i) => (i.bucket ?? "signing") === "signing").map(head),
     getAcceptedInvoices: async () => [],
     getRejectedInvoices: async () => [],
+    getArchivedInvoices: async (_r: string, _a: number, _f: Date, _t: Date, page: number) =>
+      page === 1 ? invoices.filter((i) => i.bucket === "archived").map(head) : [],
     getInvoicesBySeriaNumber: async (ids: Array<{ seria: string; number: string }>) =>
-      ids
-        .map((id) => invoices.find((i) => i.seria === id.seria && i.number === id.number))
-        .filter((i): i is (typeof invoices)[number] => !!i)
-        .map((i) => ({
-          seria: i.seria,
-          number: i.number,
-          invoiceStatus: i.invoiceStatus,
-          invoiceStatusLabel: "",
-          message: null,
-          xml: i.xml,
-        })),
+      find(ids).map((i) => ({ ...head(i), xml: i.xml ?? "" })),
+    getInvoiceQrTexts: async (ids: Array<{ seria: string; number: string }>) =>
+      find(ids)
+        .filter((i) => i.qrText)
+        .map((i) => ({ seria: i.seria, number: i.number, text: i.qrText! })),
+    // Registrul fiscal: denumirea furnizorului, pentru codurile pe care nu le știm din registrul propriu.
+    getTaxpayersInfo: async (idnos: string[]) =>
+      idnos.map((idno) => ({
+        idno,
+        name: `CONTRIBUABIL ${idno}`,
+        address: null,
+        taxpayerType: 1,
+        isEfacturaActor: true,
+        existsInTaxRegistry: true,
+      })),
+  } as unknown as EfacturaMdClient;
+}
+
+/** Client care refuză tot — SFS picat / credențiale retrase. */
+function brokenClient(): EfacturaMdClient {
+  const boom = async () => {
+    throw new Error("HTTP 500");
+  };
+  return {
+    getInvoicesForSigning: boom,
+    getAcceptedInvoices: boom,
+    getRejectedInvoices: boom,
+    getArchivedInvoices: boom,
+    getInvoicesBySeriaNumber: boom,
+    getInvoiceQrTexts: boom,
   } as unknown as EfacturaMdClient;
 }
 
@@ -290,5 +327,72 @@ describe("lista brută a facturilor primite (tabul Toate e-Facturile)", () => {
     expect(list.available).toBe(false);
     expect(list.invoices).toHaveLength(0);
     expect(list.message).toMatch(/nu este configurat|simulat/i);
+  });
+});
+
+describe("facturile arhivate — cazul contului real", () => {
+  // Pe contul VECTOR ACADEMY, listele „de semnat"/„acceptate" erau GOALE, iar cele 45 de facturi
+  // primite stăteau în arhivă, cu XML gol: singurele date veneau din textul QR. Ecranul arăta
+  // „Nicio factură primită în SFS" pe un cont plin.
+  const QR = (supplier: string, total: string) =>
+    `EAW 000504087 Furn-${supplier} Cump-${BUYER} Suma totala-${total}lei Suma TVA- 0lei https://efactura.sfs.md:443/EFactura.aspx?id=abc`;
+
+  it("le include în listă, cu furnizor, sumă și link din codul QR", async () => {
+    const { listBuyerInvoicesForTenant } = await import("../services/par/efacturaScan");
+    const list = await listBuyerInvoicesForTenant(
+      tenantId,
+      stubClient([
+        { seria: "EAW", number: "000504087", invoiceStatus: 6, bucket: "archived", qrText: QR(SUPPLIER, "1200.00") },
+      ])
+    );
+
+    expect(list.available).toBe(true);
+    expect(list.invoices).toHaveLength(1);
+    expect(list.invoices[0].supplierIdno).toBe(SUPPLIER);
+    expect(list.invoices[0].totalCents).toBe(120000);
+    expect(list.invoices[0].portalUrl).toContain("EFactura.aspx");
+    // Codul fiscal singur nu spune nimic unui om: denumirea vine din registrul fiscal.
+    expect(list.invoices[0].supplierName).toBe(`CONTRIBUABIL ${SUPPLIER}`);
+  });
+
+  it("le folosește și la potrivirea cu plata", async () => {
+    const { scanEfacturasForTenant } = await import("../services/par/efacturaScan");
+    const parId = await paidPar({ requestNo: "PAR-8", idno: SUPPLIER, amountCents: 120000, paidAt: "2026-08-12" });
+
+    const result = await scanEfacturasForTenant(
+      tenantId,
+      undefined,
+      stubClient([
+        { seria: "EAW", number: "000504087", invoiceStatus: 6, bucket: "archived", qrText: QR(SUPPLIER, "1200.00") },
+      ])
+    );
+
+    expect(result.found).toBe(1);
+    const [row] = await testDb.select().from(parEinvoices).where(eq(parEinvoices.parId, parId));
+    expect(row.status).toBe("found");
+    expect(row.sfsNumber).toBe("000504087");
+  });
+});
+
+describe("când SFS refuză toate listele", () => {
+  it("scanarea nu marchează nimic drept verificat", async () => {
+    const { scanEfacturasForTenant } = await import("../services/par/efacturaScan");
+    const parId = await paidPar({ requestNo: "PAR-9", idno: SUPPLIER, amountCents: 120000, paidAt: "2026-08-12" });
+
+    const result = await scanEfacturasForTenant(tenantId, undefined, brokenClient());
+    expect(result.available).toBe(false);
+    expect(result.message).toMatch(/nu am putut interoga sfs/i);
+
+    const [row] = await testDb.select().from(parEinvoices).where(eq(parEinvoices.parId, parId));
+    expect(row.lastScanAt).toBeNull();
+    expect(row.status).toBe("expected");
+  });
+
+  it("lista brută spune că nu a putut citi, nu că nu există facturi", async () => {
+    const { listBuyerInvoicesForTenant } = await import("../services/par/efacturaScan");
+    const list = await listBuyerInvoicesForTenant(tenantId, brokenClient());
+    expect(list.available).toBe(false);
+    expect(list.invoices).toHaveLength(0);
+    expect(list.message).toMatch(/nu am putut citi/i);
   });
 });

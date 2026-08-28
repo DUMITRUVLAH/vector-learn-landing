@@ -338,16 +338,27 @@ Plata nu închide dosarul: prestatorul **persoană juridică** e obligat să emi
 persoană fizică → stare `expected`. Persoana fizică (`payee_type = fizic` sau prestator `individual`)
 → `not_applicable`; nu i se cere niciodată nimic.
 
-**Cum se verifică.** Scanarea interoghează SFS **ca CUMPĂRĂTOR** (facturile de semnat + cele
-acceptate), citește XML-ul fiecărei facturi și o potrivește cu plata după: cod fiscal furnizor
+**Cum se verifică.** Scanarea interoghează SFS **ca CUMPĂRĂTOR** pe tot ciclul de viață: facturi de
+semnat, acceptate, respinse și — obligatoriu — **arhivate** (`GetArchivedInvoices`, pe interval de
+emitere, paginat). Pe un cont real, aproape tot stă în arhivă: contul VECTOR ACADEMY avea 0 facturi
+în primele două liste și 45 în arhivă. Pentru facturile arhivate `GetInvoicesBySeriaNumber` întoarce
+XML gol, așa că furnizorul, cumpărătorul, suma și linkul din portal se citesc din **textul codului
+QR** (`GetInvoicesQRcodes`), iar denumirile furnizorilor se rezolvă dintr-un singur apel la registrul
+fiscal (`GetTaxpayersInfo` în lot). Data facturii nu e disponibilă pe această cale — rămâne
+necunoscută, nu inventată. Potrivirea cu plata se face după: cod fiscal furnizor
 (obligatoriu), cod fiscal cumpărător = IDNO-ul organizației plătitoare (când e cunoscut), fereastra
 de timp în jurul plății (−30 / +120 zile) și, ca departajare, suma. O sumă diferită **nu** invalidează
 potrivirea, dar e scrisă explicit în stare. Facturile ciornă, refuzate sau anulate nu contează drept
 dovadă, iar o factură nu poate acoperi două cereri.
 
-**Regula de onestitate.** Dacă SFS nu e configurat (sau e pe mediu simulat), scanarea NU scrie
-„nu s-a găsit" — raportează `available: false` și nu atinge starea. Altfel s-ar trimite remindere
-unor prestatori care și-au făcut treaba.
+**Regula de onestitate.** Dacă SFS nu e configurat (sau e pe mediu simulat), **sau dacă toate
+interogările pică**, scanarea NU scrie „nu s-a găsit" — raportează `available: false` și nu atinge
+starea. Altfel s-ar trimite remindere unor prestatori care și-au făcut treaba.
+
+**Menajarea SFS-ului.** Serviciul real refuză rafalele: după o serie de apeluri, aceleași credențiale
+primesc HTTP 500 (pagina HTML de eroare a portalului) câteva minute. De aceea lista se ține în cache
+5 minute per workspace, reîncărcarea explicită îl ocolește, iar mesajul de eroare spune omului că e
+o limitare temporară, nu o problemă de credențiale.
 
 **Reminderul.** Când factura lipsește, un buton trimite email + notificare in-app **solicitantului
 cererii** (nu prestatorului): cine e prestatorul, ce servicii, ce sumă, când s-a plătit, plus
