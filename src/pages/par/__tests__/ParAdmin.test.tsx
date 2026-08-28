@@ -272,6 +272,17 @@ describe("ParAdmin — import Excel cu mapare de coloane", () => {
     expect(screen.getByText(/a fost importată ca/)).toBeInTheDocument();
   });
 
+  // Ownerul a cerut ca importul Excel „să se vadă că se poate": declanșatorul e un buton verde,
+  // nu un rând de text. Testul ține culoarea pe loc dacă cineva restilizează zona.
+  it("declanșatorul de import arată ca un buton verde", async () => {
+    render(<ParAdmin isAdmin={true} />);
+    fireEvent.click(await screen.findByText("Date de referință"));
+
+    const trigger = (await screen.findByText("Import în masă din Excel")).closest("span");
+    expect(trigger?.className).toContain("pastel-mint");
+    expect(trigger?.className).toContain("text-pastel-mint-fg");
+  });
+
   it("nu importă nimic dacă anulezi dialogul", async () => {
     render(<ParAdmin isAdmin={true} />);
     fireEvent.click(await screen.findByText("Date de referință"));

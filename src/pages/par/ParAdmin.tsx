@@ -39,6 +39,7 @@ import {
   ChevronLeft,
   Upload,
   Download,
+  FileSpreadsheet,
   Calendar,
   BarChart2,
   Wand2,
@@ -2270,15 +2271,23 @@ function ParReferenceData({ initialSection }: ParReferenceDataProps) {
       )}
 
       {/* VM1-02: Import Excel. Stă strâns într-un rând: pagina se deschide pe listele de date,
-          nu pe un bloc de instrucțiuni. Se desface singur când are ceva de raportat. */}
-      <details open={!!importResult || !!importError} className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-        <summary className="cursor-pointer text-sm font-medium text-foreground">
-          Import în masă din Excel
-          <span className="ml-1 font-normal text-muted-foreground">
-            — organizații, proiecte, evenimente, departamente, coduri bugetare, beneficiari
+          nu pe un bloc de instrucțiuni. Se desface singur când are ceva de raportat.
+          Declanșatorul e un buton verde, nu un rând de text: pe listele de referință, „se poate
+          încărca din Excel" trebuie să se vadă din prima privire, nu să fie descoperit. Verdele e
+          perechea `pastel-mint` din design system (are contrast bun și în dark), nu un verde ad-hoc. */}
+      <details open={!!importResult || !!importError} className="group space-y-3">
+        <summary className="list-none [&::-webkit-details-marker]:hidden flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="inline-flex items-center gap-1.5 rounded-lg pastel-mint text-pastel-mint-fg border border-success/30 px-3 py-1.5 text-sm font-medium min-h-[36px] hover:brightness-95 transition">
+            <FileSpreadsheet className="h-4 w-4 flex-shrink-0" aria-hidden />
+            Import în masă din Excel
+            <ChevronRight className="h-4 w-4 flex-shrink-0 transition-transform group-open:rotate-90" aria-hidden />
+          </span>
+          {/* Ce anume se poate încărca — util cât e închis, redundant cât e deschis (scrie înăuntru). */}
+          <span className="text-sm text-muted-foreground group-open:hidden">
+            organizații, proiecte, evenimente, departamente, coduri bugetare, beneficiari
           </span>
         </summary>
-        <div className="mt-3 space-y-3">
+        <div className="mt-3 space-y-3 rounded-lg border border-border bg-muted/20 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
