@@ -12,6 +12,7 @@
  *   GET    /api/par/:id                          → detail (header + line items + approvals + payment)
  *   PATCH  /api/par/:id                          → update header / end-use / payee (draft|changes_requested only)
  *   DELETE /api/par/:id                          → cancel (requestor own | par_admin)
+ *   POST   /api/par/:id/withdraw                 → retrage din aprobare în draft pentru corectură
  *   POST   /api/par/:id/line-items               → add line item
  *   PATCH  /api/par/:id/line-items/:lineId       → update line item
  *   DELETE /api/par/:id/line-items/:lineId       → delete line item
@@ -1669,6 +1670,92 @@ parRoutes.post("/:id/reopen", async (c) => {
   });
 
   return c.json({ ...reopened, chain_status: "reopened" });
+});
+
+// ─── POST /api/par/:id/withdraw — retrage din aprobare pentru corectură ──────
+// Cerere owner (2026-08-28): „aș vrea să pot edita PAR-urile care încă nu au fost aprobate dacă
+// am greșit". O cerere trimisă e SIGILATĂ (body_hash): orice editare directă pe 'pending_approval'
+// ar rupe sigiliul și fiecare /approve ar muri cu "integrity_violation". Deci corectura nu se face
+// pe loc — autorul RETRAGE cererea înapoi în 'draft' (același număr, aceleași date, aceleași
+// atașamente), o editează normal, apoi o re-trimite: submitPAR reconstruiește lanțul din matricea
+// DOA curentă și re-sigilează corpul.
+//
+// Aprobările deja date pe pașii anteriori se ANULEAZĂ — au fost date pe alt conținut și nu pot fi
+// transferate pe unul editat. Numărul lor se întoarce în răspuns (ca UI-ul să avertizeze ÎNAINTE)
+// și rămâne în par_audit.
+parRoutes.post("/:id/withdraw", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+
+  const roles = await getUserPARRoles(user.id, tenantId);
+  const isAdmin = roles.includes("par_admin");
+  if (par.requestedByUserId !== user.id && !isAdmin) {
+    return c.json({ error: "forbidden: only the author can withdraw this PAR" }, 403);
+  }
+  // Doar cât timp NU e aprobată. 'approved'/'in_finance'/'paid' sunt deja decise — acolo calea e
+  // anularea, nu retragerea; 'draft'/'changes_requested' sunt deja editabile.
+  if (par.status !== "pending_approval") {
+    return c.json(
+      {
+        error: `conflict: only a PAR pending approval can be withdrawn (status is '${par.status}')`,
+        status: par.status,
+      },
+      409
+    );
+  }
+
+  // Pasul 0 e semnătura autorului însuși (submitPAR îl scrie „approved") — nu e o aprobare
+  // pierdută, deci nu intră la numărătoare; altfel orice retragere ar raporta fals „1 aprobare".
+  const decided = await db
+    .select({ id: parApprovals.id })
+    .from(parApprovals)
+    .where(
+      and(
+        eq(parApprovals.parId, parId),
+        eq(parApprovals.tenantId, tenantId),
+        ne(parApprovals.step, 0),
+        ne(parApprovals.decision, "pending")
+      )
+    );
+
+  // Lanțul stale dispare; submitPAR îl regenerează la re-trimitere.
+  await db
+    .delete(parApprovals)
+    .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)));
+
+  const [withdrawn] = await db
+    .update(parRequests)
+    .set({
+      status: "draft",
+      bodyHash: null,
+      submittedAt: null,
+      approvedAt: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
+    .returning();
+
+  await writeAudit({
+    tenantId,
+    parId,
+    actorUserId: user.id,
+    event: "withdrawn",
+    detail:
+      `PAR ${par.requestNo} retras din aprobare → 'draft' pentru corectură` +
+      (decided.length
+        ? ` — ${decided.length} decizie(i) de aprobare deja dată(e) au fost anulate`
+        : ""),
+  });
+
+  return c.json({
+    ...withdrawn,
+    chain_status: "withdrawn",
+    discarded_approvals: decided.length,
+  });
 });
 
 // ─── GET /api/par/:id/dosar ─────────────────────────────────────────────────

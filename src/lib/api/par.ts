@@ -259,6 +259,19 @@ export async function reopenPar(id: string): Promise<ParRequest & { chain_status
   return api<ParRequest & { chain_status?: string }>(`/api/par/${id}/reopen`, { method: "POST" });
 }
 
+/**
+ * Retrage o cerere din aprobare înapoi în 'draft' ca să poată fi corectată (owner, 2026-08-28).
+ * `discarded_approvals` = câte decizii deja date s-au anulat prin retragere.
+ */
+export async function withdrawPar(
+  id: string
+): Promise<ParRequest & { chain_status?: string; discarded_approvals?: number }> {
+  return api<ParRequest & { chain_status?: string; discarded_approvals?: number }>(
+    `/api/par/${id}/withdraw`,
+    { method: "POST" }
+  );
+}
+
 // VF-104: comments
 export interface ParComment {
   id: string;

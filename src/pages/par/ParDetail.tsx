@@ -30,6 +30,7 @@ import {
   Edit2,
   Trash2,
   RefreshCw,
+  Undo2,
   Send,
   DollarSign,
   UserCheck,
@@ -55,6 +56,7 @@ import {
   reapproveOverage,
   duplicatePar,
   reopenPar,
+  withdrawPar,
   getPurchaseOrder,
   issuePurchaseOrder,
   getParMe,
@@ -469,6 +471,38 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
         >
           {busy === "submit" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCw className="h-4 w-4" aria-hidden />}
           Re-trimite
+        </button>
+      );
+    }
+    // Owner 2026-08-28: „vreau să pot edita PAR-urile care încă nu au fost aprobate dacă am greșit".
+    // Cererea trimisă e sigilată (body_hash), deci nu se editează pe loc: o retragem în ciornă
+    // (același număr, aceleași date) și deschidem direct formularul. Dacă lanțul avea deja aprobări
+    // pe pașii anteriori, ele se anulează — de aceea confirmarea le numără explicit.
+    if (status === "pending_approval") {
+      // step 0 = semnătura autorului la trimitere, nu o aprobare de pierdut (vezi /withdraw).
+      const givenApprovals = (par.approvals ?? []).filter(
+        (a) => a.step > 0 && a.decision === "approved"
+      ).length;
+      actions.push(
+        <button
+          key="withdraw"
+          type="button"
+          disabled={!!busy}
+          onClick={() => {
+            const warn = givenApprovals
+              ? `Retragi cererea din aprobare ca s-o corectezi?\n\n${givenApprovals} aprobare(i) deja dată(e) se anulează — după re-trimitere lanțul o ia de la capăt.`
+              : "Retragi cererea din aprobare ca s-o corectezi? Revine în ciornă și o poți re-trimite după ce o repari.";
+            if (!confirm(warn)) return;
+            do_("withdraw", async () => {
+              await withdrawPar(par.id);
+              navigate(`/business/par/${par.id}/edit`);
+            });
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted min-h-[44px] disabled:opacity-60"
+          aria-label="Retrage cererea din aprobare pentru corectură"
+        >
+          {busy === "withdraw" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Undo2 className="h-4 w-4" aria-hidden />}
+          Retrage și editează
         </button>
       );
     }

@@ -14,9 +14,11 @@ import type { ParDetail } from "@/lib/api/par";
 
 const mockGetPar = vi.fn();
 const mockGetParMe = vi.fn();
+const mockWithdrawPar = vi.fn();
+const mockNavigate = vi.fn();
 
 vi.mock("@/router/HashRouter", () => ({
-  useRouter: () => ({ path: "/business/par/par-test-id", navigate: vi.fn() }),
+  useRouter: () => ({ path: "/business/par/par-test-id", navigate: mockNavigate }),
 }));
 
 vi.mock("@/components/app/AppShell", () => ({
@@ -50,6 +52,10 @@ vi.mock("@/lib/api/par", () => ({
   rejectPar: vi.fn().mockResolvedValue({}),
   requestParChanges: vi.fn().mockResolvedValue({}),
   submitPar: vi.fn().mockResolvedValue({}),
+  reopenPar: vi.fn().mockResolvedValue({}),
+  withdrawPar: (...args: unknown[]) => mockWithdrawPar(...args),
+  duplicatePar: vi.fn().mockResolvedValue({}),
+  downloadDosar: vi.fn().mockResolvedValue(undefined),
   reapproveOverage: vi.fn().mockResolvedValue({}),
   getPurchaseOrder: vi.fn().mockResolvedValue(null),
   formatMDL: (c: number) => `${(c / 100).toLocaleString()} MDL`,
@@ -372,5 +378,65 @@ describe("ParDetailPage — PAR-118", () => {
     await waitFor(() => {
       expect(screen.getByTestId("par-timeline")).toBeDefined();
     });
+  });
+});
+
+// ─── „Retrage și editează” (owner 2026-08-28) ────────────────────────────────
+// O cerere trimisă dar NEAPROBATĂ trebuie corectabilă: autorul o retrage în ciornă și e dus
+// direct în formular. Testăm ACȚIUNEA (apelul API + navigarea), nu doar prezența butonului.
+
+describe("ParDetailPage — retragere din aprobare pentru corectură", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetPar.mockResolvedValue(mockPar); // status: pending_approval, autor user-requestor
+    mockGetParMe.mockResolvedValue({ roles: ["requestor"], userId: "user-requestor", tenantId: "tenant-1" });
+    mockWithdrawPar.mockResolvedValue({ id: "par-test-id", status: "draft", chain_status: "withdrawn", discarded_approvals: 0 });
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
+  });
+
+  it("autorul vede butonul de retragere pe o cerere în aprobare", async () => {
+    const { default: ParDetailPage } = await import("../ParDetail");
+    render(<ParDetailPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Retrage cererea din aprobare pentru corectură")).toBeInTheDocument();
+    }, { timeout: 5000 });
+  });
+
+  it("clic pe „Retrage și editează” CHEAMĂ endpointul și duce în formularul de editare", async () => {
+    const { default: ParDetailPage } = await import("../ParDetail");
+    render(<ParDetailPage />);
+
+    const btn = await screen.findByLabelText("Retrage cererea din aprobare pentru corectură", {}, { timeout: 5000 });
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      expect(mockWithdrawPar).toHaveBeenCalledWith("par-test-id");
+    }, { timeout: 5000 });
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/business/par/par-test-id/edit");
+    }, { timeout: 5000 });
+  });
+
+  it("nu apare pentru un aprobator care nu e autorul", async () => {
+    mockGetParMe.mockResolvedValue({ roles: ["approver"], userId: "user-approver", tenantId: "tenant-1" });
+    const { default: ParDetailPage } = await import("../ParDetail");
+    render(<ParDetailPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+    }, { timeout: 5000 });
+    expect(screen.queryByLabelText("Retrage cererea din aprobare pentru corectură")).toBeNull();
+  });
+
+  it("nu apare pe o cerere deja aprobată — acolo calea e anularea", async () => {
+    mockGetPar.mockResolvedValue({ ...mockPar, status: "approved" as const });
+    const { default: ParDetailPage } = await import("../ParDetail");
+    render(<ParDetailPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("app-shell")).toBeInTheDocument();
+    }, { timeout: 5000 });
+    expect(screen.queryByLabelText("Retrage cererea din aprobare pentru corectură")).toBeNull();
   });
 });

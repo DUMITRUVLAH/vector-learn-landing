@@ -284,7 +284,14 @@ draft/any non-terminal ──cancel──▶ cancelled (terminal)  └── >10
 
 - `obtain_quotations` / `provide_estimate` PARs end at **`approved`** (no finance/payout).
 - Only the **requestor** (own draft) or **par_admin** can `cancel` before `paid`.
-- Edits after submit are blocked except via `request_changes` → back to `draft` for the requestor.
+- Edits after submit are blocked except via `request_changes` → back to `draft` for the requestor,
+  or via **`withdraw`** (`POST /api/par/:id/withdraw`): autorul (sau `par_admin`) retrage o cerere
+  `pending_approval` înapoi în `draft` ca să corecteze o greșeală, cu același număr și aceleași date.
+  Sigiliul (`body_hash`) și lanțul de aprobare se șterg — aprobările deja date pe pașii 1..N se
+  anulează (raportate ca `discarded_approvals`), pentru că fuseseră date pe alt conținut; re-trimiterea
+  reconstruiește lanțul din matricea DOA curentă. Doar `pending_approval` e retractabil: după
+  `approved`/`in_finance`/`paid` calea e anularea (409 altfel).
+- Un PAR `rejected` poate fi readus în `draft` de autor prin `reopen` (recuperare, PARQA-011).
 - Every transition writes a `par_audit` row and (where relevant) a notification.
 
 ---

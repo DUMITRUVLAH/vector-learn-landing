@@ -31,6 +31,9 @@ function eventIcon(event: string): string {
       return "🔓";
     case "cancelled":
       return "🚫";
+    case "withdrawn":
+    case "reopened":
+      return "↩️";
     case "paid":
       return "💰";
     case "integrity_mismatch":
@@ -53,6 +56,8 @@ function eventLabel(event: string): string {
     changes_requested: "Changes requested",
     step_unlocked: "Next step unlocked",
     cancelled: "Cancelled",
+    withdrawn: "Withdrawn for correction",
+    reopened: "Reopened as draft",
     paid: "Payment executed",
     integrity_mismatch: "Integrity mismatch (during approval)",
     integrity_mismatch_display: "Integrity mismatch (on view)",
