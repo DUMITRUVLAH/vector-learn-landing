@@ -353,6 +353,48 @@ function DecisionModal({ par, type, onClose, onSuccess, defaultSignatureName }: 
 }
 
 
+// ─── Cine a semnat și cine mai are de semnat ──────────────────────────────────
+/**
+ * Un aprobator nu decide în gol: vrea să știe dacă cererea a trecut deja pe la cineva (și pe la
+ * cine) și câte semnături mai lipsesc după a lui. Fără asta, inbox-ul arată identic pentru o cerere
+ * proaspăt depusă și pentru una la care mai lipsește doar semnătura ta.
+ */
+function ApprovalsCell({ item }: { item: ParInboxItem }) {
+  const done = item.approvals_done ?? [];
+  const pending = item.approvals_pending ?? [];
+  const total = item.steps_total ?? done.length + pending.length;
+
+  // Serverul vechi (sau un mock de test) nu trimite listele — nu inventăm nimic.
+  if (total === 0) return <span className="text-muted-foreground">—</span>;
+
+  const shortDate = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit" }) : "";
+  const who = (p: { step: number; name: string | null; roleLabel: string | null }) =>
+    p.step === item.my_step ? "tu" : p.name ?? p.roleLabel ?? `pasul ${p.step}`;
+
+  return (
+    <div className="space-y-1 text-xs">
+      <div className="font-medium text-foreground">
+        {done.length} din {total} semnate
+      </div>
+      {done.map((a) => (
+        <div key={a.step} className="flex items-start gap-1 text-success">
+          <CheckCircle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+          <span className="truncate" title={`Pasul ${a.step}${a.roleLabel ? ` · ${a.roleLabel}` : ""}`}>
+            {a.name ?? a.roleLabel ?? `pasul ${a.step}`}
+            {a.decidedAt ? ` · ${shortDate(a.decidedAt)}` : ""}
+          </span>
+        </div>
+      ))}
+      {pending.length > 0 && (
+        <div className="text-muted-foreground">
+          Mai trebuie {pending.length}: {pending.map(who).join(" → ")}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── VF-102: Bulk approve modal ───────────────────────────────────────────────
 
 interface BulkApproveModalProps {
@@ -735,6 +777,7 @@ export default function ParInbox() {
                       <th className="whitespace-nowrap px-2 py-2.5 text-left font-medium text-muted-foreground">Servicii / descriere</th>
                       <Th k="projectName" label="Proiect" />
                       <Th k="requestedByName" label="Solicitat de" />
+                      <th className="whitespace-nowrap px-2 py-2.5 text-left font-medium text-muted-foreground">Aprobări</th>
                       <th className="whitespace-nowrap px-2 py-2.5 text-left font-medium text-muted-foreground">Documente</th>
                       <Th k="submittedAt" label="Depus" />
                     </tr>
@@ -793,6 +836,9 @@ export default function ParInbox() {
                         <td className="min-w-[150px] max-w-[220px] px-2 py-3 align-middle text-xs text-foreground"><span className="line-clamp-3" title={item.endUse ?? ""}>{item.endUse || "—"}</span></td>
                         <td className="max-w-[110px] px-2 py-3 align-middle text-foreground"><span className="line-clamp-2" title={item.projectName ?? ""}>{item.projectName ?? "—"}</span></td>
                         <td className="max-w-[110px] px-2 py-3 align-middle text-foreground"><span className="line-clamp-2" title={item.requestedByName ?? ""}>{item.requestedByName ?? "—"}</span></td>
+                        <td className="min-w-[150px] max-w-[210px] px-2 py-3 align-middle">
+                          <ApprovalsCell item={item} />
+                        </td>
                         <td className="max-w-[150px] px-2 py-3 align-middle">
                           {item.attachments?.length ? (
                             <div className="flex flex-col items-start gap-1">

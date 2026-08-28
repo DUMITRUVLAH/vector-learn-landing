@@ -552,15 +552,56 @@ parApprovalsRoutes.get("/inbox", async (c) => {
   // "Oricine · PAR Admin" pe care tot el trebuie să-l semneze.
   const chainRows = parIds.length
     ? await db
-        .select({ parId: parApprovals.parId, step: parApprovals.step, decision: parApprovals.decision })
+        .select({
+          parId: parApprovals.parId,
+          step: parApprovals.step,
+          decision: parApprovals.decision,
+          approverUserId: parApprovals.approverUserId,
+          approverRoleLabel: parApprovals.approverRoleLabel,
+          signatureName: parApprovals.signatureName,
+          decidedAt: parApprovals.decidedAt,
+        })
         .from(parApprovals)
         .where(and(eq(parApprovals.tenantId, tenantId), inArray(parApprovals.parId, parIds)))
     : [];
+
+  // Numele semnatarilor: cine a semnat deja și cine e pinuit pe un pas care încă așteaptă.
+  const chainUserIds = [...new Set(chainRows.map((s) => s.approverUserId).filter((v): v is string => !!v))];
+  const chainUserRows = chainUserIds.length
+    ? await db.select({ id: users.id, name: users.name, email: users.email }).from(users)
+        .where(and(eq(users.tenantId, tenantId), inArray(users.id, chainUserIds)))
+    : [];
+  const chainUserName = (id: string | null) => {
+    if (!id) return null;
+    const u = chainUserRows.find((r) => r.id === id);
+    return u?.name || u?.email || null;
+  };
+
   const chainOf = (parId: string) => {
-    const steps = chainRows.filter((s) => s.parId === parId && s.step > 0);
+    const steps = chainRows
+      .filter((s) => s.parId === parId && s.step > 0)
+      .sort((a, b) => a.step - b.step);
     return {
       steps_total: steps.length,
       steps_approved: steps.filter((s) => s.decision === "approved").length,
+      // Cine a semnat deja — numele contează mai mult decât numărul: aprobatorul vrea să știe
+      // dacă cererea a trecut pe la directorul de program înainte să pună el semnătura.
+      approvals_done: steps
+        .filter((s) => s.decision === "approved")
+        .map((s) => ({
+          step: s.step,
+          name: chainUserName(s.approverUserId) ?? s.signatureName ?? null,
+          roleLabel: s.approverRoleLabel ?? null,
+          decidedAt: s.decidedAt,
+        })),
+      // Câți mai trebuie și cine — inclusiv pasul curent al celui care se uită acum.
+      approvals_pending: steps
+        .filter((s) => s.decision === "pending")
+        .map((s) => ({
+          step: s.step,
+          name: chainUserName(s.approverUserId),
+          roleLabel: s.approverRoleLabel ?? null,
+        })),
     };
   };
 

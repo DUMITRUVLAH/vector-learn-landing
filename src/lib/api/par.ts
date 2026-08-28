@@ -161,6 +161,10 @@ export interface ParInboxItem extends ParRequest {
   /** Câți pași de aprobare are lanțul (fără pasul 0 = solicitantul) și câți sunt deja semnați. */
   steps_total?: number;
   steps_approved?: number;
+  /** Cine a semnat deja, în ordinea pașilor. */
+  approvals_done?: Array<{ step: number; name: string | null; roleLabel: string | null; decidedAt: string | null }>;
+  /** Ce semnături mai lipsesc (inclusiv pasul celui care se uită acum). */
+  approvals_pending?: Array<{ step: number; name: string | null; roleLabel: string | null }>;
   projectName?: string | null;
   requestedByName?: string | null;
   attachments?: Array<{ id: string; fileName: string; kind: string }>;

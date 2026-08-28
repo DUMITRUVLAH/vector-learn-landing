@@ -181,6 +181,48 @@ describe("ParInbox", () => {
     expect(banner.textContent).toMatch(/Coadă finanțe/);
   });
 
+  // Cerut de owner (2026-08-28): "sa vad in inbox aprobare daca a fost aprobat de cineva si cate
+  // persoane mai trebuie sa aprobe". Coloana "Aprobări" arată ambele, pe rând, fără să deschizi cererea.
+  it("arată cine a semnat deja și câte semnături mai lipsesc", async () => {
+    const item = makeInboxItem({
+      my_step: 2,
+      my_step_label: "Oricine · PAR Admin",
+      steps_total: 2,
+      steps_approved: 1,
+      approvals_done: [
+        { step: 1, name: "Violeta", roleLabel: "Oricine · Approver", decidedAt: "2026-08-28T14:12:00.000Z" },
+      ],
+      approvals_pending: [{ step: 2, name: null, roleLabel: "Oricine · PAR Admin" }],
+    });
+    vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [item], total: 1 });
+
+    render(<ParInbox />);
+
+    await waitFor(() => expect(screen.getByText("1 din 2 semnate")).toBeTruthy());
+    expect(screen.getByText(/Violeta/)).toBeTruthy();
+    expect(screen.getByText(/Mai trebuie 1: tu/)).toBeTruthy();
+  });
+
+  it("când nimeni nu a semnat încă, listează pașii care urmează în ordine", async () => {
+    const item = makeInboxItem({
+      my_step: 1,
+      my_step_label: "Oricine · Approver",
+      steps_total: 2,
+      steps_approved: 0,
+      approvals_done: [],
+      approvals_pending: [
+        { step: 1, name: null, roleLabel: "Oricine · Approver" },
+        { step: 2, name: "Ion Director", roleLabel: "Oricine · PAR Admin" },
+      ],
+    });
+    vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [item], total: 1 });
+
+    render(<ParInbox />);
+
+    await waitFor(() => expect(screen.getByText("0 din 2 semnate")).toBeTruthy());
+    expect(screen.getByText(/Mai trebuie 2: tu → Ion Director/)).toBeTruthy();
+  });
+
   it("shows error state on API failure", async () => {
     vi.spyOn(parApi, "getParInbox").mockRejectedValue(new Error("Network error"));
 
