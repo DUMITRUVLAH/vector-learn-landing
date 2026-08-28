@@ -47,61 +47,55 @@ describe('POST /api/<route>', () => {
 
 Use the project's existing test setup (supertest or fetch against the real server). Never mock DB — hit PGlite. The test IDs must match the `T-<ID>-N` scenarios in the spec's Tests section.
 
-### Playwright E2E tests — `e2e/<ID>.spec.ts`
+### Scenarii E2E — `scripts/e2e-<ID>.mjs` + poarta din §3.5.1quinquies
 
-For each user story in the spec ("Ca <rol>, vreau să <acțiune>"), write one E2E test:
+**NU folosi `@playwright/test`.** Nu e instalat, nu există `playwright.config.ts` și nici un
+director `e2e/` — instrucțiunea veche descria un runner care nu a existat niciodată aici. Casa
+rulează Playwright ca BIBLIOTECĂ, în scripturi `.mjs` care lovesc serverul REAL prin HTTP
+(vezi cele ~28 de exemple din `scripts/`). Livrezi două lucruri:
 
-```typescript
-import { test, expect } from '@playwright/test'
+**(a) Înregistrează endpoint-urile și rutele item-ului în poartă** — `scripts/e2e-gate.mjs`,
+obiectul `AREAS`. Una-două linii în zona potrivită (`par`, `fin`, `platform`, `docmerge`,
+`shell`). Astea se verifică de-atunci înainte după FIECARE modificare, nu doar la item-ul tău:
 
-test('[T-<ID>-N] <user story title>', async ({ page }) => {
-  // Given: set up state (login, navigate)
-  await page.goto('http://localhost:5173/#/app/login')
-  await page.fill('[name=email]', 'admin@demo.vectorlearn.io')
-  // ...
-  // When: perform the action
-  // Then: assert observable outcome
-  await expect(page.locator('<selector>')).toBeVisible()
-})
+```js
+par: {
+  api: [
+    ["GET", "/api/par/<ruta-ta>", (j) => Array.isArray(j?.items)],   // formă, nu doar status
+  ],
+  routes: ["/business/par/<pagina-ta>"],
+  deep: ["e2e-<ID>.mjs"],
+}
 ```
 
-Rules for Playwright tests:
-- Always start from login (use `admin@demo.vectorlearn.io` / `demo123456` / tenant `demo-lingua-school`)
-- Use `data-testid` attributes for selectors when available; fall back to role/label selectors
-- Assert observable outcomes: text visible, URL changed, toast shown, DB state via API call
-- Never assert on internal state or component internals
+**(b) Scrie fluxul propriu-zis** în `scripts/e2e-<ID>.mjs`, după tiparul din
+`scripts/e2e-platform-console.mjs` (cel mai curat exemplu):
 
-### Playwright config
-
-If `playwright.config.ts` does not exist in the project root, create it:
-
-```typescript
-import { defineConfig } from '@playwright/test'
-
-export default defineConfig({
-  testDir: './e2e',
-  timeout: 30_000,
-  use: {
-    baseURL: 'http://localhost:5173',
-    headless: true,
-  },
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: true,
-  },
-})
+```js
+import { request } from "playwright-core";
+const BASE = process.env.BASE_URL ?? "http://localhost:3131";
+const ctx = await request.newContext({ baseURL: BASE });
+await ctx.post("/api/business/auth/login", { data: { email: "admin@atic.demo.io", password: "demo123456" } });
+const res = await ctx.post("/api/par/<actiune>", { data: { /* input realist */ } });
+check("[T-<ID>-N] acțiunea întoarce 200 cu forma așteptată", res.status() === 200 && (await res.json())?.id);
 ```
 
-If `@playwright/test` is not installed, run:
+Reguli (§3.5.1quater — testează ACȚIUNEA, nu butonul):
+- Fiecare endpoint nou se INVOCĂ o dată cu input realist și i se verifică **200 + forma
+  răspunsului**. „Butonul se randează" nu dovedește nimic despre ce se întâmplă la click.
+- Pentru verificările în browser: după navigare, asigură-te că **URL-ul final e cel cerut**.
+  O pagină care te aruncă la login are text destul și niciun cuvânt de eroare — vechiul
+  `e2e-smoke.mjs` trecea verde exact așa, luni de zile.
+- Conturi de seed reale: `admin@atic.demo.io` / `approver@atic.demo.io` /
+  `finance@atic.demo.io` / `requestor@atic.demo.io`, parola `demo123456`, tenant
+  `demo-atic-ngo`. (`admin@demo.vectorlearn.io` aparține tenantului CRM `demo-lingua-school`,
+  a cărui suprafață `/app/*` nu mai există — nu-l folosi.)
+- Aplicația trăiește pe `/#/business/*`, servită de serverul Hono din `dist/`, nu pe `:5173`.
+- Analizează drepturile: ce vede un `approver` și NU vede un `requestor` e un scenariu, nu un detaliu.
+
+Verifică-ți livrarea rulând chiar poarta:
 ```bash
-npm install --save-dev @playwright/test && npx playwright install chromium
-```
-
-Add to `package.json` scripts if missing:
-```json
-"test:e2e": "playwright test",
-"test:e2e:report": "playwright show-report"
+node scripts/e2e-gate.mjs --area <zona> --all
 ```
 
 ## Output
@@ -112,10 +106,10 @@ TEST_WRITER_RESULT: success
 ID: <ID>
 unit_tests: <N files written, M test cases>
 integration_tests: <N files written, M test cases>
-e2e_tests: <N files written, M test cases>
+e2e_script: <scripts/e2e-<ID>.mjs — N verificări>
 scenarios_covered: <list of T-<ID>-N IDs>
 scenarios_missing: <any from spec not covered, with reason>
-playwright_config: <created|already existed>
+gate_areas_updated: <zona/zonele din scripts/e2e-gate.mjs în care ai adăugat api/routes/deep>
 ```
 
 If you cannot write tests for a scenario (e.g., no API surface defined in spec), note it in `scenarios_missing` — do NOT invent API shapes. The spec is the contract.

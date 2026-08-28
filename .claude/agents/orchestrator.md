@@ -157,12 +157,12 @@ test-runner now runs these gates in order (see its agent file for exact commands
 4. API integration smoke (BLOCKING)
 5. DB portability check (BLOCKING)
 6. **Coverage gate (BLOCKING): ≥ 80% on new code** — `npm test -- --run --coverage`. If below 80%, the fixer must add tests (not remove lines) until coverage rises.
-7. **Playwright E2E gate (BLOCKING):** `npm run test:e2e` — all E2E tests written by test-writer must pass. Any Playwright failure is treated the same as a red unit test.
+7. **Poarta E2E (BLOCANT — CLAUDE.md §3.5.1quinquies):** `node scripts/e2e-gate.mjs --area <zona> --all` — gărzi statice + endpoint-urile zonei chemate real + browser pe rutele ei + suitele dedicate. Orice ❌ e tratat ca un test unitar roșu. (NU `npm run test:e2e`: `@playwright/test` nu există în proiect.)
 8. Lighthouse ≥ 0.9 (skip if no Chrome)
 9. Axe a11y: 0 critical+serious violations
 
 - `PASS` → continue to PERSONA_MANAGER
-- `FAIL` → this is a real bug, not a stop. Invoke `feature-builder` as the **FIXER** with the failing gate output (especially `MIGRATION_GATE` / `INTEGRATION_SMOKE` / `PORTABILITY` / `COVERAGE` / `E2E`), then re-run `test-runner`. Repeat up to **2 fix cycles**. Only if it still fails AND the cause is clearly structural → block with `backlog/reports/<ID>-tests.md`. **Never advance to PR with a red blocking gate.**
+- `FAIL` → this is a real bug, not a stop. Invoke `feature-builder` as the **FIXER** with the failing gate output (especially `MIGRATION_GATE` / `INTEGRATION_SMOKE` / `PORTABILITY` / `COVERAGE` / `E2E_GATE`), then re-run `test-runner`. Repeat up to **2 fix cycles**. Only if it still fails AND the cause is clearly structural → block with `backlog/reports/<ID>-tests.md`. **Never advance to PR with a red blocking gate.**
 
 ### Step 5 — PERSONA_MANAGER
 Invoke `persona-manager`. Pass the ID.

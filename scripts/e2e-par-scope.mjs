@@ -108,7 +108,11 @@ async function main() {
 
   // approver becomes a PAYER-SCOPED par_admin (workspace 'teacher') — the exact actor the
   // GET /api/par par_admin-exemption leak affected. Scope it to payer B ONLY.
-  eq((await POST("admin", "/api/par/members", { userId: approverId, role: "par_admin" })).status, 201, "grant approver the par_admin role");
+  // POST /api/par/members e idempotent: 201 la creare, 200 dacă rolul există deja
+  // (server/routes/parMembers.ts). Un `eq(…, 201)` făcea suita să pice la a doua rulare pe
+  // aceeași bază — un test care depinde de ordine, nu un bug de produs.
+  const grantStatus = (await POST("admin", "/api/par/members", { userId: approverId, role: "par_admin" })).status;
+  if (grantStatus !== 201 && grantStatus !== 200) throw new Error(`grant approver the par_admin role: expected 200 or 201, got ${grantStatus}`);
   eq((await PUT("admin", `/api/par/profiles/${approverId}/payers`, { payer_ids: [payerB.id] })).status, 200, "scope approver → payer B");
   eq((await PUT("admin", `/api/par/profiles/${approverId}/projects`, { project_ids: [projectB1.id] })).status, 200, "scope approver → project B1");
   // Re-login approver so the session reflects the new par_admin role + scope.

@@ -186,6 +186,17 @@ async function findServer() {
   return null;
 }
 
+async function serverAlive(base) {
+  try {
+    const ctx = await request.newContext({ baseURL: base, timeout: 4000 });
+    const res = await ctx.get("/api/health");
+    await ctx.dispose();
+    return res.status() === 200;
+  } catch {
+    return false;
+  }
+}
+
 async function bootServer() {
   const port = process.env.E2E_PORT ?? "3131";
   console.log(`  … niciun server activ, pornesc unul pe :${port}`);
@@ -369,7 +380,7 @@ async function browserSweep(base, areas, ctx) {
 }
 
 // ── 6. Suitele grele ale zonei ───────────────────────────────────────────────
-function deepSuites(base, areas) {
+async function deepSuites(base, areas) {
   const scripts = [...new Set(areas.flatMap((a) => AREAS[a].deep))];
   if (!scripts.length) return;
   console.log("\n▶ Suite dedicate");
@@ -383,8 +394,19 @@ function deepSuites(base, areas) {
       });
       check(s, true);
     } catch (e) {
-      const out = `${e.stdout ?? ""}${e.stderr ?? ""}`.split("\n").filter((l) => l.includes("❌")).slice(0, 5).join(" | ");
-      check(s, false, out.slice(0, 500) || "vezi ieșirea completă rulând scriptul direct");
+      // Serverul poate dispărea sub noi: în acest depozit lucrează mai multe conversații în
+      // paralel (CLAUDE.md §0.4) și oricare poate reporni serverul. Un „❌ suită picată" în
+      // acel caz e o minciună — suita n-a apucat să ruleze. Deci întrebăm serverul, apoi decidem.
+      const alive = await serverAlive(base);
+      if (!alive) {
+        check(s, false, `serverul de pe ${base} a dispărut în timpul rulării — repornește-l și reia`);
+        continue;
+      }
+      // Motivul real: întâi liniile marcate de scriptul însuși, altfel coada ieșirii.
+      const raw = `${e.stdout ?? ""}${e.stderr ?? ""}`.split("\n").filter((l) => l.trim());
+      const marked = raw.filter((l) => l.includes("❌") || l.startsWith("FATAL"));
+      const detail = (marked.length ? marked : raw.slice(-6)).slice(0, 6).join(" | ");
+      check(s, false, detail.slice(0, 600) || `ieșire ${e.status ?? "necunoscută"}`);
     }
   }
 }
@@ -403,7 +425,7 @@ async function main() {
   const ctx = await sessionContext(base);
   if (ctx) {
     await apiSweep(base, areas, ctx);
-    if (WANT_DEEP) deepSuites(base, areas);
+    if (WANT_DEEP) await deepSuites(base, areas);
     if (WANT_BROWSER) await browserSweep(base, areas, ctx);
     await ctx.dispose();
   }

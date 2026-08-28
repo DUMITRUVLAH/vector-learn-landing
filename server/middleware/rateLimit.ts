@@ -33,6 +33,26 @@ function keyFor(c: Context): string {
 }
 
 /**
+ * Poarta E2E (CLAUDE.md §3.5.1quinquies) se rulează după FIECARE modificare, iar suitele
+ * dedicate autentifică 4 roluri fiecare — adică peste cota de 10/15 minute în câteva rulări.
+ * Rezultatul era un `429 too_many_attempts` raportat ca „suită picată", deci un test care
+ * mințea despre starea codului.
+ *
+ * Sărim limitarea DOAR când sunt adevărate simultan două lucruri:
+ *   1. nu suntem în producție, ȘI
+ *   2. cererea nu vine printr-un proxy (fără `x-forwarded-for` / `x-real-ip`) — adică e local.
+ *
+ * Pe Vercel ambele condiții pică: `NODE_ENV=production` și proxy-ul pune mereu
+ * `x-forwarded-for`. Deci clientul plătitor rămâne protejat chiar și dacă NODE_ENV ar fi
+ * configurat greșit. `RATE_LIMIT_FORCE=1` reactivează limitarea local, când chiar ea e ce testezi.
+ */
+export function skipLocalDev(c: Context): boolean {
+  if (process.env.RATE_LIMIT_FORCE === "1") return false;
+  if (process.env.NODE_ENV === "production") return false;
+  return !c.req.header("x-forwarded-for") && !c.req.header("x-real-ip");
+}
+
+/**
  * Autentificare: 10 încercări / 15 minute / IP / rută.
  * Suficient pentru un om care greșește parola de câteva ori, inutil pentru un atac prin forță brută.
  */
@@ -41,6 +61,7 @@ export const authRateLimit = rateLimiter({
   limit: 10,
   standardHeaders: "draft-6",
   keyGenerator: keyFor,
+  skip: skipLocalDev,
   message: { error: "too_many_attempts" },
 });
 
@@ -53,5 +74,6 @@ export const expensiveRateLimit = rateLimiter({
   limit: 20,
   standardHeaders: "draft-6",
   keyGenerator: keyFor,
+  skip: skipLocalDev,
   message: { error: "rate_limit_exceeded" },
 });

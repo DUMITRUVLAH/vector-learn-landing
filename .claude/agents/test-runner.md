@@ -80,14 +80,25 @@ Parse coverage output for the files touched in this item (from `git diff --name-
   ```
   and run `npm install --save-dev @vitest/coverage-v8` if needed (one-time setup, non-blocking for this run — note in report).
 
-### 4e. Playwright E2E gate (BLOCKING — all E2E tests must pass)
+### 4e. Poarta E2E (BLOCANT — CLAUDE.md §3.5.1quinquies)
 ```bash
-npm run test:e2e 2>&1 | tail -40
+node scripts/e2e-gate.mjs --area <zona atinsă> --all 2>&1 | tail -40
 ```
-- All tests in `e2e/<ID>.spec.ts` must pass.
-- If `test:e2e` script is missing or `@playwright/test` not installed → **FAIL**: "Playwright not configured — test-writer should have set it up; block and report".
-- If Chromium binary is missing → run `npx playwright install chromium` first, then re-run.
-- Any Playwright test failure → **FAIL** with the test name and error.
+Poarta rulează gărzile statice, cheamă REAL endpoint-urile zonei prin HTTP, deschide un browser
+pe rutele ei și rulează suitele dedicate din `deep`. Ieșire 0 = trecut; orice ❌ = **FAIL**, tratat
+identic cu un test unitar roșu.
+
+- **NU rula `npm run test:e2e`** și nu cere `@playwright/test`: nu există în proiect și n-a
+  existat niciodată. Instrucțiunea veche de aici bloca item-uri pentru un runner imaginar.
+- Zona se deduce singură din `git diff`; dă `--area` doar dacă vrei s-o forțezi.
+- Serverul: poarta îl refolosește pe cel pornit (3131/3100/3000/3132) sau pornește unul singură.
+  **Nu porni tu un al doilea server în același director** — PGlite ține `.pglite` exclusiv și al
+  doilea proces moare cu `RuntimeError: Aborted()`.
+- `429 too_many_attempts` la login nu e un bug al item-ului: e cota de 10 autentificări/15 minute
+  din `server/middleware/rateLimit.ts`. Poarta refolosește sesiunea din `.e2e-session.json`;
+  dacă tot apare, repornește serverul și reia — nu marca item-ul blocat pentru asta.
+- Dacă o rută nouă e raportată „redirecționat la …", pagina NU s-a randat (redirect la login sau
+  rută inexistentă care cade pe dashboard). E o pică reală, nu un fals pozitiv.
 
 ### 4a. Migration discipline gate (BLOCKING — catches schema drift)
 Any schema change must ship with a committed migration, and the DB must rebuild cleanly.
@@ -175,7 +186,7 @@ MIGRATION_COLLISION: <pass|fail>   # no prefix ≤ max-on-main; no duplicate jou
 INTEGRATION_SMOKE: <pass|fail>     # health/db + login + feature endpoints
 PORTABILITY: <pass|fail>           # no raw .execute().rows
 COVERAGE: <XX% | fail>             # ≥ 80% on new code (BLOCKING)
-E2E: <X/Y passed | fail>           # Playwright tests from e2e/<ID>.spec.ts (BLOCKING)
+E2E_GATE: <X/Y passed | fail>      # node scripts/e2e-gate.mjs --all (BLOCANT)
 LIGHTHOUSE:
   performance: <0.XX | skipped>
   accessibility: <0.XX | skipped>
