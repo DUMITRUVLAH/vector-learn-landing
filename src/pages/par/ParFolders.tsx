@@ -98,8 +98,12 @@ function FolderRow({ icon, name, subtitle, badges, meta, href, ariaLabel }: Fold
         <span className="block truncate font-medium text-foreground">{name}</span>
         {subtitle ? <span className="block truncate text-xs text-muted-foreground">{subtitle}</span> : null}
       </span>
-      {badges ? <span className="hidden items-center gap-1.5 md:flex">{badges}</span> : null}
-      {meta ? <span className="hidden text-xs tabular-nums text-muted-foreground sm:block">{meta}</span> : null}
+      {badges ? <span className="hidden shrink-0 items-center gap-1.5 md:flex">{badges}</span> : null}
+      {meta ? (
+        <span className="hidden w-44 shrink-0 whitespace-nowrap text-right text-xs tabular-nums text-muted-foreground sm:block">
+          {meta}
+        </span>
+      ) : null}
       <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden />
     </a>
   );
@@ -123,9 +127,11 @@ function BucketBadges({ buckets }: { buckets: BucketFolder[] }) {
           <Badge
             key={b.key}
             variant={b.key === "pending" ? "warning" : b.key === "approved" ? "info" : "success"}
-            className="tabular-nums"
+            className="whitespace-nowrap tabular-nums"
           >
-            {b.label}: {b.count}
+            {b.label}:{" "}
+            {/* cifrele ocupă mereu aceeași lățime, altfel „3" și „12" mișcă pastila de lângă */}
+            <span className="ml-0.5 inline-block min-w-[1.25ch] text-right">{b.count}</span>
           </Badge>
         ))}
     </>
