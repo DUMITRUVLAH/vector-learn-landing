@@ -357,8 +357,11 @@ contactul din registru. Maximum un reminder pe zi per cerere; totul e scris în 
 cu serie/număr opționale — pentru facturile venite pe alt canal. O stare `found` sau `received_manual`
 nu se retrogradează niciodată la resincronizare.
 
-**Unde se vede.** `/business/par/efactura` (coadă + scanare + configurare SFS, roluri finance /
-par_admin) și cardul „e-Factura de la prestator" din pagina oricărei cereri achitate.
+**Unde se vede.** `/business/par/efactura` (roluri finance / par_admin), cu două taburi:
+*Cereri achitate* (coada „cine nu ne-a dat factura", cu remindere și marcare manuală) și
+*Toate e-Facturile* — lista brută a facturilor primite în SFS, inclusiv cele respinse și cele care
+nu au niciun PAR în spate (abonamente, livrări directe), fiecare arătând cererea de care e legată,
+dacă există. Plus cardul „e-Factura de la prestator" din pagina oricărei cereri achitate.
 
 **Reuse:** credențialele SFS = `fin_sfs_settings` (un singur cont per workspace), clientul SOAP =
 `EfacturaMdClient`, emailul = serviciul de notificări PAR. Stare: `par_einvoices` (migrarea 0146).

@@ -49,6 +49,8 @@ export interface SfsInvoiceSummary {
   invoiceStatus: number;
   invoiceStatusLabel: string;
   supplierIdno: string | null;
+  /** Denumirea furnizorului, când XML-ul o expune (nu toate formularele o au). */
+  supplierName?: string | null;
   buyerIdno: string | null;
   invoiceDate: Date | null;
   /** Totalul cu TVA, în unități minore (bani). Null dacă XML-ul nu l-a expus. */
@@ -101,14 +103,19 @@ function parseDate(raw: string | null | undefined): Date | null {
  */
 export function parseSfsInvoiceXml(xml: string | null | undefined): {
   supplierIdno: string | null;
+  supplierName: string | null;
   buyerIdno: string | null;
   invoiceDate: Date | null;
   totalCents: number | null;
 } {
-  if (!xml) return { supplierIdno: null, buyerIdno: null, invoiceDate: null, totalCents: null };
+  if (!xml) {
+    return { supplierIdno: null, supplierName: null, buyerIdno: null, invoiceDate: null, totalCents: null };
+  }
 
   const supplierIdno =
     attr(xml, "Supplier", "IDNO") ?? element(xml, "SupplierIDNO") ?? element(xml, "SupplierIdno");
+  const supplierName =
+    attr(xml, "Supplier", "Name") ?? element(xml, "SupplierName") ?? element(xml, "SupplierNameString");
   const buyerIdno =
     attr(xml, "Buyer", "IDNO") ?? element(xml, "BuyerIDNO") ?? element(xml, "BuyerIdno");
   const invoiceDate = parseDate(
@@ -126,6 +133,7 @@ export function parseSfsInvoiceXml(xml: string | null | undefined): {
 
   return {
     supplierIdno: supplierIdno?.trim() || null,
+    supplierName: supplierName?.trim() || null,
     buyerIdno: buyerIdno?.trim() || null,
     invoiceDate,
     totalCents,

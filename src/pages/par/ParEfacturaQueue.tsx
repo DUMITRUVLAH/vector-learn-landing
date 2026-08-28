@@ -8,6 +8,8 @@
  *   • scanează SFS (ca CUMPĂRĂTOR) și potrivește facturile primite cu plățile făcute;
  *   • arată clar când verificarea automată NU s-a putut face (SFS neconfigurat) — ca nimeni să nu
  *     citească „lipsește" acolo unde de fapt scrie „n-am putut verifica";
+ *   • are un al doilea tab cu TOATE facturile primite în SFS (chiar și cele fără PAR sau respinse),
+ *     ca omul de la finanțe să vadă întreg fluxul, nu doar ce s-a potrivit cu o plată;
  *   • trimite, cu un buton, reminder solicitantului cererii: „amintește-i prestatorului X să emită
  *     e-Factura pentru serviciile Y, suma Z";
  *   • permite configurarea credențialelor SFS (par_admin), refolosind `fin_sfs_settings`.
@@ -34,6 +36,7 @@ import {
   Input,
   Label,
   Select,
+  Tabs,
   Table,
   TableBody,
   TableCell,
@@ -45,6 +48,7 @@ import { ApiError } from "@/lib/api";
 import { useRouter } from "@/router/HashRouter";
 import {
   getParEfacturaQueue,
+  getParEfacturaInvoices,
   scanParEfacturas,
   sendParEfacturaReminder,
   markParEfacturaReceived,
@@ -53,6 +57,7 @@ import {
   PAR_EFACTURA_STATUS_LABELS,
   type ParEfacturaQueue as Queue,
   type ParEfacturaFilter,
+  type BuyerInvoiceList,
 } from "@/lib/api/parEfactura";
 
 function fmtDate(iso: string | null): string {
@@ -205,6 +210,11 @@ export default function ParEfacturaQueuePage() {
   const [noticeIsError, setNoticeIsError] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  // Al doilea tab: lista brută din SFS. Se încarcă doar la cerere — e un apel SOAP, nu o citire din DB.
+  const [view, setView] = useState<"requests" | "invoices">("requests");
+  const [invoices, setInvoices] = useState<BuyerInvoiceList | null>(null);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [invoicesError, setInvoicesError] = useState<string | null>(null);
 
   const load = useCallback(async (f: ParEfacturaFilter) => {
     setLoading(true);
@@ -222,9 +232,29 @@ export default function ParEfacturaQueuePage() {
     }
   }, []);
 
+  const loadInvoices = useCallback(async () => {
+    setInvoicesLoading(true);
+    try {
+      setInvoices(await getParEfacturaInvoices());
+      setInvoicesError(null);
+    } catch (e) {
+      setInvoicesError(
+        e instanceof ApiError && e.status === 403
+          ? "Ai nevoie de rolul finanțe sau administrator PAR."
+          : "Nu am putut citi facturile din SFS."
+      );
+    } finally {
+      setInvoicesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void load(filter);
   }, [filter, load]);
+
+  useEffect(() => {
+    if (view === "invoices" && !invoices && !invoicesLoading) void loadInvoices();
+  }, [view, invoices, invoicesLoading, loadInvoices]);
 
   const scanAll = async () => {
     setScanning(true);
@@ -279,10 +309,17 @@ export default function ParEfacturaQueuePage() {
       pageTitle="e-Factura prestatori"
       pageDescription="Cererile achitate pentru care prestatorul trebuie să emită e-Factura în SFS"
       actions={
-        <Button variant="outline" onClick={scanAll} disabled={scanning} aria-label="Scanează SFS">
-          {scanning ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCcw className="h-4 w-4" aria-hidden />}
-          Scanează SFS
-        </Button>
+        view === "invoices" ? (
+          <Button variant="outline" onClick={() => void loadInvoices()} disabled={invoicesLoading} aria-label="Reîncarcă facturile din SFS">
+            {invoicesLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCcw className="h-4 w-4" aria-hidden />}
+            Reîncarcă din SFS
+          </Button>
+        ) : (
+          <Button variant="outline" onClick={scanAll} disabled={scanning} aria-label="Scanează SFS">
+            {scanning ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCcw className="h-4 w-4" aria-hidden />}
+            Scanează SFS
+          </Button>
+        )
       }
     >
       <div className="space-y-6">
@@ -295,6 +332,17 @@ export default function ParEfacturaQueuePage() {
 
         {queue && <SfsSettingsPanel sfs={queue.sfs} onSaved={() => void load(filter)} />}
 
+        {/* Două întrebări diferite: „cererile mele au factură?" și „ce facturi am primit, în general?" */}
+        <Tabs
+          aria-label="Secțiuni e-Factura"
+          value={view}
+          onChange={(next) => setView(next as "requests" | "invoices")}
+          tabs={[
+            { value: "requests", label: "Cereri achitate", count: queue?.counts.missing },
+            { value: "invoices", label: "Toate e-Facturile", count: invoices?.invoices.length },
+          ]}
+        />
+
         {notice && (
           <Alert variant={noticeIsError ? "warning" : "success"} icon={noticeIsError ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}>
             {notice}
@@ -303,7 +351,7 @@ export default function ParEfacturaQueuePage() {
 
         {error && <Alert variant="destructive" icon={<AlertTriangle className="h-4 w-4" />}>{error}</Alert>}
 
-        {queue && (
+        {view === "requests" && queue && (
           <Card className="flex flex-wrap items-center gap-3 p-3">
             <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrează lista">
               {FILTERS.map((f) => (
@@ -326,14 +374,14 @@ export default function ParEfacturaQueuePage() {
           </Card>
         )}
 
-        {loading && (
+        {view === "requests" && loading && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             Se încarcă…
           </div>
         )}
 
-        {!loading && queue && queue.items.length === 0 && (
+        {view === "requests" && !loading && queue && queue.items.length === 0 && (
           <Card className="p-8 text-center">
             <ReceiptText className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden />
             <p className="mt-2 text-sm text-muted-foreground">
@@ -344,7 +392,7 @@ export default function ParEfacturaQueuePage() {
           </Card>
         )}
 
-        {!loading && queue && queue.items.length > 0 && (
+        {view === "requests" && !loading && queue && queue.items.length > 0 && (
           <Card className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -432,6 +480,88 @@ export default function ParEfacturaQueuePage() {
               </TableBody>
             </Table>
           </Card>
+        )}
+
+        {/* ── Tab 2: tot ce a intrat în SFS, chiar dacă nu are PAR în spate ── */}
+        {view === "invoices" && (
+          <>
+            {invoicesError && (
+              <Alert variant="destructive" icon={<AlertTriangle className="h-4 w-4" />}>{invoicesError}</Alert>
+            )}
+
+            {invoicesLoading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                Se citesc facturile din SFS…
+              </div>
+            )}
+
+            {!invoicesLoading && invoices && !invoices.available && (
+              <Alert variant="warning" icon={<AlertTriangle className="h-5 w-5" />} title="Nu putem citi facturile din SFS">
+                {invoices.message}
+              </Alert>
+            )}
+
+            {!invoicesLoading && invoices?.available && invoices.invoices.length === 0 && (
+              <Card className="p-8 text-center">
+                <ReceiptText className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden />
+                <p className="mt-2 text-sm text-muted-foreground">Nicio factură primită în SFS.</p>
+              </Card>
+            )}
+
+            {!invoicesLoading && invoices?.available && invoices.invoices.length > 0 && (
+              <>
+                <p className="text-xs text-muted-foreground">{invoices.message}</p>
+                <Card className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Factura</TableHead>
+                        <TableHead>Furnizor</TableHead>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Sumă</TableHead>
+                        <TableHead>Stare în SFS</TableHead>
+                        <TableHead>Cerere PAR</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {invoices.invoices.map((inv) => (
+                        <TableRow key={`${inv.seria}-${inv.number}`}>
+                          <TableCell className="whitespace-nowrap text-sm font-medium text-foreground">
+                            {inv.seria} {inv.number}
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm text-foreground">{inv.supplierName ?? "—"}</span>
+                            {inv.supplierIdno && <p className="text-xs text-muted-foreground">{inv.supplierIdno}</p>}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm">{fmtDate(inv.invoiceDate)}</TableCell>
+                          <TableCell className="whitespace-nowrap text-sm">
+                            {inv.totalCents != null ? fmtAmount(inv.totalCents, "MDL") : "—"}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {inv.invoiceStatusLabel || `cod ${inv.invoiceStatus}`}
+                          </TableCell>
+                          <TableCell>
+                            {inv.linkedParId ? (
+                              <button
+                                type="button"
+                                onClick={() => router.navigate(`/business/par/${inv.linkedParId}`)}
+                                className="min-h-[44px] text-sm font-medium text-primary hover:underline"
+                              >
+                                {inv.linkedRequestNo}
+                              </button>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">fără cerere</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Card>
+              </>
+            )}
+          </>
         )}
       </div>
     </AppShell>

@@ -191,21 +191,41 @@ export async function syncEfacturaCandidates(
 const DETAIL_CHUNK = 20;
 
 /**
+ * Plafon de facturi pentru care mai cerem XML-ul detaliat.
+ *
+ * Detaliile (furnizor, dată, sumă) vin cu un apel SOAP la fiecare 20 de facturi, iar serverul taie
+ * orice GET la 20 s. Un cont SFS cu istoric mare ar transforma pagina într-un timeout — mai bine
+ * arătăm primele N complet și spunem explicit că restul au rămas fără detalii.
+ */
+const DETAIL_MAX = 200;
+
+/**
  * Lista facturilor în care organizația e CUMPĂRĂTOR: cele nesemnate încă (venite de la furnizori)
  * plus cele deja acceptate. Fiecare apel e izolat — dacă SFS refuză o metodă (drepturi lipsă),
  * scanarea continuă cu ce a obținut și raportează diferența.
  */
 async function fetchBuyerInvoices(
   client: EfacturaMdClient,
-  requestId: string
+  requestId: string,
+  options: { includeRejected?: boolean } = {}
 ): Promise<{ invoices: SfsInvoiceSummary[]; errors: string[] }> {
   const errors: string[] = [];
   const heads: InvoiceListItem[] = [];
 
-  for (const [label, call] of [
+  // Potrivirea are nevoie doar de facturile „vii"; lista brută (ecranul „Toate e-Facturile") le
+  // arată și pe cele respinse, pentru că omul trebuie să le vadă ca să știe ce s-a întâmplat.
+  const sources: Array<readonly [string, () => Promise<InvoiceListItem[]>]> = [
     ["facturi de semnat", () => client.getInvoicesForSigning(`${requestId}-sign`, EFACTURA_MD_ACTOR.CUMPARATOR)],
     ["facturi acceptate", () => client.getAcceptedInvoices(`${requestId}-acc`, EFACTURA_MD_ACTOR.CUMPARATOR)],
-  ] as const) {
+  ];
+  if (options.includeRejected) {
+    sources.push([
+      "facturi respinse",
+      () => client.getRejectedInvoices(`${requestId}-rej`, EFACTURA_MD_ACTOR.CUMPARATOR),
+    ]);
+  }
+
+  for (const [label, call] of sources) {
     try {
       heads.push(...(await call()));
     } catch (e) {
@@ -220,7 +240,13 @@ async function fetchBuyerInvoices(
   }
 
   // Detaliile (furnizor, cumpărător, dată, sumă) vin doar cu XML-ul facturii.
-  const identifiers = [...uniqueHeads.values()].map((h) => ({ seria: h.seria, number: h.number }));
+  const allIdentifiers = [...uniqueHeads.values()].map((h) => ({ seria: h.seria, number: h.number }));
+  const identifiers = allIdentifiers.slice(0, DETAIL_MAX);
+  if (allIdentifiers.length > identifiers.length) {
+    errors.push(
+      `am citit detaliile doar pentru primele ${DETAIL_MAX} din ${allIdentifiers.length} facturi (limită de timp)`
+    );
+  }
   const xmlByKey = new Map<string, string>();
   for (let i = 0; i < identifiers.length; i += DETAIL_CHUNK) {
     const chunk = identifiers.slice(i, i + DETAIL_CHUNK);
@@ -405,5 +431,114 @@ export async function scanEfacturasForTenant(
     missing,
     invoicesFetched: invoices.length,
     message: errors.length ? `${base} SFS a răspuns parțial: ${errors.join("; ")}` : base,
+  };
+}
+
+// ─── 3. Lista brută a facturilor primite (ecranul „Toate e-Facturile") ────────
+
+/** O factură din SFS, așa cum e arătată în lista brută (independent de cereri). */
+export interface BuyerInvoiceItem {
+  seria: string;
+  number: string;
+  invoiceStatus: number;
+  invoiceStatusLabel: string;
+  supplierIdno: string | null;
+  /** Denumirea furnizorului: din XML dacă o are, altfel din registrul propriu de prestatori. */
+  supplierName: string | null;
+  buyerIdno: string | null;
+  invoiceDate: string | null;
+  totalCents: number | null;
+  /** Cererea PAR de care e legată factura, dacă a fost potrivită sau marcată manual. */
+  linkedParId: string | null;
+  linkedRequestNo: string | null;
+}
+
+export interface BuyerInvoiceListResult {
+  available: boolean;
+  source: "sfs" | "mock";
+  message: string;
+  invoices: BuyerInvoiceItem[];
+}
+
+/**
+ * Toate facturile în care organizația e cumpărător — nu doar cele legate de o plată PAR.
+ *
+ * De ce există separat de scanare: scanarea răspunde la „cererea asta are factură?", ecranul acesta
+ * la „ce facturi am primit, de la cine, în ce stare?" — inclusiv cele pe care nu le așteptam
+ * (abonamente, livrări fără PAR) și cele respinse. Nu scrie nimic: e o citire.
+ */
+export async function listBuyerInvoicesForTenant(
+  tenantId: string,
+  clientOverride?: EfacturaMdClient
+): Promise<BuyerInvoiceListResult> {
+  const sfs = clientOverride ? null : await loadSfsConfig(tenantId);
+  if (!clientOverride && (!sfs || sfs.config.mock)) {
+    return {
+      available: false,
+      source: "mock",
+      message: sfs
+        ? "Integrarea e-Factura rulează în mod simulat (fără credențiale SFS) — nu putem citi facturile reale."
+        : "Integrarea e-Factura (SFS) nu este configurată pentru această organizație.",
+      invoices: [],
+    };
+  }
+
+  const client = clientOverride ?? new EfacturaMdClient(sfs!.config);
+  const { invoices, errors } = await fetchBuyerInvoices(client, `par-efp-list-${Date.now()}`, {
+    includeRejected: true,
+  });
+
+  // Legătura cu cererile: rândurile de urmărire care poartă deja seria+numărul facturii.
+  const tracked = await db
+    .select({
+      parId: parEinvoices.parId,
+      seria: parEinvoices.sfsSeria,
+      number: parEinvoices.sfsNumber,
+      requestNo: parRequests.requestNo,
+    })
+    .from(parEinvoices)
+    .innerJoin(parRequests, eq(parRequests.id, parEinvoices.parId))
+    .where(eq(parEinvoices.tenantId, tenantId));
+  const linkByKey = new Map(
+    tracked
+      .filter((t) => t.seria && t.number)
+      .map((t) => [invoiceKey({ seria: t.seria!, number: t.number! }), t])
+  );
+
+  // Denumirea furnizorului, când XML-ul nu o dă: din registrul propriu, după codul fiscal.
+  const vendors = await db
+    .select({ name: parVendors.name, idnp: parVendors.idnp })
+    .from(parVendors)
+    .where(eq(parVendors.tenantId, tenantId));
+  const nameByIdno = new Map(
+    vendors.filter((v) => v.idnp).map((v) => [normalizeFiscalId(v.idnp), v.name])
+  );
+
+  const items: BuyerInvoiceItem[] = invoices
+    .map((inv) => {
+      const link = linkByKey.get(invoiceKey(inv));
+      return {
+        seria: inv.seria,
+        number: inv.number,
+        invoiceStatus: inv.invoiceStatus,
+        invoiceStatusLabel: inv.invoiceStatusLabel,
+        supplierIdno: inv.supplierIdno,
+        supplierName: inv.supplierName ?? nameByIdno.get(normalizeFiscalId(inv.supplierIdno)) ?? null,
+        buyerIdno: inv.buyerIdno,
+        invoiceDate: inv.invoiceDate?.toISOString() ?? null,
+        totalCents: inv.totalCents,
+        linkedParId: link?.parId ?? null,
+        linkedRequestNo: link?.requestNo ?? null,
+      };
+    })
+    // Cele mai noi primele; facturile fără dată în XML cad la coadă.
+    .sort((a, b) => (b.invoiceDate ?? "").localeCompare(a.invoiceDate ?? ""));
+
+  const base = `${items.length} facturi primite găsite în SFS.`;
+  return {
+    available: true,
+    source: "sfs",
+    message: errors.length ? `${base} SFS a răspuns parțial: ${errors.join("; ")}` : base,
+    invoices: items,
   };
 }
