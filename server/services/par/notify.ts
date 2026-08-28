@@ -259,6 +259,15 @@ async function sendEmail(params: {
   }
 }
 
+/**
+ * Corpul notificării in-app conține „Link: /business/par/<id>" — o cale relativă, utilă doar în
+ * aplicație. În email era text mort (niciun client nu o poate deschide), pe lângă linkul absolut
+ * adăugat mai jos. Se scoate ca destinatarul să vadă un singur link, cel care chiar funcționează.
+ */
+export function stripInAppLink(body: string): string {
+  return body.replace(/\s*Link:\s*\/business\/par\/[0-9a-f-]+\.?/gi, "").trim();
+}
+
 /** Notify a single user (in-app + email) */
 async function notifyUser(params: {
   tenantId: string;
@@ -281,7 +290,7 @@ async function notifyUser(params: {
       tenantId: params.tenantId,
       toAddress: userRecord.email,
       subject: params.subject,
-      body: `${params.body}\n\nDeschide cererea: ${parDeepLink(params.parId)}`,
+      body: `${stripInAppLink(params.body)}\n\nDeschide cererea: ${parDeepLink(params.parId)}`,
     });
   }
 }

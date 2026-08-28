@@ -284,3 +284,26 @@ describe("PAR-111 notifyStepAdvanced", () => {
     await expect(notifyStepAdvanced(ctx, null, "Executive Director")).resolves.not.toThrow();
   });
 });
+
+/**
+ * Regression (2026-08-28): emailul conținea DOUĂ linkuri — calea relativă din corpul
+ * notificării in-app („Link: /business/par/<id>", moartă în orice client de mail) plus
+ * linkul absolut. Destinatarul vedea întâi cel care nu funcționează.
+ */
+describe("stripInAppLink — calea relativă nu ajunge în email", () => {
+  it("scoate „Link: /business/par/<id>” din corpul preluat de la notificarea in-app", async () => {
+    const { stripInAppLink } = await import("../notify");
+
+    expect(
+      stripInAppLink("PAR PAR-2026-0003 has been paid. Link: /business/par/675c33af-b475-463f-9f4e-23becff5c694")
+    ).toBe("PAR PAR-2026-0003 has been paid.");
+  });
+
+  it("lasă neatins un corp fără cale relativă", async () => {
+    const { stripInAppLink } = await import("../notify");
+
+    expect(stripInAppLink("PAR PAR-2026-0003 a fost respinsă. Motiv: lipsă factură")).toBe(
+      "PAR PAR-2026-0003 a fost respinsă. Motiv: lipsă factură"
+    );
+  });
+});

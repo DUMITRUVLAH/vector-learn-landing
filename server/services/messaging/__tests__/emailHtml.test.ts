@@ -58,3 +58,49 @@ describe("buildHtml — email branding", () => {
     expect(html).toContain("a &amp; &lt;b&gt;<br>linia 2");
   });
 });
+
+/**
+ * Regression (2026-08-28): linkurile din emailurile PAR erau text simplu în HTML.
+ * Gmail le autolinka, Outlook NU — destinatarii pe Outlook primeau un URL neclicabil.
+ */
+describe("buildHtml — linkuri clicabile", () => {
+  it("transformă ultima linie „Etichetă: https://…” într-un buton cu <a href>", () => {
+    const html = buildHtml(
+      "[PAR] PAR-2026-0003",
+      "PAR PAR-2026-0003 este aprobată.\n\nDeschide cererea: https://finflow.best/#/business/par/675c33af-b475-463f-9f4e-23becff5c694"
+    );
+
+    expect(html).toContain(
+      '<a href="https://finflow.best/#/business/par/675c33af-b475-463f-9f4e-23becff5c694"'
+    );
+    expect(html).toContain(">Deschide cererea</a>");
+    // butonul e pe <td bgcolor> — Outlook desktop ignoră padding-ul pe <a>
+    expect(html).toContain('<td bgcolor="#1a1aff"');
+    // fallback pentru clienții care blochează stilurile
+    expect(html).toContain("Dacă butonul nu funcționează, copiază linkul");
+    // linia „Deschide cererea: …” nu se mai repetă ca text în corp
+    expect(html).not.toContain("Deschide cererea: https://");
+  });
+
+  it("face clicabil orice URL rămas în corpul mesajului", () => {
+    const html = buildHtml("subiect", "Vezi https://finflow.best/#/business/par/abc și gata.");
+
+    expect(html).toContain('<a href="https://finflow.best/#/business/par/abc"');
+    // punctuația/textul de după rămâne în afara ancorei
+    expect(html).toContain("</a> și gata.");
+  });
+
+  it("nu permite ieșirea din atributul href prin ghilimele din corp", () => {
+    const html = buildHtml("subiect", 'https://x.test/a"onmouseover="alert(1)');
+
+    expect(html).not.toContain('"onmouseover="');
+    expect(html).toContain("&quot;onmouseover=");
+  });
+
+  it("nu afișează buton când nu există niciun link", () => {
+    const html = buildHtml("subiect", "Doar text, fără linkuri.");
+
+    expect(html).not.toContain("bgcolor=\"#1a1aff\"");
+    expect(html).toContain("Doar text, fără linkuri.");
+  });
+});

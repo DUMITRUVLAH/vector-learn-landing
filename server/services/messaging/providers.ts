@@ -119,6 +119,71 @@ function escapeHtml(value: string): string {
 }
 
 /**
+ * URL-uri absolute din corpul (deja escapat) al emailului → ancore reale.
+ *
+ * Gmail transformă singur un URL scris ca text simplu în link; **Outlook nu** (nici desktop,
+ * nici outlook.com, în HTML mail). Fără `<a href>`, „Deschide cererea: https://finflow.best/#/…"
+ * ajungea la destinatarii pe Outlook ca text neclicabil — trebuia copiat manual în bara de
+ * adrese. De aceea linkurile se marchează explicit, nu ne bazăm pe autolink-ul clientului.
+ *
+ * Se aplică DUPĂ escapeHtml, deci `"` e deja `&quot;` (nu se poate ieși din atribut) și
+ * `&` e deja `&amp;` (valid în href). Punctuația finală (`.`, `,`, `)`) rămâne în afara linkului.
+ */
+const ABSOLUTE_URL_RE = /(https?:\/\/[^\s<]*[^\s<.,;:!?)\]])/g;
+
+function linkify(escapedHtml: string): string {
+  return escapedHtml.replace(
+    ABSOLUTE_URL_RE,
+    (url) =>
+      `<a href="${url}" style="color:#1a1aff;text-decoration:underline;word-break:break-all">${url}</a>`
+  );
+}
+
+/**
+ * Extrage din corp ultima linie de forma „Etichetă: https://…" ca să devină buton CTA.
+ * Textul dinainte rămâne paragraful principal; ce urma după linie (ex. coada cu workspace-ul
+ * și contul destinatar) se randează sub buton, ca să nu se strecoare deasupra lui.
+ * Dacă nu există o astfel de linie, nu se afișează buton.
+ */
+function extractCta(body: string): {
+  text: string;
+  cta: { label: string; url: string } | null;
+  tail: string;
+} {
+  const lines = body.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = lines[i].match(/^\s*([^:\n]{1,60}):\s*(https?:\/\/\S+)\s*$/);
+    if (m) {
+      return {
+        text: lines.slice(0, i).join("\n").trim(),
+        cta: { label: m[1].trim(), url: m[2] },
+        tail: lines.slice(i + 1).join("\n").trim(),
+      };
+    }
+  }
+  return { text: body, cta: null, tail: "" };
+}
+
+/**
+ * Buton „bulletproof" pe tabel: Outlook desktop (motorul Word) ignoră padding-ul pe `<a>`,
+ * deci culoarea și zona de click stau pe `<td>`. Sub buton se repetă URL-ul ca text, pentru
+ * clienții care blochează stilurile — destinatarul are întotdeauna ce copia.
+ */
+function ctaHtml(cta: { label: string; url: string }): string {
+  const url = escapeHtml(cta.url);
+  const label = escapeHtml(cta.label);
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:24px 0">
+      <tr>
+        <td bgcolor="#1a1aff" style="border-radius:6px">
+          <a href="${url}" style="display:inline-block;padding:12px 22px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:6px">${label}</a>
+        </td>
+      </tr>
+    </table>
+    <p style="font-size:12px;line-height:1.6;color:#999;margin:0">Dacă butonul nu funcționează, copiază linkul:<br><a href="${url}" style="color:#1a1aff;text-decoration:underline;word-break:break-all">${url}</a></p>`;
+}
+
+/**
  * Minimal HTML email wrapper — plain-text body inside a clean card, under the
  * FinFlow lockup used in the app shell (square mark + wordmark).
  *
@@ -128,7 +193,9 @@ function escapeHtml(value: string): string {
  * wordmark alone instead of a broken-image icon.
  */
 export function buildHtml(subject: string, body: string): string {
-  const escaped = escapeHtml(body).replace(/\n/g, "<br>");
+  const { text, cta, tail } = extractCta(body);
+  const escaped = linkify(escapeHtml(text).replace(/\n/g, "<br>"));
+  const escapedTail = tail ? linkify(escapeHtml(tail).replace(/\n/g, "<br>")) : "";
   const logoUrl = `${publicAssetOrigin()}/finflow-mark.png`;
 
   return `<!DOCTYPE html>
@@ -144,7 +211,11 @@ export function buildHtml(subject: string, body: string): string {
         <td style="vertical-align:middle;font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:bold;letter-spacing:-.3px;color:#1a1aff">FinFlow</td>
       </tr>
     </table>
-    <p style="font-size:15px;line-height:1.6;color:#333">${escaped}</p>
+    <p style="font-size:15px;line-height:1.6;color:#333">${escaped}</p>${cta ? ctaHtml(cta) : ""}${
+      escapedTail
+        ? `\n    <p style="font-size:13px;line-height:1.6;color:#666;margin:20px 0 0">${escapedTail}</p>`
+        : ""
+    }
     <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
     <p style="font-size:12px;color:#999">FinFlow · Notificare automată · Nu răspunde la acest email</p>
   </div>
