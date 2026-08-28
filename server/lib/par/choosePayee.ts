@@ -440,6 +440,8 @@ function decidePayee(
   //   (c) documentul îi tipărește un IBAN VALID — pe o factură contul tipărit e al celui care încasează;
   //   (d) nu poartă marcaj explicit de plătitor („Plătitor:"/„Ordonator:"/„Bill To:" pe numele ei).
   // Rezultatul e marcat „⚠ de verificat" pe nume: e o deducție din rechizite, nu o certitudine.
+  // Păstrăm varianta de pe main: `fuzzyOrgMatchAny` acoperă și denumirile alternative ale
+  // organizației, deci e strict mai bună decât `fuzzyOrgMatch` din commit-ul mai vechi.
   const selfPresent = ext.parties.some((p) => fuzzyOrgMatchAny(p.name, tenantOrgName));
   const soleParty = dedupeByName(displayCandidates);
   if (
