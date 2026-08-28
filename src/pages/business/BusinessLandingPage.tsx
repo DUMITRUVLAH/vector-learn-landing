@@ -80,12 +80,12 @@ export function BusinessLandingPage() {
       <TrustedBy />
       <PainSection />
       <BeforeAfter />
+      <FlowSection />
       <StatsBar />
       <AiSection />
       <DoaSection />
       <FinanceSection />
       <EfacturaSection />
-      <FlowSection />
       <MoreCapabilities />
       <SecuritySection />
       <ModulesStrip />
@@ -332,9 +332,11 @@ function HeroMock() {
 
 /**
  * Logourile organizațiilor care folosesc platforma. Fișierele stau în `public/logos/`,
- * descărcate de pe site-urile lor oficiale. În dark mode le facem siluetă albă
- * (`brightness-0 invert`): un logo color pe fundal închis fie dispare, fie își aduce
- * propriul dreptunghi alb.
+ * descărcate de pe site-urile lor oficiale.
+ *
+ * Rămân COLORATE (cerere owner). Ca să funcționeze și pe tema închisă — unde un logotip
+ * bleumarin devine invizibil — fiecare stă pe o plăcuță albă. Plăcuța e albă în ambele teme,
+ * intenționat: e suprafața pe care logourile astea au fost desenate.
  */
 const TRUSTED_BY: { name: string; src: string; size: string }[] = [
   // Înălțimea e per logo: la aceeași înălțime, o siglă pătrată pare de două ori mai mare
@@ -354,15 +356,14 @@ function TrustedBy() {
         <h2 id="utilizat-de" className="mb-6 text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Utilizat de
         </h2>
-        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 sm:gap-x-14">
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
           {TRUSTED_BY.map((l) => (
-            <img
+            <span
               key={l.name}
-              src={l.src}
-              alt={l.name}
-              loading="lazy"
-              className={`${l.size} w-auto max-w-[150px] object-contain opacity-60 grayscale transition duration-200 hover:opacity-100 hover:grayscale-0 dark:opacity-70 dark:brightness-0 dark:invert`}
-            />
+              className="flex items-center justify-center rounded-xl border border-border/60 bg-white px-4 py-3 shadow-sm transition-transform duration-200 hover:-translate-y-0.5"
+            >
+              <img src={l.src} alt={l.name} loading="lazy" className={`${l.size} w-auto max-w-[140px] object-contain`} />
+            </span>
           ))}
         </div>
       </div>
@@ -402,12 +403,12 @@ function PainSection() {
 }
 
 /** Contrastul, pe rânduri scurte — mai convingător decât o listă de funcționalități. */
-const CONTRAST: { before: string; after: string }[] = [
-  { before: "Formular pe hârtie, semnat și scanat", after: "PDF oficial, semnat în aplicație" },
-  { before: "Cine semnează? Depinde cine își amintește", after: "Pragurile decid singure lanțul" },
-  { before: "Rechizitele, retastate din documente", after: "AI-ul le scoate din contract" },
-  { before: "Depășirea de buget se vede la raport", after: "Peste 10% → reaprobare, pe loc" },
-  { before: "Dosarul pentru audit se adună manual", after: "Audit filtrabil, exportat în două clicuri" },
+const CONTRAST: { icon: typeof FileText; before: string; after: string }[] = [
+  { icon: FileText, before: "Formular pe hârtie, semnat și scanat", after: "PDF oficial, semnat în aplicație" },
+  { icon: ShieldCheck, before: "Cine semnează? Depinde cine își amintește", after: "Pragurile decid singure lanțul" },
+  { icon: ScanLine, before: "Rechizitele, retastate din documente", after: "AI-ul le scoate din contract" },
+  { icon: TrendingUp, before: "Depășirea de buget se vede la raport", after: "Peste 10% → reaprobare, pe loc" },
+  { icon: FolderOpen, before: "Dosarul pentru audit se adună manual", after: "Audit filtrabil, în două clicuri" },
 ];
 
 function BeforeAfter() {
@@ -419,17 +420,26 @@ function BeforeAfter() {
           Aceleași reguli pe care le ai deja pe hârtie — doar că le ține sistemul.
         </p>
         <div className="overflow-hidden rounded-2xl border border-border">
-          <div className="grid grid-cols-2 border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wider">
+          <div className="grid grid-cols-[3rem_1fr_1fr] border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wider sm:grid-cols-[4rem_1fr_1fr]">
+            <div aria-hidden="true" />
             <div className="px-4 py-2.5 text-muted-foreground">Azi</div>
             <div className="border-l border-border px-4 py-2.5 text-primary">Cu FinFlow</div>
           </div>
           {CONTRAST.map((row) => (
-            <div key={row.after} className="grid grid-cols-2 border-b border-border last:border-0">
-              <div className="px-4 py-3 text-sm text-muted-foreground line-through decoration-destructive/40">
+            <div
+              key={row.after}
+              className="grid grid-cols-[3rem_1fr_1fr] items-stretch border-b border-border last:border-0 sm:grid-cols-[4rem_1fr_1fr]"
+            >
+              <div className="flex items-center justify-center">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                  <row.icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                </span>
+              </div>
+              <div className="flex items-center px-4 py-3 text-sm text-muted-foreground line-through decoration-destructive/40">
                 {row.before}
               </div>
-              <div className="flex items-start gap-2 border-l border-border bg-primary/[0.03] px-4 py-3 text-sm">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <div className="flex items-center gap-2 border-l border-border bg-primary/[0.03] px-4 py-3 text-sm">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                 <span>{row.after}</span>
               </div>
             </div>
@@ -687,15 +697,47 @@ interface FlowStage {
   label: string;
   who: string;
   detail: string;
+  /** Ce rămâne scris după pasul ăsta — dovada pe care o arăți donatorului sau auditorului. */
+  proof: string;
 }
 
 const FLOW_STAGES: FlowStage[] = [
-  { label: "Cerere", who: "Solicitant", detail: "Se completează din document cu AI: beneficiar, sumă, cod bugetar." },
-  { label: "Trimisă", who: "Sistem", detail: "Conținutul se sigilează — sumele și liniile nu se mai pot schimba." },
-  { label: "Aprobare", who: "Aprobatori", detail: "Matricea DOA construiește lanțul după sumă. Fiecare semnătură intră în PDF." },
-  { label: "Finanțe", who: "Contabilitate", detail: "Cererea aprobată intră în coada de plăți, cu preluare și repartizare." },
-  { label: "Plată", who: "Contabilitate", detail: "Sumă reală, dată, referință, dovadă. Peste 10% diferență → reaprobare." },
-  { label: "e-Factura", who: "Prestator", detail: "Factura din SFS se leagă singură de cerere; dacă lipsește, pleacă un reminder." },
+  {
+    label: "Cerere",
+    who: "Solicitant",
+    detail: "Se completează din document cu AI: beneficiar, sumă, cod bugetar.",
+    proof: "Contractul și oferta rămân atașate cererii",
+  },
+  {
+    label: "Trimisă",
+    who: "Sistem",
+    detail: "Conținutul se sigilează — sumele și liniile nu se mai pot schimba.",
+    proof: "Amprenta conținutului + ora trimiterii",
+  },
+  {
+    label: "Aprobare",
+    who: "Aprobatori",
+    detail: "Matricea de praguri construiește lanțul după sumă.",
+    proof: "Fiecare semnătură: nume, funcție, oră, comentariu",
+  },
+  {
+    label: "Finanțe",
+    who: "Contabilitate",
+    detail: "Cererea aprobată intră în coada de plăți, cu preluare și repartizare.",
+    proof: "Cine a preluat cererea și cui i-a fost repartizată",
+  },
+  {
+    label: "Plată",
+    who: "Contabilitate",
+    detail: "Sumă reală, dată, referință. Peste 10% diferență → reaprobare.",
+    proof: "Ordinul de plată și dovada, atașate la dosar",
+  },
+  {
+    label: "e-Factura",
+    who: "Prestator",
+    detail: "Factura din SFS se leagă singură de cerere.",
+    proof: "Factura fiscală — sau reminderul trimis, dacă lipsește",
+  },
 ];
 
 function FlowSection() {
@@ -727,9 +769,11 @@ function FlowSection() {
       <div className="mx-auto max-w-5xl">
         <div className="mb-10 text-center">
           <Badge variant="outline">Fluxul</Badge>
-          <h2 className="mt-4 mb-3 text-2xl font-bold sm:text-4xl">Traseul unei cereri</h2>
+          <h2 className="mt-4 mb-3 text-2xl font-bold sm:text-4xl">
+            Traseul unei cereri de plată, documentat
+          </h2>
           <p className="mx-auto max-w-lg text-sm text-muted-foreground sm:text-base">
-            Șase pași, fiecare cu autorul și ora lui.
+            Șase pași. La fiecare rămâne o dovadă pe care o poți arăta.
           </p>
         </div>
 
@@ -773,10 +817,14 @@ function FlowSection() {
           </ol>
         </div>
 
-        <Card tone="dashboard" className="mx-auto max-w-2xl p-5 text-center shadow-lg">
-          <p key={active} className="animate-in fade-in duration-500 text-sm motion-reduce:animate-none sm:text-base">
+        <Card key={active} tone="dashboard" className="mx-auto max-w-2xl animate-in fade-in p-5 text-center shadow-lg duration-500 motion-reduce:animate-none">
+          <p className="text-sm sm:text-base">
             <strong className="font-semibold">{FLOW_STAGES[active].label}</strong>{" "}
             <span className="text-muted-foreground">— {FLOW_STAGES[active].detail}</span>
+          </p>
+          <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
+            <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+            {FLOW_STAGES[active].proof}
           </p>
         </Card>
       </div>
