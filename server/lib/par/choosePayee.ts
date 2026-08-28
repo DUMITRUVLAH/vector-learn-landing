@@ -413,6 +413,41 @@ function decidePayee(
     };
   }
 
+  // 7. Plasă de siguranță — SINGURA contraparte, cu cont de încasare tipărit.
+  //
+  // Când rolurile ies greșit (modelul etichetează „client" firma din antetul unui cont de plată,
+  // parserul determinist leagă „PLĂTITOR:" de compania de dedesubt), pool-ul rămâne gol și
+  // formularul se completa cu... nimic: numele, IDNO-ul și IBAN-ul beneficiarului goale, deși
+  // documentul le conținea pe toate (raport owner: cont de plată ZBOR.MD, 2026-08-28).
+  //
+  // Propunem partea DOAR sub condiții care exclud capcana „nu prefila plătitorul":
+  //   (a) documentul nu conține deloc propria organizație (deci nu suntem noi vânzătorul, iar ce a
+  //       rămas nu e cumpărătorul nostru — cazul MIXBOOK/BNS, care trebuie să rămână fără beneficiar);
+  //   (b) e SINGURA parte non-bancă din document;
+  //   (c) documentul îi tipărește un IBAN VALID — pe o factură contul tipărit e al celui care încasează;
+  //   (d) nu poartă marcaj explicit de plătitor („Plătitor:"/„Ordonator:"/„Bill To:" pe numele ei).
+  // Rezultatul e marcat „⚠ de verificat" pe nume: e o deducție din rechizite, nu o certitudine.
+  const selfPresent = ext.parties.some((p) => fuzzyOrgMatch(p.name, tenantOrgName));
+  const soleParty = dedupeByName(displayCandidates);
+  if (
+    !selfPresent &&
+    soleParty.length === 1 &&
+    soleParty[0].iban &&
+    !soleParty[0]._isPayerHint
+  ) {
+    const fallback = soleParty[0];
+    return {
+      _pool: displayCandidates,
+      needsClarification: false,
+      candidates: [],
+      payee: stripInternal(fallback),
+      lowConfidence: { ...lowConfFor(fallback), name: true },
+      amountCents: baseAmount,
+      currency,
+      scope,
+    };
+  }
+
   // distinct.length === 0 → nothing payable found.
   return {
     _pool: displayCandidates,

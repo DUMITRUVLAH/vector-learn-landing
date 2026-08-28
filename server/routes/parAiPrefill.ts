@@ -19,6 +19,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { extractParParties } from "../lib/ai/parExtractor";
 import { choosePayee } from "../lib/par/choosePayee";
+import { parseAmountInWords } from "../lib/par/amountInWords";
 import type { PayeeCandidate } from "../lib/par/parPartyTypes";
 import { extractPdfText } from "../lib/ai/pdfText";
 import { extractOfficeText } from "../lib/ai/officeText";
@@ -235,6 +236,26 @@ parAiPrefillRoutes.post(
     // Deterministic payee selection + requisite validation/routing.
     const choice = choosePayee(extraction, orgLegalName);
 
+    // Suma ÎN LITERE bate cifra citită din tabel. Într-un PDF ordinea rândurilor se amestecă:
+    // pe contul de plată al owner-ului „23042" a ajuns pe alt rând decât „TOTAL", modelul a citit
+    // 23 442 lei, iar parserul determinist n-a găsit nicio sumă. Litera e sursa legală de adevăr,
+    // deci o folosim când o putem citi și valuta se potrivește — marcând câmpul „de verificat"
+    // când corectează o cifră deja extrasă.
+    const words = parseAmountInWords(rawText);
+    let amountCents = choice.amountCents;
+    let amountConfidence = extraction.amountConfidence;
+    let amountLowConf: boolean | undefined;
+    if (words && (words.currency ?? "MDL") === choice.currency) {
+      if (amountCents == null) {
+        amountCents = words.cents;
+        amountConfidence = Math.max(amountConfidence, 0.9);
+      } else if (amountCents !== words.cents) {
+        amountCents = words.cents;
+        amountConfidence = Math.min(amountConfidence, 0.6);
+        amountLowConf = true;
+      }
+    }
+
     const payee = choice.payee;
     // Honest confidence: the regex stub has no contextual understanding, so its output is
     // capped below the 0.7 low-confidence threshold — EVERY stub-filled field renders
@@ -259,7 +280,7 @@ parAiPrefillRoutes.post(
         value: payee?.payeeType ?? null,
         confidence: payee?.payeeType ? 0.8 : 0,
       },
-      totalCents: field(choice.amountCents, extraction.amountConfidence),
+      totalCents: field(amountCents, amountConfidence, amountLowConf),
       currency: field(choice.currency, 0.9),
       endUse: field(choice.scope ?? "", choice.scope ? 0.6 : 0),
       documentClass: {

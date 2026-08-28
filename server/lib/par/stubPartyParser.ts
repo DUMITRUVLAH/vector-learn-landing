@@ -16,6 +16,7 @@ import type {
 } from "./parPartyTypes";
 import { isPayeeBank, findBankKeywordMatch } from "./payeeBankClassifier";
 import { splitBankRequisites } from "./bankRequisites";
+import { parseAmountInWords } from "./amountInWords";
 import { purifyExtraction } from "./partyPurify";
 
 // ─── Low-level token extractors (exported for unit tests) ─────────────────────
@@ -426,6 +427,83 @@ function bindRolesPositionally(
   return bound;
 }
 
+/**
+ * Rule C — eticheta de PLĂTITOR singură pe rând ("PLĂTITOR:" / "Плательщик:" / "Bill To:").
+ *
+ * Layout-ul standard al unui „CONT DE PLATĂ"/proformă din Moldova pune VÂNZĂTORUL în ANTET (cu
+ * adresa, codul fiscal și conturile lui) și marchează cumpărătorul doar cu eticheta „PLĂTITOR:",
+ * urmată pe rândul următor de numele lui — adesea o prescurtare fără formă juridică („ATIC"), pe
+ * care detectorul de nume nici nu o vede. Proximitatea din `roleForName` lega atunci eticheta de
+ * prima companie găsită — exact vânzătorul din antet — care ieșea `client` + `isPayerHint` și era
+ * scos din pool-ul de beneficiari: documentul se încărca, dar TOATE câmpurile beneficiarului
+ * rămâneau goale (raport owner: cont de plată ZBOR.MD nr. 68339, 2026-08-28).
+ *
+ * Regula: eticheta aparține PRIMULUI RÂND care o urmează, nu primei companii. Dacă acel rând e un
+ * nume deja descoperit → îi legăm rolul (identic cu comportamentul vechi). Dacă e un nume pe care
+ * detectorul nu-l vede → îl întoarcem ca parte separată. În ambele cazuri ancora e CONSUMATĂ, ca să
+ * nu mai poată eticheta drept plătitor o companie aflată mai jos în document.
+ */
+const STANDALONE_PAYER_LABEL_RE =
+  /^[ \t]*(?:PL[ĂA]TITOR|ПЛАТЕЛЬЩИК|Плательщик|ORDONATOR|BILL\s*TO)[ \t]*:?[ \t]*$/i;
+
+interface StandalonePayerBinding {
+  /** nameHit.index → rolul legat (când plătitorul e un nume pe care detectorul l-a găsit). */
+  bound: Map<number, { role: ParRole; payerHint: boolean }>;
+  /** intervalele [start,end] ale etichetelor consumate — ancorele din ele nu mai etichetează nimic. */
+  suppressedRanges: Array<[number, number]>;
+  /** plătitori pe care detectorul de nume nu-i vede (prescurtări fără formă juridică). */
+  extraPayers: Array<{ name: string; index: number }>;
+}
+
+/** Rândul de după o etichetă de plătitor arată a nume de parte (nu a adresă, cod, IBAN sau altă etichetă)? */
+function isPlausiblePayerName(raw: string): boolean {
+  const s = raw.trim();
+  if (s.length < 2 || s.length > 80) return false;
+  if (!/\p{L}/u.test(s)) return false; // trebuie să conțină litere
+  if (/\d{5,}/.test(s)) return false; // cod fiscal / telefon / sumă
+  if (/\b[A-Z]{2}\d{2}[A-Z0-9]{10,}\b/.test(s)) return false; // IBAN
+  if (s.includes(":")) return false; // „Cod fiscal: …" e etichetă, nu nume
+  if (ADDR_SEGMENT_RE.test(s)) return false; // adresă
+  if (roleForWord(s.split(/[\s,]+/)[0])) return false; // altă etichetă de rol
+  return true;
+}
+
+function bindStandalonePayerLabels(text: string, nameHits: NameHit[]): StandalonePayerBinding {
+  const bound = new Map<number, { role: ParRole; payerHint: boolean }>();
+  const suppressedRanges: Array<[number, number]> = [];
+  const extraPayers: Array<{ name: string; index: number }> = [];
+
+  const lines = text.split(/\r?\n/);
+  const starts: number[] = [];
+  let off = 0;
+  for (const l of lines) {
+    starts.push(off);
+    off += l.length + 1;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    if (!STANDALONE_PAYER_LABEL_RE.test(lines[i])) continue;
+    let j = i + 1;
+    while (j < lines.length && !lines[j].trim()) j++;
+    if (j >= lines.length) continue;
+
+    const valueStart = starts[j];
+    const valueEnd = valueStart + lines[j].length;
+    const hit = nameHits.find((h) => h.index >= valueStart && h.index < valueEnd);
+    if (hit) {
+      if (!bound.has(hit.index)) bound.set(hit.index, { role: "client", payerHint: true });
+    } else if (isPlausiblePayerName(lines[j])) {
+      const name = cleanName(lines[j]);
+      if (name) extraPayers.push({ name, index: valueStart });
+      else continue;
+    } else {
+      continue; // rândul nu e un nume → lăsăm proximitatea veche să decidă
+    }
+    suppressedRanges.push([starts[i], starts[i] + lines[i].length]);
+  }
+  return { bound, suppressedRanges, extraPayers };
+}
+
 // ─── Name extraction ──────────────────────────────────────────────────────────
 
 const HONORIFICS_RE = /(?:^|\s)(?:dl\.|dna\.?|dnul|d-l|d-na|domnul|doamna|г-н|г-жа|cet[ăa][țt]ean(?:ul)?\s+al\s+Republicii\s+Moldova)(?=\s|$)/gi;
@@ -714,13 +792,31 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
   const ibans = findIbanCandidates(text);
   const ids = findIdCandidates(text);
   const vats = findVatCandidates(text);
-  const { amountCents, currency } = extractAmount(text);
-  const anchors = findRoleAnchors(text);
+  let { amountCents, currency } = extractAmount(text);
+  // „Total factura în litere: …" — pe un PDF cu ordinea rândurilor amestecată cifra totalului se
+  // rupe de eticheta „TOTAL" și `extractAmount` nu găsește nimic; litera o spune fără echivoc.
+  if (amountCents == null) {
+    const words = parseAmountInWords(text);
+    if (words) {
+      amountCents = words.cents;
+      currency = currency ?? words.currency;
+    }
+  }
 
   // Discover party names, sorted by position; dedupe by normalized name (keep first occurrence,
   // which is usually the labelled header, then merge requisites from later occurrences).
   const nameHits = findNameHits(text).sort((a, b) => a.index - b.index);
+
+  // Rule C first: a "PLĂTITOR:" label alone on its line belongs to the line right after it, and is
+  // then CONSUMED — otherwise proximity hands it to the seller printed in the letterhead below.
+  const payerLabels = bindStandalonePayerLabels(text, nameHits);
+  const anchors = findRoleAnchors(text).filter(
+    (a) => !payerLabels.suppressedRanges.some(([s0, e0]) => a.index >= s0 && a.index <= e0),
+  );
+
   const boundRoles = bindRolesPositionally(text, nameHits);
+  // Rules A/B (contract wording, signature columns) are authoritative; Rule C only fills the gaps.
+  for (const [idx, role] of payerLabels.bound) if (!boundRoles.has(idx)) boundRoles.set(idx, role);
 
   // Build, per distinct name, the role + windowed requisites.
   type WorkingParty = ParExtractedParty & { _roleLocked?: boolean };
@@ -827,6 +923,30 @@ export function parsePartiesFromText(docText: string): Omit<ParPartiesExtraction
   const columnar = tryParseColumnarContract(text);
   if (columnar) {
     workingParties = columnar as typeof workingParties;
+  }
+
+  // Plătitorii găsiți de Rule C pe care detectorul de nume nu-i vede (prescurtări fără formă
+  // juridică, ex. „ATIC" sub „PLĂTITOR:") intră ca părți proprii: rămân în afara pool-ului de
+  // beneficiari (isPayerHint), dar documentul arată acum AMBELE părți, deci UI-ul poate oferi
+  // grupurile „cine primește plata?" în loc de o singură parte tăcut eliminată.
+  if (!columnar) {
+    for (const p of payerLabels.extraPayers) {
+      const key = partyKey(p.name);
+      if (workingParties.some((w) => partyKey(w.name) === key)) continue;
+      workingParties.push({
+        name: p.name,
+        role: "client",
+        idno: null,
+        iban: null,
+        bank: null,
+        bic: null,
+        legalAddress: null,
+        administratorName: null,
+        vatCode: null,
+        isPayerHint: true,
+        _roleLocked: true,
+      });
+    }
   }
 
   // Orphan-requisite attachment: a "Payment details / Beneficiary bank" section often sits at the

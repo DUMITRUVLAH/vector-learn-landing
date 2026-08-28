@@ -1,0 +1,17 @@
+{
+  "name": "Cont de plată cu vânzătorul în ANTET și „PLĂTITOR:” (ZBOR.MD / Explor Tur)",
+  "sursa": "Document REAL al owner-ului — cont de plată nr. 68339 din 25.08.2026, raportat pe 2026-08-28 („am încărcat documentul și nu s-a autocompletat”)",
+  "deCeConteaza": "Vânzătorul e doar în antet (fără cuvântul „Furnizor”), cumpărătorul apare ca „PLĂTITOR:” + o prescurtare fără formă juridică pe rândul următor („ATIC”), iar ordinea rândurilor din PDF e amestecată: tabelul de servicii vine ÎNAINTEA antetului, iar totalul „23042” ajunge pe alt rând decât eticheta „TOTAL”. Rezultat înainte de fix: eticheta „PLĂTITOR” se lipea de firma din antet → singura parte plătibilă era marcată plătitor și eliminată → TOATE câmpurile beneficiarului rămâneau goale, iar suma nu se extrăgea deloc (modelul o citea 23 442 în loc de 23 042).",
+  "asteptari": {
+    "payeeNameContains": "Explor Tur",
+    "payeeIdno": "1012600013482",
+    "payeeIban": "MD61VI000000222432697MDL",
+    "payeeBic": "VICBMD2X469",
+    "payeeBankContains": "VICTORIABANK",
+    "payeeBankNotContains": "Chisinau",
+    "amountCents": 2304200,
+    "currency": "MDL",
+    "documentClass": "invoice",
+    "needsClarification": false
+  }
+}
