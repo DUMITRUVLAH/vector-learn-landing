@@ -329,6 +329,42 @@ All screens: Vector 365 tokens, light + dark, WCAG AA, mobile-usable (CLAUDE.md 
 
 ---
 
+## 6bis. După plată — e-Factura de la prestator (PAR-EFP)
+
+Plata nu închide dosarul: prestatorul **persoană juridică** e obligat să emită e-Factura în SIA
+„e-Factura" (SFS), iar organizația trebuie să o aibă în contabilitate. Modulul urmărește exact asta.
+
+**Cine datorează factură.** O cerere `paid` + `execute_payment` + beneficiar cu cod fiscal care nu e
+persoană fizică → stare `expected`. Persoana fizică (`payee_type = fizic` sau prestator `individual`)
+→ `not_applicable`; nu i se cere niciodată nimic.
+
+**Cum se verifică.** Scanarea interoghează SFS **ca CUMPĂRĂTOR** (facturile de semnat + cele
+acceptate), citește XML-ul fiecărei facturi și o potrivește cu plata după: cod fiscal furnizor
+(obligatoriu), cod fiscal cumpărător = IDNO-ul organizației plătitoare (când e cunoscut), fereastra
+de timp în jurul plății (−30 / +120 zile) și, ca departajare, suma. O sumă diferită **nu** invalidează
+potrivirea, dar e scrisă explicit în stare. Facturile ciornă, refuzate sau anulate nu contează drept
+dovadă, iar o factură nu poate acoperi două cereri.
+
+**Regula de onestitate.** Dacă SFS nu e configurat (sau e pe mediu simulat), scanarea NU scrie
+„nu s-a găsit" — raportează `available: false` și nu atinge starea. Altfel s-ar trimite remindere
+unor prestatori care și-au făcut treaba.
+
+**Reminderul.** Când factura lipsește, un buton trimite email + notificare in-app **solicitantului
+cererii** (nu prestatorului): cine e prestatorul, ce servicii, ce sumă, când s-a plătit, plus
+contactul din registru. Maximum un reminder pe zi per cerere; totul e scris în `par_audit`.
+
+**Ieșirea manuală.** Finanțele/administratorul pot marca factura drept primită (`received_manual`),
+cu serie/număr opționale — pentru facturile venite pe alt canal. O stare `found` sau `received_manual`
+nu se retrogradează niciodată la resincronizare.
+
+**Unde se vede.** `/business/par/efactura` (coadă + scanare + configurare SFS, roluri finance /
+par_admin) și cardul „e-Factura de la prestator" din pagina oricărei cereri achitate.
+
+**Reuse:** credențialele SFS = `fin_sfs_settings` (un singur cont per workspace), clientul SOAP =
+`EfacturaMdClient`, emailul = serviciul de notificări PAR. Stare: `par_einvoices` (migrarea 0146).
+
+---
+
 ## 7. Notifications (reuse existing service)
 
 - Requestor: on each approval step, on final approval, on reject/changes, on paid.

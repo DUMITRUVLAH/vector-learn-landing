@@ -25,6 +25,7 @@ import {
   Users,
   Home,
   Receipt,
+  ReceiptText,
   Banknote,
   Settings,
   FileSpreadsheet,
@@ -170,6 +171,7 @@ const PAR_NAV_GROUPS: NavGroup[] = [
       { label: "Cereri de plată", href: "/business/par", icon: ClipboardList, tone: "indigo" },
       { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, tone: "emerald", roles: ["approver", "par_admin"] },
       { label: "Coadă finanțe", href: "/business/par/finance", icon: Banknote, tone: "amber", roles: ["finance", "par_admin"] },
+      { label: "e-Factura prestatori", href: "/business/par/efactura", icon: ReceiptText, tone: "violet", roles: ["finance", "par_admin"] },
     ],
   },
   {
