@@ -1753,3 +1753,23 @@ export async function prefillParFromDocument(file: File): Promise<ParPrefillResu
   }
   return res.json();
 }
+
+// ─── Flux de activitate pentru tabloul de bord PAR ───────────────────────────
+
+/** O intrare din feed: fie un comentariu, fie un eveniment notabil (trimis/aprobat/plătit). */
+export interface ParActivityItem {
+  id: string;
+  kind: "comment" | "event";
+  event: string | null;
+  text: string | null;
+  createdAt: string;
+  actorName: string | null;
+  parId: string | null;
+  requestNo: string | null;
+  payerName: string | null;
+  projectName: string | null;
+}
+
+export async function listParActivity(limit = 8): Promise<{ items: ParActivityItem[] }> {
+  return api<{ items: ParActivityItem[] }>(`/api/par/activity?limit=${limit}`);
+}

@@ -76,7 +76,7 @@ describe("gating-ul modulelor în navigația clientului", () => {
   });
 
   it("ascunde secțiunea FinDesk când modulul e oprit", async () => {
-    setEnabled(["par"]);
+    setEnabled(["par", "itpark"]);
     renderShell();
     await waitFor(() => {
       expect(screen.queryByText("FinDesk — Finanțe")).not.toBeInTheDocument();
@@ -84,11 +84,38 @@ describe("gating-ul modulelor în navigația clientului", () => {
     expect(await screen.findByText("PAR — Cereri de plată")).toBeInTheDocument();
   });
 
+  it("un workspace DOAR cu PAR primește meniul PAR complet, nu cele trei rânduri dintr-o secțiune", async () => {
+    // Bug raportat de owner: în stânga apăreau 3 rânduri PAR, iar restul meniului (coada de
+    // finanțe, folderele, administrarea) apărea abia după ce intrai într-o cerere.
+    setEnabled(["par"]);
+    mockUseParRoles.mockReturnValue({ status: "resolved", roles: ["par_admin", "approver", "finance"] });
+    renderShell();
+    // Shell-ul randează și raftul desktop, și sertarul mobil — deci fiecare rând apare de 2 ori.
+    expect((await screen.findAllByText("Cereri de plată")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Coadă finanțe")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Foldere proiecte")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Administrare PAR")).length).toBeGreaterThan(0);
+    // Nu există alt modul spre care să te întorci, deci butonul n-are ce căuta acolo.
+    expect(screen.queryByLabelText("Înapoi la toate modulele")).not.toBeInTheDocument();
+    // Tabloul de bord rămâne accesibil din meniu.
+    expect((await screen.findAllByText("Dashboard")).length).toBeGreaterThan(0);
+  });
+
+  it("cu mai multe module active meniul rămâne pe secțiuni, cu PAR pliabil", async () => {
+    setEnabled(["par", "findesk"]);
+    mockUseParRoles.mockReturnValue({ status: "resolved", roles: ["par_admin"] });
+    renderShell();
+    expect(await screen.findByText("PAR — Cereri de plată")).toBeInTheDocument();
+    expect(await screen.findByText("FinDesk — Finanțe")).toBeInTheDocument();
+    expect(screen.queryByText("Coadă finanțe")).not.toBeInTheDocument();
+  });
+
   it("când nu se poate citi starea modulelor, rămâne implicitul: PAR în meniu, restul nu", async () => {
     // Exact ce întoarce hook-ul real la eroare de rețea / tabelă lipsă.
     setEnabled([...DEFAULT_MODULE_KEYS]);
     renderShell();
-    expect(await screen.findByText("PAR — Cereri de plată")).toBeInTheDocument();
+    // PAR singur = meniul PAR complet (fără antetul de secțiune pliabilă).
+    expect((await screen.findAllByText("Cereri de plată")).length).toBeGreaterThan(0);
     expect(screen.queryByText("FinDesk — Finanțe")).not.toBeInTheDocument();
   });
 });

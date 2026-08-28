@@ -32,6 +32,7 @@ import { useBusinessDashboard } from "@/hooks/useBusinessDashboard";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { useDashboardWidgets, type WidgetId } from "@/hooks/useDashboardWidgets";
 import { useEnabledModules, type ModuleKey } from "@/hooks/useEnabledModules";
+import { ParFocusDashboard } from "@/components/business/ParFocusDashboard";
 import { formatCents } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import {
@@ -316,6 +317,19 @@ function renderWidget(id: WidgetId, loading: boolean, data: ReturnType<typeof us
   }
 }
 
+/**
+ * Din ce modul face parte fiecare widget. Un workspace care nu are FinDesk nu are ce face cu
+ * dala „Facturi luna" — trimitea într-o pagină la care oricum primea „Modul indisponibil".
+ */
+const WIDGET_MODULE: Record<WidgetId, ModuleKey> = {
+  findesk: "findesk",
+  par: "par",
+  itpark: "itpark",
+  invoices: "findesk",
+  payroll: "findesk",
+  budget: "findesk",
+};
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function BusinessDashboardPage() {
@@ -326,25 +340,37 @@ export function BusinessDashboardPage() {
 
   const [customizerOpen, setCustomizerOpen] = useState(false);
   const { visibleWidgets, allWidgets, toggleWidget, moveUp, moveDown, reset } = useDashboardWidgets(userId);
-  // PLATFORM-001: dalele modulelor oprite din Consola Platformă nu se mai afișează.
-  const { isEnabled } = useEnabledModules();
+  // PLATFORM-001: dalele și widget-urile modulelor oprite din Consola Platformă nu se afișează.
+  const { isEnabled, enabled: enabledModules } = useEnabledModules();
   const moduleTiles = MODULE_TILES.filter((tile) => isEnabled(tile.moduleKey));
+  const shownWidgets = visibleWidgets.filter((id) => isEnabled(WIDGET_MODULE[id]));
+  const moduleWidgets = allWidgets.filter((w) => isEnabled(WIDGET_MODULE[w.id]));
+  // Un workspace cu un singur modul nu are „module" între care să aleagă: îi arătăm tabloul
+  // acelui modul, nu un lansator cu o singură dală și KPI-uri din module pe care nu le are.
+  const parOnly = enabledModules.length === 1 && enabledModules[0] === "par";
+  const subtitle = parOnly
+    ? "Tablou de bord — cereri de plată"
+    : `Tablou de bord — ${MODULE_TILES.filter((t) => isEnabled(t.moduleKey))
+        .map((t) => (t.moduleKey === "par" ? "PAR" : t.label.split(" — ")[0]))
+        .join(" · ") || "FinFlow"}`;
 
   return (
     <BusinessShell
       pageTitle={firstName ? `Salut, ${firstName}` : "FinFlow"}
-      pageDescription="Tablou de bord — FinDesk · PAR · ITPark"
+      pageDescription={subtitle}
       actions={
         <>
-          {/* POLISH-002: Widget customizer trigger */}
-          <Button
-            variant="outline"
-            onClick={() => setCustomizerOpen(true)}
-            aria-label="Personalizează dashboard"
-          >
-            <Settings className="h-4 w-4" aria-hidden="true" />
-            <span className="hidden sm:inline">Personalizează</span>
-          </Button>
+          {/* POLISH-002: Widget customizer trigger — n-are ce personaliza pe tabloul PAR. */}
+          {!parOnly && (
+            <Button
+              variant="outline"
+              onClick={() => setCustomizerOpen(true)}
+              aria-label="Personalizează dashboard"
+            >
+              <Settings className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Personalizează</span>
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={refetch}
@@ -357,45 +383,56 @@ export function BusinessDashboardPage() {
         </>
       }
     >
-      {/* POLISH-002: Dynamic widget grid — order and visibility from useDashboardWidgets */}
-      {visibleWidgets.length > 0 ? (
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="widget-grid">
-          {visibleWidgets.map((id) => renderWidget(id, loading, data))}
-        </div>
+      {parOnly ? (
+        <ParFocusDashboard
+          pendingCount={data?.par?.pendingCount ?? null}
+          pendingValueCents={data?.par?.pendingValueCents ?? null}
+          loading={loading}
+        />
       ) : (
-        <div className="mb-8 rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          Niciun widget vizibil.{" "}
-          <button type="button" className="text-primary underline" onClick={() => setCustomizerOpen(true)}>
-            Personalizează
-          </button>{" "}
-          pentru a activa widget-uri.
-        </div>
-      )}
+        <>
+        {/* POLISH-002: Dynamic widget grid — order and visibility from useDashboardWidgets */}
+        {shownWidgets.length > 0 ? (
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="widget-grid">
+            {shownWidgets.map((id) => renderWidget(id, loading, data))}
+          </div>
+        ) : (
+          <div className="mb-8 rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+            Niciun widget vizibil.{" "}
+            <button type="button" className="text-primary underline" onClick={() => setCustomizerOpen(true)}>
+              Personalizează
+            </button>{" "}
+            pentru a activa widget-uri.
+          </div>
+        )}
 
-      {/* Module launcher — choose a module to work in */}
-      <section aria-label="Module">
-        <h2 className="mb-3 text-3xs font-semibold uppercase tracking-group text-muted-foreground">
-          Alege un modul
-        </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {moduleTiles.map((tile) => (
-            <ModuleCard
-              key={tile.href}
-              title={tile.label}
-              description={tile.description}
-              icon={tile.icon}
-              tone={tile.tone}
-              href={tile.href}
-            />
-          ))}
-        </div>
-      </section>
+        {/* Module launcher — choose a module to work in */}
+        <section aria-label="Module">
+          <h2 className="mb-3 text-3xs font-semibold uppercase tracking-group text-muted-foreground">
+            Alege un modul
+          </h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {moduleTiles.map((tile) => (
+              <ModuleCard
+                key={tile.href}
+                title={tile.label}
+                description={tile.description}
+                icon={tile.icon}
+                tone={tile.tone}
+                href={tile.href}
+              />
+            ))}
+          </div>
+        </section>
+
+        </>
+      )}
 
       {/* POLISH-002: DashboardCustomizer panel */}
       <DashboardCustomizer
         isOpen={customizerOpen}
         onClose={() => setCustomizerOpen(false)}
-        widgets={allWidgets}
+        widgets={moduleWidgets}
         onToggle={toggleWidget}
         onMoveUp={moveUp}
         onMoveDown={moveDown}

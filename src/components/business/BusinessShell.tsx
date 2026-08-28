@@ -301,7 +301,8 @@ function SidebarBody({
   path,
   inboxCount,
   financeCount,
-  isParModule,
+  showBackToModules,
+  showDashboard,
   userName,
   userRole,
   onLogout,
@@ -311,7 +312,9 @@ function SidebarBody({
   path: string;
   inboxCount: number;
   financeCount: number;
-  isParModule: boolean;
+  /** „Înapoi la module" are sens doar când CHIAR există alt modul de întors. */
+  showBackToModules: boolean;
+  showDashboard: boolean;
   userName: string;
   userRole: string;
   onLogout: () => void;
@@ -362,8 +365,8 @@ function SidebarBody({
         </div>
       </div>
 
-      {/* Back to modules — only inside a module */}
-      {isParModule && (
+      {/* Back to modules — only inside a module, și doar dacă mai există altul */}
+      {showBackToModules && (
         <div className="px-4 pb-3 pt-1">
           <Link
             to="/business/dashboard"
@@ -378,7 +381,7 @@ function SidebarBody({
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-2" aria-label="Meniu FinFlow">
-        {!isParModule && (
+        {showDashboard && (
           <SidebarNavItem
             href="/business/dashboard"
             label="Dashboard"
@@ -434,8 +437,11 @@ export function BusinessShell({
   // VM1-01: fetch PAR roles to gate the PAR navigation section.
   const { roles: parRoles, status: parRolesStatus } = useParRoles();
   // PLATFORM-001: modulele dezactivate din Consola Platformă dispar din meniu.
-  const { isEnabled } = useEnabledModules();
+  const { isEnabled, enabled: enabledModules } = useEnabledModules();
   const hasPar = parRolesStatus === "resolved" && parRoles.length >= 1 && isEnabled("par");
+  // Un workspace care are DOAR PAR nu are „module" între care să comute: meniul lui e chiar
+  // meniul PAR, complet, nu cele trei rânduri dintr-o secțiune pliabilă.
+  const parOnlyWorkspace = enabledModules.length === 1 && enabledModules[0] === "par";
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   useEffect(() => {
     // Sonda cea mai ieftină pentru „sunt superadmin?" — /catalog nu atinge datele clienților.
@@ -469,11 +475,13 @@ export function BusinessShell({
 
   // SPLIT-501: inside PAR module → focused PAR-only sidebar.
   const isParModule = path.startsWith("/business/par");
+  // Meniul PAR complet: în interiorul modulului SAU când PAR e tot ce are workspace-ul.
+  const useParNav = isParModule || (parOnlyWorkspace && hasPar);
 
   const availableGroups: NavGroup[] = isPlatformAdmin
     ? [...NAV_GROUPS, { section: "Platformă", prefix: "/business/platform", items: [{ label: "Consola Platformă", href: "/business/platform", icon: ShieldCheck, tone: "rose" as ChipTone }] }]
     : NAV_GROUPS;
-  const baseGroups = isParModule
+  const baseGroups = useParNav
     ? PAR_NAV_GROUPS
     : availableGroups.filter((g) => {
         if (g.section === "PAR — Cereri de plată") return hasPar;
@@ -528,7 +536,8 @@ export function BusinessShell({
       path={path}
       inboxCount={inboxCount}
       financeCount={financeCount}
-      isParModule={isParModule}
+      showBackToModules={isParModule && !parOnlyWorkspace}
+      showDashboard={!isParModule || parOnlyWorkspace}
       userName={userName}
       userRole={userRole}
       onLogout={handleLogout}
@@ -563,7 +572,8 @@ export function BusinessShell({
               path={path}
               inboxCount={inboxCount}
               financeCount={financeCount}
-              isParModule={isParModule}
+              showBackToModules={isParModule && !parOnlyWorkspace}
+              showDashboard={!isParModule || parOnlyWorkspace}
               userName={userName}
               userRole={userRole}
               onLogout={handleLogout}
