@@ -158,6 +158,9 @@ export interface ParApproval {
 export interface ParInboxItem extends ParRequest {
   my_step: number | null;
   my_step_label: string | null;
+  /** Câți pași de aprobare are lanțul (fără pasul 0 = solicitantul) și câți sunt deja semnați. */
+  steps_total?: number;
+  steps_approved?: number;
   projectName?: string | null;
   requestedByName?: string | null;
   attachments?: Array<{ id: string; fileName: string; kind: string }>;
@@ -488,9 +491,21 @@ export interface RequestChangesPayload {
   comment: string;
 }
 
+/**
+ * Ce s-a întâmplat cu lanțul după semnătura ta. Serverul îl trimitea deja; UI-ul îl arunca, așa că
+ * un aprobator care semna pasul 1 din 2 vedea cererea rămasă în inbox și credea că nu s-a salvat.
+ */
+export interface ApproveOutcome extends ParRequest {
+  chain_status?: "complete" | "advanced" | "awaiting_parallel_approvals";
+  next_step?: number | null;
+  next_step_label?: string | null;
+  next_approvers?: number;
+  approvals_remaining?: number;
+}
+
 /** Approve the active step for a PAR */
-export async function approvePar(id: string, payload: ApprovePayload = {}): Promise<ParRequest> {
-  return api<ParRequest>(`/api/par/${id}/approve`, {
+export async function approvePar(id: string, payload: ApprovePayload = {}): Promise<ApproveOutcome> {
+  return api<ApproveOutcome>(`/api/par/${id}/approve`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

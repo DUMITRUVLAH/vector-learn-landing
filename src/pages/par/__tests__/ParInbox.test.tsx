@@ -5,7 +5,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import ParInbox from "../ParInbox";
 import * as parApi from "@/lib/api/par";
 import type { ParInboxItem } from "@/lib/api/par";
@@ -130,6 +130,55 @@ describe("ParInbox", () => {
       expect(screen.getByLabelText(/Solicită modificări la PAR-2026-0001/)).toBeTruthy();
       expect(screen.getByLabelText(/Respinge PAR-2026-0001/)).toBeTruthy();
     });
+  });
+
+  // Regresie (raportat de utilizatori, 2026-08-28, tenant ATIC): matricea DOA avea un pas 2
+  // "Oricine · PAR Admin", așa că o aprobare din inbox NU trimitea cererea în Coadă finanțe — o
+  // muta la pasul următor, adesea al aceleiași persoane. UI-ul nu spunea nimic: modalul se
+  // închidea, lista se reîncărca, cererea era tot acolo. De aici "aprob și nu se duce la finanțe".
+  it("după aprobarea unui pas intermediar spune explicit că cererea rămâne în inbox", async () => {
+    const item = makeInboxItem({ my_step: 1, my_step_label: "Oricine · Approver", steps_total: 2, steps_approved: 0 });
+    vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [item], total: 1 });
+    const approve = vi.spyOn(parApi, "approvePar").mockResolvedValue({
+      ...item,
+      status: "pending_approval",
+      chain_status: "advanced",
+      next_step: 2,
+      next_step_label: "Oricine · PAR Admin",
+    });
+
+    render(<ParInbox />);
+    await waitFor(() => expect(screen.getByLabelText(/Aprobă PAR-2026-0001/)).toBeTruthy());
+
+    // Rândul spune din start că semnătura asta nu e ultima.
+    expect(screen.getByText(/Pasul 1 din 2/)).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText(/Aprobă PAR-2026-0001/));
+    const submit = await screen.findByRole("button", { name: "Aprobă" });
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(approve).toHaveBeenCalled());
+    const banner = await screen.findByRole("status");
+    expect(banner.textContent).toMatch(/Oricine · PAR Admin/);
+    expect(banner.textContent).toMatch(/RĂMÂNE în inbox/);
+  });
+
+  it("după ultima semnătură spune că cererea a intrat în Coadă finanțe", async () => {
+    const item = makeInboxItem({ my_step: 2, my_step_label: "Oricine · PAR Admin", steps_total: 2, steps_approved: 1 });
+    vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [item], total: 1 });
+    vi.spyOn(parApi, "approvePar").mockResolvedValue({
+      ...item,
+      status: "in_finance",
+      chain_status: "complete",
+    });
+
+    render(<ParInbox />);
+    await waitFor(() => expect(screen.getByLabelText(/Aprobă PAR-2026-0001/)).toBeTruthy());
+    fireEvent.click(screen.getByLabelText(/Aprobă PAR-2026-0001/));
+    fireEvent.click(await screen.findByRole("button", { name: "Aprobă" }));
+
+    const banner = await screen.findByRole("status");
+    expect(banner.textContent).toMatch(/Coadă finanțe/);
   });
 
   it("shows error state on API failure", async () => {

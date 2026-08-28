@@ -546,6 +546,24 @@ parApprovalsRoutes.get("/inbox", async (c) => {
       ))
     : [];
 
+  // Cât de lung e lanțul acestei cereri. Fără asta, un aprobator care semnează pasul 1 dintr-un
+  // lanț de 2 vede aceeași cerere reapărând în inbox și crede că aprobarea "nu a mers" / că cererea
+  // "nu se duce în coada de finanțe" — exact reclamația din ATIC, unde matricea DOA are un pas 2
+  // "Oricine · PAR Admin" pe care tot el trebuie să-l semneze.
+  const chainRows = parIds.length
+    ? await db
+        .select({ parId: parApprovals.parId, step: parApprovals.step, decision: parApprovals.decision })
+        .from(parApprovals)
+        .where(and(eq(parApprovals.tenantId, tenantId), inArray(parApprovals.parId, parIds)))
+    : [];
+  const chainOf = (parId: string) => {
+    const steps = chainRows.filter((s) => s.parId === parId && s.step > 0);
+    return {
+      steps_total: steps.length,
+      steps_approved: steps.filter((s) => s.decision === "approved").length,
+    };
+  };
+
   const inbox = inboxPars.map((p) => {
     const myStep = mySteps.find((s) => s.parId === p.id);
     return {
@@ -553,6 +571,7 @@ parApprovalsRoutes.get("/inbox", async (c) => {
       above_micro_threshold: p.totalEstimatedCents > threshold,
       my_step: myStep?.step ?? null,
       my_step_label: myStep?.approverRoleLabel ?? null,
+      ...chainOf(p.id),
       projectName: projName(p.projectId),
       requestedByName: reqName(p.requestedByUserId),
       attachments: attachmentRows

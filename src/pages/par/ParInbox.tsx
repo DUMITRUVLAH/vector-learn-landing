@@ -32,6 +32,7 @@ import {
   requestParChanges,
   formatMDL,
   type ParInboxItem,
+  type ApproveOutcome,
 } from "@/lib/api/par";
 import { api } from "@/lib/api";
 import { requestParBadgeRefresh } from "@/lib/par/badgeBus";
@@ -46,7 +47,7 @@ interface DecisionModalProps {
   par: ParInboxItem;
   type: DecisionType;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (outcome: DecisionOutcome) => void;
   /** Pre-filled signature (current user's name) — one less field to type. */
   defaultSignatureName?: string;
 }
@@ -144,6 +145,35 @@ const DECISION_CONFIG: Record<
   },
 };
 
+/**
+ * Ce spunem aprobatorului după ce a semnat.
+ *
+ * Fără asta, o cerere dintr-un lanț cu mai mulți pași rămâne în inbox după aprobare (a avansat la
+ * pasul următor, care poate fi tot al lui) și oamenii raportează că "aprobarea nu duce cererea în
+ * coada de finanțe". Răspunsul serverului știe exact ce s-a întâmplat — îl arătăm.
+ */
+type DecisionOutcome = { tone: "success" | "info"; text: string };
+
+function describeApproval(requestNo: string, res: ApproveOutcome): DecisionOutcome {
+  if (res.chain_status === "advanced") {
+    const who = res.next_step_label ? ` (${res.next_step_label})` : "";
+    return {
+      tone: "info",
+      text: `${requestNo}: semnătura ta a fost înregistrată, dar lanțul nu s-a încheiat. Urmează pasul ${res.next_step}${who} — cererea RĂMÂNE în inbox până e semnată și acolo.`,
+    };
+  }
+  if (res.chain_status === "awaiting_parallel_approvals") {
+    return {
+      tone: "info",
+      text: `${requestNo}: semnătura ta a fost înregistrată. Se mai așteaptă ${res.approvals_remaining ?? 1} aprobare/aprobări pe același pas.`,
+    };
+  }
+  if (res.status === "in_finance") {
+    return { tone: "success", text: `${requestNo} este aprobată integral și a intrat în Coadă finanțe.` };
+  }
+  return { tone: "success", text: `${requestNo} este aprobată integral (status: ${res.status}).` };
+}
+
 function DecisionModal({ par, type, onClose, onSuccess, defaultSignatureName }: DecisionModalProps) {
   // Escape closes it, like the DS `Dialog` and every other overlay in the app.
   // Without this the only way out was the small × in the corner — and a modal
@@ -169,20 +199,24 @@ function DecisionModal({ par, type, onClose, onSuccess, defaultSignatureName }: 
     setSubmitting(true);
     setError(null);
     try {
+      let outcome: DecisionOutcome;
       if (type === "approve") {
-        await approvePar(par.id, {
+        const res = await approvePar(par.id, {
           comment: comment || null,
           signatureName: signatureName || null,
         });
+        outcome = describeApproval(par.requestNo, res);
       } else if (type === "reject") {
         await rejectPar(par.id, {
           comment: comment.trim(),
           signatureName: signatureName || null,
         });
+        outcome = { tone: "info", text: `${par.requestNo} a fost respinsă. Nu mai apare în inbox.` };
       } else {
         await requestParChanges(par.id, { comment: comment.trim() });
+        outcome = { tone: "info", text: `${par.requestNo} a fost trimisă înapoi solicitantului pentru modificări.` };
       }
-      onSuccess();
+      onSuccess(outcome);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Eroare necunoscută";
       setError(msg);
@@ -325,7 +359,7 @@ interface BulkApproveModalProps {
   ids: string[];
   defaultSignatureName?: string;
   onClose: () => void;
-  onDone: (results: Record<string, { ok: boolean; error?: string }>) => void;
+  onDone: (results: Record<string, { ok: boolean; error?: string; status?: string }>) => void;
 }
 
 function BulkApproveModal({ ids, defaultSignatureName, onClose, onDone }: BulkApproveModalProps) {
@@ -344,8 +378,8 @@ function BulkApproveModal({ ids, defaultSignatureName, onClose, onDone }: BulkAp
         comment: comment || null,
         signatureName: signatureName || null,
       });
-      const map: Record<string, { ok: boolean; error?: string }> = {};
-      for (const r of res.results) map[r.id] = { ok: r.ok, error: r.error };
+      const map: Record<string, { ok: boolean; error?: string; status?: string }> = {};
+      for (const r of res.results) map[r.id] = { ok: r.ok, error: r.error, status: r.status };
       onDone(map);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Eroare la aprobarea în lot");
@@ -405,7 +439,9 @@ export default function ParInbox() {
   // VF-102: bulk-approve selection + results
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkResults, setBulkResults] = useState<Record<string, { ok: boolean; error?: string }>>({});
+  const [bulkResults, setBulkResults] = useState<Record<string, { ok: boolean; error?: string; status?: string }>>({});
+  // Rezultatul ultimei decizii — rămâne pe ecran după reîncărcarea listei.
+  const [lastOutcome, setLastOutcome] = useState<DecisionOutcome | null>(null);
 
   // Excel-style table: filter by project + sort by any column.
   const [projectFilter, setProjectFilter] = useState("");
@@ -513,8 +549,9 @@ export default function ParInbox() {
     document.querySelector<HTMLElement>('[data-cursor="true"]')?.scrollIntoView({ block: "nearest" });
   }, [cursor]);
 
-  const handleSuccess = async () => {
+  const handleSuccess = async (outcome: DecisionOutcome) => {
     setModalTarget(null);
+    setLastOutcome(outcome);
     await loadInbox();
     // The sidebar pill polls on a 60s timer of its own — without this it keeps
     // claiming "4" while the list already shows 3.
@@ -522,7 +559,7 @@ export default function ParInbox() {
   };
 
   // VF-102: after a bulk run, refresh the list but keep result annotations briefly.
-  const handleBulkDone = async (results: Record<string, { ok: boolean; error?: string }>) => {
+  const handleBulkDone = async (results: Record<string, { ok: boolean; error?: string; status?: string }>) => {
     setBulkResults(results);
     setBulkOpen(false);
     setSelectedIds(new Set());
@@ -550,6 +587,31 @@ export default function ParInbox() {
       }
     >
       <div className="space-y-6">
+
+        {/* Ce s-a întâmplat cu ultima decizie. O cerere care rămâne în listă după "Aprobă" nu e o
+            eroare — e un lanț cu mai mulți pași — dar tăcerea de dinainte o făcea să pară una. */}
+        {lastOutcome && (
+          <div
+            role="status"
+            className={cn(
+              "flex items-start gap-2 rounded-lg border p-3 text-sm",
+              lastOutcome.tone === "success"
+                ? "border-success/30 bg-success/10 text-success"
+                : "border-warning/30 bg-warning/10 text-warning",
+            )}
+          >
+            <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="flex-1">{lastOutcome.text}</span>
+            <button
+              type="button"
+              onClick={() => setLastOutcome(null)}
+              className="shrink-0 rounded p-0.5 hover:bg-foreground/10"
+              aria-label="Închide mesajul"
+            >
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        )}
 
         {/* Content */}
         {loading && (
@@ -708,9 +770,21 @@ export default function ParInbox() {
                               {PURPOSE_LABEL[item.purpose] ?? item.purpose}
                             </div>
                           )}
+                          {/* Al câtelea pas semnezi din câți. Un "Pasul 2 din 2" pe rând este
+                              diferența dintre "aprob și pleacă la finanțe" și "aprob degeaba". */}
+                          {item.my_step != null && (item.steps_total ?? 0) > 1 && (
+                            <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">
+                              Pasul {item.my_step} din {item.steps_total}
+                              {item.my_step_label ? ` · ${item.my_step_label}` : ""}
+                            </div>
+                          )}
                           {bulkResults[item.id] && (
                             <div className={cn("text-[11px] font-medium", bulkResults[item.id].ok ? "text-success" : "text-destructive")}>
-                              {bulkResults[item.id].ok ? "✓ Aprobată" : `✗ ${bulkResults[item.id].error ?? "Eroare"}`}
+                              {bulkResults[item.id].ok
+                                ? bulkResults[item.id].status === "pending_approval"
+                                  ? "✓ Semnat · mai are un pas"
+                                  : "✓ Aprobată"
+                                : `✗ ${bulkResults[item.id].error ?? "Eroare"}`}
                             </div>
                           )}
                         </td>
