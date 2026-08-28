@@ -161,17 +161,21 @@ export function PlatformConsolePage() {
 function OverviewTab() {
   const [data, setData] = useState<PlatformOverview | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<unknown>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
     getPlatformOverview()
       .then(setData)
-      .catch(() => setError(true))
+      .catch((err) => setError(err ?? new Error("failed")))
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   if (loading) return <LoadingRow />;
-  if (error || !data) return <Alert variant="destructive">Statisticile nu au putut fi încărcate.</Alert>;
+  if (error || !data) return <LoadFailed what="Statisticile" error={error} onRetry={load} />;
 
   return (
     <div className="space-y-6">
@@ -229,19 +233,19 @@ function OverviewTab() {
 function WorkspacesTab({ modules }: { modules: PlatformModule[] }) {
   const [rows, setRows] = useState<PlatformWorkspace[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<unknown>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "suspended" | "churn">("all");
   const [selected, setSelected] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(false);
+    setError(null);
     try {
       const data = await getPlatformWorkspaces();
       setRows(data.workspaces);
-    } catch {
-      setError(true);
+    } catch (err) {
+      setError(err ?? new Error("failed"));
     } finally {
       setLoading(false);
     }
@@ -263,7 +267,7 @@ function WorkspacesTab({ modules }: { modules: PlatformModule[] }) {
   }, [rows, query, filter]);
 
   if (loading) return <LoadingRow />;
-  if (error) return <Alert variant="destructive">Lista workspace-urilor nu a putut fi încărcată.</Alert>;
+  if (error) return <LoadFailed what="Lista workspace-urilor" error={error} onRetry={() => void load()} />;
 
   return (
     <div className="space-y-4">
@@ -833,11 +837,52 @@ function AccessTab() {
 // ─── Bucăți comune ────────────────────────────────────────────────────────────
 
 function LoadingRow() {
+  // După 8 s spinnerul singur nu mai spune nimic: omul nu știe dacă mai are rost să aștepte.
+  // Spunem că durează neobișnuit de mult ȘI că cererea se va opri singură (vezi GET_TIMEOUT_MS).
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 8_000);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
-    <div className="flex items-center gap-2 py-12 text-muted-foreground">
-      <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-      Se încarcă…
+    <div className="flex flex-col gap-1 py-12 text-muted-foreground">
+      <div className="flex items-center gap-2">
+        <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+        Se încarcă…
+      </div>
+      {slow && (
+        <p className="text-sm" role="status">
+          Durează mai mult decât de obicei. Dacă serverul nu răspunde, cererea se oprește singură
+          și poți reîncerca.
+        </p>
+      )}
     </div>
+  );
+}
+
+/**
+ * Ecranul de „nu s-a încărcat" — cu motiv și cu buton de reîncercare.
+ *
+ * Un `<Alert>` mut era un fund de sac: dacă o cerere pica (sau expira), singura ieșire era
+ * reîncărcarea întregii pagini. Când motivul e o cerere expirată, o spunem pe șleau — altfel
+ * omul crede că nu are drepturi sau că nu există date.
+ */
+function LoadFailed({ what, error, onRetry }: { what: string; error?: unknown; onRetry: () => void }) {
+  const timedOut = error instanceof ApiError && error.code === "request_timeout";
+  return (
+    <Alert variant="destructive" className="flex flex-wrap items-center justify-between gap-3">
+      <span>
+        {what}
+        {timedOut
+          ? " — serverul nu a răspuns la timp. Conexiunea pare întreruptă."
+          : " nu au putut fi încărcate."}
+      </span>
+      <Button variant="outline" size="sm" onClick={onRetry}>
+        <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
+        Reîncearcă
+      </Button>
+    </Alert>
   );
 }
 

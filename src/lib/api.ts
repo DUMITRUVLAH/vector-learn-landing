@@ -45,15 +45,53 @@ export async function api<T = unknown>(
   return dedupe(url, () => rawApi<T>(url, init), init.cache === "reload");
 }
 
+/**
+ * Cât așteptăm un GET înainte să-l declarăm blocat.
+ *
+ * De ce există: `fetch` nu are timeout implicit. O cerere care rămâne agățată (rețea care a
+ * dispărut, laptop trezit din somn cu conexiunea moartă, proxy care ține socketul deschis) NU
+ * respinge niciodată promisiunea — iar fiecare ecran care face `finally { setLoading(false) }`
+ * rămâne pe „Se încarcă…" la infinit, fără nicio cale de ieșire în afară de reîncărcarea paginii.
+ * Exact așa a arătat fila „Workspace-uri" din Consola Platformă (2026-08-28), în timp ce
+ * `GET /api/platform/workspaces` răspundea în 260 ms pe prod.
+ *
+ * 30 s = de peste 100× latența reală a celui mai lent GET al aplicației, deci nu poate tăia o
+ * cerere sănătoasă; dar transformă o cerere moartă într-o eroare vizibilă, cu buton de reîncercare.
+ * Un apelant care chiar are nevoie de mai mult își trimite propriul `signal` și scapă de limită.
+ */
+export const GET_TIMEOUT_MS = 30_000;
+
 async function rawApi<T>(url: string, init: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init.headers ?? {}),
-    },
-    ...init,
-  });
+  const method = (init.method ?? "GET").toUpperCase();
+  // Doar GET-urile primesc limita automat: mutațiile (extragere AI, generare PDF, import) pot
+  // dura legitim minute, iar un abort acolo ar lăsa acțiunea pe jumătate făcută pe server.
+  const guard = method === "GET" && !init.signal ? new AbortController() : null;
+  const timer = guard ? setTimeout(() => guard.abort(), GET_TIMEOUT_MS) : null;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(init.headers ?? {}),
+      },
+      ...init,
+      signal: init.signal ?? guard?.signal,
+    });
+  } catch (err) {
+    if (guard?.signal.aborted) {
+      reportClientError({
+        kind: "client_api_error",
+        message: `Cererea ${url} nu a răspuns în ${GET_TIMEOUT_MS / 1000} s (abandonată)`,
+        method,
+      });
+      throw new ApiError(0, "request_timeout");
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 
   if (!res.ok) {
     let code = `http_${res.status}`;
