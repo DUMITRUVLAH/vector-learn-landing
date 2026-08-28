@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "check-refs": "node scripts/check-undefined-refs.mjs",
-    "smoke": "node scripts/e2e-smoke.mjs",
+    "smoke": "node scripts/e2e-gate.mjs --browser",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 100",
     "test": "vitest",
     "test:run": "vitest run",
@@ -27,7 +27,10 @@
     "docker:logs": "docker compose logs -f app",
     "docker:down": "docker compose down",
     "par:corpus": "vitest run server/lib/par/__tests__/documentCorpus.test.ts",
-    "par:extract": "node scripts/par-extract.mjs"
+    "par:extract": "node scripts/par-extract.mjs",
+    "e2e": "node scripts/e2e-gate.mjs",
+    "e2e:browser": "node scripts/e2e-gate.mjs --browser",
+    "e2e:all": "node scripts/e2e-gate.mjs --all"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.4.6",
@@ -81,6 +84,7 @@
     "eslint-plugin-react-refresh": "^0.4.13",
     "jsdom": "^25.0.1",
     "playwright": "^1.60.0",
+    "playwright-core": "^1.60.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
     "tailwindcss-animate": "^1.0.7",

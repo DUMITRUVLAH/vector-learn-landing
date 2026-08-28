@@ -452,6 +452,32 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
 > route-mounts, migration-breakpoints, schema-drift) on every PR + push to main. It is fast, needs
 > no secrets, and is the durable "these bug classes can't silently return" net. Keep it green.
 
+### 3.5.1quinquies Poarta E2E după FIECARE modificare (directivă owner, 2026-08-28)
+
+**Owner-ul a cerut: „e2e teste după fiecare chestie pe care o modificăm."** Nu la finalul fazei,
+nu înainte de push — după fiecare modificare care atinge cod care rulează.
+
+```bash
+npm run e2e            # ~18s — gărzi statice + API real pe zona atinsă
+npm run e2e:browser    # + browser real pe rutele zonei (rebuild dist doar dacă e vechi)
+npm run e2e:all        # + suitele dedicate (e2e-par-sweep, e2e-platform-console…)
+```
+
+`scripts/e2e-gate.mjs` deduce singur zona din `git diff` (nesalvat + ultimul commit), deci nu
+trebuie să ții minte ce script se potrivește cu ce schimbare. Refolosește serverul care rulează
+deja (3131/3100/3000/3132) și **refolosește sesiunea** dintr-un `.e2e-session.json` gitignored —
+altfel cota de 10 autentificări/15 minute din `authRateLimit` s-ar epuiza după câteva rulări și
+poarta ar raporta „login eșuat" în loc de starea reală a codului.
+
+Cadență: `npm run e2e` după fiecare item, `npm run e2e:browser` înainte de commit, `npm run e2e:all`
+înainte de push în `main`. După deploy: `BASE_URL=https://finflow1.vercel.app npm run smoke`.
+
+**Ce am învățat construind-o** (§3.5.1quater — fiecare greșeală devine o gardă): vechiul
+`npm run smoke` mătura 40 de rute `/#/app/*` dispărute și **nu verifica dacă pagina chiar s-a
+randat** — o redirecționare la login are text destul și niciun cuvânt de eroare, deci trecea verde.
+Poarta cere explicit ca URL-ul final să fie cel cerut. O verificare care nu poate pica nu e o
+verificare; testul negativ (o rută inexistentă TREBUIE să facă poarta roșie) face parte din livrare.
+
 ### 3.5.1ter The 2026-06-02 prod-outage lessons (READ before merging anything to main)
 On 2026-06-02 the whole app went down for hours after 38 stale PRs were merged to `main` at
 once. The mechanical conflict resolution produced syntactically broken files (`users.ts` with a

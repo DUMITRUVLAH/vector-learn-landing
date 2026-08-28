@@ -51,3 +51,4 @@ HR365*.html
 .perf-measure.mjs
 .mobile-audit.mjs
 .verify.mjs
+.e2e-session.json

@@ -1,3 +1,15 @@
+// ⚠️ DEPRECAT (2026-08-28) — NU MAI RULA ACEST SCRIPT.
+//
+// Măturarea de mai jos vizează 40 de rute `/#/app/*` care NU MAI EXISTĂ: aplicația a migrat
+// pe `/business/*`, iar `/#/app/login` nu mai e o rută, deci scriptul moare la autentificare.
+// Înlocuitorul e `scripts/e2e-gate.mjs`, care mătură rutele reale ȘI verifică faptul că pagina
+// chiar s-a randat (aici lipsea: o redirecționare la login trecea verde).
+//
+//   npm run smoke                                   # local, în browser real
+//   BASE_URL=https://finflow1.vercel.app npm run smoke   # după deploy
+//
+// Păstrat doar ca referință istorică pentru lista de tipare de eroare. Ștergerea lui e
+// decizia owner-ului.
 // Post-deploy E2E smoke test — real browser, real DB.
 //
 // Why this exists (post-mortem 2026-06-02): unit tests run on PGlite and pass even when
