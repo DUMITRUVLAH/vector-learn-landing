@@ -62,11 +62,20 @@ export const sessions = pgTable(
     userAgent: varchar("user_agent", { length: 512 }),
     lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
     twoFactorPending: boolean("two_factor_pending").notNull().default(false),
+    /**
+     * PLATFORM-403 — sesiune de impersonare: cine (superadmin de platformă) a deschis-o.
+     * NULL = sesiune normală, deschisă de utilizatorul însuși. Prezența ei e singura sursă
+     * de adevăr pentru bannerul „ești în contul altcuiva" și pentru butonul de ieșire.
+     */
+    impersonatedByUserId: uuid("impersonated_by_user_id").references(() => users.id, { onDelete: "cascade" }),
+    /** Tokenul sesiunii proprii a superadminului, ca ieșirea din impersonare să-l repună în cont. */
+    impersonatorToken: varchar("impersonator_token", { length: 128 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     userIdx: index("sessions_user_idx").on(t.userId),
     tokenIdx: index("sessions_token_idx").on(t.token),
+    impersonatedByIdx: index("sessions_impersonated_by_idx").on(t.impersonatedByUserId),
   })
 );
 

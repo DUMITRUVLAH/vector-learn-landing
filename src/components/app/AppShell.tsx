@@ -4,6 +4,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { Logo } from "@/components/Logo";
 import { BusinessShell } from "@/components/business/BusinessShell";
+import { ImpersonationBanner } from "@/components/platform/ImpersonationBanner";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { BranchSwitcher } from "@/components/app/BranchSwitcher";
 import { Link, useRouter } from "@/router/HashRouter";
@@ -278,6 +279,8 @@ export function AppShell({ children, pageTitle, pageDescription, actions }: AppS
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
+      {/* PLATFORM-403: aceeași bandă și în aplicația „learn" — impersonarea nu e per-aplicație. */}
+      <ImpersonationBanner />
       <header className="border-b border-border bg-card sticky top-0 z-30">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           {/* SPLIT-401: Show Business Suite branding on /business/* routes */}

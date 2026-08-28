@@ -6,7 +6,7 @@
  * ultimele logări și notele interne.
  */
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Loader2, StickyNote, UserRound } from "lucide-react";
+import { AlertTriangle, Loader2, LogIn, StickyNote, UserRound } from "lucide-react";
 import {
   addWorkspaceNote,
   getPlatformWorkspace,
@@ -19,6 +19,8 @@ import {
   type PlatformNote,
   type PlatformWorkspace,
 } from "@/lib/api/platform";
+import { IMPERSONATION_REFUSALS, startImpersonation } from "@/lib/api/impersonation";
+import { ApiError } from "@/lib/api";
 import { Alert, Badge, Button, Card, Select, Sheet, Switch, Textarea } from "@/components/ds";
 import { formatDateTime, formatRelative, statusLabel } from "./format";
 
@@ -65,6 +67,26 @@ export function WorkspaceSheet({ tenantId, modules, onClose, onChanged }: Worksp
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * PLATFORM-403: intră în contul membrului pentru testare/suport. Nu e o „vizualizare":
+   * sesiunea chiar devine a lui, deci reîncărcăm pagina complet — orice stare din memorie
+   * (roluri, module, cache de cereri) aparține contului părăsit.
+   */
+  const enterAccount = async (member: PlatformMember) => {
+    if (!confirm(`Intri în contul lui ${member.name || member.email}?\n\nVezi aplicația exact ca el. Acțiunile pe care le faci se salvează în contul lui, iar intrarea și ieșirea se scriu în audit.`)) return;
+    setBusy(`impersonate:${member.id}`);
+    setError(null);
+    try {
+      const res = await startImpersonation(member.id);
+      window.location.hash = res.redirect;
+      window.location.reload();
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : "";
+      setError(IMPERSONATION_REFUSALS[code] ?? "Nu s-a putut intra în cont.");
+      setBusy(null);
+    }
+  };
 
   const toggleModule = async (moduleKey: string, enabled: boolean) => {
     if (!tenantId || !workspace) return;
@@ -251,11 +273,26 @@ export function WorkspaceSheet({ tenantId, modules, onClose, onChanged }: Worksp
                       <span className="block truncate text-xs text-muted-foreground">{m.email}</span>
                     </span>
                   </span>
-                  <span className="shrink-0 text-right">
-                    <Badge variant={m.isActive ? "outline" : "destructive"}>{m.role}</Badge>
-                    <span className="mt-1 block text-3xs text-muted-foreground">
-                      {formatRelative(m.lastLoginAt)}
+                  <span className="flex shrink-0 items-center gap-3">
+                    <span className="text-right">
+                      <Badge variant={m.isActive ? "outline" : "destructive"}>{m.role}</Badge>
+                      <span className="mt-1 block text-3xs text-muted-foreground">
+                        {formatRelative(m.lastLoginAt)}
+                      </span>
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => void enterAccount(m)}
+                      disabled={!m.isActive || busy === `impersonate:${m.id}`}
+                      title={m.isActive ? "Vezi aplicația din contul lui" : "Contul este dezactivat"}
+                      aria-label={`Intră în contul lui ${m.name || m.email}`}
+                      className="inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                    >
+                      {busy === `impersonate:${m.id}`
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                        : <LogIn className="h-3.5 w-3.5" aria-hidden="true" />}
+                      Intră în cont
+                    </button>
                   </span>
                 </li>
               ))}

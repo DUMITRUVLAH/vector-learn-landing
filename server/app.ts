@@ -90,6 +90,7 @@ import { parReceiptsRoutes } from "./routes/parReceipts";
 // VM1-02: PAR config import (projects/departments/budget codes from Excel)
 import { parConfigImportRoutes } from "./routes/parConfigImport";
 import { platformAdminRoutes } from "./routes/platformAdmin";
+import { impersonationRoutes } from "./routes/impersonation";
 import { myModulesRoutes } from "./routes/myModules";
 import { telemetryRoutes } from "./routes/telemetry";
 import { platformInsightsRoutes } from "./routes/platformInsights";
@@ -294,6 +295,7 @@ app.route("/api/par", parAttachmentsRoutes);
 
 // Platform operations (global superadmin only)
 app.route("/api/platform", platformAdminRoutes);
+app.route("/api/impersonation", impersonationRoutes);
 // PLATFORM-002: erorile clienților + semnalele de creștere (același prefix, router separat,
 // cu propriile requireAuth + requirePlatformAdmin — nu moștenește nimic de la vecin).
 app.route("/api/platform", platformInsightsRoutes);

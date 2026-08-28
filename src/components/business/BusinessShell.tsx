@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
+import { ImpersonationBanner } from "@/components/platform/ImpersonationBanner";
 import { cn } from "@/lib/utils";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { useParRoles } from "@/hooks/useParRoles";
@@ -535,7 +536,10 @@ export function BusinessShell({
   );
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      {/* PLATFORM-403: pe o sesiune de impersonare, banda stă deasupra întregului shell. */}
+      <ImpersonationBanner />
+      <div className="flex min-h-screen flex-1">
       {/* Desktop sidebar */}
       <aside
         className="hidden w-sidebar shrink-0 border-r border-sidebar-border bg-sidebar md:sticky md:top-0 md:flex md:h-screen md:flex-col"
@@ -663,6 +667,7 @@ export function BusinessShell({
           );
         })()}
       </nav>
+      </div>
     </div>
   );
 }
