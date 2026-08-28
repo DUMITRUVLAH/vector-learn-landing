@@ -440,13 +440,22 @@ parApprovalsRoutes.get("/inbox", async (c) => {
   // PAR's project (projects with no designated approvers stay open to any approver).
   const projectApproverMap = await getProjectApproverMap(tenantId);
   const stepParIds = [...new Set(pendingSteps.map((s) => s.parId))];
-  const scopeByPar = new Map<string, { projectId: string | null; payerId: string | null }>();
+  const scopeByPar = new Map<string, { projectId: string | null; payerId: string | null; requestedByUserId?: string | null }>();
   if (stepParIds.length > 0) {
     const projRows = await db
-      .select({ id: parRequests.id, projectId: parRequests.projectId, payerId: parRequests.payerId })
+      .select({
+        id: parRequests.id,
+        projectId: parRequests.projectId,
+        payerId: parRequests.payerId,
+        requestedByUserId: parRequests.requestedByUserId,
+      })
       .from(parRequests)
       .where(and(eq(parRequests.tenantId, tenantId), inArray(parRequests.id, stepParIds)));
-    for (const r of projRows) scopeByPar.set(r.id, { projectId: r.projectId ?? null, payerId: r.payerId ?? null });
+    for (const r of projRows) scopeByPar.set(r.id, {
+      projectId: r.projectId ?? null,
+      payerId: r.payerId ?? null,
+      requestedByUserId: r.requestedByUserId,
+    });
   }
   const [accessibleProjects, accessiblePayers] = await Promise.all([
     accessibleProjectIds(user.id, tenantId, user.role), accessiblePayerIds(user.id, tenantId, user.role),
@@ -459,6 +468,10 @@ parApprovalsRoutes.get("/inbox", async (c) => {
       ? accessibleProjects === null || accessibleProjects.includes(parScope.projectId)
       : !!parScope?.payerId && (accessiblePayers === null || accessiblePayers.includes(parScope.payerId));
     if (!allowedByMembership) return false;
+    // Segregation of duties (PARQA-003): approve/reject refuse your OWN request with 403, so it has
+    // no business sitting in your approval inbox with an "Aprobă" button next to it — an approver who
+    // files a request saw it queued as if it were waiting on them, and clicking through gave an error.
+    if (parScope?.requestedByUserId && parScope.requestedByUserId === user.id) return false;
     // Same rule set as approve/reject (decisionAuthority.ts): explicit assignment bypasses project
     // scoping; a role-based step needs project permission AND the role the step requires; a step
     // assigned to a delegator (X→me active) is mine. Nothing lands in the inbox that approve 403s on.

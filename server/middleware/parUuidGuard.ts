@@ -25,7 +25,9 @@ export function parUuidGuard(paramName = "id"): MiddlewareHandler {
   return async (c, next) => {
     const value = c.req.param(paramName);
     if (value !== undefined && !UUID_RE.test(value)) {
-      return c.json({ error: "not_found" }, 404);
+      // `reason` ca ecranul să poată spune „identificatorul din link nu e valid", nu doar
+      // codul sec `not_found` (vezi server/lib/par/accessReason.ts).
+      return c.json({ error: "not_found", reason: "unknown_id" }, 404);
     }
     return next();
   };

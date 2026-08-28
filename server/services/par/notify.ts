@@ -24,6 +24,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/client";
 import { inAppNotifications } from "../../db/schema/inAppNotifications";
 import { users } from "../../db/schema/users";
+import { tenants } from "../../db/schema/tenants";
 import { parMembers, parRequests, parProjects, parBudgetCodes, parVendors, parEvents } from "../../db/schema/par";
 import { appUrl } from "../../lib/par/invites";
 import { getActiveDelegatesOf } from "../../lib/par/delegations";
@@ -222,6 +223,23 @@ async function sendInApp(params: {
   }
 }
 
+/**
+ * Coada fiecărui email PAR: în CE workspace și pe CE cont duce linkul.
+ *
+ * Fără ea, un destinatar care are conturi în mai multe workspace-uri deschide linkul din sesiunea
+ * greșită și primește un 404 fără explicație (incidentul 2026-08-28). Informația trebuie să fie în
+ * email, nu doar în pagina de eroare. Best-effort: dacă interogarea pică, emailul pleacă neschimbat.
+ */
+async function accountFooter(tenantId: string, toAddress: string): Promise<string> {
+  try {
+    const [t] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
+    const workspace = t?.name ? `Workspace: ${t.name} · ` : "";
+    return `\n\n${workspace}Cont destinatar: ${toAddress}`;
+  } catch {
+    return "";
+  }
+}
+
 /** Send email via MessagingService. Silently absorbs errors. */
 async function sendEmail(params: {
   tenantId: string;
@@ -234,7 +252,7 @@ async function sendEmail(params: {
       channel: "email",
       toAddress: params.toAddress,
       subject: params.subject,
-      body: params.body,
+      body: params.body + (await accountFooter(params.tenantId, params.toAddress)),
     });
   } catch {
     // Best-effort — never crash the caller

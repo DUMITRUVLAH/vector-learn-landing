@@ -12,7 +12,13 @@ export class ApiError extends Error {
     public readonly code: string,
     message?: string,
     /** Field-level validation errors, e.g. the PAR /submit endpoint's `errors` array. */
-    public readonly details: ApiFieldError[] = []
+    public readonly details: ApiFieldError[] = [],
+    /**
+     * Corpul JSON brut al erorii. Unele rute nu trimit doar un cod, ci și CONTEXTUL care explică
+     * de ce a picat (ex. `GET /api/par/:id` → `reason`, `workspace`, `currentEmail`) — fără el,
+     * ecranul nu poate afișa decât codul sec, care nu spune omului nimic.
+     */
+    public readonly body: Record<string, unknown> = {}
   ) {
     super(message ?? code);
   }
@@ -52,6 +58,7 @@ async function rawApi<T>(url: string, init: RequestInit): Promise<T> {
   if (!res.ok) {
     let code = `http_${res.status}`;
     let details: ApiFieldError[] = [];
+    let raw: Record<string, unknown> = {};
     try {
       // The API returns errors in a few shapes:
       //   - app errors:        { error: "some_code" }                     (string)
@@ -60,6 +67,7 @@ async function rawApi<T>(url: string, init: RequestInit): Promise<T> {
       // Coerce to a readable string so the UI never shows "[object Object]", and
       // preserve any field-level `errors` array so the caller can map them.
       const body = (await res.json()) as { error?: unknown; errors?: unknown };
+      if (body && typeof body === "object") raw = body as Record<string, unknown>;
       const e = body?.error;
       if (typeof e === "string") {
         code = e;
@@ -80,7 +88,7 @@ async function rawApi<T>(url: string, init: RequestInit): Promise<T> {
     } catch {
       // ignore — keep the http_<status> fallback
     }
-    throw new ApiError(res.status, code, undefined, details);
+    throw new ApiError(res.status, code, undefined, details, raw);
   }
 
   if (res.status === 204) return undefined as T;

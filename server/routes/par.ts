@@ -54,6 +54,7 @@ import { verifyParBodyHash } from "../lib/par/integrity";
 import { buildApprovalSheetLines, type SheetLine } from "../lib/par/approvalSheet";
 import { winAnsiSafe } from "../lib/par/pdfText";
 import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
+import { explainMissingPar, parDenial } from "../lib/par/accessReason";
 import { getDesignatedApprovers, projectAllowsApprover } from "../lib/par/projectApprovers";
 import { getActiveDelegators, getDelegatedAuthority } from "../lib/par/delegations";
 import { resolveViewerDecision } from "../lib/par/decisionAuthority";
@@ -887,10 +888,14 @@ parRoutes.get("/:id", async (c) => {
   const user = c.get("user");
   const tenantId = user.tenantId;
   const parId = c.req.param("id");
-  if (!UUID_RE.test(parId)) return c.json({ error: "not_found" }, 404);
+  // Fiecare ieșire de mai jos rămâne 404 `not_found` (nu confirmăm un id din alt workspace
+  // printr-un 403), dar cară și MOTIVUL — ecranul trebuie să spună de ce, nu doar „not_found".
+  if (!UUID_RE.test(parId)) {
+    return c.json(await parDenial(user, "unknown_id"), 404);
+  }
 
   const par = await getPAR(parId, tenantId);
-  if (!par) return c.json({ error: "not_found" }, 404);
+  if (!par) return c.json(await explainMissingPar(user, parId), 404);
 
   const roles = await getUserPARRoles(user.id, tenantId);
   const hasElevatedRole = roles.some((r) =>
@@ -899,7 +904,7 @@ parRoutes.get("/:id", async (c) => {
 
   // Requestors can only see their own PARs (unless elevated role)
   if (!hasElevatedRole && par.requestedByUserId !== user.id) {
-    return c.json({ error: "not_found" }, 404);
+    return c.json(await parDenial(user, "not_requestor"), 404);
   }
   // CORE §1/§9: a DRAFT has not been routed to anyone yet, so no approver or finance officer is
   // "the routed approver" — yet an elevated role could open it and read the payee block (name,
@@ -910,13 +915,14 @@ parRoutes.get("/:id", async (c) => {
     par.requestedByUserId !== user.id &&
     !isWorkspaceAdminRole(user.role)
   ) {
-    return c.json({ error: "not_found" }, 404);
+    return c.json(await parDenial(user, "draft_private"), 404);
   }
   const inScope = par.projectId
     ? await mayAccessProject(user.id, tenantId, par.projectId, user.role)
     : await mayAccessPayer(user.id, tenantId, par.payerId, user.role);
-  if (!inScope || !(await hasPayerModuleEntitlement(user.id, tenantId, par.payerId, "par"))) {
-    return c.json({ error: "not_found" }, 404);
+  if (!inScope) return c.json(await parDenial(user, "out_of_scope"), 404);
+  if (!(await hasPayerModuleEntitlement(user.id, tenantId, par.payerId, "par"))) {
+    return c.json(await parDenial(user, "module_disabled"), 404);
   }
 
   // Fetch related data

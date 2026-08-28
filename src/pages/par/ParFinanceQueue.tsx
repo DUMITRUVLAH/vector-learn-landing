@@ -69,7 +69,21 @@ interface Section16ModalProps {
   onSaved: () => void;
 }
 
+/**
+ * Escape închide dialogul. Cele trei modale de aici sunt scrise de mână (fără bibliotecă de
+ * dialog), așa că tasta trebuia legată explicit: fără ea, un utilizator care lucrează de la
+ * tastatură rămâne blocat în dialog și trebuie să găsească butonul „Anulare" cu mouse-ul.
+ */
+function useEscapeToClose(onClose: () => void) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+}
+
 function Section16Modal({ par, onClose, onSaved }: Section16ModalProps) {
+  useEscapeToClose(onClose);
   const [parBl, setParBl] = useState(par.payment?.parBl ?? "");
   const [receivedBy, setReceivedBy] = useState(par.payment?.receivedByUserId ?? "");
   const [assignedTo, setAssignedTo] = useState(par.payment?.assignedToUserId ?? "");
@@ -174,7 +188,7 @@ function Section16Modal({ par, onClose, onSaved }: Section16ModalProps) {
             className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-            Salvează &amp; Marchează in_finance
+            Salvează și trimite la finanțe
           </button>
         </div>
       </div>
@@ -197,6 +211,7 @@ function mdlStringToCents(s: string): number {
 }
 
 function PayModal({ par, onClose, onPaid }: PayModalProps) {
+  useEscapeToClose(onClose);
   // Suma reală este în MDL și se pre-completează cu suma integrală (estimatul) — editabilă.
   const [actualAmountMdl, setActualAmountMdl] = useState(
     (((par.payment?.actualAmountCents ?? par.totalEstimatedCents) || 0) / 100).toFixed(2)
@@ -474,6 +489,7 @@ interface AttachmentsModalProps {
 }
 
 function AttachmentsModal({ par, onClose }: AttachmentsModalProps) {
+  useEscapeToClose(onClose);
   const [items, setItems] = useState<ParAttachment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 

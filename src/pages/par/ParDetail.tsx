@@ -70,6 +70,8 @@ import { downloadParPdf } from "@/lib/parPdf";
 import { openParAttachment } from "@/lib/parFiles";
 import { validateIban } from "@/lib/par/iban";
 import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
+import { parAccessMessage, type ParAccessMessage } from "@/lib/par/accessMessage";
+import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // ─── Label helpers ─────────────────────────────────────────────────────────────
@@ -753,6 +755,8 @@ export function ParDetailPage() {
   const payeeIbanWarning = payeeIbanInfo && !payeeIbanInfo.ok ? payeeIbanInfo.message : null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // De ce a picat încărcarea, în cuvinte (serverul trimite `reason` + contul curent).
+  const [accessError, setAccessError] = useState<ParAccessMessage | null>(null);
   const [showTimeline, setShowTimeline] = useState(false);
 
   // Current user PAR roles
@@ -762,6 +766,7 @@ export function ParDetailPage() {
   const load = async () => {
     setLoading(true);
     setError(null);
+    setAccessError(null);
     try {
       const [data, me] = await Promise.all([
         getPar(id),
@@ -771,6 +776,11 @@ export function ParDetailPage() {
       setCurrentUserId(me.userId ?? null);
       setCurrentRoles(me.roles ?? []);
     } catch (e: unknown) {
+      // 404 pe cerere = „nu ai acces / nu e aici", iar codul sec (`not_found`) nu spune nimic:
+      // arătăm motivul trimis de server, nu identificatorul erorii.
+      if (e instanceof ApiError && e.status === 404) {
+        setAccessError(parAccessMessage(e.body));
+      }
       setError(e instanceof Error ? e.message : "Eroare la încărcare");
     } finally {
       setLoading(false);
@@ -793,9 +803,21 @@ export function ParDetailPage() {
     return (
       <AppShell pageTitle="Cerere PAR">
         <div className="max-w-2xl mx-auto px-4 py-8">
-          <div role="alert" className="flex items-center gap-2 p-4 rounded-lg bg-destructive/10 text-destructive text-sm">
-            <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
-            <span>{error ?? "Cererea nu a fost găsită."}</span>
+          <div role="alert" className="flex items-start gap-2 p-4 rounded-lg bg-destructive/10 text-destructive text-sm">
+            <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" aria-hidden />
+            {accessError ? (
+              <div className="space-y-1">
+                <p className="font-medium">{accessError.title}</p>
+                <p className="text-destructive/90">{accessError.detail}</p>
+                {accessError.suggestsRelogin && (
+                  <a href="#/business/login" className="inline-block underline underline-offset-2 font-medium">
+                    Intră cu alt cont
+                  </a>
+                )}
+              </div>
+            ) : (
+              <span>{error ?? "Cererea nu a fost găsită."}</span>
+            )}
           </div>
           <button type="button" onClick={() => router.navigate(backTarget)} className="mt-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-4 w-4" aria-hidden />
