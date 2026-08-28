@@ -21,6 +21,7 @@
  *   Plătitori:      Denumire plătitor | Denumire juridică | IDNO | Cod TVA | Adresă juridică |
  *                   Bancă | IBAN | Cod bancar | Email | Telefon | Semnatar | Funcție semnatar
  *   Proiecte:       Denumire proiect | Donor | Plătitor / Organizație
+ *   Evenimente:     Denumire eveniment | Proiect | Început | Sfârșit
  *   Departamente:   Denumire departament
  *   Coduri buget:   Cod (or "Cod buget") | Denumire | Suma alocată (MDL) | Plătitor | Proiect
  *
@@ -32,9 +33,9 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type ExcelJS from "exceljs";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "../db/client";
-import { parProjects, parDepartments, parBudgetCodes, parPayers, parPayerModules, parVendors } from "../db/schema/par";
+import { parProjects, parEvents, parDepartments, parBudgetCodes, parPayers, parPayerModules, parVendors } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { mayAccessPayer } from "../lib/par/projectScope";
@@ -49,6 +50,7 @@ import {
   PAYER_NAME_ALIASES,
   PROJECT_ALIASES,
   PROJECT_NAME_ALIASES,
+  EVENT_NAME_ALIASES,
   VENDOR_NAME_ALIASES,
   FISCAL_ID_ALIASES,
   IBAN_ALIASES,
@@ -98,6 +100,7 @@ interface CategoryResult {
 interface ImportResult {
   payers: CategoryResult;
   projects: CategoryResult;
+  events: CategoryResult;
   departments: CategoryResult;
   budgetCodes: CategoryResult;
   vendors: CategoryResult;
@@ -110,8 +113,9 @@ const MAX_CODE_LEN = 50;
 const MAX_NAME_LEN = 200;
 
 const KIND_LABELS: Record<SheetKind, string> = {
-  payers: "Plătitori / Organizații",
-  projects: "Proiecte/Programe",
+  payers: "Organizații plătitoare",
+  projects: "Proiecte / Programe",
+  events: "Evenimente",
   departments: "Departamente",
   budgetCodes: "Coduri bugetare",
   vendors: "Beneficiari / Furnizori",
@@ -121,7 +125,8 @@ const KIND_LABELS: Record<SheetKind, string> = {
 
 /**
  * Returns a ready-made .xlsx template the par_admin can fill and upload.
- * Four worksheets: Plătitori, Proiecte, Departamente, Coduri buget.
+ * Șase foi: Plătitori, Proiecte, Evenimente, Departamente, Coduri buget, Furnizori — câte una
+ * pentru fiecare listă de referință pe care o cere o cerere PAR.
  */
 parConfigImportRoutes.get(
   "/template",
@@ -161,14 +166,24 @@ parConfigImportRoutes.get(
     ];
     ws1.getRow(1).font = { bold: true };
 
-    // Sheet 2: Departments
+    // Sheet 3: Events — sub-entities of a project, pickable on a request
+    const ws3b = wb.addWorksheet("Evenimente");
+    ws3b.columns = [
+      { header: "Denumire eveniment *", key: "name", width: 40 },
+      { header: "Proiect", key: "project", width: 35 },
+      { header: "Început (dată)", key: "startsAt", width: 18 },
+      { header: "Sfârșit (dată)", key: "endsAt", width: 18 },
+    ];
+    ws3b.getRow(1).font = { bold: true };
+
+    // Sheet 4: Departments
     const ws2 = wb.addWorksheet("Departamente");
     ws2.columns = [
       { header: "Denumire departament *", key: "name", width: 35 },
     ];
     ws2.getRow(1).font = { bold: true };
 
-    // Sheet 3: Budget codes
+    // Sheet 5: Budget codes
     const ws3 = wb.addWorksheet("Coduri buget");
     ws3.columns = [
       { header: "Cod buget *", key: "code", width: 20 },
@@ -179,7 +194,7 @@ parConfigImportRoutes.get(
     ];
     ws3.getRow(1).font = { bold: true };
 
-    // Sheet 4: Vendors / payees — the registry the PAR form's "Beneficiar salvat" reads from
+    // Sheet 6: Vendors / payees — the registry the PAR form's "Beneficiar salvat" reads from
     const ws4 = wb.addWorksheet("Furnizori");
     ws4.columns = [
       { header: "Denumire beneficiar *", key: "name", width: 40 },
@@ -188,6 +203,10 @@ parConfigImportRoutes.get(
       { header: "Bancă", key: "bank", width: 30 },
       { header: "Cod bancar (BIC / SWIFT)", key: "bicSwift", width: 22 },
       { header: "Adresă juridică", key: "legalAddress", width: 40 },
+      { header: "Cod TVA", key: "vatCode", width: 16 },
+      { header: "Administrator / reprezentant", key: "administratorName", width: 30 },
+      { header: "Email", key: "contactEmail", width: 26 },
+      { header: "Telefon", key: "contactPhone", width: 18 },
     ];
     ws4.getRow(1).font = { bold: true };
 
@@ -394,6 +413,7 @@ parConfigImportRoutes.post(
     // Payers and projects first — budget codes reference them.
     const payerResult = await upsertPayers(ctx, rowsFor("payers"));
     const projectResult = await upsertProjects(ctx, rowsFor("projects"));
+    const eventResult = await upsertEvents(ctx, rowsFor("events"), projectResult);
     const deptResult = await upsertDepartments(tenantId, rowsFor("departments"));
     const budgetResult = await upsertBudgetCodes(ctx, rowsFor("budgetCodes"), projectResult);
     const vendorResult = await upsertVendors(tenantId, rowsFor("vendors"));
@@ -412,6 +432,7 @@ parConfigImportRoutes.post(
     const result: ImportResult = {
       payers: payerResult,
       projects: projectResult,
+      events: eventResult,
       departments: deptResult,
       budgetCodes: budgetResult,
       vendors: vendorResult,
@@ -426,6 +447,23 @@ parConfigImportRoutes.post(
 
 function emptyResult(): CategoryResult {
   return { created: 0, updated: 0, errors: [] };
+}
+
+/**
+ * Datele din Excel ajung aici fie ISO („2026-08-01", cum le dă exceljs pentru celule de tip dată),
+ * fie tastate de om („01.08.2026", „1/8/2026"). Întoarce `null` când celula e goală și literalul
+ * "invalid" când chiar nu se poate citi — ca rândul să pice cu un mesaj, nu cu o dată greșită.
+ */
+function parseImportDate(raw: string): Date | null | "invalid" {
+  const value = raw.trim();
+  if (!value) return null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  const local = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(value);
+  let d: Date | null = null;
+  if (iso) d = new Date(Date.UTC(+iso[1], +iso[2] - 1, +iso[3]));
+  else if (local) d = new Date(Date.UTC(+local[3], +local[2] - 1, +local[1]));
+  if (!d || isNaN(d.getTime())) return "invalid";
+  return d;
 }
 
 /** Turn an unexpected DB failure on ONE row into a row error instead of a 500 for the file. */
@@ -457,6 +495,12 @@ async function upsertVendors(tenantId: string, rows: ImportRow[]): Promise<Categ
     const bank = getField(data, "bank", ...BANK_ALIASES) || null;
     const bicSwift = getField(data, "bicSwift", ...BIC_ALIASES).replace(/\s+/g, "") || null;
     const legalAddress = getField(data, "legalAddress", "adresă juridică", "adresa") || null;
+    // Codul de TVA e o coloană proprie în registru (cererea contabilei) — lipsea din import,
+    // deci un fișier care îl conținea îl pierdea. La fel administratorul și datele de contact.
+    const vatCode = getField(data, "vatCode", "cod tva", "nr tva", "tva") || null;
+    const administratorName = getField(data, "administratorName", "Administrator / reprezentant", "administrator", "reprezentant") || null;
+    const contactEmail = getField(data, "contactEmail", "email", "e-mail") || null;
+    const contactPhone = getField(data, "contactPhone", "telefon", "tel") || null;
 
     if (!name) {
       res.errors.push({ row, column: "Denumire beneficiar", message: "Câmpul 'Denumire beneficiar' este obligatoriu." });
@@ -486,6 +530,10 @@ async function upsertVendors(tenantId: string, rows: ImportRow[]): Promise<Categ
         if (!existing.bank && bank) patch.bank = bank;
         if (!existing.bicSwift && bicSwift) patch.bicSwift = bicSwift;
         if (!existing.legalAddress && legalAddress) patch.legalAddress = legalAddress;
+        if (!existing.vatCode && vatCode) patch.vatCode = vatCode;
+        if (!existing.administratorName && administratorName) patch.administratorName = administratorName;
+        if (!existing.contactEmail && contactEmail) patch.contactEmail = contactEmail;
+        if (!existing.contactPhone && contactPhone) patch.contactPhone = contactPhone;
         if (!existing.active) patch.active = true;
         if (Object.keys(patch).length) {
           await db
@@ -505,6 +553,10 @@ async function upsertVendors(tenantId: string, rows: ImportRow[]): Promise<Categ
         bank: bank?.slice(0, 300) ?? null,
         bicSwift: bicSwift?.slice(0, 32) ?? null,
         legalAddress,
+        vatCode: vatCode?.slice(0, 50) ?? null,
+        administratorName: administratorName?.slice(0, 300) ?? null,
+        contactEmail: contactEmail?.slice(0, 255) ?? null,
+        contactPhone: contactPhone?.slice(0, 100) ?? null,
         kind: detectPayeeType(name) === "fizic" ? "individual" : "company",
       });
       res.created++;
@@ -638,9 +690,11 @@ async function upsertProjects(ctx: ImportCtx, rows: ImportRow[]): Promise<Catego
         .where(and(eq(parProjects.tenantId, tenantId), eq(parProjects.payerId, payer.id), eq(parProjects.name, name)));
 
       if (existing) {
+        // Doar coloanele PREZENTE în fișier se scriu: un import fără coloana „Donor" nu are voie
+        // să șteargă donorul completat manual (aceeași regulă ca la plătitori).
         await db
           .update(parProjects)
-          .set({ donor: donor || null, payerId: payer.id, active: true, updatedAt: new Date() })
+          .set({ ...(donor ? { donor } : {}), payerId: payer.id, active: true, updatedAt: new Date() })
           .where(and(eq(parProjects.id, existing.id), eq(parProjects.tenantId, tenantId)));
         res.updated++;
       } else {
@@ -652,6 +706,102 @@ async function upsertProjects(ctx: ImportCtx, rows: ImportRow[]): Promise<Catego
     }
   }
 
+  return res;
+}
+
+/**
+ * Evenimentele sunt sub-entități ale proiectului și se aleg pe cerere (ParCreateForm), deci
+ * trebuie să poată veni și ele din fișier — până acum erau singura listă de referință care nu
+ * se putea importa, deși un proiect are zeci de evenimente.
+ *
+ * Upsert după (proiect, denumire): re-importul aceluiași fișier actualizează datele, nu dublează.
+ */
+async function upsertEvents(
+  ctx: ImportCtx,
+  rows: ImportRow[],
+  /** Proiectele create din mers de pe un rând de eveniment se numără aici. */
+  projectResult: CategoryResult
+): Promise<CategoryResult> {
+  const { tenantId } = ctx;
+  const res = emptyResult();
+
+  for (const { row, data } of rows) {
+    const name = getField(data, ...EVENT_NAME_ALIASES);
+    const projectName = getField(data, ...PROJECT_ALIASES);
+    const payerName = getField(data, ...PAYER_ALIASES);
+    const startsAt = parseImportDate(getField(data, "Început (dată)", "startsAt", "inceput", "data inceput", "de la"));
+    const endsAt = parseImportDate(getField(data, "Sfârșit (dată)", "endsAt", "sfarsit", "data sfarsit", "până la"));
+
+    if (!name) {
+      res.errors.push({ row, column: "Denumire eveniment", message: "Câmpul 'Denumire eveniment' este obligatoriu." });
+      continue;
+    }
+    if (name.length > MAX_NAME_LEN) {
+      res.errors.push({ row, column: "Denumire eveniment", message: `Denumirea depășește ${MAX_NAME_LEN} de caractere.` });
+      continue;
+    }
+    if (startsAt === "invalid" || endsAt === "invalid") {
+      res.errors.push({ row, column: startsAt === "invalid" ? "Început (dată)" : "Sfârșit (dată)", message: "Data nu poate fi citită. Folosește 2026-08-01 sau 01.08.2026." });
+      continue;
+    }
+
+    try {
+      // Proiectul e opțional pe eveniment, dar dacă e numit și nu există, îl creăm (la fel ca
+      // pe rândurile de coduri bugetare: fișierele reale repetă numele proiectului pe fiecare rând).
+      let projectId: string | null = null;
+      if (projectName) {
+        const payer = await resolvePayer(ctx, payerName);
+        if (!payer) {
+          res.errors.push({ row, column: "Proiect", message: "Nu există un plătitor pe care să atârne proiectul. Adaugă foaia 'Plătitori'." });
+          continue;
+        }
+        if (!(await mayAccessPayer(ctx.userId, tenantId, payer.id, ctx.role))) {
+          res.errors.push({ row, column: "Proiect", message: `Nu ai acces la plătitorul '${payer.name}'.` });
+          continue;
+        }
+        const [project] = await db.select({ id: parProjects.id }).from(parProjects).where(and(
+          eq(parProjects.tenantId, tenantId), eq(parProjects.payerId, payer.id), eq(parProjects.name, projectName),
+        ));
+        if (project) {
+          projectId = project.id;
+        } else {
+          const [created] = await db.insert(parProjects).values({ tenantId, name: projectName, payerId: payer.id }).returning({ id: parProjects.id });
+          projectId = created.id;
+          projectResult.created++;
+        }
+      }
+
+      const [existing] = await db
+        .select({ id: parEvents.id })
+        .from(parEvents)
+        .where(and(
+          eq(parEvents.tenantId, tenantId),
+          eq(parEvents.name, name),
+          projectId ? eq(parEvents.projectId, projectId) : isNull(parEvents.projectId),
+        ));
+
+      if (existing) {
+        await db.update(parEvents).set({
+          ...(startsAt ? { startsAt } : {}),
+          ...(endsAt ? { endsAt } : {}),
+          projectId,
+          active: true,
+          updatedAt: new Date(),
+        }).where(and(eq(parEvents.id, existing.id), eq(parEvents.tenantId, tenantId)));
+        res.updated++;
+      } else {
+        await db.insert(parEvents).values({
+          tenantId, name, projectId,
+          startsAt: startsAt || null,
+          endsAt: endsAt || null,
+          createdByUserId: ctx.userId,
+        });
+        res.created++;
+      }
+    } catch (err) {
+      res.errors.push({ row, column: "Denumire eveniment", message: rowFailure(err) });
+    }
+  }
   return res;
 }
 

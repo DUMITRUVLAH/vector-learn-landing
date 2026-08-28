@@ -47,10 +47,15 @@ const preview: ParConfigImportPreview = {
       { key: "name", label: "Denumire beneficiar", required: true },
       { key: "iban", label: "IBAN", required: false },
     ],
+    events: [
+      { key: "name", label: "Denumire eveniment", required: true },
+      { key: "project", label: "Proiect", required: false },
+    ],
   },
   kindLabels: {
-    payers: "Plătitori / Organizații",
-    projects: "Proiecte/Programe",
+    payers: "Organizații plătitoare",
+    projects: "Proiecte / Programe",
+    events: "Evenimente",
     departments: "Departamente",
     budgetCodes: "Coduri bugetare",
     vendors: "Beneficiari / Furnizori",

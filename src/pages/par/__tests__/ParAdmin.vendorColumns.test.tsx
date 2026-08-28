@@ -20,7 +20,7 @@ vi.mock("@/components/app/AppShell", () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div data-testid="app-shell">{children}</div>,
 }));
 
-// Mock PARȚIAL: pagina „Date referință" cheamă zeci de funcții din modul, iar o fabrică
+// Mock PARȚIAL: pagina „Date de referință" cheamă zeci de funcții din modul, iar o fabrică
 // completă s-ar dezechilibra la fiecare export nou. Suprascriem doar ce ne interesează.
 vi.mock("@/lib/api/par", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/par")>();
@@ -79,12 +79,12 @@ vi.mock("@/lib/api/par", async (importOriginal) => {
   };
 });
 
-/** Deschide fila „Date referință" → secțiunea „Beneficiari / Furnizori". */
+/** Deschide fila „Date de referință" → secțiunea „Beneficiari / Furnizori". */
 async function openVendors() {
   render(<ParAdmin isAdmin />);
-  fireEvent.click(await screen.findByRole("tab", { name: /Date referință/i }));
+  fireEvent.click(await screen.findByRole("tab", { name: /Date de referință/i }));
   fireEvent.click(await screen.findByRole("tab", { name: /Furnizori/i }));
-  return screen.findByRole("table", { name: "Furnizori" });
+  return screen.findByRole("table", { name: "Beneficiari" });
 }
 
 describe("VendorSection — rechizitele au coloane separate", () => {
@@ -124,7 +124,7 @@ describe("VendorSection — rechizitele au coloane separate", () => {
 
   it("formularul are câmp separat pentru codul de TVA și pentru codul bancar", async () => {
     await openVendors();
-    fireEvent.click(screen.getByLabelText("Adaugă furnizor"));
+    fireEvent.click(screen.getByLabelText("Adaugă beneficiar"));
     await waitFor(() => {
       expect(screen.getByLabelText("Cod TVA")).toBeDefined();
       expect(screen.getByLabelText("Cod bancar (BIC / SWIFT)")).toBeDefined();

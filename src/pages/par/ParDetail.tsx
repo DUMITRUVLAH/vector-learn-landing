@@ -78,16 +78,19 @@ import { cn } from "@/lib/utils";
 
 // ─── Label helpers ─────────────────────────────────────────────────────────────
 
+// Formularul PAR tipărit (src/lib/parPdf.ts) rămâne în engleză — e formularul oficial.
+// În aplicație etichetele sunt în română, la fel ca în formularul de creare: același câmp nu
+// are voie să se numească „Executare plată" când îl completezi și „Execute payment" când îl citești.
 const PURPOSE_LABEL: Record<string, string> = {
-  execute_payment: "Execute payment",
-  obtain_quotations: "Obtain quotations",
-  provide_estimate: "Provide estimate",
+  execute_payment: "Executare plată",
+  obtain_quotations: "Obținere oferte",
+  provide_estimate: "Estimare cost",
 };
 
 const CHARGE_LABEL: Record<string, string> = {
-  operations: "Operations",
+  operations: "Operațional",
   program: "Program",
-  other: "Other",
+  other: "Altele",
 };
 
 function fmtDate(iso: string | null | undefined): string {
@@ -945,10 +948,10 @@ export function ParDetailPage() {
               {par.purpose === "provide_estimate" && "Estimare cost, fără concurență"}
             </p>
           </Section>
-          <Section num="9" title="Charge To">
+          <Section num="9" title="Tip cheltuială">
             <p className="text-sm font-semibold text-foreground">{CHARGE_LABEL[par.chargeTo] ?? par.chargeTo}</p>
             {par.chargeBillingCode && (
-              <p className="text-xs text-muted-foreground mt-0.5">Billing code: {par.chargeBillingCode}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Cod de facturare: {par.chargeBillingCode}</p>
             )}
           </Section>
         </div>

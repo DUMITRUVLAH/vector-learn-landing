@@ -190,7 +190,7 @@ describe("ParDetailPage — PAR-118", () => {
     await waitFor(() => {
       expect(screen.getByText("Informații cerere")).toBeDefined();     // 1–7
       expect(screen.getByText("Scopul PAR")).toBeDefined();             // 8
-      expect(screen.getByText("Charge To")).toBeDefined();              // 9
+      expect(screen.getByText("Tip cheltuială")).toBeDefined();          // 9
       expect(screen.getByText("Articole solicitate")).toBeDefined();    // 10
       expect(screen.getByText("Scopul și descrierea utilizării finale")).toBeDefined(); // 11
       expect(screen.getByText("Beneficiar plată (Vendor)")).toBeDefined(); // 12

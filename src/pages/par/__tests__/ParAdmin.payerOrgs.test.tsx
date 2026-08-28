@@ -75,10 +75,10 @@ vi.mock("@/lib/api/par", async (importOriginal) => {
   };
 });
 
-/** Fila „Date referință" → secțiunea „Organizații plătitoare". */
+/** Fila „Date de referință" → secțiunea „Organizații plătitoare". */
 async function openPayers() {
   render(<ParAdmin isAdmin />);
-  fireEvent.click(await screen.findByRole("tab", { name: /Date referință/i }));
+  fireEvent.click(await screen.findByRole("tab", { name: /Date de referință/i }));
   fireEvent.click(await screen.findByRole("tab", { name: /Organizații plătitoare/i }));
   return screen.findByText("ATIC");
 }

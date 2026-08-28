@@ -19,7 +19,7 @@
  */
 import type ExcelJS from "exceljs";
 
-export type SheetKind = "payers" | "projects" | "departments" | "budgetCodes" | "vendors";
+export type SheetKind = "payers" | "projects" | "events" | "departments" | "budgetCodes" | "vendors";
 
 export interface ImportRow {
   /** 1-based worksheet row number, as shown in Excel — used in error messages. */
@@ -120,6 +120,8 @@ export const PAYER_ALIASES = [
   "denumire platitor",
   "payer",
 ];
+export const EVENT_NAME_ALIASES = ["denumire eveniment", "eveniment", "evenimente", "activitate", "denumire", "nume", "name"];
+export const EVENT_ALIASES = ["eveniment", "activitate", "event"];
 export const DEPARTMENT_NAME_ALIASES = ["denumire departament", "departament", "denumire", "nume", "name"];
 export const PROJECT_NAME_ALIASES = ["denumire proiect", "proiect", "denumire program", "program", "denumire", "nume", "name"];
 export const PAYER_NAME_ALIASES = ["denumire platitor", "platitor organizatie", "platitor", "organizatie", "denumire", "nume", "name"];
@@ -176,6 +178,9 @@ export function detectKindFromHeaders(headers: string[]): SheetKind | null {
   if (hasHeader(headers, [...IBAN_ALIASES, "denumire beneficiar", "beneficiar", "denumire furnizor", "furnizor"]))
     return "vendors";
   if (hasHeader(headers, ["denumire departament", "departament", "departamente"])) return "departments";
+  // Evenimentele înaintea proiectelor: o foaie de evenimente are și o coloană „Proiect",
+  // iar detecția pe proiecte ar înghiți-o.
+  if (hasHeader(headers, ["denumire eveniment", "eveniment", "evenimente"])) return "events";
   if (hasHeader(headers, ["denumire proiect", "proiect", "proiecte", "program", "programe", "donor", "donor finantator"]))
     return "projects";
   if (hasHeader(headers, ["denumire platitor", "platitor", "platitori", "organizatie", "idno"])) return "payers";
@@ -189,6 +194,7 @@ export function detectKindFromName(sheetName: string): SheetKind | null {
   if (n.includes("cod") || n.includes("buget")) return "budgetCodes";
   if (n.includes("furnizor") || n.includes("beneficiar")) return "vendors";
   if (n.includes("departament")) return "departments";
+  if (n.includes("eveniment") || n.includes("activitat")) return "events";
   if (n.includes("proiect") || n.includes("program")) return "projects";
   if (n.includes("platitor") || n.includes("organizat")) return "payers";
   return null;
@@ -285,6 +291,14 @@ export const FIELD_DEFS: Record<SheetKind, FieldDef[]> = {
     { key: "donor", label: "Donor / Finanțator", required: false },
     { key: "payer", label: "Plătitor / Organizație", required: false, hint: "Implicit: plătitorul curent" },
   ],
+  // Evenimentele sunt sub-entități ale proiectului și se aleg pe cerere — deci trebuie să poată
+  // veni și ele din fișier, nu doar adăugate una câte una.
+  events: [
+    { key: "name", label: "Denumire eveniment", required: true },
+    { key: "project", label: "Proiect", required: false, hint: "Proiectul e creat dacă nu există" },
+    { key: "startsAt", label: "Început (dată)", required: false, hint: "2026-08-01 sau 01.08.2026" },
+    { key: "endsAt", label: "Sfârșit (dată)", required: false },
+  ],
   departments: [{ key: "name", label: "Denumire departament", required: true }],
   vendors: [
     { key: "name", label: "Denumire beneficiar", required: true },
@@ -293,6 +307,10 @@ export const FIELD_DEFS: Record<SheetKind, FieldDef[]> = {
     { key: "bank", label: "Bancă", required: false },
     { key: "bicSwift", label: "Cod bancar (BIC / SWIFT)", required: false },
     { key: "legalAddress", label: "Adresă juridică", required: false },
+    { key: "vatCode", label: "Cod TVA", required: false },
+    { key: "administratorName", label: "Administrator / reprezentant", required: false },
+    { key: "contactEmail", label: "Email", required: false },
+    { key: "contactPhone", label: "Telefon", required: false },
   ],
   budgetCodes: [
     { key: "code", label: "Cod", required: true, hint: "Dacă celula conține și denumirea, este separată automat" },
@@ -323,12 +341,17 @@ const FIELD_ALIASES: Record<string, string[]> = {
   contactPhone: ["telefon", "tel", "nr telefon", "phone"],
   directorName: ["semnatar", "director", "administrator", "conducator"],
   directorRole: ["functie semnatar", "functie", "functia"],
+  administratorName: ["administrator", "reprezentant", "administrator reprezentant"],
+  startsAt: ["inceput", "data inceput", "de la", "start", "data start"],
+  endsAt: ["sfarsit", "data sfarsit", "pana la", "final", "end"],
+  event: EVENT_ALIASES,
 };
 
 /** Field aliases that only make sense for one kind (a payers sheet's "Denumire" is its name). */
 const KIND_NAME_ALIASES: Record<SheetKind, string[]> = {
   payers: PAYER_NAME_ALIASES,
   projects: PROJECT_NAME_ALIASES,
+  events: EVENT_NAME_ALIASES,
   departments: DEPARTMENT_NAME_ALIASES,
   budgetCodes: NAME_ALIASES,
   vendors: VENDOR_NAME_ALIASES,

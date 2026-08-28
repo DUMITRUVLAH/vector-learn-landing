@@ -196,7 +196,7 @@ describe("ParDetailPage — T-PAR-115-1 [blocant]: render without crash", () => 
     await waitFor(() => {
       expect(screen.getByText(/Informații cerere/i)).toBeInTheDocument();
       expect(screen.getByText(/Scopul PAR/i)).toBeInTheDocument();
-      expect(screen.getByText(/Charge To/i)).toBeInTheDocument();
+      expect(screen.getByText(/Tip cheltuială/i)).toBeInTheDocument();
       expect(screen.getByText(/Articole solicitate/i)).toBeInTheDocument();
       expect(screen.getByText(/Beneficiar plată/i)).toBeInTheDocument();
       expect(screen.getByText(/Atașamente/i)).toBeInTheDocument();

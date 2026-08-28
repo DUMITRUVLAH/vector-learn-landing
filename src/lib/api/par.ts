@@ -1572,6 +1572,8 @@ export interface ParConfigImportRowError {
 export interface ParConfigImportResult {
   payers: { created: number; updated: number; errors: ParConfigImportRowError[] };
   projects: { created: number; updated: number; errors: ParConfigImportRowError[] };
+  /** Evenimentele proiectelor — lipsesc la un server mai vechi. */
+  events?: { created: number; updated: number; errors: ParConfigImportRowError[] };
   departments: { created: number; updated: number; errors: ParConfigImportRowError[] };
   budgetCodes: { created: number; updated: number; errors: ParConfigImportRowError[] };
   /** Registrul de beneficiari — lipsește la un server mai vechi. */
@@ -1588,7 +1590,7 @@ export interface ParImportFieldDef {
   hint?: string;
 }
 
-export type ParImportKind = "payers" | "projects" | "departments" | "budgetCodes" | "vendors";
+export type ParImportKind = "payers" | "projects" | "events" | "departments" | "budgetCodes" | "vendors";
 
 export interface ParImportSheetPreview {
   name: string;

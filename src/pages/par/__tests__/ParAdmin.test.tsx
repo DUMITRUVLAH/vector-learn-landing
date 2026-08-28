@@ -91,7 +91,7 @@ describe("ParAdmin — PAR-116", () => {
       expect(screen.getByText("Aprobare")).toBeDefined();
       expect(screen.getByText("Setări")).toBeDefined();
       expect(screen.getByText("Membri")).toBeDefined();
-      expect(screen.getByText("Date referință")).toBeDefined();
+      expect(screen.getByText("Date de referință")).toBeDefined();
     });
   });
 
@@ -200,10 +200,15 @@ describe("ParAdmin — import Excel cu mapare de coloane", () => {
         { key: "name", label: "Denumire beneficiar", required: true },
         { key: "iban", label: "IBAN", required: false },
       ],
+      events: [
+        { key: "name", label: "Denumire eveniment", required: true },
+        { key: "project", label: "Proiect", required: false },
+      ],
     },
     kindLabels: {
-      payers: "Plătitori / Organizații",
-      projects: "Proiecte/Programe",
+      payers: "Organizații plătitoare",
+      projects: "Proiecte / Programe",
+      events: "Evenimente",
       departments: "Departamente",
       budgetCodes: "Coduri bugetare",
       vendors: "Beneficiari / Furnizori",
@@ -230,8 +235,8 @@ describe("ParAdmin — import Excel cu mapare de coloane", () => {
   // [blocant] Choosing a file must NOT import straight away — it opens the mapping dialog.
   it("deschide dialogul de mapare în loc să importe direct", async () => {
     render(<ParAdmin isAdmin={true} />);
-    await screen.findByText("Date referință");
-    fireEvent.click(screen.getByText("Date referință"));
+    await screen.findByText("Date de referință");
+    fireEvent.click(screen.getByText("Date de referință"));
 
     await userEvent.upload(await screen.findByLabelText("Alege fișier Excel"), xlsx());
 
@@ -243,7 +248,7 @@ describe("ParAdmin — import Excel cu mapare de coloane", () => {
   // [blocant] The mapping the user confirmed is what reaches the API.
   it("trimite fișierul împreună cu maparea confirmată", async () => {
     render(<ParAdmin isAdmin={true} />);
-    fireEvent.click(await screen.findByText("Date referință"));
+    fireEvent.click(await screen.findByText("Date de referință"));
     await userEvent.upload(await screen.findByLabelText("Alege fișier Excel"), xlsx());
     await screen.findByRole("dialog", { name: "Ce importăm din fișier?" });
 
@@ -263,7 +268,7 @@ describe("ParAdmin — import Excel cu mapare de coloane", () => {
 
   it("nu importă nimic dacă anulezi dialogul", async () => {
     render(<ParAdmin isAdmin={true} />);
-    fireEvent.click(await screen.findByText("Date referință"));
+    fireEvent.click(await screen.findByText("Date de referință"));
     await userEvent.upload(await screen.findByLabelText("Alege fișier Excel"), xlsx());
     await screen.findByRole("dialog", { name: "Ce importăm din fișier?" });
 

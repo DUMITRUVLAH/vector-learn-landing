@@ -153,7 +153,7 @@ const TABS: TabProps[] = [
   { id: "doa", label: "Aprobare", icon: <Shield className="h-4 w-4" aria-hidden /> },
   { id: "settings", label: "Setări", icon: <Settings className="h-4 w-4" aria-hidden /> },
   { id: "members", label: "Membri", icon: <Users className="h-4 w-4" aria-hidden /> },
-  { id: "reference", label: "Date referință", icon: <BookOpen className="h-4 w-4" aria-hidden /> },
+  { id: "reference", label: "Date de referință", icon: <BookOpen className="h-4 w-4" aria-hidden /> },
   { id: "audit", label: "Audit", icon: <FileClock className="h-4 w-4" aria-hidden /> },
 ];
 
@@ -179,19 +179,34 @@ const AUDIT_EVENT_LABELS: Record<string, string> = {
   integrity_mismatch_display: "Integritate: nepotrivire (afișare)",
 };
 
+/**
+ * Tipul de cheltuială (câmpul „Charge To" din formularul tipărit). ATENȚIE: cererile se creează
+ * ÎNTOTDEAUNA cu „program" (ParCreateForm nu expune câmpul), deci o regulă limitată la altă
+ * valoare nu s-ar aplica niciodată — de aceea selectul avertizează, nu doar listează.
+ */
 const CHARGE_OPTIONS = [
   { value: "", label: "Orice" },
-  { value: "operations", label: "Operations" },
   { value: "program", label: "Program" },
-  { value: "other", label: "Other" },
+  { value: "operations", label: "Operațional" },
+  { value: "other", label: "Altele" },
 ];
 
-const ROLE_OPTIONS = [
-  { value: "requestor", label: "Requestor" },
-  { value: "approver", label: "Approver" },
-  { value: "finance", label: "Finance" },
-  { value: "par_admin", label: "PAR Admin" },
-];
+/**
+ * Etichetele rolurilor — O SINGURĂ sursă, în română. Înainte trăiau în trei locuri
+ * (ROLE_OPTIONS, ROLE_LABELS, INVITE_ROLE_LABELS), două în engleză: același om apărea
+ * „Aprobator" pe invitație și „Approver" în tabelul de membri, pe același ecran.
+ */
+const PAR_ROLE_LABELS: Record<string, string> = {
+  requestor: "Solicitant",
+  approver: "Aprobator",
+  finance: "Finanțe",
+  par_admin: "Administrator PAR",
+};
+
+const ROLE_OPTIONS = (["requestor", "approver", "finance", "par_admin"] as const).map((value) => ({
+  value,
+  label: PAR_ROLE_LABELS[value],
+}));
 
 /** PARQA-025: what each role can actually do — shown in the add-role form and the legend. */
 const ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -543,10 +558,15 @@ function ApprovalRuleBuilder({ initial, isNew, saving, departments, payers, proj
               </Select>
             </div>
             <div>
-              <label className={labelCls}>Charge To</label>
-              <Select value={draft.chargeTo ?? ""} onChange={(e) => set("chargeTo", (e.target.value || null) as RuleDraft["chargeTo"])} className={field} aria-label="Charge To">
+              <label className={labelCls}>Tip cheltuială</label>
+              <Select value={draft.chargeTo ?? ""} onChange={(e) => set("chargeTo", (e.target.value || null) as RuleDraft["chargeTo"])} className={field} aria-label="Tip cheltuială">
                 {CHARGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </Select>
+              {draft.chargeTo && draft.chargeTo !== "program" && (
+                <p className="mt-1 text-xs text-warning">
+                  Cererile se creează cu „Program". O regulă limitată la „{CHARGE_OPTIONS.find((o) => o.value === draft.chargeTo)?.label}" nu se va aplica.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -598,7 +618,7 @@ function RuleCard({ group, departments, payers, projects, members, onEdit, onDel
             <span className="text-muted-foreground">/</span>
             <span className="text-foreground">{projectName}</span>
             {deptName && <span className="text-xs text-muted-foreground">· {deptName}</span>}
-            {d.chargeTo && <span className="text-xs text-muted-foreground">· {d.chargeTo}</span>}
+            {d.chargeTo && <span className="text-xs text-muted-foreground">· {CHARGE_OPTIONS.find((o) => o.value === d.chargeTo)?.label ?? d.chargeTo}</span>}
           </div>
           {hasAmount && (
             <div className="text-xs text-muted-foreground">
@@ -1287,10 +1307,6 @@ function EmailLogSection() {
 
 // ─── VF-004: Invite by email (inside Members tab) ─────────────────────────────
 
-const INVITE_ROLE_LABELS: Record<string, string> = {
-  requestor: "Solicitant", approver: "Aprobator", finance: "Finanțe", par_admin: "Administrator",
-};
-
 function InviteSection({ payers }: { payers: ParPayer[] }) {
   const [invites, setInvites] = useState<ParInvite[]>([]);
   const [email, setEmail] = useState("");
@@ -1408,7 +1424,7 @@ function InviteSection({ payers }: { payers: ParPayer[] }) {
             <div key={inv.id} className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm">
               <span className="truncate">
                 <span className="text-foreground">{inv.email}</span>
-                <span className="text-muted-foreground"> · {INVITE_ROLE_LABELS[inv.parRole] ?? inv.parRole}</span>
+                <span className="text-muted-foreground"> · {PAR_ROLE_LABELS[inv.parRole] ?? inv.parRole}</span>
                 <span className="block text-xs text-muted-foreground">{(inv.payerIds ?? []).map((id) => payers.find((payer) => payer.id === id)?.name ?? id).join(", ") || "Toate organizațiile (invitație veche)"}</span>
               </span>
               <button type="button" onClick={() => revoke(inv.id)} aria-label={`Revocă invitația pentru ${inv.email}`}
@@ -1459,24 +1475,15 @@ const ROLE_BADGE_COLORS: Record<ParMember["role"], string> = {
   par_admin: "bg-primary/10 text-primary",
 };
 
-const ROLE_LABELS: Record<ParMember["role"], string> = {
-  requestor: "Requestor",
-  approver: "Approver",
-  finance: "Finance",
-  par_admin: "Admin",
-};
-
 /**
  * Self-service role panel. The admin is an implicit par_admin but, to appear in approval chains, they
  * need an explicit `approver` (or finance/requestor) row. This is the one-click "give MYSELF
  * role X" shortcut (the general form covers colleagues via the by-name picker).
  * (Owner: "vreau să dau rol de aprobator și mie, dar nu pot".)
  */
-const SELF_ASSIGNABLE: Array<{ value: "approver" | "finance" | "requestor"; label: string }> = [
-  { value: "approver", label: "Aprobator" },
-  { value: "finance", label: "Finanțe" },
-  { value: "requestor", label: "Solicitant" },
-];
+const SELF_ASSIGNABLE: Array<{ value: "approver" | "finance" | "requestor"; label: string }> = (
+  ["approver", "finance", "requestor"] as const
+).map((value) => ({ value, label: PAR_ROLE_LABELS[value] }));
 
 function MyRolesPanel({ onChanged }: { onChanged: () => void }) {
   const [me, setMe] = useState<{ userId: string; roles: string[] } | null>(null);
@@ -1523,7 +1530,7 @@ function MyRolesPanel({ onChanged }: { onChanged: () => void }) {
         ) : (
           me.roles.map((r) => (
             <span key={r} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
-              {INVITE_ROLE_LABELS[r] ?? r}
+              {PAR_ROLE_LABELS[r] ?? r}
             </span>
           ))
         )}
@@ -1846,7 +1853,7 @@ function ParMembersTab() {
   };
 
   const handleRevoke = async (id: string, roleName: string, userName: string) => {
-    if (!confirm(`Revoce rolul „${roleName}" pentru ${userName}?`)) return;
+    if (!confirm(`Revoci rolul „${roleName}" pentru ${userName}?`)) return;
     try {
       await revokeParMember(id);
       await load();
@@ -1924,7 +1931,7 @@ function ParMembersTab() {
           {ROLE_OPTIONS.map((o) => (
             <div key={o.value} className="flex gap-2 text-sm">
               <dt className={cn("inline-flex h-fit items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0", ROLE_BADGE_COLORS[o.value as ParMember["role"]])}>
-                {ROLE_LABELS[o.value as ParMember["role"]]}
+                {PAR_ROLE_LABELS[o.value as ParMember["role"]]}
               </dt>
               <dd className="text-muted-foreground">{ROLE_DESCRIPTIONS[o.value]}</dd>
             </div>
@@ -1947,7 +1954,7 @@ function ParMembersTab() {
             </label>
             <CandidatePicker
               candidates={candidates}
-              memberRoles={new Map(grouped.map((g) => [g.userId, g.roles.map((r) => ROLE_LABELS[r.role])]))}
+              memberRoles={new Map(grouped.map((g) => [g.userId, g.roles.map((r) => PAR_ROLE_LABELS[r.role])]))}
               value={pickedUser}
               onPick={setPickedUser}
             />
@@ -2067,7 +2074,7 @@ function ParMembersTab() {
                             "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
                             ROLE_BADGE_COLORS[r.role]
                           )}>
-                            {ROLE_LABELS[r.role]}
+                            {PAR_ROLE_LABELS[r.role]}
                           </span>
                           {r.implicit ? (
                             /* Authority comes from the tenant role — there is no par_members
@@ -2081,9 +2088,9 @@ function ParMembersTab() {
                           ) : (
                             <button
                               type="button"
-                              onClick={() => handleRevoke(r.id, ROLE_LABELS[r.role], displayName)}
+                              onClick={() => handleRevoke(r.id, PAR_ROLE_LABELS[r.role], displayName)}
                               className="p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                              aria-label={`Revoce rolul ${ROLE_LABELS[r.role]} pentru ${displayName}`}
+                              aria-label={`Revocă rolul ${PAR_ROLE_LABELS[r.role]} pentru ${displayName}`}
                             >
                               <X className="h-3 w-3" aria-hidden />
                             </button>
@@ -2246,7 +2253,7 @@ function ParReferenceData({ initialSection }: ParReferenceDataProps) {
     payers: "Organizații plătitoare",
     budgetCodes: "Coduri bugetare",
     departments: "Departamente",
-    projects: "Proiecte/Programe",
+    projects: "Proiecte / Programe",
     events: "Evenimente", // VM1-04
     vendors: "Beneficiari / Furnizori",
   };
@@ -2260,9 +2267,17 @@ function ParReferenceData({ initialSection }: ParReferenceDataProps) {
         </div>
       )}
 
-      {/* VM1-02: Import Excel section */}
-      <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-border">
-        <span className="text-sm text-muted-foreground">Import în masă:</span>
+      {/* VM1-02: Import Excel. Stă strâns într-un rând: pagina se deschide pe listele de date,
+          nu pe un bloc de instrucțiuni. Se desface singur când are ceva de raportat. */}
+      <details open={!!importResult || !!importError} className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+        <summary className="cursor-pointer text-sm font-medium text-foreground">
+          Import în masă din Excel
+          <span className="ml-1 font-normal text-muted-foreground">
+            — organizații, proiecte, evenimente, departamente, coduri bugetare, beneficiari
+          </span>
+        </summary>
+        <div className="mt-3 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => importFileRef.current?.click()}
@@ -2297,20 +2312,12 @@ function ParReferenceData({ initialSection }: ParReferenceDataProps) {
         />
       </div>
 
-      {/* VM1-02b: choose the import type + column mapping before anything is written */}
-      <ParImportMappingDialog
-        open={importFile !== null}
-        preview={importPreview}
-        fileName={importFile?.name ?? ""}
-        loading={importLoading}
-        onCancel={cancelImport}
-        onConfirm={runImport}
-      />
+
       <details className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm">
         <summary className="cursor-pointer font-medium text-foreground">Cum se face importul Excel</summary>
         <div className="mt-2 space-y-1 text-muted-foreground">
           <p>1. Poți folosi template-ul sau <strong className="font-medium text-foreground">orice fișier al tău</strong> — denumirile foilor și ale coloanelor nu contează.</p>
-          <p>2. După ce alegi fișierul se deschide o fereastră în care <strong className="font-medium text-foreground">tu decizi</strong>: pentru fiecare foaie, ce fel de date conține (coduri bugetare, proiecte, departamente, plătitori) și ce reprezintă fiecare coloană. Coloanele lăsate pe „nu importa" sunt ignorate. Sugestiile sunt pre-completate, dar le poți schimba.</p>
+          <p>2. După ce alegi fișierul se deschide o fereastră în care <strong className="font-medium text-foreground">tu decizi</strong>: pentru fiecare foaie, ce fel de date conține (organizații plătitoare, proiecte, evenimente, departamente, coduri bugetare, beneficiari) și ce reprezintă fiecare coloană. Coloanele lăsate pe „nu importa" sunt ignorate. Sugestiile sunt pre-completate, dar le poți schimba.</p>
           <p>3. Dacă în coloana pusă pe <span className="font-mono">Cod</span> ai tot textul (ex. <span className="font-mono">1.1 Project Coordinator</span>), codul și denumirea sunt separate automat. Proiectul indicat pe rând este creat dacă nu există.</p>
           <p>4. Sumele acceptă atât formatul MD/EU (<span className="font-mono">12 500,50</span>), cât și formatul internațional (<span className="font-mono">12500.50</span>).</p>
           <p>Importul nu oprește tot fișierul la prima eroare: rândurile valide sunt procesate, iar erorile rămân vizibile pentru corectare.</p>
@@ -2333,12 +2340,13 @@ function ParReferenceData({ initialSection }: ParReferenceDataProps) {
           {(importResult.warnings ?? []).map((w, i) => (
             <p key={`w-${i}`} className="text-muted-foreground text-xs">{w}</p>
           ))}
-          {(["payers", "projects", "departments", "budgetCodes", "vendors"] as const).map((key) => {
+          {(["payers", "projects", "events", "departments", "budgetCodes", "vendors"] as const).map((key) => {
             const cat = importResult[key];
             if (!cat) return null;
             const label =
-              key === "payers" ? "Plătitori"
+              key === "payers" ? "Organizații plătitoare"
               : key === "projects" ? "Proiecte"
+              : key === "events" ? "Evenimente"
               : key === "departments" ? "Departamente"
               : key === "budgetCodes" ? "Coduri buget"
               : "Beneficiari / Furnizori";
@@ -2361,6 +2369,19 @@ function ParReferenceData({ initialSection }: ParReferenceDataProps) {
           })}
         </div>
       )}
+
+        </div>
+      </details>
+
+      {/* VM1-02b: choose the import type + column mapping before anything is written */}
+      <ParImportMappingDialog
+        open={importFile !== null}
+        preview={importPreview}
+        fileName={importFile?.name ?? ""}
+        loading={importLoading}
+        onCancel={cancelImport}
+        onConfirm={runImport}
+      />
 
       {/* Section tabs */}
       <Tabs
@@ -3105,17 +3126,17 @@ function VendorSection({ vendors, onReload, normalizing, normalizeResult, onNorm
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">Furnizori / Plătitori</h3>
+        <h3 className="text-sm font-semibold text-foreground">Beneficiari / Furnizori</h3>
         <button type="button" onClick={startAdd}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 min-h-[44px]"
-          aria-label="Adaugă furnizor">
+          aria-label="Adaugă beneficiar">
           <Plus className="h-4 w-4" aria-hidden />Adaugă
         </button>
       </div>
 
       {/* Registry search */}
       <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
-        <p className="text-xs font-medium text-muted-foreground">Caută în registrul contafirm.md (autofill)</p>
+        <p className="text-xs font-medium text-muted-foreground">Caută în registrul de stat (contafirm.md) — completează automat denumirea, IDNO-ul și adresa</p>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden />
           <Input type="text" value={registryQuery} onChange={(e) => onQueryChange(e.target.value)}
@@ -3162,7 +3183,7 @@ function VendorSection({ vendors, onReload, normalizing, normalizeResult, onNorm
       {/* Rechizitele au fiecare coloana ei: contabila filtrează/copiază un cod, nu un paragraf.
           Tabelul e lat, deci derulează pe orizontală în interiorul lui — pagina nu se lățește. */}
       <div className="rounded-lg border border-border overflow-x-auto">
-        <table className="w-full min-w-[900px] text-sm" aria-label="Furnizori">
+        <table className="w-full min-w-[900px] text-sm" aria-label="Beneficiari">
           <thead className="bg-muted/50">
             <tr>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Nume</th>
@@ -3176,7 +3197,7 @@ function VendorSection({ vendors, onReload, normalizing, normalizeResult, onNorm
           </thead>
           <tbody>
             {vendors.length === 0 && (
-              <tr><td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">Niciun furnizor.</td></tr>
+              <tr><td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">Niciun beneficiar salvat. Beneficiarii apar și automat, din cererile trimise.</td></tr>
             )}
             {vendors.map((v) => (
               <tr key={v.id} className="border-t border-border">
