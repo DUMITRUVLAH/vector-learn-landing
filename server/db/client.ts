@@ -43,14 +43,34 @@ function createConnection(): {
     //     never returns and the function dies with FUNCTION_INVOCATION_TIMEOUT (30s). This was the
     //     prod login hang: the connection opened but findFirst() never resolved. Disabling the
     //     types fetch is the documented Supabase-pooler-on-serverless fix.
-    // The single-connection + short-timeout options are SERVERLESS-ONLY — on the persistent
-    // local/container server `max:1` serializes requests into a deadlock, so local keeps a
-    // normal pool. SSL comes from the URL's own `sslmode=require`; passing ssl:"require" here too
-    // double-negotiates and can stall the handshake, so it is left to the connection string.
+    // The pool options are SERVERLESS-ONLY — on the persistent local/container server `max:1`
+    // serializes requests into a deadlock, so local keeps a normal pool. SSL comes from the URL's
+    // own `sslmode=require`; passing ssl:"require" here too double-negotiates and can stall the
+    // handshake, so it is left to the connection string.
+    //
+    // PLATFORM-404 (2026-08-28) — două schimbări față de `max:1 + idle_timeout:20`, după ce
+    // măsurătorile pe prod au arătat ~4 din 50 de invocări care porneau și nu mai răspundeau
+    // NICIODATĂ (504 FUNCTION_INVOCATION_TIMEOUT), în timp ce fiecare răspuns reușit venea sub 3 s:
+    //
+    //   • `idle_timeout` ELIMINAT. Pe Vercel instanța e ÎNGHEȚATĂ între cereri, deci cronometrul
+    //     de inactivitate nu se scurge în timp real: se declanșează în momentul dezghețului —
+    //     exact când sosește cererea următoare. Conexiunea se închide fix pe interogarea nouă,
+    //     care rămâne scrisă într-un socket mort și nu primește niciodată răspuns. Un timp care
+    //     nu curge nu are voie să închidă conexiuni. Pooler-ul Supabase închide oricum sesiunile
+    //     inactive de partea lui, iar postgres.js reconectează la următoarea interogare.
+    //
+    //   • `max` 1 → 3. Funcțiile Node de pe Vercel servesc cereri CONCURENT în aceeași instanță,
+    //     iar cu o singură conexiune o interogare blocată le lua cu ea pe toate celelalte — de
+    //     aceea se blocau deodată `/api/par/finance`, `/api/notifications` și `/api/platform/*`.
+    //     Trei conexiuni izolează avaria la cererea ei; e departe de limitele pooler-ului.
+    //
+    // Notă: `statement_timeout` NU e o plasă aici — pgBouncer în mod tranzacție ignoră parametrul
+    // la conectare (verificat: rămâne 2 min), iar oricum serverul nu execută nimic, doar răspunsul
+    // s-a pierdut. Plafonul real e în `server/middleware/getTimeout.ts`.
     const client = postgres(
       databaseUrl,
       onVercel
-        ? { prepare: false, fetch_types: false, max: 1, connect_timeout: 10, idle_timeout: 20 }
+        ? { prepare: false, fetch_types: false, max: 3, connect_timeout: 10 }
         : { prepare: false }
     );
     return {

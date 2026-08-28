@@ -75,6 +75,48 @@ describe("api() — limita de timp pe GET", () => {
   });
 });
 
+describe("api() — o singură reîncercare la eșec tranzitoriu", () => {
+  it("reia GET-ul după 503 server_timeout și întoarce rezultatul reușit", async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls++;
+        return calls === 1
+          ? { ok: false, status: 503, json: async () => ({ error: "server_timeout" }) }
+          : { ok: true, status: 200, json: async () => ({ workspaces: [{ id: "w1" }] }) };
+      }) as unknown as typeof fetch
+    );
+
+    await expect(api("/api/platform/workspaces")).resolves.toEqual({ workspaces: [{ id: "w1" }] });
+    expect(calls).toBe(2);
+  });
+
+  it("nu reîncearcă la erori definitive (403) — ar ascunde problema reală", async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls++;
+        return { ok: false, status: 403, json: async () => ({ error: "platform_admin_required" }) };
+      }) as unknown as typeof fetch
+    );
+
+    await expect(api("/api/platform/workspaces")).rejects.toMatchObject({
+      code: "platform_admin_required",
+    });
+    expect(calls).toBe(1);
+  });
+
+  it("dă drumul erorii dacă și reîncercarea pică", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 503, json: async () => ({ error: "server_timeout" }) })) as unknown as typeof fetch
+    );
+    await expect(api("/api/x")).rejects.toMatchObject({ code: "server_timeout" });
+  });
+});
+
 describe("ApiError", () => {
   it("expune codul de timeout ca instanță ApiError", () => {
     const e = new ApiError(0, "request_timeout");

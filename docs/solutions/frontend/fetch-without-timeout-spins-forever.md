@@ -60,3 +60,42 @@ Când UI-ul zice „se încarcă" iar `curl` pe același endpoint răspunde în 
 în server**. Întrebarea corectă e „ce se întâmplă dacă cererea nu se termină niciodată?" — și
 răspunsul, în orice cod care folosește `fetch` fără `signal`, e „ecranul se blochează pe vecie".
 Orice stare de încărcare are nevoie de o limită de timp ȘI de o cale de ieșire.
+
+---
+
+## Continuare (aceeași zi): cauza era pe SERVER, nu doar lipsa timeout-ului
+
+Timeout-ul de client a scos spinnerul infinit, dar cererile tot se blocau. Telemetria a arătat
+că expirau `/api/par/finance` ȘI `/api/notifications` din același tab — deci **nu o rută anume**.
+
+Măsurat pe prod, cu rafale de 9-10 cereri paralele (ca la montarea paginii):
+
+- ~4 din 50 de invocări logau `<-- GET …` și **nu mai răspundeau niciodată** → 504
+  FUNCTION_INVOCATION_TIMEOUT. Toate răspunsurile reușite veneau **sub 3 s**. Comportament binar:
+  ori rapid, ori pe veci — deci nu „interogare lentă", ci **răspuns care nu mai vine**.
+- `/api/health` (care face `SELECT 1`) se bloca și el → blocajul e pe conexiunea la bază.
+- `statement_timeout` NU e o plasă: pooler-ul Supabase în mod tranzacție **ignoră** parametrul la
+  conectare (verificat: rămâne 2 min), iar serverul oricum nu execută nimic.
+
+### Cele două cauze din `server/db/client.ts`
+
+1. **`idle_timeout: 20` pe Vercel.** Instanța e ÎNGHEȚATĂ între cereri, deci cronometrul nu se
+   scurge în timp real — se declanșează la dezgheț, exact când sosește cererea următoare.
+   Conexiunea se închide fix pe interogarea nouă, care rămâne scrisă într-un socket mort.
+   **Un timp care nu curge nu are voie să închidă conexiuni.** Eliminat.
+2. **`max: 1`.** Funcțiile Node de pe Vercel servesc cereri CONCURENT în aceeași instanță; cu o
+   singură conexiune, o interogare blocată le lua cu ea pe toate — de aici blocajul simultan al
+   tuturor cererilor unui tab. Ridicat la 3.
+
+### Plasa care face simptomul imposibil
+
+`server/middleware/getTimeout.ts` — orice `GET /api/*` care depășește 20 s primește `503
+server_timeout` în loc să atârne până la 504. Doar GET: mutațiile (AI, PDF, import) pot dura
+legitim minute. Clientul reia o singură dată un GET picat cu 503 (idempotent, reușește sub o secundă).
+
+### Capcană de verificare
+
+**Nu poți demonstra plafonul local:** PGlite e WASM în proces și rulează interogarea **sincron**,
+blocând bucla de evenimente — `setTimeout` nu apucă să pornească, deci middleware-ul pare inactiv
+chiar dacă e montat corect (confirmat cu log: rulează, cu cap=1 ms, și tot întoarce 200). Verificarea
+reală se face pe Postgres (prod/preview), cu rafale paralele.

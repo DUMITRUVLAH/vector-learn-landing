@@ -94,6 +94,7 @@ import { impersonationRoutes } from "./routes/impersonation";
 import { myModulesRoutes } from "./routes/myModules";
 import { telemetryRoutes } from "./routes/telemetry";
 import { platformInsightsRoutes } from "./routes/platformInsights";
+import { getTimeout } from "./middleware/getTimeout";
 import { errorCapture } from "./middleware/errorCapture";
 import { recordError } from "./lib/errorTelemetry";
 import { alertOwnerOnNewError } from "./lib/errorAlerts";
@@ -151,6 +152,12 @@ app.use("*", httpCache);
 // PLATFORM-002: prinde orice 5xx și orice 404 pe /api/* (rută nemontată = bug real aici).
 // Montat înaintea rutelor, ca să vadă răspunsul fiecăreia.
 app.use("/api/*", errorCapture);
+
+// PLATFORM-404: nicio CITIRE nu are voie să atârne la infinit. Fără plafonul ăsta, o interogare
+// al cărei răspuns nu mai vine (socket mort către pooler) ținea invocația până la 504-ul lui
+// Vercel, iar în interfață toate cererile tabului rămâneau blocate pe „Se încarcă…".
+// Montat DUPĂ errorCapture, ca 503-ul să fie vizibil în Consola Platformă.
+app.use("/api/*", getTimeout);
 
 // SEC-002: limitare de rată pe autentificare, invitații și endpoint-urile AI (cost real per apel).
 // Fără ea, POST /api/business/auth/login accepta un număr nelimitat de încercări de parolă.

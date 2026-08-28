@@ -42,7 +42,28 @@ export async function api<T = unknown>(
   }
   // `cache: "reload"` = reîncărcare cerută explicit de utilizator (butonul „Reîncarcă").
   // Trebuie să ocolească micro-cache-ul, altfel butonul pare că nu face nimic.
-  return dedupe(url, () => rawApi<T>(url, init), init.cache === "reload");
+  return dedupe(url, () => getWithOneRetry<T>(url, init), init.cache === "reload");
+}
+
+/**
+ * O singură reîncercare pentru citirile picate TRANZITORIU.
+ *
+ * Serverul plafonează acum orice `GET /api/*` la 20 s și răspunde `503 server_timeout` în loc să
+ * atârne până la 504-ul lui Vercel (vezi server/middleware/getTimeout.ts). Eșecul e al conexiunii
+ * din spate, nu al cererii: măsurat pe prod, reîncercarea imediată reușește sub o secundă. Un GET
+ * e idempotent, deci reluarea lui nu poate strica nimic.
+ *
+ * NU reîncercăm după `request_timeout` (abandonul nostru la 30 s): acolo conexiunea browserului e
+ * moartă, iar o a doua încercare doar ar dubla așteptarea înainte de mesajul de eroare.
+ */
+async function getWithOneRetry<T>(url: string, init: RequestInit): Promise<T> {
+  try {
+    return await rawApi<T>(url, init);
+  } catch (err) {
+    const transient = err instanceof ApiError && (err.code === "server_timeout" || err.status === 503);
+    if (!transient) throw err;
+    return rawApi<T>(url, init);
+  }
 }
 
 /**
