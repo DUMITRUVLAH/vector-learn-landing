@@ -13,12 +13,60 @@ export const parPayersRoutes = new Hono<{ Variables: AuthVariables }>();
 parPayersRoutes.use("*", requireAuth);
 parPayersRoutes.use("/:id", parUuidGuard("id"));
 
+const optionalText = (max: number) => z.string().max(max).optional().nullable();
+
 const payerSchema = z.object({
   name: z.string().min(1).max(300),
-  legal_name: z.string().max(300).optional().nullable(),
-  idno: z.string().max(32).optional().nullable(),
+  legal_name: optionalText(300),
+  idno: optionalText(32),
+  vat_code: optionalText(50),
+  address: optionalText(500),
+  bank_name: optionalText(300),
+  iban: optionalText(64),
+  bank_code: optionalText(32),
+  contact_email: optionalText(200),
+  contact_phone: optionalText(50),
+  director_name: optionalText(200),
+  director_role: optionalText(200),
+  logo_url: optionalText(1000),
+  notes: optionalText(5000),
   active: z.boolean().optional(),
 });
+
+/** Câmpurile de identitate, în ordinea din formular — o singură listă pentru select + update. */
+const PAYER_DETAIL_FIELDS = [
+  ["legal_name", "legalName"],
+  ["idno", "idno"],
+  ["vat_code", "vatCode"],
+  ["address", "address"],
+  ["bank_name", "bankName"],
+  ["iban", "iban"],
+  ["bank_code", "bankCode"],
+  ["contact_email", "contactEmail"],
+  ["contact_phone", "contactPhone"],
+  ["director_name", "directorName"],
+  ["director_role", "directorRole"],
+  ["logo_url", "logoUrl"],
+  ["notes", "notes"],
+] as const;
+
+type PayerInput = z.infer<typeof payerSchema>;
+
+/**
+ * Mapează body-ul (snake_case) pe coloanele drizzle (camelCase). Doar câmpurile TRIMISE se
+ * ating — un PATCH parțial nu are voie să șteargă rechizitele pe care UI-ul nu le-a trimis.
+ * Un text golit din formular ajunge "" și înseamnă „nu e completat" → null, nu șir gol.
+ */
+function payerColumnValues(body: Partial<PayerInput>): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const [bodyKey, column] of PAYER_DETAIL_FIELDS) {
+    const raw = body[bodyKey];
+    if (raw === undefined) continue;
+    const trimmed = typeof raw === "string" ? raw.trim() : raw;
+    values[column] = trimmed ? trimmed : null;
+  }
+  return values;
+}
 
 parPayersRoutes.get("/", async (c) => {
   const user = c.get("user");
@@ -48,6 +96,17 @@ parPayersRoutes.get("/", async (c) => {
     name: parPayers.name,
     legalName: parPayers.legalName,
     idno: parPayers.idno,
+    vatCode: parPayers.vatCode,
+    address: parPayers.address,
+    bankName: parPayers.bankName,
+    iban: parPayers.iban,
+    bankCode: parPayers.bankCode,
+    contactEmail: parPayers.contactEmail,
+    contactPhone: parPayers.contactPhone,
+    directorName: parPayers.directorName,
+    directorRole: parPayers.directorRole,
+    logoUrl: parPayers.logoUrl,
+    notes: parPayers.notes,
     active: parPayers.active,
     createdAt: parPayers.createdAt,
     updatedAt: parPayers.updatedAt,
@@ -65,7 +124,7 @@ parPayersRoutes.post("/", requirePARRole("par_admin"), zValidator("json", payerS
   if (user.role !== "admin" && user.role !== "manager") return c.json({ error: "workspace_admin_required" }, 403);
   const body = c.req.valid("json");
   const [payer] = await db.insert(parPayers).values({
-    tenantId, name: body.name, legalName: body.legal_name ?? null, idno: body.idno ?? null, active: body.active ?? true,
+    tenantId, name: body.name, active: body.active ?? true, ...payerColumnValues(body),
   }).returning();
   await db.insert(parPayerModules).values({ tenantId, payerId: payer.id, moduleKey: "par", enabled: true, updatedByUserId: c.get("user").id });
   return c.json(payer, 201);
@@ -77,8 +136,7 @@ parPayersRoutes.patch("/:id", requirePARRole("par_admin"), zValidator("json", pa
   const body = c.req.valid("json");
   const [payer] = await db.update(parPayers).set({
     ...(body.name !== undefined ? { name: body.name } : {}),
-    ...(body.legal_name !== undefined ? { legalName: body.legal_name } : {}),
-    ...(body.idno !== undefined ? { idno: body.idno } : {}),
+    ...payerColumnValues(body),
     ...(body.active !== undefined ? { active: body.active } : {}), updatedAt: new Date(),
   }).where(and(eq(parPayers.id, c.req.param("id")), eq(parPayers.tenantId, tenantId))).returning();
   if (!payer) return c.json({ error: "not_found" }, 404);

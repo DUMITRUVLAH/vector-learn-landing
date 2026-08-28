@@ -20,7 +20,27 @@ export interface ApprovalSheetApproval {
   comment: string | null;
 }
 
+/**
+ * Identitatea organizației care PLĂTEȘTE. Un workspace poate avea mai multe entități juridice
+ * plătitoare, așa că fișa trebuie să spună explicit care dintre ele achită — altfel un dosar
+ * scos din sistem nu se poate atașa la contabilitatea entității corecte.
+ */
+export interface ApprovalSheetPayer {
+  name: string | null;
+  legalName: string | null;
+  idno: string | null;
+  vatCode: string | null;
+  address: string | null;
+  bankName: string | null;
+  iban: string | null;
+  bankCode: string | null;
+  directorName: string | null;
+  directorRole: string | null;
+}
+
 export interface ApprovalSheetData {
+  /** null când cererea nu are plătitor ales (workspace cu o singură entitate, dosar vechi). */
+  payer?: ApprovalSheetPayer | null;
   requestNo: string | null;
   dateOfRequest: Date | string | null;
   status: string;
@@ -115,6 +135,27 @@ export function buildApprovalSheetLines(d: ApprovalSheetData, generatedAt: Date)
   if (d.approvedAt) statusBits.push(`Aprobat la: ${fmtDateTime(d.approvedAt)}`);
   if (d.paidAt) statusBits.push(`Plătit la: ${fmtDateTime(d.paidAt)}`);
   push(statusBits.join(" · "), { bold: true });
+
+  const payer = d.payer;
+  if (payer && (payer.legalName || payer.name)) {
+    push("Organizația plătitoare", { bold: true, size: 12, gapBefore: 14 });
+    const identity = [
+      payer.legalName || payer.name,
+      payer.idno ? `IDNO: ${payer.idno}` : null,
+      payer.vatCode ? `Cod TVA: ${payer.vatCode}` : null,
+    ].filter(Boolean);
+    push(identity.join(" · "), { bold: true });
+    if (payer.address) push(`Adresa: ${payer.address}`);
+    const account = [
+      payer.iban ? `IBAN: ${payer.iban}` : null,
+      payer.bankName,
+      payer.bankCode ? `cod bancar: ${payer.bankCode}` : null,
+    ].filter(Boolean);
+    if (account.length) push(account.join(" · "));
+    if (payer.directorName) {
+      push(`Semnatar: ${payer.directorName}${payer.directorRole ? `, ${payer.directorRole}` : ""}`);
+    }
+  }
 
   push("Plata", { bold: true, size: 12, gapBefore: 14 });
   push(`Beneficiar: ${d.payeeName ?? "—"}${d.payeeIdnp ? ` (IDNO/IDNP: ${d.payeeIdnp})` : ""}`);

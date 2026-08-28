@@ -146,3 +146,58 @@ describe("VM3-02 winAnsiSafe — regresia 'WinAnsi cannot encode'", () => {
     expect(() => page.drawText(winAnsiSafe(nasty), { x: 50, y: 700, size: 10, font })).not.toThrow();
   });
 });
+
+describe("organizația plătitoare pe fișa aprobărilor", () => {
+  // De ce contează: workspace-ul poate avea mai multe entități juridice care plătesc, iar un
+  // dosar scos din sistem trebuie să spună singur care dintre ele achită (contabilitate + audit).
+  const payer = {
+    name: "ATIC",
+    legalName: "Asociația Națională a Companiilor din Domeniul TIC",
+    idno: "1012620008289",
+    vatCode: "0301234",
+    address: "str. Maria Cebotari 37, mun. Chișinău",
+    bankName: 'BC "MAIB" S.A.',
+    iban: "MD24AG000225100013104168",
+    bankCode: "AGRNMD2X885",
+    directorName: "Ana Popescu",
+    directorRole: "Director executiv",
+  };
+
+  it("[blocant] scrie denumirea juridică, IDNO și codul TVA", () => {
+    const text = buildApprovalSheetLines({ ...base, payer }, new Date("2026-07-15T08:00:00Z"))
+      .map((l) => l.text)
+      .join("\n");
+    expect(text).toContain(winAnsiSafe("Organizația plătitoare"));
+    expect(text).toContain(winAnsiSafe("Asociația Națională a Companiilor din Domeniul TIC"));
+    expect(text).toContain("IDNO: 1012620008289");
+    expect(text).toContain("Cod TVA: 0301234");
+  });
+
+  it("scrie contul din care se plătește și semnatarul", () => {
+    const text = buildApprovalSheetLines({ ...base, payer }, new Date("2026-07-15T08:00:00Z"))
+      .map((l) => l.text)
+      .join("\n");
+    expect(text).toContain("IBAN: MD24AG000225100013104168");
+    expect(text).toContain("cod bancar: AGRNMD2X885");
+    expect(text).toContain(winAnsiSafe("Semnatar: Ana Popescu, Director executiv"));
+  });
+
+  it("fără plătitor ales, secțiunea lipsește (dosare vechi rămân valide)", () => {
+    const text = buildApprovalSheetLines(base, new Date("2026-07-15T08:00:00Z"))
+      .map((l) => l.text)
+      .join("\n");
+    expect(text).not.toContain(winAnsiSafe("Organizația plătitoare"));
+  });
+
+  it("un plătitor cu doar denumirea completată nu inventează rânduri goale", () => {
+    const lines = buildApprovalSheetLines(
+      { ...base, payer: { ...payer, legalName: null, address: null, iban: null, bankName: null, bankCode: null, directorName: null } },
+      new Date("2026-07-15T08:00:00Z"),
+    ).map((l) => l.text);
+    const start = lines.indexOf(winAnsiSafe("Organizația plătitoare"));
+    const end = lines.indexOf(winAnsiSafe("Plata"));
+    expect(start).toBeGreaterThan(-1);
+    // Doar rândul de identitate — fără cont și fără semnatar, care lipsesc din date.
+    expect(lines.slice(start + 1, end)).toEqual([winAnsiSafe("ATIC · IDNO: 1012620008289 · Cod TVA: 0301234")]);
+  });
+});

@@ -225,11 +225,26 @@ describe("suggestMapping — what the mapping dialog pre-selects", () => {
   });
 
   it("uses the kind's own name aliases (a payers sheet's 'Denumire' is its name)", () => {
-    expect(suggestMapping("payers", ["Denumire", "IDNO"])).toEqual({
-      name: "Denumire",
-      legalName: null,
-      idno: "IDNO",
-    });
+    // Foaia de plătitori are acum și rechizite (identitatea completă a organizației care achită),
+    // deci verificăm coloanele mapate, nu întregul obiect — restul câmpurilor rămân nemapate.
+    const m = suggestMapping("payers", ["Denumire", "IDNO"]);
+    expect(m.name).toBe("Denumire");
+    expect(m.idno).toBe("IDNO");
+    expect(m.legalName).toBeNull();
+    expect(Object.values(m).filter(Boolean)).toHaveLength(2);
+  });
+
+  it("mapează rechizitele organizației plătitoare din antetele fișierului", () => {
+    const m = suggestMapping("payers", [
+      "Denumire plătitor", "IDNO", "Cod TVA", "Adresa juridică", "Bancă", "IBAN", "Semnatar", "Funcție",
+    ]);
+    expect(m.name).toBe("Denumire plătitor");
+    expect(m.vatCode).toBe("Cod TVA");
+    expect(m.legalAddress).toBe("Adresa juridică");
+    expect(m.bank).toBe("Bancă");
+    expect(m.iban).toBe("IBAN");
+    expect(m.directorName).toBe("Semnatar");
+    expect(m.directorRole).toBe("Funcție");
   });
 
   it("suggests nothing when no column matches — the user picks by hand", () => {

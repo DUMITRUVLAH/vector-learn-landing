@@ -18,7 +18,8 @@
  * for why (a real one-sheet file silently imported 0 budget codes and 41 duplicate projects).
  *
  * Recognised columns (diacritics/case/`*` insensitive):
- *   Plătitori:      Denumire plătitor | Denumire juridică | IDNO
+ *   Plătitori:      Denumire plătitor | Denumire juridică | IDNO | Cod TVA | Adresă juridică |
+ *                   Bancă | IBAN | Cod bancar | Email | Telefon | Semnatar | Funcție semnatar
  *   Proiecte:       Denumire proiect | Donor | Plătitor / Organizație
  *   Departamente:   Denumire departament
  *   Coduri buget:   Cod (or "Cod buget") | Denumire | Suma alocată (MDL) | Plătitor | Proiect
@@ -139,6 +140,15 @@ parConfigImportRoutes.get(
       { header: "Denumire plătitor *", key: "name", width: 35 },
       { header: "Denumire juridică", key: "legalName", width: 35 },
       { header: "IDNO", key: "idno", width: 20 },
+      { header: "Cod TVA", key: "vatCode", width: 16 },
+      { header: "Adresă juridică", key: "legalAddress", width: 40 },
+      { header: "Bancă", key: "bank", width: 28 },
+      { header: "IBAN", key: "iban", width: 30 },
+      { header: "Cod bancar (BIC/SWIFT)", key: "bicSwift", width: 22 },
+      { header: "Email", key: "contactEmail", width: 26 },
+      { header: "Telefon", key: "contactPhone", width: 18 },
+      { header: "Semnatar", key: "directorName", width: 26 },
+      { header: "Funcție semnatar", key: "directorRole", width: 24 },
     ];
     ws0.getRow(1).font = { bold: true };
 
@@ -509,10 +519,35 @@ async function upsertPayers(ctx: ImportCtx, rows: ImportRow[]): Promise<Category
   const { tenantId } = ctx;
   const res = emptyResult();
 
+  /**
+   * Doar coloanele PREZENTE în fișier se scriu. Înainte, un import care nu mapa „Denumire
+   * juridică"/„IDNO" le suprascria cu null — adică ștergea date completate de mână în admin.
+   * Cu identitatea completă a organizației (rechizite, semnatar) miza e și mai mare.
+   */
+  const presentFields = (data: Record<string, string>) => {
+    const values: Record<string, string | null> = {};
+    const put = (column: string, raw: string, normalize?: (v: string) => string) => {
+      if (!raw) return;
+      const clean = normalize ? normalize(raw) : raw.trim();
+      values[column] = clean || null;
+    };
+    put("legalName", getField(data, "Denumire juridică", "legalName"));
+    put("idno", getField(data, "IDNO", "idno"), (v) => v.replace(/\s+/g, ""));
+    put("vatCode", getField(data, "Cod TVA", "vatCode"));
+    put("address", getField(data, "Adresă juridică", "legalAddress", "adresa"));
+    put("bankName", getField(data, "Bancă", "bank"));
+    put("iban", getField(data, "IBAN", "iban"), (v) => v.replace(/\s+/g, "").toUpperCase());
+    put("bankCode", getField(data, "Cod bancar (BIC/SWIFT)", "bicSwift"), (v) => v.replace(/\s+/g, ""));
+    put("contactEmail", getField(data, "Email", "contactEmail"));
+    put("contactPhone", getField(data, "Telefon", "contactPhone"));
+    put("directorName", getField(data, "Semnatar", "directorName"));
+    put("directorRole", getField(data, "Funcție semnatar", "directorRole"));
+    return values;
+  };
+
   for (const { row, data } of rows) {
     const name = getField(data, ...PAYER_NAME_ALIASES);
-    const legalName = getField(data, "Denumire juridică", "legalName");
-    const idno = getField(data, "IDNO", "idno");
+    const details = presentFields(data);
     if (!name) {
       res.errors.push({ row, column: "Denumire plătitor", message: "Câmpul 'Denumire plătitor' este obligatoriu." });
       continue;
@@ -529,7 +564,7 @@ async function upsertPayers(ctx: ImportCtx, rows: ImportRow[]): Promise<Category
           res.errors.push({ row, column: "Denumire plătitor", message: `Nu ai acces la plătitorul '${name}'.` });
           continue;
         }
-        await db.update(parPayers).set({ legalName: legalName || null, idno: idno || null, active: true, updatedAt: new Date() }).where(eq(parPayers.id, existing.id));
+        await db.update(parPayers).set({ ...details, active: true, updatedAt: new Date() }).where(eq(parPayers.id, existing.id));
         res.updated++;
       } else {
         // PARQA: creating a NEW legal entity is a workspace-admin action (mirrors POST /api/par/payers).
@@ -537,7 +572,7 @@ async function upsertPayers(ctx: ImportCtx, rows: ImportRow[]): Promise<Category
           res.errors.push({ row, column: "Denumire plătitor", message: "Doar un administrator de workspace poate crea plătitori noi." });
           continue;
         }
-        const [payer] = await db.insert(parPayers).values({ tenantId, name, legalName: legalName || null, idno: idno || null }).returning();
+        const [payer] = await db.insert(parPayers).values({ tenantId, name, ...details }).returning();
         await db.insert(parPayerModules).values({ tenantId, payerId: payer.id, moduleKey: "par", enabled: true });
         res.created++;
       }

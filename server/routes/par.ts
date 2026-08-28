@@ -1865,8 +1865,28 @@ parRoutes.get("/:id/dosar", async (c) => {
         .where(and(eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.id, par.budgetCodeId)))
     : [];
 
+  // Identitatea entității care plătește — un workspace poate avea mai multe (par_payers).
+  const [sheetPayer] = par.payerId
+    ? await db
+        .select({
+          name: parPayers.name,
+          legalName: parPayers.legalName,
+          idno: parPayers.idno,
+          vatCode: parPayers.vatCode,
+          address: parPayers.address,
+          bankName: parPayers.bankName,
+          iban: parPayers.iban,
+          bankCode: parPayers.bankCode,
+          directorName: parPayers.directorName,
+          directorRole: parPayers.directorRole,
+        })
+        .from(parPayers)
+        .where(and(eq(parPayers.tenantId, tenantId), eq(parPayers.id, par.payerId)))
+    : [];
+
   const sheetLines = buildApprovalSheetLines(
     {
+      payer: sheetPayer ?? null,
       requestNo: par.requestNo,
       dateOfRequest: par.dateOfRequest,
       status: par.status,

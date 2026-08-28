@@ -5,8 +5,8 @@
  *   - Accepts multipart/form-data with field "file" (contract/invoice)
  *   - Runs the PAR-specific multi-party extractor (server/lib/ai/parExtractor.ts),
  *     then the deterministic choosePayee post-processor (server/lib/par/choosePayee.ts).
- *   - Reads parSettings.orgLegalName (tenant-scoped) to EXCLUDE the creator's own org
- *     from the payee candidates (the "Beneficiar = client who pays" trap).
+ *   - Reads the client's own org names (parSettings.orgLegalName + every par_payers entity)
+ *     to EXCLUDE them from the payee candidates (the "Beneficiar = client who pays" trap).
  *   - Returns the resolved payee* fields, or needsClarification + candidates when ambiguous.
  *   - Works in mock mode (no API key): the stub regex parser reproduces the scenarios.
  *
@@ -24,7 +24,7 @@ import type { PayeeCandidate } from "../lib/par/parPartyTypes";
 import { extractPdfText } from "../lib/ai/pdfText";
 import { extractOfficeText } from "../lib/ai/officeText";
 import { db } from "../db/client";
-import { parSettings } from "../db/schema/par";
+import { parPayers, parSettings } from "../db/schema/par";
 
 export const parAiPrefillRoutes = new Hono<{ Variables: AuthVariables }>();
 parAiPrefillRoutes.use("*", requireAuth);
@@ -221,20 +221,35 @@ parAiPrefillRoutes.post(
       prefillId,
     });
 
-    // Tenant org identity → excludes the creator's own org from payee candidates.
-    let orgLegalName: string | null = null;
+    // Identitatea proprie a clientului → exclude propriile organizații din candidații de beneficiar.
+    // Un workspace poate avea mai multe entități plătitoare (par_payers), iar un document emis
+    // între două dintre ele nu are beneficiar extern: le luăm pe TOATE, nu doar denumirea din
+    // setări (care e una singură pe tenant).
+    const ownOrgNames: string[] = [];
     try {
       const [settings] = await db
         .select({ orgLegalName: parSettings.orgLegalName })
         .from(parSettings)
         .where(eq(parSettings.tenantId, user.tenantId));
-      orgLegalName = settings?.orgLegalName ?? null;
+      if (settings?.orgLegalName) ownOrgNames.push(settings.orgLegalName);
     } catch {
-      orgLegalName = null;
+      // Setările lipsesc (tenant nou) — plătitorii de mai jos rămân sursa de adevăr.
+    }
+    try {
+      const payerRows = await db
+        .select({ name: parPayers.name, legalName: parPayers.legalName })
+        .from(parPayers)
+        .where(eq(parPayers.tenantId, user.tenantId));
+      for (const row of payerRows) {
+        if (row.legalName) ownOrgNames.push(row.legalName);
+        if (row.name) ownOrgNames.push(row.name);
+      }
+    } catch {
+      // Tabela lipsește pe un deploy în urmă — nu blocăm completarea.
     }
 
     // Deterministic payee selection + requisite validation/routing.
-    const choice = choosePayee(extraction, orgLegalName);
+    const choice = choosePayee(extraction, ownOrgNames.length ? ownOrgNames : null);
 
     // Suma ÎN LITERE bate cifra citită din tabel. Într-un PDF ordinea rândurilor se amestecă:
     // pe contul de plată al owner-ului „23042" a ajuns pe alt rând decât „TOTAL", modelul a citit

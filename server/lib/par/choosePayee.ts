@@ -1,8 +1,9 @@
 /**
  * PAR AI multi-party autocomplete — deterministic payee post-processor.
  *
- * `choosePayee(extraction, tenantOrgName)` is a PURE function (no I/O) that:
- *   - excludes banks and the creator's own org (fuzzy self-match) and explicit payers,
+ * `choosePayee(extraction, tenantOrgNames)` is a PURE function (no I/O) that:
+ *   - excludes banks and the creator's own orgs (fuzzy self-match, one or many payer entities)
+ *     and explicit payers,
  *   - picks the payee by ROLE (executor > provider; never the literal word "Beneficiar"),
  *   - validates & routes every requisite (IBAN mod-97, 13-digit IDNO, VAT exclusion),
  *   - asks the user when genuinely ambiguous (2+ equally-ranked paid parties).
@@ -106,6 +107,18 @@ export function fuzzyOrgMatch(name: string, org: string | null): boolean {
   // Single very-distinctive token shared (handles 1-word distinctive orgs).
   const overlapStrong = setOrg.filter((t) => setName.has(t) && t.length >= 6).length;
   return overlapStrong >= 1 && (distinctTokens(nOrg).length <= 2 || distinctTokens(nName).length <= 2);
+}
+
+/**
+ * Un workspace poate avea MAI MULTE organizații plătitoare (par_payers), nu una singură: toate
+ * sunt „noi", deci niciuna nu are voie să ajungă candidat de beneficiar. Când documentul e emis
+ * între două entități ale aceluiași client, excluderea pe o singură denumire lăsa a doua entitate
+ * să treacă drept beneficiar.
+ */
+export function fuzzyOrgMatchAny(name: string, orgs: string | string[] | null): boolean {
+  if (!orgs) return false;
+  const list = Array.isArray(orgs) ? orgs : [orgs];
+  return list.some((org) => fuzzyOrgMatch(name, org));
 }
 
 export function roleRank(role: ParRole): number {
@@ -271,7 +284,7 @@ function dedupeByName(cands: InternalCandidate[]): InternalCandidate[] {
  */
 function decidePayee(
   ext: ParPartiesExtraction,
-  tenantOrgName: string | null,
+  tenantOrgName: string | string[] | null,
 ): Omit<ChoosePayeeResult, "options"> & { _pool: InternalCandidate[] } {
   const currency = ext.currency ?? "MDL";
   const scope = ext.scope;
@@ -289,7 +302,7 @@ function decidePayee(
   // user can still pick it when the document's role wording misled the extractor — the classic
   // Moldovan "BENEFICIAR = the one who pays" trap.
   const displayPool = ext.parties.filter(
-    (p) => p.role !== "bank" && !isPayeeBank(p.name) && !fuzzyOrgMatch(p.name, tenantOrgName),
+    (p) => p.role !== "bank" && !isPayeeBank(p.name) && !fuzzyOrgMatchAny(p.name, tenantOrgName),
   );
   const pool = displayPool.filter((p) => !(trustRoles && p.role === "client"));
 
@@ -427,7 +440,7 @@ function decidePayee(
   //   (c) documentul îi tipărește un IBAN VALID — pe o factură contul tipărit e al celui care încasează;
   //   (d) nu poartă marcaj explicit de plătitor („Plătitor:"/„Ordonator:"/„Bill To:" pe numele ei).
   // Rezultatul e marcat „⚠ de verificat" pe nume: e o deducție din rechizite, nu o certitudine.
-  const selfPresent = ext.parties.some((p) => fuzzyOrgMatch(p.name, tenantOrgName));
+  const selfPresent = ext.parties.some((p) => fuzzyOrgMatchAny(p.name, tenantOrgName));
   const soleParty = dedupeByName(displayCandidates);
   if (
     !selfPresent &&
@@ -472,7 +485,8 @@ function decidePayee(
  */
 export function choosePayee(
   ext: ParPartiesExtraction,
-  tenantOrgName: string | null,
+  /** Denumirea/denumirile proprii ale clientului: setările tenantului + toate organizațiile plătitoare. */
+  tenantOrgName: string | string[] | null,
 ): ChoosePayeeResult {
   const { _pool, ...decision } = decidePayee(ext, tenantOrgName);
 

@@ -47,6 +47,7 @@ import { AppShell } from "@/components/app/AppShell";
 import { ParImportMappingDialog } from "@/components/par/ParImportMappingDialog";
 import { cn } from "@/lib/utils";
 import { Alert, Badge, Button, Card, Checkbox, Input, Label, Select, Switch, Tabs, Textarea } from "@/components/ds";
+import { validateIban } from "@/lib/par/iban";
 import {
   type RuleDraft, type ApproverPick, type GroupedRule,
   ruleScopeKey, buildDoaRows, groupDoaRows, emptyRuleDraft,
@@ -122,6 +123,7 @@ import {
   type ParDepartment,
   type ParProject,
   type ParPayer,
+  type ParPayerDetailsInput,
   type ParBudgetCode,
   type ParVendor,
   type ParEvent,
@@ -641,7 +643,12 @@ const CURRENCY_OPTIONS = [
 
 const isHttpUrl = (v: string) => /^https?:\/\/\S+$/i.test(v);
 
-function ParSettingsForm() {
+interface ParSettingsFormProps {
+  /** Duce la lista de organizații plătitoare — acolo se completează datele fiecărei entități. */
+  onManagePayers: () => void;
+}
+
+function ParSettingsForm({ onManagePayers }: ParSettingsFormProps) {
   const { navigate } = useRouter();
   const [settings, setSettings] = useState<Partial<ParSettings>>({});
   const [loading, setLoading] = useState(true);
@@ -719,8 +726,25 @@ function ParSettingsForm() {
         </div>
       )}
 
-      {section("Organizație", "Apar pe formularele PAR generate și în antetul PDF-ului.", (
+      {section("Organizație", "Valorile implicite ale workspace-ului, folosite când cererea nu are o organizație plătitoare aleasă.", (
         <>
+          {/* Identitatea reală (IDNO, adresă, cont, semnatar) stă pe FIECARE organizație plătitoare:
+              un workspace poate avea mai multe entități care achită, iar setările sunt unice. */}
+          <div className="rounded-md border border-border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">
+              Ai mai multe organizații care plătesc? Datele fiecăreia — IDNO, cod TVA, adresă,
+              cont bancar, semnatar — se completează separat, pe organizație.
+            </p>
+            <button
+              type="button"
+              onClick={onManagePayers}
+              className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              <Building2 className="h-4 w-4" aria-hidden />
+              Organizații plătitoare
+            </button>
+          </div>
+
           <div>
             <label htmlFor="par-legal-name" className="text-sm font-medium text-foreground block mb-1">
               Denumire legală organizație
@@ -2092,8 +2116,13 @@ function ParMembersTab() {
 
 type RefSection = "payers" | "budgetCodes" | "departments" | "projects" | "events" | "vendors";
 
-function ParReferenceData() {
-  const [section, setSection] = useState<RefSection>("budgetCodes");
+interface ParReferenceDataProps {
+  /** Secțiunea deschisă la intrare (ex. „Organizații plătitoare", venind din Setări). */
+  initialSection?: RefSection;
+}
+
+function ParReferenceData({ initialSection }: ParReferenceDataProps) {
+  const [section, setSection] = useState<RefSection>(initialSection ?? "budgetCodes");
   const [departments, setDepartments] = useState<ParDepartment[]>([]);
   const [payers, setPayers] = useState<ParPayer[]>([]);
   const [projects, setProjects] = useState<ParProject[]>([]);
@@ -2214,7 +2243,7 @@ function ParReferenceData() {
   }
 
   const sectionLabels: Record<RefSection, string> = {
-    payers: "Plătitori / Organizații",
+    payers: "Organizații plătitoare",
     budgetCodes: "Coduri bugetare",
     departments: "Departamente",
     projects: "Proiecte/Programe",
@@ -2342,33 +2371,7 @@ function ParReferenceData() {
         tabs={(Object.keys(sectionLabels) as RefSection[]).map((s) => ({ value: s, label: sectionLabels[s] }))}
       />
 
-      {section === "payers" && (
-        <SimpleRefTable
-          title="Plătitori / Organizații"
-          items={payers}
-          columns={[
-            { label: "Denumire scurtă", key: "name" as const },
-            { label: "Denumire juridică", key: "legalName" as const },
-            { label: "IDNO", key: "idno" as const },
-          ]}
-          onAdd={(payload) => createPayer({
-            name: payload.name,
-            legal_name: payload.legalName || null,
-            idno: payload.idno || null,
-          }).then(load)}
-          onEdit={(id, payload) => updatePayer(id, {
-            name: payload.name,
-            legal_name: payload.legalName || null,
-            idno: payload.idno || null,
-          }).then(load)}
-          onDelete={(id) => deletePayer(id).then(() => load())}
-          addFields={[
-            { id: "name", label: "Denumire scurtă", placeholder: "ex. Compania Grup SRL", required: true },
-            { id: "legalName", label: "Denumire juridică", placeholder: "Denumirea din acte" },
-            { id: "idno", label: "IDNO", placeholder: "ex. 1012600000000" },
-          ]}
-        />
-      )}
+      {section === "payers" && <PayerOrgsSection payers={payers} onChanged={load} />}
 
       {section === "budgetCodes" && (
         <BudgetCodesTable
@@ -3212,6 +3215,340 @@ function VendorSection({ vendors, onReload, normalizing, normalizeResult, onNorm
   );
 }
 
+// ─── Organizații plătitoare ───────────────────────────────────────────────────
+// Un workspace poate avea MAI MULTE entități juridice care plătesc (ATIC, un proiect cu
+// entitate proprie, un SRL afiliat). De aceea identitatea completă — rechizite, contact,
+// semnatar, logo — stă pe fiecare plătitor, nu în setările tenantului (care sunt unice).
+// Datele ajung pe fișa aprobărilor din PDF și exclud propria organizație din candidații
+// de beneficiar la completarea AI.
+
+interface PayerFieldDef {
+  id: string;
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  multiline?: boolean;
+  wide?: boolean;
+}
+
+const PAYER_FIELD_GROUPS: Array<{ title: string; hint?: string; fields: PayerFieldDef[] }> = [
+  {
+    title: "Identitate",
+    hint: "Denumirea juridică și IDNO apar pe fișa aprobărilor și feresc organizația de a fi propusă drept beneficiar.",
+    fields: [
+      { id: "name", label: "Denumire scurtă", placeholder: "ex. ATIC", required: true },
+      { id: "legalName", label: "Denumire juridică", placeholder: "Denumirea completă din acte" },
+      { id: "idno", label: "IDNO / cod fiscal", placeholder: "ex. 1012600000000" },
+      { id: "vatCode", label: "Cod TVA", placeholder: "ex. 0301234" },
+      { id: "address", label: "Adresa juridică", placeholder: "str. …, mun. Chișinău, MD-2001", wide: true },
+    ],
+  },
+  {
+    title: "Contul din care se plătește",
+    fields: [
+      { id: "bankName", label: "Banca", placeholder: "ex. BC „MAIB” S.A." },
+      { id: "iban", label: "IBAN", placeholder: "MD24AG000225100013104168" },
+      { id: "bankCode", label: "Cod bancar (BIC/SWIFT)", placeholder: "ex. AGRNMD2X885" },
+    ],
+  },
+  {
+    title: "Contact",
+    fields: [
+      { id: "contactEmail", label: "Email", placeholder: "contabilitate@organizatie.md" },
+      { id: "contactPhone", label: "Telefon", placeholder: "+373 22 000 000" },
+    ],
+  },
+  {
+    title: "Semnatar",
+    hint: "Cine semnează pentru această organizație.",
+    fields: [
+      { id: "directorName", label: "Nume", placeholder: "ex. Ana Popescu" },
+      { id: "directorRole", label: "Funcție", placeholder: "ex. Director executiv" },
+    ],
+  },
+  {
+    title: "Antet și note",
+    fields: [
+      { id: "logoUrl", label: "Logo URL", placeholder: "https://…/logo.png", wide: true },
+      { id: "notes", label: "Note interne", placeholder: "Detalii utile echipei (nu apar pe PDF)", multiline: true, wide: true },
+    ],
+  },
+];
+
+/** camelCase din formular → cheile snake_case ale API-ului. */
+const PAYER_API_KEYS: Record<string, keyof ParPayerDetailsInput> = {
+  legalName: "legal_name",
+  idno: "idno",
+  vatCode: "vat_code",
+  address: "address",
+  bankName: "bank_name",
+  iban: "iban",
+  bankCode: "bank_code",
+  contactEmail: "contact_email",
+  contactPhone: "contact_phone",
+  directorName: "director_name",
+  directorRole: "director_role",
+  logoUrl: "logo_url",
+  notes: "notes",
+};
+
+const PAYER_FIELDS: PayerFieldDef[] = PAYER_FIELD_GROUPS.flatMap((g) => g.fields);
+
+function emptyPayerForm(): Record<string, string> {
+  return Object.fromEntries(PAYER_FIELDS.map((f) => [f.id, ""]));
+}
+
+function payerFormFrom(payer: ParPayer): Record<string, string> {
+  const values = payer as unknown as Record<string, unknown>;
+  return Object.fromEntries(PAYER_FIELDS.map((f) => [f.id, String(values[f.id] ?? "")]));
+}
+
+/** Trimite TOATE câmpurile de identitate: golirea unui câmp trebuie să se și salveze. */
+function payerDetailsPayload(form: Record<string, string>): ParPayerDetailsInput {
+  const payload: Record<string, string | null> = {};
+  for (const [formKey, apiKey] of Object.entries(PAYER_API_KEYS)) {
+    const value = (form[formKey] ?? "").trim();
+    payload[apiKey] = formKey === "iban" && value ? value.replace(/\s+/g, "").toUpperCase() : value || null;
+  }
+  return payload as ParPayerDetailsInput;
+}
+
+/** Perechile completate, pentru rezumatul din card (fără cele deja afișate în antetul lui). */
+const PAYER_SUMMARY_SKIP = new Set(["name", "legalName", "logoUrl", "notes"]);
+
+function payerSummaryRows(payer: ParPayer): Array<[string, string]> {
+  const values = payer as unknown as Record<string, unknown>;
+  return PAYER_FIELDS.filter((f) => !PAYER_SUMMARY_SKIP.has(f.id))
+    .map((f) => [f.label, String(values[f.id] ?? "")] as [string, string])
+    .filter(([, value]) => value.trim().length > 0);
+}
+
+interface PayerOrgsSectionProps {
+  payers: ParPayer[];
+  onChanged: () => Promise<void> | void;
+}
+
+function PayerOrgsSection({ payers, onChanged }: PayerOrgsSectionProps) {
+  const [editingId, setEditingId] = useState<string | null>(null); // id existent sau "new"
+  const [form, setForm] = useState<Record<string, string>>(emptyPayerForm);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const setField = (id: string, value: string) => setForm((f) => ({ ...f, [id]: value }));
+
+  const startAdd = () => {
+    setForm(emptyPayerForm());
+    setEditingId("new");
+    setError(null);
+  };
+
+  const startEdit = (payer: ParPayer) => {
+    setForm(payerFormFrom(payer));
+    setEditingId(payer.id);
+    setError(null);
+  };
+
+  const cancel = () => {
+    setEditingId(null);
+    setForm(emptyPayerForm());
+    setError(null);
+  };
+
+  const save = async () => {
+    const name = (form.name ?? "").trim();
+    if (!name) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const details = payerDetailsPayload(form);
+      if (editingId === "new") {
+        await createPayer({ name, ...details });
+      } else if (editingId) {
+        await updatePayer(editingId, { name, ...details });
+      }
+      await onChanged();
+      cancel();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Nu s-a putut salva organizația.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deactivate = async (payer: ParPayer) => {
+    if (!confirm(`Dezactivezi organizația „${payer.name}"? Cererile existente rămân neatinse.`)) return;
+    setError(null);
+    try {
+      await deletePayer(payer.id);
+      await onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Nu s-a putut dezactiva organizația.");
+    }
+  };
+
+  // IBAN-ul greșit nu blochează salvarea (unele conturi vechi nu trec mod-97), doar avertizează.
+  const ibanCheck = validateIban(form.iban ?? "");
+  const ibanWarning = (form.iban ?? "").trim() && !ibanCheck.ok ? ibanCheck.message : null;
+
+  const renderForm = () => (
+    <div className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+      {PAYER_FIELD_GROUPS.map((group) => (
+        <fieldset key={group.title} className="space-y-2">
+          <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {group.title}
+          </legend>
+          {group.hint && <p className="text-xs text-muted-foreground">{group.hint}</p>}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {group.fields.map((field) => (
+              <div key={field.id} className={cn(field.wide && "sm:col-span-2")}>
+                <Label htmlFor={`payer-${field.id}`} className="mb-1 block text-xs font-medium text-muted-foreground">
+                  {field.label}{field.required && " *"}
+                </Label>
+                {field.multiline ? (
+                  <Textarea
+                    id={`payer-${field.id}`}
+                    rows={2}
+                    value={form[field.id] ?? ""}
+                    onChange={(e) => setField(field.id, e.target.value)}
+                    placeholder={field.placeholder}
+                    className="w-full"
+                  />
+                ) : (
+                  <Input
+                    id={`payer-${field.id}`}
+                    type="text"
+                    value={form[field.id] ?? ""}
+                    onChange={(e) => setField(field.id, e.target.value)}
+                    placeholder={field.placeholder}
+                    className="w-full"
+                  />
+                )}
+                {field.id === "iban" && ibanWarning && (
+                  <p className="mt-1 text-xs text-destructive">{ibanWarning}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </fieldset>
+      ))}
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving || !(form.name ?? "").trim()}
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}
+          Salvează
+        </button>
+        <button
+          type="button"
+          onClick={cancel}
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+        >
+          <X className="h-4 w-4" aria-hidden />
+          Anulează
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Organizații plătitoare</h3>
+          <p className="text-xs text-muted-foreground">
+            Datele fiecărei entități care achită. Poți avea oricâte în același workspace.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={startAdd}
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          aria-label="Adaugă organizație plătitoare"
+        >
+          <Plus className="h-4 w-4" aria-hidden />
+          Adaugă
+        </button>
+      </div>
+
+      {error && (
+        <div role="alert" className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" aria-hidden />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {editingId === "new" && renderForm()}
+
+      {payers.length === 0 && editingId !== "new" && (
+        <p className="rounded-lg border border-border p-6 text-center text-sm text-muted-foreground">
+          Nicio organizație plătitoare.
+        </p>
+      )}
+
+      <div className="space-y-3">
+        {payers.map((payer) => {
+          const rows = payerSummaryRows(payer);
+          return (
+            <div key={payer.id} className="rounded-lg border border-border bg-card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="truncate text-sm font-semibold text-foreground">{payer.name}</span>
+                    {payer.active === false && <Badge variant="secondary">Inactivă</Badge>}
+                  </div>
+                  {payer.legalName && (
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{payer.legalName}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => (editingId === payer.id ? cancel() : startEdit(payer))}
+                    className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label={`Editează datele organizației ${payer.name}`}
+                  >
+                    <Edit2 className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deactivate(payer)}
+                    className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={`Dezactivează organizația ${payer.name}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </div>
+              </div>
+
+              {editingId === payer.id ? (
+                <div className="mt-3">{renderForm()}</div>
+              ) : rows.length > 0 ? (
+                <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                  {rows.map(([label, value]) => (
+                    <div key={label} className="flex gap-2 text-xs">
+                      <dt className="min-w-[120px] flex-shrink-0 text-muted-foreground">{label}</dt>
+                      <dd className="break-words font-medium text-foreground">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Doar denumirea e completată. Adaugă IDNO, adresa și rechizitele bancare — apar pe fișa aprobărilor.
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 interface SimpleRefTableProps<T extends { id: string; active?: boolean }> {
   title: string;
   items: T[];
@@ -3418,6 +3755,8 @@ interface ParAdminProps {
 export function ParAdmin({ isAdmin }: ParAdminProps) {
   const { navigate } = useRouter();
   const [tab, setTab] = useState("doa");
+  // Secțiunea de date-referință deschisă la comutarea din altă filă (ex. Setări → plătitori).
+  const [refSection, setRefSection] = useState<RefSection>("budgetCodes");
   const [departments, setDepartments] = useState<ParDepartment[]>([]);
 
   useEffect(() => {
@@ -3492,9 +3831,11 @@ export function ParAdmin({ isAdmin }: ParAdminProps) {
           aria-labelledby={`tab-${tab}`}
         >
           {tab === "doa" && <DoaMatrixEditor departments={departments} />}
-          {tab === "settings" && <ParSettingsForm />}
+          {tab === "settings" && (
+            <ParSettingsForm onManagePayers={() => { setRefSection("payers"); setTab("reference"); }} />
+          )}
           {tab === "members" && <ParMembersTab />}
-          {tab === "reference" && <ParReferenceData />}
+          {tab === "reference" && <ParReferenceData key={refSection} initialSection={refSection} />}
           {tab === "audit" && <AuditTab />}
         </div>
       </div>

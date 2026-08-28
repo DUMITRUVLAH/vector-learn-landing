@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -247,6 +247,61 @@ describe("POST /api/par/config-import — the four-sheet template still works", 
     const [code] = await testDb.select().from(parBudgetCodes).where(eq(parBudgetCodes.tenantId, tenantId));
     // "45 000,50" MDL → cents
     expect(code.allocatedCents).toBe(4500050);
+  });
+});
+
+describe("POST /api/par/config-import — datele organizației plătitoare", () => {
+  it("aduce rechizitele complete ale plătitorului din fișier", async () => {
+    const wb = new ExcelJS.Workbook();
+    const p = wb.addWorksheet("Plătitori");
+    p.addRow(["Denumire plătitor *", "Denumire juridică", "IDNO", "Cod TVA", "Adresă juridică", "Bancă", "IBAN", "Cod bancar (BIC/SWIFT)", "Semnatar", "Funcție semnatar"]);
+    p.addRow([
+      "Fundația Vector", "A.O. Fundația Vector", "1015600001234", "0301234",
+      "str. Maria Cebotari 37, mun. Chișinău", 'BC "MAIB" S.A.',
+      "md24 ag00 0225 1000 1310 4168", "AGRNMD2X885", "Ana Popescu", "Director executiv",
+    ]);
+    const buf = await wb.xlsx.writeBuffer();
+
+    const res = await postImport(new File([buf], "platitori.xlsx"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ImportBody;
+    expect(body.payers.errors).toEqual([]);
+
+    const [row] = await testDb
+      .select()
+      .from(parPayers)
+      .where(and(eq(parPayers.tenantId, tenantId), eq(parPayers.name, "Fundația Vector")));
+    expect(row.legalName).toBe("A.O. Fundația Vector");
+    expect(row.vatCode).toBe("0301234");
+    expect(row.address).toBe("str. Maria Cebotari 37, mun. Chișinău");
+    expect(row.bankName).toBe('BC "MAIB" S.A.');
+    expect(row.iban).toBe("MD24AG000225100013104168");
+    expect(row.bankCode).toBe("AGRNMD2X885");
+    expect(row.directorName).toBe("Ana Popescu");
+    expect(row.directorRole).toBe("Director executiv");
+  });
+
+  it("[blocant] un import fără coloanele de identitate NU șterge datele completate manual", async () => {
+    // Datele există deja pe plătitor (completate în admin).
+    await testDb
+      .update(parPayers)
+      .set({ legalName: "A.O. ATIC", idno: "1010600000000", iban: "MD24AG000225100013104168" })
+      .where(eq(parPayers.id, payerId));
+
+    const wb = new ExcelJS.Workbook();
+    const p = wb.addWorksheet("Plătitori");
+    p.addRow(["Denumire plătitor *"]);
+    p.addRow(["ATIC"]);
+    const buf = await wb.xlsx.writeBuffer();
+
+    const res = await postImport(new File([buf], "doar-nume.xlsx"));
+    expect(res.status).toBe(200);
+
+    const [row] = await testDb.select().from(parPayers).where(eq(parPayers.id, payerId));
+    // Înainte, update-ul scria null peste tot ce nu era mapat.
+    expect(row.legalName).toBe("A.O. ATIC");
+    expect(row.idno).toBe("1010600000000");
+    expect(row.iban).toBe("MD24AG000225100013104168");
   });
 });
 

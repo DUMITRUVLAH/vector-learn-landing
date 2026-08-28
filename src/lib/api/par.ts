@@ -180,7 +180,46 @@ export interface ParPayment {
 
 // Config entities
 export interface ParDepartment { id: string; name: string; active: boolean; }
-export interface ParPayer { id: string; name: string; legalName: string | null; idno: string | null; active: boolean; }
+/**
+ * O organizație plătitoare. Un workspace poate avea mai multe entități juridice care plătesc,
+ * deci identitatea (rechizite, contact, semnatar, logo) stă pe fiecare plătitor în parte —
+ * nu în setările tenantului, care sunt unice.
+ */
+export interface ParPayer {
+  id: string;
+  name: string;
+  legalName: string | null;
+  idno: string | null;
+  vatCode?: string | null;
+  address?: string | null;
+  bankName?: string | null;
+  iban?: string | null;
+  bankCode?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  directorName?: string | null;
+  directorRole?: string | null;
+  logoUrl?: string | null;
+  notes?: string | null;
+  active: boolean;
+}
+
+/** Câmpurile de identitate acceptate de API (snake_case, ca pe server). */
+export interface ParPayerDetailsInput {
+  legal_name?: string | null;
+  idno?: string | null;
+  vat_code?: string | null;
+  address?: string | null;
+  bank_name?: string | null;
+  iban?: string | null;
+  bank_code?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  director_name?: string | null;
+  director_role?: string | null;
+  logo_url?: string | null;
+  notes?: string | null;
+}
 export interface ParProject { id: string; payerId: string | null; name: string; donor: string | null; active: boolean; approverUserIds?: string[]; }
 export interface ParBudgetCode { id: string; payerId: string | null; projectId: string | null; code: string; name: string; active: boolean; allocatedCents?: number; }
 /** VM1-04: Event — sub-entity of a project */
@@ -792,11 +831,11 @@ export async function listPayers(): Promise<{ items: ParPayer[] }> {
   return api<{ payers: ParPayer[] }>("/api/par/payers").then((r) => ({ items: r.payers ?? [] }));
 }
 
-export async function createPayer(payload: { name: string; legal_name?: string | null; idno?: string | null }): Promise<ParPayer> {
+export async function createPayer(payload: { name: string } & ParPayerDetailsInput): Promise<ParPayer> {
   return api("/api/par/payers", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export async function updatePayer(id: string, payload: Partial<{ name: string; legal_name: string | null; idno: string | null; active: boolean }>): Promise<ParPayer> {
+export async function updatePayer(id: string, payload: Partial<{ name: string; active: boolean }> & ParPayerDetailsInput): Promise<ParPayer> {
   return api(`/api/par/payers/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
 

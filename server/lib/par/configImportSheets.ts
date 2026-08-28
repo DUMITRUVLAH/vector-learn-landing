@@ -164,6 +164,14 @@ function hasHeader(headers: string[], aliases: string[]): boolean {
 export function detectKindFromHeaders(headers: string[]): SheetKind | null {
   if (!headers.length) return null;
   if (hasHeader(headers, CODE_ALIASES)) return "budgetCodes";
+  // Organizația plătitoare are acum și rechizite bancare, deci un IBAN nu mai e dovadă că foaia
+  // e registrul de beneficiari. „Denumire plătitor" e antetul propriu al foii de plătitori
+  // (foaia de proiecte folosește „Plătitor / Organizație", prinsă mai jos, în ordinea veche).
+  if (
+    hasHeader(headers, ["denumire platitor", "denumire organizatie"]) &&
+    !hasHeader(headers, ["denumire beneficiar", "denumire furnizor", "denumire proiect"])
+  )
+    return "payers";
   // Un IBAN nu apare pe nicio altă foaie de configurare — e semnătura registrului de beneficiari.
   if (hasHeader(headers, [...IBAN_ALIASES, "denumire beneficiar", "beneficiar", "denumire furnizor", "furnizor"]))
     return "vendors";
@@ -256,10 +264,21 @@ export interface FieldDef {
 }
 
 export const FIELD_DEFS: Record<SheetKind, FieldDef[]> = {
+  // Organizația plătitoare are identitate completă (mai multe entități per workspace), deci
+  // fișierul de configurare poate aduce și rechizitele, nu doar denumirea + IDNO.
   payers: [
     { key: "name", label: "Denumire plătitor", required: true },
     { key: "legalName", label: "Denumire juridică", required: false },
     { key: "idno", label: "IDNO", required: false },
+    { key: "vatCode", label: "Cod TVA", required: false },
+    { key: "legalAddress", label: "Adresă juridică", required: false },
+    { key: "bank", label: "Bancă", required: false },
+    { key: "iban", label: "IBAN", required: false },
+    { key: "bicSwift", label: "Cod bancar (BIC/SWIFT)", required: false },
+    { key: "contactEmail", label: "Email", required: false },
+    { key: "contactPhone", label: "Telefon", required: false },
+    { key: "directorName", label: "Semnatar", required: false },
+    { key: "directorRole", label: "Funcție semnatar", required: false },
   ],
   projects: [
     { key: "name", label: "Denumire proiect", required: true },
@@ -299,6 +318,11 @@ const FIELD_ALIASES: Record<string, string[]> = {
   bank: BANK_ALIASES,
   bicSwift: BIC_ALIASES,
   legalAddress: ["adresa juridica", "adresa", "sediu", "adresa sediu"],
+  vatCode: ["cod tva", "nr tva", "tva", "cod t v a"],
+  contactEmail: ["email", "e-mail", "mail", "posta electronica"],
+  contactPhone: ["telefon", "tel", "nr telefon", "phone"],
+  directorName: ["semnatar", "director", "administrator", "conducator"],
+  directorRole: ["functie semnatar", "functie", "functia"],
 };
 
 /** Field aliases that only make sense for one kind (a payers sheet's "Denumire" is its name). */

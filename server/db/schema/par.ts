@@ -126,6 +126,23 @@ export const parPayers = pgTable(
     name: varchar("name", { length: 300 }).notNull(),
     legalName: varchar("legal_name", { length: 300 }),
     idno: varchar("idno", { length: 32 }),
+    /** Nr. de înregistrare ca plătitor de TVA (separat de IDNO — pe acte apar amândouă). */
+    vatCode: varchar("vat_code", { length: 50 }),
+    /** Adresa juridică, așa cum apare în acte (o singură linie e suficientă pe antet/PDF). */
+    address: varchar("address", { length: 500 }),
+    /** Rechizitele contului din care plătește ACEASTĂ organizație. */
+    bankName: varchar("bank_name", { length: 300 }),
+    iban: varchar("iban", { length: 64 }),
+    /** Cod bancar = BIC/SWIFT (ISO 9362), în MD cu sufixul de filială: AGRNMD2X885. */
+    bankCode: varchar("bank_code", { length: 32 }),
+    contactEmail: varchar("contact_email", { length: 200 }),
+    contactPhone: varchar("contact_phone", { length: 50 }),
+    /** Cine semnează pentru organizație (apare pe fișa aprobărilor). */
+    directorName: varchar("director_name", { length: 200 }),
+    directorRole: varchar("director_role", { length: 200 }),
+    /** Logo propriu — un workspace cu mai multe entități nu poate folosi unul singur. */
+    logoUrl: varchar("logo_url", { length: 1000 }),
+    notes: text("notes"),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
