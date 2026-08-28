@@ -29,7 +29,7 @@ export interface KpiTileProps {
 }
 
 const SHELL =
-  "block w-full rounded-2xl border border-border/60 bg-card p-5 text-left";
+  "block w-full rounded-xl border border-border/60 bg-card p-3.5 text-left sm:p-4";
 
 export function KpiTile({
   label,
@@ -43,24 +43,31 @@ export function KpiTile({
   className,
   "data-testid": testId,
 }: KpiTileProps) {
+  // Compact by design: icon beside the number, not stacked above it. The old
+  // stacked layout (40px chip + mb-4 + text-3xl + p-5) made three tiles eat half
+  // the viewport before the user saw a single request.
   const body = (
-    <>
-      <PastelIcon tone={tone} size={40} className="mb-4">
+    <div className="flex items-center gap-3">
+      <PastelIcon tone={tone} size={32}>
         {icon}
       </PastelIcon>
-      {loading ? (
-        <>
-          <div className="h-8 w-24 animate-pulse rounded-md bg-muted" />
-          <div className="mt-2 h-4 w-20 animate-pulse rounded-md bg-muted" />
-        </>
-      ) : (
-        <>
-          <p className="text-3xl font-bold tracking-tight tabular-nums text-foreground">{value}</p>
-          <p className="mt-1 text-sm font-medium text-muted-foreground">{label}</p>
-          {hint ? <div className="mt-2 text-xs text-muted-foreground">{hint}</div> : null}
-        </>
-      )}
-    </>
+      <div className="min-w-0 flex-1">
+        {loading ? (
+          <>
+            <div className="h-6 w-20 animate-pulse rounded-md bg-muted" />
+            <div className="mt-1.5 h-3 w-16 animate-pulse rounded-md bg-muted" />
+          </>
+        ) : (
+          <>
+            <p className="text-lg font-bold leading-tight tracking-tight tabular-nums text-foreground sm:text-2xl">
+              {value}
+            </p>
+            <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">{label}</p>
+            {hint ? <div className="mt-1 text-xs text-muted-foreground">{hint}</div> : null}
+          </>
+        )}
+      </div>
+    </div>
   );
 
   const INTERACTIVE =
