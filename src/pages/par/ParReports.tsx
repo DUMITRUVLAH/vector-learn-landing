@@ -10,15 +10,19 @@
  * Design: Vector 365, light+dark, WCAG AA.
  */
 import { useState, useEffect } from "react";
+import { useKeepAliveState } from "@/hooks/useKeepAliveState";
+import { useBusinessSession } from "@/hooks/useBusinessSession";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import {
-  BarChart2,
   Download,
   AlertCircle,
   Loader2,
   TrendingUp,
   Clock,
   FileText,
+  FileDown,
+  SlidersHorizontal,
+  X,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import {
@@ -34,6 +38,10 @@ import {
   getParReportExportUrl,
   getParReportExportXlsxUrl,
   getParReportCurrencyBreakdown,
+  getParReportByEvent,
+  listPayers,
+  listProjects,
+  listDepartments,
   type ParSpendByItem,
   type ParAgingItem,
   type ParCycleTimeItem,
@@ -55,8 +63,22 @@ import {
   TableRow,
   Tabs,
 } from "@/components/ds";
-import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { downloadReportPdf } from "@/lib/parReportPdf";
+import {
+  STATUS_LABELS,
+  EMPTY_CONFIG,
+  activeFilterLabels,
+  basisCents,
+  configToFilters,
+  loadReportConfig,
+  saveReportConfig,
+  CHARGE_LABELS,
+  PURPOSE_LABELS,
+  type ReportConfig,
+  type ReportTab,
+  type SpendBasis,
+} from "@/lib/par/reportConfig";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -84,21 +106,33 @@ interface SpendChartProps {
   title: string;
   items: ParSpendByItem[];
   loading: boolean;
+  basis: SpendBasis;
+  /** Câte bare arătăm; 0 = toate. Înainte erau 10 fixe, fără să scrie nicăieri. */
+  topN: number;
 }
 
-function SpendChart({ title, items, loading }: SpendChartProps) {
-  const data = items
-    .slice(0, 10)
-    .sort((a, b) => b.totalCents - a.totalCents)
-    .map((it) => ({
-      name: it.label ?? "—",
-      totalMDL: it.totalCents / 100,
-      count: it.count,
-    }));
+function SpendChart({ title, items, loading, basis, topN }: SpendChartProps) {
+  const sorted = items
+    .slice()
+    .sort((a, b) => basisCents(b, basis) - basisCents(a, basis))
+    .filter((it) => basisCents(it, basis) !== 0 || basis === "estimated");
+  const shown = topN > 0 ? sorted.slice(0, topN) : sorted;
+  const hidden = sorted.length - shown.length;
+  const data = shown.map((it) => ({
+    name: it.label ?? "—",
+    totalMDL: basisCents(it, basis) / 100,
+    count: it.count,
+  }));
 
   return (
     <Card className="p-4">
-      <h3 className="mb-3 text-sm font-semibold text-foreground">{title}</h3>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <span className="text-xs text-muted-foreground">
+          {basis === "paid" ? "sume plătite efectiv" : "sume estimate"}
+          {hidden > 0 ? ` · încă ${hidden} sub prag` : ""}
+        </span>
+      </div>
       {loading ? (
         <div className="flex items-center justify-center h-32">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-label="Se încarcă" />
@@ -124,7 +158,7 @@ function SpendChart({ title, items, loading }: SpendChartProps) {
               tickFormatter={(v) => `${(v as number / 1000).toFixed(0)}k`}
             />
             <Tooltip
-              formatter={(val: unknown) => [formatMDL(Math.round((val as number) * 100)), "Total estimat"]}
+              formatter={(val: unknown) => [formatMDL(Math.round((val as number) * 100)), basis === "paid" ? "Plătit efectiv" : "Total estimat"]}
               contentStyle={{
                 fontSize: 12,
                 borderRadius: 8,
@@ -187,17 +221,6 @@ interface AgingTableProps {
   loading: boolean;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Ciornă",
-  pending_approval: "În aprobare",
-  changes_requested: "Modificări",
-  rejected: "Respinsă",
-  approved: "Aprobată",
-  in_finance: "La finanțe",
-  reapproval_required: "Re-aprobare",
-  paid: "Plătită",
-  cancelled: "Anulată",
-};
 
 function AgingTable({ items, loading }: AgingTableProps) {
   return (
@@ -243,44 +266,61 @@ function AgingTable({ items, loading }: AgingTableProps) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ParReports() {
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [tab, setTab] = useState<"payer" | "budget" | "department" | "project" | "vendor" | "event" | "charge">("budget");
+  // Numele workspace-ului intră în antetul PDF-ului: un raport care circulă prin email trebuie
+  // să spună A CUI e, altfel două organizații nu-și mai deosebesc fișierele.
+  const session = useBusinessSession();
+  const orgName = session.data?.tenant?.name ?? "Organizație";
+  const [cfg, setCfgState] = useKeepAliveState<ReportConfig>("par.reports.cfg", loadReportConfig);
+  const setCfg = (patch: Partial<ReportConfig>) =>
+    setCfgState((prev) => {
+      const next = { ...prev, ...patch };
+      saveReportConfig(next);
+      return next;
+    });
+  const fromDate = cfg.from;
+  const toDate = cfg.to;
+  const tab = cfg.tab;
+  const setTab = (v: ReportTab) => setCfg({ tab: v });
+  const setFromDate = (v: string) => setCfg({ from: v });
+  const setToDate = (v: string) => setCfg({ to: v });
 
-  const [byBudget, setByBudget] = useState<ParSpendByItem[]>([]);
-  const [byPayer, setByPayer] = useState<ParSpendByItem[]>([]);
-  const [byDept, setByDept] = useState<ParSpendByItem[]>([]);
-  const [byProject, setByProject] = useState<ParSpendByItem[]>([]);
-  const [byVendor, setByVendor] = useState<ParSpendByItem[]>([]); // PARQA-019
-  const [byEvent, setByEvent] = useState<ParSpendByItem[]>([]); // VM1-04
-  const [byCharge, setByCharge] = useState<ParSpendByItem[]>([]);
-  const [aging, setAging] = useState<ParAgingItem[]>([]);
-  const [cycleTime, setCycleTime] = useState<ParCycleTimeItem | null>(null);
+  // Listele pentru filtre — încărcate o dată, ținute minte între navigări.
+  const [payerOpts, setPayerOpts] = useKeepAliveState<{ id: string; name: string }[]>("par.reports.payers", []);
+  const [projectOpts, setProjectOpts] = useKeepAliveState<{ id: string; name: string }[]>("par.reports.projects", []);
+  const [deptOpts, setDeptOpts] = useKeepAliveState<{ id: string; name: string }[]>("par.reports.departments", []);
+
+  const [byBudget, setByBudget] = useKeepAliveState<ParSpendByItem[]>("par.reports.byBudget", []);
+  const [byPayer, setByPayer] = useKeepAliveState<ParSpendByItem[]>("par.reports.byPayer", []);
+  const [byDept, setByDept] = useKeepAliveState<ParSpendByItem[]>("par.reports.byDept", []);
+  const [byProject, setByProject] = useKeepAliveState<ParSpendByItem[]>("par.reports.byProject", []);
+  const [byVendor, setByVendor] = useKeepAliveState<ParSpendByItem[]>("par.reports.byVendor", []); // PARQA-019
+  const [byEvent, setByEvent] = useKeepAliveState<ParSpendByItem[]>("par.reports.byEvent", []); // VM1-04
+  const [byCharge, setByCharge] = useKeepAliveState<ParSpendByItem[]>("par.reports.byCharge", []);
+  const [aging, setAging] = useKeepAliveState<ParAgingItem[]>("par.reports.aging", []);
+  const [cycleTime, setCycleTime] = useKeepAliveState<ParCycleTimeItem | null>("par.reports.cycleTime", null);
   // VM1-03: per-currency breakdown
-  const [currencyBreakdown, setCurrencyBreakdown] = useState<ParCurrencyBreakdownItem[]>([]);
-  const [totalMdlCents, setTotalMdlCents] = useState(0);
+  const [currencyBreakdown, setCurrencyBreakdown] = useKeepAliveState<ParCurrencyBreakdownItem[]>("par.reports.currency", []);
+  const [totalMdlCents, setTotalMdlCents] = useKeepAliveState("par.reports.totalMdl", 0);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [loadingCharts, setLoadingCharts] = useState(false);
   const [loadingAging, setLoadingAging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [presetApplyKey, setPresetApplyKey] = useState(0);
 
-  const filters = { period_from: fromDate || undefined, period_to: toDate || undefined };
+  const filters = configToFilters(cfg);
 
   const loadCharts = async () => {
     setLoadingCharts(true);
     setError(null);
     try {
-      const qs = [
-        filters.period_from ? `from=${encodeURIComponent(filters.period_from)}` : "",
-        filters.period_to ? `to=${encodeURIComponent(filters.period_to)}` : "",
-      ].filter(Boolean).join("&");
       const [payerRows, b, d, p, v, evts, ch, cb] = await Promise.all([
         getParReportByPayer(filters),
         getParReportByBudget(filters),
         getParReportByDepartment(filters),
         getParReportByProject(filters),
         getParReportByVendor(filters), // PARQA-019
-        api<{ items: ParSpendByItem[] }>(`/api/par/reports/by-event${qs ? `?${qs}` : ""}`),
+        getParReportByEvent(filters),
         getParReportByChargeTo(filters),
         getParReportCurrencyBreakdown(filters),
       ]);
@@ -304,8 +344,8 @@ export function ParReports() {
     setLoadingAging(true);
     try {
       const [a, ct] = await Promise.all([
-        getParReportAging(),
-        getParReportCycleTime(),
+        getParReportAging(filters),
+        getParReportCycleTime(filters),
       ]);
       setAging(a.items ?? []);
       setCycleTime(ct);
@@ -319,10 +359,14 @@ export function ParReports() {
   useEffect(() => {
     loadCharts();
     loadAging();
+    // Listele pentru filtre: o singură dată pe sesiune (sunt mici și stabile).
+    listPayers().then((r) => setPayerOpts(r.items.map((x) => ({ id: x.id, name: x.name })))).catch(() => {});
+    listProjects().then((r) => setProjectOpts(r.items.map((x) => ({ id: x.id, name: x.name })))).catch(() => {});
+    listDepartments().then((r) => setDeptOpts(r.items.map((x) => ({ id: x.id, name: x.name })))).catch(() => {});
   }, []); // eslint-disable-line
 
   useEffect(() => {
-    if (presetApplyKey > 0) loadCharts();
+    if (presetApplyKey > 0) { loadCharts(); loadAging(); }
   }, [presetApplyKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const applyPreset = (preset: "month" | "quarter" | "year" | "30" | "90") => {
@@ -333,18 +377,65 @@ export function ParReports() {
     if (preset === "year") { start.setMonth(0, 1); }
     if (preset === "30") start.setDate(start.getDate() - 29);
     if (preset === "90") start.setDate(start.getDate() - 89);
-    setFromDate(start.toISOString().slice(0, 10));
-    setToDate(end.toISOString().slice(0, 10));
+    setCfg({ from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) });
     setPresetApplyKey((v) => v + 1);
   };
 
   const handleApply = () => {
     loadCharts();
+    loadAging();
   };
 
-  // VM1-03: use totalMdlCents (MDL aggregate from currency-breakdown) as the canonical total.
-  const totalSpend = totalMdlCents;
+  // VM1-03: totalul canonic e agregatul MDL. Cu baza „plătit" raportăm banii chiar ieșiți —
+  // însumați pe plătitor, fiindcă ORICE cerere are un plătitor (deci nu se pierde niciun rând).
+  const totalPaid = byPayer.reduce((sum, it) => sum + (it.paidCents ?? 0), 0);
+  const totalSpend = cfg.basis === "paid" ? totalPaid : totalMdlCents;
   const totalCount = currencyBreakdown.reduce((s, it) => s + it.count, 0);
+  const basisLabel = cfg.basis === "paid" ? "plătit efectiv" : "estimat";
+
+  const nameMaps = {
+    payers: Object.fromEntries(payerOpts.map((o) => [o.id, o.name])),
+    projects: Object.fromEntries(projectOpts.map((o) => [o.id, o.name])),
+    departments: Object.fromEntries(deptOpts.map((o) => [o.id, o.name])),
+  };
+  const filterLabels = activeFilterLabels(cfg, nameMaps);
+
+  const currentSection = (() => {
+    const map: Record<ReportTab, { title: string; labelHead: string; items: ParSpendByItem[] }> = {
+      payer: { title: "Execuție pe plătitor / organizație", labelHead: "Plătitor", items: byPayer },
+      budget: { title: "Execuție pe cod bugetar", labelHead: "Cod bugetar", items: byBudget },
+      department: { title: "Cheltuieli pe departament", labelHead: "Departament", items: byDept },
+      project: { title: "Cheltuieli pe proiect/program", labelHead: "Proiect", items: byProject },
+      vendor: { title: "Cheltuieli pe beneficiar", labelHead: "Beneficiar", items: byVendor },
+      event: { title: "Cheltuieli pe eveniment", labelHead: "Eveniment", items: byEvent },
+      charge: { title: "Cheltuieli pe Charge To", labelHead: "Charge To", items: byCharge },
+    };
+    return map[cfg.tab];
+  })();
+
+  /** PDF-ul conține EXACT ce e pe ecran: aceleași filtre, aceeași bază, aceleași rânduri. */
+  const handlePdf = async () => {
+    setExportingPdf(true);
+    try {
+      await downloadReportPdf({
+        orgName,
+        periodLabel,
+        filterLabels,
+        basisLabel,
+        totalCents: totalSpend,
+        totalCount,
+        cycleTime,
+        currencyBreakdown,
+        sections: [currentSection],
+        aging,
+        agingStatusLabel: (st) => STATUS_LABELS[st] ?? st,
+      }, `Raport_PAR_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch {
+      setError("PDF-ul nu a putut fi generat. Încearcă exportul Excel.");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   /**
    * Every number on this page is scoped by the period filter, but nothing said so —
@@ -368,6 +459,10 @@ export function ParReports() {
       pageDescription={`Statistici pe perioadă, departament și cod bugetar · ${periodLabel}`}
       actions={
         <>
+          <Button onClick={handlePdf} disabled={exportingPdf} aria-label="Exportă PDF">
+            {exportingPdf ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <FileDown className="h-4 w-4" aria-hidden />}
+            Export PDF
+          </Button>
           {/* Native <a download> — these are file downloads, not navigations. */}
           <a
             href={exportXlsxUrl}
@@ -426,11 +521,188 @@ export function ParReports() {
               onChange={(e) => setToDate(e.target.value)}
             />
           </div>
-          <Button onClick={handleApply} disabled={loadingCharts} aria-label="Aplică filtrele">
-            {loadingCharts ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            Aplică
-          </Button>
+          <div className="ml-auto flex items-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters((v) => !v)}
+              aria-expanded={showFilters}
+              aria-label="Mai multe filtre"
+            >
+              <SlidersHorizontal className="h-4 w-4" aria-hidden />
+              Filtre
+              {filterLabels.length > 0 && (
+                <span className="ml-1 rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
+                  {filterLabels.length}
+                </span>
+              )}
+            </Button>
+            <Button onClick={handleApply} disabled={loadingCharts} aria-label="Aplică filtrele">
+              {loadingCharts ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+              Aplică
+            </Button>
+          </div>
+
+          {showFilters && (
+            <div className="basis-full border-t border-border pt-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="rep-payer">Plătitor</Label>
+                  <select
+                    id="rep-payer"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    value={cfg.payerId}
+                    onChange={(e) => setCfg({ payerId: e.target.value })}
+                  >
+                    <option value="">Toți plătitorii</option>
+                    {payerOpts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rep-project">Proiect</Label>
+                  <select
+                    id="rep-project"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    value={cfg.projectId}
+                    onChange={(e) => setCfg({ projectId: e.target.value })}
+                  >
+                    <option value="">Toate proiectele</option>
+                    {projectOpts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rep-dept">Departament</Label>
+                  <select
+                    id="rep-dept"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    value={cfg.departmentId}
+                    onChange={(e) => setCfg({ departmentId: e.target.value })}
+                  >
+                    <option value="">Toate departamentele</option>
+                    {deptOpts.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rep-currency">Monedă</Label>
+                  <select
+                    id="rep-currency"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    value={cfg.currency}
+                    onChange={(e) => setCfg({ currency: e.target.value })}
+                  >
+                    <option value="">Toate monedele</option>
+                    {["MDL", "EUR", "USD"].map((cur) => <option key={cur} value={cur}>{cur}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rep-purpose">Scopul cererii</Label>
+                  <select
+                    id="rep-purpose"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    value={cfg.purpose}
+                    onChange={(e) => setCfg({ purpose: e.target.value })}
+                  >
+                    <option value="">Toate scopurile</option>
+                    {Object.entries(PURPOSE_LABELS).map(([v, l]) => <option key={v} value={v}>{String(l)}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rep-charge">Charge To</Label>
+                  <select
+                    id="rep-charge"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    value={cfg.chargeTo}
+                    onChange={(e) => setCfg({ chargeTo: e.target.value })}
+                  >
+                    <option value="">Toate</option>
+                    {Object.entries(CHARGE_LABELS).map(([v, l]) => <option key={v} value={v}>{String(l)}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rep-q">Caută (nr. cerere / beneficiar)</Label>
+                  <Input id="rep-q" value={cfg.q} onChange={(e) => setCfg({ q: e.target.value })} placeholder="ex. PAR-2026 sau Orange" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rep-topn">Rânduri în grafic</Label>
+                  <select
+                    id="rep-topn"
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                    value={String(cfg.topN)}
+                    onChange={(e) => setCfg({ topN: Number(e.target.value) })}
+                  >
+                    <option value="10">Primele 10</option>
+                    <option value="25">Primele 25</option>
+                    <option value="0">Toate</option>
+                  </select>
+                </div>
+              </div>
+
+              <fieldset className="mt-3">
+                <legend className="mb-1.5 text-xs font-medium text-muted-foreground">Statusuri incluse</legend>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(STATUS_LABELS).map(([value, label]) => {
+                    const on = cfg.status.includes(value);
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setCfg({
+                          status: on ? cfg.status.filter((x) => x !== value) : [...cfg.status, value],
+                        })}
+                        className={cn(
+                          "min-h-[36px] rounded-full border px-3 text-xs font-medium transition-colors",
+                          on
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border text-muted-foreground hover:bg-muted",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Niciun status selectat = toate cererile, inclusiv ciornele și cele anulate.
+                </p>
+              </fieldset>
+            </div>
+          )}
         </Card>
+
+        {/* Ce sumă raportăm + filtrele active, în cuvinte */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-md border border-border p-0.5" role="group" aria-label="Ce sumă raportăm">
+            {([["estimated", "Estimat"], ["paid", "Plătit efectiv"]] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={cfg.basis === value}
+                onClick={() => setCfg({ basis: value })}
+                className={cn(
+                  "min-h-[36px] rounded px-3 text-xs font-medium transition-colors",
+                  cfg.basis === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {filterLabels.map((label) => (
+            <span key={label} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs text-foreground">
+              {label}
+            </span>
+          ))}
+          {(filterLabels.length > 0 || cfg.from || cfg.to) && (
+            <button
+              type="button"
+              onClick={() => { setCfg({ ...EMPTY_CONFIG, tab: cfg.tab, basis: cfg.basis, topN: cfg.topN }); setPresetApplyKey((v) => v + 1); }}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
+            >
+              <X className="h-3 w-3" aria-hidden />
+              Resetează filtrele
+            </button>
+          )}
+        </div>
 
         {error && (
           <Alert variant="destructive" icon={<AlertCircle className="h-4 w-4" />}>{error}</Alert>
@@ -439,7 +711,7 @@ export function ParReports() {
         {/* KPI cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <KpiTile
-            label="Total estimat (perioadă)"
+            label={cfg.basis === "paid" ? "Total plătit efectiv (perioadă)" : "Total estimat (perioadă)"}
             value={formatMDL(totalSpend)}
             tone="indigo"
             icon={<FileText className="h-5 w-5" />}
@@ -478,26 +750,26 @@ export function ParReports() {
           />
 
           {tab === "payer" && (
-            <><SpendChart title="Execuție pe plătitor / organizație" items={byPayer} loading={loadingCharts} /><BudgetExecutionTable items={byPayer} /></>
+            <><SpendChart title="Execuție pe plătitor / organizație" items={byPayer} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} /><BudgetExecutionTable items={byPayer} /></>
           )}
 
           {tab === "budget" && (
-            <><SpendChart title="Execuție pe cod bugetar" items={byBudget} loading={loadingCharts} /><BudgetExecutionTable items={byBudget} /></>
+            <><SpendChart title="Execuție pe cod bugetar" items={byBudget} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} /><BudgetExecutionTable items={byBudget} /></>
           )}
           {tab === "department" && (
-            <SpendChart title="Cheltuieli pe departament" items={byDept} loading={loadingCharts} />
+            <SpendChart title="Cheltuieli pe departament" items={byDept} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} />
           )}
           {tab === "project" && (
-            <><SpendChart title="Cheltuieli pe proiect/program" items={byProject} loading={loadingCharts} /><BudgetExecutionTable items={byProject} /></>
+            <><SpendChart title="Cheltuieli pe proiect/program" items={byProject} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} /><BudgetExecutionTable items={byProject} /></>
           )}
           {tab === "vendor" && (
-            <SpendChart title="Cheltuieli pe beneficiar" items={byVendor} loading={loadingCharts} />
+            <SpendChart title="Cheltuieli pe beneficiar" items={byVendor} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} />
           )}
           {tab === "event" && (
-            <><SpendChart title="Cheltuieli pe eveniment" items={byEvent} loading={loadingCharts} /><BudgetExecutionTable items={byEvent} /></>
+            <><SpendChart title="Cheltuieli pe eveniment" items={byEvent} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} /><BudgetExecutionTable items={byEvent} /></>
           )}
           {tab === "charge" && (
-            <SpendChart title="Cheltuieli pe Charge To" items={byCharge} loading={loadingCharts} />
+            <SpendChart title="Cheltuieli pe Charge To" items={byCharge} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} />
           )}
         </div>
 
