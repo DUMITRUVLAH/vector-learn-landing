@@ -23,6 +23,7 @@
  */
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
+  AlertTriangle,
   ArrowRight,
   ArrowLeftRight,
   BadgeCheck,
@@ -37,6 +38,9 @@ import {
   Landmark,
   Lock,
   LogIn,
+  MessageSquare,
+  Search,
+  TrendingUp,
   Receipt,
   ScanLine,
   Send,
@@ -73,6 +77,9 @@ export function BusinessLandingPage() {
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       <Navbar />
       <Hero />
+      <TrustedBy />
+      <PainSection />
+      <BeforeAfter />
       <StatsBar />
       <AiSection />
       <DoaSection />
@@ -139,9 +146,6 @@ function Hero() {
 
       <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-14">
-          <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary mb-6">
-            Achiziții și aprobări interne · MDL / EUR / USD · e-Factura SFS
-          </div>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold leading-[1.08] mb-5 tracking-tight">
             Nicio plată fără aprobare.{" "}
             <span className="text-gradient relative lg:whitespace-nowrap">
@@ -155,8 +159,7 @@ function Hero() {
             .
           </h1>
           <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto mb-8">
-            Cererea de plată, aprobările după praguri și execuția — un singur traseu, cu PDF oficial
-            și audit la capăt.
+            Cereri de plată, aprobări și execuție — un singur traseu, cu dovada la capăt.
           </p>
           <div className="flex gap-3 justify-center flex-col sm:flex-row">
             <Button size="lg" href="/business/signup" className="h-12 px-8 text-base rounded-xl">
@@ -325,6 +328,118 @@ function HeroMock() {
   );
 }
 
+/* ─────────────────────────── Utilizat de ─────────────────────────── */
+
+/**
+ * Logourile organizațiilor care folosesc platforma. Fișierele stau în `public/logos/`,
+ * descărcate de pe site-urile lor oficiale. În dark mode le facem siluetă albă
+ * (`brightness-0 invert`): un logo color pe fundal închis fie dispare, fie își aduce
+ * propriul dreptunghi alb.
+ */
+const TRUSTED_BY: { name: string; src: string; size: string }[] = [
+  // Înălțimea e per logo: la aceeași înălțime, o siglă pătrată pare de două ori mai mare
+  // decât un logotip lat. Cifrele de mai jos egalizează mărimea *optică*, nu pe cea în pixeli.
+  { name: "ATIC", src: "/logos/atic.png", size: "h-9 sm:h-10" },
+  { name: "Tekwill", src: "/logos/tekwill.png", size: "h-7 sm:h-8" },
+  { name: "Tekwill Academy", src: "/logos/tekwill-academy.svg", size: "h-8 sm:h-9" },
+  { name: "Inotek", src: "/logos/inotek.png", size: "h-6 sm:h-7" },
+  { name: "Clubul Tinerilor Makeri", src: "/logos/ctm.png", size: "h-7 sm:h-8" },
+  { name: "iHUB", src: "/logos/ihub.png", size: "h-7 sm:h-8" },
+];
+
+function TrustedBy() {
+  return (
+    <section aria-labelledby="utilizat-de" className="px-4 pb-14 pt-6 sm:px-6">
+      <div className="mx-auto max-w-5xl">
+        <h2 id="utilizat-de" className="mb-6 text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          Utilizat de
+        </h2>
+        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 sm:gap-x-14">
+          {TRUSTED_BY.map((l) => (
+            <img
+              key={l.name}
+              src={l.src}
+              alt={l.name}
+              loading="lazy"
+              className={`${l.size} w-auto max-w-[150px] object-contain opacity-60 grayscale transition duration-200 hover:opacity-100 hover:grayscale-0 dark:opacity-70 dark:brightness-0 dark:invert`}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── Durerile ─────────────────────────── */
+
+const PAINS: { icon: typeof Search; text: string }[] = [
+  { icon: Search, text: "„Unde e cererea mea?” — nimeni nu știe la cine stă." },
+  { icon: MessageSquare, text: "Aprobarea vine pe WhatsApp, seara, ca poză." },
+  { icon: FileText, text: "Cineva retastează IBAN-ul dintr-un PDF. A treia oară." },
+  { icon: TrendingUp, text: "S-a plătit mai mult decât s-a aprobat. Afli la raport." },
+  { icon: FolderOpen, text: "Donatorul cere dosarul. Îl aduni trei zile." },
+  { icon: AlertTriangle, text: "Prestatorul n-a dat factura și nu urmărește nimeni." },
+];
+
+function PainSection() {
+  return (
+    <section className="border-y border-border bg-muted/30 px-4 py-16 sm:px-6 sm:py-20">
+      <div className="mx-auto max-w-5xl">
+        <h2 className="mb-10 text-center text-2xl font-bold sm:text-4xl">Sună cunoscut?</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {PAINS.map((p) => (
+            <div key={p.text} className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
+                <p.icon className="h-4 w-4 text-destructive" aria-hidden="true" />
+              </span>
+              <p className="text-sm leading-snug">{p.text}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Contrastul, pe rânduri scurte — mai convingător decât o listă de funcționalități. */
+const CONTRAST: { before: string; after: string }[] = [
+  { before: "Formular pe hârtie, semnat și scanat", after: "PDF oficial, semnat în aplicație" },
+  { before: "Cine semnează? Depinde cine își amintește", after: "Pragurile decid singure lanțul" },
+  { before: "Rechizitele, retastate din documente", after: "AI-ul le scoate din contract" },
+  { before: "Depășirea de buget se vede la raport", after: "Peste 10% → reaprobare, pe loc" },
+  { before: "Dosarul pentru audit se adună manual", after: "Audit filtrabil, exportat în două clicuri" },
+];
+
+function BeforeAfter() {
+  return (
+    <section className="px-4 py-16 sm:px-6 sm:py-20">
+      <div className="mx-auto max-w-4xl">
+        <h2 className="mb-3 text-center text-2xl font-bold sm:text-4xl">Ce se schimbă, concret</h2>
+        <p className="mx-auto mb-10 max-w-lg text-center text-sm text-muted-foreground sm:text-base">
+          Aceleași reguli pe care le ai deja pe hârtie — doar că le ține sistemul.
+        </p>
+        <div className="overflow-hidden rounded-2xl border border-border">
+          <div className="grid grid-cols-2 border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wider">
+            <div className="px-4 py-2.5 text-muted-foreground">Azi</div>
+            <div className="border-l border-border px-4 py-2.5 text-primary">Cu FinFlow</div>
+          </div>
+          {CONTRAST.map((row) => (
+            <div key={row.after} className="grid grid-cols-2 border-b border-border last:border-0">
+              <div className="px-4 py-3 text-sm text-muted-foreground line-through decoration-destructive/40">
+                {row.before}
+              </div>
+              <div className="flex items-start gap-2 border-l border-border bg-primary/[0.03] px-4 py-3 text-sm">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                <span>{row.after}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ─────────────────────────── Bara de statistici ─────────────────────────── */
 
 function StatsBar() {
@@ -405,7 +520,7 @@ function AiSection() {
       id="ai"
       badge="AI"
       title="Nu mai copiezi nimic dintr-un PDF"
-      subtitle="Urci contractul, factura sau actul. AI-ul scoate părțile, rechizitele și sumele, completează cererea și îți spune unde documentul nu se potrivește cu ea."
+      subtitle="Urci contractul sau factura. AI-ul completează cererea și îți spune unde documentul nu se potrivește cu ea."
       bullets={[
         "Extrage beneficiar, cod fiscal, IBAN, sumă și scop — din orice tip de act",
         "Nu confundă organizația ta cu prestatorul; când sunt două companii, întreabă",
@@ -447,7 +562,7 @@ function DoaSection() {
       id="aprobari"
       badge="Aprobări"
       title="Pragurile decid cine semnează"
-      subtitle="Configurezi o dată matricea de delegare a autorității. La trimitere, lanțul de aprobare se construiește singur."
+      subtitle="Configurezi o dată pragurile. La trimitere, lanțul de aprobare se construiește singur."
       bullets={[
         "Secvențial sau în paralel, pe bandă de sumă, departament sau tip de cheltuială",
         "Delegare pe perioada concediului, fără să dai parola nimănui",
@@ -494,7 +609,7 @@ function FinanceSection() {
       id="finante"
       badge="Finanțe"
       title="Plata nu poate depăși ce s-a aprobat"
-      subtitle="Finanțele preiau cererea aprobată și înregistrează suma reală. Peste 10% diferență, cererea se întoarce la aprobare — automat."
+      subtitle="Finanțele înregistrează suma reală. Peste 10% diferență, cererea se întoarce la aprobare — automat."
       bullets={[
         "Coadă proprie cu cererile aprobate, cu preluare și repartizare",
         "Dovada plății și ordinul rămân atașate cererii",
@@ -536,7 +651,7 @@ function EfacturaSection() {
       id="efactura"
       badge="e-Factura"
       title="Plata nu închide dosarul. Factura, da."
-      subtitle="După plată, FinFlow caută factura în SIA „e-Factura” ca și cumpărător și o leagă de cerere. Dacă lipsește, trimite un reminder solicitantului."
+      subtitle="FinFlow caută factura în SIA „e-Factura” și o leagă de cerere. Dacă lipsește, trimite un reminder."
       bullets={[
         "Potrivire după cod fiscal, fereastră de timp și sumă",
         "Persoanele fizice nu sunt niciodată bătute la cap",
@@ -614,7 +729,7 @@ function FlowSection() {
           <Badge variant="outline">Fluxul</Badge>
           <h2 className="mt-4 mb-3 text-2xl font-bold sm:text-4xl">Traseul unei cereri</h2>
           <p className="mx-auto max-w-lg text-sm text-muted-foreground sm:text-base">
-            Șase pași, fiecare cu autorul și ora lui. Nu mai întrebi pe nimeni unde s-a oprit.
+            Șase pași, fiecare cu autorul și ora lui.
           </p>
         </div>
 
@@ -676,32 +791,32 @@ function MoreCapabilities() {
     {
       icon: Building2,
       title: "Mai multe entități juridice",
-      desc: "Plătitor → proiect → cod bugetar. Un cod al unui proiect nu poate ajunge pe altul, nici prin API.",
+      desc: "Plătitor → proiect → cod bugetar, cu acces separat pe fiecare nivel.",
     },
     {
       icon: BarChart3,
       title: "Alocat, angajat, plătit",
-      desc: "Pe cod, proiect, plătitor sau beneficiar. Export CSV, XLSX și PDF, exact ca pe ecran.",
+      desc: "Pe cod, proiect sau beneficiar, cu export CSV, XLSX și PDF.",
     },
     {
       icon: Users,
       title: "Registru de beneficiari",
-      desc: "IBAN validat cu cifra de control, cod fiscal verificat, date reutilizate în loc de retastate.",
+      desc: "IBAN validat cu cifra de control, reutilizat în loc de retastat.",
     },
     {
       icon: FolderOpen,
       title: "Foldere pe proiect",
-      desc: "Contoare de plătite și de aprobat; întoarcerea din cerere te aduce înapoi în folder.",
+      desc: "Contoare de plătite și de aprobat, pe fiecare proiect.",
     },
     {
       icon: FileSpreadsheet,
       title: "Import din Excel",
-      desc: "Plătitori, proiecte, departamente și coduri bugetare, cu rândurile respinse raportate pe motiv.",
+      desc: "Plătitori, proiecte și coduri bugetare, cu rândurile respinse raportate.",
     },
     {
       icon: ArrowLeftRight,
       title: "Curs valutar BNM",
-      desc: "Tabloul zilei și seria pe 30 de zile, folosite direct în cereri.",
+      desc: "Cursul oficial al zilei, folosit direct în cereri.",
     },
   ];
 
@@ -733,11 +848,11 @@ function MoreCapabilities() {
 function SecuritySection() {
   const items = [
     { icon: Lock, title: "Date găzduite în Europa", desc: "Baza de date rulează în regiunea europeană a furnizorului cloud." },
-    { icon: ShieldCheck, title: "GDPR by default", desc: "Export și ștergere la cerere; fiecare citire a datelor bancare e jurnalizată." },
-    { icon: BadgeCheck, title: "Acces minim necesar", desc: "Numele, codul fiscal și IBAN-ul le vede doar cine are treabă cu cererea." },
-    { icon: FileText, title: "Conținut sigilat", desc: "După trimitere, sumele nu se mai schimbă — PDF-ul dovedește ce s-a aprobat." },
-    { icon: Users, title: "2FA și sesiuni", desc: "Autentificare în doi pași, istoric de logări, închiderea sesiunilor de la distanță." },
-    { icon: ClipboardList, title: "Audit care nu se editează", desc: "Jurnal append-only, filtrabil și exportabil pentru donator sau auditor." },
+    { icon: ShieldCheck, title: "GDPR by default", desc: "Export și ștergere la cerere; citirea datelor bancare e jurnalizată." },
+    { icon: BadgeCheck, title: "Acces minim necesar", desc: "Rechizitele bancare le vede doar cine are treabă cu cererea." },
+    { icon: FileText, title: "Conținut sigilat", desc: "După trimitere, sumele nu se mai schimbă." },
+    { icon: Users, title: "2FA și sesiuni", desc: "Autentificare în doi pași și istoric de logări." },
+    { icon: ClipboardList, title: "Audit care nu se editează", desc: "Jurnal append-only, filtrabil și exportabil." },
   ];
 
   return (
@@ -746,9 +861,7 @@ function SecuritySection() {
         <div className="mb-10 text-center">
           <Badge variant="outline">Securitate & GDPR</Badge>
           <h2 className="mt-4 mb-3 text-2xl font-bold sm:text-4xl">Făcut pentru bani care se raportează</h2>
-          <p className="mx-auto max-w-lg text-sm text-muted-foreground sm:text-base">
-            Cine primește banii și în ce cont — exact datele pe care modulul le protejează.
-          </p>
+
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((i) => (
@@ -814,7 +927,7 @@ function PricingSection() {
           <Badge variant="outline">Prețuri</Badge>
           <h2 className="mt-4 mb-3 text-2xl font-bold sm:text-4xl">Plătești pentru cine decide</h2>
           <p className="mx-auto max-w-lg text-sm text-muted-foreground sm:text-base">
-            Cine cere bani costă puțin. Manageri sunt doar aprobatorii, finanțele și administratorii.
+            Manageri sunt doar aprobatorii, finanțele și administratorii.
           </p>
         </div>
 
@@ -1053,8 +1166,7 @@ function ContactSection() {
           <Badge variant="outline">Contact</Badge>
           <h2 className="mt-4 mb-4 text-2xl font-bold sm:text-3xl lg:text-4xl">Îți arătăm fluxul pe cererile tale</h2>
           <p className="mb-8 text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Vino cu formularul pe care îl folosești azi și cu pragurile voastre. În ~20 de minute vezi
-            aceeași cerere trecând prin FinFlow.
+            Vino cu formularul pe care îl folosești azi. În ~20 de minute îl vezi trecând prin FinFlow.
           </p>
           <ul className="space-y-4">
             {[
@@ -1170,7 +1282,7 @@ function FinalCta() {
         </p>
         <h2 className="mb-3 text-2xl font-bold sm:text-3xl">Prima cerere, azi</h2>
         <p className="mx-auto mb-6 max-w-md text-sm text-muted-foreground sm:text-base">
-          Deschizi workspace-ul, inviți aprobatorii, trimiți o cerere reală prin tot fluxul.
+          Deschizi workspace-ul, inviți aprobatorii, trimiți o cerere reală.
         </p>
         <div className="flex flex-col justify-center gap-3 sm:flex-row">
           <Button size="lg" href="/business/signup" className="h-12 rounded-xl px-8">

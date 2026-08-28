@@ -87,13 +87,37 @@ describe("BusinessLandingPage (FinFlow)", () => {
     expect(within(flow).getByText(/sumă reală/i)).toBeTruthy();
   });
 
-  it("nu publică date reale de clienți", () => {
+  it("nu publică date reale din cererile clienților", () => {
     renderPage();
     const text = document.body.textContent ?? "";
-    // Prima versiune a paginii afișa numele, proiectul, IDNP-ul și IBAN-ul din formularul real.
-    for (const real of ["Ana Chiriță", "Irina Oriol", "Daria Roitman", "Digital Safeguard", "ATIC", "MD48", "2008001007903"]) {
+    // Prima versiune afișa numele, proiectul, IDNP-ul și IBAN-ul din formularul real al unui client.
+    // (Numele organizațiilor din banda „Utilizat de" sunt altceva: sunt afișate cu acordul lor,
+    // ca referință comercială — nu sunt datele personale ale unui beneficiar de plată.)
+    for (const real of ["Ana Chiriță", "Irina Oriol", "Daria Roitman", "Digital Safeguard", "MD48", "2008001007903"]) {
       expect(text, `pagina conține date reale: ${real}`).not.toContain(real);
     }
+  });
+
+  it("arată organizațiile care folosesc platforma, cu logouri care se încarcă", () => {
+    renderPage();
+    const strip = document.querySelector('section[aria-labelledby="utilizat-de"]');
+    expect(strip).not.toBeNull();
+    const logos = within(strip as HTMLElement).getAllByRole("img");
+    expect(logos).toHaveLength(6);
+    for (const name of ["ATIC", "Tekwill", "Tekwill Academy", "Inotek", "Clubul Tinerilor Makeri", "iHUB"]) {
+      expect(within(strip as HTMLElement).getByAltText(name)).toBeTruthy();
+    }
+    // Fișierele trebuie să existe în `public/logos/`, altfel utilizatorul vede textul alt.
+    for (const img of logos) expect(img.getAttribute("src")).toMatch(/^\/logos\/[\w.-]+$/);
+  });
+
+  it("prima jumătate vorbește despre problemă, nu despre funcționalități", () => {
+    renderPage();
+    expect(screen.getByRole("heading", { name: /sună cunoscut/i })).toBeTruthy();
+    expect(screen.getByText(/aprobarea vine pe whatsapp/i)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /ce se schimbă, concret/i })).toBeTruthy();
+    // Insigna de sub titlu a fost scoasă la cererea owner-ului.
+    expect(document.body.textContent).not.toContain("Achiziții și aprobări interne · MDL");
   });
 
   it("formularul de contact deschide un email precompletat", async () => {
