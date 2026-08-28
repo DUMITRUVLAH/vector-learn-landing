@@ -32,6 +32,7 @@ import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "rec
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { Alert, Button, Card, EmptyState, Input, Label, Select, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
 import { cn } from "@/lib/utils";
+import { EMOJI_FONT_STACK, flagOf } from "@/lib/par/currencyFlag";
 import {
   crossRate,
   formatMoney,
@@ -60,6 +61,31 @@ function formatDateRo(iso: string): string {
   });
 }
 
+// ─── Steagul valutei ─────────────────────────────────────────────────────────
+
+/**
+ * Steag într-un cerc neutru. E DECORATIV (`aria-hidden`): codul valutei stă mereu lângă el, deci
+ * cititorul de ecran și platformele fără glife de steag nu pierd nimic. Valutele fără țară (XDR)
+ * primesc codul în locul steagului, ca rândul să nu rămână cu un gol în dreptul icoanei.
+ */
+function CurrencyFlag({ code, size = "md" }: { code: string; size?: "sm" | "md" }) {
+  const flag = flagOf(code);
+  const box = size === "sm" ? "h-6 w-6 text-[13px]" : "h-9 w-9 text-lg";
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-full bg-muted leading-none",
+        box,
+        !flag && "text-[9px] font-semibold tracking-tight text-muted-foreground",
+      )}
+      style={flag ? { fontFamily: EMOJI_FONT_STACK } : undefined}
+    >
+      {flag ?? code}
+    </span>
+  );
+}
+
 // ─── Cartela unei valute de top ──────────────────────────────────────────────
 
 function RateCard({ rate }: { rate: FxRate }) {
@@ -71,9 +97,12 @@ function RateCard({ rate }: { rate: FxRate }) {
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">{rate.code}</p>
-          <p className="truncate text-xs text-muted-foreground">{rate.name}</p>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <CurrencyFlag code={rate.code} />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">{rate.code}</p>
+            <p className="truncate text-xs text-muted-foreground">{rate.name}</p>
+          </div>
         </div>
         {rate.change != null ? (
           <span
@@ -120,10 +149,15 @@ function Converter({ rates, effectiveDate }: ConverterProps) {
 
   // MDL nu e în tabloul BNM (e valuta de bază), dar e cea în care se plătește — deci intră
   // explicit în ambele liste, prima.
-  const options = useMemo(() => {
-    const list = [{ code: "MDL", name: "Leu moldovenesc" }, ...rates.map((r) => ({ code: r.code, name: r.name }))];
-    return list;
-  }, [rates]);
+  const options = useMemo(
+    () =>
+      [{ code: "MDL", name: "Leu moldovenesc" }, ...rates.map((r) => ({ code: r.code, name: r.name }))].map((o) => ({
+        ...o,
+        // `<option>` acceptă doar text, deci steagul intră direct în etichetă.
+        label: `${flagOf(o.code) ?? ""} ${o.code} — ${o.name}`.trim(),
+      })),
+    [rates],
+  );
 
   const parsed = Number(amount.replace(",", "."));
   const valid = amount.trim() !== "" && Number.isFinite(parsed);
@@ -158,7 +192,7 @@ function Converter({ rates, effectiveDate }: ConverterProps) {
             <Select id="fx-from" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1.5">
               {options.map((o) => (
                 <option key={o.code} value={o.code}>
-                  {o.code} — {o.name}
+                  {o.label}
                 </option>
               ))}
             </Select>
@@ -193,7 +227,7 @@ function Converter({ rates, effectiveDate }: ConverterProps) {
             <Select id="fx-to" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1.5">
               {options.map((o) => (
                 <option key={o.code} value={o.code}>
-                  {o.code} — {o.name}
+                  {o.label}
                 </option>
               ))}
             </Select>
@@ -222,6 +256,34 @@ function Converter({ rates, effectiveDate }: ConverterProps) {
 // ─── Graficul pe 30 de zile ──────────────────────────────────────────────────
 
 const SERIES_CODES = ["EUR", "USD"];
+
+/** Perioadele oferite în grafic. `days` = câte zile în urmă față de azi. */
+const PERIODS = [
+  { key: "30d", label: "30 zile", days: 30 },
+  { key: "3m", label: "3 luni", days: 92 },
+  { key: "1y", label: "1 an", days: 366 },
+  { key: "3y", label: "3 ani", days: 1096 },
+] as const;
+
+type PeriodKey = (typeof PERIODS)[number]["key"] | "custom";
+
+/** Data de la care începe o perioadă predefinită. */
+function startOf(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - (days - 1));
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/**
+ * Eticheta de pe axa X. Pe 30 de zile ziua contează („08.12"); pe ani, nu — acolo devine
+ * „08.24", adică luna și anul, altfel axa e un zid de numere care se repetă.
+ */
+function axisLabel(iso: string, longRange: boolean): string {
+  const [y, m, d] = iso.split("-");
+  return longRange ? `${m}.${y.slice(2)}` : `${d}.${m}`;
+}
 const SERIES_COLOR: Record<string, string> = {
   // Recharts cere valori de culoare, nu clase Tailwind. Folosim aceeași convenție ca restul
   // graficelor din aplicație (`--chart-N` cu HSL de rezervă), ca seriile să fie distincte și
@@ -230,23 +292,108 @@ const SERIES_COLOR: Record<string, string> = {
   USD: "hsl(var(--chart-2, 160 84% 39%))",
 };
 
-function HistoryChart({ points, loading }: { points: FxSeriesPoint[]; loading: boolean }) {
+interface HistoryChartProps {
+  points: FxSeriesPoint[];
+  loading: boolean;
+  period: PeriodKey;
+  onPeriod: (p: PeriodKey) => void;
+  from: string;
+  to: string;
+  onFrom: (v: string) => void;
+  onTo: (v: string) => void;
+  stepDays: number;
+}
+
+function HistoryChart({
+  points,
+  loading,
+  period,
+  onPeriod,
+  from,
+  to,
+  onFrom,
+  onTo,
+  stepDays,
+}: HistoryChartProps) {
+  const longRange = stepDays > 3;
   const data = useMemo(
     () =>
       points.map((p) => ({
-        date: p.date.slice(5).replace("-", "."),
+        date: axisLabel(p.date, longRange),
+        iso: p.date,
         EUR: p.rates.EUR ?? null,
         USD: p.rates.USD ?? null,
       })),
-    [points],
+    [points, longRange],
   );
 
   return (
     <Card className="p-4 sm:p-5">
-      <div className="mb-4 flex items-center gap-2">
-        <TrendingUp className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        <h2 className="text-sm font-semibold text-foreground">Evoluție 30 de zile — lei pentru 1 EUR / 1 USD</h2>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <h2 className="text-sm font-semibold text-foreground">Evoluție — lei pentru 1 EUR / 1 USD</h2>
+        </div>
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Perioada graficului">
+          {PERIODS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => onPeriod(p.key)}
+              aria-pressed={period === p.key}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                period === p.key
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => onPeriod("custom")}
+            aria-pressed={period === "custom"}
+            className={cn(
+              "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+              period === "custom"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Interval
+          </button>
+        </div>
       </div>
+
+      {period === "custom" ? (
+        <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="fx-from-date">De la</Label>
+            <Input
+              id="fx-from-date"
+              type="date"
+              value={from}
+              max={to}
+              onChange={(e) => onFrom(e.target.value)}
+              className="w-[170px]"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="fx-to-date">Până la</Label>
+            <Input
+              id="fx-to-date"
+              type="date"
+              value={to}
+              min={from}
+              max={todayIso()}
+              onChange={(e) => onTo(e.target.value)}
+              className="w-[170px]"
+            />
+          </div>
+        </div>
+      ) : null}
       {loading ? (
         <div className="flex h-[240px] items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-label="Se încarcă graficul" />
@@ -267,6 +414,10 @@ function HistoryChart({ points, loading }: { points: FxSeriesPoint[]; loading: b
             />
             <Tooltip
               formatter={(v, name) => [`${formatRate(Number(v))} MDL`, String(name)]}
+              labelFormatter={(_l, payload) => {
+                const iso = (payload?.[0]?.payload as { iso?: string } | undefined)?.iso;
+                return iso ? formatDateRo(iso) : "";
+              }}
               contentStyle={{
                 background: "hsl(var(--card))",
                 border: "1px solid hsl(var(--border))",
@@ -289,6 +440,12 @@ function HistoryChart({ points, loading }: { points: FxSeriesPoint[]; loading: b
           </LineChart>
         </ResponsiveContainer>
       )}
+      {stepDays > 1 && data.length > 0 ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Pe perioade lungi graficul ia un punct la {stepDays} zile — BNM servește o singură zi per
+          cerere, iar curba arată la fel. Pentru cursul exact al unei zile, alege data de sus.
+        </p>
+      ) : null}
       <div className="mt-3 flex flex-wrap gap-4">
         {SERIES_CODES.map((code) => (
           <span key={code} className="inline-flex items-center gap-2 text-xs text-muted-foreground">
@@ -313,6 +470,10 @@ export function ParExchange() {
   } | null>(null);
   const [series, setSeries] = useState<FxSeriesPoint[]>([]);
   const [seriesLoading, setSeriesLoading] = useState(true);
+  const [period, setPeriod] = useState<PeriodKey>("30d");
+  const [rangeFrom, setRangeFrom] = useState(() => startOf(30));
+  const [rangeTo, setRangeTo] = useState(todayIso());
+  const [stepDays, setStepDays] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -342,23 +503,50 @@ export function ParExchange() {
     void load(date);
   }, [date, load]);
 
+  /** Trecerea pe o perioadă predefinită rescrie intervalul; „Interval" îl lasă pe al omului. */
+  const choosePeriod = useCallback((next: PeriodKey) => {
+    setPeriod(next);
+    const preset = PERIODS.find((p) => p.key === next);
+    if (preset) {
+      setRangeFrom(startOf(preset.days));
+      setRangeTo(todayIso());
+    }
+  }, []);
+
+  /**
+   * Serverul completează cel mult 60 de zile noi pe cerere (ca o funcție serverless să nu fie
+   * tăiată la timeout) și raportează `partial`. Pe o perioadă lungă cerută prima dată, continuăm
+   * în runde până se umple — fiecare rundă desenează deja ce a adus, deci graficul se completează
+   * sub ochii omului în loc să stea gol.
+   */
   useEffect(() => {
     let cancelled = false;
     setSeriesLoading(true);
-    getFxSeries(SERIES_CODES, 30)
-      .then((res) => {
-        if (!cancelled) setSeries(res.points);
-      })
-      .catch(() => {
+
+    (async () => {
+      try {
+        for (let round = 0; round < 8; round++) {
+          const res = await getFxSeries(SERIES_CODES, {
+            from: rangeFrom,
+            to: rangeTo,
+            refresh: round > 0,
+          });
+          if (cancelled) return;
+          setSeries(res.points);
+          setStepDays(res.step_days);
+          if (!res.partial) break;
+        }
+      } catch {
         if (!cancelled) setSeries([]);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setSeriesLoading(false);
-      });
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [rangeFrom, rangeTo]);
 
   const rates = data?.rates ?? [];
   const pinned = rates.filter((r) => r.pinned).slice(0, 4);
@@ -439,7 +627,23 @@ export function ParExchange() {
         {/* Convertor + grafic */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {data ? <Converter rates={rates} effectiveDate={data.effectiveDate} /> : <Skeleton className="h-[280px] rounded-2xl" />}
-          <HistoryChart points={series} loading={seriesLoading} />
+          <HistoryChart
+            points={series}
+            loading={seriesLoading}
+            period={period}
+            onPeriod={choosePeriod}
+            from={rangeFrom}
+            to={rangeTo}
+            onFrom={(v) => {
+              setPeriod("custom");
+              setRangeFrom(v || startOf(30));
+            }}
+            onTo={(v) => {
+              setPeriod("custom");
+              setRangeTo(v || todayIso());
+            }}
+            stepDays={stepDays}
+          />
         </div>
 
         {/* Tabloul complet */}
@@ -486,7 +690,12 @@ export function ParExchange() {
                     const down = pct.dir < 0;
                     return (
                       <TableRow key={r.code}>
-                        <TableCell className="font-medium text-foreground">{r.code}</TableCell>
+                        <TableCell className="font-medium text-foreground">
+                          <span className="inline-flex items-center gap-2">
+                            <CurrencyFlag code={r.code} size="sm" />
+                            {r.code}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-muted-foreground">{r.name}</TableCell>
                         <TableCell className="text-right tabular-nums">{r.nominal}</TableCell>
                         <TableCell className="text-right font-medium tabular-nums text-foreground">

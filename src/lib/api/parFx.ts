@@ -39,8 +39,12 @@ export interface FxSeriesPoint {
 
 export interface FxSeriesResponse {
   codes: string[];
-  days: number;
-  end_date: string;
+  from: string;
+  to: string;
+  /** Pasul de eșantionare în zile: 1 = zilnic; perioadele lungi se rărește. */
+  step_days: number;
+  /** true = seria e încă în curs de completat de la BNM; o reîncărcare aduce restul. */
+  partial: boolean;
   points: FxSeriesPoint[];
 }
 
@@ -59,10 +63,20 @@ export function getFxRates(date?: string): Promise<FxRatesResponse> {
   return api<FxRatesResponse>(`/api/par/fx/rates${q}`);
 }
 
-export function getFxSeries(codes: string[], days = 30, endDate?: string): Promise<FxSeriesResponse> {
-  const params = new URLSearchParams({ codes: codes.join(","), days: String(days) });
-  if (endDate) params.set("date", endDate);
-  return api<FxSeriesResponse>(`/api/par/fx/series?${params.toString()}`);
+export function getFxSeries(
+  codes: string[],
+  range: { from?: string; to?: string; days?: number; refresh?: boolean } = {}
+): Promise<FxSeriesResponse> {
+  const params = new URLSearchParams({ codes: codes.join(",") });
+  if (range.from) params.set("from", range.from);
+  if (range.to) params.set("to", range.to);
+  if (!range.from && range.days) params.set("days", String(range.days));
+  // Rundele de completare trebuie să ocolească micro-cache-ul de GET-uri, altfel a doua cerere
+  // primește exact răspunsul parțial al primeia și bucla nu avansează niciodată.
+  return api<FxSeriesResponse>(
+    `/api/par/fx/series?${params.toString()}`,
+    range.refresh ? { cache: "reload" } : {}
+  );
 }
 
 export function convertFx(

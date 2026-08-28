@@ -166,3 +166,53 @@ export async function fetchBnmQuotes(
   if (!res.ok) throw new Error("bnm_http_error");
   return parseBnmRates(await res.text());
 }
+
+// ─── Arhiva: exportul CSV ────────────────────────────────────────────────────
+
+/**
+ * BNM servește DOUĂ surse, iar diferența dintre ele nu e documentată nicăieri:
+ *   - `official_exchange_rates?get_xml=1&date=` — doar zilele recente; pentru o dată din 2023
+ *     întoarce un `<ValCurs>` GOL (nu o eroare), deci pare „zi fără curs";
+ *   - `export-official-exchange-rates?date=` — arhiva completă, în CSV, până în anii 2010.
+ *     Pentru zilele vechi conține doar valutele principale (EUR, USD, UAH, RON, RUB), ceea ce
+ *     e exact ce cere un grafic pe ani.
+ *
+ * De aceea istoricul și selectorul de dată merg pe CSV, iar ziua curentă pe XML (listă completă).
+ */
+export function bnmCsvUrl(date: Date): string {
+  return `https://www.bnm.md/ro/export-official-exchange-rates?date=${bnmDate(date)}`;
+}
+
+/**
+ * Parsează CSV-ul BNM: `Valuta;Cod;Abr;Rata;Cursul`, cu zecimala virgulă și numele între
+ * ghilimele („Dolar S.U.A."). `Rata` e nominalul, `Cursul` e valoarea pentru acel nominal.
+ */
+export function parseBnmCsv(csv: string): BnmQuote[] {
+  const out: BnmQuote[] = [];
+  for (const line of csv.split(/\r?\n/)) {
+    const cells = line.split(";");
+    if (cells.length < 5) continue;
+    const code = cells[2]?.replace(/"/g, "").trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(code ?? "")) continue; // sare peste antet și subsol
+    const nominal = Number(cells[3]?.replace(/"/g, "").replace(",", ".").trim());
+    const value = Number(cells[4]?.replace(/"/g, "").replace(",", ".").trim());
+    if (!Number.isFinite(value) || !Number.isFinite(nominal) || nominal <= 0 || value <= 0) continue;
+    const name = (cells[0] ?? code).replace(/"/g, "").trim();
+    out.push({ code: code as string, name, nominal, value, mdlPerUnit: value / nominal });
+  }
+  return out;
+}
+
+/** Descarcă o zi din arhiva CSV. [] dacă BNM n-are ziua (404 pe date viitoare). */
+export async function fetchBnmQuotesCsv(
+  date: Date,
+  opts: { fetchImpl?: FxFetch; timeoutMs?: number } = {}
+): Promise<BnmQuote[]> {
+  const doFetch: FxFetch =
+    opts.fetchImpl ??
+    ((url) =>
+      fetch(url, { signal: AbortSignal.timeout(opts.timeoutMs ?? 8000) }) as unknown as ReturnType<FxFetch>);
+  const res = await doFetch(bnmCsvUrl(date));
+  if (!res.ok) return []; // 404 = zi inexistentă în arhivă, nu o defecțiune
+  return parseBnmCsv(await res.text());
+}
