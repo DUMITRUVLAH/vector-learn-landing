@@ -11,6 +11,7 @@
  * Design system: Vector 365 tokens only, light + dark, WCAG AA
  */
 import { useState, useEffect, type ReactNode } from "react";
+import { useKeepAliveState, hasKeepAlive } from "@/hooks/useKeepAliveState";
 import { Plus, Search, Filter, Loader2, FileText, AlertCircle, Inbox, Landmark, ArrowRight, SlidersHorizontal, X, Clock } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import {
@@ -121,8 +122,6 @@ export function ParDashboard() {
     if (params.get("from") !== "folders") sessionStorage.removeItem("par:returnTo");
   }, []);
 
-  const [requests, setRequests] = useState<(ParRequest & { above_micro_threshold: boolean })[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // VM1-10: when arriving from a Folder click, the project/status come in the URL query
@@ -140,7 +139,7 @@ export function ParDashboard() {
   const saved = loadSavedFilters();
   const [statusFilter, setStatusFilter] = useState<ParStatus | "">(urlFilters.status || saved.status || "");
   const [projectFilter, setProjectFilter] = useState<string>(urlFilters.projectId || "");
-  const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
+  const [projectsMap, setProjectsMap] = useKeepAliveState<Record<string, string>>("par.projectsMap", {});
   const [purposeFilter, setPurposeFilter] = useState<ParPurpose | "">(saved.purpose ?? "");
   const [searchQ, setSearchQ] = useState(saved.q ?? "");
   // VF-105: advanced filters (date range + total range in MDL units as strings)
@@ -149,8 +148,15 @@ export function ParDashboard() {
   const [minTotal, setMinTotal] = useState(saved.minTotal ?? "");
   const [maxTotal, setMaxTotal] = useState(saved.maxTotal ?? "");
   const [showMoreFilters, setShowMoreFilters] = useState(false);
+  // Lista se ține minte între navigări, dar CHEIA include filtrele: altfel, venind dintr-un
+  // folder cu alt filtru, ai vedea o clipă rândurile filtrului anterior.
+  const listKey = `par.list:${JSON.stringify({ statusFilter, purposeFilter, searchQ, dateFrom, dateTo, minTotal, maxTotal })}`;
+  const [requests, setRequests] = useKeepAliveState<(ParRequest & { above_micro_threshold: boolean })[]>(listKey, []);
+  // Dacă avem deja lista în memorie, nu mai pornim de la „se încarcă": ecranul e gata desenat.
+  const [loading, setLoading] = useState(() => !hasKeepAlive(listKey));
+
   // VM1-04: event filter (client-side only — applied after fetch)
-  const [events, setEvents] = useState<ParEvent[]>([]);
+  const [events, setEvents] = useKeepAliveState<ParEvent[]>("par.events", []);
   const [eventFilter, setEventFilter] = useState("");
 
   // Persist all filters on change.
@@ -166,22 +172,25 @@ export function ParDashboard() {
   };
   const hasActiveFilters = !!(statusFilter || purposeFilter || searchQ || dateFrom || dateTo || minTotal || maxTotal || eventFilter || projectFilter);
 
-  // "Te așteaptă" — real counts for the action banner (role-aware, loaded once)
-  const [inboxCount, setInboxCount] = useState(0);
-  const [isFinance, setIsFinance] = useState(false);
+  // „Te așteaptă" — cifrele bannerelor de acțiune. Ținute minte între navigări, altfel
+  // bannerele apăreau după ce restul paginii era deja desenat („apar niște elemente și după
+  // apar altele"), împingând lista în jos.
+  const [inboxCount, setInboxCount] = useKeepAliveState("par.inboxCount", 0);
+  const [isFinance, setIsFinance] = useKeepAliveState("par.isFinance", false);
 
   // VF-202: top budget codes near/over their limit (finance/par_admin only).
-  const [budgetAlerts, setBudgetAlerts] = useState<BudgetCodeUsage[]>([]);
+  const [budgetAlerts, setBudgetAlerts] = useKeepAliveState<BudgetCodeUsage[]>("par.budgetAlerts", []);
 
   useEffect(() => {
     // VM1-04: load events for filter dropdown
-    listEvents().then((r) => setEvents(r.events)).catch(() => setEvents([]));
+    // La eșec PĂSTRĂM ce e pe ecran: o împrospătare picată nu are voie să golească o listă bună.
+    listEvents().then((r) => setEvents(r.events)).catch(() => {});
     // VM1-10: project id→name map (for the active-project filter chip from a Folder click)
-    listProjects().then((r) => setProjectsMap(Object.fromEntries(r.items.map((p) => [p.id, p.name])))).catch(() => setProjectsMap({}));
+    listProjects().then((r) => setProjectsMap(Object.fromEntries(r.items.map((p) => [p.id, p.name])))).catch(() => {});
     // Non-approvers get an empty inbox (no 403), so this is safe for everyone.
     getParInbox()
       .then((r) => setInboxCount(r.total))
-      .catch(() => setInboxCount(0));
+      .catch(() => {});
     getParMe()
       .then((r) => {
         const elevated = r.roles.includes("finance") || r.roles.includes("par_admin");
@@ -211,16 +220,18 @@ export function ParDashboard() {
                 .slice(0, 3);
               setBudgetAlerts(near);
             })
-            .catch(() => setBudgetAlerts([]));
+            .catch(() => {});
         }
       })
-      .catch(() => setIsFinance(false));
+      .catch(() => {});
   }, []);
 
   // Load data
   useEffect(() => {
     const load = async () => {
-      setLoading(true);
+      // Cu date în memorie împrospătăm TĂCUT (stale-while-revalidate): un spinner peste un
+      // ecran deja corect e chiar „pagina se generează de la zero" pe care o vede omul.
+      if (!hasKeepAlive(listKey)) setLoading(true);
       setError(null);
       try {
         const minN = parseFloat(minTotal.replace(",", "."));
@@ -242,7 +253,8 @@ export function ParDashboard() {
       }
     };
     load();
-  }, [statusFilter, purposeFilter, searchQ, dateFrom, dateTo, minTotal, maxTotal]);
+    // `listKey` conține deja toate filtrele; îl adăugăm ca dependență explicită.
+  }, [statusFilter, purposeFilter, searchQ, dateFrom, dateTo, minTotal, maxTotal, listKey, setRequests]);
 
   // Derived sections — apply event + project filters client-side (VM1-04 / VM1-10).
   const filteredByEvent = (eventFilter

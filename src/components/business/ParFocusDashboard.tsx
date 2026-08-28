@@ -6,7 +6,7 @@
  * făcut azi. Aici arătăm exact asta: ce așteaptă decizia ta, ce se mișcă în organizație
  * (cine a cerut, cine a comentat, ce s-a aprobat) și pe unde intri mai departe.
  */
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { ClipboardList, ShieldCheck, Banknote, MessageSquare, Plus, ArrowRight, Clock } from "lucide-react";
 import { Link, useRouter } from "@/router/HashRouter";
 import {
@@ -20,6 +20,7 @@ import {
   type ParListRow,
 } from "@/lib/api/par";
 import { useParRoles } from "@/hooks/useParRoles";
+import { useKeepAliveState } from "@/hooks/useKeepAliveState";
 import { formatCents } from "@/lib/utils";
 import { Button, Card, KpiTile, PastelIcon } from "@/components/ds";
 
@@ -94,11 +95,13 @@ export function ParFocusDashboard({ pendingCount, pendingValueCents, loading }: 
   const canApprove = roles.some((r) => ["approver", "par_admin"].includes(r));
   const canFinance = roles.some((r) => ["finance", "par_admin"].includes(r));
 
-  const [inbox, setInbox] = useState<{ items: ParInboxItem[]; total: number } | null>(null);
-  const [financeTotal, setFinanceTotal] = useState<number | null>(null);
-  const [activity, setActivity] = useState<ParActivityItem[] | null>(null);
+  // Ținute minte între navigări: la a doua vizită tabloul e deja desenat, iar cererile de
+  // rețea doar confirmă. Fără asta, fiecare intrare pe dashboard redesena totul de la zero.
+  const [inbox, setInbox] = useKeepAliveState<{ items: ParInboxItem[]; total: number } | null>("par.focus.inbox", null);
+  const [financeTotal, setFinanceTotal] = useKeepAliveState<number | null>("par.focus.finance", null);
+  const [activity, setActivity] = useKeepAliveState<ParActivityItem[] | null>("par.focus.activity", null);
   /** Pentru cine nu aprobă nimic, „ce am trimis eu" e informația utilă în locul inboxului. */
-  const [mine, setMine] = useState<ParListRow[] | null>(null);
+  const [mine, setMine] = useKeepAliveState<ParListRow[] | null>("par.focus.mine", null);
 
   useEffect(() => {
     if (rolesStatus !== "resolved") return;
@@ -106,21 +109,21 @@ export function ParFocusDashboard({ pendingCount, pendingValueCents, loading }: 
     if (canApprove) {
       getParInbox()
         .then((r) => alive && setInbox({ items: r.inbox ?? [], total: r.total ?? 0 }))
-        .catch(() => alive && setInbox({ items: [], total: 0 }));
+        .catch(() => alive && setInbox((prev) => prev ?? { items: [], total: 0 }));
     } else {
       setInbox({ items: [], total: 0 });
       listPar()
         .then((r) => alive && setMine((r.requests ?? []).slice(0, 5)))
-        .catch(() => alive && setMine([]));
+        .catch(() => alive && setMine((prev) => prev ?? []));
     }
     if (canFinance) {
       getFinanceQueue()
         .then((r) => alive && setFinanceTotal(r.total ?? 0))
-        .catch(() => alive && setFinanceTotal(null));
+        .catch(() => { /* păstrăm ultima valoare bună */ });
     }
     listParActivity(8)
       .then((r) => alive && setActivity(r.items ?? []))
-      .catch(() => alive && setActivity([]));
+      .catch(() => alive && setActivity((prev) => prev ?? []));
     return () => {
       alive = false;
     };

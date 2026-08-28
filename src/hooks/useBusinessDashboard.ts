@@ -9,6 +9,10 @@ import {
   fetchBusinessDashboardKPI,
   type BusinessDashboardKPI,
 } from "@/lib/api/businessDashboard";
+import { useKeepAliveState, hasKeepAlive } from "@/hooks/useKeepAliveState";
+
+/** O singură cheie: tabloul de bord e unul singur per sesiune. */
+const KEY = "business.dashboard.kpi";
 
 export interface UseBusinessDashboardResult {
   data: BusinessDashboardKPI | null;
@@ -18,14 +22,18 @@ export interface UseBusinessDashboardResult {
 }
 
 export function useBusinessDashboard(): UseBusinessDashboardResult {
-  const [data, setData] = useState<BusinessDashboardKPI | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Cifrele rămân pe ecran între navigări și se împrospătează tăcut — altfel tabloul de bord
+  // se năștea de fiecare dată din zero, cu toate dalele pe „se încarcă".
+  const [data, setData] = useKeepAliveState<BusinessDashboardKPI | null>(KEY, null);
+  const [loading, setLoading] = useState(() => !hasKeepAlive(KEY));
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    // La prima montare cu date în memorie NU arătăm spinner (ecranul e deja corect), dar la o
+    // reîncărcare cerută de om (butonul „Reîncarcă", tick > 0) îl arătăm — altfel butonul pare mort.
+    if (!hasKeepAlive(KEY) || tick > 0) setLoading(true);
     setError(null);
 
     fetchBusinessDashboardKPI()

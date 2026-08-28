@@ -17,6 +17,12 @@
  *    Acoperă remontările din timpul unei singure navigări (shell + guard + pagină). Fereastra e
  *    sub timpul de reacție uman, deci nu se poate vedea ca „date învechite".
  *
+ *    NU o lărgi ca să scazi numărul de cereri: fereastra golește DOAR cache-ul celui care face
+ *    mutația, nu și pe al colegului. Cu 10 s, aprobatorul nu vedea în inbox cererea pe care
+ *    solicitantul tocmai o trimisese (măsurat: 8 din 15 parcursuri de rol picau). Ecranul instant
+ *    se obține din memoria de ecran (`viewState`), care randează imediat și împrospătează în
+ *    fundal — nu din întârzierea împrospătării.
+ *
  * 3. **Cache de identitate (5 min)** — doar pentru rutele din `IDENTITY_TTL`: cine sunt, ce roluri
  *    am, ce module sunt active. Se schimbă la login/logout/schimbare de roluri, momente în care
  *    cache-ul e golit explicit.
@@ -25,6 +31,8 @@
  * O aplicație care aprobă plăți nu are voie să arate o listă învechită după o acțiune; a plăti
  * cu o cerere de rețea în plus după fiecare mutație e schimbul corect.
  */
+
+import { clearViewState } from "./viewState";
 
 interface CacheEntry {
   promise: Promise<unknown>;
@@ -50,6 +58,9 @@ const IDENTITY_PATHS = [
   "/api/modules",
   "/api/fin/members/me",
   "/api/platform/catalog",
+  // Sesiunea e sau nu de impersonare pe toată durata ei — nu are de ce să fie întrebată la
+  // fiecare navigare. Se golește oricum la start/stop (ambele sunt POST-uri).
+  "/api/impersonation/status",
 ];
 
 function ttlFor(path: string): number {
@@ -96,9 +107,14 @@ export function peekApiCache<T>(key: string): T | undefined {
   return undefined;
 }
 
-/** Golește tot cache-ul de GET-uri. Apelat după fiecare mutație și la logout. */
+/**
+ * Golește tot cache-ul de GET-uri. Apelat după fiecare mutație și la logout.
+ * Golește și memoria de ecran (`viewState`): o pagină care revine instantaneu din memorie nu
+ * are voie să arate lista dinainte de aprobarea pe care tocmai ai făcut-o.
+ */
 export function clearApiCache(): void {
   cache.clear();
+  clearViewState();
 }
 
 /** Golește intrările a căror cheie începe cu `prefix` (ex. după o acțiune pe un singur modul). */
