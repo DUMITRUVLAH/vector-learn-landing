@@ -21,6 +21,7 @@ import {
   Textarea,
 } from "@/components/ds";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
+import { ParUrgentBadge } from "@/components/par/ParUrgentBadge";
 import { useRouter } from "@/router/HashRouter";
 import {
   getParInbox,
@@ -92,6 +93,9 @@ function sortFilterInbox(
   const filtered = projectFilter ? items.filter((i) => (i.projectName ?? "") === projectFilter) : items;
   const dir = sort.dir === "asc" ? 1 : -1;
   return [...filtered].sort((a, b) => {
+    // Urgență (owner request, 2026-08-28): urgente primele indiferent de coloana aleasă de om —
+    // altfel sortarea implicită după "submittedAt" ar anula ordinea urgent-primul dată de server.
+    if (a.isUrgent !== b.isUrgent) return a.isUrgent ? -1 : 1;
     if (sort.key === "totalEstimatedCents") return (a.totalEstimatedCents - b.totalEstimatedCents) * dir;
     if (sort.key === "submittedAt") {
       const ta = a.submittedAt ? Date.parse(a.submittedAt) : 0;
@@ -806,6 +810,11 @@ export default function ParInbox() {
                         </td>
                         <td className="px-3 py-3 align-middle">
                           <button onClick={() => navigate(`/business/par/${item.id}`)} className="whitespace-nowrap font-mono text-foreground hover:text-primary hover:underline">{item.requestNo}</button>
+                          {item.isUrgent && (
+                            <div className="mt-0.5">
+                              <ParUrgentBadge reason={item.urgentReason} reasonNote={item.urgentReasonNote} dueDate={item.urgentDueDate} />
+                            </div>
+                          )}
                           {/* The Scop column is gone — it said "Execută plata" on every row.
                               The two purposes that are NOT the default still change how you
                               read the request, so they stay, as a chip on the row instead. */}

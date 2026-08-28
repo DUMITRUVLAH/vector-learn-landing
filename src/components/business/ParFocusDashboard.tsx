@@ -23,6 +23,7 @@ import { useParRoles } from "@/hooks/useParRoles";
 import { useKeepAliveState } from "@/hooks/useKeepAliveState";
 import { formatCents } from "@/lib/utils";
 import { Button, Card, KpiTile, PastelIcon } from "@/components/ds";
+import { ParUrgentBadge } from "@/components/par/ParUrgentBadge";
 
 /** „acum 3 ore" bate un timestamp ISO pe un tablou de bord — contează cât de proaspăt e. */
 function relativeTime(iso: string): string {
@@ -130,6 +131,9 @@ export function ParFocusDashboard({ pendingCount, pendingValueCents, loading }: 
   }, [rolesStatus, canApprove, canFinance]);
 
   const waiting = inbox?.items.slice(0, 5) ?? [];
+  // Urgență (owner request, 2026-08-28): câte din inbox-ul complet (nu doar cele 5 afișate) sunt
+  // urgente — folosit pentru hint-ul KPI-ului "Așteaptă decizia ta".
+  const urgentInboxCount = inbox?.items.filter((item) => item.isUrgent).length ?? 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -142,7 +146,13 @@ export function ParFocusDashboard({ pendingCount, pendingValueCents, loading }: 
             tone="emerald"
             href="/business/par/inbox"
             loading={inbox === null}
-            hint={inbox && inbox.total === 0 ? "Nimic de aprobat acum" : "Inbox de aprobare"}
+            hint={
+              inbox && inbox.total === 0
+                ? "Nimic de aprobat acum"
+                : urgentInboxCount > 0
+                  ? `${urgentInboxCount} urgente`
+                  : "Inbox de aprobare"
+            }
             data-testid="par-kpi-inbox"
           />
         )}
@@ -195,8 +205,11 @@ export function ParFocusDashboard({ pendingCount, pendingValueCents, loading }: 
                       className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 no-underline hover:bg-accent"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-foreground">
+                        <span className="flex items-center gap-1.5 truncate text-sm font-medium text-foreground">
                           {row.requestNo} · {row.payeeName ?? "Fără beneficiar"}
+                          {row.isUrgent && (
+                            <ParUrgentBadge reason={row.urgentReason} reasonNote={row.urgentReasonNote} dueDate={row.urgentDueDate} />
+                          )}
                         </span>
                         <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                           {PAR_STATUS_LABELS[row.status] ?? row.status}
@@ -223,8 +236,11 @@ export function ParFocusDashboard({ pendingCount, pendingValueCents, loading }: 
                     className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 no-underline hover:bg-accent"
                   >
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-foreground">
+                      <span className="flex items-center gap-1.5 truncate text-sm font-medium text-foreground">
                         {item.requestNo} · {item.payeeName ?? "Fără beneficiar"}
+                        {item.isUrgent && (
+                          <ParUrgentBadge reason={item.urgentReason} reasonNote={item.urgentReasonNote} dueDate={item.urgentDueDate} />
+                        )}
                       </span>
                       <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                         Cerut de {item.requestedByName ?? "—"}

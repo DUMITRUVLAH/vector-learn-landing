@@ -14,7 +14,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, desc } from "drizzle-orm";
 import { db } from "../db/client";
 import {
   parRequests,
@@ -181,7 +181,8 @@ parPaymentsRoutes.get("/finance", async (c) => {
         eq(parRequests.purpose, "execute_payment"),
         inArray(parRequests.status, ["approved", "in_finance", "reapproval_required"])
       )
-    );
+    )
+    .orderBy(desc(parRequests.isUrgent), desc(parRequests.createdAt));
   const [projectScope, payerScope] = await Promise.all([
     accessibleProjectIds(user.id, tenantId, user.role), accessiblePayerIds(user.id, tenantId, user.role),
   ]);

@@ -1037,6 +1037,13 @@
       "when": 1787000200005,
       "tag": "0148_bnm_rates",
       "breakpoints": true
+    },
+    {
+      "idx": 149,
+      "version": "7",
+      "when": 1787000200006,
+      "tag": "0149_par_urgent_flag",
+      "breakpoints": true
     }
   ]
 }

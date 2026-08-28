@@ -67,6 +67,13 @@ export interface ParRequest {
   above_micro_threshold?: boolean;
   // VM1-04: optional event (sub-entity of project)
   eventId?: string | null;
+  // Urgency flag (owner request, 2026-08-28). Optional (not required) like `above_micro_threshold`
+  // above: dozens of existing test fixtures construct a ParRequest literal without every field, and
+  // this repo's convention for additive columns is to make them optional rather than break them all.
+  isUrgent?: boolean;
+  urgentReason?: string | null;
+  urgentReasonNote?: string | null;
+  urgentDueDate?: string | null;
   status: ParStatus;
   submittedAt: string | null;
   approvedAt: string | null;
@@ -273,6 +280,11 @@ export interface CreateParPayload {
   purpose?: ParPurpose;
   charge_to?: ParChargeTo;
   charge_billing_code?: string | null;
+  // Urgency flag (owner request, 2026-08-28)
+  is_urgent?: boolean;
+  urgent_reason?: string | null;
+  urgent_reason_note?: string | null;
+  urgent_due_date?: string | null;
 }
 
 export interface UpdateParPayload extends CreateParPayload {
@@ -1349,6 +1361,19 @@ export async function getParReportCurrencyBreakdown(
 
 export async function getParReportCycleTime(filters?: ParReportFilters): Promise<ParCycleTimeItem> {
   return api(`/api/par/reports/cycle-time${parReportQuery(filters)}`);
+}
+
+// Urgency flag (owner request, 2026-08-28): who requests urgent most, why.
+export interface ParUrgentByRequester { userId: string | null; name: string; count: number; }
+export interface ParUrgentByReason { reason: string; label: string; count: number; }
+export interface ParUrgentReport {
+  totalUrgent: number;
+  byRequester: ParUrgentByRequester[];
+  byReason: ParUrgentByReason[];
+}
+
+export async function getParReportUrgent(filters?: ParReportFilters): Promise<{ urgent: ParUrgentReport }> {
+  return api(`/api/par/reports/urgent${parReportQuery(filters)}`);
 }
 
 export function getParReportExportUrl(filters?: ParReportFilters): string {

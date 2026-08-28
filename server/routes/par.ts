@@ -61,6 +61,7 @@ import { getActiveDelegators, getDelegatedAuthority } from "../lib/par/delegatio
 import { resolveViewerDecision } from "../lib/par/decisionAuthority";
 import { enabledPayerIds, hasPayerModuleEntitlement } from "../middleware/requireModuleEntitlement";
 import { canViewPar, isWorkspaceAdminRole } from "../lib/par/visibility";
+import { isUrgentReasonCode } from "../../src/lib/par/urgentReasons";
 
 export const parRoutes = new Hono<{ Variables: AuthVariables }>();
 parRoutes.use("*", requireAuth);
@@ -94,6 +95,11 @@ const createParSchema = z.object({
   purpose: z.enum(parPurposeValues).optional(),
   charge_to: z.enum(parChargeToValues).optional(),
   charge_billing_code: z.string().max(100).optional().nullable(),
+  // Urgency flag (owner request, 2026-08-28)
+  is_urgent: z.boolean().optional(),
+  urgent_reason: z.string().max(60).optional().nullable(),
+  urgent_reason_note: z.string().max(500).optional().nullable(),
+  urgent_due_date: z.string().datetime().optional().nullable(),
 });
 
 const updateParSchema = z.object({
@@ -127,7 +133,46 @@ const updateParSchema = z.object({
   attachments_note: z.string().max(2000).optional().nullable(),
   // VM1-03: currency MDL/EUR/USD only (RON removed).
   currency: z.enum(["MDL", "EUR", "USD"]).optional(),
+  // Urgency flag (owner request, 2026-08-28)
+  is_urgent: z.boolean().optional(),
+  urgent_reason: z.string().max(60).optional().nullable(),
+  urgent_reason_note: z.string().max(500).optional().nullable(),
+  urgent_due_date: z.string().datetime().optional().nullable(),
 });
+
+/**
+ * Owner request 2026-08-28: an urgent PAR must always carry a valid formal reason + a due date;
+ * "other" additionally requires a non-empty note. Effective values fall back to the existing row
+ * on update (a PATCH that only flips `is_urgent` without resending reason/date must still validate
+ * against what's already stored). We never force-clear reason/note/date when un-urgent-ing — they
+ * stay as a historical record unless the caller explicitly nulls them.
+ */
+function validateUrgentFields(
+  body: { is_urgent?: boolean; urgent_reason?: string | null; urgent_reason_note?: string | null; urgent_due_date?: string | null },
+  existing?: { isUrgent: boolean; urgentReason: string | null; urgentReasonNote: string | null; urgentDueDate: Date | null } | null
+): { error: string } | null {
+  const effectiveIsUrgent = body.is_urgent !== undefined ? body.is_urgent : existing?.isUrgent ?? false;
+  if (!effectiveIsUrgent) return null;
+
+  const effectiveReason = body.urgent_reason !== undefined ? body.urgent_reason : existing?.urgentReason ?? null;
+  if (!effectiveReason || !isUrgentReasonCode(effectiveReason)) {
+    return { error: "urgent_reason_required" };
+  }
+
+  const effectiveDueDate = body.urgent_due_date !== undefined ? body.urgent_due_date : existing?.urgentDueDate ?? null;
+  if (!effectiveDueDate) {
+    return { error: "urgent_due_date_required" };
+  }
+
+  if (effectiveReason === "other") {
+    const effectiveNote = body.urgent_reason_note !== undefined ? body.urgent_reason_note : existing?.urgentReasonNote ?? null;
+    if (!effectiveNote || !effectiveNote.trim()) {
+      return { error: "urgent_reason_note_required" };
+    }
+  }
+
+  return null;
+}
 
 const lineItemSchema = z.object({
   description: z.string().min(1).max(2000),
@@ -272,6 +317,9 @@ parRoutes.post(
       }
     }
 
+    const urgentError = validateUrgentFields(body, null);
+    if (urgentError) return c.json(urgentError, 400);
+
     // Generate collision-free request number (max+1 within tenant+year)
     const requestNo = await generateRequestNo(tenantId);
 
@@ -296,6 +344,10 @@ parRoutes.post(
         chargeBillingCode: body.charge_billing_code ?? null,
         status: "draft",
         totalEstimatedCents: 0,
+        isUrgent: body.is_urgent ?? false,
+        urgentReason: body.urgent_reason ?? null,
+        urgentReasonNote: body.urgent_reason_note ?? null,
+        urgentDueDate: body.urgent_due_date ? new Date(body.urgent_due_date) : null,
       })
       .returning();
 
@@ -367,6 +419,10 @@ parRoutes.post("/:id/duplicate", async (c) => {
       currency: source.currency,
       totalEstimatedCents: 0,
       status: "draft",
+      isUrgent: false,
+      urgentReason: null,
+      urgentReasonNote: null,
+      urgentDueDate: null,
     })
     .returning();
 
@@ -792,7 +848,7 @@ parRoutes.get("/", async (c) => {
       .select()
       .from(parRequests)
       .where(and(...conditions))
-      .orderBy(desc(parRequests.createdAt))
+      .orderBy(desc(parRequests.isUrgent), desc(parRequests.createdAt))
       .limit(limit)
       .offset(offset),
     db
@@ -1147,6 +1203,14 @@ parRoutes.patch(
       }
     }
 
+    const urgentError = validateUrgentFields(body, {
+      isUrgent: par.isUrgent,
+      urgentReason: par.urgentReason,
+      urgentReasonNote: par.urgentReasonNote,
+      urgentDueDate: par.urgentDueDate,
+    });
+    if (urgentError) return c.json(urgentError, 400);
+
     // PAR-103: IBAN + cod fiscal — ATENȚIONĂM, NU BLOCĂM (decizie owner, 2026-08-21).
     //
     // Regulile de format nu pot fi un zid: plățile pot fi internaționale, iar formatele străine
@@ -1223,6 +1287,11 @@ parRoutes.patch(
       updateData.attachmentsPresent = body.attachments_present;
     if (body.attachments_note !== undefined)
       updateData.attachmentsNote = body.attachments_note;
+    if (body.is_urgent !== undefined) updateData.isUrgent = body.is_urgent;
+    if (body.urgent_reason !== undefined) updateData.urgentReason = body.urgent_reason;
+    if (body.urgent_reason_note !== undefined) updateData.urgentReasonNote = body.urgent_reason_note;
+    if (body.urgent_due_date !== undefined)
+      updateData.urgentDueDate = body.urgent_due_date ? new Date(body.urgent_due_date) : null;
 
     // Inline payee fields (no vendor selected). The form always sends
     // vendor_id: null when entering payee manually, so the inline block must

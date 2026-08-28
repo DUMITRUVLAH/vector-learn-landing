@@ -510,7 +510,7 @@ parApprovalsRoutes.get("/inbox", async (c) => {
         eq(parRequests.status, "pending_approval")
       )
     )
-    .orderBy(desc(parRequests.submittedAt));
+    .orderBy(desc(parRequests.isUrgent), desc(parRequests.submittedAt));
 
   // Join with relevant steps
   const [settings] = await db

@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   FileText, Loader2, Plus, Trash2, Upload, X, AlertCircle, CheckCircle2, Paperclip, Save,
   Search, Building2, BookmarkPlus, BookOpen, Sparkles, Info, Pencil,
-  ClipboardList, ListChecks, AlignLeft, Wallet, ChevronDown, Globe,
+  ClipboardList, ListChecks, AlignLeft, Wallet, ChevronDown, Globe, AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
@@ -45,7 +45,10 @@ import {
   type ParPrefillResult, type ParLineItemSuggestion, type ParAttachmentAnalysis,
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
-import { Card, PastelIcon, Select, Textarea, chipToneFor } from "@/components/ds";
+import { Card, PastelIcon, Select, Switch, Textarea, chipToneFor } from "@/components/ds";
+import {
+  URGENT_REASON_ORDER, URGENT_REASON_LABELS, URGENT_REASON_NOTE_MAX_LEN, isUrgentReasonCode,
+} from "@/lib/par/urgentReasons";
 
 /** Why the AI could not be consulted — shown verbatim instead of a silent "(demo)" badge. */
 const AI_UNAVAILABLE_MESSAGE: Record<string, string> = {
@@ -68,6 +71,14 @@ const FIELD_MESSAGES: Record<string, string> = {
   payee_iban: "IBAN invalid.",
   payee_idnp: "IDNP invalid.",
   payee_bank: "Numele băncii e prea lung (max 300 caractere) — scurtează-l sau corectează-l.",
+};
+
+/** The 3 urgency 400s (server/routes/par.ts validateUrgentFields) come back as a bare `{ error:
+ *  <code> }`, not a field-error array — map the top-level code to the inline field it belongs to. */
+const URGENT_ERROR_MESSAGES: Record<string, { field: string; message: string }> = {
+  urgent_reason_required: { field: "urgent_reason", message: "Alege un motiv pentru urgență." },
+  urgent_due_date_required: { field: "urgent_due_date", message: "Completează termenul limită de plată." },
+  urgent_reason_note_required: { field: "urgent_reason_note", message: "Detaliază motivul (ai ales „Alt motiv”)." },
 };
 
 /**
@@ -431,6 +442,11 @@ export function ParCreateForm() {
   // Beneficiary UX: pick ONE way to add the payee (manual / company registry / AI document / saved),
   // so the section isn't a wall of four tools stacked at once. `null` = show only the picker.
   const [payeeMethod, setPayeeMethod] = useState<"manual" | "registry" | "ai" | "saved" | null>(null);
+  // Urgență (owner request, 2026-08-28)
+  const [isUrgent, setIsUrgent] = useState(false);
+  const [urgentReason, setUrgentReason] = useState("");
+  const [urgentReasonNote, setUrgentReasonNote] = useState("");
+  const [urgentDueDate, setUrgentDueDate] = useState("");
   // Attachments (13)
   const [attachmentsPresent, setAttachmentsPresent] = useState(false);
   const [attachmentsNote, setAttachmentsNote] = useState("");
@@ -583,6 +599,10 @@ export function ParCreateForm() {
           if (existing.vendorId || existing.payeeName || existing.payeeIban) setPayeeMethod("manual");
           setAttachmentsPresent(!!existing.attachmentsPresent);
           setAttachmentsNote(existing.attachmentsNote ?? "");
+          setIsUrgent(!!existing.isUrgent);
+          setUrgentReason(existing.urgentReason ?? "");
+          setUrgentReasonNote(existing.urgentReasonNote ?? "");
+          if (existing.urgentDueDate) setUrgentDueDate(existing.urgentDueDate.slice(0, 10));
         }
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : editId ? "Eroare la încărcarea ciornei" : "Eroare la crearea ciornei");
@@ -612,10 +632,15 @@ export function ParCreateForm() {
       payee_type: payeeType,
       attachments_present: attachmentsPresent, attachments_note: attachmentsNote || null,
       currency,
+      is_urgent: isUrgent,
+      urgent_reason: urgentReason || null,
+      urgent_reason_note: urgentReasonNote || null,
+      urgent_due_date: urgentDueDate ? new Date(urgentDueDate).toISOString() : null,
     });
   }, [dateOfRequest, requestorTitle, requestorCode, payerId, departmentId, dateNeeded, projectId, eventId, budgetCodeId,
       budgetCodeNote, purpose, chargeTo, endUse, vendorId, payeeName,
-      payeeIdnp, payeeIban, payeeBank, payeeType, attachmentsPresent, attachmentsNote, currency]);
+      payeeIdnp, payeeIban, payeeBank, payeeType, attachmentsPresent, attachmentsNote, currency,
+      isUrgent, urgentReason, urgentReasonNote, urgentDueDate]);
 
   const ensureDraft = useCallback(async (): Promise<string> => {
     if (parId) return parId;
@@ -1117,6 +1142,18 @@ export function ParCreateForm() {
       const hasPayee = !!vendorId || (!!payeeName.trim() && !!payeeIban.trim());
       if (!hasPayee) errs.payee = FIELD_MESSAGES.payee;
     }
+    // Urgență (owner request, 2026-08-28) — mirrors validateUrgentFields on the server.
+    if (isUrgent) {
+      if (!urgentReason || !isUrgentReasonCode(urgentReason)) {
+        errs.urgent_reason = URGENT_ERROR_MESSAGES.urgent_reason_required.message;
+      }
+      if (!urgentDueDate) {
+        errs.urgent_due_date = URGENT_ERROR_MESSAGES.urgent_due_date_required.message;
+      }
+      if (urgentReason === "other" && !urgentReasonNote.trim()) {
+        errs.urgent_reason_note = URGENT_ERROR_MESSAGES.urgent_reason_note_required.message;
+      }
+    }
     setFieldErrors(errs);
     if (Object.keys(errs).length) {
       setError("Mai sunt câmpuri de completat înainte de trimitere — vezi mai jos.");
@@ -1140,6 +1177,10 @@ export function ParCreateForm() {
         const mapped: Record<string, string> = {};
         for (const d of e.details) mapped[d.field] = FIELD_MESSAGES[d.field] ?? d.message;
         setFieldErrors(mapped);
+        setError("Ciorna nu a putut fi salvată — vezi câmpurile marcate mai jos.");
+      } else if (e instanceof ApiError && URGENT_ERROR_MESSAGES[e.code]) {
+        const { field, message } = URGENT_ERROR_MESSAGES[e.code];
+        setFieldErrors((p) => ({ ...p, [field]: message }));
         setError("Ciorna nu a putut fi salvată — vezi câmpurile marcate mai jos.");
       } else {
         setError(e instanceof Error ? e.message : "Eroare la salvare");
@@ -1189,6 +1230,10 @@ export function ParCreateForm() {
         const mapped: Record<string, string> = {};
         for (const d of e.details) mapped[d.field] = FIELD_MESSAGES[d.field] ?? d.message;
         setFieldErrors(mapped);
+        setError("Cererea nu a putut fi trimisă — vezi câmpurile marcate mai jos.");
+      } else if (e instanceof ApiError && URGENT_ERROR_MESSAGES[e.code]) {
+        const { field, message } = URGENT_ERROR_MESSAGES[e.code];
+        setFieldErrors((p) => ({ ...p, [field]: message }));
         setError("Cererea nu a putut fi trimisă — vezi câmpurile marcate mai jos.");
       } else {
         setError(e instanceof Error ? e.message : "Eroare la trimitere");
@@ -1301,6 +1346,70 @@ export function ParCreateForm() {
                 </Select>
               </Field>
             </div>
+          </FieldGroup>
+
+          {/* Urgență (owner request, 2026-08-28): cererile urgente sunt sortate primele peste tot
+              unde le văd aprobatorii/finanțele — inbox, coadă de finanțe, listă, dashboard. */}
+          <FieldGroup label="Urgență">
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={isUrgent}
+                onChange={(next) => {
+                  setIsUrgent(next);
+                  setFieldErrors((p) => ({ ...p, urgent_reason: "", urgent_due_date: "", urgent_reason_note: "" }));
+                }}
+                aria-label="Marchează cererea ca urgentă"
+              />
+              <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden />
+                Cerere urgentă
+              </span>
+            </div>
+            {isUrgent && (
+              <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                <Field label="Motivul urgenței" htmlFor="urgentReason" required error={fieldErrors.urgent_reason}>
+                  <Select
+                    id="urgentReason"
+                    className="w-full"
+                    value={urgentReason}
+                    onChange={(e) => { setUrgentReason(e.target.value); setFieldErrors((p) => ({ ...p, urgent_reason: "" })); }}
+                    aria-label="Motivul urgenței"
+                  >
+                    <option value="">— Selectează —</option>
+                    {URGENT_REASON_ORDER.map((code) => (
+                      <option key={code} value={code}>{URGENT_REASON_LABELS[code]}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Termen limită plată" htmlFor="urgentDueDate" required error={fieldErrors.urgent_due_date}
+                  hint="Data până la care plata trebuie efectuată.">
+                  <input
+                    id="urgentDueDate"
+                    type="date"
+                    className={inputCls}
+                    value={urgentDueDate}
+                    onChange={(e) => { setUrgentDueDate(e.target.value); setFieldErrors((p) => ({ ...p, urgent_due_date: "" })); }}
+                  />
+                </Field>
+                <Field
+                  label={urgentReason === "other" ? "Detaliază motivul" : "Notă (opțional)"}
+                  htmlFor="urgentReasonNote"
+                  required={urgentReason === "other"}
+                  error={fieldErrors.urgent_reason_note}
+                  hint={urgentReason === "other" ? undefined : `${urgentReasonNote.length}/${URGENT_REASON_NOTE_MAX_LEN}`}
+                >
+                  <input
+                    id="urgentReasonNote"
+                    type="text"
+                    maxLength={URGENT_REASON_NOTE_MAX_LEN}
+                    className={cn(inputCls, urgentReason === "other" && "border-destructive/50")}
+                    placeholder={urgentReason === "other" ? "Descrie motivul urgenței" : "Context suplimentar (opțional)"}
+                    value={urgentReasonNote}
+                    onChange={(e) => { setUrgentReasonNote(e.target.value); setFieldErrors((p) => ({ ...p, urgent_reason_note: "" })); }}
+                  />
+                </Field>
+              </div>
+            )}
           </FieldGroup>
 
           {/* Cine solicită — pe un singur rând: nume, funcție, cod persoană, departament. */}

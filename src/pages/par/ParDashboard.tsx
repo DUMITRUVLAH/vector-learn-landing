@@ -35,6 +35,7 @@ import {
 } from "@/components/ds";
 import { useRouter } from "@/router/HashRouter";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
+import { ParUrgentBadge } from "@/components/par/ParUrgentBadge";
 import {
   listPar,
   getParInbox,
@@ -613,7 +614,12 @@ function Section({ title, count, requests, onRowClick, emptyMessage, highlight, 
                   </span>
                 </TableCell>
                 <TableCell>
-                  <ParStatusChip status={r.status} />
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <ParStatusChip status={r.status} />
+                    {r.isUrgent && (
+                      <ParUrgentBadge reason={r.urgentReason} reasonNote={r.urgentReasonNote} dueDate={r.urgentDueDate} />
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
                   {new Date(r.createdAt).toLocaleDateString("ro-MD", {

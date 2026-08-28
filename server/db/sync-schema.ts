@@ -379,6 +379,14 @@ async function main() {
     `CREATE UNIQUE INDEX IF NOT EXISTS "bnm_rates_date_code_idx" ON "bnm_rates" ("rate_date","code")`,
     `CREATE INDEX IF NOT EXISTS "bnm_rates_date_idx" ON "bnm_rates" ("rate_date")`,
     `CREATE INDEX IF NOT EXISTS "bnm_rates_code_idx" ON "bnm_rates" ("code")`,
+    // Migrarea 0149: flag de urgență pe cerere. is_urgent e NOT NULL DEFAULT false — healul
+    // generic de mai sus adaugă coloana FĂRĂ modificatori, deci rândurile existente ar rămâne
+    // NULL. Explicit aici, ca la par_budget_codes.currency (migrarea 0147).
+    `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "is_urgent" boolean DEFAULT false NOT NULL`,
+    `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "urgent_reason" varchar(60)`,
+    `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "urgent_reason_note" text`,
+    `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "urgent_due_date" timestamp with time zone`,
+    `CREATE INDEX IF NOT EXISTS "par_requests_urgent_idx" ON "par_requests" ("is_urgent")`,
   ];
   for (const stmt of ENSURE_STATEMENTS) {
     try {

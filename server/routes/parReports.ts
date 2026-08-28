@@ -34,6 +34,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { accessiblePayerIds, accessibleProjectIds } from "../lib/par/projectScope";
 import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
+import { URGENT_REASON_LABELS, type UrgentReasonCode } from "../../src/lib/par/urgentReasons";
 
 type ReportVariables = AuthVariables & { parReportScope: SQL };
 export const parReportsRoutes = new Hono<{ Variables: ReportVariables }>();
@@ -467,6 +468,61 @@ parReportsRoutes.get("/cycle-time", async (c) => {
     avgSubmitToApprovedDays: raw ? (raw.avgSubmitToApproved != null ? parseFloat(String(raw.avgSubmitToApproved)) : null) : null,
     avgSubmitToPaidDays: raw ? (raw.avgSubmitToPaid != null ? parseFloat(String(raw.avgSubmitToPaid)) : null) : null,
   });
+});
+
+/** GET /api/par/reports/urgent — owner request 2026-08-28: cine cere urgent cel mai des și de ce.
+ * Folosește exact aceleași filtre ca restul raportului (perioadă, status, plătitor, proiect,
+ * departament, monedă, căutare) — altfel secțiunea ar răspunde la alte întrebări decât cele de
+ * deasupra ei, pe același ecran. */
+parReportsRoutes.get("/urgent", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const q = parseReportQuery(c);
+  const scopeWhere = and(buildReportWhere(tenantId, q, c.get("parReportScope")), eq(parRequests.isUrgent, true))!;
+
+  const [totalRow, byRequesterRows, byReasonRows] = await Promise.all([
+    db.select({ count: sql<number>`cast(count(*) as integer)` }).from(parRequests).where(scopeWhere),
+    db
+      .select({
+        userId: parRequests.requestedByUserId,
+        name: users.name,
+        count: sql<number>`cast(count(*) as integer)`,
+      })
+      .from(parRequests)
+      .leftJoin(users, eq(users.id, parRequests.requestedByUserId))
+      .where(scopeWhere)
+      .groupBy(parRequests.requestedByUserId, users.name),
+    db
+      .select({
+        reason: parRequests.urgentReason,
+        count: sql<number>`cast(count(*) as integer)`,
+      })
+      .from(parRequests)
+      .where(scopeWhere)
+      .groupBy(parRequests.urgentReason),
+  ]);
+
+  const totalData = Array.isArray(totalRow) ? totalRow : (totalRow as { rows?: unknown[] }).rows ?? [];
+  const totalUrgent = totalData[0] ? Number((totalData[0] as Record<string, unknown>).count ?? 0) : 0;
+
+  const requesterData = Array.isArray(byRequesterRows) ? byRequesterRows : (byRequesterRows as { rows?: unknown[] }).rows ?? [];
+  const byRequester = (requesterData as Record<string, unknown>[])
+    .map((r) => ({
+      userId: (r.userId as string | null) ?? null,
+      name: (r.name as string | null) ?? "Necunoscut",
+      count: Number(r.count ?? 0),
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const reasonData = Array.isArray(byReasonRows) ? byReasonRows : (byReasonRows as { rows?: unknown[] }).rows ?? [];
+  const byReason = (reasonData as Record<string, unknown>[])
+    .map((r) => {
+      const reason = (r.reason as string | null) ?? "necunoscut";
+      const label = URGENT_REASON_LABELS[reason as UrgentReasonCode] ?? reason;
+      return { reason, label, count: Number(r.count ?? 0) };
+    })
+    .sort((a, b) => b.count - a.count);
+
+  return c.json({ urgent: { totalUrgent, byRequester, byReason } });
 });
 
 /** GET /api/par/reports/export.csv — raw CSV export */

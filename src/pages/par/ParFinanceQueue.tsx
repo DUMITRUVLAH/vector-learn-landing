@@ -42,6 +42,7 @@ import {
   Textarea,
 } from "@/components/ds";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
+import { ParUrgentBadge } from "@/components/par/ParUrgentBadge";
 import {
   getFinanceQueue,
   submitSection16,
@@ -801,7 +802,12 @@ export default function ParFinanceQueue() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex flex-col gap-1">
-                        <ParStatusChip status={par.status} />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <ParStatusChip status={par.status} />
+                          {par.isUrgent && (
+                            <ParUrgentBadge reason={par.urgentReason} reasonNote={par.urgentReasonNote} dueDate={par.urgentDueDate} />
+                          )}
+                        </div>
                         {par.status === "reapproval_required" && (
                           <span className="text-xs font-medium text-warning">
                             Re-aprobare necesară (&gt;10% depășire)

@@ -23,6 +23,7 @@ import {
   FileDown,
   SlidersHorizontal,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import {
@@ -42,10 +43,12 @@ import {
   listPayers,
   listProjects,
   listDepartments,
+  getParReportUrgent,
   type ParSpendByItem,
   type ParAgingItem,
   type ParCycleTimeItem,
   type ParCurrencyBreakdownItem,
+  type ParUrgentReport,
 } from "@/lib/api/par";
 import {
   Alert,
@@ -301,6 +304,8 @@ export function ParReports() {
   // VM1-03: per-currency breakdown
   const [currencyBreakdown, setCurrencyBreakdown] = useKeepAliveState<ParCurrencyBreakdownItem[]>("par.reports.currency", []);
   const [totalMdlCents, setTotalMdlCents] = useKeepAliveState("par.reports.totalMdl", 0);
+  // Urgență (owner request, 2026-08-28): cine cere urgent cel mai des și de ce.
+  const [urgentReport, setUrgentReport] = useKeepAliveState<ParUrgentReport | null>("par.reports.urgent", null);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [loadingCharts, setLoadingCharts] = useState(false);
@@ -314,7 +319,7 @@ export function ParReports() {
     setLoadingCharts(true);
     setError(null);
     try {
-      const [payerRows, b, d, p, v, evts, ch, cb] = await Promise.all([
+      const [payerRows, b, d, p, v, evts, ch, cb, ur] = await Promise.all([
         getParReportByPayer(filters),
         getParReportByBudget(filters),
         getParReportByDepartment(filters),
@@ -323,6 +328,7 @@ export function ParReports() {
         getParReportByEvent(filters),
         getParReportByChargeTo(filters),
         getParReportCurrencyBreakdown(filters),
+        getParReportUrgent(filters),
       ]);
       setByPayer(payerRows.items ?? []);
       setByBudget(b.items ?? []);
@@ -333,6 +339,7 @@ export function ParReports() {
       setByCharge(ch.items ?? []);
       setCurrencyBreakdown(cb.byCurrency ?? []);
       setTotalMdlCents(cb.totalMdlCents ?? 0);
+      setUrgentReport(ur.urgent ?? null);
     } catch {
       setError("Eroare la încărcarea rapoartelor");
     } finally {
@@ -814,6 +821,65 @@ export function ParReports() {
                   </tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Urgență (owner request, 2026-08-28): cine cere urgent cel mai des și de ce. */}
+        {urgentReport && urgentReport.totalUrgent > 0 && (
+          <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden />
+              Cereri urgente
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              {urgentReport.totalUrgent} {urgentReport.totalUrgent === 1 ? "cerere urgentă" : "cereri urgente"} · {periodLabel}
+            </p>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="overflow-x-auto">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Cine cere cel mai des urgent
+                </h3>
+                <table className="w-full text-sm border-collapse" aria-label="Cine cere cel mai des urgent">
+                  <thead>
+                    <tr className="text-left text-muted-foreground border-b border-border">
+                      <th className="pb-2 pr-4 font-medium">Solicitant</th>
+                      <th className="pb-2 font-medium text-right">Cereri urgente</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {urgentReport.byRequester.length === 0 ? (
+                      <tr><td colSpan={2} className="py-3 text-center text-xs text-muted-foreground">Nicio înregistrare.</td></tr>
+                    ) : urgentReport.byRequester.map((row) => (
+                      <tr key={row.userId ?? row.name} className="border-b border-border/50">
+                        <td className="py-2 pr-4 text-foreground">{row.name}</td>
+                        <td className="py-2 text-right font-medium text-foreground">{row.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="overflow-x-auto">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">De ce</h3>
+                <table className="w-full text-sm border-collapse" aria-label="De ce sunt cererile urgente">
+                  <thead>
+                    <tr className="text-left text-muted-foreground border-b border-border">
+                      <th className="pb-2 pr-4 font-medium">Motiv</th>
+                      <th className="pb-2 font-medium text-right">Cereri</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {urgentReport.byReason.length === 0 ? (
+                      <tr><td colSpan={2} className="py-3 text-center text-xs text-muted-foreground">Nicio înregistrare.</td></tr>
+                    ) : urgentReport.byReason.map((row) => (
+                      <tr key={row.reason} className="border-b border-border/50">
+                        <td className="py-2 pr-4 text-foreground">{row.label}</td>
+                        <td className="py-2 text-right font-medium text-foreground">{row.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

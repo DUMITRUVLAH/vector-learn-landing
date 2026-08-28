@@ -518,6 +518,19 @@ export const parRequests = pgTable(
     /** VF-203: total converted to MDL minor units at submit (= totalEstimatedCents when currency=MDL). */
     totalMdlCents: integer("total_mdl_cents"),
     status: parStatusEnum("status").notNull().default("draft"),
+    /**
+     * Urgency flag (owner request, 2026-08-28): a requester can mark a PAR urgent so it sorts
+     * first in every approver/finance queue. `urgentReason` is a code from
+     * `src/lib/par/urgentReasons.ts` (varchar, not a pg enum — the list may grow and a plain
+     * column heals cleanly via sync-schema's generic ADD COLUMN, unlike a new enum type which
+     * needs to exist before the column can reference it). `urgentReasonNote` carries the free
+     * text detail (required when reason = "other", optional extra context otherwise).
+     */
+    isUrgent: boolean("is_urgent").notNull().default(false),
+    urgentReason: varchar("urgent_reason", { length: 60 }),
+    urgentReasonNote: text("urgent_reason_note"),
+    /** Deadline the payment must go out by — why the request is time-critical. */
+    urgentDueDate: timestamp("urgent_due_date", { withTimezone: true }),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
@@ -536,6 +549,7 @@ export const parRequests = pgTable(
     payerIdx: index("par_requests_payer_idx").on(t.payerId),
     statusIdx: index("par_requests_status_idx").on(t.status),
     requestedByIdx: index("par_requests_requested_by_idx").on(t.requestedByUserId),
+    urgentIdx: index("par_requests_urgent_idx").on(t.isUrgent),
   })
 );
 
