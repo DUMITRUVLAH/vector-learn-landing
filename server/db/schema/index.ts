@@ -45,6 +45,7 @@ export * from "./paymentAccounts";
 export * from "./paymentAccountItems";
 // PAR module
 export * from "./par";
+export * from "./parEinvoices";
 // FinVat
 export * from "./finVatImports";
 // CRM schema kept for FinDesk cross-references (finLedger, finBankLink, finGdpr etc.)

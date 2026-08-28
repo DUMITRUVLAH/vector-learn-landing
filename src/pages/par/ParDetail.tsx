@@ -44,6 +44,7 @@ import { ParTimeline } from "@/components/par/ParTimeline";
 import { ParComments } from "@/components/par/ParComments";
 import { ReceiptSection } from "@/components/par/ReceiptSection";
 import { ThreeWayMatchPanel } from "@/components/par/ThreeWayMatchPanel";
+import { ParEfacturaCard } from "@/components/par/ParEfacturaCard";
 import { useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
 import {
@@ -1188,6 +1189,9 @@ export function ParDetailPage() {
               )}
             </>
           )}
+
+        {/* PAR-EFP: a emis prestatorul e-Factura pentru plata asta? */}
+        {par.status === "paid" && <ParEfacturaCard parId={par.id} onNavigate={router.navigate} />}
 
         {/* VF-104: comments */}
         <ParComments parId={par.id} />

@@ -1016,6 +1016,13 @@
       "when": 1787000200002,
       "tag": "0145_par_default_module",
       "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1787000200003,
+      "tag": "0146_par_einvoices",
+      "breakpoints": true
     }
   ]
 }

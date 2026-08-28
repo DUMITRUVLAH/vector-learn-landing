@@ -90,6 +90,8 @@ import { parReceiptsRoutes } from "./routes/parReceipts";
 
 // VM1-02: PAR config import (projects/departments/budget codes from Excel)
 import { parConfigImportRoutes } from "./routes/parConfigImport";
+// PAR-EFP: e-Factura primită de la prestator după plată
+import { parEfacturaRoutes } from "./routes/parEfactura";
 import { platformAdminRoutes } from "./routes/platformAdmin";
 import { impersonationRoutes } from "./routes/impersonation";
 import { myModulesRoutes } from "./routes/myModules";
@@ -288,6 +290,7 @@ app.route("/api/par/projects", parProjectsRoutes);
 app.route("/api/par/events", parEventsRoutes);
 app.route("/api/par/vendors", parVendorsRoutes);
 app.route("/api/par/settings", parSettingsRoutes);
+app.route("/api/par/efactura", parEfacturaRoutes);
 app.route("/api/par/invites", parInvitesRoutes);
 app.route("/api/par/templates", parTemplatesRoutes);
 app.route("/api/par/reports", parReportsRoutes);

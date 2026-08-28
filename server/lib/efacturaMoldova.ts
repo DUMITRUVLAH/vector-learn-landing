@@ -829,21 +829,50 @@ export class EfacturaMdClient {
     });
   }
 
-  /** §5.2 GetAcceptedInvoices — facturile emise de furnizor și acceptate. */
-  async getAcceptedInvoices(requestId: string): Promise<InvoiceListItem[]> {
+  /**
+   * §5.2 GetAcceptedInvoices — facturile acceptate, din perspectiva actorului cerut.
+   *
+   * `actorRole` implicit FURNIZOR (comportamentul de dinainte: „ce am emis eu și s-a acceptat").
+   * Cu CUMPARATOR întoarce facturile pe care le-am primit și acceptat — direcția de care are nevoie
+   * PAR-ul, ca să vadă dacă prestatorul chiar a emis factura pentru plata făcută.
+   */
+  async getAcceptedInvoices(
+    requestId: string,
+    actorRole: number = EFACTURA_MD_ACTOR.FURNIZOR
+  ): Promise<InvoiceListItem[]> {
     // ActorBaseRequest: RequestId, ActorRole. Toate în `d:`.
     const inner =
       `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
-      `<d:ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</d:ActorRole>`;
+      `<d:ActorRole>${actorRole}</d:ActorRole>`;
     const xml = await this.call("GetAcceptedInvoices", inner);
     return this.parseInvoiceList(xml);
   }
 
-  /** §5.8 GetRejectedInvoices — facturile respinse de cumpărător. */
-  async getRejectedInvoices(requestId: string): Promise<InvoiceListItem[]> {
+  /**
+   * §5.5 GetInvoicesForSigning — facturile care așteaptă semnătura actorului.
+   *
+   * Ca CUMPĂRĂTOR, aici stau facturile primite de la furnizori și nesemnate încă — adică exact
+   * cazul obișnuit după o plată PAR: prestatorul a emis, noi n-am apucat să acceptăm.
+   */
+  async getInvoicesForSigning(
+    requestId: string,
+    actorRole: number = EFACTURA_MD_ACTOR.CUMPARATOR
+  ): Promise<InvoiceListItem[]> {
     const inner =
       `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
-      `<d:ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</d:ActorRole>`;
+      `<d:ActorRole>${actorRole}</d:ActorRole>`;
+    const xml = await this.call("GetInvoicesForSigning", inner);
+    return this.parseInvoiceList(xml);
+  }
+
+  /** §5.8 GetRejectedInvoices — facturile respinse, din perspectiva actorului cerut. */
+  async getRejectedInvoices(
+    requestId: string,
+    actorRole: number = EFACTURA_MD_ACTOR.FURNIZOR
+  ): Promise<InvoiceListItem[]> {
+    const inner =
+      `<d:RequestId>${escapeXml(requestId)}</d:RequestId>` +
+      `<d:ActorRole>${actorRole}</d:ActorRole>`;
     const xml = await this.call("GetRejectedInvoices", inner);
     return this.parseInvoiceList(xml);
   }

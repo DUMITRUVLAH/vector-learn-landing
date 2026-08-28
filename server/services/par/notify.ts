@@ -441,3 +441,67 @@ export async function notifyPaid(
     subject,
   });
 }
+
+// ─── PAR-EFP: e-Factura lipsă de la prestator ─────────────────────────────────
+
+export interface EfacturaReminderInput {
+  /** Prestatorul care trebuie să emită factura. */
+  payeeName: string;
+  /** Suma plătită, deja formatată („12.500,00 MDL"). */
+  amountLabel: string;
+  /** Ce s-a plătit — scopul din cerere, scurtat. */
+  servicesLabel: string;
+  /** Data plății, formatată. Null dacă nu e cunoscută. */
+  paidAtLabel: string | null;
+  /** Contactul prestatorului din registru (email / telefon), dacă îl avem. */
+  vendorContact?: string | null;
+}
+
+/**
+ * Prestatorul nu a emis e-Factura → i se scrie SOLICITANTULUI cererii, nu prestatorului.
+ *
+ * De ce solicitantului: el e cel care are relația cu prestatorul și îl poate suna. Un email plecat
+ * automat către o adresă de prestator luată din registru ajunge des la cine nu trebuie și nu are
+ * cine să răspundă la el. Textul îi dă omului tot ce trebuie ca să ceară factura într-un minut:
+ * cine, pentru ce, ce sumă, când s-a plătit.
+ */
+export async function notifyEfacturaMissing(
+  ctx: ParNotifyContext,
+  requestorUserId: string,
+  input: EfacturaReminderInput
+): Promise<{ emailed: boolean; toAddress: string | null }> {
+  const lines = [
+    `Reamintire: prestatorul ${input.payeeName} nu a emis încă e-Factura pentru cererea ${ctx.requestNo}.`,
+    `Servicii/bunuri: ${input.servicesLabel}`,
+    `Sumă achitată: ${input.amountLabel}${input.paidAtLabel ? ` · plătită la ${input.paidAtLabel}` : ""}`,
+    input.vendorContact ? `Contact prestator: ${input.vendorContact}` : null,
+    "",
+    `Te rugăm să-i amintești să emită e-Factura pentru suma și serviciile de mai sus.`,
+  ].filter((l): l is string => l !== null);
+  const body = lines.join("\n");
+  const subject = `[PAR] ${ctx.requestNo} — lipsește e-Factura de la ${input.payeeName}`;
+
+  await sendInApp({
+    tenantId: ctx.tenantId,
+    recipientUserId: requestorUserId,
+    body: `${body}\n\nLink: /business/par/${ctx.parId}`,
+    parId: ctx.parId,
+  });
+
+  const userRecord = await getUser(requestorUserId, ctx.tenantId);
+  if (!userRecord?.email) return { emailed: false, toAddress: null };
+
+  try {
+    const message = await messagingService.sendMessage(ctx.tenantId, {
+      channel: "email",
+      toAddress: userRecord.email,
+      subject,
+      body:
+        `${body}\n\nDeschide cererea: ${parDeepLink(ctx.parId)}` +
+        (await accountFooter(ctx.tenantId, userRecord.email)),
+    });
+    return { emailed: message.status === "sent", toAddress: userRecord.email };
+  } catch {
+    return { emailed: false, toAddress: userRecord.email };
+  }
+}
