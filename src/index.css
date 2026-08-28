@@ -206,6 +206,9 @@
   }
   html {
     scroll-behavior: smooth;
+    /* Bara de derulare care apare/dispare când conținutul crește mută toată pagina lateral;
+       rezervăm mereu culoarul, ca lățimea să nu mai sară între pagini. */
+    scrollbar-gutter: stable;
   }
 }
 

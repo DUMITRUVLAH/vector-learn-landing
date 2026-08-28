@@ -11,7 +11,7 @@
  */
 import { useEffect, useState, useCallback } from "react";
 import { getParMe } from "@/lib/api/par";
-import { cachedOnce } from "@/lib/sessionCache";
+import { cachedOnce, peekResolved } from "@/lib/sessionCache";
 
 type ParRolesStatus = "loading" | "resolved";
 
@@ -22,12 +22,18 @@ export interface UseParRolesResult {
 
 // Session cache: the shell remounts on every navigation, so without this the roles were
 // re-fetched (and flashed "loading") on each click. cachedOnce makes remounts instant.
-const parMeCached = () => cachedOnce("par-me", getParMe);
+const CACHE_KEY = "par-me";
+const parMeCached = () => cachedOnce(CACHE_KEY, getParMe);
 
 export function useParRoles(): UseParRolesResult {
+  // Citirea SINCRONĂ din cache e cea care ține meniul nemișcat. `cachedOnce` întorcea o
+  // promisiune deja rezolvată, dar rezolvarea vine abia după prima randare — deci fiecare
+  // navigare desena întâi un sidebar FĂRĂ secțiunea PAR și abia apoi o adăuga. De aici
+  // senzația că „sare toată pagina" la fiecare click.
+  const cached = peekResolved<{ roles: string[] }>(CACHE_KEY);
   const [state, setState] = useState<UseParRolesResult>({
-    status: "loading",
-    roles: [],
+    status: cached ? "resolved" : "loading",
+    roles: cached?.roles ?? [],
   });
 
   const fetchRoles = useCallback(async () => {

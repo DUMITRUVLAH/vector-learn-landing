@@ -12,11 +12,30 @@ function getCurrentPath(): string {
   return hash || "/";
 }
 
+/**
+ * Sari sus INSTANT la schimbarea paginii.
+ *
+ * `behavior: "auto"` nu înseamnă „fără animație": conform specificației, delegă deciziei
+ * CSS-ului, iar noi avem `html { scroll-behavior: smooth }` — deci fiecare navigare pornea o
+ * animație de derulare peste conținutul care tocmai se schimba. Așa se vedea „sare toată
+ * pagina în sus și în jos" la fiecare click din meniu. `"instant"` taie animația.
+ */
+function jumpToTop() {
+  try {
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  } catch {
+    window.scrollTo(0, 0); // browsere vechi, fără opțiuni de derulare
+  }
+}
+
 export function HashRouter({ children }: { children: ReactNode }) {
   const [path, setPath] = useState<string>(() => getCurrentPath());
 
   useEffect(() => {
-    const onHashChange = () => setPath(getCurrentPath());
+    const onHashChange = () => {
+      setPath(getCurrentPath());
+      jumpToTop();
+    };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
@@ -57,8 +76,9 @@ export function Link({
       className={className}
       onClick={(e) => {
         e.preventDefault();
+        // Derularea sus o face routerul, pentru ORICE navigare (link sau `navigate()`),
+        // ca meniul și butoanele din pagină să se poarte la fel.
         navigate(to);
-        window.scrollTo({ top: 0, behavior: "auto" });
       }}
       {...rest}
     >

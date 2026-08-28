@@ -10,7 +10,7 @@
  * sidebar, iar dreapta-sus rămâne un rând de utilitare (clopoțel + ieșire).
  * Tokens semantice Vector 365 — zero hex în .tsx, light + dark, WCAG AA.
  */
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
   LogOut,
@@ -54,6 +54,7 @@ import { getParInbox, getFinanceQueue } from "@/lib/api/par";
 import { onParBadgeRefresh } from "@/lib/par/badgeBus";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { api } from "@/lib/api";
+import { cachedOnce, peekResolved } from "@/lib/sessionCache";
 import { Avatar, PageHeader, SidebarNavItem, type ChipTone } from "@/components/ds";
 
 interface BusinessShellProps {
@@ -218,6 +219,9 @@ function badgeFor(href: string, inboxCount: number, financeCount: number): numbe
 // sidebar "jumps". These module-level stores survive remounts within a session.
 const sectionOpenState = new Map<string, boolean>(); // section label → expanded?
 const badgeCache = { inbox: 0, finance: 0 }; // last seen notification counts
+/** Cât era derulat meniul când s-a schimbat pagina — altfel reapare mereu de la început. */
+const navScroll = { top: 0 };
+const PLATFORM_ADMIN_CACHE_KEY = "platform-admin-probe";
 
 /** Collapsible sidebar section. Opens when active; always-open when section is null. */
 function SidebarGroup({
@@ -325,6 +329,14 @@ function SidebarBody({
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
 
+  // Shell-ul se remontează la fiecare navigare, deci meniul reapărea derulat la început: dacă
+  // dădeai click pe un rând de jos (FinDesk are 26), lista sărea sub degetul tău. Restaurăm
+  // poziția ÎNAINTE de paint (useLayoutEffect), ca ochiul să nu prindă saltul.
+  const navRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (navRef.current) navRef.current.scrollTop = navScroll.top;
+  }, []);
+
   // Filtering keeps a group only while it still has a matching row.
   const shownGroups = useMemo(() => {
     if (!q) return navGroups;
@@ -382,7 +394,12 @@ function SidebarBody({
       )}
 
       {/* Nav */}
-      <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-2" aria-label="Meniu FinFlow">
+      <nav
+        ref={navRef}
+        onScroll={(e) => { navScroll.top = (e.target as HTMLElement).scrollTop; }}
+        className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-2"
+        aria-label="Meniu FinFlow"
+      >
         {showDashboard && (
           <SidebarNavItem
             href="/business/dashboard"
@@ -444,10 +461,16 @@ export function BusinessShell({
   // Un workspace care are DOAR PAR nu are „module" între care să comute: meniul lui e chiar
   // meniul PAR, complet, nu cele trei rânduri dintr-o secțiune pliabilă.
   const parOnlyWorkspace = enabledModules.length === 1 && enabledModules[0] === "par";
-  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  // Sonda „sunt superadmin?" trebuie citită SINCRON din cache la remount, altfel secțiunea
+  // „Platformă" apare abia după primul paint și meniul își schimbă înălțimea la fiecare click.
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(
+    () => peekResolved<boolean>(PLATFORM_ADMIN_CACHE_KEY) ?? false,
+  );
   useEffect(() => {
     // Sonda cea mai ieftină pentru „sunt superadmin?" — /catalog nu atinge datele clienților.
-    api("/api/platform/catalog").then(() => setIsPlatformAdmin(true)).catch(() => setIsPlatformAdmin(false));
+    cachedOnce(PLATFORM_ADMIN_CACHE_KEY, () =>
+      api("/api/platform/catalog").then(() => true).catch(() => false),
+    ).then((isAdmin) => setIsPlatformAdmin(isAdmin));
   }, []);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -550,7 +573,10 @@ export function BusinessShell({
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       {/* PLATFORM-403: pe o sesiune de impersonare, banda stă deasupra întregului shell. */}
       <ImpersonationBanner />
-      <div className="flex min-h-screen flex-1">
+      {/* `flex-1` e de ajuns: părintele are deja `min-h-screen`. Al doilea `min-h-screen`
+          adăuga înălțimea benzii peste 100vh, deci și paginile scurte aveau bară de derulare
+          — și orice schimbare de conținut o făcea să apară și să dispară. */}
+      <div className="flex flex-1">
       {/* Desktop sidebar */}
       <aside
         className="hidden w-sidebar shrink-0 border-r border-sidebar-border bg-sidebar md:sticky md:top-0 md:flex md:h-screen md:flex-col"
