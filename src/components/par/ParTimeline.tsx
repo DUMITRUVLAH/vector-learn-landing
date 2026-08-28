@@ -1,85 +1,66 @@
 /**
  * PAR-110: ParTimeline component
  *
- * Renders the chronological audit trail for a PAR request.
- * Consumed by the PAR detail page (PAR-118) and deliverable standalone.
+ * Jurnalul de activitate al unei cereri PAR — scris pentru oameni, nu pentru log.
+ * Traducerea evenimentelor tehnice (engleză, id-uri, JSON) în propoziții stă în
+ * `src/lib/par/timelineHumanize.ts`; aici doar le așezăm pe fir.
  *
  * Design: Vector 365 semantic tokens; light + dark; WCAG AA.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getParTimeline, type ParTimelineEvent } from "../../lib/api/par";
+import { humanizeEvent, type HumanTimelineEvent } from "../../lib/par/timelineHumanize";
 
-// ─── Event icon mapping ───────────────────────────────────────────────────────
+// ─── Grupare ──────────────────────────────────────────────────────────────────
 
-function eventIcon(event: string): string {
-  switch (event) {
-    case "created":
-      return "➕";
-    case "edited":
-      return "✏️";
-    case "submitted":
-      return "📤";
-    case "approved":
-    case "fully_approved":
-    case "fully_approved_to_finance":
-      return "✅";
-    case "rejected":
-      return "❌";
-    case "changes_requested":
-      return "🔄";
-    case "step_unlocked":
-      return "🔓";
-    case "cancelled":
-      return "🚫";
-    case "withdrawn":
-    case "reopened":
-      return "↩️";
-    case "paid":
-      return "💰";
-    case "integrity_mismatch":
-    case "integrity_mismatch_display":
-      return "⚠️";
-    default:
-      return "📋";
-  }
+interface TimelineEntry {
+  event: ParTimelineEvent;
+  human: HumanTimelineEvent;
+  /** De câte ori s-a repetat identic, la rând (verificarea unui act se poate relua). */
+  count: number;
 }
 
-function eventLabel(event: string): string {
-  const labels: Record<string, string> = {
-    created: "Created",
-    edited: "Edited",
-    submitted: "Submitted for approval",
-    approved: "Step approved",
-    fully_approved: "Fully approved",
-    fully_approved_to_finance: "Fully approved → sent to finance",
-    rejected: "Rejected",
-    changes_requested: "Changes requested",
-    step_unlocked: "Next step unlocked",
-    cancelled: "Cancelled",
-    withdrawn: "Withdrawn for correction",
-    reopened: "Reopened as draft",
-    paid: "Payment executed",
-    integrity_mismatch: "Integrity mismatch (during approval)",
-    integrity_mismatch_display: "Integrity mismatch (on view)",
-  };
-  return labels[event] ?? event.replace(/_/g, " ");
+/**
+ * Evenimente identice, unul după altul (același tip, același text, același autor),
+ * se strâng într-un singur rând cu „de N ori". Altfel jurnalul repetă aceeași
+ * frază de trei ori și nu se mai vede ce s-a întâmplat de fapt.
+ */
+function groupEvents(events: ParTimelineEvent[]): TimelineEntry[] {
+  const out: TimelineEntry[] = [];
+  for (const event of events) {
+    const human = humanizeEvent(event);
+    const last = out[out.length - 1];
+    if (
+      last &&
+      last.event.event === event.event &&
+      last.event.actor_user_id === event.actor_user_id &&
+      last.human.title === human.title &&
+      last.human.lines.join("|") === human.lines.join("|")
+    ) {
+      last.count += 1;
+      continue;
+    }
+    out.push({ event, human, count: 1 });
+  }
+  return out;
 }
 
 // ─── Timeline item ────────────────────────────────────────────────────────────
 
 interface TimelineItemProps {
-  event: ParTimelineEvent;
+  entry: TimelineEntry;
   isLast: boolean;
 }
 
-function TimelineItem({ event, isLast }: TimelineItemProps) {
+function TimelineItem({ entry, isLast }: TimelineItemProps) {
+  const { event, human, count } = entry;
   const date = new Date(event.created_at);
-  const dateStr = date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
+  const dateStr = date.toLocaleDateString("ro-RO", {
+    day: "numeric",
+    month: "long",
     year: "numeric",
   });
-  const timeStr = date.toLocaleTimeString("en-GB", {
+  const timeStr = date.toLocaleTimeString("ro-RO", {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -99,17 +80,20 @@ function TimelineItem({ event, isLast }: TimelineItemProps) {
         className="flex-shrink-0 flex h-9 w-9 items-center justify-center rounded-full bg-muted text-base ring-1 ring-border"
         aria-hidden="true"
       >
-        {eventIcon(event.event)}
+        {human.icon}
       </span>
 
       {/* Content */}
       <div className="flex-1 pb-5">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-foreground">
-            {eventLabel(event.event)}
-          </span>
+          <span className="text-sm font-medium text-foreground">{human.title}</span>
+          {count > 1 && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              de {count} ori
+            </span>
+          )}
           <span className="text-xs text-muted-foreground">
-            {dateStr} · {timeStr}
+            {dateStr}, ora {timeStr}
           </span>
         </div>
 
@@ -117,34 +101,15 @@ function TimelineItem({ event, isLast }: TimelineItemProps) {
           <span className="font-medium">{event.actor_name}</span>
         </p>
 
-        {event.detail && (
-          <p className="mt-1 text-sm text-foreground/80 break-words whitespace-pre-wrap">
-            {event.detail}
-          </p>
-        )}
-
-        {event.diff && (() => {
-          try {
-            const parsed = JSON.parse(event.diff) as Record<string, unknown>;
-            return (
-              <div className="mt-2 rounded-md border border-border bg-muted/50 px-3 py-2">
-                <p className="text-xs font-semibold text-muted-foreground mb-1">Changes</p>
-                {Object.entries(parsed).map(([field, change]) => (
-                  <div key={field} className="text-xs text-foreground/80">
-                    <span className="font-medium">{field}:</span>{" "}
-                    {JSON.stringify(change)}
-                  </div>
-                ))}
-              </div>
-            );
-          } catch {
-            return (
-              <p className="mt-1 text-xs font-mono text-muted-foreground break-all">
-                {event.diff}
+        {human.lines.length > 0 && (
+          <div className="mt-1 space-y-0.5">
+            {human.lines.map((line, i) => (
+              <p key={i} className="text-sm text-foreground/80 break-words">
+                {line}
               </p>
-            );
-          }
-        })()}
+            ))}
+          </div>
+        )}
       </div>
     </li>
   );
@@ -183,7 +148,7 @@ export function ParTimeline({ parId, events: preloadedEvents, className }: ParTi
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load timeline");
+          setError(err instanceof Error ? err.message : "Nu am putut încărca jurnalul");
         }
       })
       .finally(() => {
@@ -193,6 +158,8 @@ export function ParTimeline({ parId, events: preloadedEvents, className }: ParTi
       cancelled = true;
     };
   }, [parId, preloadedEvents]);
+
+  const entries = useMemo(() => groupEvents(events), [events]);
 
   if (loading) {
     return (
@@ -218,22 +185,22 @@ export function ParTimeline({ parId, events: preloadedEvents, className }: ParTi
     );
   }
 
-  if (events.length === 0) {
+  if (entries.length === 0) {
     return (
       <p className={`text-sm text-muted-foreground ${className ?? ""}`}>
-        No timeline events yet.
+        Deocamdată nu s-a întâmplat nimic pe cererea asta.
       </p>
     );
   }
 
   return (
-    <section aria-label="PAR activity timeline" className={className}>
+    <section aria-label="Jurnal de activitate" className={className}>
       <ul className="space-y-0" role="list">
-        {events.map((event, idx) => (
+        {entries.map((entry, idx) => (
           <TimelineItem
-            key={event.id}
-            event={event}
-            isLast={idx === events.length - 1}
+            key={entry.event.id}
+            entry={entry}
+            isLast={idx === entries.length - 1}
           />
         ))}
       </ul>
