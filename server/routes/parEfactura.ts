@@ -5,6 +5,8 @@
  *   GET  /api/par/efactura                              → coada cererilor plătite + starea facturii
  *   POST /api/par/efactura/scan                         → scanează SFS pentru toate cererile în așteptare
  *   GET  /api/par/efactura/invoices                     → TOATE facturile primite în SFS (brut)
+ *   GET  /api/par/efactura/invoices/:seria/:number      → conținutul unei facturi (toate câmpurile)
+ *   GET  /api/par/efactura/invoices/:seria/:number/pdf  → documentul PDF oficial, din SFS
  *   GET  /api/par/efactura/settings                     → configurarea SFS (par_admin)
  *   PUT  /api/par/efactura/settings                     → salvează configurarea SFS (par_admin)
  *   POST /api/par/efactura/settings/test                → test de conexiune la SFS (par_admin)
@@ -47,6 +49,8 @@ import {
   scanEfacturasForTenant,
   syncEfacturaCandidates,
   listBuyerInvoicesForTenant,
+  getBuyerInvoiceDetail,
+  getBuyerInvoicePdf,
 } from "../services/par/efacturaScan";
 
 export const parEfacturaRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -257,6 +261,48 @@ parEfacturaRoutes.get("/invoices", async (c) => {
   const force = c.req.query("refresh") === "1";
   const result = await listBuyerInvoicesForTenant(user.tenantId, undefined, force);
   return c.json({ ...result, sfs: await sfsSummary(user.tenantId) });
+});
+
+/** Seria/numărul vin din URL — le validăm strict, ca să nu ajungă gunoi în cererea SOAP. */
+const INVOICE_ID_RE = /^[A-Za-z0-9-]{1,50}$/;
+
+/**
+ * Conținutul unei facturi primite — furnizor, cumpărător, date, totaluri, liniile de marfă.
+ * Asta răspunde la „ce scrie, de fapt, în factura asta?", fără să deschizi portalul SFS.
+ */
+parEfacturaRoutes.get("/invoices/:seria/:number", async (c) => {
+  const user = c.get("user");
+  if (!(await isElevated(user.id, user.tenantId))) {
+    return c.json({ error: "forbidden", detail: "Necesită rol finance sau par_admin." }, 403);
+  }
+  const seria = c.req.param("seria");
+  const number = c.req.param("number");
+  if (!INVOICE_ID_RE.test(seria) || !INVOICE_ID_RE.test(number)) {
+    return c.json({ error: "invalid_invoice_id" }, 400);
+  }
+  return c.json(await getBuyerInvoiceDetail(user.tenantId, seria, number));
+});
+
+/** Documentul PDF oficial, servit inline ca omul să-l poată citi în browser. */
+parEfacturaRoutes.get("/invoices/:seria/:number/pdf", async (c) => {
+  const user = c.get("user");
+  if (!(await isElevated(user.id, user.tenantId))) {
+    return c.json({ error: "forbidden", detail: "Necesită rol finance sau par_admin." }, 403);
+  }
+  const seria = c.req.param("seria");
+  const number = c.req.param("number");
+  if (!INVOICE_ID_RE.test(seria) || !INVOICE_ID_RE.test(number)) {
+    return c.json({ error: "invalid_invoice_id" }, 400);
+  }
+  const res = await getBuyerInvoicePdf(user.tenantId, seria, number);
+  if ("error" in res) return c.json({ error: "pdf_unavailable", detail: res.error }, 502);
+  return new Response(new Uint8Array(res.pdf), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="e-factura-${seria}-${number}.pdf"`,
+      "Cache-Control": "private, max-age=300",
+    },
+  });
 });
 
 // ─── Configurarea SFS (par_admin) ─────────────────────────────────────────────

@@ -342,10 +342,12 @@ persoană fizică → stare `expected`. Persoana fizică (`payee_type = fizic` s
 semnat, acceptate, respinse și — obligatoriu — **arhivate** (`GetArchivedInvoices`, pe interval de
 emitere, paginat). Pe un cont real, aproape tot stă în arhivă: contul VECTOR ACADEMY avea 0 facturi
 în primele două liste și 45 în arhivă. Pentru facturile arhivate `GetInvoicesBySeriaNumber` întoarce
-XML gol, așa că furnizorul, cumpărătorul, suma și linkul din portal se citesc din **textul codului
-QR** (`GetInvoicesQRcodes`), iar denumirile furnizorilor se rezolvă dintr-un singur apel la registrul
-fiscal (`GetTaxpayersInfo` în lot). Data facturii nu e disponibilă pe această cale — rămâne
-necunoscută, nu inventată. Potrivirea cu plata se face după: cod fiscal furnizor
+XML-ul facturii — care conține TOT (părți cu adrese și conturi bancare, data emiterii și a livrării,
+puncte de încărcare/descărcare, totaluri, liniile de marfă, semnăturile). Textul codului QR
+(`GetInvoicesQRcodes`) rămâne sursă de rezervă pentru furnizor/sumă, iar denumirile lipsă se rezolvă
+dintr-un singur apel la registrul fiscal (`GetTaxpayersInfo` în lot). Documentul oficial se aduce cu
+`GetInvoicesContentForPrint` (PDF) și se deschide din aplicație. Potrivirea cu plata se face după:
+cod fiscal furnizor
 (obligatoriu), cod fiscal cumpărător = IDNO-ul organizației plătitoare (când e cunoscut), fereastra
 de timp în jurul plății (−30 / +120 zile) și, ca departajare, suma. O sumă diferită **nu** invalidează
 potrivirea, dar e scrisă explicit în stare. Facturile ciornă, refuzate sau anulate nu contează drept

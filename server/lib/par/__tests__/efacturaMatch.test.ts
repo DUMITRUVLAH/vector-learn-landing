@@ -10,6 +10,7 @@
 import { describe, it, expect } from "vitest";
 import {
   expectsEfactura,
+  parseSfsInvoiceDetail,
   parseSfsQrText,
   matchInvoiceForPar,
   parseSfsInvoiceXml,
@@ -219,5 +220,63 @@ describe("textul QR al facturii (singura sursă pentru facturile arhivate)", () 
     expect(s.portalUrl).toContain("EFactura.aspx");
     // Data nu vine în QR — rămâne necunoscută, nu inventată.
     expect(s.invoiceDate).toBeNull();
+  });
+});
+
+describe("conținutul complet al facturii (ce scrie în document)", () => {
+  // Structura reală întoarsă de SFS pentru o factură primită (nume/coduri înlocuite):
+  // denumirile stau în atributul `Title`, totalul în `<Total>`, liniile în `<Row …/>`,
+  // iar textul vine escapat — de aceea ghilimelele apar ca `&quot;`.
+  const XML = `<Document><SupplierInfo><Seria>EAW</Seria><Number>000504087</Number>` +
+    `<IssuedDate>2025-04-02T12:39:51.633+03:00</IssuedDate><DeliveryDate>2025-04-02T09:38:42.306Z</DeliveryDate>` +
+    `<Supplier IDNO="1024600080726" Title="&quot;DUCONT GRUP&quot; S.R.L." Address="SEC.BUIUCANI Alba-Iulia nr.21" TaxpayerType="1">` +
+    `<BankAccount BranchTitle="BC'MAIB'S.A." BranchCode="AGRNMD2X" Account="MD43AG000000022516391752"><IsManual>false</IsManual></BankAccount></Supplier>` +
+    `<Buyer IDNO="1024600035737" Title="VECTOR ACADEMY S.R.L." Address="SEC.CENTRU 31 August 1989 nr.78">` +
+    `<BankAccount BranchTitle="" BranchCode="" Account=""><IsManual>true</IsManual></BankAccount></Buyer>` +
+    `<LoadingPoint>SEC.BUIUCANI Alba-Iulia nr.21</LoadingPoint><UnloadingPoint>SEC.CENTRU 31 August 1989 nr.78</UnloadingPoint>` +
+    `<Total>4920.00</Total><TotalTVA>820.00</TotalTVA><Merchandises>` +
+    `<Row Name="Hârtie A4" UnitOfMeasure="buc" Quantity="10" UnitPriceWithoutTVA="410.00" TotalPriceWithoutTVA="4100.00" TVA="20" TotalTVA="820.00" TotalPrice="4920.00"><Dynamic /></Row>` +
+    `</Merchandises></SupplierInfo><Signatures><SignatureContent /></Signatures></Document>`;
+
+  it("scoate părțile, datele, totalurile și liniile", () => {
+    const d = parseSfsInvoiceDetail(XML)!;
+    expect(d.seria).toBe("EAW");
+    expect(d.number).toBe("000504087");
+    expect(d.issuedDate?.toISOString().slice(0, 10)).toBe("2025-04-02");
+    expect(d.deliveryDate?.toISOString().slice(0, 10)).toBe("2025-04-02");
+    expect(d.supplier.idno).toBe("1024600080726");
+    // Entitățile XML se decodează: altfel ecranul arăta `&quot;DUCONT GRUP&quot; S.R.L.`
+    expect(d.supplier.name).toBe('"DUCONT GRUP" S.R.L.');
+    expect(d.supplier.bankAccount).toBe("MD43AG000000022516391752");
+    expect(d.supplier.bankName).toBe("BC'MAIB'S.A.");
+    expect(d.buyer.name).toBe("VECTOR ACADEMY S.R.L.");
+    expect(d.buyer.bankAccount).toBeNull();
+    expect(d.loadingPoint).toContain("Alba-Iulia");
+    expect(d.totalCents).toBe(492000);
+    expect(d.totalVatCents).toBe(82000);
+    expect(d.signed).toBe(true);
+    expect(d.lines).toHaveLength(1);
+    expect(d.lines[0]).toMatchObject({
+      name: "Hârtie A4",
+      unitOfMeasure: "buc",
+      quantity: 10,
+      unitPriceWithoutVatCents: 41000,
+      totalWithoutVatCents: 410000,
+      vatRate: "20",
+      vatCents: 82000,
+      totalCents: 492000,
+    });
+  });
+
+  it("citește data emiterii și suma și în sumarul folosit la potrivire", () => {
+    const s = summarizeSfsInvoice({ seria: "EAW", number: "000504087", invoiceStatus: 6, xml: XML });
+    expect(s.supplierIdno).toBe("1024600080726");
+    expect(s.invoiceDate?.toISOString().slice(0, 10)).toBe("2025-04-02");
+    expect(s.totalCents).toBe(492000);
+  });
+
+  it("nu inventează un detaliu dintr-un XML lipsă", () => {
+    expect(parseSfsInvoiceDetail(null)).toBeNull();
+    expect(parseSfsInvoiceDetail("   ")).toBeNull();
   });
 });

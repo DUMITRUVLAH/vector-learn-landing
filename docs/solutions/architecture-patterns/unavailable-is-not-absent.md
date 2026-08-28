@@ -57,8 +57,16 @@ Câteva ore mai târziu, ecranul „Toate e-Facturile" arăta „Nicio factură 
    „n-am putut citi" arătau identic. Fix: `ok=false` la eșec total → `available:false`, iar mesajul
    se afișează și pe starea goală.
 
-Regresiile: „facturile arhivate — cazul contului real" și „când SFS refuză toate listele" din
-`server/__tests__/par-efactura-scan.test.ts`.
+3. **Un nume de tag scris cu altă capitalizare a ascuns tot conținutul.** Serverul întoarce
+   `<a:Xml>`, ghidul îl scrie `XML`, iar helperul de parsare compară case-SENSITIV → fiecare factură
+   părea „fără conținut", ceea ce m-a făcut să concluzionez (greșit) că datele nu există și că
+   trebuie luate din codul QR. Lecție: înainte de a declara „API-ul nu dă câmpul X", tipărește
+   răspunsul BRUT. La fel `GetInvoicesContentForPrint`, care întoarce `<a:Result>` (singular), nu
+   `<InvoicePrintResult>` ca în ghid — cu numele din ghid, PDF-ul „nu exista".
+
+Regresiile: „facturile arhivate — cazul contului real", „când SFS refuză toate listele" din
+`server/__tests__/par-efactura-scan.test.ts` și „conținutul complet al facturii" din
+`server/lib/par/__tests__/efacturaMatch.test.ts`.
 
 ## Cum se aplică în altă parte
 

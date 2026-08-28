@@ -151,7 +151,10 @@ export interface BuyerInvoiceItem {
   buyerIdno: string | null;
   invoiceDate: string | null;
   totalCents: number | null;
-  /** Linkul către factura din portalul SFS, dacă îl avem din codul QR. */
+  /**
+   * Linkul din codul QR către portalul SFS. NU se afișează ca link: în afara sesiunii din portal
+   * întoarce 404 (verificat). Rămâne în date pentru diagnostic.
+   */
   portalUrl: string | null;
   /** Cererea PAR de care e legată factura (dacă a fost potrivită sau marcată manual). */
   linkedParId: string | null;
@@ -174,6 +177,63 @@ export async function getParEfacturaInvoices(refresh = false): Promise<BuyerInvo
   return api<BuyerInvoiceList>(`/api/par/efactura/invoices${refresh ? "?refresh=1" : ""}`, {
     cache: refresh ? "reload" : undefined,
   });
+}
+
+// ─── Conținutul unei facturi ─────────────────────────────────────────────────
+
+export interface SfsInvoiceParty {
+  idno: string | null;
+  name: string | null;
+  address: string | null;
+  bankAccount: string | null;
+  bankName: string | null;
+  bankCode: string | null;
+}
+
+export interface SfsInvoiceLineDetail {
+  name: string;
+  unitOfMeasure: string | null;
+  quantity: number | null;
+  unitPriceWithoutVatCents: number | null;
+  totalWithoutVatCents: number | null;
+  vatRate: string | null;
+  vatCents: number | null;
+  totalCents: number | null;
+}
+
+export interface SfsInvoiceDetail {
+  seria: string | null;
+  number: string | null;
+  issuedDate: string | null;
+  deliveryDate: string | null;
+  supplier: SfsInvoiceParty;
+  buyer: SfsInvoiceParty;
+  loadingPoint: string | null;
+  unloadingPoint: string | null;
+  totalCents: number | null;
+  totalVatCents: number | null;
+  lines: SfsInvoiceLineDetail[];
+  signed: boolean;
+}
+
+export interface BuyerInvoiceDetailResponse {
+  available: boolean;
+  message: string;
+  seria: string;
+  number: string;
+  invoiceStatus: number | null;
+  invoiceStatusLabel: string | null;
+  detail: SfsInvoiceDetail | null;
+}
+
+/** Tot ce scrie în factură: părți, date, puncte de livrare, totaluri și liniile de marfă. */
+export async function getBuyerInvoiceDetail(seria: string, number: string): Promise<BuyerInvoiceDetailResponse> {
+  return api<BuyerInvoiceDetailResponse>(`/api/par/efactura/invoices/${encodeURIComponent(seria)}/${encodeURIComponent(number)}`);
+}
+
+/** Adresa documentului PDF oficial (servit de server din SFS, cu sesiunea utilizatorului). */
+export function parEfacturaPdfUrl(seria: string, number: string): string {
+  return `/api/par/efactura/invoices/${encodeURIComponent(seria)}/${encodeURIComponent(number)}/pdf`;
 }
 
 // ─── Etichete ─────────────────────────────────────────────────────────────────

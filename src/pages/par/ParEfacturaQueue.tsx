@@ -45,6 +45,7 @@ import {
   TableRow,
 } from "@/components/ds";
 import { ApiError } from "@/lib/api";
+import { SfsInvoiceDialog } from "@/components/par/SfsInvoiceDialog";
 import { useRouter } from "@/router/HashRouter";
 import {
   getParEfacturaQueue,
@@ -215,6 +216,7 @@ export default function ParEfacturaQueuePage() {
   const [invoices, setInvoices] = useState<BuyerInvoiceList | null>(null);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [invoicesError, setInvoicesError] = useState<string | null>(null);
+  const [openInvoice, setOpenInvoice] = useState<{ seria: string; number: string } | null>(null);
 
   const load = useCallback(async (f: ParEfacturaFilter) => {
     setLoading(true);
@@ -530,21 +532,17 @@ export default function ParEfacturaQueuePage() {
                     <TableBody>
                       {invoices.invoices.map((inv) => (
                         <TableRow key={`${inv.seria}-${inv.number}`}>
-                          <TableCell className="whitespace-nowrap text-sm font-medium text-foreground">
-                            {inv.portalUrl ? (
-                              <a
-                                href={inv.portalUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline"
-                              >
-                                {inv.seria} {inv.number}
-                              </a>
-                            ) : (
-                              <>
-                                {inv.seria} {inv.number}
-                              </>
-                            )}
+                          <TableCell className="whitespace-nowrap text-sm font-medium">
+                            {/* Linkul din codul QR duce la 404 în afara portalului SFS, deci
+                                deschidem conținutul facturii aici, în aplicație. */}
+                            <button
+                              type="button"
+                              onClick={() => setOpenInvoice({ seria: inv.seria, number: inv.number })}
+                              className="min-h-[44px] text-primary hover:underline"
+                              aria-label={`Vezi factura ${inv.seria} ${inv.number}`}
+                            >
+                              {inv.seria} {inv.number}
+                            </button>
                           </TableCell>
                           <TableCell>
                             <span className="text-sm text-foreground">{inv.supplierName ?? "—"}</span>
@@ -580,6 +578,14 @@ export default function ParEfacturaQueuePage() {
           </>
         )}
       </div>
+
+      {openInvoice && (
+        <SfsInvoiceDialog
+          seria={openInvoice.seria}
+          number={openInvoice.number}
+          onClose={() => setOpenInvoice(null)}
+        />
+      )}
     </AppShell>
   );
 }

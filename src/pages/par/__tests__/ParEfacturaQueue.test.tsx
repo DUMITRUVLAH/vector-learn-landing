@@ -149,11 +149,8 @@ describe("ParEfacturaQueue — taburi", () => {
     // Cea legată duce la cererea ei.
     expect(screen.getByRole("button", { name: "PAR-2026-0025" })).toBeInTheDocument();
     expect(screen.getByText("Trimis la Cumpărător")).toBeInTheDocument();
-    // Factura cu link se deschide în portalul SFS.
-    expect(screen.getByRole("link", { name: "EFMD 000000777" })).toHaveAttribute(
-      "href",
-      "https://efactura.sfs.md:443/EFactura.aspx?id=aaa"
-    );
+    // Seria/numărul deschid conținutul facturii ÎN APLICAȚIE (linkul din QR duce la 404 în portal).
+    expect(screen.getByRole("button", { name: /Vezi factura EFMD 000000777/i })).toBeInTheDocument();
   });
 
   it("când SFS nu poate fi citit, tabul explică — nu arată o listă goală ca adevăr", async () => {

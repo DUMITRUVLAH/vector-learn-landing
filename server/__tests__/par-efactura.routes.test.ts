@@ -316,3 +316,35 @@ describe("tabul cu toate e-Facturile", () => {
     session = saved;
   });
 });
+
+describe("conținutul unei facturi și documentul PDF", () => {
+  it("refuză identificatori care nu arată a serie/număr", async () => {
+    const res = await app.request("/api/par/efactura/invoices/EA W/000%2F123");
+    expect(res.status).toBe(400);
+  });
+
+  it("spune că nu poate citi factura când SFS nu e configurat", async () => {
+    const res = await app.request("/api/par/efactura/invoices/EAW/000504087");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { available: boolean; detail: unknown; message: string };
+    expect(body.available).toBe(false);
+    expect(body.detail).toBeNull();
+    expect(body.message).toMatch(/nu este configurat|simulat/i);
+  });
+
+  it("întoarce o eroare explicită pentru PDF, nu un fișier gol", async () => {
+    const res = await app.request("/api/par/efactura/invoices/EAW/000504087/pdf");
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string; detail: string };
+    expect(body.error).toBe("pdf_unavailable");
+    expect(body.detail).toMatch(/nu este configurat|simulat/i);
+  });
+
+  it("nu lasă un solicitant fără rol să citească facturile", async () => {
+    const saved = session;
+    session = { id: requestorUser, tenantId, role: "teacher", email: "solicitant@atic.example" };
+    expect((await app.request("/api/par/efactura/invoices/EAW/000504087")).status).toBe(403);
+    expect((await app.request("/api/par/efactura/invoices/EAW/000504087/pdf")).status).toBe(403);
+    session = saved;
+  });
+});

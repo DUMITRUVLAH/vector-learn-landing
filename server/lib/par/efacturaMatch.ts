@@ -66,16 +66,30 @@ export function invoiceKey(inv: { seria: string; number: string }): string {
 
 // ─── Parsarea XML-ului de factură SFS ─────────────────────────────────────────
 
+/**
+ * XML-ul facturii vine dintr-un câmp escapat, deci denumirile poartă entități: fără decodare,
+ * ecranul arăta `&quot;DUCONT GRUP&quot; S.R.L.` în loc de „DUCONT GRUP" S.R.L.
+ */
+function decodeXmlEntities(value: string): string {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)))
+    .replace(/&amp;/g, "&");
+}
+
 function attr(xml: string, tag: string, name: string): string | null {
   const re = new RegExp(`<(?:[\\w]+:)?${tag}\\b[^>]*?\\b${name}\\s*=\\s*"([^"]*)"`, "i");
   const m = xml.match(re);
-  return m ? m[1].trim() : null;
+  return m ? decodeXmlEntities(m[1].trim()) : null;
 }
 
 function element(xml: string, tag: string): string | null {
   const re = new RegExp(`<(?:[\\w]+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:[\\w]+:)?${tag}>`, "i");
   const m = xml.match(re);
-  return m ? m[1].trim() : null;
+  return m ? decodeXmlEntities(m[1].trim()) : null;
 }
 
 /** Suma în unități minore dintr-un text zecimal („1234.50" / „1 234,50" → 123450). */
@@ -116,15 +130,28 @@ export function parseSfsInvoiceXml(xml: string | null | undefined): {
 
   const supplierIdno =
     attr(xml, "Supplier", "IDNO") ?? element(xml, "SupplierIDNO") ?? element(xml, "SupplierIdno");
+  // Serverul real pune denumirea în atributul `Title` al blocului Supplier
+  // (`<Supplier IDNO="…" Title="BARDA MARKETING SOLUTIONS S.R.L." Address="…">`).
   const supplierName =
-    attr(xml, "Supplier", "Name") ?? element(xml, "SupplierName") ?? element(xml, "SupplierNameString");
+    attr(xml, "Supplier", "Title") ??
+    attr(xml, "Supplier", "Name") ??
+    element(xml, "SupplierName") ??
+    element(xml, "SupplierNameString");
   const buyerIdno =
     attr(xml, "Buyer", "IDNO") ?? element(xml, "BuyerIDNO") ?? element(xml, "BuyerIdno");
+  // `IssuedDate` = data emiterii (cea de pe factură); `DeliveryDate` = data livrării, folosită ca
+  // rezervă. Ambele apar în XML-ul real.
   const invoiceDate = parseDate(
-    element(xml, "DeliveryDate") ?? element(xml, "InvoiceDate") ?? element(xml, "DocumentDate")
+    element(xml, "IssuedDate") ??
+      element(xml, "DeliveryDate") ??
+      element(xml, "InvoiceDate") ??
+      element(xml, "DocumentDate")
   );
 
-  let totalCents = moneyToCents(element(xml, "TotalPrice") ?? element(xml, "TotalSum"));
+  // `<Total>` = totalul facturii pe serverul real; `TotalPrice`/`TotalSum` sunt variantele din ghid.
+  let totalCents = moneyToCents(
+    element(xml, "Total") ?? element(xml, "TotalPrice") ?? element(xml, "TotalSum")
+  );
   if (totalCents === null) {
     // Fără total explicit: însumăm atributul TotalPrice de pe fiecare rând de marfă/serviciu.
     const rowTotals = [...xml.matchAll(/<(?:[\w]+:)?Row\b[^>]*?\bTotalPrice\s*=\s*"([^"]*)"/gi)]
@@ -358,4 +385,115 @@ export function matchInvoiceForPar(
   }
 
   return { invoice: best, amountMatches: matches, note: parts.join(" · ") };
+}
+
+// ─── Detaliul complet al unei facturi (toate câmpurile, pentru afișare) ──────
+
+/** O linie de marfă/serviciu din factură. */
+export interface SfsInvoiceLineDetail {
+  name: string;
+  unitOfMeasure: string | null;
+  quantity: number | null;
+  unitPriceWithoutVatCents: number | null;
+  totalWithoutVatCents: number | null;
+  /** Cota TVA, așa cum apare („20", „-", „0"). */
+  vatRate: string | null;
+  vatCents: number | null;
+  totalCents: number | null;
+}
+
+/** Un partener (furnizor sau cumpărător) așa cum apare în factură. */
+export interface SfsInvoiceParty {
+  idno: string | null;
+  name: string | null;
+  address: string | null;
+  bankAccount: string | null;
+  bankName: string | null;
+  bankCode: string | null;
+}
+
+export interface SfsInvoiceDetail {
+  seria: string | null;
+  number: string | null;
+  issuedDate: Date | null;
+  deliveryDate: Date | null;
+  supplier: SfsInvoiceParty;
+  buyer: SfsInvoiceParty;
+  loadingPoint: string | null;
+  unloadingPoint: string | null;
+  totalCents: number | null;
+  totalVatCents: number | null;
+  lines: SfsInvoiceLineDetail[];
+  /** True dacă factura poartă semnături electronice (blocul Signatures există). */
+  signed: boolean;
+}
+
+function partyFrom(xml: string, tag: "Supplier" | "Buyer"): SfsInvoiceParty {
+  // Blocul poate fi auto-închis sau cu conținut; luăm întâi atributele, apoi contul bancar.
+  const block = new RegExp(`<(?:[\\w]+:)?${tag}\\b[^>]*>([\\s\\S]*?)</(?:[\\w]+:)?${tag}>`, "i").exec(xml);
+  const inner = block?.[1] ?? "";
+  return {
+    idno: attr(xml, tag, "IDNO"),
+    name: attr(xml, tag, "Title") ?? attr(xml, tag, "Name"),
+    address: attr(xml, tag, "Address"),
+    bankAccount: attr(inner, "BankAccount", "Account") || null,
+    bankName: attr(inner, "BankAccount", "BranchTitle") || null,
+    bankCode: attr(inner, "BankAccount", "BranchCode") || null,
+  };
+}
+
+function numberOrNull(raw: string | null): number | null {
+  if (raw === null) return null;
+  const v = Number(raw.replace(",", "."));
+  return Number.isFinite(v) ? v : null;
+}
+
+/**
+ * Desface XML-ul unei facturi SFS în toate câmpurile ei, ca ecranul să poată arăta ce scrie în
+ * document — nu doar seria și suma. Tolerant la câmpuri lipsă: fiecare rămâne null, nu aruncă.
+ */
+export function parseSfsInvoiceDetail(xml: string | null | undefined): SfsInvoiceDetail | null {
+  if (!xml || !xml.trim()) return null;
+  const lines: SfsInvoiceLineDetail[] = [];
+  const rowRe = /<(?:[\w]+:)?Row\b([^>]*)\/?>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(xml)) !== null) {
+    const a = (name: string): string | null => {
+      const hit = new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`, "i").exec(m![1]);
+      return hit ? decodeXmlEntities(hit[1].trim()) : null;
+    };
+    const name = a("Name");
+    if (name === null) continue;
+    lines.push({
+      name,
+      unitOfMeasure: a("UnitOfMeasure"),
+      quantity: numberOrNull(a("Quantity")),
+      unitPriceWithoutVatCents: moneyToCents(a("UnitPriceWithoutTVA")),
+      totalWithoutVatCents: moneyToCents(a("TotalPriceWithoutTVA")),
+      vatRate: a("TVA"),
+      vatCents: moneyToCents(a("TotalTVA")),
+      totalCents: moneyToCents(a("TotalPrice")),
+    });
+  }
+
+  const parsed = parseSfsInvoiceXml(xml);
+  return {
+    seria: element(xml, "Seria"),
+    number: element(xml, "Number"),
+    issuedDate: parsed.invoiceDate,
+    deliveryDate: (() => {
+      const d = element(xml, "DeliveryDate");
+      if (!d) return null;
+      const dt = new Date(d);
+      return isNaN(dt.getTime()) ? null : dt;
+    })(),
+    supplier: partyFrom(xml, "Supplier"),
+    buyer: partyFrom(xml, "Buyer"),
+    loadingPoint: element(xml, "LoadingPoint"),
+    unloadingPoint: element(xml, "UnloadingPoint"),
+    totalCents: parsed.totalCents,
+    totalVatCents: moneyToCents(element(xml, "TotalTVA")),
+    lines,
+    signed: /<(?:[\w]+:)?Signatures>/i.test(xml),
+  };
 }

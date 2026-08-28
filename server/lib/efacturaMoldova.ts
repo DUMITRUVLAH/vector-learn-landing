@@ -782,7 +782,8 @@ export class EfacturaMdClient {
     seria: string,
     number: string,
     requestId: string,
-    orientation: 0 | 1 = 0 // 0 = Portrait, 1 = Landscape (xs:int)
+    orientation: 0 | 1 = 0, // 0 = Portrait, 1 = Landscape (xs:int)
+    actorRole: number = EFACTURA_MD_ACTOR.FURNIZOR
   ): Promise<{ seria: string; number: string; pdf: Buffer } | null> {
     // InvoicesContentRequest extends InvoicesRequest: RequestId, SeriaAndNumbers,
     // apoi ActorRole, Orientation (ambele int). Toate în `d:`.
@@ -792,10 +793,13 @@ export class EfacturaMdClient {
       `<d:Number>${escapeXml(number)}</d:Number>` +
       `<d:Seria>${escapeXml(seria)}</d:Seria>` +
       `</d:InvoiceIndentificator></d:SeriaAndNumbers>` +
-      `<d:ActorRole>${EFACTURA_MD_ACTOR.FURNIZOR}</d:ActorRole>` +
+      `<d:ActorRole>${actorRole}</d:ActorRole>` +
       `<d:Orientation>${orientation}</d:Orientation>`;
     const xml = await this.call("GetInvoicesContentForPrint", inner);
-    const block = xmlBlocks(xml, "InvoicePrintResult")[0];
+    // Serverul real întoarce `<a:Result>` (SINGULAR) — nu `<InvoicePrintResult>` ca în ghid. Cu
+    // numele vechi, metoda întorcea NULL pentru orice factură, deși PDF-ul venea în răspuns
+    // (verificat live 2026-08-28). Acceptăm ambele forme.
+    const block = xmlBlocks(xml, "InvoicePrintResult")[0] ?? xmlBlocks(xml, "Result")[0];
     if (!block) return null;
     const content = xmlText(block, "Content");
     if (!content) return null;
@@ -868,7 +872,10 @@ export class EfacturaMdClient {
       const invoiceStatus = Number(xmlText(block, "InvoiceStatus") ?? 0);
       // Conținutul facturii vine escapat în elementul <XML> — îl decodăm ca să
       // fie XML utilizabil (de-escapat) pentru aplicație.
-      const rawXml = xmlText(block, "XML");
+      // Elementul se numește `Xml` pe serverul real (ghidul îl scrie `XML`), iar `xmlText` compară
+      // numele case-SENSITIV: din cauza asta fiecare factură părea „fără conținut" și tot ecranul
+      // rămânea fără furnizor, dată și sumă (verificat live 2026-08-28).
+      const rawXml = xmlText(block, "Xml") ?? xmlText(block, "XML");
       return {
         seria: xmlText(block, "Seria") ?? "",
         number: xmlText(block, "Number") ?? "",

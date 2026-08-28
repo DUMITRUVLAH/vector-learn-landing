@@ -31,9 +31,11 @@ import {
   expectsEfactura,
   matchInvoiceForPar,
   summarizeSfsInvoice,
+  parseSfsInvoiceDetail,
   invoiceKey,
   normalizeFiscalId,
   type SfsInvoiceSummary,
+  type SfsInvoiceDetail,
 } from "../../lib/par/efacturaMatch";
 
 // ─── Tipuri ───────────────────────────────────────────────────────────────────
@@ -693,4 +695,93 @@ export async function listBuyerInvoicesForTenant(
     message: errors.length ? `${base} SFS a răspuns parțial: ${errors.join("; ")}` : base,
     invoices: items,
   };
+}
+
+// ─── 4. O singură factură: toate câmpurile + documentul PDF ──────────────────
+
+export interface BuyerInvoiceDetailResult {
+  available: boolean;
+  message: string;
+  seria: string;
+  number: string;
+  invoiceStatus: number | null;
+  invoiceStatusLabel: string | null;
+  detail: SfsInvoiceDetail | null;
+}
+
+/** Clientul SFS al workspace-ului, sau null când integrarea nu e configurată. */
+async function clientFor(
+  tenantId: string,
+  clientOverride?: EfacturaMdClient
+): Promise<{ client: EfacturaMdClient | null; message: string }> {
+  if (clientOverride) return { client: clientOverride, message: "" };
+  const sfs = await loadSfsConfig(tenantId);
+  if (!sfs || sfs.config.mock) {
+    return {
+      client: null,
+      message: sfs
+        ? "Integrarea e-Factura rulează în mod simulat (fără credențiale SFS)."
+        : "Integrarea e-Factura (SFS) nu este configurată pentru această organizație.",
+    };
+  }
+  return { client: new EfacturaMdClient(sfs.config), message: "" };
+}
+
+/**
+ * Conținutul unei facturi primite: furnizor, cumpărător, date, puncte de încărcare/descărcare,
+ * totaluri și liniile de marfă/serviciu — adică tot ce scrie în document.
+ */
+export async function getBuyerInvoiceDetail(
+  tenantId: string,
+  seria: string,
+  number: string,
+  clientOverride?: EfacturaMdClient
+): Promise<BuyerInvoiceDetailResult> {
+  const base = { seria, number, invoiceStatus: null, invoiceStatusLabel: null, detail: null };
+  const { client, message } = await clientFor(tenantId, clientOverride);
+  if (!client) return { ...base, available: false, message };
+
+  try {
+    const [item] = await client.getInvoicesBySeriaNumber([{ seria, number }], `par-efp-one-${Date.now()}`);
+    if (!item) {
+      return { ...base, available: true, message: "Factura nu a fost găsită în SFS." };
+    }
+    const detail = parseSfsInvoiceDetail(item.xml);
+    return {
+      available: true,
+      message: detail ? "" : "SFS nu a returnat conținutul facturii.",
+      seria: item.seria || seria,
+      number: item.number || number,
+      invoiceStatus: item.invoiceStatus,
+      invoiceStatusLabel: item.invoiceStatusLabel,
+      detail,
+    };
+  } catch (e) {
+    return {
+      ...base,
+      available: false,
+      message: `Nu am putut citi factura din SFS: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+}
+
+/**
+ * Documentul PDF oficial al facturii, așa cum îl tipărește SFS. Întoarce null când integrarea nu e
+ * configurată sau SFS nu dă conținutul — apelantul decide ce mesaj arată.
+ */
+export async function getBuyerInvoicePdf(
+  tenantId: string,
+  seria: string,
+  number: string,
+  clientOverride?: EfacturaMdClient
+): Promise<{ pdf: Buffer } | { error: string }> {
+  const { client, message } = await clientFor(tenantId, clientOverride);
+  if (!client) return { error: message };
+  try {
+    const res = await client.getInvoicePdf(seria, number, `par-efp-pdf-${Date.now()}`, 0, EFACTURA_MD_ACTOR.CUMPARATOR);
+    if (!res) return { error: "SFS nu a returnat documentul pentru această factură." };
+    return { pdf: res.pdf };
+  } catch (e) {
+    return { error: `Nu am putut descărca factura din SFS: ${e instanceof Error ? e.message : String(e)}` };
+  }
 }
