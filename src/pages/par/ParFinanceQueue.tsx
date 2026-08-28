@@ -825,14 +825,19 @@ export default function ParFinanceQueue() {
                       <CopyValue display={par.payeeIdnp ?? ""} label="Copiază IDNO" mono />
                     </td>
                     <td className="px-3 py-3 text-foreground">
+                      {/* Un IBAN moldovenesc are 24 de caractere; la scara tabelului încap în ~250px.
+                          Lățimea veche (190px) era calibrată pe text-xs și, după unificarea mărimii,
+                          tăia IBAN-ul cu „…" — exact câmpul pentru care finanțele deschid ecranul. */}
                       <CopyValue
                         display={par.payeeIban ?? ""}
                         label="Copiază IBAN"
                         mono
-                        maxWidthClass="max-w-[190px]"
+                        maxWidthClass="max-w-[250px]"
                       />
                     </td>
-                    <td className="px-3 py-3 text-right font-mono text-foreground whitespace-nowrap">
+                    {/* Suma poartă aceeași greutate ca în inbox: e cifra pe care o cauți cu ochiul
+                        pe ambele ecrane, deci se scrie la fel pe amândouă. */}
+                    <td className="px-3 py-3 text-right font-mono font-semibold text-foreground whitespace-nowrap">
                       <CopyValue
                         display={
                           par.currency && par.currency !== "MDL"

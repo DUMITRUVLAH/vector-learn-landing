@@ -373,7 +373,7 @@ function ApprovalsCell({ item }: { item: ParInboxItem }) {
     p.step === item.my_step ? "tu" : p.name ?? p.roleLabel ?? `pasul ${p.step}`;
 
   return (
-    <div className="space-y-1 text-xs">
+    <div className="space-y-1">
       <div className="font-medium text-foreground">
         {done.length} din {total} semnate
       </div>
@@ -805,12 +805,12 @@ export default function ParInbox() {
                           </div>
                         </td>
                         <td className="px-3 py-3 align-middle">
-                          <button onClick={() => navigate(`/business/par/${item.id}`)} className="whitespace-nowrap font-mono text-xs text-foreground hover:text-primary hover:underline">{item.requestNo}</button>
+                          <button onClick={() => navigate(`/business/par/${item.id}`)} className="whitespace-nowrap font-mono text-foreground hover:text-primary hover:underline">{item.requestNo}</button>
                           {/* The Scop column is gone — it said "Execută plata" on every row.
                               The two purposes that are NOT the default still change how you
                               read the request, so they stay, as a chip on the row instead. */}
                           {item.purpose !== DEFAULT_PURPOSE && (
-                            <div className="mt-0.5 inline-block rounded bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning">
+                            <div className="mt-0.5 inline-block rounded bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning">
                               {PURPOSE_LABEL[item.purpose] ?? item.purpose}
                             </div>
                           )}
@@ -819,13 +819,13 @@ export default function ParInbox() {
                               fiecare rând. Pe un pas intermediar rămâne esențial: e diferența dintre
                               "aprob și pleacă la finanțe" și "aprob degeaba" (regresie ATIC, 2026-08-28). */}
                           {item.my_step != null && (item.steps_total ?? 0) > 1 && item.my_step < (item.steps_total ?? 0) && (
-                            <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">
+                            <div className="mt-0.5 text-xs font-medium text-muted-foreground">
                               Pasul {item.my_step} din {item.steps_total}
                               {item.my_step_label ? ` · ${item.my_step_label}` : ""}
                             </div>
                           )}
                           {bulkResults[item.id] && (
-                            <div className={cn("text-[11px] font-medium", bulkResults[item.id].ok ? "text-success" : "text-destructive")}>
+                            <div className={cn("text-xs font-medium", bulkResults[item.id].ok ? "text-success" : "text-destructive")}>
                               {bulkResults[item.id].ok
                                 ? bulkResults[item.id].status === "pending_approval"
                                   ? "✓ Semnat · mai are un pas"
@@ -836,7 +836,7 @@ export default function ParInbox() {
                         </td>
                         <td className="min-w-[130px] max-w-[190px] px-3 py-3 align-middle font-medium text-foreground"><span className="line-clamp-3" title={item.payeeName ?? ""}>{item.payeeName ?? "—"}</span></td>
                         <td className="whitespace-nowrap px-3 py-3 text-right align-middle font-mono font-semibold text-foreground">{formatMDL(item.totalEstimatedCents)}</td>
-                        <td className="min-w-[150px] max-w-[220px] px-3 py-3 align-middle text-xs text-foreground"><span className="line-clamp-3" title={item.endUse ?? ""}>{item.endUse || "—"}</span></td>
+                        <td className="min-w-[150px] max-w-[220px] px-3 py-3 align-middle text-foreground"><span className="line-clamp-3" title={item.endUse ?? ""}>{item.endUse || "—"}</span></td>
                         <td className="max-w-[110px] px-3 py-3 align-middle text-foreground"><span className="line-clamp-2" title={item.projectName ?? ""}>{item.projectName ?? "—"}</span></td>
                         <td className="max-w-[110px] px-3 py-3 align-middle text-foreground"><span className="line-clamp-2" title={item.requestedByName ?? ""}>{item.requestedByName ?? "—"}</span></td>
                         <td className="min-w-[150px] max-w-[210px] px-3 py-3 align-middle">
@@ -850,7 +850,7 @@ export default function ParInbox() {
                                   key={attachment.id}
                                   type="button"
                                   onClick={() => window.open(`/api/par/${item.id}/attachments/${attachment.id}/preview`, "_blank", "noopener,noreferrer")}
-                                  className="inline-flex max-w-full items-center gap-1 text-xs text-primary hover:underline"
+                                  className="inline-flex max-w-full items-center gap-1 text-primary hover:underline"
                                   title={`Deschide ${attachment.fileName} în browser`}
                                 >
                                   <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -860,7 +860,7 @@ export default function ParInbox() {
                             </div>
                           ) : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 align-middle text-xs text-muted-foreground">
+                        <td className="whitespace-nowrap px-3 py-3 align-middle text-muted-foreground">
                           {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"}
                         </td>
                       </tr>
