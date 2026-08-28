@@ -11,6 +11,8 @@
  * through (via choosePayee), so the check runs regardless of which document format produced it.
  */
 
+import { isPayeeBank } from "./payeeBankClassifier";
+
 const ADDRESS_MARKER_RE =
   /\b(mun\.|or\.|sat\.|str\.|bd\.|sediul\w*|adres[ăa]|Chi[sș]in[ăa]u|Chisinau|B[ăa]l[țt]i)\b/i;
 const LEGAL_FORM_SUFFIX_RE =
@@ -71,7 +73,12 @@ export function sanitizeRequisites(p: {
       recoveredIban = bank.replace(/\s+/g, "").toUpperCase();
       bank = null;
     } else if (ADDRESS_MARKER_RE.test(bank) || bank.length > MAX_BANK_LEN) {
-      bank = null;
+      // Numele unei FILIALE conține legitim un oraș („B.C. VICTORIABANK S.A. fil.nr.26 Chisinau",
+      // „Maib, filiala nr. 3 Bălți"): a arunca tot câmpul lăsa „Bancă" gol pe o factură care o
+      // scria negru pe alb. Când valoarea chiar e un nume de bancă, tăiem doar coada de adresă.
+      const cut = bank.search(ADDRESS_MARKER_RE);
+      const trimmed = cut > 0 ? bank.slice(0, cut).replace(/[\s,;.\u2013-]+$/, "").trim() : "";
+      bank = trimmed && isPayeeBank(trimmed) ? trimmed.slice(0, MAX_BANK_LEN) : null;
     }
   }
 

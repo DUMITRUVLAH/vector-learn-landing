@@ -162,3 +162,83 @@ describe("choosePayee — field-sanity cross-check (bank/legalAddress/administra
     expect(r.payee?.administratorName).toBe("Ion Popescu");
   });
 });
+
+/**
+ * Plasa de siguranță „singura contraparte cu cont de încasare tipărit" (2026-08-28).
+ *
+ * Pe contul de plată ZBOR.MD nr. 68339 modelul a etichetat `client` chiar firma din antet — singura
+ * parte din document, cu IDNO, IBAN și bancă tipărite. Pool-ul rămânea gol și formularul se
+ * completa cu nimic. Când propria organizație NU apare deloc în document, singura contraparte al
+ * cărei cont e tipărit este cea care încasează: o propunem, marcată „de verificat".
+ */
+describe("choosePayee — plasa de siguranță pentru singura contraparte", () => {
+  const llm = (parties: ParPartiesExtraction["parties"]): ParPartiesExtraction => ({
+    parties,
+    amountCents: 2_304_200,
+    currency: "MDL",
+    scope: "Bilete de avion",
+    documentClass: "invoice",
+    isStub: false,
+  });
+
+  it("[blocant] rol greșit („client”) pe singura parte cu IBAN → tot o propunem, cu „de verificat”", () => {
+    const r = choosePayee(
+      llm([
+        {
+          name: 'S.C. "Explor Tur" S.R.L.',
+          role: "client",
+          idno: "1012600013482",
+          iban: "MD61VI000000222432697MDL",
+          bank: "B.C. VICTORIABANK S.A.",
+        },
+      ]),
+      "Asociația Națională TIC",
+    );
+    expect(r.payee?.name).toMatch(/Explor Tur/);
+    expect(r.payee?.iban).toBe("MD61VI000000222432697MDL");
+    expect(r.lowConfidence.name).toBe(true);
+    expect(r.needsClarification).toBe(false);
+  });
+
+  it("propria organizație E în document (noi suntem vânzătorul) → rămâne FĂRĂ beneficiar, chiar dacă cumpărătorul are IBAN", () => {
+    const r = choosePayee(
+      llm([
+        { name: "Vector Academy SRL", role: "provider", idno: "1024600035737", iban: "MD87AG000000022516065719" },
+        { name: "S.R.L. MIXBOOK", role: "client", idno: "1017600027590", iban: "MD24MO2224ASV12345678901" },
+      ]),
+      "Vector Academy SRL",
+    );
+    expect(r.payee).toBeNull();
+  });
+
+  it("fără IBAN tipărit nu ghicim beneficiarul (un cumpărător rămas singur nu devine plătit)", () => {
+    const r = choosePayee(llm([{ name: "S.R.L. MIXBOOK", role: "client", idno: "1017600027590" }]), null);
+    expect(r.payee).toBeNull();
+  });
+
+  it("marcaj explicit de plătitor pe singura parte → tot fără beneficiar", () => {
+    const r = choosePayee(
+      llm([
+        {
+          name: "Vector Academy SRL",
+          role: "client",
+          iban: "MD87AG000000022516065719",
+          isPayerHint: true,
+        },
+      ]),
+      null,
+    );
+    expect(r.payee).toBeNull();
+  });
+
+  it("două contrapărți etichetate „client” → nu alegem la întâmplare", () => {
+    const r = choosePayee(
+      llm([
+        { name: "S.R.L. ALFA", role: "client", iban: "MD87AG000000022516065719" },
+        { name: "S.R.L. BETA", role: "client", iban: "MD24MO2224ASV12345678901" },
+      ]),
+      null,
+    );
+    expect(r.payee).toBeNull();
+  });
+});

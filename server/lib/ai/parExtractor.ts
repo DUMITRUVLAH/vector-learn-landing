@@ -59,6 +59,26 @@ REGULI ABSOLUTE:
        Academy)." → MIXBOOK = "client" (Către, cumpărătorul care plătește); Vector Academy = "provider"
        (De la, vânzătorul, are IBAN-ul de încasare) = beneficiarul plății. Deci role MIXBOOK="client",
        role "Vector Academy"="provider", iar IBAN-ul MD87... aparține Vector Academy.
+     • ANTET + "PLĂTITOR:" (layout-ul standard al unui "CONT DE PLATĂ"/proformă din Moldova, ex. ZBOR.MD,
+       agenții de turism, furnizori de servicii): firma tipărită ÎN ANTET — cea care are adresa, "Cod
+       fiscal", "Date Bancare", "Cod bancar", "Cont: IBAN …" și telefonul — este VÂNZĂTORUL (provider),
+       chiar dacă în document NU apare niciodată cuvântul "Furnizor"/"Prestator"/"Vânzător". Eticheta
+       "PLĂTITOR:" / "Plătitor" / "Client:" / "Către:" este urmată de numele CUMPĂRĂTORULUI, adesea doar
+       o prescurtare pe rândul următor, fără formă juridică și fără rechizite (ex. "ATIC") — ACELA e
+       partea cu role="client". Listează-l ca parte separată chiar dacă nu are IDNO/IBAN (name + role
+       ajung). NU atribui eticheta "PLĂTITOR" firmei din antet doar pentru că numele ei urmează imediat
+       după numele plătitorului.
+       EXEMPLU: "PLĂTITOR: / ATIC / S.C. Explor Tur S.R.L. / str. 31 August 1989, 64 / Cod fiscal:
+       1012600013482 / Date Bancare: … / Cont: IBAN MD61VI000000222432697MDL" → două părți:
+       {name:"ATIC", role:"client"} și {name:"S.C. Explor Tur S.R.L.", role:"provider",
+       idno:"1012600013482", iban:"MD61VI000000222432697MDL"}. Explor Tur ÎNCASEAZĂ, ATIC plătește.
+     • REGULĂ DURĂ (are prioritate față de orice etichetă din vecinătate): partea ale cărei conturi
+       ("Date Bancare", "Cont", "c/d", IBAN, "Cod bancar") sunt TIPĂRITE în document este cea care
+       ÎNCASEAZĂ → NU poate avea role="client". Dacă ezitezi între "client" și "provider" pentru partea
+       care deține IBAN-ul de încasare, alege "provider".
+     • ORDINEA RÂNDURILOR dintr-un PDF poate fi AMESTECATĂ la extragere (tabelul de servicii apare
+       adesea ÎNAINTEA antetului, iar "TOTAL" ajunge pe alt rând decât suma). Nu deduce rolul unei părți
+       din simpla vecinătate a rândurilor — folosește cine deține contul bancar și eticheta explicită.
    - TABEL CU DOUĂ COLOANE (foarte frecvent în contractele MD): blocul de recuzite e adesea un
      tabel "EXECUTOR | BENEFICIAR" care, în text, are fiecare etichetă REPETATĂ pe linie
      ("Cod fiscal X Cod fiscal Y", "IBAN X IBAN Y", "Banca X Banca Y"). PRIMA valoare aparține
@@ -107,11 +127,22 @@ REGULI ABSOLUTE:
    articole detaliate (doar un total), returnează [] (lista goală). Exemplu: "Ziua 1 de training ... 4 000",
    "Pregătire materiale ... 10 500" → 2 articole. "provision of psihologic session services 1 sesie 7 000"
    → un articol {description:"provision of psihologic session services", quantity:1, unit:"sesie", unit_price:7000}.
+   Într-un PDF cu ordinea rândurilor amestecată, antetul tabelului ("Nr. Denumirea serviciilor Preţ unitar
+   Cant. Preţ produs") poate apărea DUPĂ rândurile lui, sau deloc. Un rând numerotat de forma
+   "<nr> <denumire> <preț unitar> <cantitate> <preț produs>" ESTE un articol: din
+   "1 Bilet de avion TLLLISTLL, BORDEI VIORICA 11094 1 11094" rezultă
+   {description:"Bilet de avion TLLLISTLL, BORDEI VIORICA", quantity:1, unit:null, unit_price:11094}.
+   Extrage TOATE rândurile de acest fel — lista goală doar când documentul chiar nu are articole.
 3. amount: suma DE PLATĂ în UNITĂȚI ÎNTREGI ale valutei (lei/euro/dolari) — NU în cenți,
    NU înmulți cu 100; aplicația face conversia. Folosește TOTALUL de plată ("Total de plată",
    "TOTAL DUE", "Итого к оплате", "всего", "Suma", "Remunerația", "în mărime de", "стоимость",
    "preț"), NU subtotalul fără TVA și NU doar TVA-ul.
    Exemplu: "5000 lei" → 5000. "45 000,00 lei" → 45000. "EUR 2,400.00" → 2400.
+   SUMA ÎN LITERE ESTE SURSA DE ADEVĂR: dacă documentul are un rând de tipul "Total factura în litere:
+   douazeci si trei de mii patruzeci si doi lei 00 bani", transcrie ACEA sumă în cifre (→ 23042) și
+   folosește-o. Cifra din tabel poate ajunge pe alt rând decât eticheta "TOTAL" (ordinea din PDF e
+   amestecată) — nu ghici și nu schimba cifrele: 23042 NU este 23442. Verifică și că totalul = suma
+   rândurilor din tabel (11094 + 11948 = 23042).
    Dacă documentul nu conține o sumă de plată → null.
 4. currency: "MDL" pentru lei/лей, "EUR" pentru €/EUR, "USD" pentru $/USD. Implicit "MDL".
 5. scope: descrierea DETALIATĂ și SPECIFICĂ a ce s-a livrat sau prestat (utilizarea finală).
@@ -130,6 +161,9 @@ REGULI ABSOLUTE:
    dacă apar în document.
 7. NU decide tu cine e beneficiarul plății. Doar listează părțile cu rolul lor corect.
    Selecția finală a beneficiarului se face în alt pas.
+8. confidence: cât de sigur ești, între 0.0 și 1.0. Pune o valoare REALĂ (ex. 0.9 când valoarea
+   e citită clar din document, 0.4 când e dedusă) — nu lăsa 0.0 „din oficiu”, pentru că aplicația
+   marchează cu „de verificat” exact câmpurile cu încredere mică.
 
 Returnează DOAR JSON:
 {
