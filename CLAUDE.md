@@ -159,6 +159,34 @@ rămân per item**; doar livrarea (branch+PR) se grupează pe fază.
 
 ---
 
+## 0.2bis Livrarea merge DIRECT pe `main` (directivă owner, 2026-08-28)
+
+**Owner-ul a cerut explicit: „tot să fie pe main toate modificările posibile de acum".** Autorizarea
+de merge în `main` (= auto-deploy pe www.finflow.best, la clientul plătitor) e acum **permanentă**, nu
+per-caz. Nu mai las PR-uri deschise care așteaptă review și nu mai întreb „vrei să dau merge?".
+
+De ce: branch-urile care stau deschise putrezesc în conflicte ireconciliabile — repo-ul a ajuns la 30+
+PR-uri, iar merge-ul lor în bloc a produs outage-ul din 2026-06-02 (§3.5.1ter). Deploy mic și des bate
+merge mare și rar.
+
+Cum: construiesc pe branch-ul de fază (§0.2), rulez gate-urile, apoi `git push origin <branch>:main`
+când e fast-forward curat — nu atinge working tree-ul, deci e sigur și cu chaturi paralele (§0.4).
+
+**Înainte de FIECARE push în `main`, obligatoriu** (asta NU se relaxează — e singurul lucru care ține
+prod-ul în viață):
+1. migrarea nouă are prefix **> max de pe `origin/main`** și `--> statement-breakpoint` între statements;
+2. orice **coloană sau tabelă nouă pe calea de request** are heal în `server/db/sync-schema.ts` —
+   prod-ul nu aplică fiabil migrări; coloanele se adaugă generic, **tabelele NU** (au nevoie de
+   `ENSURE_STATEMENTS`);
+3. `check-undefined-refs` + `check-route-mounts` + `check-migration-breakpoints` + `schema-drift` verzi;
+4. testele zonei atinse verzi (suita întreagă e roșie preexistent — nu e un semnal despre schimbarea ta);
+5. după deploy, verific că prod chiar răspunde, autentificat, nu doar că build-ul a trecut.
+
+Dacă o schimbare e chiar riscantă pentru clientul plătitor, o spun într-o propoziție **și tot o livrez** —
+scalarea în jos e decizia owner-ului.
+
+---
+
 ## 0.3 Fereastra de noapte — autonomie totală 23:00–08:00 (owner doarme)
 
 **Între 23:00 și 08:00 (ora Europe/Chișinău), lucrează complet autonom, fără nicio oprire și
