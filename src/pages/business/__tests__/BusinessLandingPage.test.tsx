@@ -45,37 +45,55 @@ describe("BusinessLandingPage (FinFlow)", () => {
     const pricing = document.getElementById("preturi");
     expect(pricing).not.toBeNull();
     const section = within(pricing as HTMLElement);
-    expect(section.getByText("$20")).toBeTruthy();
-    expect(section.getByText("$5")).toBeTruthy();
+    expect(section.getAllByText("$20").length).toBeGreaterThan(0);
+    expect(section.getAllByText("$5").length).toBeGreaterThan(0);
   });
 
   it("calculatorul recalculează totalul când se schimbă numărul de oameni", () => {
     renderPage();
 
-    // Implicit: 3 manageri × 20 $ + 15 membri × 5 $ = 135 $.
-    expect(monthlyTotal()).toBe("$135");
+    // Implicit: 1 manager × 20 $ + 3 membri × 5 $ = 35 $ — o echipă mică, nu o corporație.
+    expect(monthlyTotal()).toBe("$35");
 
-    fireEvent.change(screen.getByLabelText(/manageri.*număr exact/i), { target: { value: "5" } });
-    expect(monthlyTotal()).toBe("$175"); // 5 × 20 + 15 × 5
+    fireEvent.change(screen.getByLabelText(/manageri.*număr exact/i), { target: { value: "3" } });
+    expect(monthlyTotal()).toBe("$75"); // 3 × 20 + 3 × 5
 
-    fireEvent.change(screen.getByLabelText(/membri.*număr exact/i), { target: { value: "40" } });
-    expect(monthlyTotal()).toBe("$300"); // 5 × 20 + 40 × 5
+    fireEvent.change(screen.getByLabelText(/membri.*număr exact/i), { target: { value: "10" } });
+    expect(monthlyTotal()).toBe("$110"); // 3 × 20 + 10 × 5
   });
 
-  it("calculatorul nu propagă valori sub minim în preț", () => {
+  it("calculatorul nu propagă valori în afara limitelor în preț", () => {
     renderPage();
     fireEvent.change(screen.getByLabelText(/membri.*număr exact/i), { target: { value: "-4" } });
-    // 3 × 20 + 0 × 5 = 60 $ — negativul e prins, nu ajunge în total.
-    expect(monthlyTotal()).toBe("$60");
+    expect(monthlyTotal()).toBe("$20"); // 1 × 20 + 0 × 5 — negativul e prins
+    fireEvent.change(screen.getByLabelText(/membri.*număr exact/i), { target: { value: "999" } });
+    expect(monthlyTotal()).toBe("$170"); // plafonat la 30 de membri: 20 + 150
   });
 
-  it("carusela schimbă slide-ul la click pe indicator", async () => {
+  it("fiecare capacitate are secțiunea ei, nu un slide", () => {
+    renderPage();
+    for (const id of ["ai", "aprobari", "finante", "efactura", "flux", "securitate", "preturi"]) {
+      expect(document.getElementById(id), `lipsește secțiunea #${id}`).not.toBeNull();
+    }
+    expect(screen.getByRole("heading", { name: /nu mai copiezi nimic dintr-un pdf/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /pragurile decid cine semnează/i })).toBeTruthy();
+  });
+
+  it("traseul cererii e interactiv: click pe un pas schimbă explicația", async () => {
     const user = userEvent.setup();
     renderPage();
-    expect(screen.getByText(/cererea se completează singură/i)).toBeTruthy();
+    const flow = document.getElementById("flux") as HTMLElement;
+    await user.click(within(flow).getByRole("button", { name: /pasul 5: plată/i }));
+    expect(within(flow).getByText(/sumă reală/i)).toBeTruthy();
+  });
 
-    await user.click(screen.getByRole("button", { name: /arată matricea doa/i }));
-    expect(screen.getByText(/pragurile decid cine semnează/i)).toBeTruthy();
+  it("nu publică date reale de clienți", () => {
+    renderPage();
+    const text = document.body.textContent ?? "";
+    // Prima versiune a paginii afișa numele, proiectul, IDNP-ul și IBAN-ul din formularul real.
+    for (const real of ["Ana Chiriță", "Irina Oriol", "Daria Roitman", "Digital Safeguard", "ATIC", "MD48", "2008001007903"]) {
+      expect(text, `pagina conține date reale: ${real}`).not.toContain(real);
+    }
   });
 
   it("formularul de contact deschide un email precompletat", async () => {
