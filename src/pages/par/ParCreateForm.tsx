@@ -26,6 +26,7 @@ import {
 import type { ParPayeeCandidate, ParPayeeOption } from "@/lib/par/parCandidateTypes";
 import { QuotesSection } from "@/components/par/QuotesSection";
 import { ApiError } from "@/lib/api";
+import { PAR_FIELD_MESSAGES } from "@/lib/par/submitErrors";
 import {
   createPar, getPar, updatePar, submitPar,
   addLineItem, deleteLineItem,
@@ -59,16 +60,9 @@ const AI_UNAVAILABLE_MESSAGE: Record<string, string> = {
     "Serviciul AI nu a răspuns (cont fără credit sau eroare temporară). Am completat doar ce s-a putut citi direct din document — verifică fiecare câmp.",
 };
 
-/** Map server submit `errors[].field` → friendly RO message for the summary + inline. */
-const FIELD_MESSAGES: Record<string, string> = {
-  line_items: "Adaugă cel puțin un articol în secțiunea „Articole” (totalul trebuie să fie > 0).",
-  total: "Totalul estimat trebuie să fie mai mare ca 0 — adaugă articole.",
-  end_use: "Completează „Descrierea utilizării finale” (obligatoriu pentru plăți).",
-  payee: "Completează beneficiarul: nume + IBAN (sau alege un furnizor salvat).",
-  payee_iban: "IBAN invalid.",
-  payee_idnp: "IDNP invalid.",
-  payee_bank: "Numele băncii e prea lung (max 300 caractere) — scurtează-l sau corectează-l.",
-};
+/** Mesajele pe câmp trăiesc în `@/lib/par/submitErrors` — aceleași și pe pagina de detaliu,
+ *  ca „Trimite spre aprobare" să explice la fel indiferent de unde e apăsat. */
+const FIELD_MESSAGES = PAR_FIELD_MESSAGES;
 
 /**
  * Every control on this form is driven by this one class. It mirrors the `Input`

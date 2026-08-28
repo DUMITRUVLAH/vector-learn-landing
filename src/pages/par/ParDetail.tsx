@@ -66,6 +66,7 @@ import {
   type ParAttachmentAnalysis,
   PAR_STATUS_LABELS,
 } from "@/lib/api/par";
+import { describeParSubmitError } from "@/lib/par/submitErrors";
 import { downloadParPdf } from "@/lib/parPdf";
 import { openParAttachment } from "@/lib/parFiles";
 import { validateIban } from "@/lib/par/iban";
@@ -367,12 +368,15 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [showChangesForm, setShowChangesForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Motivele câmp-cu-câmp când serverul refuză trimiterea (validation_failed). */
+  const [errorReasons, setErrorReasons] = useState<string[]>([]);
   // VF-202: advisory over-budget notice after submit (non-blocking).
   const [budgetWarning, setBudgetWarning] = useState<string | null>(null);
 
   const doSubmit = async () => {
     setBusy("submit");
     setError(null);
+    setErrorReasons([]);
     setBudgetWarning(null);
     try {
       const res = await submitPar(par.id);
@@ -383,7 +387,15 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
       }
       onRefresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Eroare");
+      // `validation_failed` singur nu spune nimic: arătăm exact ce lipsește din ciornă,
+      // ca autorul să poată intra pe „Editează" și completa fără să ghicească.
+      const described = describeParSubmitError(e);
+      if (described) {
+        setError(described.summary);
+        setErrorReasons(described.reasons);
+      } else {
+        setError(e instanceof Error ? e.message : "Eroare");
+      }
     } finally {
       setBusy(null);
     }
@@ -411,6 +423,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
   const do_ = async (label: string, action: () => Promise<unknown>) => {
     setBusy(label);
     setError(null);
+    setErrorReasons([]);
     try {
       await action();
       onRefresh();
@@ -636,9 +649,25 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
       )}
 
       {error && (
-        <div role="alert" className="flex items-center gap-2 p-2 rounded bg-destructive/10 text-destructive text-xs">
-          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
-          <span>{error}</span>
+        <div role="alert" className="flex items-start gap-2 p-2 rounded bg-destructive/10 text-destructive text-xs">
+          <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden />
+          <div className="space-y-1">
+            <span>{error}</span>
+            {errorReasons.length > 0 && (
+              <ul className="list-disc pl-4 space-y-0.5">
+                {errorReasons.map((r) => <li key={r}>{r}</li>)}
+              </ul>
+            )}
+            {errorReasons.length > 0 && (isRequestor || isAdmin) && (
+              <button
+                type="button"
+                onClick={() => navigate(`/business/par/${par.id}/edit`)}
+                className="underline underline-offset-2 font-medium"
+              >
+                Deschide cererea pentru completare
+              </button>
+            )}
+          </div>
         </div>
       )}
 
