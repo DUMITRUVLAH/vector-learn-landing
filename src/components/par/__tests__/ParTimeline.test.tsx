@@ -64,7 +64,7 @@ describe("ParTimeline (T-PAR-110-2)", () => {
     const events = [
       makeEvent({ event: "created", detail: null }),
       makeEvent({ event: "submitted", detail: "Submitted" }),
-      makeEvent({ event: "approved", detail: "Step 1 approved" }),
+      makeEvent({ event: "approved", detail: "Step 1 (Director) approved" }),
     ];
 
     render(<ParTimeline parId="par-001" events={events} />);
@@ -88,7 +88,7 @@ describe("ParTimeline (T-PAR-110-2)", () => {
   it("shows empty state when no events", () => {
     render(<ParTimeline parId="par-001" events={[]} />);
 
-    expect(screen.getByText(/no timeline events/i)).toBeTruthy();
+    expect(screen.getByText(/nu s-a întâmplat nimic/i)).toBeTruthy();
   });
 
   it("fetches events from API when not preloaded", async () => {
@@ -119,9 +119,9 @@ describe("ParTimeline (T-PAR-110-2)", () => {
     });
   });
 
-  it("renders diff as key-value pairs when diff is JSON", () => {
+  it("writes the diff as a human sentence, not JSON", () => {
     const diff = JSON.stringify({
-      endUse: { before: null, after: "Group consulting" },
+      endUse: { before: null, after: "Consultanță de grup" },
     });
 
     const events = [
@@ -130,14 +130,55 @@ describe("ParTimeline (T-PAR-110-2)", () => {
 
     render(<ParTimeline parId="par-001" events={events} />);
 
-    // Should show "Changes" section
-    expect(screen.getByText(/changes/i)).toBeTruthy();
+    expect(screen.getByText(/Destinația finală: Consultanță de grup/i)).toBeTruthy();
+    // Nimic din bruta tehnică nu ajunge pe ecran
+    expect(screen.queryByText(/Updated fields/i)).toBeNull();
+    expect(screen.queryByText(/\{/)).toBeNull();
+  });
+
+  it("turns a document reconciliation JSON detail into readable lines", () => {
+    const detail = JSON.stringify({
+      attachmentId: "0973c7b7-9467-4854-aaf7-dcc7e1573e60",
+      fileName: "68339_CA_ATIC_25Aug26.pdf",
+      warnings: 0,
+      checks: [
+        { field: "sumă", expected: 2340200, found: null, matches: null },
+        { field: "valută", expected: "MDL", found: "MDL", matches: true },
+        { field: "beneficiar", expected: null, found: null, matches: null },
+      ],
+    });
+
+    render(
+      <ParTimeline
+        parId="par-001"
+        events={[makeEvent({ event: "document_reconciliation_match", detail, diff: null })]}
+      />
+    );
+
+    expect(screen.getByText(/Actul se potrivește cu cererea/i)).toBeTruthy();
+    expect(screen.getByText(/68339_CA_ATIC_25Aug26\.pdf/)).toBeTruthy();
+    expect(screen.getByText(/Coincid: valuta/i)).toBeTruthy();
+    expect(screen.queryByText(/attachmentId/)).toBeNull();
+    expect(screen.queryByText(/matches/)).toBeNull();
+  });
+
+  it("collapses identical consecutive events into one row", () => {
+    const detail = "PAR-2026-0004 created as draft";
+    const events = [
+      makeEvent({ id: "a", event: "created", detail, created_at: new Date("2026-08-28T08:41:00Z").toISOString() }),
+      makeEvent({ id: "b", event: "created", detail, created_at: new Date("2026-08-28T08:41:10Z").toISOString() }),
+    ];
+
+    render(<ParTimeline parId="par-001" events={events} />);
+
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByText(/de 2 ori/i)).toBeTruthy();
   });
 
   it("has accessible section label", () => {
     const events = [makeEvent()];
     render(<ParTimeline parId="par-001" events={events} />);
 
-    expect(screen.getByRole("region", { name: /par activity timeline/i })).toBeTruthy();
+    expect(screen.getByRole("region", { name: /jurnal de activitate/i })).toBeTruthy();
   });
 });
