@@ -11,8 +11,9 @@
  * Curățarea autoritară rămâne pe server (server/lib/docs/sanitizeHtml.ts): API-ul poate fi apelat
  * și fără editor.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
+import type { EditorState } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
@@ -38,6 +39,8 @@ import {
   Code2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FIELD_GROUPS, fieldLabel, searchFields } from "@/lib/docs/fieldCatalog";
+import { FieldChip } from "./FieldChip";
 
 export interface DocTemplateEditorProps {
   value: string;
@@ -53,6 +56,24 @@ interface ToolButton {
 
 export function DocTemplateEditor({ value, onChange }: DocTemplateEditorProps) {
   const [sourceMode, setSourceMode] = useState(false);
+  /** Textul tastat după „/" — null când nu suntem într-o căutare de câmp. */
+  const [slashQuery, setSlashQuery] = useState<string | null>(null);
+
+  /**
+   * „/" e singura sintaxă pe care o învață utilizatorul, și nici pe aceea nu trebuie s-o rețină:
+   * tastezi „/" și apare lista. Căutăm doar în ultimele caractere dinaintea cursorului, ca un „/"
+   * scris cu o oră în urmă (sau într-o adresă) să nu redeschidă panoul.
+   */
+  const detectSlash = useCallback((e: { state: EditorState }) => {
+    const { from, empty } = e.state.selection;
+    if (!empty) {
+      setSlashQuery(null);
+      return;
+    }
+    const before = e.state.doc.textBetween(Math.max(0, from - 30), from, "\n", " ");
+    const m = before.match(/(?:^|\s)\/([\wăâîșț.]*)$/i);
+    setSlashQuery(m ? m[1] : null);
+  }, []);
 
   const editor = useEditor({
     extensions: [
@@ -63,9 +84,14 @@ export function DocTemplateEditor({ value, onChange }: DocTemplateEditorProps) {
       TableRow,
       TableHeader,
       TableCell,
+      FieldChip.configure({ labelFor: fieldLabel }),
     ],
     content: value,
-    onUpdate: ({ editor: e }) => onChange(e.getHTML()),
+    onUpdate: ({ editor: e }) => {
+      onChange(e.getHTML());
+      detectSlash(e);
+    },
+    onSelectionUpdate: ({ editor: e }) => detectSlash(e),
     editorProps: {
       attributes: {
         class:
@@ -82,6 +108,21 @@ export function DocTemplateEditor({ value, onChange }: DocTemplateEditorProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, editor]);
+
+  const insertField = useCallback(
+    (name: string) => {
+      if (!editor) return;
+      const chain = editor.chain().focus();
+      if (slashQuery !== null) {
+        // Ștergem „/căutarea" tastată, altfel ar rămâne în text lângă cip.
+        const { from } = editor.state.selection;
+        chain.deleteRange({ from: from - (slashQuery.length + 1), to: from });
+      }
+      chain.insertField(name).run();
+      setSlashQuery(null);
+    },
+    [editor, slashQuery]
+  );
 
   if (!editor) return null;
 
@@ -135,17 +176,81 @@ export function DocTemplateEditor({ value, onChange }: DocTemplateEditorProps) {
         </button>
       </div>
 
-      {sourceMode ? (
-        <textarea
-          aria-label="Sursa HTML a șablonului"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          spellCheck={false}
-          className="min-h-[380px] w-full rounded-b-lg border border-t-0 border-border bg-background p-4 font-mono text-xs text-foreground"
-        />
-      ) : (
-        <EditorContent editor={editor} />
-      )}
+      <div className="flex flex-col gap-4 lg:flex-row">
+        <div className="min-w-0 flex-1">
+          {sourceMode ? (
+            <textarea
+              aria-label="Sursa HTML a șablonului"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              spellCheck={false}
+              className="min-h-[380px] w-full rounded-b-lg border border-t-0 border-border bg-background p-4 font-mono text-xs text-foreground"
+            />
+          ) : (
+            <EditorContent editor={editor} />
+          )}
+
+          {/* Panoul de sub editor apare doar cât timp cauți cu „/". */}
+          {!sourceMode && slashQuery !== null && (
+            <div
+              role="listbox"
+              aria-label="Câmpuri disponibile"
+              className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-border bg-background p-1 shadow-lg"
+            >
+              {searchFields(slashQuery).slice(0, 8).map((f) => (
+                <button
+                  key={f.name}
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  onClick={() => insertField(f.name)}
+                  className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+                >
+                  <span>{f.label}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{f.name}</span>
+                </button>
+              ))}
+              {searchFields(slashQuery).length === 0 && (
+                <p className="px-3 py-2 text-sm text-muted-foreground">
+                  Niciun câmp nu se potrivește. Scrie textul direct sau șterge „/".
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <aside
+          aria-label="Câmpuri de inserat"
+          className="w-full shrink-0 rounded-lg border border-border p-3 lg:w-72"
+        >
+          <p className="text-sm font-medium text-foreground">Câmpuri</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Tastează „/" în text sau apasă un câmp — se completează singur când generezi actul.
+          </p>
+          <div className="mt-3 space-y-4">
+            {FIELD_GROUPS.map((g) => (
+              <div key={g.key}>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {g.label}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {g.fields.map((f) => (
+                    <button
+                      key={f.name}
+                      type="button"
+                      onClick={() => insertField(f.name)}
+                      title={`${f.name} — ex.: ${f.sample}`}
+                      className="rounded-md bg-muted px-2 py-1 text-xs text-foreground hover:bg-primary/10 hover:text-primary"
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
