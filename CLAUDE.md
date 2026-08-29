@@ -410,6 +410,13 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
   differ. Never use raw `db.execute(...).rows`; use the query builder, or handle both with
   `Array.isArray(r) ? r : r.rows`. (This is the `.rows` bug that broke `/api/health/db`.)
 - **In-app links** must point to real routes (`#/app/login`), never dead anchors (`#login`).
+- **Fallback-ul SPA acoperă DOAR navigațiile — o cale de FIȘIER inexistentă trebuie să dea 404.**
+  Un `/assets/<chunk>.js` lipsă care primește `200` + index.html nu e o eroare care trece: browserul
+  refuză HTML-ul ca modul („Failed to fetch dynamically imported module"), iar service worker-ul,
+  văzând un răspuns „reușit", îl cache-uiește PERMANENT sub URL-ul de JavaScript — hash-ul unui
+  modul nemodificat se repetă la deploy-urile următoare, deci eroarea devine veșnică pentru acel
+  browser (2026-08-29). Aceeași regulă exista deja pentru `/api/*`; se aplică oricărei căi de fișier.
+  Vezi [docs/solutions/frontend/stale-chunk-poisoned-sw-cache.md].
 - **Migrations must run on prod at deploy (the #1 client-facing 500 cause).** Vercel auto-deploys
   CODE but NOT DB migrations — so new code expecting a column/table (e.g. `students.debt_cents`,
   the `invoices` table) reaches the paying client BEFORE the schema exists → every query 500s.
