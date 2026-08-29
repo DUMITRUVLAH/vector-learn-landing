@@ -35,6 +35,8 @@ import { extractPlaceholders, renderWithContext } from "../lib/docmerge/placehol
 import { SYSTEM_TEMPLATES } from "../lib/docs/systemTemplates";
 import { buildPreviewContext } from "../lib/docs/previewContext";
 import { missingFields, resolveDocumentContext } from "../lib/docs/fieldResolver";
+import { validateIban, validateFiscalId } from "../../src/lib/par/iban";
+import { fieldLabelRo } from "../lib/docs/fieldLabels";
 
 export const docsRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -506,6 +508,44 @@ docsRoutes.post("/documents/:id/finalize", async (c) => {
   if (lines.length === 0) missing.push("Cel puțin o poziție în act");
   const totalCents = lines.reduce((s, l) => s + l.lineTotalCents, 0);
   if (totalCents <= 0) missing.push("Suma actului (mai mare ca zero)");
+
+  // DG-111: rechizitele contrapărții pe care ȘABLONUL le cere trebuie să existe. Un act de plată
+  // semnat cu rândul de IBAN gol e mai rău decât un act neemis: ajunge la bancă și se întoarce.
+  // Restul câmpurilor fără sursă (semnătura administratorului nostru, de pildă) se completează cu
+  // pixul, deci nu blochează.
+  const preflightContext = await buildDocumentContext({
+    tenantId: user.tenantId,
+    vendorId: doc.counterpartyKind === "vendor" ? doc.counterpartyId : null,
+    projectId: doc.projectId,
+    eventId: doc.eventId,
+    payerId: doc.payerId,
+    docNumber: "—",
+    docDate: doc.docDate,
+    totalCents,
+    currency: doc.currency,
+    userName: (user as { name?: string }).name ?? null,
+    clientContext: safeJson(doc.context) as Record<string, string>,
+  });
+  const templatePlaceholders = doc.templateId
+    ? (await renderBody(user.tenantId, doc.templateId, preflightContext)).placeholders
+    : [];
+  for (const field of missingFields(templatePlaceholders, preflightContext)) {
+    if (field.startsWith("contraparte.")) missing.push(fieldLabelRo(field));
+  }
+
+  // Valorile care EXISTĂ trebuie și să fie corecte: un IBAN cu cifră de control greșită prins aici
+  // costă 30 de secunde; prins după plată, costă un transfer returnat.
+  const iban = preflightContext["contraparte.iban"];
+  if (iban) {
+    const check = validateIban(iban);
+    if (!check.ok) missing.push(`IBAN contraparte: ${check.message ?? "invalid"}`);
+  }
+  const fiscal = preflightContext["contraparte.idno"];
+  if (fiscal) {
+    const check = validateFiscalId(fiscal);
+    if (!check.ok) missing.push(`Cod fiscal contraparte: ${check.message ?? "invalid"}`);
+  }
+
   if (missing.length > 0) return c.json({ error: "incomplete", missing }, 400);
 
   const year = doc.docDate.getFullYear();

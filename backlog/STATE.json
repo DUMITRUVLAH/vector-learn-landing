@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "DG-109",
+  "last_completed": "DG-111",
   "iterations": 180,
   "last_run_at": "2026-06-28T00:00:00Z",
   "milestone_status": "VIOLETA: VM1 done (#204-#216). VM3 (feedback 2026-07-16) done — PR #262. VM2: 20 pending.",
@@ -4831,7 +4831,7 @@
       "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-110": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4841,10 +4841,11 @@
         "DG-109"
       ],
       "priority": "medium",
-      "title": "Contraparte nouă din act: lipire bloc de rechizite + verificare în registrul de firme"
+      "title": "Contraparte nouă din act: lipire bloc de rechizite + verificare în registrul de firme",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-111": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4854,7 +4855,8 @@
         "DG-109"
       ],
       "priority": "high",
-      "title": "Validare înainte de finalizare (IBAN, IDNO, câmpuri lipsă, sumă, poziții)"
+      "title": "Validare înainte de finalizare (IBAN, IDNO, câmpuri lipsă, sumă, poziții)",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-112": {
       "status": "pending",

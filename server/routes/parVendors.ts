@@ -277,6 +277,69 @@ parVendorsRoutes.patch(
  * Calea are DOUĂ segmente intenționat: `use("/:id", parUuidGuard)` prinde doar căile de un
  * segment, deci `/actions/normalize` nu e confundată cu un id de beneficiar.
  */
+/**
+ * DG-110 — despică un bloc de rechizite lipit dintr-un email în câmpurile fișei.
+ *
+ * De ce e un endpoint și nu cod în browser: parserul (`splitBankRequisites`) e cel folosit deja la
+ * salvarea beneficiarilor și e acoperit de teste pe formate reale de e-mail moldovenești. O a doua
+ * implementare în client ar diverge exact pe cazurile ciudate — „c.f./ nr.TVA" pe un singur rând,
+ * codul bancar lipit de numele băncii — adică fix acolo unde greșeala costă o plată.
+ */
+parVendorsRoutes.post(
+  "/actions/parse-requisites",
+  requirePARRole("requestor", "approver", "finance", "par_admin"),
+  async (c) => {
+    let text = "";
+    try {
+      const body = (await c.req.json()) as { text?: string };
+      text = body?.text ?? "";
+    } catch {
+      text = "";
+    }
+    if (!text.trim()) return c.json({ error: "empty_text" }, 400);
+
+    // Parsăm LINIE cu LINIE, nu blocul întreg: `splitBankRequisites` e făcut pentru câmpul „bancă"
+    // al unui beneficiar, iar dat pe un bloc de e-mail ar lua denumirea firmei drept nume de bancă
+    // (prima linie). Pe linii, fiecare cod ajunge unde trebuie, iar numele băncii se ia din linia
+    // care chiar vorbește despre bancă.
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const merged = { bank: null as string | null, bankCode: null as string | null, fiscalCode: null as string | null, vatCode: null as string | null, iban: null as string | null };
+
+    for (const line of lines) {
+      const parsed = splitBankRequisites(line);
+      const looksLikeBank = /\b(banc|bank|bc\b|b\.c\.)/i.test(line);
+      if (!merged.fiscalCode && parsed.fiscalCode) merged.fiscalCode = parsed.fiscalCode;
+      if (!merged.vatCode && parsed.vatCode) merged.vatCode = parsed.vatCode;
+      if (!merged.iban && parsed.iban) merged.iban = parsed.iban;
+      if (!merged.bankCode && parsed.bankCode) merged.bankCode = parsed.bankCode;
+      if (!merged.bank && looksLikeBank && parsed.bank) merged.bank = parsed.bank;
+    }
+
+    // IBAN-ul poate sta singur pe un rând, fără etichetă.
+    if (!merged.iban) {
+      const m = text.replace(/\s+/g, " ").match(/\b([A-Z]{2}\d{2}[A-Z0-9]{10,30})\b/i);
+      if (m) merged.iban = m[1].toUpperCase();
+    }
+
+    // Denumirea firmei: prima linie care NU e un rând de rechizite (fără cod, fără IBAN, fără bancă).
+    const nameLine =
+      lines.find((l) => {
+        const p = splitBankRequisites(l);
+        const hasCode = !!(p.fiscalCode || p.vatCode || p.iban || p.bankCode);
+        return !hasCode && !/\b(banc|bank|bc\b|iban)/i.test(l);
+      }) ?? lines[0] ?? null;
+
+    return c.json({
+      name: nameLine,
+      bank: merged.bank,
+      bic_swift: merged.bankCode,
+      idnp: merged.fiscalCode,
+      vat_code: merged.vatCode,
+      iban: merged.iban,
+    });
+  }
+);
+
 parVendorsRoutes.post("/actions/normalize", requirePARRole("par_admin"), async (c) => {
   const tenantId = c.get("user").tenantId;
   const rows = await db.select().from(parVendors).where(eq(parVendors.tenantId, tenantId));

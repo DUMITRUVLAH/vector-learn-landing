@@ -47,10 +47,20 @@ const VENDOR = {
   legalAddress: "mun. Chișinău, bd. Dacia 45",
 };
 
+const createVendor = vi.fn();
+
 vi.mock("@/lib/api/par", () => ({
   listVendors: vi.fn().mockResolvedValue({ items: [VENDOR] }),
   listProjects: vi.fn().mockResolvedValue({ items: [{ id: "p1", name: "Digital Skills 2026" }] }),
+  createVendor: (...a: unknown[]) => createVendor(...a),
 }));
+
+/** Panoul de furnizor nou vorbește direct cu API-ul (parsare + registru). */
+const apiMock = vi.fn();
+vi.mock("@/lib/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+  return { ...actual, api: (...a: unknown[]) => apiMock(...a) };
+});
 
 const listDocTemplates = vi.fn();
 const getDocument = vi.fn();
@@ -110,6 +120,22 @@ const FINAL_DOC: DocDetail = {
 beforeEach(() => {
   vi.clearAllMocks();
   currentPath = "/business/docs/nou";
+  apiMock.mockResolvedValue({
+    name: "SRL Alfa",
+    idnp: "1002600012345",
+    iban: "MD24AG000225100013104168",
+    bank: "BC Moldova-Agroindbank SA",
+    bic_swift: "AGRNMD2X",
+    vat_code: null,
+  });
+  createVendor.mockResolvedValue({
+    id: "v-new",
+    name: "SRL Alfa",
+    idnp: "1002600012345",
+    iban: "MD24AG000225100013104168",
+    bank: "BC Moldova-Agroindbank SA",
+    legalAddress: null,
+  });
   listDocTemplates.mockResolvedValue([
     { id: "tpl-1", name: "Act de primire-predare", kind: "act_primire_predare", category: null, isSystem: true, version: 1, placeholders: [], updatedAt: "" },
   ]);
@@ -233,5 +259,60 @@ describe("DG-109 — completarea unui act", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Șterge poziția 2" }));
     expect(screen.queryByLabelText("Denumirea poziției 2")).toBeNull();
+  });
+});
+
+describe("DG-110 — furnizor nou fără să ieși din act", () => {
+  it("[blocant] „Adaugă furnizor nou” apare când căutarea nu găsește nimic", async () => {
+    render(<DocEditorPage />);
+    await userEvent.type(await screen.findByLabelText("Contrapartea"), "Zzz");
+    expect(await screen.findByRole("button", { name: /Adaugă furnizor nou/i })).toBeInTheDocument();
+  });
+
+  it("[blocant] rechizitele lipite se despart prin server, iar furnizorul salvat intră în act", async () => {
+    render(<DocEditorPage />);
+    await userEvent.type(await screen.findByLabelText("Contrapartea"), "Alfa");
+    await userEvent.click(await screen.findByRole("button", { name: /Adaugă furnizor nou/i }));
+
+    const panel = await screen.findByRole("region", { name: "Furnizor nou" });
+    // Denumirea tastată în căutare se preia — nu se scrie de două ori.
+    expect(within(panel).getByLabelText("Denumirea")).toHaveValue("Alfa");
+
+    await userEvent.type(
+      within(panel).getByLabelText("Rechizite lipite"),
+      "SRL Alfa c.f. 1002600012345"
+    );
+    await userEvent.click(within(panel).getByRole("button", { name: /Despica rechizitele/i }));
+
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith(
+      "/api/par/vendors/actions/parse-requisites",
+      expect.objectContaining({ method: "POST" })
+    ));
+    await waitFor(() =>
+      expect(within(panel).getByLabelText("Cod fiscal (IDNO/IDNP)")).toHaveValue("1002600012345")
+    );
+
+    await userEvent.click(within(panel).getByRole("button", { name: /Salvează furnizorul/i }));
+    await waitFor(() => expect(createVendor).toHaveBeenCalled());
+
+    // Furnizorul nou e selectat imediat: rechizitele lui apar în act, fără reîncărcare.
+    expect(await screen.findByText("MD24AG000225100013104168")).toBeInTheDocument();
+  });
+
+  it("[blocant] registrul indisponibil NU se raportează ca firmă inexistentă", async () => {
+    apiMock.mockImplementation(async (url: string) => {
+      if (url.includes("parse-requisites")) return {};
+      throw new Error("registry down");
+    });
+    render(<DocEditorPage />);
+    await userEvent.type(await screen.findByLabelText("Contrapartea"), "Zzz");
+    await userEvent.click(await screen.findByRole("button", { name: /Adaugă furnizor nou/i }));
+
+    const panel = await screen.findByRole("region", { name: "Furnizor nou" });
+    await userEvent.type(within(panel).getByLabelText("Cod fiscal (IDNO/IDNP)"), "1002600012345");
+    await userEvent.click(within(panel).getByRole("button", { name: /Verifică/i }));
+
+    expect(await within(panel).findByText(/Registrul nu a răspuns/)).toBeInTheDocument();
+    expect(within(panel).queryByText(/nu există/i)).toBeNull();
   });
 });

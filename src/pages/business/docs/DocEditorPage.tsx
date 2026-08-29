@@ -33,6 +33,7 @@ import {
 } from "@/lib/api/docs";
 import { listVendors, listProjects, type ParVendor, type ParProject } from "@/lib/api/par";
 import { fieldLabel } from "@/lib/docs/fieldCatalog";
+import { NewVendorPanel } from "./NewVendorPanel";
 
 /**
  * Cantitatea și prețul se țin ca TEXT cât timp omul tastează.
@@ -87,6 +88,7 @@ export function DocEditorPage() {
   const [templateId, setTemplateId] = useState("");
   const [vendorId, setVendorId] = useState("");
   const [vendorQuery, setVendorQuery] = useState("");
+  const [addingVendor, setAddingVendor] = useState(false);
   const [projectId, setProjectId] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([{ ...EMPTY_LINE }]);
 
@@ -394,10 +396,36 @@ export function DocEditorPage() {
                   ))}
                   {filteredVendors.length === 0 && (
                     <li className="p-3 text-sm text-muted-foreground">
-                      Niciun furnizor găsit. Actul se poate face și cu denumirea scrisă aici.
+                      Niciun furnizor găsit în registru.
                     </li>
                   )}
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => setAddingVendor(true)}
+                      className="flex w-full items-center gap-2 p-3 text-left text-sm text-primary hover:bg-muted/40"
+                    >
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                      Adaugă furnizor nou
+                    </button>
+                  </li>
                 </ul>
+              )}
+
+              {addingVendor && (
+                <NewVendorPanel
+                  initialName={vendorQuery}
+                  onCancel={() => setAddingVendor(false)}
+                  onCreated={(v) => {
+                    // Furnizorul nou intră imediat în listă și în act — fără să reîncarci pagina și
+                    // fără să pierzi ce ai completat până acum.
+                    setVendors((vs) => [v, ...vs.filter((x) => x.id !== v.id)]);
+                    setVendorId(v.id);
+                    setVendorQuery("");
+                    setAddingVendor(false);
+                    touch();
+                  }}
+                />
               )}
 
               {selectedVendor && (
