@@ -72,6 +72,7 @@ import { parDepartmentsRoutes } from "./routes/parDepartments";
 import { parProjectsRoutes } from "./routes/parProjects";
 import { parEventsRoutes } from "./routes/parEvents";
 import { parVendorsRoutes } from "./routes/parVendors";
+import { parVendorProfileRoutes } from "./routes/parVendorProfile";
 import { parSettingsRoutes } from "./routes/parSettings";
 import { parRoutes } from "./routes/par";
 import { parFxRoutes } from "./routes/parFx";
@@ -290,6 +291,9 @@ app.route("/api/par/budget-codes", parBudgetCodesRoutes);
 app.route("/api/par/departments", parDepartmentsRoutes);
 app.route("/api/par/projects", parProjectsRoutes);
 app.route("/api/par/events", parEventsRoutes);
+// Fișa furnizorului se montează ÎNAINTEA registrului: rutele ei sunt mai specifice
+// (/categories, /:id/profile, /ratings/:id), iar ce nu se potrivește cade pe registru.
+app.route("/api/par/vendors", parVendorProfileRoutes);
 app.route("/api/par/vendors", parVendorsRoutes);
 app.route("/api/par/settings", parSettingsRoutes);
 app.route("/api/par/efactura", parEfacturaRoutes);
