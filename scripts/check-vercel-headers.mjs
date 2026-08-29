@@ -61,6 +61,30 @@ function headersFor(pathname, existsAsFile = true) {
   return out;
 }
 
+/**
+ * Regula TERMINALĂ care va servi o cale (`dest` sau `status`), nu doar headerele ei.
+ * Necesară pentru verificarea 4: acolo nu contează ce headere primește cererea, ci CE i se
+ * răspunde — pagina SPA sau un 404.
+ */
+function terminalRuleFor(pathname, existsAsFile = true) {
+  for (const r of routes) {
+    if (r.handle) {
+      if (r.handle === "filesystem" && existsAsFile) return { servedFromDisk: true };
+      continue;
+    }
+    if (!r.src) continue;
+    let re;
+    try {
+      re = new RegExp(`^${r.src}$`);
+    } catch {
+      continue;
+    }
+    if (!re.test(pathname)) continue;
+    if (!r.continue) return r;
+  }
+  return null;
+}
+
 const REQUIRED_SECURITY = [
   "content-security-policy",
   "x-frame-options",
@@ -88,6 +112,20 @@ if (!cc.includes("immutable")) {
 const htmlCC = htmlHeaders["cache-control"] ?? "";
 if (/max-age=(?!0)\d+/.test(htmlCC) && !htmlCC.includes("no-cache")) {
   problems.push(`pagina "/" e cache-uită lung ("${htmlCC}") — un deploy nou n-ar mai fi văzut`);
+}
+
+// 4. Un chunk cu hash care NU există trebuie să dea 404, nu pagina SPA.
+//    Bug 2026-08-29 („eroarea asta e mereu"): `/assets/<chunk>.js` lipsă cădea în fallback-ul SPA
+//    și primea `200` + index.html. Browserul refuză HTML-ul ca modul ES → „Failed to fetch
+//    dynamically imported module", iar service worker-ul, văzând un răspuns `ok`, îl cache-uia
+//    PERMANENT sub URL-ul de JavaScript. Cum hash-ul unui modul nemodificat rămâne același la
+//    deploy-urile următoare, eroarea nu mai dispărea niciodată pentru browserul acela.
+const missingAsset = terminalRuleFor("/assets/ParDashboard-Cvn9ANnH.js", false);
+if (!missingAsset || missingAsset.dest === "/index.html" || missingAsset.status !== 404) {
+  problems.push(
+    "un /assets/*.js inexistent nu primește 404 — cade în fallback-ul SPA și primește 200 + HTML, " +
+      "ceea ce otrăvește cache-ul service worker-ului (vezi public/sw.js și src/lib/staleChunk.ts)"
+  );
 }
 
 if (problems.length) {

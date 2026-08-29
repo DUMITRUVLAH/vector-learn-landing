@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ErrorBoundary } from "../ErrorBoundary";
+import { reportClientError } from "@/lib/telemetry";
 
 vi.mock("@/lib/telemetry", () => ({ reportClientError: vi.fn() }));
 
@@ -29,7 +30,9 @@ describe("ErrorBoundary — stale chunk after deploy", () => {
     });
     // ErrorBoundary logs via console.error on every catch — keep test output clean.
     vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     sessionStorage.clear();
+    vi.mocked(reportClientError).mockClear();
   });
 
   afterEach(() => {
@@ -37,22 +40,24 @@ describe("ErrorBoundary — stale chunk after deploy", () => {
     vi.restoreAllMocks();
   });
 
-  it("auto-reloads once on a Chrome-style stale-chunk error", () => {
+  // Reload-ul e acum asincron: recuperarea golește ÎNTÂI cache-urile service worker-ului (acolo
+  // stătea HTML-ul care făcea eroarea permanentă — src/lib/staleChunk.ts) și abia apoi reîncarcă.
+  it("auto-reloads once on a Chrome-style stale-chunk error", async () => {
     render(
       <ErrorBoundary>
         <Boom message="Failed to fetch dynamically imported module: https://www.finflow.best/assets/ParDetail-Cs4c13kY.js" />
       </ErrorBoundary>,
     );
-    expect(reloadSpy).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(reloadSpy).toHaveBeenCalledTimes(1));
   });
 
-  it("auto-reloads on the Firefox and Safari phrasings too", () => {
+  it("auto-reloads on the Firefox and Safari phrasings too", async () => {
     render(
       <ErrorBoundary>
         <Boom message="error loading dynamically imported module: https://x/y.js" />
       </ErrorBoundary>,
     );
-    expect(reloadSpy).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(reloadSpy).toHaveBeenCalledTimes(1));
 
     reloadSpy.mockClear();
     sessionStorage.clear();
@@ -61,7 +66,31 @@ describe("ErrorBoundary — stale chunk after deploy", () => {
         <Boom message="Importing a module script failed." />
       </ErrorBoundary>,
     );
-    expect(reloadSpy).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(reloadSpy).toHaveBeenCalledTimes(1));
+  });
+
+  it("nu raportează un chunk vechi ca 'crash' — dar raportează dacă recuperarea a eșuat", async () => {
+    // Owner-ul primea un email „tip NOU de eroare" la fiecare hash nou de chunk, pentru o
+    // situație care se repară singură (raport 2026-08-29: „aceasta eroare este mereu").
+    // Prima trecere = recuperare pornită → tăcere.
+    const { unmount } = render(
+      <ErrorBoundary>
+        <Boom message="Failed to fetch dynamically imported module: https://x/ParDashboard-Cvn9ANnH.js" />
+      </ErrorBoundary>,
+    );
+    await vi.waitFor(() => expect(reloadSpy).toHaveBeenCalledTimes(1));
+    expect(reportClientError).not.toHaveBeenCalled();
+    unmount();
+
+    // A doua trecere în fereastra de răcire = recuperarea NU a rezolvat → acolo chiar e un bug,
+    // deci pleacă raportul (și utilizatorul vede cardul manual).
+    render(
+      <ErrorBoundary>
+        <Boom message="Failed to fetch dynamically imported module: https://x/ParDashboard-Cvn9ANnH.js" />
+      </ErrorBoundary>,
+    );
+    expect(reportClientError).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("alert")).toBeTruthy();
   });
 
   it("does NOT auto-reload for an unrelated crash — shows the manual card instead", () => {
@@ -75,13 +104,13 @@ describe("ErrorBoundary — stale chunk after deploy", () => {
     expect(screen.getByText("Reîncarcă")).toBeTruthy();
   });
 
-  it("does not loop: a second stale-chunk failure right after the first is NOT auto-reloaded", () => {
+  it("does not loop: a second stale-chunk failure right after the first is NOT auto-reloaded", async () => {
     const { unmount } = render(
       <ErrorBoundary>
         <Boom message="Failed to fetch dynamically imported module: https://x/a.js" />
       </ErrorBoundary>,
     );
-    expect(reloadSpy).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(reloadSpy).toHaveBeenCalledTimes(1));
     unmount();
 
     // Simulate the reload not having actually happened yet (jsdom doesn't navigate) — a second

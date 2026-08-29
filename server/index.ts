@@ -24,6 +24,16 @@ if (existsSync(distDir)) {
   app.use("/*", compress());
   app.use("/*", serveStatic({ root: "./dist" }));
   app.notFound(async (c) => {
+    // Un fișier cu hash care nu există trebuie să dea 404, NU pagina SPA. Vezi
+    // scripts/build-vercel.mjs (aceeași regulă pe CDN) și src/lib/staleChunk.ts: `200` + HTML sub
+    // un URL de modul e fix ce a produs „Failed to fetch dynamically imported module" permanent,
+    // pentru că service worker-ul cache-uia răspunsul „reușit" sub URL-ul de JavaScript.
+    const pathname = new URL(c.req.url).pathname;
+    if (pathname.startsWith("/assets/")) {
+      c.header("Cache-Control", "no-store");
+      return c.text("Not found", 404);
+    }
+
     const indexPath = path.join(distDir, "index.html");
     if (existsSync(indexPath)) {
       const html = await import("node:fs/promises").then((fs) => fs.readFile(indexPath, "utf8"));

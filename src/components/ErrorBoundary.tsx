@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { reportClientError } from "@/lib/telemetry";
+import { isStaleChunkError, recoverFromStaleChunk } from "@/lib/staleChunk";
 
 interface Props {
   children: ReactNode;
@@ -11,20 +12,10 @@ interface State {
   error: Error | null;
 }
 
-/** Cross-browser phrasing for a lazy-loaded chunk that 404s — the stale-tab-after-deploy case:
- * the already-loaded bundle still references a hashed chunk filename that a NEW deploy replaced.
- * Chrome/Edge: "Failed to fetch dynamically imported module: <url>".
- * Firefox: "error loading dynamically imported module: <url>".
- * Safari: "Importing a module script failed."
- * Also matches the synthetic timeout error lazyWithTimeout() throws when the import HANGS
- * instead of rejecting (App.tsx) — same root cause, same recovery. */
-const STALE_CHUNK_RE = /fetch dynamically imported module|loading dynamically imported module|importing a module script failed/i;
-
-/** One auto-reload per stale-chunk incident, not a loop: if the reload didn't actually fix it
- * (a real outage, not just a stale tab), a SECOND failure within this window falls through to
- * the manual "Reîncarcă" card instead of reloading forever. */
-const STALE_CHUNK_RELOAD_KEY = "vl-stale-chunk-reload-at";
-const STALE_CHUNK_RELOAD_COOLDOWN_MS = 15_000;
+/* Detecția și recuperarea „chunk vechi după deploy" trăiesc în `@/lib/staleChunk`: sunt folosite
+ * și de factory-ul `lazy()` (src/lib/lazyWithTimeout.ts), care prinde cazul MAI DEVREME — înainte
+ * ca eroarea să urce aici ca un crash de randare. Boundary-ul rămâne plasa pentru chunk-urile
+ * importate în afara acelui helper. */
 
 /**
  * Where "Spre panou" actually goes.
@@ -54,6 +45,19 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
+    // Fiecare deploy mintește hash-uri noi de chunk; o filă deschisă dinainte (sau un cache de
+    // service worker) încă indică numele vechi, deci următoarea rută încărcată leneș pică. Nu e
+    // un bug pe care utilizatorul trebuie să-l vadă — un reload cu cache-ul golit îl repară
+    // transparent (detalii despre cache-ul otrăvit: src/lib/staleChunk.ts).
+    if (isStaleChunkError(error.message) && recoverFromStaleChunk()) {
+      // Recuperare pornită: pagina se reîncarcă imediat. NU raportăm — altfel owner-ul primea un
+      // email „tip NOU de eroare" la fiecare hash nou de chunk, pentru o situație care se repară
+      // singură. Dacă recuperarea NU reușește, a doua trecere cade pe ramura de mai jos și ATUNCI
+      // pleacă raportul: acolo chiar e ceva stricat.
+      console.warn("[ErrorBoundary] chunk vechi după deploy — reîncarc cu cache-ul golit");
+      return;
+    }
+
     console.error("[ErrorBoundary]", error, info.componentStack);
     // PLATFORM-002: pagina tocmai a murit pentru un client real. Până acum se oprea în
     // consola LUI de browser, unde nu se uită nimeni; acum ajunge în Consola Platformă.
@@ -62,28 +66,6 @@ export class ErrorBoundary extends Component<Props, State> {
       message: error.message || String(error),
       stack: `${error.stack ?? ""}\n--- componentStack ---${info.componentStack ?? ""}`,
     });
-
-    // Every deploy mints new chunk hashes; a tab that was open (or a service-worker-cached
-    // index.html) before the deploy still points at the OLD filenames, so its NEXT lazy-loaded
-    // route 404s. That's not a real bug the user needs to see — a full reload fetches the fresh
-    // index.html and fixes it transparently. Bug 2026-08-25: inginerita2000@gmail.com hit exactly
-    // this on /business/par/... right after a deploy and had to notice + click "Reîncarcă" herself.
-    if (STALE_CHUNK_RE.test(error.message)) {
-      let lastAttempt = 0;
-      try {
-        lastAttempt = Number(sessionStorage.getItem(STALE_CHUNK_RELOAD_KEY) ?? 0);
-      } catch {
-        // sessionStorage unavailable (private mode / blocked) — fall through to the manual card.
-      }
-      if (Date.now() - lastAttempt > STALE_CHUNK_RELOAD_COOLDOWN_MS) {
-        try {
-          sessionStorage.setItem(STALE_CHUNK_RELOAD_KEY, String(Date.now()));
-        } catch {
-          /* best-effort guard; a failed write just means no auto-reload this time */
-        }
-        window.location.reload();
-      }
-    }
   }
 
   componentDidUpdate(prev: Props): void {
