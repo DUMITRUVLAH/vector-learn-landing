@@ -49,6 +49,7 @@ import { ParImportMappingDialog } from "@/components/par/ParImportMappingDialog"
 import { cn } from "@/lib/utils";
 import { Alert, Badge, Button, Card, Checkbox, Input, Label, Select, Switch, Tabs, Textarea } from "@/components/ds";
 import { validateIban } from "@/lib/par/iban";
+import { PAR_EVENT_TITLES, eventTitle, humanizeDetail } from "@/lib/par/timelineHumanize";
 import {
   type RuleDraft, type ApproverPick, type GroupedRule,
   ruleScopeKey, buildDoaRows, groupDoaRows, emptyRuleDraft,
@@ -161,26 +162,9 @@ const TABS: TabProps[] = [
 ];
 
 // VF-301: Romanian labels for audit events.
-const AUDIT_EVENT_LABELS: Record<string, string> = {
-  created: "Creat",
-  created_from_template: "Creat din șablon",
-  duplicated_from: "Duplicat",
-  edited: "Modificat",
-  submitted: "Trimis spre aprobare",
-  approved: "Aprobat (pas)",
-  step_unlocked: "Pas deblocat",
-  rejected: "Respins",
-  changes_requested: "Modificări cerute",
-  in_finance: "La finanțe",
-  fully_approved_to_finance: "Aprobat → finanțe",
-  fully_approved: "Aprobat complet",
-  paid: "Plătit",
-  cancelled: "Anulat",
-  reapproval_required: "Re-aprobare necesară",
-  overage_reapproved: "Depășire re-aprobată",
-  integrity_mismatch: "Integritate: nepotrivire",
-  integrity_mismatch_display: "Integritate: nepotrivire (afișare)",
-};
+// Etichetele evenimentelor vin din catalogul unic (src/lib/par/timelineHumanize.ts). Dicționarul
+// local de aici rămăsese în urmă: evenimentele mai noi — verificarea unui act, comanda emisă,
+// recepția, e-Factura — apăreau ca „document_reconciliation_match".
 
 /**
  * Tipul de cheltuială (câmpul „Charge To" din formularul tipărit). ATENȚIE: cererile se creează
@@ -1049,7 +1033,7 @@ function DelegationSection({ members }: { members: ParMember[] }) {
 
 const AUDIT_EVENT_OPTIONS = [
   { value: "", label: "Toate evenimentele" },
-  ...Object.entries(AUDIT_EVENT_LABELS).map(([value, label]) => ({ value, label })),
+  ...Object.entries(PAR_EVENT_TITLES).map(([value, label]) => ({ value, label })),
 ];
 
 function auditTimeFmt(iso: string): string {
@@ -1125,10 +1109,10 @@ function AuditTab() {
     const header = "data,eveniment,actor,cerere,detaliu\n";
     const rows = entries.map((e) => [
       auditTimeFmt(e.createdAt),
-      AUDIT_EVENT_LABELS[e.event] ?? e.event,
+      eventTitle(e.event),
       e.actorName ?? "",
       e.requestNo ?? "",
-      e.detail ?? "",
+      humanizeDetail(e.event, e.detail).join(" ") || (e.detail ?? ""),
     ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -1195,10 +1179,10 @@ function AuditTab() {
               {entries.map((e) => (
                 <tr key={e.id} className="border-t border-border">
                   <td className="p-2.5 text-muted-foreground text-xs whitespace-nowrap">{auditTimeFmt(e.createdAt)}</td>
-                  <td className="p-2.5 text-foreground">{AUDIT_EVENT_LABELS[e.event] ?? e.event}</td>
+                  <td className="p-2.5 text-foreground">{eventTitle(e.event)}</td>
                   <td className="p-2.5 text-foreground">{e.actorName ?? "—"}</td>
                   <td className="p-2.5 font-mono text-xs text-primary">{e.requestNo ?? "—"}</td>
-                  <td className="p-2.5 text-muted-foreground text-xs hidden md:table-cell max-w-md truncate">{e.detail ?? ""}</td>
+                  <td className="p-2.5 text-muted-foreground text-xs hidden md:table-cell max-w-md truncate">{humanizeDetail(e.event, e.detail).join(" ")}</td>
                 </tr>
               ))}
             </tbody>

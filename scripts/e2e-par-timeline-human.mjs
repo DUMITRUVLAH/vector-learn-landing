@@ -13,7 +13,7 @@
 //
 //   node scripts/e2e-par-timeline-human.mjs           (server pe :3000, seed rulat)
 //   BASE=http://localhost:3100 node scripts/e2e-par-timeline-human.mjs
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { request } from "playwright-core";
@@ -50,6 +50,8 @@ async function apiContext() {
   const ctx = await request.newContext({ baseURL: BASE });
   const login = await ctx.post("/api/business/auth/login", { data: { email: ADMIN, password: PW } });
   if (login.status() !== 200) throw new Error(`login ${ADMIN} → ${login.status()} (server pornit? seed rulat?)`);
+  // Păstrăm cookie-ul: cota e 10 autentificări / 15 minute, iar poarta se rulează des.
+  writeFileSync(SESSION_FILE, JSON.stringify({ base: BASE, state: await ctx.storageState() }));
   return ctx;
 }
 
@@ -128,6 +130,29 @@ check("fiecare rând are un titlu scris cu cuvinte", titles.length > 0 && titles
   titles.filter((t) => t.includes("_")).join(", "));
 check("jurnalul e în română", /creat|aprob|semnat|plăt|modific|trimis|finanțe/i.test(text), text.slice(0, 120));
 check("nicio eroare JS pe pagină", crashes.length === 0, crashes[0] ?? "");
+
+// ── A doua suprafață cu aceleași rânduri: „Administrare PAR → Audit” ─────────
+// Tabelul de audit avea propriul dicționar de etichete, rămas în urmă, și turna `detail` brut
+// în coloana „Detaliu” (și în exportul CSV). Aceleași reguli se aplică și acolo.
+await page.goto(`${BASE}/#/business/par/admin`, { waitUntil: "networkidle" });
+await page.waitForTimeout(1200);
+const auditTab = page.getByRole("tab", { name: /Audit/i }).first();
+check("fila „Audit” există în Administrare PAR", await auditTab.count() > 0);
+await auditTab.click();
+await page.waitForTimeout(1800);
+const table = page.locator("table").first();
+check("tabelul de audit s-a randat", await table.count() > 0 && await table.isVisible());
+const auditText = await table.innerText();
+check("tabelul de audit are rânduri", auditText.split("\n").length > 2, auditText.slice(0, 80));
+for (const [re, what] of FORBIDDEN) {
+  const m = auditText.match(re);
+  check(`audit: fără ${what}`, !m, m ? `găsit: „${String(m[0]).slice(0, 80)}”` : "");
+}
+check(
+  "audit: fără nume de eveniment cu underscore",
+  !/\b[a-z]+_[a-z_]+\b/.test(auditText),
+  (auditText.match(/\b[a-z]+_[a-z_]+\b/) ?? [""])[0],
+);
 
 console.log(`\n──── ce vede omul ────\n${text.split("\n").slice(0, 24).map((l) => `  ${l}`).join("\n")}\n`);
 
