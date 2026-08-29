@@ -31,7 +31,8 @@
     "e2e": "node scripts/e2e-gate.mjs",
     "e2e:browser": "node scripts/e2e-gate.mjs --browser",
     "e2e:all": "node scripts/e2e-gate.mjs --all",
-    "build:blog": "tsx scripts/build-blog.ts"
+    "build:blog": "tsx scripts/build-blog.ts",
+    "check:blog-live": "node scripts/check-blog-live.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.4.6",
