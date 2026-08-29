@@ -65,7 +65,7 @@ export function Dialog({ open, onClose, title, description, footer, size = "md",
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
       <button
         type="button"
         aria-label="Închide"
@@ -79,7 +79,12 @@ export function Dialog({ open, onClose, title, description, footer, size = "md",
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          "relative grid max-h-[90vh] w-full gap-4 overflow-y-auto rounded-lg border border-border bg-background p-6 shadow-lg outline-none animate-fade-in",
+          // `grid-cols-[minmax(0,1fr)]`, nu doar `grid`: un element de grilă are implicit
+          // `min-width: auto`, așa că un rând lung (numele unui beneficiar, de pildă) lățea
+          // coloana peste panou. Panoul e plafonat de max-width, deci TOT conținutul se așeza
+          // pe o lățime mai mare și era tăiat la marginea din dreapta — pe telefon, dialogul
+          // „Cum începem cererea?" apărea cu textul retezat (owner, 2026-08-29).
+          "relative grid grid-cols-[minmax(0,1fr)] max-h-[90vh] w-full gap-4 overflow-y-auto rounded-lg border border-border bg-background p-4 sm:p-6 shadow-lg outline-none animate-fade-in",
           DIALOG_SIZES[size],
         )}
       >

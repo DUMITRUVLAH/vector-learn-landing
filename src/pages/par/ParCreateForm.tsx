@@ -1524,7 +1524,7 @@ export function ParCreateForm() {
     <AppShell>
       {/* Fără padding propriu pe telefon: shell-ul dă deja px-5, iar cardul încă p-3. Trei
           rânduri de spațiu însemnau ~90px pierduți dintr-un ecran de 390 (owner, 2026-08-29). */}
-      <div className="max-w-6xl mx-auto px-0 sm:px-4 py-5 pb-48 md:pb-32 space-y-3">
+      <div className="max-w-6xl mx-auto px-0 sm:px-4 py-5 pb-36 md:pb-32 space-y-3">
         <div className="flex items-center gap-3">
           <FileText className="h-6 w-6 text-primary flex-shrink-0" aria-hidden />
           <div>
@@ -2004,7 +2004,7 @@ export function ParCreateForm() {
           <div className={cn("flex items-center justify-between p-3 rounded-lg",
             aboveThreshold ? "border border-warning/40 bg-warning/[0.08]" : "bg-muted")}>
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-foreground">TOTAL ESTIMAT</span>
+              <span className="text-sm font-medium text-foreground">TOTAL</span>
               {/* VF-203: currency selector (draft only) */}
               <Select
                 value={currency}
@@ -2722,7 +2722,7 @@ export function ParCreateForm() {
           „Trimite pentru aprobare" era complet acoperit. Cererea nu se putea trimite de pe
           telefon (owner, 2026-08-29). Pe ≥md navigarea de jos nu există, deci bara coboară. */}
       <div className="fixed bottom-14 md:bottom-0 inset-x-0 z-30 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="max-w-6xl mx-auto px-4 py-3 space-y-2">
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2 sm:py-3 space-y-2">
           {/* Feature 2: non-blocking budget overage warning */}
           {budgetOverageWarn && (
             <div role="status" className="flex items-center gap-2 p-2 rounded-md border border-warning/40 bg-warning/[0.08] text-xs text-warning">
@@ -2730,12 +2730,14 @@ export function ParCreateForm() {
               <span>Depășește bugetul disponibil pentru acest cod ({fmtMoney(budgetBalance!.availableOriginalCents ?? budgetBalance!.availableCents, budgetBalance!.currency ?? "MDL")} disponibil)</span>
             </div>
           )}
-          <div className="flex items-center justify-between gap-3">
-            <div className="leading-tight flex-shrink-0">
-              <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">Total estimat</span>
+          <div className="flex items-center justify-between gap-2 sm:gap-3">
+            {/* Pe telefon: etichetă și sumă pe aceeași linie. Stivuite, împingeau butoanele pe
+                încă un rând, iar „Trimite pentru aprobare" se rupea în două rânduri. */}
+            <div className="flex flex-shrink-0 items-baseline gap-1.5 sm:block sm:leading-tight">
+              <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">Total</span>
               <span className={cn("text-base font-bold tabular-nums", aboveThreshold ? "text-warning" : "text-foreground")}>{fmtMoney(totalCents, currency)}</span>
             </div>
-            <div className="flex items-center gap-2 flex-wrap justify-end">
+            <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-end">
               {/* Feature 3: Templates */}
               {templates.length > 0 && (
                 <div className="relative">
@@ -2743,8 +2745,9 @@ export function ParCreateForm() {
                     disabled={busy}
                     aria-label="Pornește din șablon"
                     aria-expanded={showTemplates}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 transition-colors min-h-[44px]">
-                    <BookOpen className="h-4 w-4" aria-hidden />Șabloane
+                    title="Pornește din șablon"
+                    className="flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 transition-colors min-h-[44px] min-w-[44px] justify-center">
+                    <BookOpen className="h-4 w-4" aria-hidden /><span className="hidden sm:inline">Șabloane</span>
                   </button>
                   {showTemplates && (
                     <div className="absolute bottom-full mb-1 right-0 w-64 rounded-lg border border-border bg-popover shadow-lg z-30 overflow-hidden">
@@ -2786,18 +2789,20 @@ export function ParCreateForm() {
                 ) : (
                   <button type="button" onClick={() => setShowSaveTemplate(true)} disabled={busy}
                     aria-label="Salvează ca șablon"
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 transition-colors min-h-[44px]">
-                    <BookmarkPlus className="h-4 w-4" aria-hidden />Salvează ca șablon
+                    title="Salvează ca șablon"
+                    className="flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 transition-colors min-h-[44px] min-w-[44px] justify-center">
+                    <BookmarkPlus className="h-4 w-4" aria-hidden /><span className="hidden sm:inline">Salvează ca șablon</span>
                   </button>
                 )
               )}
               <button type="button" onClick={saveDraft} disabled={busy}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors min-h-[44px]">
-                <Save className="h-4 w-4" aria-hidden />Salvează ciornă
+                aria-label="Salvează ciornă" title="Salvează ciornă"
+                className="flex items-center gap-2 px-2.5 sm:px-4 py-2 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors min-h-[44px] min-w-[44px] justify-center">
+                <Save className="h-4 w-4" aria-hidden /><span className="hidden sm:inline">Salvează ciornă</span>
               </button>
               <button type="button" onClick={submit} disabled={busy || !parId} aria-label="Trimite cererea pentru aprobare"
-                className="flex items-center gap-2 px-6 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold shadow-sm hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[44px]">
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}Trimite pentru aprobare
+                className="flex items-center gap-2 whitespace-nowrap px-4 sm:px-6 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold shadow-sm hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[44px]">
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}Trimite<span className="hidden sm:inline">&nbsp;pentru aprobare</span>
               </button>
             </div>
           </div>
