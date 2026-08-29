@@ -160,7 +160,8 @@ function DuplicateButton({ parId, onNavigate }: { parId: string; onNavigate: (pa
     setErr(false);
     try {
       const { par } = await duplicatePar(parId);
-      onNavigate(`/business/par/${par.id}`);
+      // Copia se deschide direct în formular: după „repetă" urmează completarea, nu cititul.
+      onNavigate(`/business/par/${par.id}/edit`);
     } catch {
       setErr(true);
       setBusy(false);
@@ -172,11 +173,11 @@ function DuplicateButton({ parId, onNavigate }: { parId: string; onNavigate: (pa
       onClick={handle}
       disabled={busy}
       className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted transition-colors min-h-[44px] disabled:opacity-60"
-      aria-label="Duplică această cerere într-o ciornă nouă"
-      title={err ? "Eroare la duplicare" : "Duplică"}
+      aria-label="Repetă această cerere într-o ciornă nouă"
+      title={err ? "Eroare la duplicare" : "Repetă cererea"}
     >
       {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
-      Duplică
+      Repetă cererea
     </button>
   );
 }

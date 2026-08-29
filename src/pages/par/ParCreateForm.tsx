@@ -12,7 +12,7 @@ import {
   FileText, Loader2, Plus, Trash2, Upload, X, AlertCircle, CheckCircle2, Paperclip, Save,
   Search, Building2, BookmarkPlus, BookOpen, Sparkles, Info, Pencil,
   ClipboardList, ListChecks, AlignLeft, Wallet, ChevronDown, Globe, AlertTriangle,
-  IdCard, Landmark, ScrollText, CalendarClock,
+  IdCard, Landmark, ScrollText, CalendarClock, Copy, FilePlus2,
   type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
@@ -38,6 +38,7 @@ import {
   getMyParProfile, createEvent, createBudgetCode,
   searchRegistryCompanies, getBudgetCodeBalance,
   listParTemplates, saveParTemplate, instantiateParTemplate,
+  listPar, duplicatePar,
   prefillParFromDocument,
   readPayeeDocument,
   getLineItemSuggestions,
@@ -45,11 +46,11 @@ import {
   type ParRequest, type ParLineItem, type ParAttachment,
   type ParDepartment, type ParPayer, type ParProject, type ParEvent, type ParBudgetCode, type ParVendor,
   type ParPurpose, type ParChargeTo, type ParAttachmentKind,
-  type RegistryCompany, type BudgetCodeBalance, type ParTemplate,
+  type RegistryCompany, type BudgetCodeBalance, type ParTemplate, type ParListRow,
   type ParPrefillResult, type ParLineItemSuggestion, type ParAttachmentAnalysis,
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
-import { Card, PastelIcon, Select, Switch, Textarea, chipToneFor } from "@/components/ds";
+import { Card, Dialog, PastelIcon, Select, Switch, Textarea, chipToneFor } from "@/components/ds";
 import {
   URGENT_REASON_ORDER, URGENT_REASON_LABELS, URGENT_REASON_NOTE_MAX_LEN, isUrgentReasonCode,
 } from "@/lib/par/urgentReasons";
@@ -129,6 +130,58 @@ function saveLastUsedContext(ctx: LastUsedContext): void {
   } catch {
     /* private mode / quota — the form just stops remembering */
   }
+}
+
+/**
+ * „Vrei să salvezi ca șablon?" după trimitere — util o dată, enervant de zece ori. Cine bifează
+ * „nu mă mai întreba" nu mai e întrebat pe browserul lui; șablonul rămâne oricând salvabil din
+ * bara de jos a formularului.
+ */
+const ASK_TEMPLATE_KEY = "par.askSaveTemplate";
+
+function askSaveTemplateEnabled(): boolean {
+  try {
+    return localStorage.getItem(ASK_TEMPLATE_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+function disableAskSaveTemplate(): void {
+  try {
+    localStorage.setItem(ASK_TEMPLATE_KEY, "off");
+  } catch {
+    /* private mode — întrebarea rămâne activă, nu e o pierdere */
+  }
+}
+
+/**
+ * Ciorna curentă s-a născut dintr-un șablon sau dintr-o cerere repetată? Atunci nu are rost să
+ * întrebăm, la trimitere, dacă vrea salvată ca șablon — modelul ei există deja. Ținut în
+ * sessionStorage pentru că navigarea /new → /:id/edit remontează formularul.
+ */
+const STARTED_FROM_KEY = "par.startedFromTemplate";
+
+function markStartedFromTemplate(parId: string): void {
+  try {
+    sessionStorage.setItem(STARTED_FROM_KEY, parId);
+  } catch {
+    /* fără memorie de sesiune întrebăm o dată în plus — inofensiv */
+  }
+}
+
+function startedFromTemplate(parId: string): boolean {
+  try {
+    return sessionStorage.getItem(STARTED_FROM_KEY) === parId;
+  } catch {
+    return false;
+  }
+}
+
+/** Numele propus pentru șablon: ce se vede pe cerere, nu un „Șablon 1" gol de sens. */
+function suggestTemplateName(lines: ParLineItem[], payeeName: string, requestNo: string): string {
+  const base = lines[0]?.description?.trim() || payeeName.trim() || requestNo;
+  return base.length > 60 ? `${base.slice(0, 57)}…` : base;
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -379,6 +432,23 @@ export function ParCreateForm() {
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
   /**
+   * „Cum începem?" — o cerere nouă pornea mereu de la zero, deși cele mai multe repetă ceva
+   * (aceeași chirie, același formator, aceeași factură lunară). La deschiderea formularului
+   * gol întrebăm o dată: de la zero, dintr-un șablon, sau repetând o cerere anterioară.
+   * Se arată doar dacă există din ce alege — altfel dialogul ar fi un click în plus, degeaba.
+   */
+  const [startChoiceOpen, setStartChoiceOpen] = useState(false);
+  const [recentPars, setRecentPars] = useState<ParListRow[]>([]);
+  /** Id-ul opțiunii pe care se lucrează (șablon sau cerere), ca să arate spinner doar pe ea. */
+  const [startingFrom, setStartingFrom] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+
+  /** După trimitere: cererea tocmai trimisă, pentru care întrebăm dacă devine șablon. */
+  const [submittedPar, setSubmittedPar] = useState<ParRequest | null>(null);
+  const [askTemplateName, setAskTemplateName] = useState("");
+  const [askTemplateDontAsk, setAskTemplateDontAsk] = useState(false);
+
+  /**
    * A requestor fills the same four context fields on every single request —
    * department, payer, project, currency — and they almost never change. Remember
    * what was used last and prefill a NEW draft with it; an existing draft always
@@ -556,9 +626,11 @@ export function ParCreateForm() {
     let alive = true;
     (async () => {
       try {
-        const [depts, projs, evts, codes, vends, tmplRes] = await Promise.all([
+        const [depts, projs, evts, codes, vends, tmplRes, recentRes] = await Promise.all([
           listDepartments(), listProjects(), listEvents(), listBudgetCodes(), listVendors(),
           listParTemplates().catch(() => ({ templates: [] })),
+          // Cererile din care se poate „repeta" — doar pe formularul gol, și non-blocant.
+          editId ? Promise.resolve({ requests: [] as ParListRow[] }) : listPar().catch(() => ({ requests: [] as ParListRow[] })),
         ]);
         const [payerRes, profileRes] = await Promise.all([
           Promise.resolve().then(() => listPayers()).catch(() => ({ items: [] })),
@@ -574,7 +646,12 @@ export function ParCreateForm() {
         setBudgetCodes(codes.items.filter((c) => c.active));
         setVendors(vends.items.filter((v) => v.active));
         setTemplates(tmplRes.templates ?? []);
+        // O ciornă nu e un model de repetat (e nefinalizată), deci nu intră în listă.
+        const repeatable = (recentRes.requests ?? []).filter((r) => r.status !== "draft").slice(0, 6);
+        setRecentPars(repeatable);
         if (!editId) {
+          // Întrebăm doar dacă chiar are din ce alege.
+          if ((tmplRes.templates ?? []).length > 0 || repeatable.length > 0) setStartChoiceOpen(true);
           if (activePayers.length === 1) setPayerId(activePayers[0].id);
           if (activeProjects.length === 1) {
             setProjectId(activeProjects[0].id);
@@ -996,18 +1073,42 @@ export function ParCreateForm() {
   };
 
   // Feature 3: instantiate a template into the current draft
+  // Ciorna nouă se deschide în FORMULAR (/edit), nu pe pagina de vizualizare: omul tocmai a spus
+  // „pornesc de aici", deci pasul următor e completarea, nu cititul.
   const onInstantiateTemplate = async (tmpl: ParTemplate) => {
     if (!tmpl.snapshot) return;
     setShowTemplates(false);
-    // Navigate to the instantiated draft instead of the current empty one
     try {
       setBusy(true);
+      setStartingFrom(tmpl.id);
       const { par: newPar } = await instantiateParTemplate(tmpl.id);
-      navigate(`/business/par/${newPar.id}`);
+      markStartedFromTemplate(newPar.id);
+      setStartChoiceOpen(false);
+      navigate(`/business/par/${newPar.id}/edit`);
     } catch {
       setError("Eroare la pornirea din șablon");
+      setStartError("Nu am putut porni din acest șablon. Încearcă din nou sau începe de la zero.");
     } finally {
       setBusy(false);
+      setStartingFrom(null);
+    }
+  };
+
+  /** „Repetă" o cerere anterioară: server-ul face copia (antet + articole), noi o deschidem. */
+  const onRepeatPar = async (source: ParListRow) => {
+    try {
+      setBusy(true);
+      setStartError(null);
+      setStartingFrom(source.id);
+      const { par: copy } = await duplicatePar(source.id);
+      markStartedFromTemplate(copy.id);
+      setStartChoiceOpen(false);
+      navigate(`/business/par/${copy.id}/edit`);
+    } catch {
+      setStartError("Nu am putut repeta această cerere. Încearcă din nou sau începe de la zero.");
+    } finally {
+      setBusy(false);
+      setStartingFrom(null);
     }
   };
 
@@ -1025,6 +1126,28 @@ export function ParCreateForm() {
     } finally {
       setSavingTemplate(false);
     }
+  };
+
+  /** Închide întrebarea de după trimitere și duce omul la cererea trimisă. */
+  const finishAfterSubmit = () => {
+    if (askTemplateDontAsk) disableAskSaveTemplate();
+    const target = submittedPar;
+    setSubmittedPar(null);
+    if (target) navigate(`/business/par/${target.id}`);
+  };
+
+  /** „Da, salvează ca șablon" din dialogul de după trimitere. */
+  const onSaveTemplateAfterSubmit = async () => {
+    if (!submittedPar || !askTemplateName.trim()) return;
+    setSavingTemplate(true);
+    try {
+      await saveParTemplate({ name: askTemplateName.trim(), parId: submittedPar.id });
+    } catch {
+      /* șablonul e un bonus: dacă salvarea pică, cererea trimisă rămâne trimisă */
+    } finally {
+      setSavingTemplate(false);
+    }
+    finishAfterSubmit();
   };
 
   /**
@@ -1355,6 +1478,14 @@ export function ParCreateForm() {
       // Remember the context for the next request — only on a successful submit,
       // so a half-filled abandoned draft never becomes the default.
       saveLastUsedContext({ departmentId, payerId, projectId, currency });
+      // Momentul în care se știe că cererea e bună e chiar după trimitere — atunci întrebăm
+      // dacă devine șablon. Nu întrebăm dacă ea însăși a pornit dintr-un șablon/o repetare
+      // (modelul există deja) sau dacă utilizatorul a cerut să nu mai fie întrebat.
+      if (askSaveTemplateEnabled() && !startedFromTemplate(draftId)) {
+        setAskTemplateName(suggestTemplateName(lineItems, payeeName, submitted.requestNo));
+        setSubmittedPar(submitted);
+        return;
+      }
       navigate(`/business/par/${submitted.id}`);
     } catch (e) {
       if (e instanceof ApiError && e.details.length) {
@@ -2675,6 +2806,145 @@ export function ParCreateForm() {
           </div>
         </div>
       </div>
+
+      {/*
+        Întrebarea de start. Nu blochează nimic: „Începe de la zero" e prima opțiune, Escape sau
+        închiderea o lasă exact la formularul gol de dinainte.
+      */}
+      <Dialog
+        open={startChoiceOpen}
+        onClose={() => setStartChoiceOpen(false)}
+        title="Cum începem cererea?"
+        description="De la zero, dintr-un șablon salvat sau repetând o cerere anterioară — cu beneficiarul și articolele deja completate."
+        size="md"
+      >
+        {startError && (
+          <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {startError}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setStartChoiceOpen(false)}
+          className="flex w-full items-center gap-3 rounded-lg border border-primary/40 bg-primary/[0.06] px-4 py-3 text-left transition-colors hover:bg-primary/10 min-h-[44px]"
+        >
+          <PastelIcon tone="indigo" size={32}><FilePlus2 className="h-4 w-4" aria-hidden /></PastelIcon>
+          <span>
+            <span className="block text-sm font-semibold text-foreground">Începe de la zero</span>
+            <span className="block text-xs text-muted-foreground">Formular gol, completat de tine</span>
+          </span>
+        </button>
+
+        {templates.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Din șablon</p>
+            <ul className="space-y-1.5">
+              {templates.map((t) => (
+                <li key={t.id}>
+                  <button
+                    type="button"
+                    onClick={() => onInstantiateTemplate(t)}
+                    disabled={startingFrom !== null}
+                    className="flex w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-muted disabled:opacity-60 min-h-[44px]"
+                  >
+                    {startingFrom === t.id
+                      ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />
+                      : <BookOpen className="h-4 w-4 text-muted-foreground" aria-hidden />}
+                    <span className="truncate">{t.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {recentPars.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Repetă o cerere anterioară</p>
+            <ul className="space-y-1.5">
+              {recentPars.map((r) => (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    onClick={() => onRepeatPar(r)}
+                    disabled={startingFrom !== null}
+                    aria-label={`Repetă cererea ${r.requestNo}`}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-muted disabled:opacity-60 min-h-[44px]"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      {startingFrom === r.id
+                        ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />
+                        : <Copy className="h-4 w-4 text-muted-foreground" aria-hidden />}
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{r.requestNo}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{r.payeeName || "Fără beneficiar"}</span>
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {fmtMoney(r.totalEstimatedCents, r.currency)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Dialog>
+
+      {/* După trimitere: cererea e gata și verificată — cel mai bun moment să devină șablon. */}
+      <Dialog
+        open={submittedPar !== null}
+        onClose={finishAfterSubmit}
+        title="Salvezi cererea ca șablon?"
+        description="Data viitoare o pornești din șablon, cu beneficiarul și articolele deja completate."
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={finishAfterSubmit}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted min-h-[44px]"
+            >
+              Nu, mulțumesc
+            </button>
+            <button
+              type="button"
+              onClick={onSaveTemplateAfterSubmit}
+              disabled={savingTemplate || !askTemplateName.trim()}
+              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 min-h-[44px]"
+            >
+              {savingTemplate ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <BookmarkPlus className="h-4 w-4" aria-hidden />}
+              Salvează șablonul
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="post-submit-template-name" className="mb-1 block text-sm font-medium text-foreground">
+              Numele șablonului
+            </label>
+            <input
+              id="post-submit-template-name"
+              type="text"
+              className={inputCls}
+              value={askTemplateName}
+              onChange={(e) => setAskTemplateName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && onSaveTemplateAfterSubmit()}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-input"
+              checked={askTemplateDontAsk}
+              onChange={(e) => setAskTemplateDontAsk(e.target.checked)}
+            />
+            Nu mă mai întreba
+          </label>
+        </div>
+      </Dialog>
     </AppShell>
   );
 }

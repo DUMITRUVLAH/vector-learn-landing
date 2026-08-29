@@ -12,7 +12,7 @@
  */
 import { useState, useEffect, type ReactNode } from "react";
 import { useKeepAliveState, hasKeepAlive } from "@/hooks/useKeepAliveState";
-import { Plus, Search, Filter, Loader2, FileText, AlertCircle, Inbox, Landmark, ArrowRight, SlidersHorizontal, X, Clock } from "lucide-react";
+import { Plus, Search, Filter, Loader2, FileText, AlertCircle, Inbox, Landmark, ArrowRight, SlidersHorizontal, X, Clock, Copy } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import {
   Alert,
@@ -38,6 +38,7 @@ import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { ParUrgentBadge } from "@/components/par/ParUrgentBadge";
 import {
   listPar,
+  duplicatePar,
   getParInbox,
   getParMe,
   getParSettings,
@@ -267,6 +268,21 @@ export function ParDashboard() {
   // let the reader ask for the rest. Filters and tabs narrow it first.
   const [showAll, setShowAll] = useState(false);
   const awaitingPayment = filteredByEvent.filter((r) => r.status === "in_finance");
+
+  /**
+   * „Repetă" din listă: serverul face copia (antet + articole, fără aprobări/plată), iar noi
+   * deschidem COPIA în formular — asta a cerut owner-ul: repetarea să nu ceară intrarea în
+   * cererea veche, iar cea nouă să se deschidă imediat.
+   */
+  const repeatRequest = async (id: string) => {
+    setError(null);
+    try {
+      const { par } = await duplicatePar(id);
+      navigate(`/business/par/${par.id}/edit`);
+    } catch {
+      setError("Nu am putut repeta cererea. Încearcă din nou.");
+    }
+  };
 
   // Summary totals
   const totalActive = requests
@@ -518,6 +534,7 @@ export function ParDashboard() {
               requests={showAll ? myRequests : myRequests.slice(0, ROW_CAP)}
               onShowAll={!showAll && myRequests.length > ROW_CAP ? () => setShowAll(true) : undefined}
               onRowClick={(id) => navigate(`/business/par/${id}`)}
+              onRepeat={repeatRequest}
               emptyMessage="Nu ai cereri de plată încă."
               projectsMap={projectsMap}
             />
@@ -547,6 +564,8 @@ interface SectionProps {
   count: number;
   requests: (ParRequest & { above_micro_threshold: boolean })[];
   onRowClick: (id: string) => void;
+  /** „Repetă": copiază cererea într-o ciornă nouă și o deschide, fără a intra în cea veche. */
+  onRepeat: (id: string) => Promise<void>;
   emptyMessage: string;
   highlight?: boolean;
   /** Set when more rows exist than are rendered. */
@@ -555,7 +574,7 @@ interface SectionProps {
   projectsMap: Record<string, string>;
 }
 
-function Section({ title, count, requests, onRowClick, emptyMessage, highlight, projectsMap, onShowAll }: SectionProps) {
+function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, highlight, projectsMap, onShowAll }: SectionProps) {
   return (
     <section aria-labelledby={`section-${title}`}>
       <div className="flex items-center gap-2 mb-3">
@@ -583,6 +602,7 @@ function Section({ title, count, requests, onRowClick, emptyMessage, highlight, 
               <TableHead scope="col" className="text-right">Total (MDL)</TableHead>
               <TableHead scope="col">Status</TableHead>
               <TableHead scope="col" className="hidden md:table-cell">Data</TableHead>
+              <TableHead scope="col"><span className="sr-only">Acțiuni</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -628,6 +648,9 @@ function Section({ title, count, requests, onRowClick, emptyMessage, highlight, 
                     year: "numeric",
                   })}
                 </TableCell>
+                <TableCell className="text-right">
+                  <RepeatButton requestNo={r.requestNo} onRepeat={() => onRepeat(r.id)} />
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -643,6 +666,33 @@ function Section({ title, count, requests, onRowClick, emptyMessage, highlight, 
         </button>
       )}
     </section>
+  );
+}
+
+/**
+ * „Repetă" direct din listă (cerere owner, 2026-08-29): cele mai multe cereri se repetă lună de
+ * lună, iar până acum copierea cerea intrarea în cerere. Butonul stă în rând, oprește propagarea
+ * (rândul e clicabil) și deschide COPIA în formular.
+ */
+function RepeatButton({ requestNo, onRepeat }: { requestNo: string; onRepeat: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      aria-label={`Repetă cererea ${requestNo}`}
+      title="Repetă cererea într-o ciornă nouă"
+      onClick={(e) => {
+        e.stopPropagation();
+        setBusy(true);
+        onRepeat().finally(() => setBusy(false));
+      }}
+      onKeyDown={(e) => e.stopPropagation()}
+      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
+    >
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
+      <span className="hidden sm:inline">Repetă</span>
+    </button>
   );
 }
 
