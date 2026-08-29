@@ -191,6 +191,52 @@ describe("filtrele rapoartelor", () => {
     expect(csv).not.toContain("PAR-9999");
   });
 
+  it("[blocant] drill-down: cererile din spatele unei bare, cu aceleași filtre", async () => {
+    // Owner: „dacă apeși pe un furnizor să se deschidă tot cartonașul, toate plățile către el."
+    const res = await app.request(`/api/par/reports/breakdown?dimension=vendor&value=${encodeURIComponent("Orange")}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      items: { requestNo: string; payeeName: string | null; estimatedCents: number; paidCents: number; status: string }[];
+      totals: { count: number; estimatedCents: number; paidCents: number };
+    };
+    expect(body.items.map((i) => i.requestNo)).toEqual(["PAR-0001"]);
+    expect(body.items[0].payeeName).toBe("Orange");
+    expect(body.items[0].status).toBe("paid");
+    expect(body.totals.count).toBe(1);
+    expect(body.totals.estimatedCents).toBe(200_00);
+    // Cererea e plătită, deci coloana „plătit" nu poate fi zero.
+    expect(body.totals.paidCents).toBe(200_00);
+  });
+
+  it("[blocant] drill-down-ul respectă filtrele raportului — nu arată mai mult decât totalul", async () => {
+    const all = await app.request(`/api/par/reports/breakdown?dimension=project&value=${projectAId}`);
+    const allBody = (await all.json()) as { totals: { count: number } };
+    expect(allBody.totals.count).toBe(2);
+
+    const filtered = await app.request(`/api/par/reports/breakdown?dimension=project&value=${projectAId}&status=paid`);
+    const filteredBody = (await filtered.json()) as { totals: { count: number } };
+    expect(filteredBody.totals.count).toBe(1);
+  });
+
+  it("drill-down pe galeata fara dimensiune (valoare goala) intoarce cererile neclasificate", async () => {
+    const res = await app.request("/api/par/reports/breakdown?dimension=department&value=");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { totals: { count: number } };
+    expect(body.totals.count).toBe(3); // niciuna dintre cele trei nu are departament
+  });
+
+  it("[blocant] drill-down-ul nu poate scoate cereri din alt workspace", async () => {
+    const res = await app.request(`/api/par/reports/breakdown?dimension=charge&value=program`);
+    const body = (await res.json()) as { items: { requestNo: string }[] };
+    expect(body.items.some((i) => i.requestNo === "PAR-9999")).toBe(false);
+    expect(body.items).toHaveLength(3);
+  });
+
+  it("o dimensiune inventată e respinsă cu 400, nu întoarce tot", async () => {
+    const res = await app.request("/api/par/reports/breakdown?dimension=inventat&value=x");
+    expect(res.status).toBe(400);
+  });
+
   it("filtrele se aplică la fel pe toate dimensiunile (plătitor, buget, aging)", async () => {
     for (const url of ["by-payer", "by-budget", "by-charge-to", "aging"]) {
       const res = await app.request(`/api/par/reports/${url}?project_id=${projectAId}`);
