@@ -122,15 +122,10 @@ function Navbar() {
             </a>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" href="/business/login" className="hidden sm:inline-flex">
-            <LogIn className="h-4 w-4 mr-1.5" aria-hidden="true" />
-            Autentificare
-          </Button>
-          <Button size="sm" href="/business/signup">
-            Începe gratuit <ArrowRight className="h-4 w-4 ml-1" aria-hidden="true" />
-          </Button>
-        </div>
+        <Button size="sm" href="/business/login">
+          <LogIn className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Autentificare
+        </Button>
       </div>
     </nav>
   );
@@ -162,8 +157,8 @@ function Hero() {
             Cereri de plată, aprobări și execuție — un singur traseu, cu dovada la capăt.
           </p>
           <div className="flex gap-3 justify-center flex-col sm:flex-row">
-            <Button size="lg" href="/business/signup" className="h-12 px-8 text-base rounded-xl">
-              Începe gratuit <ArrowRight className="h-5 w-5 ml-2" aria-hidden="true" />
+            <Button size="lg" href="/business/login" className="h-12 rounded-xl px-8 text-base">
+              Intră în cont <ArrowRight className="ml-2 h-5 w-5" aria-hidden="true" />
             </Button>
             <a
               href="#flux"
@@ -172,7 +167,9 @@ function Hero() {
               Vezi fluxul
             </a>
           </div>
-          <p className="text-xs text-muted-foreground mt-4">Fără card bancar · datele rămân ale organizației tale</p>
+          <p className="mt-4 text-xs text-muted-foreground">
+            Nu ai cont? Îl creezi din aceeași pagină · fără card bancar
+          </p>
         </div>
 
         <HeroMock />
@@ -1000,8 +997,8 @@ function PricingSection() {
                 </li>
               ))}
             </ul>
-            <Button variant="outline" href="/business/signup" className="w-full rounded-xl">
-              Începe gratuit
+            <Button variant="outline" href="/business/login" className="w-full rounded-xl">
+              Intră în cont
             </Button>
           </Card>
 
@@ -1030,8 +1027,8 @@ function PricingSection() {
                 </li>
               ))}
             </ul>
-            <Button href="/business/signup" className="w-full rounded-xl">
-              Începe gratuit <ArrowRight className="ml-1 h-4 w-4" aria-hidden="true" />
+            <Button href="/business/login" className="w-full rounded-xl">
+              Intră în cont <ArrowRight className="ml-1 h-4 w-4" aria-hidden="true" />
             </Button>
           </Card>
 
@@ -1123,8 +1120,8 @@ function PriceCalculator() {
               <dd className="font-medium tabular-nums">${(members * PRICING.member).toLocaleString("ro-MD")}</dd>
             </div>
           </dl>
-          <Button href="/business/signup" className="mt-5 w-full rounded-xl">
-            Începe gratuit
+          <Button href="/business/login" className="mt-5 w-full rounded-xl">
+            Intră în cont
           </Button>
         </div>
       </div>
@@ -1330,11 +1327,12 @@ function FinalCta() {
         </p>
         <h2 className="mb-3 text-2xl font-bold sm:text-3xl">Prima cerere, azi</h2>
         <p className="mx-auto mb-6 max-w-md text-sm text-muted-foreground sm:text-base">
-          Deschizi workspace-ul, inviți aprobatorii, trimiți o cerere reală.
+          Te autentifici sau îți creezi workspace-ul din aceeași pagină, inviți aprobatorii și
+          trimiți o cerere reală.
         </p>
         <div className="flex flex-col justify-center gap-3 sm:flex-row">
-          <Button size="lg" href="/business/signup" className="h-12 rounded-xl px-8">
-            Începe gratuit <ArrowRight className="ml-2 h-5 w-5" aria-hidden="true" />
+          <Button size="lg" href="/business/login" className="h-12 rounded-xl px-8">
+            Intră în cont <ArrowRight className="ml-2 h-5 w-5" aria-hidden="true" />
           </Button>
           <a
             href="#contact"
