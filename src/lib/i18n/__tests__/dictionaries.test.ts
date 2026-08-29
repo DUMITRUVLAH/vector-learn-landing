@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import { EN, NAMESPACES, RO } from "../dictionaries";
 import { LANGS } from "../types";
 
-const NAMESPACE_PREFIXES = ["common.", "landing.", "par."] as const;
+const NAMESPACE_PREFIXES = ["common.", "landing.", "par.", "shell."] as const;
 
 /** Numele variabilelor `{x}` dintr-un șablon, sortate — ca să se poată compara ca mulțimi. */
 function placeholders(value: string): string[] {

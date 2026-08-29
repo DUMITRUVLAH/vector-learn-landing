@@ -9,12 +9,14 @@ import type { Dict, Lang } from "../types";
 import * as common from "./common";
 import * as landing from "./landing";
 import * as par from "./par";
+import * as shell from "./shell";
 
 /** Dicționarul RO — sursa de adevăr pentru mulțimea de chei. */
 export const RO = {
   ...common.ro,
   ...landing.ro,
   ...par.ro,
+  ...shell.ro,
 } as const;
 
 /** Dicționarul EN — aceleași chei, garantat de `Translated<>` în fiecare fișier. */
@@ -22,6 +24,7 @@ export const EN: Record<keyof typeof RO, string> = {
   ...common.en,
   ...landing.en,
   ...par.en,
+  ...shell.en,
 };
 
 /** Uniunea tuturor cheilor valide — ce acceptă `t()`. */
@@ -30,4 +33,4 @@ export type TranslationKey = keyof typeof RO;
 export const DICTS: Record<Lang, Dict> = { ro: RO, en: EN };
 
 /** Namespace-urile, expuse pentru testele de paritate și pentru `scripts/i18n-check.mjs`. */
-export const NAMESPACES = { common, landing, par } as const;
+export const NAMESPACES = { common, landing, par, shell } as const;
