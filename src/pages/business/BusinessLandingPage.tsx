@@ -536,6 +536,7 @@ function AiSection() {
         "Nu confundă organizația ta cu prestatorul; când sunt două companii, întreabă",
         "Compară documentul cu cererea și marchează neconcordanțele",
       ]}
+      link={{ label: "Vezi ce scoate dintr-un act", href: "/business/features/ai-citeste-documentul" }}
       visual={
         <div className="space-y-2.5">
           <div className="flex items-center gap-2.5 rounded-xl border border-border px-3 py-2.5">
