@@ -9,10 +9,12 @@
  * de completare (DG-109) au item-ele lor. Aici e registrul + acțiunile care schimbă starea.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Plus, Loader2, AlertCircle, Search, Download, FileSpreadsheet, FolderOpen, Banknote, X } from "lucide-react";
+import { FileText, Plus, Loader2, AlertCircle, Search, Download, FileSpreadsheet, FolderOpen, Banknote, X, Upload } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import { listPar, type ParListRow } from "@/lib/api/par";
+import { listDocTemplates, type DocTemplateListItem } from "@/lib/api/docs";
+import { BulkGenerateDialog } from "./BulkGenerateDialog";
 import {
   listDocuments,
   createDocumentFromPar,
@@ -70,6 +72,8 @@ export function DocsPage() {
   /** DG-118: „am plătit, unde e actul semnat?" — actul se naște din cererea aprobată. */
   const [pickingPar, setPickingPar] = useState(false);
   const [pars, setPars] = useState<ParListRow[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [templates, setTemplates] = useState<DocTemplateListItem[]>([]);
 
 
   const load = useCallback(async () => {
@@ -142,6 +146,17 @@ export function DocsPage() {
             <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
             Exportă registrul
           </a>
+          <button
+            type="button"
+            onClick={() => {
+              void listDocTemplates().then(setTemplates).catch(() => setTemplates([]));
+              setBulkOpen(true);
+            }}
+            className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+          >
+            <Upload className="h-4 w-4" aria-hidden="true" />
+            Generare în masă
+          </button>
           <button
             type="button"
             onClick={() => void openParPicker()}
@@ -321,6 +336,17 @@ export function DocsPage() {
           </div>
         )}
       </div>
+
+      {bulkOpen && (
+        <BulkGenerateDialog
+          templates={templates}
+          onClose={() => {
+            setBulkOpen(false);
+            void load();
+          }}
+          onDone={() => void load()}
+        />
+      )}
 
       {pickingPar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

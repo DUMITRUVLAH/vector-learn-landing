@@ -539,4 +539,4 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | 6 | `DG-121` | Dosarul contrapărții (istoric acte + schimbări de rechizite) | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 6 | `DG-122` | Registrul actelor: export XLSX + ZIP pe filtre | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 6 | `DG-123` | Permisiuni pe proiect + jurnal în limbaj omenesc | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
-| 6 | `DG-124` | Generare în masă din Excel, salvată în registru (reuse DOCMERGE) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 6 | `DG-124` | Generare în masă din Excel, salvată în registru (reuse DOCMERGE) | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |

@@ -52,6 +52,8 @@ import {
 import { generateRequestNo } from "../lib/par/requestNo";
 import { buildProjectDossier, buildCounterpartyDossier } from "../lib/docs/dossier";
 import { sendDocumentEmail } from "../lib/docs/sendDocumentEmail";
+import { BatchPdfRenderer } from "../lib/docmerge/htmlToPdf";
+import { buildPdfZip } from "../lib/docmerge/zipPdfs";
 import { accessibleProjectIds, mayAccessProject } from "../lib/par/projectScope";
 
 export const docsRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -1835,6 +1837,180 @@ docsRoutes.get("/documents/:id/word", async (c) => {
     headers: {
       "Content-Type": "application/msword; charset=utf-8",
       "Content-Disposition": `attachment; filename="${fileName}"`,
+    },
+  });
+});
+
+
+// ─── Generare în masă + ZIP (DG-124) ─────────────────────────────────────────
+
+/**
+ * N acte dintr-un tabel, salvate ÎN REGISTRU, nu doar într-un ZIP pe care îl pierzi.
+ *
+ * Diferența față de wizardul de generare în masă existent: acolo ieșeau fișiere, aici ies acte —
+ * cu număr, contraparte, sumă și loc în dosarul proiectului. Un rând stricat NU oprește lotul:
+ * se raportează pe poziția lui și restul se generează, altfel o singură celulă goală anulează
+ * munca de o oră.
+ */
+docsRoutes.post("/bulk", async (c) => {
+  const user = c.get("user");
+  let payload: {
+    templateId?: string;
+    kind?: string;
+    projectId?: string | null;
+    rows?: Record<string, string>[];
+  } = {};
+  try {
+    payload = (await c.req.json()) as typeof payload;
+  } catch {
+    return c.json({ error: "invalid_body" }, 400);
+  }
+
+  const rows = payload.rows ?? [];
+  if (rows.length === 0) return c.json({ error: "no_rows", message: "Tabelul nu are rânduri." }, 400);
+  if (rows.length > 500) {
+    return c.json({ error: "too_many_rows", message: "Maxim 500 de acte într-un lot." }, 400);
+  }
+
+  const kind = payload.kind ?? "act_primire_predare";
+  const templateId = payload.templateId ?? (await pickTemplateForKind(user.tenantId, kind));
+
+  const created: { id: string; row: number; title: string }[] = [];
+  const failed: { row: number; reason: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    try {
+      const partyName = row["contraparte.denumire"]?.trim();
+      if (!partyName) {
+        failed.push({ row: i + 1, reason: "Lipsește denumirea contrapărții." });
+        continue;
+      }
+      const amount = Number.parseFloat((row["total.suma"] ?? "0").replace(/\s/g, "").replace(",", "."));
+      const totalCents = Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+
+      const context = await buildDocumentContext({
+        tenantId: user.tenantId,
+        projectId: payload.projectId ?? null,
+        docDate: new Date(),
+        totalCents,
+        currency: row["total.valuta"] ?? "MDL",
+        userName: (user as { name?: string }).name ?? null,
+        clientContext: row,
+      });
+      // Rândul din tabel e sursa pentru contraparte: lotul se face de obicei pentru părți care
+      // NU sunt în registru (participanți, voluntari), deci datele vin din coloane.
+      for (const [k, v] of Object.entries(row)) if (k.startsWith("contraparte.")) context[k] = v;
+
+      const rendered = await renderBody(user.tenantId, templateId, context, [], row["total.valuta"] ?? "MDL");
+      const snapshot: Record<string, string> = {};
+      for (const [k, v] of Object.entries(context)) {
+        if (k.startsWith("contraparte.")) snapshot[k.replace("contraparte.", "")] = v;
+      }
+
+      const [doc] = await db
+        .insert(docDocuments)
+        .values({
+          tenantId: user.tenantId,
+          templateId,
+          templateVersion: rendered.templateVersion,
+          kind,
+          title: row["document.titlu"]?.trim() || `${DOC_KIND_LABEL[kind] ?? "Act"} — ${partyName}`,
+          projectId: payload.projectId ?? null,
+          counterpartyKind: "inline",
+          counterpartyName: partyName,
+          counterpartySnapshot: JSON.stringify(snapshot),
+          context: JSON.stringify(context),
+          bodyHtml: rendered.bodyHtml,
+          totalCents,
+          currency: row["total.valuta"] ?? "MDL",
+          createdByUserId: user.id,
+        })
+        .returning();
+
+      await writeAudit(user.tenantId, doc.id, user.id, "created", { bulkRow: i + 1 });
+      created.push({ id: doc.id, row: i + 1, title: doc.title });
+    } catch (e) {
+      failed.push({ row: i + 1, reason: e instanceof Error ? e.message : "Rând invalid." });
+    }
+  }
+
+  return c.json({ created, failed, total: rows.length }, 201);
+});
+
+/**
+ * ZIP cu PDF-urile actelor alese. Un SINGUR browser pentru tot lotul (BatchPdfRenderer): N
+ * lansări de chromium ar epuiza memoria serverului la al zecelea act.
+ */
+docsRoutes.post("/export/zip", async (c) => {
+  const user = c.get("user");
+  let ids: string[] = [];
+  try {
+    const body = (await c.req.json()) as { ids?: string[] };
+    ids = body?.ids ?? [];
+  } catch {
+    ids = [];
+  }
+  if (ids.length === 0) return c.json({ error: "no_documents" }, 400);
+
+  const allowed = await visibilityFilter(user as { id: string; tenantId: string; role?: string });
+  const docs = (
+    await db
+      .select()
+      .from(docDocuments)
+      .where(and(eq(docDocuments.tenantId, user.tenantId), inArray(docDocuments.id, ids)))
+  ).filter((d) => maySeeDocument(d.projectId, allowed));
+  if (docs.length === 0) return c.json({ error: "not_found" }, 404);
+
+  const [settings] = await db
+    .select()
+    .from(parSettings)
+    .where(eq(parSettings.tenantId, user.tenantId))
+    .limit(1);
+  const org = { name: settings?.orgLegalName ?? null, logoUrl: settings?.orgLogoUrl ?? null };
+
+  const renderer = await BatchPdfRenderer.create();
+  const files: { name: string; pdf: Uint8Array }[] = [];
+  try {
+    for (const doc of docs) {
+      const printable = {
+        docNumber: doc.docNumber,
+        title: doc.title,
+        kind: doc.kind,
+        docDate: doc.docDate,
+        bodyHtml: doc.bodyHtml,
+        bodyHash: doc.bodyHash,
+        status: doc.status,
+        counterpartyName: doc.counterpartyName,
+        counterpartySnapshot: safeJson(doc.counterpartySnapshot) as Record<string, string>,
+        currency: doc.currency,
+        totalCents: doc.totalCents,
+      };
+      const name = pdfFileName(printable, doc.counterpartyName);
+      // PDF-ul stocat (actul semnat) are prioritate — ZIP-ul trebuie să conțină exact ce s-a semnat.
+      if (doc.pdfUrl) {
+        files.push({ name, pdf: Buffer.from(doc.pdfUrl.split(",")[1] ?? "", "base64") });
+        continue;
+      }
+      if (!renderer) continue;
+      files.push({ name, pdf: await renderer.render(buildPrintableHtml(printable, org)) });
+    }
+  } finally {
+    await renderer?.close();
+  }
+
+  if (files.length === 0) {
+    return c.json(
+      { error: "pdf_unavailable", message: "Nu s-a putut genera niciun PDF (chromium indisponibil)." },
+      503
+    );
+  }
+
+  const zip = await buildPdfZip(files);
+  return new Response(zip, {
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="acte.zip"`,
     },
   });
 });

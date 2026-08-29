@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "DG-115",
+  "last_completed": "DG-124",
   "iterations": 180,
   "last_run_at": "2026-06-28T00:00:00Z",
   "milestone_status": "VIOLETA: VM1 done (#204-#216). VM3 (feedback 2026-07-16) done — PR #262. VM2: 20 pending.",
@@ -5027,7 +5027,7 @@
       "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-124": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -5037,7 +5037,8 @@
         "DG-113"
       ],
       "priority": "medium",
-      "title": "Generare în masă din Excel salvată în registru (reuse generateBatch/zipPdfs)"
+      "title": "Generare în masă din Excel salvată în registru (reuse generateBatch/zipPdfs)",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     }
   }
 }
