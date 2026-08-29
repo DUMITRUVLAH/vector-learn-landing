@@ -35,6 +35,12 @@ const STEPS = [
   //    Vezi docs/solutions/build-errors/react-dev-build-shipped-to-production.md.
   ["build frontend", "NODE_ENV=production vite build"],
 
+  // ── Blogul, pre-randat ca HTML static în dist/blog/. DUPĂ vite build (are nevoie de dist/)
+  //    și ÎNAINTE de împachetare (build-vercel.mjs copiază dist/ în output). Fără pasul ăsta,
+  //    /blog/* ar cădea în fallback-ul SPA și ar servi shell-ul aplicației — adică o pagină
+  //    goală pentru orice crawler.
+  ["blog pre-randat", "tsx scripts/build-blog.ts"],
+
   // ── Porți pe ARTEFACTUL construit: se pot verifica doar după ce dist/ există.
   ["React de producție în dist/", "node scripts/check-react-prod-build.mjs"],
   ["buget cale critică", "node scripts/check-bundle-budget.mjs"],

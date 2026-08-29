@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && NODE_ENV=production vite build && node scripts/check-react-prod-build.mjs && node scripts/check-bundle-budget.mjs",
+    "build": "tsc -b && NODE_ENV=production vite build && tsx scripts/build-blog.ts && node scripts/check-react-prod-build.mjs && node scripts/check-bundle-budget.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "check-refs": "node scripts/check-undefined-refs.mjs",
@@ -30,7 +30,8 @@
     "par:extract": "node scripts/par-extract.mjs",
     "e2e": "node scripts/e2e-gate.mjs",
     "e2e:browser": "node scripts/e2e-gate.mjs --browser",
-    "e2e:all": "node scripts/e2e-gate.mjs --all"
+    "e2e:all": "node scripts/e2e-gate.mjs --all",
+    "build:blog": "tsx scripts/build-blog.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.4.6",

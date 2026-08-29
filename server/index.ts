@@ -22,6 +22,22 @@ if (existsSync(distDir)) {
   // pe firul local, ceea ce făcea ca măsurătorile locale să nu semene deloc cu prod-ul.
   // `compress()` sare singur peste ce e deja comprimat (imagini, fonturi woff2).
   app.use("/*", compress());
+
+  /**
+   * Blogul pre-randat: URL-urile publice nu poartă extensia `.html`, dar fișierele o au.
+   *
+   * Pe Vercel maparea o face `config.json` (vezi scripts/build-vercel.mjs). Local, `serveStatic`
+   * nu încearcă singur `.html`, deci fără regula asta `/blog/<slug>` ar cădea în fallback-ul SPA
+   * și ar servi shell-ul aplicației — exact bug-ul care arată bine în producție și lipsește local.
+   */
+  app.get("/blog/:slug{[^.]+}", async (c) => {
+    const file = path.join(distDir, "blog", `${c.req.param("slug")}.html`);
+    if (!existsSync(file)) return c.notFound();
+    const html = await import("node:fs/promises").then((fs) => fs.readFile(file, "utf8"));
+    c.header("Cache-Control", "no-cache");
+    return c.html(html);
+  });
+
   app.use("/*", serveStatic({ root: "./dist" }));
   app.notFound(async (c) => {
     // Un fișier cu hash care nu există trebuie să dea 404, NU pagina SPA. Vezi

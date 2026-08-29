@@ -137,6 +137,12 @@ writeFileSync(
           headers: { "cache-control": "public, max-age=86400, must-revalidate" },
           continue: true,
         },
+        // Blogul e pre-randat ca fișiere .html; URL-urile publice nu poartă extensia.
+        // Regulile astea stau ÎNAINTE de `handle: filesystem` pentru că maparea fără extensie nu
+        // e implicită în Build Output API — fără ele, /blog/<slug> ar cădea în fallback-ul SPA și
+        // ar servi shell-ul aplicației cu status 200, adică o pagină goală pentru crawlere.
+        { src: "/blog/?$", dest: "/blog/index.html" },
+        { src: "/blog/([^/.]+)/?$", dest: "/blog/$1.html" },
         { handle: "filesystem" },
         // Un fișier cu hash care NU există trebuie să dea 404, nu pagina SPA.
         // Bug 2026-08-29 („eroarea asta e mereu"): fără regula asta, `/assets/<chunk>.js` lipsă
