@@ -144,6 +144,17 @@ describe("DG-111 — nimic nu se semnează cu rechizite lipsă sau greșite", ()
     expect(doc.bodyHtml).toContain("MD48ML000002259A19498121");
   });
 
+  it("[blocant] adresa sau administratorul contrapărții lipsă NU blochează semnarea", async () => {
+    // Distincția care ține poarta folosibilă: blocăm pe ce trimite banii (denumire, cod fiscal,
+    // IBAN), nu pe ce se completează cu pixul. Furnizorul de aici n-are adresă și nici
+    // administrator, dar are rechizitele bancare — actul se poate semna.
+    const id = await draftWith(
+      await vendor({ idnp: "1234567890123", iban: "MD48ML000002259A19498121", legalAddress: null, administratorName: null })
+    );
+    const res = await app.request(`/api/docs/documents/${id}/finalize`, { method: "POST" });
+    expect(res.status).toBe(200);
+  });
+
   it("[blocant] un câmp care se completează cu pixul NU blochează semnarea", async () => {
     // Șablonul cere {{noi.administrator}}, pe care nicio sursă nu-l umple: pe act devine rând de
     // completat, nu motiv de refuz. Altfel poarta ar opri fiecare act al fiecărei organizații.

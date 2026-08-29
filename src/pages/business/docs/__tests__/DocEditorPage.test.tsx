@@ -68,6 +68,9 @@ const createDocument = vi.fn();
 const updateDocument = vi.fn();
 const finalizeDocument = vi.fn();
 const convertDocumentToPar = vi.fn();
+const getDocumentTrail = vi.fn();
+const listDerivableKinds = vi.fn();
+const deriveDocument = vi.fn();
 
 vi.mock("@/lib/api/docs", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/docs")>("@/lib/api/docs");
@@ -79,6 +82,9 @@ vi.mock("@/lib/api/docs", async () => {
     updateDocument: (...a: unknown[]) => updateDocument(...a),
     finalizeDocument: (...a: unknown[]) => finalizeDocument(...a),
     convertDocumentToPar: (...a: unknown[]) => convertDocumentToPar(...a),
+    getDocumentTrail: (...a: unknown[]) => getDocumentTrail(...a),
+    listDerivableKinds: (...a: unknown[]) => listDerivableKinds(...a),
+    deriveDocument: (...a: unknown[]) => deriveDocument(...a),
   };
 });
 
@@ -142,6 +148,8 @@ beforeEach(() => {
     { id: "tpl-1", name: "Act de primire-predare", kind: "act_primire_predare", category: null, isSystem: true, version: 1, placeholders: [], updatedAt: "" },
   ]);
   createDocument.mockResolvedValue({ ...FINAL_DOC, id: "doc-new", status: "draft", docNumber: null, missing: [] });
+  getDocumentTrail.mockResolvedValue({ document: FINAL_DOC, basedOn: [], derived: [], paymentRequests: [] });
+  listDerivableKinds.mockResolvedValue({ kinds: [] });
   updateDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null, missing: [] });
 });
 
@@ -371,5 +379,53 @@ describe("DG-117 — actul devine cerere de plată", () => {
     expect(convertDocumentToPar).toHaveBeenCalledTimes(1);
     expect(navigate).not.toHaveBeenCalledWith(expect.stringContaining("/business/par/"));
     confirmSpy.mockRestore();
+  });
+});
+
+
+describe("DG-116 + DG-119 — actele derivate și traseul", () => {
+  it("[blocant] traseul arată contractul-sursă și cererea de plată, cu linkuri reale", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue(FINAL_DOC);
+    getDocumentTrail.mockResolvedValue({
+      document: FINAL_DOC,
+      basedOn: [
+        { id: "ctr-1", kind: "contract_servicii", docNumber: "CTR-2026-0003", title: "Contract", status: "final", totalCents: 0, currency: "MDL" },
+      ],
+      derived: [],
+      paymentRequests: [
+        { id: "par-7", requestNo: "PAR-2026-0007", status: "approved", totalEstimatedCents: 2450000, currency: "MDL", paidAt: null, approvedAt: "2026-03-14T00:00:00.000Z" },
+      ],
+    });
+    render(<DocEditorPage />);
+
+    const trail = await screen.findByRole("region", { name: "Traseul actului" });
+    expect(within(trail).getByText("CTR-2026-0003")).toHaveAttribute("href", "#/business/docs/ctr-1");
+    expect(within(trail).getByText("PAR-2026-0007")).toHaveAttribute("href", "#/business/par/par-7");
+    // Starea se spune omenește: „aprobată", nu „approved".
+    expect(within(trail).getByText(/aprobată/)).toBeInTheDocument();
+  });
+
+  it("[blocant] alegerea unui tip derivat creează actul și te duce la el", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue(FINAL_DOC);
+    listDerivableKinds.mockResolvedValue({ kinds: ["act_primire_predare", "proces_verbal"] });
+    deriveDocument.mockResolvedValue({ ...FINAL_DOC, id: "doc-derived", status: "draft" });
+    render(<DocEditorPage />);
+
+    const select = await screen.findByLabelText(/Creează act pe baza acestuia/i);
+    await userEvent.selectOptions(select, "proces_verbal");
+
+    await waitFor(() => expect(deriveDocument).toHaveBeenCalledWith("doc-1", "proces_verbal"));
+    expect(navigate).toHaveBeenCalledWith("/business/docs/doc-derived");
+  });
+
+  it("[normal] pe o ciornă nu se oferă derivare — n-are ce moșteni încă", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
+    render(<DocEditorPage />);
+    await waitFor(() => expect(getDocument).toHaveBeenCalled());
+    expect(listDerivableKinds).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText(/Creează act pe baza acestuia/i)).toBeNull();
   });
 });

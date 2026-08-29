@@ -18,7 +18,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, desc, eq, gte, ilike, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { db } from "../db/client";
 import {
@@ -560,8 +560,12 @@ docsRoutes.post("/documents/:id/finalize", async (c) => {
   const templatePlaceholders = doc.templateId
     ? (await renderBody(user.tenantId, doc.templateId, preflightContext)).placeholders
     : [];
+  // Blocăm DOAR pe datele care trimit banii undeva: denumirea, codul fiscal, IBAN-ul. Adresa
+  // juridică sau numele administratorului lipsă se completează cu pixul pe act — dacă am bloca și
+  // pe ele, jumătate din actele reale n-ar putea fi semnate, iar oamenii ar ocoli poarta.
+  const PAYMENT_CRITICAL = ["contraparte.denumire", "contraparte.idno", "contraparte.iban"];
   for (const field of missingFields(templatePlaceholders, preflightContext)) {
-    if (field.startsWith("contraparte.")) missing.push(fieldLabelRo(field));
+    if (PAYMENT_CRITICAL.includes(field)) missing.push(fieldLabelRo(field));
   }
 
   // Valorile care EXISTĂ trebuie și să fie corecte: un IBAN cu cifră de control greșită prins aici
@@ -1134,4 +1138,256 @@ docsRoutes.post("/documents/:id/to-par", async (c) => {
   await writeAudit(user.tenantId, doc.id, user.id, "converted_to_par", { requestNo });
 
   return c.json({ parId: par.id, requestNo, attachmentAdded: !!doc.pdfUrl }, 201);
+});
+
+
+// ─── Acte derivate + traseul actului (DG-116, DG-119) ────────────────────────
+
+/**
+ * Ce se poate naște din ce. Regulile nu sunt decorative: un „act adițional" la un act de
+ * primire-predare n-are sens juridic, iar dacă îl oferi în listă, cineva îl va face.
+ */
+const DERIVABLE: Record<string, string[]> = {
+  contract_servicii: ["act_primire_predare", "act_aditional", "proces_verbal", "act_compensare"],
+  contract_vanzare: ["act_primire_predare", "act_aditional", "proces_verbal"],
+  act_primire_predare: ["proces_verbal", "act_compensare"],
+  proces_verbal: ["act_primire_predare"],
+  act_aditional: ["act_primire_predare", "proces_verbal"],
+  other: ["act_primire_predare", "contract_servicii"],
+};
+
+docsRoutes.get("/documents/:id/derivable", async (c) => {
+  const user = c.get("user");
+  const [doc] = await db
+    .select({ kind: docDocuments.kind, status: docDocuments.status })
+    .from(docDocuments)
+    .where(and(eq(docDocuments.id, c.req.param("id")), eq(docDocuments.tenantId, user.tenantId)));
+  if (!doc) return c.json({ error: "not_found" }, 404);
+  return c.json({ kinds: DERIVABLE[doc.kind] ?? DERIVABLE.other });
+});
+
+/**
+ * „Act nou pe baza acestuia": actul derivat moștenește părțile, proiectul, pozițiile și valuta, iar
+ * referința legală („în baza contractului nr. X din data Y") se scrie singură — exact partea pe
+ * care omul o copiază greșit când o tastează.
+ */
+docsRoutes.post("/documents/:id/derive", async (c) => {
+  const user = c.get("user");
+  const [source] = await db
+    .select()
+    .from(docDocuments)
+    .where(and(eq(docDocuments.id, c.req.param("id")), eq(docDocuments.tenantId, user.tenantId)));
+  if (!source) return c.json({ error: "not_found" }, 404);
+  if (source.status !== "final") {
+    return c.json(
+      { error: "source_not_final", message: "Actul-sursă trebuie finalizat înainte de a naște altul." },
+      409
+    );
+  }
+
+  let kind = "act_primire_predare";
+  let title: string | null = null;
+  let templateId: string | null = null;
+  try {
+    const body = (await c.req.json()) as { kind?: string; title?: string; templateId?: string };
+    kind = body?.kind ?? kind;
+    title = body?.title ?? null;
+    templateId = body?.templateId ?? null;
+  } catch {
+    /* corp gol — folosim implicitele */
+  }
+
+  const allowed = DERIVABLE[source.kind] ?? DERIVABLE.other;
+  if (!allowed.includes(kind)) {
+    return c.json({ error: "kind_not_derivable", allowed }, 400);
+  }
+
+  const lines = await db
+    .select()
+    .from(docDocumentLines)
+    .where(eq(docDocumentLines.documentId, source.id))
+    .orderBy(docDocumentLines.position);
+
+  const sourceLabel = source.docNumber
+    ? `${DOC_KIND_LABEL[source.kind] ?? "actul"} nr. ${source.docNumber} din ${source.docDate.toLocaleDateString("ro-MD")}`
+    : source.title;
+
+  const clientContext = {
+    ...(safeJson(source.context) as Record<string, string>),
+    "document.baza": sourceLabel,
+  };
+  const context = await buildDocumentContext({
+    tenantId: user.tenantId,
+    vendorId: source.counterpartyKind === "vendor" ? source.counterpartyId : null,
+    projectId: source.projectId,
+    eventId: source.eventId,
+    payerId: source.payerId,
+    docDate: new Date(),
+    totalCents: source.totalCents,
+    currency: source.currency,
+    userName: (user as { name?: string }).name ?? null,
+    clientContext,
+  });
+
+  const chosenTemplateId = templateId ?? (await pickTemplateForKind(user.tenantId, kind));
+  const rendered = await renderBody(
+    user.tenantId,
+    chosenTemplateId,
+    context,
+    lines,
+    source.currency
+  );
+
+  const [derived] = await db
+    .insert(docDocuments)
+    .values({
+      tenantId: user.tenantId,
+      templateId: chosenTemplateId,
+      templateVersion: rendered.templateVersion,
+      kind,
+      title: title ?? `${DOC_KIND_LABEL[kind] ?? "Act"} — ${source.counterpartyName ?? source.title}`,
+      projectId: source.projectId,
+      eventId: source.eventId,
+      payerId: source.payerId,
+      counterpartyKind: source.counterpartyKind,
+      counterpartyId: source.counterpartyId,
+      counterpartyName: source.counterpartyName,
+      counterpartySnapshot: source.counterpartySnapshot,
+      context: JSON.stringify(context),
+      bodyHtml: rendered.bodyHtml,
+      totalCents: source.totalCents,
+      currency: source.currency,
+      createdByUserId: user.id,
+    })
+    .returning();
+
+  if (lines.length > 0) {
+    await db.insert(docDocumentLines).values(
+      lines.map((l, i) => ({
+        tenantId: user.tenantId,
+        documentId: derived.id,
+        position: i + 1,
+        description: l.description,
+        unit: l.unit,
+        quantity: l.quantity,
+        unitPriceCents: l.unitPriceCents,
+        lineTotalCents: l.lineTotalCents,
+        vatPercent: l.vatPercent,
+      }))
+    );
+  }
+
+  // Legătura se scrie o dată, dar se citește din ambele capete (vezi /trail).
+  await db.insert(docDocumentLinks).values({
+    tenantId: user.tenantId,
+    fromDocumentId: source.id,
+    toKind: "document",
+    toDocumentId: derived.id,
+    relation: "derived_from",
+    createdByUserId: user.id,
+  });
+  await writeAudit(user.tenantId, source.id, user.id, "derived", { kind, derivedId: derived.id });
+  await writeAudit(user.tenantId, derived.id, user.id, "created", { from: source.docNumber });
+
+  return c.json({ ...derived, basedOn: sourceLabel }, 201);
+});
+
+/** Etichetele tipurilor, pentru texte generate pe server („în baza contractului nr…"). */
+const DOC_KIND_LABEL: Record<string, string> = {
+  act_primire_predare: "actul de primire-predare",
+  contract_servicii: "contractul de prestări servicii",
+  contract_vanzare: "contractul de vânzare-cumpărare",
+  act_aditional: "actul adițional",
+  proces_verbal: "procesul-verbal",
+  act_compensare: "actul de compensare",
+  other: "documentul",
+};
+
+/** Șablonul implicit pentru un tip de act: primul al organizației, altfel cel standard. */
+async function pickTemplateForKind(tenantId: string, kind: string): Promise<string | null> {
+  const rows = await db
+    .select({ id: docmergeTemplates.id, isSystem: docmergeTemplates.isSystem })
+    .from(docmergeTemplates)
+    .where(and(eq(docmergeTemplates.tenantId, tenantId), eq(docmergeTemplates.kind, kind)))
+    .orderBy(desc(docmergeTemplates.updatedAt));
+  return rows.find((r) => !r.isSystem)?.id ?? rows[0]?.id ?? null;
+}
+
+/**
+ * DG-119 — traseul actului: contract → act → cerere de plată → plată.
+ *
+ * Răspunde la întrebarea „unde s-a oprit lucrul?", care azi se pune pe chat, de trei ori pe zi.
+ * Verigile se citesc în ambele sensuri: și din actul-sursă, și din cel derivat.
+ */
+docsRoutes.get("/documents/:id/trail", async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const [doc] = await db
+    .select()
+    .from(docDocuments)
+    .where(and(eq(docDocuments.id, id), eq(docDocuments.tenantId, user.tenantId)));
+  if (!doc) return c.json({ error: "not_found" }, 404);
+
+  const outgoing = await db
+    .select()
+    .from(docDocumentLinks)
+    .where(and(eq(docDocumentLinks.tenantId, user.tenantId), eq(docDocumentLinks.fromDocumentId, id)));
+  const incoming = await db
+    .select()
+    .from(docDocumentLinks)
+    .where(and(eq(docDocumentLinks.tenantId, user.tenantId), eq(docDocumentLinks.toDocumentId, id)));
+
+  const docIds = [
+    ...outgoing.filter((l) => l.toDocumentId).map((l) => l.toDocumentId as string),
+    ...incoming.map((l) => l.fromDocumentId),
+  ];
+  const relatedDocs = docIds.length
+    ? await db
+        .select({
+          id: docDocuments.id,
+          kind: docDocuments.kind,
+          docNumber: docDocuments.docNumber,
+          title: docDocuments.title,
+          status: docDocuments.status,
+          docDate: docDocuments.docDate,
+          totalCents: docDocuments.totalCents,
+          currency: docDocuments.currency,
+        })
+        .from(docDocuments)
+        .where(and(eq(docDocuments.tenantId, user.tenantId), inArray(docDocuments.id, docIds)))
+    : [];
+
+  const parIds = outgoing.filter((l) => l.toParId).map((l) => l.toParId as string);
+  const relatedPars = parIds.length
+    ? await db
+        .select({
+          id: parRequests.id,
+          requestNo: parRequests.requestNo,
+          status: parRequests.status,
+          totalEstimatedCents: parRequests.totalEstimatedCents,
+          currency: parRequests.currency,
+          paidAt: parRequests.paidAt,
+          approvedAt: parRequests.approvedAt,
+        })
+        .from(parRequests)
+        .where(and(eq(parRequests.tenantId, user.tenantId), inArray(parRequests.id, parIds)))
+    : [];
+
+  return c.json({
+    document: {
+      id: doc.id,
+      kind: doc.kind,
+      docNumber: doc.docNumber,
+      title: doc.title,
+      status: doc.status,
+      totalCents: doc.totalCents,
+      currency: doc.currency,
+    },
+    basedOn: incoming.map((l) => relatedDocs.find((d) => d.id === l.fromDocumentId)).filter(Boolean),
+    derived: outgoing
+      .filter((l) => l.toKind === "document")
+      .map((l) => relatedDocs.find((d) => d.id === l.toDocumentId))
+      .filter(Boolean),
+    paymentRequests: relatedPars,
+  });
 });

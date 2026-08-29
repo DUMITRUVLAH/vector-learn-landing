@@ -208,3 +208,46 @@ export function convertDocumentToPar(id: string, force = false): Promise<DocToPa
     { method: "POST" }
   );
 }
+
+export interface DocTrailDocument {
+  id: string;
+  kind: string;
+  docNumber: string | null;
+  title: string;
+  status: DocStatus;
+  totalCents: number;
+  currency: string;
+}
+
+export interface DocTrailPar {
+  id: string;
+  requestNo: string;
+  status: string;
+  totalEstimatedCents: number;
+  currency: string;
+  paidAt: string | null;
+  approvedAt: string | null;
+}
+
+export interface DocTrail {
+  document: DocTrailDocument;
+  basedOn: DocTrailDocument[];
+  derived: DocTrailDocument[];
+  paymentRequests: DocTrailPar[];
+}
+
+export function getDocumentTrail(id: string): Promise<DocTrail> {
+  return api<DocTrail>(`/api/docs/documents/${id}/trail`);
+}
+
+export function listDerivableKinds(id: string): Promise<{ kinds: string[] }> {
+  return api<{ kinds: string[] }>(`/api/docs/documents/${id}/derivable`);
+}
+
+/** Actul derivat moștenește părțile, proiectul și pozițiile, cu referința la actul-sursă. */
+export function deriveDocument(id: string, kind: string): Promise<DocDetail & { basedOn: string }> {
+  return api(`/api/docs/documents/${id}/derive`, {
+    method: "POST",
+    body: JSON.stringify({ kind }),
+  });
+}

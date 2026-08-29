@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "DG-117",
+  "last_completed": "DG-119",
   "iterations": 180,
   "last_run_at": "2026-06-28T00:00:00Z",
   "milestone_status": "VIOLETA: VM1 done (#204-#216). VM3 (feedback 2026-07-16) done — PR #262. VM2: 20 pending.",
@@ -4912,7 +4912,7 @@
       "title": "Trimitere pe email prin emailGuard + export .docx"
     },
     "DG-116": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4922,7 +4922,8 @@
         "DG-114"
       ],
       "priority": "high",
-      "title": "„Act nou pe baza acestuia”: contract → act de primire-predare / adițional / PV"
+      "title": "„Act nou pe baza acestuia”: contract → act de primire-predare / adițional / PV",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-117": {
       "status": "done",
@@ -4952,7 +4953,7 @@
       "title": "Invers: din PAR aprobat / comandă / recepție → actul precompletat"
     },
     "DG-119": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4962,7 +4963,8 @@
         "DG-117"
       ],
       "priority": "medium",
-      "title": "Traseul actului: contract → act → PAR → plată → factură (componentă comună cu PAR)"
+      "title": "Traseul actului: contract → act → PAR → plată → factură (componentă comună cu PAR)",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-120": {
       "status": "pending",

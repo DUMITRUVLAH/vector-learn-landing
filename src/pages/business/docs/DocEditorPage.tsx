@@ -20,6 +20,7 @@ import {
   Check,
   Download,
   Banknote,
+  GitBranch,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
@@ -29,10 +30,15 @@ import {
   updateDocument,
   finalizeDocument,
   convertDocumentToPar,
+  getDocumentTrail,
+  listDerivableKinds,
+  deriveDocument,
   listDocTemplates,
   DOC_KIND_LABELS,
+  DOC_STATUS_LABELS,
   type DocDetail,
   type DocTemplateListItem,
+  type DocTrail,
 } from "@/lib/api/docs";
 import { listVendors, listProjects, type ParVendor, type ParProject } from "@/lib/api/par";
 import { fieldLabel } from "@/lib/docs/fieldCatalog";
@@ -100,6 +106,8 @@ export function DocEditorPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState<string[]>([]);
+  const [trail, setTrail] = useState<DocTrail | null>(null);
+  const [derivableKinds, setDerivableKinds] = useState<string[]>([]);
   const dirty = useRef(false);
 
   const total = useMemo(
@@ -127,6 +135,12 @@ export function DocEditorPage() {
           const d = await getDocument(docId);
           if (cancelled) return;
           setDoc(d);
+          void getDocumentTrail(docId).then((t) => !cancelled && setTrail(t)).catch(() => {});
+          if (d.status === "final") {
+            void listDerivableKinds(docId)
+              .then((r) => !cancelled && setDerivableKinds(r.kinds))
+              .catch(() => {});
+          }
           setTitle(d.title);
           setKind(d.kind);
           setTemplateId(d.templateId ?? "");
@@ -257,6 +271,21 @@ export function DocEditorPage() {
       setError(body?.message ?? "Cererea de plată nu a putut fi creată.");
     }
   }, [docId, navigate]);
+
+  /** „Act nou pe baza acestuia": derivatul preia părțile și pozițiile, cu referința scrisă singură. */
+  const derive = useCallback(
+    async (kind: string) => {
+      if (!docId) return;
+      setError(null);
+      try {
+        const created = await deriveDocument(docId, kind);
+        navigate(`/business/docs/${created.id}`);
+      } catch {
+        setError("Actul derivat nu a putut fi creat.");
+      }
+    },
+    [docId, navigate]
+  );
 
   const filteredVendors = useMemo(() => {
     const q = vendorQuery.trim().toLowerCase();
@@ -400,6 +429,74 @@ export function DocEditorPage() {
                 </select>
               </div>
             </div>
+
+            {/* Traseul actului: contract → act → cerere de plată. Răspunde la „unde s-a oprit?". */}
+            {trail &&
+              ((trail.basedOn?.length ?? 0) > 0 ||
+                (trail.derived?.length ?? 0) > 0 ||
+                (trail.paymentRequests?.length ?? 0) > 0) && (
+              <section aria-label="Traseul actului" className="rounded-lg border border-border p-4">
+                <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <GitBranch className="h-4 w-4" aria-hidden="true" />
+                  Traseul actului
+                </h2>
+                <ul className="mt-3 space-y-2 text-sm">
+                  {(trail.basedOn ?? []).map((d) => (
+                    <li key={d.id}>
+                      <span className="text-muted-foreground">În baza: </span>
+                      <a href={`#/business/docs/${d.id}`} className="text-primary hover:underline">
+                        {d.docNumber ?? d.title}
+                      </a>
+                      <span className="text-muted-foreground"> · {DOC_STATUS_LABELS[d.status] ?? d.status}</span>
+                    </li>
+                  ))}
+                  {(trail.derived ?? []).map((d) => (
+                    <li key={d.id}>
+                      <span className="text-muted-foreground">A născut: </span>
+                      <a href={`#/business/docs/${d.id}`} className="text-primary hover:underline">
+                        {d.docNumber ?? d.title}
+                      </a>
+                      <span className="text-muted-foreground"> · {DOC_STATUS_LABELS[d.status] ?? d.status}</span>
+                    </li>
+                  ))}
+                  {(trail.paymentRequests ?? []).map((p) => (
+                    <li key={p.id}>
+                      <span className="text-muted-foreground">Cerere de plată: </span>
+                      <a href={`#/business/par/${p.id}`} className="text-primary hover:underline">
+                        {p.requestNo}
+                      </a>
+                      <span className="text-muted-foreground">
+                        {" · "}
+                        {p.paidAt ? "plătită" : p.approvedAt ? "aprobată" : p.status}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {derivableKinds.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-4">
+                <label htmlFor="derive-kind" className="text-sm text-foreground">
+                  Creează act pe baza acestuia:
+                </label>
+                <select
+                  id="derive-kind"
+                  defaultValue=""
+                  onChange={(e) => {
+                    if (e.target.value) void derive(e.target.value);
+                  }}
+                  className="touch-target rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="">Alege tipul…</option>
+                  {derivableKinds.map((k) => (
+                    <option key={k} value={k}>
+                      {DOC_KIND_LABELS[k] ?? k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Contrapartea: un singur câmp de căutare, apoi rechizitele apar singure. */}
             <section className="rounded-lg border border-border p-4">
