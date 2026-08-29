@@ -167,7 +167,7 @@ describe("randare", () => {
     for (const a of published) {
       const html = renderArticlePage(a, published);
       expect(html.startsWith("<!doctype html>")).toBe(true);
-      expect(html).toContain(`<link rel="canonical" href="https://finflow.best/blog/${a.slug}">`);
+      expect(html).toContain(`<link rel="canonical" href="https://www.finflow.best/blog/${a.slug}">`);
       expect(html).toContain('"@type":"Article"');
       // Singurul <script> permis e JSON-LD: pagina trebuie să se citească fără JS.
       const scripts = html.match(/<script[^>]*>/g) ?? [];

@@ -40,7 +40,12 @@ const SITE = {
   contactEmail: "contact@finflow.best",
 };
 
-export const DEFAULT_BASE_URL = "https://finflow.best";
+/**
+ * Domeniul canonic. `finflow.best` răspunde cu 308 spre `www`, deci canonicalul trebuie să fie
+ * gazda care întoarce efectiv 200 — altfel fiecare pagină se auto-referă printr-o redirecționare.
+ * Se poate suprascrie la build cu `BLOG_BASE_URL` (util pentru preview-uri).
+ */
+export const DEFAULT_BASE_URL = "https://www.finflow.best";
 
 /* ────────────────────────────── utilitare ────────────────────────────── */
 
