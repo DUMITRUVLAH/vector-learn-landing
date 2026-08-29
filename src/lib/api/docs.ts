@@ -313,3 +313,19 @@ export function createDocumentFromPar(parId: string, kind = "act_primire_predare
     body: JSON.stringify({ kind }),
   });
 }
+
+export type EmailDocumentResult =
+  | { sent: true; to: string }
+  | { sent: false; reason: string; message: string };
+
+/** Trimite actul contrapărții. Poarta de livrare poate opri trimiterea — răspunsul o spune. */
+export function emailDocument(id: string, to: string, message?: string): Promise<EmailDocumentResult> {
+  return api<EmailDocumentResult>(`/api/docs/documents/${id}/email`, {
+    method: "POST",
+    body: JSON.stringify({ to, message }),
+  });
+}
+
+export function wordExportUrl(id: string): string {
+  return `/api/docs/documents/${id}/word`;
+}

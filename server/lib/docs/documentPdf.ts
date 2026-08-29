@@ -27,6 +27,8 @@ export interface PrintableDocument {
   bodyHash: string | null;
   status: string;
   counterpartyName?: string | null;
+  /** Rechizitele înghețate pe act (idno, iban, banca…) — apar în documentul fără șablon. */
+  counterpartySnapshot?: Record<string, string> | null;
   currency?: string;
   totalCents?: number;
   /** Folosite doar când actul nu are șablon — vezi `fallbackBody`. */
@@ -107,8 +109,19 @@ function fallbackBody(doc: PrintableDocument): string {
     doc.totalCents != null
       ? `<p><strong>Total: ${(doc.totalCents / 100).toFixed(2)} ${escapeHtml(currency)}</strong></p>`
       : "";
+  // Un act fără șablon rămâne totuși un DOCUMENT: fără rechizitele părții, e doar o listă de
+  // obiecte. De aceea le tipărim din snapshotul înghețat pe act.
+  const snap = doc.counterpartySnapshot ?? {};
+  const requisites = [
+    snap.idno ? `cod fiscal ${escapeHtml(snap.idno)}` : null,
+    snap.iban ? `IBAN ${escapeHtml(snap.iban)}` : null,
+    snap.banca ? escapeHtml(snap.banca) : null,
+    snap.adresa ? escapeHtml(snap.adresa) : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
   const party = doc.counterpartyName
-    ? `<p>Contraparte: <strong>${escapeHtml(doc.counterpartyName)}</strong></p>`
+    ? `<p>Contraparte: <strong>${escapeHtml(doc.counterpartyName)}</strong>${requisites ? `, ${requisites}` : ""}</p>`
     : "";
   return `<h1>${escapeHtml(doc.title)}</h1>${party}${table}${total}`;
 }

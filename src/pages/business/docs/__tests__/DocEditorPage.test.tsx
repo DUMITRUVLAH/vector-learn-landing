@@ -68,6 +68,7 @@ const createDocument = vi.fn();
 const updateDocument = vi.fn();
 const finalizeDocument = vi.fn();
 const convertDocumentToPar = vi.fn();
+const emailDocument = vi.fn();
 const getDocumentTrail = vi.fn();
 const listDerivableKinds = vi.fn();
 const deriveDocument = vi.fn();
@@ -82,6 +83,7 @@ vi.mock("@/lib/api/docs", async () => {
     updateDocument: (...a: unknown[]) => updateDocument(...a),
     finalizeDocument: (...a: unknown[]) => finalizeDocument(...a),
     convertDocumentToPar: (...a: unknown[]) => convertDocumentToPar(...a),
+    emailDocument: (...a: unknown[]) => emailDocument(...a),
     getDocumentTrail: (...a: unknown[]) => getDocumentTrail(...a),
     listDerivableKinds: (...a: unknown[]) => listDerivableKinds(...a),
     deriveDocument: (...a: unknown[]) => deriveDocument(...a),
@@ -471,5 +473,48 @@ describe("DG-114 — sigiliul, în interfață", () => {
     render(<DocEditorPage />);
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/nu mai corespunde amprentei/);
+  });
+});
+
+
+describe("DG-115 — trimiterea pe email, din interfață", () => {
+  it("[blocant] livrarea oprită de mediu se spune ca atare, nu ca eroare", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue(FINAL_DOC);
+    emailDocument.mockResolvedValue({
+      sent: false,
+      reason: "blocked",
+      message: "Mediul acesta nu trimite e-mailuri reale (protecție anti-trimitere din teste).",
+    });
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("furnizor@example.com");
+    render(<DocEditorPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Trimite pe email/i }));
+    await waitFor(() => expect(emailDocument).toHaveBeenCalledWith("doc-1", "furnizor@example.com"));
+
+    expect(await screen.findByText(/nu trimite e-mailuri reale/)).toBeInTheDocument();
+    // Nu e o eroare roșie: livrarea a fost oprită deliberat, nu a eșuat.
+    expect(screen.queryByRole("alert")).toBeNull();
+    promptSpy.mockRestore();
+  });
+
+  it("[blocant] trimiterea reușită confirmă destinatarul", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue(FINAL_DOC);
+    emailDocument.mockResolvedValue({ sent: true, to: "furnizor@example.com" });
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("furnizor@example.com");
+    render(<DocEditorPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Trimite pe email/i }));
+    expect(await screen.findByText(/a plecat către furnizor@example.com/)).toBeInTheDocument();
+    promptSpy.mockRestore();
+  });
+
+  it("[normal] pe o ciornă nu se oferă trimiterea — se trimite ce e semnat", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
+    render(<DocEditorPage />);
+    await waitFor(() => expect(getDocument).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: /Trimite pe email/i })).toBeNull();
   });
 });

@@ -51,6 +51,7 @@ import {
 } from "../db/schema/par";
 import { generateRequestNo } from "../lib/par/requestNo";
 import { buildProjectDossier, buildCounterpartyDossier } from "../lib/docs/dossier";
+import { sendDocumentEmail } from "../lib/docs/sendDocumentEmail";
 import { accessibleProjectIds, mayAccessProject } from "../lib/par/projectScope";
 
 export const docsRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -985,6 +986,7 @@ docsRoutes.get("/documents/:id/pdf", async (c) => {
     bodyHash: doc.bodyHash,
     status: doc.status,
     counterpartyName: doc.counterpartyName,
+    counterpartySnapshot: safeJson(doc.counterpartySnapshot) as Record<string, string>,
     currency: doc.currency,
     totalCents: doc.totalCents,
     lines: printLines.map((l) => ({
@@ -1711,4 +1713,128 @@ docsRoutes.post("/from-par/:parId", async (c) => {
     { ...doc, basedOn, fromReceipt: receivedByLine.size > 0 },
     201
   );
+});
+
+
+// ─── Trimitere pe email + export pentru Word (DG-115) ────────────────────────
+
+docsRoutes.post("/documents/:id/email", async (c) => {
+  const user = c.get("user");
+  const [doc] = await db
+    .select()
+    .from(docDocuments)
+    .where(and(eq(docDocuments.id, c.req.param("id")), eq(docDocuments.tenantId, user.tenantId)));
+  if (!doc) return c.json({ error: "not_found" }, 404);
+  if (!maySeeDocument(doc.projectId, await visibilityFilter(user as { id: string; tenantId: string; role?: string }))) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  let to = "";
+  let message: string | null = null;
+  try {
+    const body = (await c.req.json()) as { to?: string; message?: string };
+    to = (body?.to ?? "").trim();
+    message = body?.message ?? null;
+  } catch {
+    to = "";
+  }
+  if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
+    return c.json({ error: "invalid_recipient", message: "Adresa de e-mail nu e validă." }, 400);
+  }
+
+  const printable = {
+    docNumber: doc.docNumber,
+    title: doc.title,
+    kind: doc.kind,
+    docDate: doc.docDate,
+    bodyHtml: doc.bodyHtml,
+    bodyHash: doc.bodyHash,
+    status: doc.status,
+  };
+  const fileName = pdfFileName(printable, doc.counterpartyName);
+  const pdfBase64 = doc.pdfUrl ? doc.pdfUrl.split(",")[1] ?? null : null;
+
+  const result = await sendDocumentEmail({
+    to,
+    subject: `${doc.docNumber ? `${doc.docNumber} · ` : ""}${doc.title}`,
+    message:
+      message ??
+      `Bună ziua,\n\nVă transmitem atașat ${doc.title}${doc.docNumber ? ` (nr. ${doc.docNumber})` : ""}.\n\nCu respect,`,
+    fileName,
+    pdfBase64,
+  });
+
+  // Jurnalul consemnează ÎNCERCAREA, nu doar succesul: „am trimis?" trebuie să aibă răspuns și
+  // când livrarea a fost blocată de politica de mediu.
+  await writeAudit(user.tenantId, doc.id, user.id, "emailed", {
+    to,
+    sent: result.sent,
+    reason: result.sent ? null : result.reason,
+  });
+
+  if (!result.sent) {
+    return c.json({ sent: false, reason: result.reason, message: result.detail }, 200);
+  }
+  return c.json({ sent: true, to });
+});
+
+/**
+ * Export pentru Word: HTML cu antetul de Office, salvat ca .doc.
+ *
+ * De ce nu .docx „adevărat": ar cere o dependență nouă doar ca să producă un fișier pe care Word îl
+ * deschide oricum din HTML, cu formatarea păstrată. Numim lucrurile pe nume în interfață
+ * („Descarcă pentru Word"), ca nimeni să nu creadă că primește un .docx nativ.
+ */
+docsRoutes.get("/documents/:id/word", async (c) => {
+  const user = c.get("user");
+  const [doc] = await db
+    .select()
+    .from(docDocuments)
+    .where(and(eq(docDocuments.id, c.req.param("id")), eq(docDocuments.tenantId, user.tenantId)));
+  if (!doc) return c.json({ error: "not_found" }, 404);
+  if (!maySeeDocument(doc.projectId, await visibilityFilter(user as { id: string; tenantId: string; role?: string }))) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  const lines = await db
+    .select()
+    .from(docDocumentLines)
+    .where(eq(docDocumentLines.documentId, doc.id))
+    .orderBy(docDocumentLines.position);
+
+  const html = buildPrintableHtml(
+    {
+      docNumber: doc.docNumber,
+      title: doc.title,
+      kind: doc.kind,
+      docDate: doc.docDate,
+      bodyHtml: doc.bodyHtml,
+      bodyHash: doc.bodyHash,
+      status: doc.status,
+      counterpartyName: doc.counterpartyName,
+      counterpartySnapshot: safeJson(doc.counterpartySnapshot) as Record<string, string>,
+      currency: doc.currency,
+      totalCents: doc.totalCents,
+      lines: lines.map((l) => ({
+        description: l.description,
+        unit: l.unit,
+        quantity: l.quantity,
+        lineTotalCents: l.lineTotalCents,
+      })),
+    },
+    { name: null, logoUrl: null }
+  );
+  const fileName = pdfFileName(
+    { docNumber: doc.docNumber, title: doc.title, kind: doc.kind, docDate: doc.docDate, bodyHtml: "", bodyHash: null, status: doc.status },
+    doc.counterpartyName
+  ).replace(/\.pdf$/, ".doc");
+
+  await writeAudit(user.tenantId, doc.id, user.id, "downloaded", { format: "word" });
+
+  return new Response(html, {
+    headers: {
+      "Content-Type": "application/msword; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${fileName}"`,
+    },
+  });
 });

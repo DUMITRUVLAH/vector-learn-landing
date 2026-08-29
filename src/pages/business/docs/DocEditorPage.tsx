@@ -24,6 +24,8 @@ import {
   History,
   ShieldCheck,
   ShieldAlert,
+  Mail,
+  FileType,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
@@ -33,6 +35,8 @@ import {
   updateDocument,
   finalizeDocument,
   convertDocumentToPar,
+  emailDocument,
+  wordExportUrl,
   getDocumentTrail,
   listDerivableKinds,
   deriveDocument,
@@ -123,6 +127,7 @@ export function DocEditorPage() {
   const [missing, setMissing] = useState<string[]>([]);
   const [trail, setTrail] = useState<DocTrail | null>(null);
   const [derivableKinds, setDerivableKinds] = useState<string[]>([]);
+  const [emailNotice, setEmailNotice] = useState<string | null>(null);
   const dirty = useRef(false);
 
   const total = useMemo(
@@ -302,6 +307,26 @@ export function DocEditorPage() {
     [docId, navigate]
   );
 
+  /**
+   * Trimiterea către contraparte. Răspunsul poate fi „nu am trimis" fără să fie eroare (mediul
+   * blochează e-mailurile reale) — atunci spunem exact asta, nu „a eșuat".
+   */
+  const sendEmail = useCallback(async () => {
+    if (!docId) return;
+    const to = window.prompt("Către ce adresă trimitem actul?", doc?.counterpartyName ? "" : "");
+    if (!to) return;
+    setError(null);
+    setEmailNotice(null);
+    try {
+      const res = await emailDocument(docId, to.trim());
+      setEmailNotice(res.sent ? `Actul a plecat către ${res.to}.` : res.message);
+      if (docId) setDoc(await getDocument(docId));
+    } catch (e) {
+      const body = (e as { body?: { message?: string } }).body;
+      setError(body?.message ?? "Actul nu a putut fi trimis.");
+    }
+  }, [docId, doc?.counterpartyName]);
+
   const filteredVendors = useMemo(() => {
     const q = vendorQuery.trim().toLowerCase();
     if (!q) return vendors.slice(0, 8);
@@ -325,6 +350,25 @@ export function DocEditorPage() {
         <div className="flex gap-2">
           {docId && (
             <a
+              href={wordExportUrl(docId)}
+              className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+            >
+              <FileType className="h-4 w-4" aria-hidden="true" />
+              Descarcă pentru Word
+            </a>
+          )}
+          {docId && doc?.status === "final" && (
+            <button
+              type="button"
+              onClick={() => void sendEmail()}
+              className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+            >
+              <Mail className="h-4 w-4" aria-hidden="true" />
+              Trimite pe email
+            </button>
+          )}
+          {docId && (
+            <a
               href={`/api/docs/documents/${docId}/pdf`}
               className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
             >
@@ -344,6 +388,12 @@ export function DocEditorPage() {
       }
     >
       <div className="p-4 sm:p-6 space-y-6">
+        {emailNotice && (
+          <p className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            {emailNotice}
+          </p>
+        )}
+
         {error && (
           <div
             role="alert"
