@@ -100,6 +100,18 @@ const AREAS = {
     routes: ["/business/platform"],
     deep: ["e2e-platform-console.mjs", "e2e-platform-telemetry.mjs"],
   },
+  docgen: {
+    label: "Acte (DOCGEN)",
+    // Atenție la ordine: „docs" prinde și rutele, și schema, și clientul API al modulului de acte.
+    match: /(server\/routes\/docs|server\/db\/(schema\/docs|ensure\/docgen)|src\/pages\/business\/docs|src\/lib\/api\/docs)/,
+    // Verificăm FORMA, nu doar 200: lista trebuie să fie un tablou de acte, nu un obiect de eroare.
+    api: [
+      ["GET", "/api/docs/documents", (j) => Array.isArray(j)],
+      ["GET", "/api/docs/documents?status=final", (j) => Array.isArray(j) && j.every((d) => d.status === "final")],
+    ],
+    routes: ["/business/docs"],
+    deep: [],
+  },
   docmerge: {
     label: "DocMerge",
     match: /(docmerge|DocMerge)/,

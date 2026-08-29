@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "VM3-03",
+  "last_completed": "DG-103",
   "iterations": 180,
   "last_run_at": "2026-06-28T00:00:00Z",
   "milestone_status": "VIOLETA: VM1 done (#204-#216). VM3 (feedback 2026-07-16) done — PR #262. VM2: 20 pending.",
@@ -4707,7 +4707,7 @@
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/262"
     },
     "DG-101": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4715,10 +4715,11 @@
       "phase": "DOCGEN-faza-1",
       "depends_on": [],
       "priority": "high",
-      "title": "Schema documentelor (doc_documents/lines/links/sequences/audit) + extensie docmerge_templates + migrare + heal sync-schema"
+      "title": "Schema documentelor (doc_documents/lines/links/sequences/audit) + extensie docmerge_templates + migrare + heal sync-schema",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-102": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4728,10 +4729,11 @@
         "DG-101"
       ],
       "priority": "high",
-      "title": "API documente: CRUD + finalizare imutabilă (body_hash) + anulare cu motiv + filtre"
+      "title": "API documente: CRUD + finalizare imutabilă (body_hash) + anulare cu motiv + filtre",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-103": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4741,7 +4743,8 @@
         "DG-102"
       ],
       "priority": "high",
-      "title": "Pagina „Acte” (/business/docs) cu filtre pe tip/proiect/contraparte/stare"
+      "title": "Pagina „Acte” (/business/docs) cu filtre pe tip/proiect/contraparte/stare",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-104": {
       "status": "pending",

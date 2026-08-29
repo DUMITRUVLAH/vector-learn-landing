@@ -43,6 +43,7 @@ const ParExchange = lazyWithTimeout(() => import("./pages/par/ParExchange").then
 const ParEfacturaQueue = lazyWithTimeout(() => import("./pages/par/ParEfacturaQueue"));
 
 // DOCMERGE
+const DocsPage = lazyWithTimeout(() => import("./pages/business/docs/DocsPage").then((m) => ({ default: m.DocsPage })));
 const DocMergeTemplatesPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeTemplatesPage").then((m) => ({ default: m.DocMergeTemplatesPage })));
 const DocMergeJobPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeJobPage").then((m) => ({ default: m.DocMergeJobPage })));
 const DocMergeWizardPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeWizardPage").then((m) => ({ default: m.DocMergeWizardPage })));
@@ -259,6 +260,8 @@ function Routes() {
   if (path.startsWith("/business/par")) return <BusinessGuardPage><ParGuardPage><ParDashboard /></ParGuardPage></BusinessGuardPage>;
 
   // DOCMERGE-001/002/003/004: Document Merge — more specific routes first
+  // DG-103: registrul de acte. ÎNAINTEA lui /business/docmerge, ca prefixul mai scurt să nu-l înghită.
+  if (path.startsWith("/business/docs")) return <BusinessGuardPage><DocsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/wizard")) return <BusinessGuardPage><DocMergeWizardPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge")) return <BusinessGuardPage><DocMergeTemplatesPage /></BusinessGuardPage>;
