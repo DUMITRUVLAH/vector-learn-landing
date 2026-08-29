@@ -12,7 +12,6 @@
 import { useState, useEffect } from "react";
 import { useKeepAliveState } from "@/hooks/useKeepAliveState";
 import { useBusinessSession } from "@/hooks/useBusinessSession";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import {
   Download,
   AlertCircle,
@@ -26,6 +25,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { Link } from "@/router/HashRouter";
 import {
   formatMDL,
   getParReportByBudget,
@@ -40,6 +40,7 @@ import {
   getParReportExportXlsxUrl,
   getParReportCurrencyBreakdown,
   getParReportByEvent,
+  getParReportBreakdown,
   listPayers,
   listProjects,
   listDepartments,
@@ -49,6 +50,9 @@ import {
   type ParCycleTimeItem,
   type ParCurrencyBreakdownItem,
   type ParUrgentReport,
+  type ParReportBreakdownItem,
+  type ParReportDimension,
+  type ParReportFilters,
 } from "@/lib/api/par";
 import {
   Alert,
@@ -58,6 +62,7 @@ import {
   Input,
   KpiTile,
   Label,
+  Sheet,
   Table,
   TableBody,
   TableCell,
@@ -110,22 +115,31 @@ interface SpendChartProps {
   items: ParSpendByItem[];
   loading: boolean;
   basis: SpendBasis;
-  /** Câte bare arătăm; 0 = toate. Înainte erau 10 fixe, fără să scrie nicăieri. */
+  /** Câte rânduri arătăm; 0 = toate. Înainte erau 10 fixe, fără să scrie nicăieri. */
   topN: number;
+  /** Deschide cererile din spatele unui rând. */
+  onSelect: (item: ParSpendByItem) => void;
 }
 
-function SpendChart({ title, items, loading, basis, topN }: SpendChartProps) {
+/**
+ * Clasament orizontal, nu coloane verticale.
+ *
+ * Numele beneficiarilor sunt lungi („Agenția de Stat pentru Proprietatea Intelectuală"), iar pe
+ * o axă verticală ajungeau rotite la 30°, tăiate la margine și imposibil de citit — jumătate din
+ * card era spațiu gol, iar barele mici arătau ca niște linii. Pe orizontală, eticheta are un rând
+ * întreg, cifra stă lângă ea, iar proporțiile rămân comparabile dintr-o privire.
+ *
+ * Fiecare rând e un buton: raportul spune „24.000 la Explor Tur SRL", clicul arată DIN CE cereri.
+ */
+function SpendChart({ title, items, loading, basis, topN, onSelect }: SpendChartProps) {
   const sorted = items
     .slice()
     .sort((a, b) => basisCents(b, basis) - basisCents(a, basis))
     .filter((it) => basisCents(it, basis) !== 0 || basis === "estimated");
   const shown = topN > 0 ? sorted.slice(0, topN) : sorted;
   const hidden = sorted.length - shown.length;
-  const data = shown.map((it) => ({
-    name: it.label ?? "—",
-    totalMDL: basisCents(it, basis) / 100,
-    count: it.count,
-  }));
+  const max = Math.max(1, ...shown.map((it) => basisCents(it, basis)));
+  const total = sorted.reduce((sum, it) => sum + basisCents(it, basis), 0);
 
   return (
     <Card className="p-4">
@@ -137,46 +151,51 @@ function SpendChart({ title, items, loading, basis, topN }: SpendChartProps) {
         </span>
       </div>
       {loading ? (
-        <div className="flex items-center justify-center h-32">
+        <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-label="Se încarcă" />
         </div>
-      ) : data.length === 0 ? (
+      ) : shown.length === 0 ? (
         <EmptyState compact title="Nicio înregistrare" />
       ) : (
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
-            <XAxis
-              dataKey="name"
-              tick={{ fontSize: 11 }}
-              tickLine={false}
-              axisLine={false}
-              angle={-30}
-              textAnchor="end"
-              interval={0}
-            />
-            <YAxis
-              tick={{ fontSize: 11 }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => `${(v as number / 1000).toFixed(0)}k`}
-            />
-            <Tooltip
-              formatter={(val: unknown) => [formatMDL(Math.round((val as number) * 100)), basis === "paid" ? "Plătit efectiv" : "Total estimat"]}
-              contentStyle={{
-                fontSize: 12,
-                borderRadius: 8,
-                border: "1px solid hsl(var(--border))",
-                background: "hsl(var(--popover))",
-                color: "hsl(var(--popover-foreground))",
-              }}
-            />
-            <Bar dataKey="totalMDL" radius={[4, 4, 0, 0]}>
-              {data.map((_, idx) => (
-                <Cell key={idx} fill={chartColor(idx)} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <ul className="flex flex-col gap-1">
+          {shown.map((it, idx) => {
+            const value = basisCents(it, basis);
+            const share = total > 0 ? (value / total) * 100 : 0;
+            return (
+              <li key={it.id ?? it.label}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(it)}
+                  className="group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={`${it.label} — ${formatMDL(value)}, ${it.count} cereri. Deschide cererile.`}
+                >
+                  <span className="w-5 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{idx + 1}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-3">
+                      <span className="truncate text-sm text-foreground group-hover:underline" title={it.label}>
+                        {it.label}
+                      </span>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                        {formatMDL(value)}
+                      </span>
+                    </span>
+                    <span className="mt-1 flex items-center gap-2">
+                      <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                        <span
+                          className="block h-full rounded-full"
+                          style={{ width: `${Math.max(2, (value / max) * 100)}%`, background: chartColor(idx) }}
+                        />
+                      </span>
+                      <span className="w-24 shrink-0 text-right text-xs text-muted-foreground">
+                        {it.count} {it.count === 1 ? "cerere" : "cereri"} · {share.toFixed(0)}%
+                      </span>
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </Card>
   );
@@ -266,6 +285,114 @@ function AgingTable({ items, loading }: AgingTableProps) {
   );
 }
 
+/**
+ * Cererile din spatele unui rând de raport.
+ *
+ * Owner: „dacă apeși pe vreun furnizor ar fi bine să se deschidă tot cartonașul, toate plățile
+ * către acesta." Panoul arată totalurile lui (estimat, plătit, câte cereri) și fiecare cerere cu
+ * status, dată, sumă și referința plății — fiecare rând duce la cererea întreagă.
+ */
+function BreakdownSheet({
+  open, onClose, title, dimension, value, filters, basis,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  dimension: ParReportDimension;
+  value: string | null;
+  filters: ParReportFilters;
+  basis: SpendBasis;
+}) {
+  const [items, setItems] = useState<ParReportBreakdownItem[] | null>(null);
+  const [totals, setTotals] = useState<{ count: number; estimatedCents: number; paidCents: number } | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    setItems(null);
+    setTotals(null);
+    setFailed(false);
+    getParReportBreakdown(dimension, value, filters)
+      .then((r) => { if (alive) { setItems(r.items); setTotals(r.totals); } })
+      .catch(() => { if (alive) { setItems([]); setFailed(true); } });
+    return () => { alive = false; };
+    // `filters` e recreat la fiecare randare; cheia stabilă e conținutul lui.
+  }, [open, dimension, value, JSON.stringify(filters)]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <Sheet open={open} onClose={onClose} title={title} description="Cererile care compun acest rând, cu aceleași filtre ca raportul" size="lg">
+      {failed && (
+        <Alert variant="destructive" icon={<AlertCircle className="h-4 w-4" />}>
+          Lista nu a putut fi încărcată.
+        </Alert>
+      )}
+      {items === null ? (
+        <div className="flex h-24 items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-label="Se încarcă" />
+        </div>
+      ) : items.length === 0 ? (
+        <EmptyState compact title="Nicio cerere" description="Cu filtrele curente nu rămâne nicio cerere pentru acest rând." />
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Cereri</p>
+              <p className="text-lg font-semibold text-foreground">{totals?.count ?? items.length}</p>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Estimat</p>
+              <p className="text-lg font-semibold text-foreground">{formatMDL(totals?.estimatedCents ?? 0)}</p>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Plătit efectiv</p>
+              <p className={cn("text-lg font-semibold", basis === "paid" ? "text-success" : "text-foreground")}>
+                {formatMDL(totals?.paidCents ?? 0)}
+              </p>
+            </div>
+          </div>
+
+          <ul className="flex flex-col gap-2">
+            {items.map((it) => (
+              <li key={it.id}>
+                <Link
+                  to={`/business/par/${it.id}`}
+                  className="block rounded-lg border border-border p-3 no-underline hover:bg-accent hover:no-underline"
+                >
+                  <span className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-sm font-medium text-foreground">{it.requestNo}</span>
+                    <span className="text-sm font-semibold tabular-nums text-foreground">
+                      {formatMDL(it.estimatedCents)}
+                      {it.currency !== "MDL" && (
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          ({(it.nativeTotalCents / 100).toLocaleString("ro-MD", { minimumFractionDigits: 2 })} {it.currency})
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                  <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <span className="rounded-full border border-border px-2 py-0.5">{STATUS_LABELS[it.status] ?? it.status}</span>
+                    <span>{new Date(it.dateOfRequest).toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                    {it.projectName && <span>{it.projectName}</span>}
+                    {it.requestorName && <span>{it.projectName ? "· " : ""}cerut de {it.requestorName}</span>}
+                  </span>
+                  {it.paidCents > 0 && (
+                    <span className="mt-1 block text-xs text-success">
+                      Plătit {formatMDL(it.paidCents)}
+                      {it.paymentDate ? ` · ${new Date(it.paymentDate).toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" })}` : ""}
+                      {it.paymentRef ? ` · ${it.paymentRef}` : ""}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ParReports() {
@@ -308,6 +435,8 @@ export function ParReports() {
   const [urgentReport, setUrgentReport] = useKeepAliveState<ParUrgentReport | null>("par.reports.urgent", null);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  /** Rândul de raport deschis („cartonașul" furnizorului), null = panou închis. */
+  const [drill, setDrill] = useState<{ dimension: ParReportDimension; value: string | null; title: string } | null>(null);
   const [loadingCharts, setLoadingCharts] = useState(false);
   const [loadingAging, setLoadingAging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -406,6 +535,13 @@ export function ParReports() {
     departments: Object.fromEntries(deptOpts.map((o) => [o.id, o.name])),
   };
   const filterLabels = activeFilterLabels(cfg, nameMaps);
+
+  const TAB_DIMENSION: Record<ReportTab, ParReportDimension> = {
+    payer: "payer", budget: "budget", department: "department",
+    project: "project", vendor: "vendor", event: "event", charge: "charge",
+  };
+  const openDrill = (item: ParSpendByItem) =>
+    setDrill({ dimension: TAB_DIMENSION[cfg.tab], value: item.id, title: item.label });
 
   const currentSection = (() => {
     const map: Record<ReportTab, { title: string; labelHead: string; items: ParSpendByItem[] }> = {
@@ -757,26 +893,26 @@ export function ParReports() {
           />
 
           {tab === "payer" && (
-            <><SpendChart title="Execuție pe plătitor / organizație" items={byPayer} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} /><BudgetExecutionTable items={byPayer} /></>
+            <><SpendChart title="Execuție pe plătitor / organizație" items={byPayer} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} onSelect={openDrill} /><BudgetExecutionTable items={byPayer} /></>
           )}
 
           {tab === "budget" && (
-            <><SpendChart title="Execuție pe cod bugetar" items={byBudget} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} /><BudgetExecutionTable items={byBudget} /></>
+            <><SpendChart title="Execuție pe cod bugetar" items={byBudget} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} onSelect={openDrill} /><BudgetExecutionTable items={byBudget} /></>
           )}
           {tab === "department" && (
-            <SpendChart title="Cheltuieli pe departament" items={byDept} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} />
+            <SpendChart title="Cheltuieli pe departament" items={byDept} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} onSelect={openDrill} />
           )}
           {tab === "project" && (
-            <><SpendChart title="Cheltuieli pe proiect/program" items={byProject} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} /><BudgetExecutionTable items={byProject} /></>
+            <><SpendChart title="Cheltuieli pe proiect/program" items={byProject} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} onSelect={openDrill} /><BudgetExecutionTable items={byProject} /></>
           )}
           {tab === "vendor" && (
-            <SpendChart title="Cheltuieli pe beneficiar" items={byVendor} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} />
+            <SpendChart title="Cheltuieli pe beneficiar" items={byVendor} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} onSelect={openDrill} />
           )}
           {tab === "event" && (
-            <><SpendChart title="Cheltuieli pe eveniment" items={byEvent} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} /><BudgetExecutionTable items={byEvent} /></>
+            <><SpendChart title="Cheltuieli pe eveniment" items={byEvent} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} onSelect={openDrill} /><BudgetExecutionTable items={byEvent} /></>
           )}
           {tab === "charge" && (
-            <SpendChart title="Cheltuieli pe Charge To" items={byCharge} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} />
+            <SpendChart title="Cheltuieli pe Charge To" items={byCharge} loading={loadingCharts} basis={cfg.basis} topN={cfg.topN} onSelect={openDrill} />
           )}
         </div>
 
@@ -886,6 +1022,17 @@ export function ParReports() {
 
         {/* Aging table */}
         <AgingTable items={aging} loading={loadingAging} />
+
+        {/* Cererile din spatele rândului pe care s-a dat click */}
+        <BreakdownSheet
+          open={drill !== null}
+          onClose={() => setDrill(null)}
+          title={drill?.title ?? ""}
+          dimension={drill?.dimension ?? "vendor"}
+          value={drill?.value ?? null}
+          filters={filters}
+          basis={cfg.basis}
+        />
 
       </div>
     </AppShell>

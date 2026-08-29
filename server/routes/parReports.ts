@@ -526,6 +526,104 @@ parReportsRoutes.get("/urgent", async (c) => {
 });
 
 /** GET /api/par/reports/export.csv — raw CSV export */
+/**
+ * GET /api/par/reports/breakdown?dimension=vendor&value=... — cererile din spatele UNEI bare.
+ *
+ * Un grafic care nu se poate deschide e o cifră fără dovadă: „24.000 la Explor Tur SRL" nu spune
+ * din ce cereri e format, deci nimeni nu-l poate verifica fără să scotocească lista. Ruta
+ * întoarce exact rândurile care compun coloana, cu ACELEAȘI filtre ca raportul — altfel drill-down-ul
+ * ar arăta mai multe cereri decât totalul din care s-a plecat.
+ *
+ * `value` gol (sau lipsă) = găleata „Fără …" (cereri fără proiect/departament/cod bugetar).
+ */
+const DIMENSIONS = ["payer", "budget", "department", "project", "vendor", "event", "charge"] as const;
+type Dimension = (typeof DIMENSIONS)[number];
+
+function dimensionCondition(dimension: Dimension, value: string | null): SQL {
+  const empty = value === null || value === "";
+  switch (dimension) {
+    case "payer": return empty ? isNull(parRequests.payerId) : eq(parRequests.payerId, value!);
+    case "budget": return empty ? isNull(parRequests.budgetCodeId) : eq(parRequests.budgetCodeId, value!);
+    case "department": return empty ? isNull(parRequests.departmentId) : eq(parRequests.departmentId, value!);
+    case "project": return empty ? isNull(parRequests.projectId) : eq(parRequests.projectId, value!);
+    case "event": return empty ? isNull(parRequests.eventId) : eq(parRequests.eventId, value!);
+    // Beneficiarul e un NUME salvat pe cerere (nu o cheie străină) — exact cheia după care
+    // grupează raportul, deci drill-down-ul trebuie să compare tot pe nume.
+    case "vendor": return empty ? isNull(parRequests.payeeName) : eq(parRequests.payeeName, value!);
+    case "charge": return sql`${parRequests.chargeTo}::text = ${value ?? "other"}`;
+  }
+}
+
+parReportsRoutes.get("/breakdown", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const q = parseReportQuery(c);
+  const dimension = c.req.query("dimension") as Dimension | undefined;
+  if (!dimension || !DIMENSIONS.includes(dimension)) return c.json({ error: "unknown_dimension" }, 400);
+  const value = c.req.query("value") ?? null;
+
+  const rows = await db
+    .select({
+      id: parRequests.id,
+      requestNo: parRequests.requestNo,
+      dateOfRequest: parRequests.dateOfRequest,
+      status: parRequests.status,
+      purpose: parRequests.purpose,
+      payeeName: parRequests.payeeName,
+      currency: parRequests.currency,
+      totalEstimatedCents: parRequests.totalEstimatedCents,
+      totalMdlCents: parRequests.totalMdlCents,
+      actualAmountCents: parPayments.actualAmountCents,
+      paymentDate: parPayments.paymentDate,
+      paymentRef: parPayments.paymentRef,
+      projectName: parProjects.name,
+      payerName: parPayers.name,
+      requestorName: users.name,
+    })
+    .from(parRequests)
+    .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
+    .leftJoin(parProjects, eq(parProjects.id, parRequests.projectId!))
+    .leftJoin(parPayers, eq(parPayers.id, parRequests.payerId!))
+    .leftJoin(users, eq(users.id, parRequests.requestedByUserId))
+    .where(and(buildReportWhere(tenantId, q, c.get("parReportScope")), dimensionCondition(dimension, value)))
+    .orderBy(parRequests.dateOfRequest);
+
+  const data = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []) as Record<string, unknown>[];
+
+  const items = data.map((r) => {
+    const estimatedCents = Number(r.totalMdlCents ?? r.totalEstimatedCents ?? 0);
+    const isPaid = String(r.status) === "paid";
+    const paidCents = isPaid
+      ? (r.currency === "MDL" ? Number(r.actualAmountCents ?? r.totalEstimatedCents ?? 0) : estimatedCents)
+      : 0;
+    return {
+      id: String(r.id),
+      requestNo: String(r.requestNo ?? ""),
+      dateOfRequest: r.dateOfRequest instanceof Date ? r.dateOfRequest.toISOString() : String(r.dateOfRequest ?? ""),
+      status: String(r.status),
+      purpose: String(r.purpose ?? ""),
+      payeeName: (r.payeeName as string | null) ?? null,
+      currency: String(r.currency ?? "MDL"),
+      nativeTotalCents: Number(r.totalEstimatedCents ?? 0),
+      estimatedCents,
+      paidCents,
+      paymentDate: r.paymentDate instanceof Date ? r.paymentDate.toISOString() : (r.paymentDate as string | null) ?? null,
+      paymentRef: (r.paymentRef as string | null) ?? null,
+      projectName: (r.projectName as string | null) ?? null,
+      payerName: (r.payerName as string | null) ?? null,
+      requestorName: (r.requestorName as string | null) ?? null,
+    };
+  });
+
+  return c.json({
+    items,
+    totals: {
+      count: items.length,
+      estimatedCents: items.reduce((sum, i) => sum + i.estimatedCents, 0),
+      paidCents: items.reduce((sum, i) => sum + i.paidCents, 0),
+    },
+  });
+});
+
 parReportsRoutes.get("/export.csv", async (c) => {
   const tenantId = c.get("user").tenantId;
   const q = parseReportQuery(c);

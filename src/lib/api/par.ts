@@ -1376,6 +1376,41 @@ export async function getParReportUrgent(filters?: ParReportFilters): Promise<{ 
   return api(`/api/par/reports/urgent${parReportQuery(filters)}`);
 }
 
+/** O cerere din spatele unei bare din raport (drill-down). */
+export interface ParReportBreakdownItem {
+  id: string;
+  requestNo: string;
+  dateOfRequest: string;
+  status: ParStatus;
+  purpose: string;
+  payeeName: string | null;
+  currency: string;
+  nativeTotalCents: number;
+  estimatedCents: number;
+  paidCents: number;
+  paymentDate: string | null;
+  paymentRef: string | null;
+  projectName: string | null;
+  payerName: string | null;
+  requestorName: string | null;
+}
+
+export type ParReportDimension = "payer" | "budget" | "department" | "project" | "vendor" | "event" | "charge";
+
+/**
+ * Cererile care compun O bară din raport. Aceleași filtre ca raportul — altfel lista deschisă
+ * dintr-un grafic filtrat ar arăta mai multe cereri decât totalul din care s-a plecat.
+ */
+export async function getParReportBreakdown(
+  dimension: ParReportDimension,
+  value: string | null,
+  filters?: ParReportFilters,
+): Promise<{ items: ParReportBreakdownItem[]; totals: { count: number; estimatedCents: number; paidCents: number } }> {
+  const qs = parReportQuery(filters);
+  const sep = qs ? "&" : "?";
+  return api(`/api/par/reports/breakdown${qs}${sep}dimension=${encodeURIComponent(dimension)}&value=${encodeURIComponent(value ?? "")}`);
+}
+
 export function getParReportExportUrl(filters?: ParReportFilters): string {
   return `/api/par/reports/export.csv${parReportQuery(filters)}`;
 }
