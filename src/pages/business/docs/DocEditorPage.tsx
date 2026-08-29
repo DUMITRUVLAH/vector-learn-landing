@@ -19,6 +19,7 @@ import {
   Trash2,
   Check,
   Download,
+  Banknote,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
@@ -27,6 +28,7 @@ import {
   getDocument,
   updateDocument,
   finalizeDocument,
+  convertDocumentToPar,
   listDocTemplates,
   DOC_KIND_LABELS,
   type DocDetail,
@@ -224,6 +226,37 @@ export function DocEditorPage() {
       }
     }
   }, [docId, save, navigate]);
+
+  /**
+   * „Transformă în PAR" — motivul pentru care există modulul. Dacă actul are deja o cerere, serverul
+   * răspunde 409 și abia atunci întrebăm omul: o a doua cerere din același act e uneori intenționată
+   * (plată în tranșe), dar niciodată din greșeală.
+   */
+  const toPar = useCallback(async () => {
+    if (!docId) return;
+    setError(null);
+    try {
+      const res = await convertDocumentToPar(docId);
+      navigate(`/business/par/${res.parId}`);
+    } catch (e) {
+      const body = (e as { body?: { error?: string; message?: string } }).body;
+      if (body?.error === "already_converted") {
+        const again = window.confirm(
+          "Actul are deja o cerere de plată. Creezi încă una? (se face doar dacă plata e în tranșe)"
+        );
+        if (!again) return;
+        try {
+          const res = await convertDocumentToPar(docId, true);
+          navigate(`/business/par/${res.parId}`);
+          return;
+        } catch {
+          setError("Cererea de plată nu a putut fi creată.");
+          return;
+        }
+      }
+      setError(body?.message ?? "Cererea de plată nu a putut fi creată.");
+    }
+  }, [docId, navigate]);
 
   const filteredVendors = useMemo(() => {
     const q = vendorQuery.trim().toLowerCase();
@@ -614,6 +647,16 @@ export function DocEditorPage() {
                 >
                   Salvează ciorna
                 </button>
+                {doc?.status === "final" && (
+                  <button
+                    type="button"
+                    onClick={() => void toPar()}
+                    className="touch-target inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                  >
+                    <Banknote className="h-4 w-4" aria-hidden="true" />
+                    Transformă în cerere de plată
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={readOnly || !docId}

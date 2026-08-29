@@ -194,3 +194,17 @@ export function previewDocTemplate(
     body: JSON.stringify({ vendorId: vendorId ?? null }),
   });
 }
+
+export interface DocToParResult {
+  parId: string;
+  requestNo: string;
+  attachmentAdded: boolean;
+}
+
+/** Transformă actul finalizat în cerere de plată. `force` confirmă a doua cerere din același act. */
+export function convertDocumentToPar(id: string, force = false): Promise<DocToParResult> {
+  return api<DocToParResult>(
+    `/api/docs/documents/${id}/to-par${force ? "?force=1" : ""}`,
+    { method: "POST" }
+  );
+}

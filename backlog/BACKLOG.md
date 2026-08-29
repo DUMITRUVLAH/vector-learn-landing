@@ -532,7 +532,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | 4 | `DG-114` | Bloc de semnături + imutabilitate prin hash de corp | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 4 | `DG-115` | Trimitere pe email (emailGuard) + export .docx | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 5 | `DG-116` | „Act nou pe baza acestuia" (contract → act de primire-predare) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
-| 5 | `DG-117` | **„Transformă în PAR"** — PAR precompletat + PDF atașat automat | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 5 | `DG-117` | **„Transformă în PAR"** — PAR precompletat + PDF atașat automat | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 5 | `DG-118` | Invers: din PAR/comandă/recepție → actul precompletat | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 5 | `DG-119` | Traseul actului: contract → act → PAR → plată → factură | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 6 | `DG-120` | Dosarul proiectului (acte pe contraparte, contractat vs plătit, ZIP) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |

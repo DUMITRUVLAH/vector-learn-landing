@@ -39,7 +39,16 @@ import { validateIban, validateFiscalId } from "../../src/lib/par/iban";
 import { fieldLabelRo } from "../lib/docs/fieldLabels";
 import { renderDocumentPdf, pdfFileName, buildPrintableHtml } from "../lib/docs/documentPdf";
 import { insertLinesTable, type TableLine } from "../lib/docs/linesTable";
-import { parSettings } from "../db/schema/par";
+import {
+  parSettings,
+  parRequests,
+  parLineItems,
+  parAttachments,
+  parProjects,
+  parPayers,
+} from "../db/schema/par";
+import { generateRequestNo } from "../lib/par/requestNo";
+import { mayAccessProject } from "../lib/par/projectScope";
 
 export const docsRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -966,4 +975,163 @@ docsRoutes.get("/documents/:id/pdf", async (c) => {
       "Content-Disposition": `attachment; filename="${fileName}"`,
     },
   });
+});
+
+
+// ─── „Transformă în PAR" (DG-117) ────────────────────────────────────────────
+
+/**
+ * Actul semnat devine cerere de plată, dintr-un click.
+ *
+ * Asta e legătura pentru care a fost construit tot modulul: aceleași date (beneficiar, rechizite,
+ * proiect, poziții, sumă) se introduceau a treia oară în formularul PAR, iar finanțele cereau
+ * separat documentele. Acum PAR-ul se naște precompletat, cu PDF-ul actului deja atașat.
+ *
+ * Reguli:
+ *  - doar din acte FINALIZATE (o ciornă nu e temei de plată);
+ *  - al doilea PAR din același act cere confirmare explicită (`?force=1`), altfel se plătește de
+ *    două ori același document;
+ *  - dacă utilizatorul n-are acces la proiectul actului, 403 — nu creăm o cerere pe un proiect
+ *    la care nu lucrează.
+ */
+docsRoutes.post("/documents/:id/to-par", async (c) => {
+  const user = c.get("user");
+  const [doc] = await db
+    .select()
+    .from(docDocuments)
+    .where(and(eq(docDocuments.id, c.req.param("id")), eq(docDocuments.tenantId, user.tenantId)));
+  if (!doc) return c.json({ error: "not_found" }, 404);
+
+  if (doc.status !== "final") {
+    return c.json(
+      {
+        error: "document_not_final",
+        message: "Doar un act finalizat poate deveni cerere de plată. Finalizează-l întâi.",
+      },
+      409
+    );
+  }
+
+  if (!(await mayAccessProject(user.id, user.tenantId, doc.projectId, (user as { role?: string }).role))) {
+    return c.json({ error: "forbidden_project" }, 403);
+  }
+
+  const force = c.req.query("force") === "1" || c.req.query("force") === "true";
+  const [existingLink] = await db
+    .select({ id: docDocumentLinks.id, parId: docDocumentLinks.toParId })
+    .from(docDocumentLinks)
+    .where(and(eq(docDocumentLinks.fromDocumentId, doc.id), eq(docDocumentLinks.toKind, "par")));
+  if (existingLink && !force) {
+    return c.json(
+      {
+        error: "already_converted",
+        parId: existingLink.parId,
+        message: "Actul are deja o cerere de plată. Confirmă dacă vrei încă una.",
+      },
+      409
+    );
+  }
+
+  const lines = await db
+    .select()
+    .from(docDocumentLines)
+    .where(eq(docDocumentLines.documentId, doc.id))
+    .orderBy(docDocumentLines.position);
+
+  // Plătitorul: cel al proiectului, altfel primul activ — aceeași regulă ca la crearea unui PAR.
+  const [project] = doc.projectId
+    ? await db
+        .select({ payerId: parProjects.payerId })
+        .from(parProjects)
+        .where(and(eq(parProjects.id, doc.projectId), eq(parProjects.tenantId, user.tenantId)))
+    : [];
+  const [defaultPayer] = project?.payerId
+    ? []
+    : await db
+        .select({ id: parPayers.id })
+        .from(parPayers)
+        .where(and(eq(parPayers.tenantId, user.tenantId), eq(parPayers.active, true)))
+        .limit(1);
+  const payerId = doc.payerId ?? project?.payerId ?? defaultPayer?.id ?? null;
+
+  const snapshot = safeJson(doc.counterpartySnapshot) as Record<string, string>;
+  const requestNo = await generateRequestNo(user.tenantId);
+  const totalCents = lines.reduce((sum, l) => sum + l.lineTotalCents, 0) || doc.totalCents;
+
+  const [par] = await db
+    .insert(parRequests)
+    .values({
+      tenantId: user.tenantId,
+      requestNo,
+      dateOfRequest: new Date(),
+      requestedByUserId: user.id,
+      payerId,
+      projectId: doc.projectId,
+      eventId: doc.eventId,
+      purpose: "execute_payment",
+      chargeTo: "program",
+      // Scopul cererii spune din ce act vine — finanțele nu trebuie să ghicească.
+      endUse: `${doc.title}${doc.docNumber ? ` (${doc.docNumber})` : ""}`,
+      vendorId: doc.counterpartyKind === "vendor" ? doc.counterpartyId : null,
+      payeeName: doc.counterpartyName,
+      payeeIdnp: snapshot.idno ?? null,
+      payeeIban: snapshot.iban ?? null,
+      payeeBank: snapshot.banca ?? null,
+      currency: doc.currency,
+      totalEstimatedCents: totalCents,
+      attachmentsPresent: true,
+      attachmentsNote: doc.docNumber ? `Act ${doc.docNumber}` : doc.title,
+      status: "draft",
+    })
+    .returning();
+
+  if (lines.length > 0) {
+    await db.insert(parLineItems).values(
+      lines.map((l, i) => ({
+        tenantId: user.tenantId,
+        parId: par.id,
+        position: i + 1,
+        description: l.description,
+        quantity: l.quantity,
+        unit: l.unit,
+        unitPriceCents: l.unitPriceCents,
+        lineTotalCents: l.lineTotalCents,
+      }))
+    );
+  }
+
+  // PDF-ul actului merge cu cererea: altfel finanțele îl cer pe email, ca până acum.
+  if (doc.pdfUrl) {
+    await db.insert(parAttachments).values({
+      tenantId: user.tenantId,
+      parId: par.id,
+      fileUrl: doc.pdfUrl,
+      fileName: pdfFileName(
+        {
+          docNumber: doc.docNumber,
+          title: doc.title,
+          kind: doc.kind,
+          docDate: doc.docDate,
+          bodyHtml: doc.bodyHtml,
+          bodyHash: doc.bodyHash,
+          status: doc.status,
+        },
+        doc.counterpartyName
+      ),
+      kind: "contract",
+      uploadedBy: user.id,
+    });
+  }
+
+  await db.insert(docDocumentLinks).values({
+    tenantId: user.tenantId,
+    fromDocumentId: doc.id,
+    toKind: "par",
+    toParId: par.id,
+    relation: "payment_request",
+    createdByUserId: user.id,
+  });
+  await writeAudit(user.tenantId, doc.id, user.id, "converted_to_par", { requestNo });
+
+  return c.json({ parId: par.id, requestNo, attachmentAdded: !!doc.pdfUrl }, 201);
 });

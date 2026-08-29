@@ -67,6 +67,7 @@ const getDocument = vi.fn();
 const createDocument = vi.fn();
 const updateDocument = vi.fn();
 const finalizeDocument = vi.fn();
+const convertDocumentToPar = vi.fn();
 
 vi.mock("@/lib/api/docs", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/docs")>("@/lib/api/docs");
@@ -77,6 +78,7 @@ vi.mock("@/lib/api/docs", async () => {
     createDocument: (...a: unknown[]) => createDocument(...a),
     updateDocument: (...a: unknown[]) => updateDocument(...a),
     finalizeDocument: (...a: unknown[]) => finalizeDocument(...a),
+    convertDocumentToPar: (...a: unknown[]) => convertDocumentToPar(...a),
   };
 });
 
@@ -314,5 +316,60 @@ describe("DG-110 — furnizor nou fără să ieși din act", () => {
 
     expect(await within(panel).findByText(/Registrul nu a răspuns/)).toBeInTheDocument();
     expect(within(panel).queryByText(/nu există/i)).toBeNull();
+  });
+});
+
+
+describe("DG-117 — actul devine cerere de plată", () => {
+  it("[blocant] butonul apare doar pe un act finalizat și duce la PAR-ul creat", async () => {
+    currentPath = "/business/docs/doc-1";
+    // Pe ciornă butonul nu are ce căuta: nu poți cere plata pentru un act nesemnat.
+    getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
+    const draftView = render(<DocEditorPage />);
+    await waitFor(() => expect(getDocument).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: /cerere de plată/i })).toBeNull();
+    draftView.unmount();
+
+    getDocument.mockResolvedValue(FINAL_DOC);
+    convertDocumentToPar.mockResolvedValue({ parId: "par-9", requestNo: "PAR-2026-0009", attachmentAdded: true });
+    render(<DocEditorPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Transformă în cerere de plată/i }));
+    await waitFor(() => expect(convertDocumentToPar).toHaveBeenCalledWith("doc-1"));
+    expect(navigate).toHaveBeenCalledWith("/business/par/par-9");
+  });
+
+  it("[blocant] a doua cerere din același act se face doar după confirmare", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue(FINAL_DOC);
+    convertDocumentToPar
+      .mockRejectedValueOnce(
+        Object.assign(new Error("already"), { body: { error: "already_converted", parId: "par-1" } })
+      )
+      .mockResolvedValueOnce({ parId: "par-2", requestNo: "PAR-2026-0010", attachmentAdded: true });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<DocEditorPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Transformă în cerere de plată/i }));
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+    await waitFor(() => expect(convertDocumentToPar).toHaveBeenLastCalledWith("doc-1", true));
+    expect(navigate).toHaveBeenCalledWith("/business/par/par-2");
+    confirmSpy.mockRestore();
+  });
+
+  it("[blocant] dacă omul refuză confirmarea, nu se creează nimic", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue(FINAL_DOC);
+    convertDocumentToPar.mockRejectedValue(
+      Object.assign(new Error("already"), { body: { error: "already_converted", parId: "par-1" } })
+    );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<DocEditorPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Transformă în cerere de plată/i }));
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+    expect(convertDocumentToPar).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalledWith(expect.stringContaining("/business/par/"));
+    confirmSpy.mockRestore();
   });
 });
