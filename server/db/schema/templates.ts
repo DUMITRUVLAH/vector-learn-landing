@@ -43,12 +43,16 @@ export const KNOWN_VARIABLES: Record<string, string> = {
 
 /** Extract variable names from template body */
 export function extractVariables(body: string): string[] {
-  const matches = body.match(/\{\{(\w+)\}\}/g) ?? [];
+  // DG-102: numele de câmp pot conține puncte (`{{contraparte.iban}}`) — actele grupează câmpurile
+  // pe surse (noi / contraparte / proiect / total), altfel un `{{iban}}` singur nu spune al cui e.
+  // Extinderea e retrocompatibilă: `{{a.b}}` nu se potrivea deloc înainte, deci nimic existent
+  // nu se comportă altfel.
+  const matches = body.match(/\{\{([\w.]+)\}\}/g) ?? [];
   const unique = [...new Set(matches.map((m) => m.slice(2, -2)))];
   return unique;
 }
 
 /** Render template with sample data or provided context */
 export function renderTemplate(body: string, context: Record<string, string> = KNOWN_VARIABLES): string {
-  return body.replace(/\{\{(\w+)\}\}/g, (_, key: string) => context[key] ?? `{{${key}}}`);
+  return body.replace(/\{\{([\w.]+)\}\}/g, (_, key: string) => context[key] ?? `{{${key}}}`);
 }

@@ -116,6 +116,7 @@ import { finCronRoutes } from "./routes/finCron";
 
 // DOCMERGE module (DOCMERGE-001)
 import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
+import { docsRoutes } from "./routes/docs";
 
 export const app = new Hono();
 
@@ -320,6 +321,8 @@ app.route("/api/telemetry", telemetryRoutes);
 
 // DOCMERGE-001: Document Merge templates
 app.route("/api/docmerge", docmergeTemplatesRoutes);
+// DG-102: registrul de acte (generare documente → PDF → PAR)
+app.route("/api/docs", docsRoutes);
 
 app.get("/api/health", async (c) => {
   try {
