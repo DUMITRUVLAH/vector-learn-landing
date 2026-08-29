@@ -22,6 +22,8 @@ import {
   Banknote,
   GitBranch,
   History,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
@@ -720,6 +722,31 @@ export function DocEditorPage() {
                 Adaugă poziție
               </button>
             </section>
+
+            {doc?.integrity?.sealed && (
+              <div
+                role={doc.integrity.valid ? undefined : "alert"}
+                className={
+                  doc.integrity.valid
+                    ? "flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground"
+                    : "flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                }
+              >
+                {doc.integrity.valid ? (
+                  <>
+                    <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                    Act sigilat — conținutul e neschimbat de la finalizare. Amprentă:{" "}
+                    <span className="font-mono">{doc.integrity.hash?.slice(0, 16)}…</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+                    Atenție: conținutul actului nu mai corespunde amprentei de la finalizare.
+                    Verifică-l înainte să-l folosești.
+                  </>
+                )}
+              </div>
+            )}
 
             {doc && doc.audit.length > 0 && (
               <section aria-label="Jurnalul actului" className="rounded-lg border border-border p-4">

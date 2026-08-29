@@ -406,12 +406,32 @@ docsRoutes.get("/documents/:id", async (c) => {
     .where(eq(docAudit.documentId, doc.id))
     .orderBy(desc(docAudit.createdAt));
 
+  // DG-114: sigiliul se VERIFICĂ la fiecare citire, nu doar se afișează. Dacă cineva a umblat
+  // direct în bază peste un act finalizat, se vede aici — altfel „imutabil" ar fi doar o vorbă.
+  const integrity =
+    doc.status === "final" && doc.bodyHash
+      ? {
+          sealed: true,
+          valid:
+            computeBodyHash({
+              bodyHtml: doc.bodyHtml,
+              counterpartyName: doc.counterpartyName,
+              counterpartySnapshot: doc.counterpartySnapshot,
+              lines,
+              totalCents: doc.totalCents,
+              currency: doc.currency,
+            }) === doc.bodyHash,
+          hash: doc.bodyHash,
+        }
+      : { sealed: false, valid: true, hash: null };
+
   return c.json({
     ...doc,
     context: safeJson(doc.context),
     counterpartySnapshot: safeJson(doc.counterpartySnapshot),
     lines,
     links,
+    integrity,
     audit: audit.map((a) => ({ ...a, details: safeJson(a.details) })),
   });
 });

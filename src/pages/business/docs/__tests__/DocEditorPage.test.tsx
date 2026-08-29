@@ -451,3 +451,25 @@ describe("DG-123 — jurnalul actului, în cuvinte", () => {
     expect(within(journal).queryByText(/converted_to_par/)).toBeNull();
   });
 });
+
+
+describe("DG-114 — sigiliul, în interfață", () => {
+  it("[blocant] actul sigilat își arată amprenta, cel rupt strigă", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue({
+      ...FINAL_DOC,
+      integrity: { sealed: true, valid: true, hash: "a".repeat(64) },
+    });
+    const ok = render(<DocEditorPage />);
+    expect(await screen.findByText(/Act sigilat/)).toBeInTheDocument();
+    ok.unmount();
+
+    getDocument.mockResolvedValue({
+      ...FINAL_DOC,
+      integrity: { sealed: true, valid: false, hash: "a".repeat(64) },
+    });
+    render(<DocEditorPage />);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/nu mai corespunde amprentei/);
+  });
+});

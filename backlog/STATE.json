@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "DG-123",
+  "last_completed": "DG-114",
   "iterations": 180,
   "last_run_at": "2026-06-28T00:00:00Z",
   "milestone_status": "VIOLETA: VM1 done (#204-#216). VM3 (feedback 2026-07-16) done — PR #262. VM2: 20 pending.",
@@ -4873,7 +4873,7 @@
       "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-113": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4883,10 +4883,11 @@
         "DG-112"
       ],
       "priority": "high",
-      "title": "Numerotare automată per tip și an, rezervată tranzacțional la finalizare"
+      "title": "Numerotare automată per tip și an, rezervată tranzacțional la finalizare",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-114": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4896,7 +4897,8 @@
         "DG-113"
       ],
       "priority": "high",
-      "title": "Bloc de semnături + imutabilitate (hash de corp, editare după finalizare → 409)"
+      "title": "Bloc de semnături + imutabilitate (hash de corp, editare după finalizare → 409)",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-115": {
       "status": "pending",

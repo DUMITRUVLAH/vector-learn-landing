@@ -40,10 +40,17 @@ export interface DocAuditEntry {
   details: Record<string, unknown>;
 }
 
+export interface DocIntegrity {
+  sealed: boolean;
+  valid: boolean;
+  hash: string | null;
+}
+
 export interface DocDetail extends DocListItem {
   eventId?: string | null;
   templateVersion?: number;
   missing?: string[];
+  integrity?: DocIntegrity;
   bodyHtml: string;
   bodyHash: string | null;
   cancelReason: string | null;
