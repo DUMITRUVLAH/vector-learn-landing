@@ -36,7 +36,16 @@ const call = async (method, path, body) => {
 const ok = [], bad = [];
 const check = (name, cond, extra = "") => (cond ? ok : bad).push(`${cond ? "✅" : "❌"} ${name} ${extra}`);
 
-const login = await call("POST", "/api/auth/login", { email: "admin@demo.vectorlearn.io", password: "demo123456" });
+/**
+ * Autentificare pe BUSINESS auth, nu pe cea de CRM.
+ *
+ * Ambele dau o sesiune pe care API-ul PAR o acceptă, dar paginile /business/* verifică sesiunea de
+ * Business Suite: cu cea de CRM, browserul e trimis înapoi la login și partea vizuală a testului
+ * raportează „pagina e ruptă" când de fapt greșit era testul. (Aceeași sursă ca în e2e-gate.mjs.)
+ */
+const EMAIL = process.env.E2E_EMAIL ?? "admin@atic.demo.io";
+const PASSWORD = process.env.E2E_PASSWORD ?? "demo123456";
+const login = await call("POST", "/api/business/auth/login", { email: EMAIL, password: PASSWORD });
 check("login", login.status === 200 && jar.size > 0, `status=${login.status}`);
 if (!jar.size) { console.log(login.json); process.exit(1); }
 
@@ -133,6 +142,8 @@ if (process.argv.includes("--browser")) {
     const context = await browser.newContext();
     await context.addCookies([...jar].map(([name, value]) => ({ name, value, url: BASE })));
     const page = await context.newPage();
+    // Plafon scurt pe orice așteptare: un test care atârnă 30 s per element nu se mai rulează.
+    page.setDefaultTimeout(8000);
     const crashes = [];
     page.on("pageerror", (e) => crashes.push(String(e.message).slice(0, 160)));
 
@@ -143,10 +154,13 @@ if (process.argv.includes("--browser")) {
     check("lista de furnizori se randează", page.url().includes("/business/par/vendors") && text.includes("Bunicii"), crashes[0] ?? text.slice(0, 100));
 
     await page.goto(`${BASE}/#/business/par/vendors/${vId}`, { waitUntil: "domcontentloaded", timeout: 20000 });
-    await page.waitForFunction(() => /Plătit în total|nu s-a putut/.test(document.body?.innerText ?? ""), null, { timeout: 20000 }).catch(() => {});
+    await page.waitForFunction(() => /plătit în total|nu s-a putut/i.test(document.body?.innerText ?? ""), null, { timeout: 15000 }).catch(() => {});
     text = await page.evaluate(() => document.body?.innerText ?? "");
     check("fișa furnizorului se deschide", page.url().includes(vId) && text.includes("Bunicii"), crashes[0] ?? text.slice(0, 120));
-    check("fișa arată KPI-urile", text.includes("Plătit în total"), text.slice(0, 120));
+    // Fără /i: eticheta e randată cu `text-transform: uppercase`, iar `innerText` întoarce textul
+    // DEJA transformat („PLĂTIT ÎN TOTAL"). O potrivire sensibilă la majuscule pică pe o pagină
+    // perfect corectă — genul de fals negativ care te trimite să repari ce nu e stricat.
+    check("fișa arată KPI-urile", /plătit în total/i.test(text), text.slice(0, 120));
     check("fișa arată semnalele de risc", text.includes("blocat") || text.includes("Blocat"), text.slice(0, 120));
 
     for (const [tab, expected] of [["Evaluări", "Excelent|stele|evaluări|Nicio evaluare"], ["Oferte", "Prânz corporativ|Nicio ofertă"], ["Documente", "Contract cadru|Niciun document"], ["Note interne", "Furnizor blocat|Nicio notă"]]) {
