@@ -76,7 +76,7 @@ const AREAS = {
       ["GET", "/api/par/fx/series?codes=EUR,USD&days=7", (j) => Array.isArray(j?.points) && j.points.every((p) => typeof p.date === "string")],
     ],
     routes: ["/business/par", "/business/par/inbox", "/business/par/new", "/business/par/folders", "/business/par/finance", "/business/par/reports", "/business/par/exchange", "/business/par/admin"],
-    deep: ["e2e-par-sweep.mjs", "e2e-par-write-sweep.mjs", "e2e-par-scope.mjs", "e2e-par-timeline-human.mjs"],
+    deep: ["e2e-par-sweep.mjs", "e2e-par-write-sweep.mjs", "e2e-par-scope.mjs", "e2e-par-timeline-human.mjs", "e2e-par-patenta.mjs"],
   },
   fin: {
     label: "FinDesk",
