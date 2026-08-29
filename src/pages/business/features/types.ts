@@ -18,9 +18,19 @@ export interface FeatureBenefit {
   desc: string;
 }
 
-/** Un bloc „cum funcționează": text pe o coloană, reconstrucția ecranului pe cealaltă. */
+/** O treaptă din diagrama numerotată de sus. Titlu de 2–4 cuvinte, o linie de explicație. */
+export interface FeatureStep {
+  icon: LucideIcon;
+  title: string;
+  desc: string;
+}
+
+/** Un bloc „cum funcționează": text pe o coloană, o diagramă simplă pe cealaltă.
+ *  `step` îl leagă de treapta cu același număr din diagrama de sus. */
 export interface FeatureBlock {
   id: string;
+  /** Numărul pasului (1-based) afișat lângă titlu. */
+  step: number;
   badge: string;
   title: string;
   body: string;
@@ -58,6 +68,10 @@ export interface FeatureDef {
   heroVisual: ReactNode;
 
   benefits: FeatureBenefit[];
+  /** Diagrama numerotată: întregul parcurs dintr-o privire, înainte de detalii. */
+  stepsTitle: string;
+  stepsSub: string;
+  steps: FeatureStep[];
   blocksTitle: string;
   blocks: FeatureBlock[];
   related: FeatureLink[];
