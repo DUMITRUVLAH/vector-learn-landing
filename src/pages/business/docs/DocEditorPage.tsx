@@ -52,6 +52,7 @@ import {
 } from "@/lib/api/docs";
 import { listProjects, createVendor, type ParProject } from "@/lib/api/par";
 import { fieldLabel } from "@/lib/docs/fieldCatalog";
+import { parseMoneyRo, formatMoneyRo } from "@/lib/docs/money";
 import { downloadDocumentPdf, ensureStoredPdf } from "@/lib/docs/documentPdfClient";
 
 /**
@@ -74,19 +75,9 @@ function lineQty(l: LineDraft): number {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
-function money(cents: number): string {
-  return (cents / 100).toLocaleString("ro-MD", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+const money = formatMoneyRo;
 
-/** „12,50" sau „12.50" → 1250 bani. Omul tastează cum îi vine, nu în unități minore. */
-function parseMoney(text: string): number {
-  const normalized = text.replace(/\s/g, "").replace(",", ".");
-  const value = Number.parseFloat(normalized);
-  return Number.isFinite(value) ? Math.round(value * 100) : 0;
-}
+const parseMoney = parseMoneyRo;
 
 /** Jurnalul se citește de oameni: „a finalizat actul", nu „finalized". */
 const AUDIT_LABELS: Record<string, string> = {
@@ -111,6 +102,8 @@ export function DocEditorPage() {
 
   const [doc, setDoc] = useState<DocDetail | null>(null);
   const [templates, setTemplates] = useState<DocTemplateListItem[]>([]);
+  /** Actul nou pornește cu șablonul tipului său: „Fără șablon" scotea acte fără corp. */
+  const templateChosenByUser = useRef(false);
   const [projects, setProjects] = useState<ParProject[]>([]);
 
   const [title, setTitle] = useState("");
@@ -161,6 +154,10 @@ export function DocEditorPage() {
         if (cancelled) return;
         setTemplates(tpls);
         setProjects(prj);
+        if (!docId && !templateChosenByUser.current) {
+          const forKind = tpls.find((t) => t.kind === "act_primire_predare");
+          if (forKind) setTemplateId(forKind.id);
+        }
 
         if (docId) {
           const d = await getDocument(docId);
@@ -185,7 +182,9 @@ export function DocEditorPage() {
             address: snap.adresa ?? "",
             administrator: snap.administrator ?? "",
           });
-          setSaveToRegistry(false);
+          // Rămâne pornită dacă actul are date de furnizor scrise de mână, dar nicio fișă în
+          // registru — altfel furnizorul s-ar pierde din nou la actul următor.
+          setSaveToRegistry(!d.counterpartyId && !!d.counterpartyName);
           setProjectId(d.projectId ?? "");
           setLines(
             d.lines.length > 0
@@ -339,9 +338,18 @@ export function DocEditorPage() {
     setError(null);
     try {
       if (dirty.current) await save();
-      const d = await finalizeDocument(docId);
-      setDoc(d);
-      navigate("/business/docs");
+      await finalizeDocument(docId);
+      // Recitim actul: răspunsul de la finalizare e rândul brut, fără jurnal și fără poziții, iar
+      // ecranul le folosește. Un obiect „aproape complet" pus în stare a albit pagina.
+      const finalized = await getDocument(docId);
+      setDoc(finalized);
+      // Rămânem pe act, nu fugim în listă: abia acum apar numărul, PDF-ul, trimiterea și
+      // transformarea în cerere de plată — adică lucrurile pentru care omul a apăsat butonul.
+      setEmailNotice(
+        finalized.docNumber
+          ? `Act finalizat: ${finalized.docNumber}. Poți descărca PDF-ul sau face cererea de plată.`
+          : "Act finalizat."
+      );
     } catch (e) {
       const body = (e as { body?: { missing?: string[]; message?: string } }).body;
       if (body?.missing?.length) {
@@ -455,7 +463,13 @@ export function DocEditorPage() {
   return (
     <BusinessShell
       pageTitle={docId ? "Act" : "Act nou"}
-      pageDescription="Alege furnizorul — rechizitele vin din registru. Completează doar ce e specific actului."
+      pageDescription={
+        doc?.status === "final"
+          ? "Act finalizat și sigilat — conținutul nu se mai schimbă."
+          : doc?.status === "cancelled"
+            ? "Act anulat — rămâne în registru ca urmă."
+            : "Alege furnizorul — rechizitele vin din registru. Completează doar ce e specific actului."
+      }
       actions={
         <div className="flex gap-2">
           {docId && (
@@ -554,7 +568,13 @@ export function DocEditorPage() {
                   disabled={readOnly}
                   onChange={(e) => {
                     touch();
-                    setKind(e.target.value);
+                    const nextKind = e.target.value;
+                    setKind(nextKind);
+                    // Schimbi tipul → primești șablonul lui, dacă nu l-ai ales tu pe altul.
+                    if (!templateChosenByUser.current) {
+                      const forKind = templates.find((t) => t.kind === nextKind);
+                      setTemplateId(forKind?.id ?? "");
+                    }
                   }}
                   className="touch-target mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
                 >
@@ -575,6 +595,7 @@ export function DocEditorPage() {
                   disabled={readOnly}
                   onChange={(e) => {
                     touch();
+                    templateChosenByUser.current = true;
                     setTemplateId(e.target.value);
                   }}
                   className="touch-target mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
@@ -1010,14 +1031,14 @@ export function DocEditorPage() {
               </div>
             )}
 
-            {doc && doc.audit.length > 0 && (
+            {doc && (doc.audit?.length ?? 0) > 0 && (
               <section aria-label="Jurnalul actului" className="rounded-lg border border-border p-4">
                 <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
                   <History className="h-4 w-4" aria-hidden="true" />
                   Jurnal
                 </h2>
                 <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                  {doc.audit.map((a) => (
+                  {(doc.audit ?? []).map((a) => (
                     <li key={a.id}>
                       {AUDIT_LABELS[a.action] ?? a.action} ·{" "}
                       {new Date(a.createdAt).toLocaleString("ro-MD")}
@@ -1050,6 +1071,8 @@ export function DocEditorPage() {
                     <Check className="h-4 w-4" aria-hidden="true" />
                     Ciornă salvată la {savedAt.toLocaleTimeString("ro-MD")}
                   </span>
+                ) : readOnly ? (
+                  "Act finalizat — se poate descărca, trimite sau transforma în cerere de plată."
                 ) : (
                   "Ciorna se salvează singură."
                 )}

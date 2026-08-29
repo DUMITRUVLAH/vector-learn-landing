@@ -196,6 +196,12 @@ describe("DG-109 — completarea unui act", () => {
     expect(screen.queryByText(/[Cc]ontrapart/)).toBeNull();
   });
 
+  it("[blocant] actul nou pornește cu șablonul tipului, nu „fără șablon”", async () => {
+    render(<DocEditorPage />);
+    const select = await screen.findByLabelText("Șablon");
+    await waitFor(() => expect((select as HTMLSelectElement).value).toBe("tpl-1"));
+  });
+
   it("[blocant] alegerea din căutare completează toate rechizitele dintr-o dată", async () => {
     render(<DocEditorPage />);
 
@@ -312,9 +318,12 @@ describe("DG-109 — completarea unui act", () => {
     expect(screen.getByRole("button", { name: /Finalizează/ })).toBeDisabled();
   });
 
-  it("[blocant] finalizarea cere serverului actul curent și duce înapoi în registru", async () => {
+  it("[blocant] după finalizare rămâi pe act și vezi numărul primit", async () => {
     currentPath = "/business/docs/doc-1";
-    getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
+    // Prima citire = ciornă; a doua (după finalizare) = actul cu număr.
+    getDocument
+      .mockResolvedValueOnce({ ...FINAL_DOC, status: "draft", docNumber: null })
+      .mockResolvedValue(FINAL_DOC);
     finalizeDocument.mockResolvedValue(FINAL_DOC);
     render(<DocEditorPage />);
 
@@ -322,7 +331,24 @@ describe("DG-109 — completarea unui act", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Finalizează/ }));
 
     await waitFor(() => expect(finalizeDocument).toHaveBeenCalledWith("doc-1"));
-    expect(navigate).toHaveBeenCalledWith("/business/docs");
+    // Rămânem pe act: numărul și acțiunile noi apar aici, nu în listă.
+    expect(await screen.findByText(/Act finalizat: ACT-2026-0007/)).toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalledWith("/business/docs");
+  });
+
+  it("[blocant] după finalizare actul se RECITEȘTE — răspunsul brut n-are jurnal și albea pagina", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
+    // Exact forma răspunsului serverului la finalize: rândul din tabel, fără `audit`/`lines`.
+    finalizeDocument.mockResolvedValue({ id: "doc-1", status: "final", docNumber: "ACT-2026-0007" });
+    render(<DocEditorPage />);
+
+    await waitFor(() => expect(getDocument).toHaveBeenCalledTimes(1));
+    await userEvent.click(await screen.findByRole("button", { name: /Finalizează/ }));
+
+    await waitFor(() => expect(finalizeDocument).toHaveBeenCalled());
+    // A doua citire = starea completă; fără ea, `doc.audit.length` arunca și pagina se albea.
+    await waitFor(() => expect(getDocument).toHaveBeenCalledTimes(2));
   });
 
   it("[blocant] un refuz de finalizare arată exact ce lipsește", async () => {

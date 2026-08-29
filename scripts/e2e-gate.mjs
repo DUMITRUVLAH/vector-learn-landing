@@ -120,7 +120,8 @@ const AREAS = {
       ["GET", "/api/docs/templates", (j) => Array.isArray(j) && j.some((t) => t.isSystem)],
     ],
     routes: ["/business/docs", "/business/docs/nou", "/business/docs/templates"],
-    deep: [],
+    // Parcursul UX complet (act nou → furnizor → poziții → finalizare → acțiuni), cu capturi.
+    deep: ["e2e-docgen-ux.mjs"],
   },
   docmerge: {
     label: "DocMerge",
