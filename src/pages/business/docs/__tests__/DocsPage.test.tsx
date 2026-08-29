@@ -24,8 +24,10 @@ vi.mock("@/hooks/useBusinessSession", () => ({
   }),
 }));
 
+const navigate = vi.fn();
+
 vi.mock("@/router/HashRouter", () => ({
-  useRouter: () => ({ path: "/business/docs", navigate: vi.fn() }),
+  useRouter: () => ({ path: "/business/docs", navigate }),
   Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode; [k: string]: unknown }) => (
     <a href={`#${to}`} {...rest}>
       {children}
@@ -140,60 +142,19 @@ describe("DG-103 — registrul de acte", () => {
     });
   });
 
-  it("[blocant] butonul de act nou creează ciorna prin API și deschide fișa", async () => {
+  it("[blocant] actul nou duce la formularul de completare, nu la un dialog orb", async () => {
     listDocuments.mockResolvedValue([]);
-    createDocument.mockResolvedValue({ ...DETAIL, id: "doc-new", status: "draft" });
-    getDocument.mockResolvedValue({ ...DETAIL, id: "doc-new", status: "draft", docNumber: null });
     render(<DocsPage />);
 
     await userEvent.click(await screen.findByRole("button", { name: /Creează primul act/i }));
-    const dialog = await screen.findByRole("dialog", { name: "Act nou" });
-    await userEvent.type(within(dialog).getByLabelText("Titlul actului"), "Act pentru laptopuri");
-    await userEvent.type(within(dialog).getByLabelText("Contraparte"), "SRL Tehnica Nouă");
-    await userEvent.click(within(dialog).getByRole("button", { name: /Creează ciorna/i }));
-
-    await waitFor(() => {
-      expect(createDocument).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: "Act pentru laptopuri",
-          kind: "act_primire_predare",
-          counterparty: expect.objectContaining({ name: "SRL Tehnica Nouă" }),
-        })
-      );
-    });
-    expect(await screen.findByText("ciornă — fără număr")).toBeInTheDocument();
+    expect(navigate).toHaveBeenCalledWith("/business/docs/nou");
   });
 
-  it("[blocant] fișa unui act finalizat nu mai oferă butonul de finalizare", async () => {
+  it("[blocant] un rând deschide actul, cu id-ul lui în adresă", async () => {
     listDocuments.mockResolvedValue([DOC]);
-    getDocument.mockResolvedValue(DETAIL);
     render(<DocsPage />);
 
     await userEvent.click(await screen.findByText("Act de primire-predare — echipament IT"));
-
-    const panel = await screen.findByRole("dialog", { name: /Actul Act de primire-predare/i });
-    expect(within(panel).queryByRole("button", { name: /Finalizează/i })).toBeNull();
-    expect(within(panel).getByText(/nu se mai poate modifica/i)).toBeInTheDocument();
-    expect(within(panel).getByText("Laptop Dell Latitude")).toBeInTheDocument();
-    // Jurnalul e în română, nu „finalized".
-    expect(within(panel).getByText(/a finalizat actul/)).toBeInTheDocument();
-  });
-
-  it("[blocant] o ciornă incompletă arată ce lipsește, în cuvinte", async () => {
-    listDocuments.mockResolvedValue([{ ...DOC, status: "draft", docNumber: null }]);
-    const draft: DocDetail = { ...DETAIL, status: "draft", docNumber: null, lines: [] };
-    getDocument.mockResolvedValue(draft);
-    finalizeDocument.mockRejectedValue(
-      Object.assign(new Error("incomplete"), {
-        body: { error: "incomplete", missing: ["Cel puțin o poziție în act"] },
-      })
-    );
-    render(<DocsPage />);
-
-    await userEvent.click(await screen.findByText("Act de primire-predare — echipament IT"));
-    const panel = await screen.findByRole("dialog", { name: /Actul Act de primire-predare/i });
-    await userEvent.click(within(panel).getByRole("button", { name: /Finalizează/i }));
-
-    expect(await screen.findByText(/lipsește: Cel puțin o poziție în act/)).toBeInTheDocument();
+    expect(navigate).toHaveBeenCalledWith("/business/docs/doc-1");
   });
 });

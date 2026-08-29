@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "DG-108",
+  "last_completed": "DG-109",
   "iterations": 180,
   "last_run_at": "2026-06-28T00:00:00Z",
   "milestone_status": "VIOLETA: VM1 done (#204-#216). VM3 (feedback 2026-07-16) done — PR #262. VM2: 20 pending.",
@@ -4817,7 +4817,7 @@
       "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-109": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4827,7 +4827,8 @@
         "DG-108"
       ],
       "priority": "high",
-      "title": "Formular de completare generat din șablon + selector contraparte cu rechizite + tabel de poziții"
+      "title": "Formular de completare generat din șablon + selector contraparte cu rechizite + tabel de poziții",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-110": {
       "status": "pending",

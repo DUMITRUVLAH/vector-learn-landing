@@ -41,6 +41,9 @@ export interface DocAuditEntry {
 }
 
 export interface DocDetail extends DocListItem {
+  eventId?: string | null;
+  templateVersion?: number;
+  missing?: string[];
   bodyHtml: string;
   bodyHash: string | null;
   cancelReason: string | null;
@@ -63,6 +66,9 @@ export interface DocFilters {
 
 export interface CreateDocBody {
   templateId?: string | null;
+  projectId?: string | null;
+  eventId?: string | null;
+  docDate?: string;
   kind: string;
   title: string;
   counterparty?: {
@@ -95,6 +101,19 @@ export function getDocument(id: string): Promise<DocDetail> {
 export function createDocument(body: CreateDocBody): Promise<DocDetail> {
   return api<DocDetail>("/api/docs/documents", {
     method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export interface UpdateDocBody extends Partial<CreateDocBody> {
+  projectId?: string | null;
+  eventId?: string | null;
+  docDate?: string;
+}
+
+export function updateDocument(id: string, body: UpdateDocBody): Promise<DocDetail & { missing?: string[] }> {
+  return api<DocDetail & { missing?: string[] }>(`/api/docs/documents/${id}`, {
+    method: "PUT",
     body: JSON.stringify(body),
   });
 }

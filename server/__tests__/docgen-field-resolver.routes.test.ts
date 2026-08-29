@@ -178,6 +178,40 @@ describe("DG-108 — actul se completează din registru, nu din tastatură", () 
     expect(doc.bodyHtml, "actul semnat nu are voie să poarte acolade").not.toContain("{{");
   });
 
+  it("[blocant] un câmp fără sursă devine rând de completat, nu acolade pe actul semnat", async () => {
+    // Șablon cu un câmp pe care nicio sursă nu-l poate umple.
+    const [tpl] = await testDb
+      .insert(docmergeTemplates)
+      .values({
+        tenantId,
+        name: "Act cu câmp orfan",
+        bodyHtml: "<p>Semnează: {{noi.administrator}}</p>",
+        placeholders: "[]",
+        kind: "act_primire_predare",
+      })
+      .returning();
+
+    const created = await app.request("/api/docs/documents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        templateId: tpl.id,
+        kind: "act_primire_predare",
+        title: "Act cu câmp orfan",
+        counterparty: { kind: "vendor", id: vendorId },
+        lines: [{ description: "Serviciu", quantity: 1, unitPriceCents: 100000 }],
+      }),
+    });
+    const { id, bodyHtml } = (await created.json()) as { id: string; bodyHtml: string };
+    // Cât e ciornă, câmpul lipsă se vede ca atare — formularul trebuie să poată spune ce lipsește.
+    expect(bodyHtml).toContain("{{noi.administrator}}");
+
+    const res = await app.request(`/api/docs/documents/${id}/finalize`, { method: "POST" });
+    const doc = (await res.json()) as { bodyHtml: string };
+    expect(doc.bodyHtml).not.toContain("{{");
+    expect(doc.bodyHtml).toContain("__________");
+  });
+
   it("[blocant] rechizitele se îngheață pe act: schimbarea fișei nu rescrie actul semnat", async () => {
     const created = await createFromRegistry();
     const { id } = (await created.json()) as { id: string };

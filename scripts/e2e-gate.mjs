@@ -112,7 +112,7 @@ const AREAS = {
       ["GET", "/api/docs/documents", (j) => Array.isArray(j)],
       ["GET", "/api/docs/documents?status=final", (j) => Array.isArray(j) && j.every((d) => d.status === "final")],
     ],
-    routes: ["/business/docs", "/business/docs/templates"],
+    routes: ["/business/docs", "/business/docs/nou", "/business/docs/templates"],
     deep: [],
   },
   docmerge: {

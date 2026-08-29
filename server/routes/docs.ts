@@ -87,6 +87,15 @@ const cancelSchema = z.object({
   reason: z.string().min(3, "Motivul anulării e obligatoriu").max(500),
 });
 
+/**
+ * Pe un act FINALIZAT nu au ce căuta acolade: dacă un câmp n-a avut sursă, se tipărește un rând de
+ * completat cu pixul, cum arată orice formular tipizat. „{{noi.administrator}}" pe un act dus la
+ * semnat e o eroare vizibilă a produsului; „____" e o practică normală.
+ */
+function blankUnresolved(html: string): string {
+  return html.replace(/\{\{[\wăâîșț.]+\}\}/gi, "__________");
+}
+
 function safeJson(raw: string | null): Record<string, unknown> {
   if (!raw) return {};
   try {
@@ -448,7 +457,10 @@ docsRoutes.put("/documents/:id", zValidator("json", updateSchema), async (c) => 
     .returning();
 
   await writeAudit(user.tenantId, doc.id, user.id, "updated", {});
-  return c.json({ ...updated, lines });
+  // Aceeași listă de lipsuri ca la creare: formularul o arată în timp ce completezi, nu abia la
+  // finalizare, când omul crede că a terminat.
+  const missing = missingFields(rendered.placeholders, context).filter((f) => f !== "document.numar");
+  return c.json({ ...updated, lines, missing });
 });
 
 // ─── Finalizare ───────────────────────────────────────────────────────────────
@@ -516,7 +528,7 @@ docsRoutes.post("/documents/:id/finalize", async (c) => {
     clientContext: safeJson(doc.context) as Record<string, string>,
   });
   const rendered = await renderBody(user.tenantId, doc.templateId, finalContext);
-  const finalBody = rendered.bodyHtml || doc.bodyHtml;
+  const finalBody = blankUnresolved(rendered.bodyHtml || doc.bodyHtml);
 
   const bodyHash = computeBodyHash({
     bodyHtml: finalBody,

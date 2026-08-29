@@ -20,6 +20,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/client";
 import { parVendors, parPayers, parSettings, parProjects, parEvents } from "../../db/schema/par";
+import { finOrgProfile } from "../../db/schema/finCore";
 import { amountToWordsRo } from "./amountToWords";
 
 export interface ResolveContextInput {
@@ -67,6 +68,20 @@ export async function resolveDocumentContext(
     .where(eq(parSettings.tenantId, input.tenantId))
     .limit(1);
   put(ctx, "noi.denumire", settings?.orgLegalName);
+
+  // Adresa juridică și codul fiscal ale organizației trăiesc în profilul de firmă (fin_org_profile),
+  // singurul loc unde sunt completate azi. Fără el, `noi.adresa` rămânea veșnic nerezolvat, iar
+  // actul standard ieșea cu un gol chiar în blocul părților.
+  const [org] = await db
+    .select()
+    .from(finOrgProfile)
+    .where(eq(finOrgProfile.tenantId, input.tenantId))
+    .limit(1);
+  if (org) {
+    if (!ctx["noi.denumire"]) put(ctx, "noi.denumire", org.legalName);
+    put(ctx, "noi.idno", org.idno);
+    put(ctx, "noi.adresa", org.address);
+  }
 
   const payerFilter = input.payerId
     ? and(eq(parPayers.tenantId, input.tenantId), eq(parPayers.id, input.payerId))
