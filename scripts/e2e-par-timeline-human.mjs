@@ -22,7 +22,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASE = process.env.BASE || process.env.BASE_URL || "http://localhost:3000";
 const ADMIN = process.env.E2E_EMAIL || "admin@atic.demo.io";
 const PW = process.env.E2E_PASSWORD || "demo123456";
-const SESSION_FILE = path.join(ROOT, ".e2e-session.json");
+// `E2E_SESSION_FILE` ține sesiunea de prod separat de cea locală (nu le amestecăm).
+const SESSION_FILE = process.env.E2E_SESSION_FILE
+  ? path.resolve(process.env.E2E_SESSION_FILE)
+  : path.join(ROOT, ".e2e-session.json");
 
 let n = 0, ok = 0;
 const failures = [];
