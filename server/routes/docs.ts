@@ -49,7 +49,7 @@ import {
 } from "../db/schema/par";
 import { generateRequestNo } from "../lib/par/requestNo";
 import { buildProjectDossier, buildCounterpartyDossier } from "../lib/docs/dossier";
-import { mayAccessProject } from "../lib/par/projectScope";
+import { accessibleProjectIds, mayAccessProject } from "../lib/par/projectScope";
 
 export const docsRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -160,6 +160,29 @@ function computeBodyHash(input: {
   return createHash("sha256").update(payload).digest("hex");
 }
 
+/**
+ * DG-123 — ce acte are voie să vadă utilizatorul.
+ *
+ * Regula e cea din PAR, ca să nu existe două adevăruri: adminii și managerii văd tot; ceilalți văd
+ * doar actele proiectelor din care fac parte. Actele FĂRĂ proiect rămân vizibile pentru toți din
+ * organizație — sunt documente administrative, nu date de donator.
+ *
+ * De ce contează: contractele cu furnizorii unui proiect conțin sume și rechizite pe care alți
+ * donatori nu trebuie să le vadă. Fără filtrul ăsta, orice utilizator invitat citea tot registrul.
+ */
+async function visibilityFilter(user: { id: string; tenantId: string; role?: string }) {
+  const allowed = await accessibleProjectIds(user.id, user.tenantId, user.role);
+  if (allowed === null) return null; // admin/manager: fără restricție
+  return allowed;
+}
+
+/** Actul e vizibil dacă n-are proiect sau dacă proiectul lui e printre cele accesibile. */
+function maySeeDocument(projectId: string | null, allowed: string[] | null): boolean {
+  if (allowed === null) return true;
+  if (!projectId) return true;
+  return allowed.includes(projectId);
+}
+
 async function writeAudit(
   tenantId: string,
   documentId: string,
@@ -254,6 +277,8 @@ docsRoutes.get("/documents", async (c) => {
   if (q.to) filters.push(lte(docDocuments.docDate, new Date(q.to)));
   if (q.q) filters.push(ilike(docDocuments.title, `%${q.q}%`));
 
+  const allowedProjects = await visibilityFilter(user as { id: string; tenantId: string; role?: string });
+
   const rows = await db
     .select({
       id: docDocuments.id,
@@ -275,7 +300,7 @@ docsRoutes.get("/documents", async (c) => {
     .orderBy(desc(docDocuments.createdAt))
     .limit(Math.min(Number(q.limit) || 200, 500));
 
-  return c.json(rows);
+  return c.json(rows.filter((r) => maySeeDocument(r.projectId, allowedProjects)));
 });
 
 // ─── Creare ───────────────────────────────────────────────────────────────────
@@ -361,6 +386,10 @@ docsRoutes.get("/documents/:id", async (c) => {
     .from(docDocuments)
     .where(and(eq(docDocuments.id, c.req.param("id")), eq(docDocuments.tenantId, user.tenantId)));
   if (!doc) return c.json({ error: "not_found" }, 404);
+  // 404, nu 403: cine n-are acces la proiect nu trebuie să afle nici măcar că actul există.
+  if (!maySeeDocument(doc.projectId, await visibilityFilter(user as { id: string; tenantId: string; role?: string }))) {
+    return c.json({ error: "not_found" }, 404);
+  }
 
   const lines = await db
     .select()
@@ -910,6 +939,9 @@ docsRoutes.get("/documents/:id/pdf", async (c) => {
     .from(docDocuments)
     .where(and(eq(docDocuments.id, c.req.param("id")), eq(docDocuments.tenantId, user.tenantId)));
   if (!doc) return c.json({ error: "not_found" }, 404);
+  if (!maySeeDocument(doc.projectId, await visibilityFilter(user as { id: string; tenantId: string; role?: string }))) {
+    return c.json({ error: "not_found" }, 404);
+  }
 
   const [settings] = await db
     .select()

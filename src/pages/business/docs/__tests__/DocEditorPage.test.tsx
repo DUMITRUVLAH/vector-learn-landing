@@ -429,3 +429,25 @@ describe("DG-116 + DG-119 — actele derivate și traseul", () => {
     expect(screen.queryByLabelText(/Creează act pe baza acestuia/i)).toBeNull();
   });
 });
+
+
+describe("DG-123 — jurnalul actului, în cuvinte", () => {
+  it("[blocant] acțiunile apar traduse, nu ca nume tehnice", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue({
+      ...FINAL_DOC,
+      audit: [
+        { id: "a1", action: "created", createdAt: "2026-03-12T09:00:00.000Z", details: {} },
+        { id: "a2", action: "finalized", createdAt: "2026-03-12T10:00:00.000Z", details: {} },
+        { id: "a3", action: "converted_to_par", createdAt: "2026-03-13T08:00:00.000Z", details: {} },
+      ],
+    });
+    render(<DocEditorPage />);
+
+    const journal = await screen.findByRole("region", { name: "Jurnalul actului" });
+    expect(within(journal).getByText(/a creat actul/)).toBeInTheDocument();
+    expect(within(journal).getByText(/a finalizat actul/)).toBeInTheDocument();
+    expect(within(journal).getByText(/a transformat actul în cerere de plată/)).toBeInTheDocument();
+    expect(within(journal).queryByText(/converted_to_par/)).toBeNull();
+  });
+});

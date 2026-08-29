@@ -21,6 +21,7 @@ import {
   Download,
   Banknote,
   GitBranch,
+  History,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
@@ -77,6 +78,18 @@ function parseMoney(text: string): number {
   const value = Number.parseFloat(normalized);
   return Number.isFinite(value) ? Math.round(value * 100) : 0;
 }
+
+/** Jurnalul se citește de oameni: „a finalizat actul", nu „finalized". */
+const AUDIT_LABELS: Record<string, string> = {
+  created: "a creat actul",
+  updated: "a modificat actul",
+  finalized: "a finalizat actul",
+  cancelled: "a anulat actul",
+  downloaded: "a descărcat PDF-ul",
+  emailed: "a trimis actul pe email",
+  converted_to_par: "a transformat actul în cerere de plată",
+  derived: "a creat un act pe baza acestuia",
+};
 
 export function DocEditorPage() {
   const { path, navigate } = useRouter();
@@ -707,6 +720,23 @@ export function DocEditorPage() {
                 Adaugă poziție
               </button>
             </section>
+
+            {doc && doc.audit.length > 0 && (
+              <section aria-label="Jurnalul actului" className="rounded-lg border border-border p-4">
+                <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <History className="h-4 w-4" aria-hidden="true" />
+                  Jurnal
+                </h2>
+                <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                  {doc.audit.map((a) => (
+                    <li key={a.id}>
+                      {AUDIT_LABELS[a.action] ?? a.action} ·{" "}
+                      {new Date(a.createdAt).toLocaleString("ro-MD")}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             {missing.length > 0 && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
