@@ -35,6 +35,15 @@ vi.mock("@/router/HashRouter", () => ({
   ),
 }));
 
+vi.mock("@/lib/api/par", () => ({
+  listPar: vi.fn().mockResolvedValue({
+    requests: [
+      { id: "par-1", requestNo: "PAR-2026-0004", payeeName: "SRL Alfa", totalEstimatedCents: 500000, currency: "MDL" },
+    ],
+    total: 1,
+  }),
+}));
+
 vi.mock("@/lib/api/docmerge", () => ({
   listTemplates: vi.fn().mockResolvedValue([
     { id: "tpl-1", name: "Act de primire-predare", placeholders: [], sourceFormat: "html", updatedAt: "" },
@@ -42,6 +51,7 @@ vi.mock("@/lib/api/docmerge", () => ({
 }));
 
 const listDocuments = vi.fn();
+const createDocumentFromPar = vi.fn();
 const getDocument = vi.fn();
 const createDocument = vi.fn();
 const finalizeDocument = vi.fn();
@@ -52,6 +62,7 @@ vi.mock("@/lib/api/docs", async () => {
   return {
     ...actual,
     listDocuments: (...a: unknown[]) => listDocuments(...a),
+    createDocumentFromPar: (...a: unknown[]) => createDocumentFromPar(...a),
     getDocument: (...a: unknown[]) => getDocument(...a),
     createDocument: (...a: unknown[]) => createDocument(...a),
     finalizeDocument: (...a: unknown[]) => finalizeDocument(...a),
@@ -156,5 +167,21 @@ describe("DG-103 — registrul de acte", () => {
 
     await userEvent.click(await screen.findByText("Act de primire-predare — echipament IT"));
     expect(navigate).toHaveBeenCalledWith("/business/docs/doc-1");
+  });
+});
+
+
+describe("DG-118 — actul dintr-o cerere de plată", () => {
+  it("[blocant] alegerea unei cereri creează actul și îl deschide", async () => {
+    listDocuments.mockResolvedValue([]);
+    createDocumentFromPar.mockResolvedValue({ id: "doc-from-par" });
+    render(<DocsPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Act dintr-o cerere/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Act dintr-o cerere de plată" });
+    await userEvent.click(within(dialog).getByRole("button", { name: /PAR-2026-0004/ }));
+
+    await waitFor(() => expect(createDocumentFromPar).toHaveBeenCalledWith("par-1"));
+    expect(navigate).toHaveBeenCalledWith("/business/docs/doc-from-par");
   });
 });

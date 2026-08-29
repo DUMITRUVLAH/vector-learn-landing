@@ -9,11 +9,13 @@
  * de completare (DG-109) au item-ele lor. Aici e registrul + acțiunile care schimbă starea.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Plus, Loader2, AlertCircle, Search, Download, FileSpreadsheet, FolderOpen } from "lucide-react";
+import { FileText, Plus, Loader2, AlertCircle, Search, Download, FileSpreadsheet, FolderOpen, Banknote, X } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
+import { listPar, type ParListRow } from "@/lib/api/par";
 import {
   listDocuments,
+  createDocumentFromPar,
   registerExportUrl,
   DOC_KIND_LABELS,
   DOC_STATUS_LABELS,
@@ -65,6 +67,9 @@ export function DocsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<DocFilters>(() => readFiltersFromUrl());
+  /** DG-118: „am plătit, unde e actul semnat?" — actul se naște din cererea aprobată. */
+  const [pickingPar, setPickingPar] = useState(false);
+  const [pars, setPars] = useState<ParListRow[]>([]);
 
 
   const load = useCallback(async () => {
@@ -94,6 +99,29 @@ export function DocsPage() {
 
 
 
+  const openParPicker = useCallback(async () => {
+    setPickingPar(true);
+    try {
+      const { requests } = await listPar({ status: "approved" });
+      setPars(requests);
+    } catch {
+      setPars([]);
+    }
+  }, []);
+
+  const createFromPar = useCallback(
+    async (parId: string) => {
+      try {
+        const doc = await createDocumentFromPar(parId);
+        setPickingPar(false);
+        navigate(`/business/docs/${doc.id}`);
+      } catch {
+        setError("Actul nu a putut fi creat din cererea aleasă.");
+      }
+    },
+    [navigate]
+  );
+
   const totalShown = useMemo(
     () => docs.reduce((s, d) => (d.status === "cancelled" ? s : s + d.totalCents), 0),
     [docs]
@@ -114,6 +142,14 @@ export function DocsPage() {
             <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
             Exportă registrul
           </a>
+          <button
+            type="button"
+            onClick={() => void openParPicker()}
+            className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+          >
+            <Banknote className="h-4 w-4" aria-hidden="true" />
+            Act dintr-o cerere
+          </button>
           {filters.projectId && (
             <button
               type="button"
@@ -286,6 +322,58 @@ export function DocsPage() {
         )}
       </div>
 
+      {pickingPar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Act dintr-o cerere de plată"
+            className="w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-lg"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Act dintr-o cerere de plată</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Actul preia beneficiarul, proiectul și pozițiile; dacă există recepție, cantitățile
+                  primite.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPickingPar(false)}
+                aria-label="Închide"
+                className="touch-target rounded-md p-1 text-muted-foreground hover:bg-muted"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            <ul className="mt-4 max-h-80 divide-y divide-border overflow-y-auto rounded-lg border border-border">
+              {pars.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => void createFromPar(p.id)}
+                    className="flex w-full items-center justify-between gap-3 p-3 text-left text-sm hover:bg-muted/40"
+                  >
+                    <span className="text-foreground">
+                      {p.requestNo} · {p.payeeName ?? "fără beneficiar"}
+                    </span>
+                    <span className="tabular-nums text-muted-foreground">
+                      {formatMoney(p.totalEstimatedCents ?? 0, p.currency ?? "MDL")}
+                    </span>
+                  </button>
+                </li>
+              ))}
+              {pars.length === 0 && (
+                <li className="p-3 text-sm text-muted-foreground">
+                  Nicio cerere aprobată deocamdată.
+                </li>
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
     </BusinessShell>
   );
 }

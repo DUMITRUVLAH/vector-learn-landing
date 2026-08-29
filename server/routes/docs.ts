@@ -46,6 +46,8 @@ import {
   parAttachments,
   parProjects,
   parPayers,
+  parReceipts,
+  parReceiptLines,
 } from "../db/schema/par";
 import { generateRequestNo } from "../lib/par/requestNo";
 import { buildProjectDossier, buildCounterpartyDossier } from "../lib/docs/dossier";
@@ -1561,4 +1563,152 @@ docsRoutes.get("/export/register.xlsx", async (c) => {
       "Content-Disposition": `attachment; filename="registrul-actelor.xlsx"`,
     },
   });
+});
+
+
+// ─── Din cerere de plată → act (DG-118) ──────────────────────────────────────
+
+/**
+ * Închide bucla „am plătit, unde e actul semnat?".
+ *
+ * Actul se compune din ce s-a PRIMIT efectiv, nu din ce s-a comandat: dacă există recepție, luăm
+ * cantitățile recepționate. Altfel actul ar declara predarea a 5 bucăți când au sosit 3, iar
+ * semnătura ar acoperi o minciună.
+ */
+docsRoutes.post("/from-par/:parId", async (c) => {
+  const user = c.get("user");
+  const [par] = await db
+    .select()
+    .from(parRequests)
+    .where(and(eq(parRequests.id, c.req.param("parId")), eq(parRequests.tenantId, user.tenantId)));
+  if (!par) return c.json({ error: "not_found" }, 404);
+  if (!(await mayAccessProject(user.id, user.tenantId, par.projectId, (user as { role?: string }).role))) {
+    return c.json({ error: "forbidden_project" }, 403);
+  }
+
+  let kind = "act_primire_predare";
+  try {
+    const body = (await c.req.json()) as { kind?: string };
+    kind = body?.kind ?? kind;
+  } catch {
+    /* fără corp — actul implicit */
+  }
+
+  const parLines = await db
+    .select()
+    .from(parLineItems)
+    .where(eq(parLineItems.parId, par.id))
+    .orderBy(parLineItems.position);
+
+  // Recepțiile: dacă există, ele spun ce a sosit cu adevărat.
+  const receipts = await db
+    .select({ id: parReceipts.id })
+    .from(parReceipts)
+    .where(and(eq(parReceipts.parId, par.id), eq(parReceipts.tenantId, user.tenantId)));
+  const receivedByLine = new Map<string, number>();
+  if (receipts.length > 0) {
+    const rLines = await db
+      .select()
+      .from(parReceiptLines)
+      .where(
+        and(
+          eq(parReceiptLines.tenantId, user.tenantId),
+          inArray(
+            parReceiptLines.receiptId,
+            receipts.map((r) => r.id)
+          )
+        )
+      );
+    for (const rl of rLines) {
+      receivedByLine.set(rl.lineItemId, (receivedByLine.get(rl.lineItemId) ?? 0) + rl.qtyReceived);
+    }
+  }
+
+  const lines = parLines
+    .map((l) => {
+      const qty = receivedByLine.size > 0 ? receivedByLine.get(l.id) ?? 0 : l.quantity;
+      return {
+        position: 0,
+        description: l.description,
+        unit: l.unit ?? "buc",
+        quantity: qty,
+        unitPriceCents: l.unitPriceCents,
+        lineTotalCents: qty * l.unitPriceCents,
+        vatPercent: 0,
+      };
+    })
+    .filter((l) => l.quantity > 0)
+    .map((l, i) => ({ ...l, position: i + 1 }));
+
+  const totalCents = lines.reduce((sum, l) => sum + l.lineTotalCents, 0);
+  const basedOn = `cererea de plată nr. ${par.requestNo}`;
+  const context = await buildDocumentContext({
+    tenantId: user.tenantId,
+    vendorId: par.vendorId,
+    projectId: par.projectId,
+    eventId: par.eventId,
+    payerId: par.payerId,
+    docDate: new Date(),
+    totalCents,
+    currency: par.currency,
+    userName: (user as { name?: string }).name ?? null,
+    clientContext: { "document.baza": basedOn },
+  });
+  // Beneficiarul poate fi scris direct pe cerere (fără fișă în registru) — atunci îl luăm de acolo.
+  if (!context["contraparte.denumire"] && par.payeeName) context["contraparte.denumire"] = par.payeeName;
+  if (!context["contraparte.idno"] && par.payeeIdnp) context["contraparte.idno"] = par.payeeIdnp;
+  if (!context["contraparte.iban"] && par.payeeIban) context["contraparte.iban"] = par.payeeIban;
+  if (!context["contraparte.banca"] && par.payeeBank) context["contraparte.banca"] = par.payeeBank;
+
+  const templateId = await pickTemplateForKind(user.tenantId, kind);
+  const rendered = await renderBody(user.tenantId, templateId, context, lines, par.currency);
+
+  const snapshot: Record<string, string> = {};
+  for (const [k, v] of Object.entries(context)) {
+    if (k.startsWith("contraparte.")) snapshot[k.replace("contraparte.", "")] = v;
+  }
+
+  const [doc] = await db
+    .insert(docDocuments)
+    .values({
+      tenantId: user.tenantId,
+      templateId,
+      templateVersion: rendered.templateVersion,
+      kind,
+      title: `${DOC_KIND_LABEL[kind] ?? "Act"} — ${par.payeeName ?? context["contraparte.denumire"] ?? par.requestNo}`,
+      projectId: par.projectId,
+      eventId: par.eventId,
+      payerId: par.payerId,
+      counterpartyKind: par.vendorId ? "vendor" : "inline",
+      counterpartyId: par.vendorId,
+      counterpartyName: context["contraparte.denumire"] ?? par.payeeName ?? null,
+      counterpartySnapshot: JSON.stringify(snapshot),
+      context: JSON.stringify(context),
+      bodyHtml: rendered.bodyHtml,
+      totalCents,
+      currency: par.currency,
+      createdByUserId: user.id,
+    })
+    .returning();
+
+  if (lines.length > 0) {
+    await db.insert(docDocumentLines).values(
+      lines.map((l) => ({ ...l, tenantId: user.tenantId, documentId: doc.id }))
+    );
+  }
+
+  await db.insert(docDocumentLinks).values({
+    tenantId: user.tenantId,
+    fromDocumentId: doc.id,
+    toKind: "par",
+    toParId: par.id,
+    relation: "from_par",
+    createdByUserId: user.id,
+  });
+  await writeAudit(user.tenantId, doc.id, user.id, "created", { fromPar: par.requestNo });
+
+  return c.json(
+    { ...doc, basedOn, fromReceipt: receivedByLine.size > 0 },
+    201
+  );
 });

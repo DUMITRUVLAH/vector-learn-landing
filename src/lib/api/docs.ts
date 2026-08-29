@@ -305,3 +305,11 @@ export function registerExportUrl(filters: DocFilters = {}): string {
   ).toString();
   return `/api/docs/export/register.xlsx${qs ? `?${qs}` : ""}`;
 }
+
+/** Actul născut dintr-o cerere de plată aprobată (DG-118). */
+export function createDocumentFromPar(parId: string, kind = "act_primire_predare"): Promise<DocDetail & { basedOn: string; fromReceipt: boolean }> {
+  return api(`/api/docs/from-par/${parId}`, {
+    method: "POST",
+    body: JSON.stringify({ kind }),
+  });
+}
