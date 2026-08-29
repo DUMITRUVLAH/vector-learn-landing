@@ -56,7 +56,7 @@ describe("DG-124 — generarea în masă", () => {
     await waitFor(() => expect(parseExcel).toHaveBeenCalled());
 
     // Potrivirea propusă: „Denumirea contrapărții" ← „Denumire participant".
-    expect(await screen.findByLabelText(/Denumirea contrapărții/)).toHaveValue("Denumire participant");
+    expect(await screen.findByLabelText(/Denumirea furnizorului/)).toHaveValue("Denumire participant");
 
     await userEvent.click(screen.getByRole("button", { name: /Generează 2 acte/ }));
 
@@ -87,7 +87,7 @@ describe("DG-124 — generarea în masă", () => {
     render(<BulkGenerateDialog templates={TEMPLATES} onClose={vi.fn()} onDone={vi.fn()} />);
     await upload();
 
-    const select = await screen.findByLabelText(/Denumirea contrapărții/);
+    const select = await screen.findByLabelText(/Denumirea furnizorului/);
     await userEvent.selectOptions(select, "");
     expect(screen.getByRole("button", { name: /Generează/ })).toBeDisabled();
   });

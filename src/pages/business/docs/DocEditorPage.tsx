@@ -41,16 +41,18 @@ import {
   listDerivableKinds,
   deriveDocument,
   listDocTemplates,
+  searchParties,
+  importPartiesFromPar as importPartiesApi,
+  type DocParty,
   DOC_KIND_LABELS,
   DOC_STATUS_LABELS,
   type DocDetail,
   type DocTemplateListItem,
   type DocTrail,
 } from "@/lib/api/docs";
-import { listVendors, listProjects, type ParVendor, type ParProject } from "@/lib/api/par";
+import { listProjects, createVendor, type ParProject } from "@/lib/api/par";
 import { fieldLabel } from "@/lib/docs/fieldCatalog";
-import { NewVendorPanel } from "./NewVendorPanel";
-import { downloadDocumentPdf } from "@/lib/docs/documentPdfClient";
+import { downloadDocumentPdf, ensureStoredPdf } from "@/lib/docs/documentPdfClient";
 
 /**
  * Cantitatea și prețul se țin ca TEXT cât timp omul tastează.
@@ -109,7 +111,6 @@ export function DocEditorPage() {
 
   const [doc, setDoc] = useState<DocDetail | null>(null);
   const [templates, setTemplates] = useState<DocTemplateListItem[]>([]);
-  const [vendors, setVendors] = useState<ParVendor[]>([]);
   const [projects, setProjects] = useState<ParProject[]>([]);
 
   const [title, setTitle] = useState("");
@@ -117,7 +118,17 @@ export function DocEditorPage() {
   const [templateId, setTemplateId] = useState("");
   const [vendorId, setVendorId] = useState("");
   const [vendorQuery, setVendorQuery] = useState("");
-  const [addingVendor, setAddingVendor] = useState(false);
+  /** Câmpurile furnizorului, mereu vizibile: se completează din căutare SAU se scriu direct. */
+  const [party, setParty] = useState({
+    name: "",
+    idno: "",
+    iban: "",
+    bank: "",
+    address: "",
+    administrator: "",
+  });
+  const [saveToRegistry, setSaveToRegistry] = useState(true);
+  const [parties, setParties] = useState<DocParty[]>([]);
   const [projectId, setProjectId] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([{ ...EMPTY_LINE }]);
 
@@ -143,14 +154,12 @@ export function DocEditorPage() {
     void (async () => {
       setLoading(true);
       try {
-        const [tpls, vnd, prj] = await Promise.all([
+        const [tpls, prj] = await Promise.all([
           listDocTemplates().catch(() => []),
-          listVendors().then((r) => r.items).catch(() => []),
           listProjects().then((r) => r.items).catch(() => []),
         ]);
         if (cancelled) return;
         setTemplates(tpls);
-        setVendors(vnd);
         setProjects(prj);
 
         if (docId) {
@@ -167,6 +176,16 @@ export function DocEditorPage() {
           setKind(d.kind);
           setTemplateId(d.templateId ?? "");
           setVendorId(d.counterpartyId ?? "");
+          const snap = (d.counterpartySnapshot ?? {}) as Record<string, string>;
+          setParty({
+            name: d.counterpartyName ?? "",
+            idno: snap.idno ?? "",
+            iban: snap.iban ?? "",
+            bank: snap.banca ?? "",
+            address: snap.adresa ?? "",
+            administrator: snap.administrator ?? "",
+          });
+          setSaveToRegistry(false);
           setProjectId(d.projectId ?? "");
           setLines(
             d.lines.length > 0
@@ -190,6 +209,38 @@ export function DocEditorPage() {
     };
   }, [docId]);
 
+  // Căutarea merge la server: acolo se unesc registrul și beneficiarii scriși pe cereri de plată.
+  useEffect(() => {
+    const q = vendorQuery.trim();
+    if (q.length < 2) {
+      setParties([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      void searchParties(q)
+        .then((r) => setParties(r.items))
+        .catch(() => setParties([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [vendorQuery]);
+
+  const pickParty = useCallback((p: DocParty) => {
+    dirty.current = true;
+    setVendorId(p.id ?? "");
+    setParty({
+      name: p.name,
+      idno: p.idno ?? "",
+      iban: p.iban ?? "",
+      bank: p.bank ?? "",
+      address: p.address ?? "",
+      administrator: p.administrator ?? "",
+    });
+    // Cine vine din registru e deja salvat; cine vine dintr-o cerere merită salvat acum.
+    setSaveToRegistry(p.source === "par");
+    setVendorQuery("");
+    setParties([]);
+  }, []);
+
   const payload = useCallback(
     () => ({
       templateId: templateId || null,
@@ -198,7 +249,28 @@ export function DocEditorPage() {
       projectId: projectId || null,
       counterparty: vendorId
         ? { kind: "vendor" as const, id: vendorId }
-        : { kind: "inline" as const, name: vendorQuery.trim() || null },
+        : {
+            kind: "inline" as const,
+            name: party.name.trim() || null,
+            snapshot: {
+              idno: party.idno.trim(),
+              iban: party.iban.replace(/\s/g, "").toUpperCase(),
+              banca: party.bank.trim(),
+              adresa: party.address.trim(),
+              administrator: party.administrator.trim(),
+            },
+          },
+      // Câmpurile scrise de mână intră și în contextul actului, ca șablonul să le poată tipări.
+      context: vendorId
+        ? undefined
+        : {
+            "contraparte.denumire": party.name.trim(),
+            "contraparte.idno": party.idno.trim(),
+            "contraparte.iban": party.iban.replace(/\s/g, "").toUpperCase(),
+            "contraparte.banca": party.bank.trim(),
+            "contraparte.adresa": party.address.trim(),
+            "contraparte.administrator": party.administrator.trim(),
+          },
       lines: lines
         .filter((l) => l.description.trim())
         .map((l) => ({
@@ -208,7 +280,7 @@ export function DocEditorPage() {
           unitPriceCents: parseMoney(l.unitPrice),
         })),
     }),
-    [templateId, kind, title, projectId, vendorId, vendorQuery, lines]
+    [templateId, kind, title, projectId, vendorId, party, lines]
   );
 
   const save = useCallback(async () => {
@@ -216,6 +288,24 @@ export function DocEditorPage() {
     setSaving(true);
     setError(null);
     try {
+      // Furnizorul nou intră în registru la prima salvare, dacă omul a lăsat bifa — ca data
+      // viitoare să nu-l mai scrie nimeni.
+      if (!vendorId && saveToRegistry && party.name.trim()) {
+        try {
+          const created = await createVendor({
+            name: party.name.trim(),
+            idnp: party.idno.trim() || null,
+            iban: party.iban.replace(/\s/g, "").toUpperCase() || null,
+            bank: party.bank.trim() || null,
+            legal_address: party.address.trim() || null,
+            administrator_name: party.administrator.trim() || null,
+          });
+          setVendorId(created.id);
+          setSaveToRegistry(false);
+        } catch {
+          // Salvarea în registru e un bonus: actul se face și fără ea.
+        }
+      }
       if (docId) {
         const updated = await updateDocument(docId, payload());
         setMissing(updated.missing ?? []);
@@ -231,7 +321,7 @@ export function DocEditorPage() {
     } finally {
       setSaving(false);
     }
-  }, [doc?.status, docId, payload, navigate]);
+  }, [doc?.status, docId, payload, navigate, vendorId, saveToRegistry, party]);
 
   // Auto-save: ciorna nu se pierde pentru că a sunat telefonul.
   useEffect(() => {
@@ -318,8 +408,11 @@ export function DocEditorPage() {
     const to = window.prompt("Către ce adresă trimitem actul?", doc?.counterpartyName ? "" : "");
     if (!to) return;
     setError(null);
-    setEmailNotice(null);
+    setEmailNotice("Pregătesc actul și îl trimit…");
     try {
+      // Întâi ne asigurăm că PDF-ul există (se randează în browser), abia apoi trimitem: altfel
+      // e-mailul ar pleca fără actul pe care îl promite în text.
+      await ensureStoredPdf(docId).catch(() => false);
       const res = await emailDocument(docId, to.trim());
       setEmailNotice(res.sent ? `Actul a plecat către ${res.to}.` : res.message);
       if (docId) setDoc(await getDocument(docId));
@@ -343,19 +436,20 @@ export function DocEditorPage() {
     }
   }, [docId]);
 
-  const filteredVendors = useMemo(() => {
-    const q = vendorQuery.trim().toLowerCase();
-    if (!q) return vendors.slice(0, 8);
-    return vendors
-      .filter(
-        (v) =>
-          v.name.toLowerCase().includes(q) ||
-          (v.idnp ?? "").includes(q)
-      )
-      .slice(0, 8);
-  }, [vendors, vendorQuery]);
+  const importPartiesFromPar = useCallback(async () => {
+    try {
+      const res = await importPartiesApi();
+      setEmailNotice(
+        res.imported > 0
+          ? `Am adus în registru ${res.imported} beneficiari din cererile de plată.`
+          : "Registrul era deja la zi — n-am găsit beneficiari noi în cereri."
+      );
+    } catch {
+      setError("Nu am putut aduce beneficiarii din cereri.");
+    }
+  }, []);
 
-  const selectedVendor = vendors.find((v) => v.id === vendorId) ?? null;
+
   const readOnly = !!doc && doc.status !== "draft";
 
   return (
@@ -585,119 +679,197 @@ export function DocEditorPage() {
               </div>
             )}
 
-            {/* Contrapartea: un singur câmp de căutare, apoi rechizitele apar singure. */}
+            {/*
+              Furnizorul, la vedere.
+
+              Înainte era un singur câmp de căutare: tastai, apărea o listă, alegeai — iar dacă
+              furnizorul nu exista, trebuia să ghicești că butonul de adăugare apare abia după 2
+              litere. Owner-ul a spus-o direct: „să fie obvious, nu să apeși contraparte, să cauți
+              și după să apară să adaugi info". Acum câmpurile sunt vizibile de la început, iar
+              căutarea doar le COMPLETEAZĂ — inclusiv din beneficiarii care trăiesc doar pe cereri
+              de plată, nu în registru.
+            */}
             <section className="rounded-lg border border-border p-4">
-              <label htmlFor="doc-vendor" className="block text-sm font-medium text-foreground">
-                Contrapartea
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-sm font-medium text-foreground">Furnizorul / beneficiarul</h2>
+                <span className="text-xs text-muted-foreground">
+                  Rechizitele apar automat dacă îl alegi din listă; altfel le scrii aici.
+                </span>
+              </div>
+
+              <label htmlFor="doc-vendor" className="mt-3 block text-sm font-medium text-foreground">
+                Caută în registru și în cererile de plată
               </label>
               <input
                 id="doc-vendor"
-                value={selectedVendor ? selectedVendor.name : vendorQuery}
+                value={vendorQuery}
                 disabled={readOnly}
                 onChange={(e) => {
                   touch();
-                  setVendorId("");
                   setVendorQuery(e.target.value);
                 }}
-                placeholder="Scrie 2 litere din denumire sau codul fiscal…"
+                placeholder="Denumire, cod fiscal sau IBAN…"
                 className="touch-target mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
               />
 
-              {!selectedVendor && !addingVendor && (
-                <ul className="mt-2 divide-y divide-border rounded-lg border border-border">
-                  {(vendorQuery.trim().length >= 2 ? filteredVendors : []).map((v) => (
-                    <li key={v.id}>
+              {!readOnly && vendorQuery.trim().length >= 2 && (
+                <ul className="mt-2 max-h-56 divide-y divide-border overflow-y-auto rounded-lg border border-border">
+                  {parties.map((p) => (
+                    <li key={`${p.source}-${p.id ?? p.name}`}>
                       <button
                         type="button"
-                        onClick={() => {
-                          touch();
-                          setVendorId(v.id);
-                          setVendorQuery("");
-                        }}
+                        onClick={() => pickParty(p)}
                         className="flex w-full items-center justify-between gap-3 p-3 text-left text-sm hover:bg-muted/40"
                       >
-                        <span className="text-foreground">{v.name}</span>
+                        <span className="text-foreground">
+                          {p.name}
+                          {p.source === "par" && (
+                            <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                              din cereri de plată
+                            </span>
+                          )}
+                        </span>
                         <span className="font-mono text-xs text-muted-foreground">
-                          {v.idnp ?? "fără cod fiscal"}
+                          {p.idno ?? p.iban ?? "fără cod"}
                         </span>
                       </button>
                     </li>
                   ))}
-                  {vendorQuery.trim().length >= 2 && filteredVendors.length === 0 && (
+                  {parties.length === 0 && (
                     <li className="p-3 text-sm text-muted-foreground">
-                      Niciun furnizor găsit în registru.
+                      Nu l-am găsit nicăieri — completează câmpurile de mai jos și îl salvăm noi.
                     </li>
                   )}
-                  {vendorQuery.trim().length < 2 && vendors.length === 0 && (
-                    <li className="p-3 text-sm text-muted-foreground">
-                      Registrul de furnizori e gol — adaugă primul furnizor de aici.
-                    </li>
-                  )}
-                  <li>
-                    <button
-                      type="button"
-                      onClick={() => setAddingVendor(true)}
-                      className="flex w-full items-center gap-2 p-3 text-left text-sm text-primary hover:bg-muted/40"
-                    >
-                      <Plus className="h-4 w-4" aria-hidden="true" />
-                      Adaugă furnizor nou
-                    </button>
-                  </li>
                 </ul>
               )}
 
-              {addingVendor && (
-                <NewVendorPanel
-                  initialName={vendorQuery}
-                  onCancel={() => setAddingVendor(false)}
-                  onCreated={(v) => {
-                    // Furnizorul nou intră imediat în listă și în act — fără să reîncarci pagina și
-                    // fără să pierzi ce ai completat până acum.
-                    setVendors((vs) => [v, ...vs.filter((x) => x.id !== v.id)]);
-                    setVendorId(v.id);
-                    setVendorQuery("");
-                    setAddingVendor(false);
-                    touch();
-                  }}
-                />
-              )}
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label htmlFor="party-name" className="block text-sm font-medium text-foreground">
+                    Denumirea furnizorului <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    id="party-name"
+                    value={party.name}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      touch();
+                      setParty((x) => ({ ...x, name: e.target.value }));
+                      setVendorId("");
+                    }}
+                    placeholder='SRL "Tehnica Nouă"'
+                    className="touch-target mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="party-idno" className="block text-sm font-medium text-foreground">
+                    Cod fiscal (IDNO/IDNP)
+                  </label>
+                  <input
+                    id="party-idno"
+                    value={party.idno}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      touch();
+                      setParty((x) => ({ ...x, idno: e.target.value }));
+                      setVendorId("");
+                    }}
+                    placeholder="1234567890123"
+                    className="touch-target mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="party-iban" className="block text-sm font-medium text-foreground">
+                    IBAN
+                  </label>
+                  <input
+                    id="party-iban"
+                    value={party.iban}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      touch();
+                      setParty((x) => ({ ...x, iban: e.target.value }));
+                      setVendorId("");
+                    }}
+                    placeholder="MD48ML000002259A19498121"
+                    className="touch-target mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm text-foreground"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="party-bank" className="block text-sm font-medium text-foreground">
+                    Banca
+                  </label>
+                  <input
+                    id="party-bank"
+                    value={party.bank}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      touch();
+                      setParty((x) => ({ ...x, bank: e.target.value }));
+                      setVendorId("");
+                    }}
+                    placeholder="BC Moldindconbank SA"
+                    className="touch-target mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="party-address" className="block text-sm font-medium text-foreground">
+                    Adresa juridică
+                  </label>
+                  <input
+                    id="party-address"
+                    value={party.address}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      touch();
+                      setParty((x) => ({ ...x, address: e.target.value }));
+                    }}
+                    placeholder="mun. Chișinău, bd. Dacia 45"
+                    className="touch-target mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="party-admin" className="block text-sm font-medium text-foreground">
+                    Administrator
+                  </label>
+                  <input
+                    id="party-admin"
+                    value={party.administrator}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      touch();
+                      setParty((x) => ({ ...x, administrator: e.target.value }));
+                    }}
+                    placeholder="Andrei Rusu"
+                    className="touch-target mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  />
+                </div>
+              </div>
 
-              {selectedVendor && (
-                <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    touch();
-                    setVendorId("");
-                    setVendorQuery("");
-                  }}
-                  className="touch-target mt-2 text-sm text-primary hover:underline"
-                >
-                  Schimbă contrapartea
-                </button>
-                <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Cod fiscal</dt>
-                    <dd className="text-foreground">{selectedVendor.idnp ?? "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">IBAN</dt>
-                    <dd className="font-mono text-foreground">{selectedVendor.iban ?? "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Banca</dt>
-                    <dd className="text-foreground">{selectedVendor.bank ?? "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Adresa juridică</dt>
-                    <dd className="text-foreground">{selectedVendor.legalAddress ?? "—"}</dd>
-                  </div>
-                </dl>
-                </>
+              {!readOnly && (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={saveToRegistry}
+                      onChange={(e) => setSaveToRegistry(e.target.checked)}
+                      className="h-4 w-4 rounded border-border"
+                    />
+                    Salvează furnizorul în registru (se completează singur data viitoare)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void importPartiesFromPar()}
+                    className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-foreground hover:bg-muted"
+                  >
+                    <Plus className="h-3 w-3" aria-hidden="true" />
+                    Adu în registru toți beneficiarii din cererile de plată
+                  </button>
+                </div>
               )}
             </section>
 
-            {/* Pozițiile: totalul se calculează pe server, aici doar se vede. */}
+            {/* Pozițiile actului: totalul se calculează pe server, aici doar se vede. */}
             <section className="rounded-lg border border-border p-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-medium text-foreground">Pozițiile actului</h2>

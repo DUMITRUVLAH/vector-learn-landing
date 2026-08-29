@@ -290,7 +290,7 @@ export function DocsPage() {
                   <th className="px-4 py-3 font-medium">Data</th>
                   <th className="px-4 py-3 font-medium">Tip</th>
                   <th className="px-4 py-3 font-medium">Titlu</th>
-                  <th className="px-4 py-3 font-medium">Contraparte</th>
+                  <th className="px-4 py-3 font-medium">Furnizor</th>
                   <th className="px-4 py-3 font-medium text-right">Sumă</th>
                   <th className="px-4 py-3 font-medium">Stare</th>
                   <th className="px-4 py-3 font-medium sr-only">Acțiuni</th>

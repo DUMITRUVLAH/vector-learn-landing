@@ -122,7 +122,7 @@ export function DocDossierPage() {
           listVendors().then((r) => r.items).catch(() => []),
         ]);
         setPartyDossier(dossier);
-        setName(vendors.find((v) => v.id === target.id)?.name ?? "Contraparte");
+        setName(vendors.find((v) => v.id === target.id)?.name ?? "Furnizor");
       }
     } catch {
       setError("Nu am putut încărca dosarul.");
@@ -137,7 +137,7 @@ export function DocDossierPage() {
 
   return (
     <BusinessShell
-      pageTitle={target?.kind === "project" ? `Dosar proiect · ${name}` : `Dosar contraparte · ${name}`}
+      pageTitle={target?.kind === "project" ? `Dosar proiect · ${name}` : `Dosar furnizor · ${name}`}
       pageDescription="Toate actele, cu sumele contractate și cele chiar plătite."
       actions={
         <button

@@ -15,6 +15,24 @@
 import { execSync } from "node:child_process";
 
 const FATAL_CODES = ["TS2304", "TS2552"]; // undefined references → runtime ReferenceError
+
+// Erori de SINTAXĂ. Adăugate 2026-08-29, după ce o ghilimea românească închisă într-un șir JS
+// („Descarcă PDF") a rupt un fișier de rute — iar poarta a raportat verde. Motivul e perfid:
+// când tsc nu poate parsa fișierul, nu mai raportează DELOC TS2304 pentru el, deci exact
+// verificarea pentru care există poarta dispare în tăcere. Un fișier care nu se parsează nu
+// se poate nici construi, deci gatearea pe ele nu blochează nimic legitim.
+const SYNTAX_CODES = [
+  "TS1002", // Unterminated string literal
+  "TS1003", // Identifier expected
+  "TS1005", // ',' expected / '}' expected
+  "TS1109", // Expression expected
+  "TS1128", // Declaration or statement expected
+  "TS1136", // Property assignment expected
+  "TS1160", // Unterminated template literal
+  "TS1161", // Unterminated regular expression literal
+  "TS1381", // Unexpected token
+  "TS1382", // Unexpected token
+];
 const projects = ["tsconfig.json", "tsconfig.server.json"];
 
 let fatal = [];
@@ -25,16 +43,29 @@ for (const proj of projects) {
   } catch (e) {
     out = (e.stdout ?? "") + (e.stderr ?? "");
   }
-  const lines = out.split("\n").filter((l) => FATAL_CODES.some((c) => l.includes(`error ${c}:`)));
+  const lines = out
+    .split("\n")
+    .filter((l) => [...FATAL_CODES, ...SYNTAX_CODES].some((c) => l.includes(`error ${c}:`)));
   fatal.push(...lines.map((l) => `[${proj}] ${l.trim()}`));
 }
 
 if (fatal.length > 0) {
-  console.error(`\n❌ [check-undefined-refs] ${fatal.length} undefined-reference error(s) — blocking deploy.`);
-  console.error("   These become runtime ReferenceError/white-screen in prod. Fix the missing imports:\n");
+  const syntax = fatal.filter((l) => SYNTAX_CODES.some((c) => l.includes(`error ${c}:`)));
+  console.error(`\n❌ [check-undefined-refs] ${fatal.length} problemă(e) blocantă(e) — deploy oprit.`);
+  if (syntax.length > 0) {
+    console.error(
+      "   ⚠️  Erori de SINTAXĂ: fișierul nu se parsează, deci restul verificărilor din el sunt oarbe."
+    );
+    console.error(
+      "      Cauză frecventă: ghilimele românești („ ”) în interiorul unui șir JS delimitat cu \".\n"
+    );
+  }
+  console.error("   Referințe nedefinite → ReferenceError/ecran alb în prod. Repară importurile:\n");
   fatal.forEach((l) => console.error("   " + l));
   console.error("");
   process.exit(1);
 }
 
-console.log("✅ [check-undefined-refs] no undefined references (TS2304/2552) — safe to build.");
+console.log(
+  "✅ [check-undefined-refs] fără referințe nedefinite (TS2304/2552) și fără erori de sintaxă — se poate construi."
+);

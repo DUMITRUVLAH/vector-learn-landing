@@ -9,6 +9,11 @@
  * numele și etichetele, ca omul care scrie șablonul să nu învețe nicio sintaxă.
  */
 
+/**
+ * Notă de vocabular (cerință owner): pe ecran scrie „furnizor / beneficiar", nu „contraparte" —
+ * termenul juridic nu spune nimic omului care completează actul. Cheile tehnice rămân
+ * `contraparte.*`, altfel toate șabloanele deja scrise ar trebui rescrise.
+ */
 export interface DocField {
   /** Numele tehnic, exact cum apare în șablon: `{{contraparte.iban}}`. */
   name: string;
@@ -41,16 +46,16 @@ export const FIELD_GROUPS: DocFieldGroup[] = [
   },
   {
     key: "contraparte",
-    label: "Contrapartea",
+    label: "Furnizorul / beneficiarul",
     hint: "Se completează din fișa furnizorului — nu se mai retastează nimic.",
     fields: [
-      { name: "contraparte.denumire", label: "Denumirea contrapărții", sample: 'SRL "Tehnica Nouă"' },
+      { name: "contraparte.denumire", label: "Denumirea furnizorului", sample: 'SRL "Tehnica Nouă"' },
       { name: "contraparte.idno", label: "Codul fiscal (IDNO/IDNP)", sample: "1234567890123" },
-      { name: "contraparte.iban", label: "IBAN contraparte", sample: "MD48ML000002259A19498121" },
-      { name: "contraparte.banca", label: "Banca contrapărții", sample: "BC Moldindconbank SA" },
+      { name: "contraparte.iban", label: "IBAN furnizor", sample: "MD48ML000002259A19498121" },
+      { name: "contraparte.banca", label: "Banca furnizorului", sample: "BC Moldindconbank SA" },
       { name: "contraparte.bic", label: "Cod bancar (BIC/SWIFT)", sample: "MOLDMD2X309" },
       { name: "contraparte.adresa", label: "Adresa juridică", sample: "mun. Chișinău, bd. Dacia 45" },
-      { name: "contraparte.administrator", label: "Administratorul contrapărții", sample: "Andrei Rusu" },
+      { name: "contraparte.administrator", label: "Administratorul furnizorului", sample: "Andrei Rusu" },
       { name: "contraparte.cod_tva", label: "Nr. plătitor TVA", sample: "0301234" },
     ],
   },

@@ -64,6 +64,27 @@ async function htmlToPdf(html: string): Promise<jsPDF> {
 }
 
 /**
+ * Se asigură că actul are PDF stocat pe server — fără să descarce nimic pe disc.
+ *
+ * De ce: trimiterea pe e-mail atașează PDF-ul stocat, iar pe producție el se naște doar în browser.
+ * Fără pasul ăsta, e-mailul pleca scriind „vă transmitem atașat" și fără act — exact ce a pățit
+ * owner-ul. Acum, înainte de trimitere, browserul randează și încarcă documentul.
+ */
+export async function ensureStoredPdf(documentId: string): Promise<boolean> {
+  const printable = await api<PrintableResponse>(`/api/docs/documents/${documentId}/print`);
+  if (printable.hasStoredPdf) return true;
+  if (printable.status === "draft") return false;
+
+  const pdf = await htmlToPdf(printable.html);
+  const base64 = pdf.output("datauristring").split(",")[1] ?? "";
+  const res = await api<{ stored: boolean }>(`/api/docs/documents/${documentId}/pdf`, {
+    method: "PUT",
+    body: JSON.stringify({ base64 }),
+  });
+  return res.stored;
+}
+
+/**
  * Descarcă actul ca PDF. Întoarce `true` dacă fișierul a fost salvat.
  * Actele finalizate își trimit PDF-ul înapoi la server, o singură dată.
  */

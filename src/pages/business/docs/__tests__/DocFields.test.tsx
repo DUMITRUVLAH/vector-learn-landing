@@ -33,7 +33,7 @@ describe("DG-105 — catalogul de câmpuri", () => {
 
   it("[blocant] căutarea ignoră diacriticele și potrivește pe cuvinte", () => {
     expect(searchFields("suma litere").map((f) => f.name)).toContain("total.in_litere");
-    expect(searchFields("administrator contrapartii").map((f) => f.name)).toContain(
+    expect(searchFields("administrator furnizorului").map((f) => f.name)).toContain(
       "contraparte.administrator"
     );
   });
@@ -43,7 +43,7 @@ describe("DG-105 — catalogul de câmpuri", () => {
   });
 
   it("[normal] eticheta unui câmp necunoscut nu aruncă, se arată ca atare", () => {
-    expect(fieldLabel("contraparte.iban")).toBe("IBAN contraparte");
+    expect(fieldLabel("contraparte.iban")).toBe("IBAN furnizor");
     expect(fieldLabel("ceva.inexistent")).toBe("ceva.inexistent");
   });
 });
@@ -109,7 +109,7 @@ describe("DG-105 — câmpul ales din panou ajunge în șablon", () => {
     await userEvent.type(await screen.findByLabelText("Denumirea șablonului"), "Act");
 
     // Panoul lateral e mereu vizibil — nu trebuie să știi de „/" ca să inserezi un câmp.
-    await userEvent.click(await screen.findByRole("button", { name: "IBAN contraparte" }));
+    await userEvent.click(await screen.findByRole("button", { name: "IBAN furnizor" }));
     await userEvent.click(screen.getByRole("button", { name: /Salvează șablonul/i }));
 
     await waitFor(() => expect(createTemplate).toHaveBeenCalled());
@@ -126,7 +126,7 @@ describe("DG-105 — câmpul ales din panou ajunge în șablon", () => {
 
     const panel = await screen.findByRole("complementary", { name: "Câmpuri de inserat" });
     expect(panel).toHaveTextContent("Organizația noastră");
-    expect(panel).toHaveTextContent("Contrapartea");
+    expect(panel).toHaveTextContent("Furnizorul / beneficiarul");
     expect(panel).toHaveTextContent("Sume");
     expect(panel).toHaveTextContent("Suma în litere");
   });

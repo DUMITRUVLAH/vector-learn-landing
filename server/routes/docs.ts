@@ -40,6 +40,7 @@ import { fieldLabelRo } from "../lib/docs/fieldLabels";
 import { renderDocumentPdf, pdfFileName, buildPrintableHtml } from "../lib/docs/documentPdf";
 import { insertLinesTable, type TableLine } from "../lib/docs/linesTable";
 import {
+  parVendors,
   parSettings,
   parRequests,
   parLineItems,
@@ -590,7 +591,7 @@ docsRoutes.post("/documents/:id/finalize", async (c) => {
   // Ce lipsește se spune pe nume, în română — nu „validation error".
   const missing: string[] = [];
   if (!doc.title.trim()) missing.push("Titlul actului");
-  if (!doc.counterpartyName?.trim()) missing.push("Contrapartea (denumirea)");
+  if (!doc.counterpartyName?.trim()) missing.push("Denumirea furnizorului");
   if (lines.length === 0) missing.push("Cel puțin o poziție în act");
   const totalCents = lines.reduce((s, l) => s + l.lineTotalCents, 0);
   if (totalCents <= 0) missing.push("Suma actului (mai mare ca zero)");
@@ -628,19 +629,17 @@ docsRoutes.post("/documents/:id/finalize", async (c) => {
   const iban = preflightContext["contraparte.iban"];
   if (iban) {
     const check = validateIban(iban);
-    if (!check.ok) missing.push(`IBAN contraparte: ${check.message ?? "invalid"}`);
+    if (!check.ok) missing.push(`IBAN furnizor: ${check.message ?? "invalid"}`);
   }
   const fiscal = preflightContext["contraparte.idno"];
   if (fiscal) {
     const check = validateFiscalId(fiscal);
-    if (!check.ok) missing.push(`Cod fiscal contraparte: ${check.message ?? "invalid"}`);
+    if (!check.ok) missing.push(`Cod fiscal furnizor: ${check.message ?? "invalid"}`);
   }
 
   // Fără duplicate: „Contrapartea (denumirea)" și „Denumirea contrapărții" sunt același lucru, iar
   // un mesaj care repetă aceeași lipsă de două ori pare o defecțiune.
-  const uniqueMissing = [...new Set(missing)].filter(
-    (m, _i, all) => !(m === "Denumirea contrapărții" && all.includes("Contrapartea (denumirea)"))
-  );
+  const uniqueMissing = [...new Set(missing)];
   if (uniqueMissing.length > 0) return c.json({ error: "incomplete", missing: uniqueMissing }, 400);
 
   const year = doc.docDate.getFullYear();
@@ -1761,6 +1760,22 @@ docsRoutes.post("/documents/:id/email", async (c) => {
   const fileName = pdfFileName(printable, doc.counterpartyName);
   const pdfBase64 = doc.pdfUrl ? doc.pdfUrl.split(",")[1] ?? null : null;
 
+  // Un e-mail care scrie „vă transmitem atașat" și pleacă gol e mai rău decât un e-mail netrimis:
+  // contrapartea crede că a primit actul. Pe producție PDF-ul se randează în browser (chromium
+  // lipsește pe serverless), deci aici doar refuzăm până când el există.
+  if (!pdfBase64) {
+    await writeAudit(user.tenantId, doc.id, user.id, "emailed", { to, sent: false, reason: "no_pdf" });
+    return c.json(
+      {
+        sent: false,
+        reason: "no_pdf",
+        message:
+          "Actul nu are încă PDF generat, iar un e-mail fără act n-are rost. Descarcă PDF-ul o dată, apoi trimite.",
+      },
+      200
+    );
+  }
+
   const result = await sendDocumentEmail({
     to,
     subject: `${doc.docNumber ? `${doc.docNumber} · ` : ""}${doc.title}`,
@@ -2125,4 +2140,145 @@ docsRoutes.put("/documents/:id/pdf", async (c) => {
     .where(eq(docDocuments.id, doc.id));
 
   return c.json({ stored: true });
+});
+
+
+// ─── Registrul de furnizori, adunat de peste tot (cerință owner) ─────────────
+
+/**
+ * Căutare de furnizor în DOUĂ locuri deodată: registrul de furnizori ȘI beneficiarii scriși direct
+ * pe cererile de plată.
+ *
+ * De ce: în practică, jumătate dintre plătiți n-au ajuns niciodată în registru — au fost tastați o
+ * dată, pe o cerere, și acolo au rămas. Când faci actul pentru ei, îi cauți și „nu există", deși
+ * organizația le-a plătit deja de trei ori.
+ */
+docsRoutes.get("/parties", async (c) => {
+  const user = c.get("user");
+  const q = (c.req.query("q") ?? "").trim().toLowerCase();
+
+  const vendors = await db
+    .select()
+    .from(parVendors)
+    .where(and(eq(parVendors.tenantId, user.tenantId), eq(parVendors.active, true)))
+    .orderBy(desc(parVendors.updatedAt))
+    .limit(500);
+
+  const payees = await db
+    .select({
+      name: parRequests.payeeName,
+      idno: parRequests.payeeIdnp,
+      iban: parRequests.payeeIban,
+      bank: parRequests.payeeBank,
+      vendorId: parRequests.vendorId,
+    })
+    .from(parRequests)
+    .where(eq(parRequests.tenantId, user.tenantId))
+    .limit(2000);
+
+  const seen = new Set(
+    vendors.flatMap((v) => [v.iban?.toUpperCase(), v.idnp, v.name.toLowerCase()].filter(Boolean) as string[])
+  );
+
+  type Party = {
+    id: string | null;
+    name: string;
+    idno: string | null;
+    iban: string | null;
+    bank: string | null;
+    address: string | null;
+    administrator: string | null;
+    source: "registry" | "par";
+  };
+
+  const list: Party[] = vendors.map((v) => ({
+    id: v.id,
+    name: v.name,
+    idno: v.idnp,
+    iban: v.iban,
+    bank: v.bank,
+    address: v.legalAddress,
+    administrator: v.administratorName,
+    source: "registry",
+  }));
+
+  for (const p of payees) {
+    if (!p.name || p.vendorId) continue;
+    const key = p.iban?.toUpperCase() ?? p.idno ?? p.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    list.push({
+      id: null,
+      name: p.name,
+      idno: p.idno,
+      iban: p.iban,
+      bank: p.bank,
+      address: null,
+      administrator: null,
+      source: "par",
+    });
+  }
+
+  const filtered = q
+    ? list.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.idno ?? "").includes(q) ||
+          (p.iban ?? "").toLowerCase().includes(q)
+      )
+    : list;
+
+  return c.json({ items: filtered.slice(0, 50), total: filtered.length });
+});
+
+/**
+ * Adună în registru toți beneficiarii care trăiesc doar pe cereri de plată.
+ *
+ * O singură apăsare, idempotentă: cine e deja în registru (după IBAN, cod fiscal sau denumire) nu
+ * se dublează. După ea, actele se completează din registru pentru toți cei plătiți vreodată.
+ */
+docsRoutes.post("/parties/import-from-par", async (c) => {
+  const user = c.get("user");
+
+  const vendors = await db
+    .select({ name: parVendors.name, idnp: parVendors.idnp, iban: parVendors.iban })
+    .from(parVendors)
+    .where(eq(parVendors.tenantId, user.tenantId));
+  const seen = new Set(
+    vendors.flatMap((v) => [v.iban?.toUpperCase(), v.idnp, v.name.toLowerCase()].filter(Boolean) as string[])
+  );
+
+  const payees = await db
+    .select({
+      name: parRequests.payeeName,
+      idno: parRequests.payeeIdnp,
+      iban: parRequests.payeeIban,
+      bank: parRequests.payeeBank,
+      vendorId: parRequests.vendorId,
+    })
+    .from(parRequests)
+    .where(eq(parRequests.tenantId, user.tenantId));
+
+  const toInsert: { name: string; idnp: string | null; iban: string | null; bank: string | null }[] = [];
+  for (const p of payees) {
+    if (!p.name?.trim() || p.vendorId) continue;
+    const key = p.iban?.toUpperCase() ?? p.idno ?? p.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    toInsert.push({ name: p.name.trim(), idnp: p.idno, iban: p.iban, bank: p.bank });
+  }
+
+  if (toInsert.length > 0) {
+    await db.insert(parVendors).values(
+      toInsert.map((v) => ({
+        tenantId: user.tenantId,
+        name: v.name,
+        idnp: v.idnp,
+        iban: v.iban,
+        bank: v.bank,
+      }))
+    );
+  }
+
+  return c.json({ imported: toInsert.length });
 });

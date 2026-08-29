@@ -50,7 +50,6 @@ const VENDOR = {
 const createVendor = vi.fn();
 
 vi.mock("@/lib/api/par", () => ({
-  listVendors: vi.fn().mockResolvedValue({ items: [VENDOR] }),
   listProjects: vi.fn().mockResolvedValue({ items: [{ id: "p1", name: "Digital Skills 2026" }] }),
   createVendor: (...a: unknown[]) => createVendor(...a),
 }));
@@ -67,12 +66,17 @@ const getDocument = vi.fn();
 const createDocument = vi.fn();
 const updateDocument = vi.fn();
 const finalizeDocument = vi.fn();
+const searchParties = vi.fn();
+const importPartiesFromPar = vi.fn();
 const convertDocumentToPar = vi.fn();
 const emailDocument = vi.fn();
 const downloadDocumentPdf = vi.fn();
 
+const ensureStoredPdf = vi.fn();
+
 vi.mock("@/lib/docs/documentPdfClient", () => ({
   downloadDocumentPdf: (...a: unknown[]) => downloadDocumentPdf(...a),
+  ensureStoredPdf: (...a: unknown[]) => ensureStoredPdf(...a),
 }));
 const getDocumentTrail = vi.fn();
 const listDerivableKinds = vi.fn();
@@ -87,6 +91,8 @@ vi.mock("@/lib/api/docs", async () => {
     createDocument: (...a: unknown[]) => createDocument(...a),
     updateDocument: (...a: unknown[]) => updateDocument(...a),
     finalizeDocument: (...a: unknown[]) => finalizeDocument(...a),
+    searchParties: (...a: unknown[]) => searchParties(...a),
+    importPartiesFromPar: (...a: unknown[]) => importPartiesFromPar(...a),
     convertDocumentToPar: (...a: unknown[]) => convertDocumentToPar(...a),
     emailDocument: (...a: unknown[]) => emailDocument(...a),
     getDocumentTrail: (...a: unknown[]) => getDocumentTrail(...a),
@@ -151,6 +157,22 @@ beforeEach(() => {
     bank: "BC Moldova-Agroindbank SA",
     legalAddress: null,
   });
+  searchParties.mockResolvedValue({
+    items: [
+      {
+        id: "v1",
+        name: 'SRL "Tehnica Nouă"',
+        idno: "1234567890123",
+        iban: "MD48ML000002259A19498121",
+        bank: "BC Moldindconbank SA",
+        address: "mun. Chișinău, bd. Dacia 45",
+        administrator: "Andrei Rusu",
+        source: "registry",
+      },
+    ],
+    total: 1,
+  });
+  createVendor.mockResolvedValue({ id: "v-new", name: "SRL Nou" });
   listDocTemplates.mockResolvedValue([
     { id: "tpl-1", name: "Act de primire-predare", kind: "act_primire_predare", category: null, isSystem: true, version: 1, placeholders: [], updatedAt: "" },
   ]);
@@ -161,44 +183,95 @@ beforeEach(() => {
 });
 
 describe("DG-109 — completarea unui act", () => {
-  it("[blocant] furnizorul ales își arată rechizitele, iar formularul nu le cere tastate", async () => {
+  it("[blocant] câmpurile furnizorului sunt LA VEDERE, nu ascunse după o căutare", async () => {
+    // Cerința owner-ului: „să fie obvious, nu să apeși contraparte, să cauți și după să apară să
+    // adaugi info". Deci: câmpurile există din prima, fără niciun click.
     render(<DocEditorPage />);
 
-    const search = await screen.findByLabelText("Contrapartea");
-    await userEvent.type(search, "Teh");
-    await userEvent.click(await screen.findByRole("button", { name: /Tehnica Nouă/ }));
-
-    // Rechizitele apar — dar ca informație, nu ca formular de completat.
-    expect(await screen.findByText("MD48ML000002259A19498121")).toBeInTheDocument();
-    expect(screen.getByText("1234567890123")).toBeInTheDocument();
-    expect(screen.queryByLabelText(/IBAN/i), "nu există câmp de IBAN de completat").toBeNull();
+    expect(await screen.findByLabelText(/Denumirea furnizorului/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Cod fiscal (IDNO/IDNP)")).toBeInTheDocument();
+    expect(screen.getByLabelText("IBAN")).toBeInTheDocument();
+    expect(screen.getByLabelText("Banca")).toBeInTheDocument();
+    // Și nicăieri cuvântul „contraparte" pe ecran.
+    expect(screen.queryByText(/[Cc]ontrapart/)).toBeNull();
   });
 
-  it("[blocant] către server pleacă id-ul furnizorului și pozițiile, nu rechizitele și nu totalul", async () => {
+  it("[blocant] alegerea din căutare completează toate rechizitele dintr-o dată", async () => {
     render(<DocEditorPage />);
 
-    await userEvent.type(await screen.findByLabelText("Titlul actului"), "Act laptopuri");
-    await userEvent.type(screen.getByLabelText("Contrapartea"), "Teh");
+    await userEvent.type(
+      await screen.findByLabelText(/Caută în registru și în cererile de plată/),
+      "Teh"
+    );
+    await waitFor(() => expect(searchParties).toHaveBeenCalledWith("Teh"));
     await userEvent.click(await screen.findByRole("button", { name: /Tehnica Nouă/ }));
+
+    expect(screen.getByLabelText(/Denumirea furnizorului/)).toHaveValue('SRL "Tehnica Nouă"');
+    expect(screen.getByLabelText("IBAN")).toHaveValue("MD48ML000002259A19498121");
+    expect(screen.getByLabelText("Banca")).toHaveValue("BC Moldindconbank SA");
+  });
+
+  it("[blocant] căutarea găsește și beneficiarii care există doar pe cereri de plată", async () => {
+    searchParties.mockResolvedValue({
+      items: [
+        { id: null, name: "II Plătit Cândva", idno: "2002", iban: "MD24AG000225100013104168", bank: null, address: null, administrator: null, source: "par" },
+      ],
+      total: 1,
+    });
+    render(<DocEditorPage />);
+
+    await userEvent.type(await screen.findByLabelText(/Caută în registru/), "Plat");
+    const option = await screen.findByRole("button", { name: /II Plătit Cândva/ });
+    expect(within(option).getByText(/din cereri de plată/)).toBeInTheDocument();
+
+    await userEvent.click(option);
+    expect(screen.getByLabelText(/Denumirea furnizorului/)).toHaveValue("II Plătit Cândva");
+  });
+
+  it("[blocant] furnizorul scris de mână se salvează în registru la prima salvare", async () => {
+    render(<DocEditorPage />);
+
+    await userEvent.type(await screen.findByLabelText("Titlul actului"), "Act nou");
+    await userEvent.type(screen.getByLabelText(/Denumirea furnizorului/), "SRL Nou");
+    await userEvent.type(screen.getByLabelText("IBAN"), "MD48ML000002259A19498121");
+    await userEvent.click(screen.getByRole("button", { name: "Salvează ciorna" }));
+
+    await waitFor(() => expect(createVendor).toHaveBeenCalled());
+    expect((createVendor.mock.calls[0][0] as { name: string }).name).toBe("SRL Nou");
+  });
+
+  it("[blocant] fără bifă, furnizorul NU intră în registru", async () => {
+    render(<DocEditorPage />);
+    await userEvent.type(await screen.findByLabelText("Titlul actului"), "Act nou");
+    await userEvent.type(screen.getByLabelText(/Denumirea furnizorului/), "SRL Unic");
+    await userEvent.click(screen.getByLabelText(/Salvează furnizorul în registru/));
+    await userEvent.click(screen.getByRole("button", { name: "Salvează ciorna" }));
+
+    await waitFor(() => expect(createDocument).toHaveBeenCalled());
+    expect(createVendor).not.toHaveBeenCalled();
+  });
+
+  it("[blocant] datele furnizorului pleacă la server, nu doar rămân pe ecran", async () => {
+    render(<DocEditorPage />);
+    await userEvent.type(await screen.findByLabelText("Titlul actului"), "Act laptopuri");
+    await userEvent.type(screen.getByLabelText(/Denumirea furnizorului/), "SRL Nou");
+    await userEvent.type(screen.getByLabelText("Cod fiscal (IDNO/IDNP)"), "1002003004005");
     await userEvent.type(screen.getByLabelText("Denumirea poziției 1"), "Laptop Dell");
     await userEvent.clear(screen.getByLabelText("Cantitatea 1"));
     await userEvent.type(screen.getByLabelText("Cantitatea 1"), "2");
     await userEvent.type(screen.getByLabelText("Prețul unitar 1"), "12250,00");
-
     await userEvent.click(screen.getByRole("button", { name: "Salvează ciorna" }));
 
     await waitFor(() => expect(createDocument).toHaveBeenCalled());
     const payload = createDocument.mock.calls[0][0] as {
-      counterparty: { kind: string; id: string };
+      counterparty: { kind: string; name: string; snapshot: Record<string, string> };
       lines: { description: string; quantity: number; unitPriceCents: number }[];
-      totalCents?: number;
     };
-    expect(payload.counterparty).toEqual({ kind: "vendor", id: "v1" });
+    expect(payload.counterparty.name).toBe("SRL Nou");
+    expect(payload.counterparty.snapshot.idno).toBe("1002003004005");
     expect(payload.lines).toEqual([
       { description: "Laptop Dell", unit: "buc", quantity: 2, unitPriceCents: 1225000 },
     ]);
-    expect(payload.totalCents, "totalul e treaba serverului").toBeUndefined();
-    expect(JSON.stringify(payload)).not.toContain("MD48ML000002259A19498121");
   });
 
   it("[blocant] totalul se vede în timp real din poziții", async () => {
@@ -224,8 +297,8 @@ describe("DG-109 — completarea unui act", () => {
     await userEvent.click(screen.getByRole("button", { name: "Salvează ciorna" }));
 
     expect(await screen.findByText(/Mai lipsesc/)).toBeInTheDocument();
-    expect(screen.getByText("IBAN contraparte")).toBeInTheDocument();
-    expect(screen.getByText("Banca contrapărții")).toBeInTheDocument();
+    expect(screen.getByText("IBAN furnizor")).toBeInTheDocument();
+    expect(screen.getByText("Banca furnizorului")).toBeInTheDocument();
   });
 
   it("[blocant] un act finalizat se deschide în citire, fără câmpuri editabile", async () => {
@@ -277,63 +350,18 @@ describe("DG-109 — completarea unui act", () => {
     await userEvent.click(screen.getByRole("button", { name: "Șterge poziția 2" }));
     expect(screen.queryByLabelText("Denumirea poziției 2")).toBeNull();
   });
-});
 
-describe("DG-110 — furnizor nou fără să ieși din act", () => {
-  it("[blocant] „Adaugă furnizor nou” apare când căutarea nu găsește nimic", async () => {
+  it("[blocant] beneficiarii din cereri se pot aduce în registru dintr-o apăsare", async () => {
+    importPartiesFromPar.mockResolvedValue({ imported: 7 });
     render(<DocEditorPage />);
-    await userEvent.type(await screen.findByLabelText("Contrapartea"), "Zzz");
-    expect(await screen.findByRole("button", { name: /Adaugă furnizor nou/i })).toBeInTheDocument();
-  });
 
-  it("[blocant] rechizitele lipite se despart prin server, iar furnizorul salvat intră în act", async () => {
-    render(<DocEditorPage />);
-    await userEvent.type(await screen.findByLabelText("Contrapartea"), "Alfa");
-    await userEvent.click(await screen.findByRole("button", { name: /Adaugă furnizor nou/i }));
-
-    const panel = await screen.findByRole("region", { name: "Furnizor nou" });
-    // Denumirea tastată în căutare se preia — nu se scrie de două ori.
-    expect(within(panel).getByLabelText("Denumirea")).toHaveValue("Alfa");
-
-    await userEvent.type(
-      within(panel).getByLabelText("Rechizite lipite"),
-      "SRL Alfa c.f. 1002600012345"
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Adu în registru toți beneficiarii/i })
     );
-    await userEvent.click(within(panel).getByRole("button", { name: /Despica rechizitele/i }));
-
-    await waitFor(() => expect(apiMock).toHaveBeenCalledWith(
-      "/api/par/vendors/actions/parse-requisites",
-      expect.objectContaining({ method: "POST" })
-    ));
-    await waitFor(() =>
-      expect(within(panel).getByLabelText("Cod fiscal (IDNO/IDNP)")).toHaveValue("1002600012345")
-    );
-
-    await userEvent.click(within(panel).getByRole("button", { name: /Salvează furnizorul/i }));
-    await waitFor(() => expect(createVendor).toHaveBeenCalled());
-
-    // Furnizorul nou e selectat imediat: rechizitele lui apar în act, fără reîncărcare.
-    expect(await screen.findByText("MD24AG000225100013104168")).toBeInTheDocument();
-  });
-
-  it("[blocant] registrul indisponibil NU se raportează ca firmă inexistentă", async () => {
-    apiMock.mockImplementation(async (url: string) => {
-      if (url.includes("parse-requisites")) return {};
-      throw new Error("registry down");
-    });
-    render(<DocEditorPage />);
-    await userEvent.type(await screen.findByLabelText("Contrapartea"), "Zzz");
-    await userEvent.click(await screen.findByRole("button", { name: /Adaugă furnizor nou/i }));
-
-    const panel = await screen.findByRole("region", { name: "Furnizor nou" });
-    await userEvent.type(within(panel).getByLabelText("Cod fiscal (IDNO/IDNP)"), "1002600012345");
-    await userEvent.click(within(panel).getByRole("button", { name: /Verifică/i }));
-
-    expect(await within(panel).findByText(/Registrul nu a răspuns/)).toBeInTheDocument();
-    expect(within(panel).queryByText(/nu există/i)).toBeNull();
+    await waitFor(() => expect(importPartiesFromPar).toHaveBeenCalled());
+    expect(await screen.findByText(/7 beneficiari/)).toBeInTheDocument();
   });
 });
-
 
 describe("DG-117 — actul devine cerere de plată", () => {
   it("[blocant] butonul apare doar pe un act finalizat și duce la PAR-ul creat", async () => {
@@ -491,6 +519,7 @@ describe("DG-115 — trimiterea pe email, din interfață", () => {
       reason: "blocked",
       message: "Mediul acesta nu trimite e-mailuri reale (protecție anti-trimitere din teste).",
     });
+    ensureStoredPdf.mockResolvedValue(true);
     const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("furnizor@example.com");
     render(<DocEditorPage />);
 
@@ -503,10 +532,28 @@ describe("DG-115 — trimiterea pe email, din interfață", () => {
     promptSpy.mockRestore();
   });
 
+  it("[blocant] PDF-ul se generează ÎNAINTE de trimitere, ca actul să chiar ajungă atașat", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue(FINAL_DOC);
+    ensureStoredPdf.mockResolvedValue(true);
+    emailDocument.mockResolvedValue({ sent: true, to: "furnizor@example.com" });
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("furnizor@example.com");
+    render(<DocEditorPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Trimite pe email/i }));
+    await waitFor(() => expect(ensureStoredPdf).toHaveBeenCalledWith("doc-1"));
+    // Ordinea contează: mai întâi actul, apoi plicul.
+    expect(ensureStoredPdf.mock.invocationCallOrder[0]).toBeLessThan(
+      emailDocument.mock.invocationCallOrder[0]
+    );
+    promptSpy.mockRestore();
+  });
+
   it("[blocant] trimiterea reușită confirmă destinatarul", async () => {
     currentPath = "/business/docs/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     emailDocument.mockResolvedValue({ sent: true, to: "furnizor@example.com" });
+    ensureStoredPdf.mockResolvedValue(true);
     const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("furnizor@example.com");
     render(<DocEditorPage />);
 
@@ -548,29 +595,5 @@ describe("Fix prod — PDF-ul se face în browser, contrapartea se poate adăuga
     expect(await screen.findByRole("alert")).toHaveTextContent(/nu a putut fi generat/);
   });
 
-  it("[blocant] cu registrul gol, tot se poate adăuga contrapartea", async () => {
-    // Bug raportat de owner: butonul de adăugare apărea doar după ce tastai 2 litere, iar într-un
-    // registru gol nu apărea niciodată — actul rămânea fără parte, deci nefinalizabil.
-    const par = await import("@/lib/api/par");
-    vi.mocked(par.listVendors).mockResolvedValue({ items: [] });
-    currentPath = "/business/docs/nou";
-    render(<DocEditorPage />);
 
-    expect(await screen.findByRole("button", { name: /Adaugă furnizor nou/i })).toBeInTheDocument();
-    expect(screen.getByText(/Registrul de furnizori e gol/)).toBeInTheDocument();
-  });
-
-  it("[normal] contrapartea aleasă se poate schimba", async () => {
-    const par = await import("@/lib/api/par");
-    vi.mocked(par.listVendors).mockResolvedValue({ items: [VENDOR] });
-    currentPath = "/business/docs/nou";
-    render(<DocEditorPage />);
-
-    await userEvent.type(await screen.findByLabelText("Contrapartea"), "Teh");
-    await userEvent.click(await screen.findByRole("button", { name: /Tehnica Nouă/ }));
-    expect(await screen.findByText("MD48ML000002259A19498121")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /Schimbă contrapartea/i }));
-    expect(screen.queryByText("MD48ML000002259A19498121")).toBeNull();
-  });
 });

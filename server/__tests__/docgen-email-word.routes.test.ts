@@ -109,6 +109,36 @@ async function finalizedDoc() {
 }
 
 describe("DG-115 — trimiterea actului", () => {
+  it("[blocant] fără PDF generat, e-mailul NU pleacă — ar promite un atașament inexistent", async () => {
+    // Bug raportat de owner: „s-a dus email, dar fără act". Pe producție PDF-ul se randează în
+    // browser, deci pe server poate lipsi; textul spunea totuși „vă transmitem atașat".
+    const created = await app.request("/api/docs/documents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "act_primire_predare",
+        title: "Act fără PDF",
+        counterparty: { kind: "vendor", id: vendorId },
+        lines: [{ description: "Serviciu", quantity: 1, unitPriceCents: 100000 }],
+      }),
+    });
+    const { id } = (await created.json()) as { id: string };
+    await app.request(`/api/docs/documents/${id}/finalize`, { method: "POST" });
+    // NU descărcăm PDF-ul, deci nu există stocat.
+
+    fetchSpy.mockClear();
+    const res = await app.request(`/api/docs/documents/${id}/email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: "furnizor@example.com" }),
+    });
+    const body = (await res.json()) as { sent: boolean; reason: string; message: string };
+    expect(body.sent).toBe(false);
+    expect(body.reason).toBe("no_pdf");
+    expect(body.message).toMatch(/Descarcă PDF/);
+    expect(fetchSpy, "nu se cheamă serviciul de e-mail").not.toHaveBeenCalled();
+  });
+
   it("[blocant] în afara producției NU pleacă niciun e-mail real", async () => {
     fetchSpy.mockClear();
     const id = await finalizedDoc();

@@ -329,3 +329,27 @@ export function emailDocument(id: string, to: string, message?: string): Promise
 export function wordExportUrl(id: string): string {
   return `/api/docs/documents/${id}/word`;
 }
+
+export interface DocParty {
+  /** Id-ul din registru; null pentru cei care trăiesc doar pe cereri de plată. */
+  id: string | null;
+  name: string;
+  idno: string | null;
+  iban: string | null;
+  bank: string | null;
+  address: string | null;
+  administrator: string | null;
+  source: "registry" | "par";
+}
+
+/** Caută furnizorul în registru ȘI printre beneficiarii scriși direct pe cererile de plată. */
+export function searchParties(q: string): Promise<{ items: DocParty[]; total: number }> {
+  return api<{ items: DocParty[]; total: number }>(
+    `/api/docs/parties?q=${encodeURIComponent(q)}`
+  );
+}
+
+/** Adună în registru toți beneficiarii care există doar pe cereri de plată. Idempotent. */
+export function importPartiesFromPar(): Promise<{ imported: number }> {
+  return api<{ imported: number }>("/api/docs/parties/import-from-par", { method: "POST" });
+}

@@ -14,7 +14,7 @@ import { FIELD_GROUPS } from "@/lib/docs/fieldCatalog";
 
 /** Câmpurile pe care un lot le poate completa din coloane. Restul vin din registre. */
 const BULK_FIELDS = [
-  { name: "contraparte.denumire", label: "Denumirea contrapărții", required: true },
+  { name: "contraparte.denumire", label: "Denumirea furnizorului", required: true },
   { name: "contraparte.idno", label: "Cod fiscal", required: false },
   { name: "total.suma", label: "Suma", required: false },
   { name: "total.valuta", label: "Valuta", required: false },

@@ -114,7 +114,7 @@ describe("DG-111 — nimic nu se semnează cu rechizite lipsă sau greșite", ()
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; missing: string[] };
     expect(body.error).toBe("incomplete");
-    expect(body.missing.join(" ")).toContain("IBAN contraparte");
+    expect(body.missing.join(" ")).toContain("IBAN furnizor");
     // Mesajul e citibil, nu „contraparte.iban".
     expect(body.missing.join(" ")).not.toContain("contraparte.iban");
 
@@ -129,7 +129,7 @@ describe("DG-111 — nimic nu se semnează cu rechizite lipsă sau greșite", ()
     const res = await app.request(`/api/docs/documents/${id}/finalize`, { method: "POST" });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { missing: string[] };
-    expect(body.missing.join(" ")).toMatch(/IBAN contraparte/);
+    expect(body.missing.join(" ")).toMatch(/IBAN furnizor/);
   });
 
   it("[blocant] cu rechizitele complete și corecte, actul se finalizează", async () => {
