@@ -4,6 +4,7 @@ import { getTableColumns, getTableName } from "drizzle-orm";
 import * as schema from "./schema/index";
 import { resolveDatabaseUrl } from "./env";
 import { DOCGEN_ENSURE_STATEMENTS } from "./ensure/docgen";
+import { PAR_VENDOR_PROFILE_ENSURE_STATEMENTS } from "./ensure/parVendorProfile";
 
 /**
  * Self-healing schema sync — runs at deploy AFTER migrations (see scripts/vercel-migrate.mjs).
@@ -400,6 +401,7 @@ async function main() {
     // Migrarea 0151: registrul de acte (DOCGEN). Tabele NOI pe calea unei cereri — fără heal,
     // pagina de acte ar da „relation doc_documents does not exist" până când migrarea ajunge.
     ...DOCGEN_ENSURE_STATEMENTS,
+    ...PAR_VENDOR_PROFILE_ENSURE_STATEMENTS,
   ];
   for (const stmt of ENSURE_STATEMENTS) {
     try {

@@ -400,6 +400,16 @@ export const parVendors = pgTable(
     registryId: integer("registry_id"),
     /** Timestamp when the vendor was last verified against the registry */
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    /**
+     * PAR-VENDOR360 — starea relației: `preferred` | `active` | `trial` | `blocked`.
+     * `blocked` NU șterge furnizorul (istoricul de plăți trebuie să rămână), dar formularul de
+     * cerere avertizează vizibil când cineva îl alege, cu motivul din `blockedReason`.
+     */
+    relationship: varchar("relationship", { length: 20 }).notNull().default("active"),
+    blockedReason: text("blocked_reason"),
+    website: varchar("website", { length: 300 }),
+    /** Termen de plată convenit, în zile (informativ pe fișă și în coada de finanțe). */
+    paymentTermsDays: integer("payment_terms_days"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
