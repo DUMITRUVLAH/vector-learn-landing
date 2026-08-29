@@ -14,7 +14,6 @@ import { ArrowLeft, ArrowRight, ChevronDown, LogIn, Sparkles } from "lucide-reac
 import { Link } from "@/router/HashRouter";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Badge, Button, Card } from "@/components/ds";
-import { TRUSTED_BY } from "@/data/trustedBy";
 import type { FeatureDef } from "./types";
 
 const CONTACT_EMAIL = "contact@finflow.best";
@@ -39,7 +38,7 @@ export function FeatureLandingPage({ feature }: { feature: FeatureDef }) {
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <Navbar />
       <Hero feature={feature} />
-      <TrustedBy />
+      <StepFlow feature={feature} />
       <Benefits feature={feature} />
       <Blocks feature={feature} />
       <Related feature={feature} />
@@ -122,25 +121,47 @@ function Hero({ feature }: { feature: FeatureDef }) {
   );
 }
 
-/* ─────────────────────────── Utilizat de ─────────────────────────── */
+/* ─────────────────────────── Diagrama pașilor ─────────────────────────── */
 
-function TrustedBy() {
+/**
+ * Parcursul întreg, dintr-o privire, ÎNAINTE de orice detaliu.
+ *
+ * Owner, după prima versiune: „în aceste screenuri e mult text și greu de înțeles pasul
+ * 1 2 3 4 5". Reconstrucțiile de ecran arătau fiecare câte o capacitate, dar nimic nu spunea
+ * în ce ordine se petrec. Banda asta e răspunsul: numere mari, un titlu de trei cuvinte, o
+ * linie de explicație — și aceleași numere revin lângă blocurile de mai jos, ca cititorul să
+ * știe mereu unde se află în poveste.
+ */
+function StepFlow({ feature }: { feature: FeatureDef }) {
   return (
-    <section aria-labelledby="utilizat-de" className="px-4 pb-14 pt-6 sm:px-6">
-      <div className="mx-auto max-w-5xl">
-        <h2 id="utilizat-de" className="mb-6 text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          Utilizat de
-        </h2>
-        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-          {TRUSTED_BY.map((l) => (
-            <span
-              key={l.name}
-              className="flex items-center justify-center rounded-xl border border-border/60 bg-white px-4 py-3 shadow-sm transition-transform duration-200 hover:-translate-y-0.5"
-            >
-              <img src={l.src} alt={l.name} loading="lazy" className={`${l.size} w-auto max-w-[140px] object-contain`} />
-            </span>
-          ))}
+    <section className="border-y border-border bg-muted/30 px-4 py-16 sm:px-6 sm:py-20">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-10 text-center sm:mb-14">
+          <h2 className="mb-3 text-2xl font-bold sm:text-3xl">{feature.stepsTitle}</h2>
+          <p className="mx-auto max-w-xl text-sm text-muted-foreground sm:text-base">{feature.stepsSub}</p>
         </div>
+
+        <ol className="relative grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 lg:gap-3">
+          {/* Linia care leagă treptele — doar pe lățime mare, unde chiar sunt pe un rând. */}
+          <span
+            className="pointer-events-none absolute left-[10%] right-[10%] top-7 hidden h-px bg-border lg:block"
+            aria-hidden="true"
+          />
+          {feature.steps.map((s, i) => (
+            <li key={s.title} className="relative flex flex-col items-center gap-3 text-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-card shadow-sm">
+                <s.icon className="h-6 w-6 text-primary" aria-hidden="true" />
+              </span>
+              <span className="absolute left-1/2 top-0 -translate-y-1/2 translate-x-3 rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold tabular-nums text-primary-foreground">
+                {i + 1}
+              </span>
+              <span>
+                <span className="mb-1 block text-sm font-semibold">{s.title}</span>
+                <span className="block text-xs leading-relaxed text-muted-foreground">{s.desc}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
       </div>
     </section>
   );
@@ -181,7 +202,13 @@ function Blocks({ feature }: { feature: FeatureDef }) {
           >
             <div className="mx-auto grid max-w-6xl items-center gap-8 lg:grid-cols-2 lg:gap-14">
               <div className={i % 2 === 1 ? "order-2" : "order-2 lg:order-1"}>
-                <Badge variant="outline">{b.badge}</Badge>
+                {/* Numărul îl leagă de treapta cu același număr din diagrama de sus. */}
+                <span className="flex items-center gap-2.5">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold tabular-nums text-primary-foreground">
+                    {b.step}
+                  </span>
+                  <Badge variant="outline">{b.badge}</Badge>
+                </span>
                 <h3 className="mb-3 mt-4 text-xl font-bold leading-tight sm:text-2xl lg:text-3xl">{b.title}</h3>
                 <p className="mb-6 text-sm text-muted-foreground sm:text-base">{b.body}</p>
                 <ul className="space-y-3">

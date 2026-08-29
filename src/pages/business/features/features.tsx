@@ -5,7 +5,19 @@
  * îmi place"), dar mesajele sunt rescrise pentru FinFlow și pentru realitatea din Moldova:
  * cereri de plată, praguri de semnătură, dosar pentru donator.
  *
- * Două reguli de conținut, aceleași ca pe landing:
+ * ── Regula vizuală (owner, după prima versiune) ──────────────────────────────────────────
+ * „În aceste screenuri e mult text și greu de înțeles pasul 1 2 3 4 5."
+ *
+ * Prima versiune reconstruia ecrane reale, dense: rânduri de 10–11px, cinci-șase câmpuri pe
+ * vizual, tabele. Arătau *ce* face produsul, dar nu *în ce ordine* — cititorul trebuia să
+ * citească ca să înțeleagă. Acum:
+ *   • fiecare pagină începe cu o diagramă numerotată 1→5, tot parcursul dintr-o privire;
+ *   • fiecare bloc poartă numărul treptei pe care o explică, deci nu se pierde nimeni;
+ *   • fiecare vizual are UN SINGUR lucru de spus, în 2–4 elemente mari, nu în șase rânduri mici;
+ *   • dimensiunea minimă de text în vizuale e `text-xs` (12px), nu 10px.
+ * Dacă adaugi un vizual nou și ai nevoie de o legendă ca să se înțeleagă, vizualul e greșit.
+ *
+ * ── Regulile de conținut, aceleași ca pe landing ─────────────────────────────────────────
  * 1. **Toate datele afișate sunt inventate.** Nume, IDNO și IBAN sintetice (IBAN cu cifra de
  *    control `00`, imposibilă). O pagină publică nu publică date reale de beneficiari.
  * 2. **Nicio afirmație pe care aplicația nu o susține.** Dacă o capacitate nu există încă
@@ -13,10 +25,13 @@
  */
 import {
   AlertTriangle,
+  ArrowDown,
   BadgeCheck,
+  CalendarClock,
   CheckCircle2,
   CircleSlash,
   ClipboardList,
+  FileCheck2,
   FileSpreadsheet,
   FileText,
   GitBranch,
@@ -26,27 +41,77 @@ import {
   Keyboard,
   Languages,
   Layers,
-  Lock,
+  MoveRight,
   ScanLine,
+  Send,
   ShieldCheck,
+  SlidersHorizontal,
+  Upload,
   UserMinus,
   Wand2,
+  X,
 } from "lucide-react";
 import { Badge } from "@/components/ds";
 import type { FeatureDef } from "./types";
 
 /** Date de vitrină — inventate integral (vezi nota din capul fișierului). */
 const DEMO = {
-  requestNo: "PAR-2026-0042",
-  amount: "148 500,00 MDL",
-  project: "Acces Digital",
+  amount: "148 500 MDL",
   vendor: "SRL „Tehnorevizie”",
+  client: "Asociația „Acces Digital”",
   requester: "Ana Popescu",
-  approver1: { name: "Victor Bălan", role: "Supervizor de proiect" },
-  approver2: { name: "Natalia Ursu", role: "Finanțe" },
-  approver3: { name: "Mihai Rusu", role: "Director executiv" },
-  deputy: { name: "Elena Grosu", role: "Director adjunct" },
+  approver1: { name: "Victor Bălan", role: "Supervizor", initials: "VB" },
+  approver2: { name: "Natalia Ursu", role: "Finanțe", initials: "NU" },
+  approver3: { name: "Mihai Rusu", role: "Director", initials: "MR" },
+  deputy: { name: "Elena Grosu", role: "Director adjunct", initials: "EG" },
 } as const;
+
+/* ─────────────────── Cărămizi de vizual, refolosite pe ambele pagini ─────────────────── */
+
+/** O persoană pe un rând: inițiale, nume, rol, plus o stare la dreapta. */
+function PersonRow({
+  initials,
+  name,
+  role,
+  right,
+  tone = "plain",
+}: {
+  initials: string;
+  name: string;
+  role: string;
+  right?: React.ReactNode;
+  tone?: "plain" | "active" | "done" | "dim";
+}) {
+  const box =
+    tone === "active"
+      ? "border-primary/40 bg-primary/5"
+      : tone === "done"
+        ? "border-emerald-500/30 bg-emerald-500/5"
+        : tone === "dim"
+          ? "border-border opacity-60"
+          : "border-border";
+  return (
+    <div className={`flex items-center gap-3 rounded-xl border px-3 py-3 ${box}`}>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">
+        {initials}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold">{name}</span>
+        <span className="block truncate text-xs text-muted-foreground">{role}</span>
+      </span>
+      {right}
+    </div>
+  );
+}
+
+/** Săgeata verticală dintre două etaje ale unei diagrame. */
+function DownArrow() {
+  return (
+    <div className="flex justify-center py-0.5">
+      <ArrowDown className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+    </div>
+  );
+}
 
 /* ══════════════════════ Aprobări pe mai multe niveluri ══════════════════════ */
 
@@ -64,115 +129,82 @@ const multiLevel: FeatureDef = {
     "Fie că e o cerere de plată, un avans sau un decont, îți configurezi regulile o dată. Apoi fiecare cerere urmează exact traseul pe care îl cere politica ta — oricâte trepte ar avea.",
   heroVisual: (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-semibold tabular-nums">{DEMO.requestNo}</span>
+      <div className="flex items-end justify-between gap-3 border-b border-border pb-3">
+        <span>
+          <span className="block text-xs text-muted-foreground">Cerere de plată</span>
+          <span className="block text-2xl font-bold tabular-nums">{DEMO.amount}</span>
+        </span>
         <Badge variant="warning">La aprobat</Badge>
       </div>
-      <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2">
-        <span className="text-[11px] text-muted-foreground">Sumă</span>
-        <span className="text-[11px] font-semibold tabular-nums">{DEMO.amount}</span>
-      </div>
-      <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2">
-        <span className="text-[11px] text-muted-foreground">Proiect</span>
-        <span className="text-[11px] font-semibold">{DEMO.project}</span>
-      </div>
-
-      <p className="pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Lanțul construit automat
-      </p>
-      {[
-        { p: DEMO.approver1, state: "done" as const },
-        { p: DEMO.approver2, state: "current" as const },
-        { p: DEMO.approver3, state: "next" as const },
-      ].map((s, i) => (
-        <div
-          key={s.p.name}
-          className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ${
-            s.state === "current" ? "border-primary/40 bg-primary/5" : "border-border"
-          }`}
-        >
-          <span
-            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-              s.state === "done"
-                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                : s.state === "current"
-                  ? "bg-primary/15 text-primary"
-                  : "bg-muted text-muted-foreground"
-            }`}
-          >
-            {s.state === "done" ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> : i + 1}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[11px] font-semibold">{s.p.name}</span>
-            <span className="block truncate text-[10px] text-muted-foreground">{s.p.role}</span>
-          </span>
-          <span className="text-[10px] text-muted-foreground">
-            {s.state === "done" ? "aprobat" : s.state === "current" ? "la el acum" : "urmează"}
-          </span>
-        </div>
-      ))}
+      <PersonRow
+        initials={DEMO.approver1.initials}
+        name={DEMO.approver1.name}
+        role={DEMO.approver1.role}
+        tone="done"
+        right={<CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />}
+      />
+      <PersonRow
+        initials={DEMO.approver2.initials}
+        name={DEMO.approver2.name}
+        role={DEMO.approver2.role}
+        tone="active"
+        right={<span className="shrink-0 text-xs font-semibold text-primary">la el acum</span>}
+      />
+      <PersonRow
+        initials={DEMO.approver3.initials}
+        name={DEMO.approver3.name}
+        role={DEMO.approver3.role}
+        tone="dim"
+        right={<span className="shrink-0 text-xs text-muted-foreground">urmează</span>}
+      />
     </div>
   ),
 
-  benefits: [
-    {
-      icon: Layers,
-      title: "Complexitatea nu strică acuratețea",
-      desc: "Oricâte praguri, proiecte și excepții ai, cererea ajunge de fiecare dată la aprobatorii pe care îi cere politica — nu la cine își amintește cineva.",
-    },
-    {
-      icon: GitBranch,
-      title: "Fluxuri pe măsura organizației",
-      desc: "Secvențial sau în paralel, pe bandă de sumă, proiect sau tip de cheltuială. Regula o scrii o dată; de aplicat o aplică sistemul.",
-    },
-    {
-      icon: UserMinus,
-      title: "Concediul nu mai blochează plata",
-      desc: "Delegare pe perioadă determinată, către o persoană anume, fără să dai parola nimănui și fără să dispară din urmă cine a semnat de fapt.",
-    },
-    {
-      icon: ClipboardList,
-      title: "Urma rămâne, oricât de complicat e traseul",
-      desc: "Cine, ce, când și pe ce versiune de document. Jurnal care nu se editează, filtrabil și exportabil pentru audit sau donator.",
-    },
+  stepsTitle: "Cum trece o cerere prin organizație",
+  stepsSub: "Pui regulile o dată. Restul se întâmplă singur, de fiecare dată la fel.",
+  steps: [
+    { icon: SlidersHorizontal, title: "Pui pragurile", desc: "O singură dată, la început." },
+    { icon: GitBranch, title: "Lanțul se face singur", desc: "Suma decide cine semnează." },
+    { icon: UserMinus, title: "Solicitantul iese din lanț", desc: "Nimeni nu semnează pentru sine." },
+    { icon: CheckCircle2, title: "Se semnează pe rând", desc: "Cine lipsește, deleagă." },
+    { icon: ClipboardList, title: "Dosarul e gata", desc: "Urma s-a scris singură." },
   ],
 
-  blocksTitle: "Cum funcționează",
+  blocksTitle: "Fiecare pas, pe îndelete",
   blocks: [
     {
       id: "reguli",
+      step: 2,
       badge: "Reguli",
-      title: "Fluxul rulează pe regulile pe care le pui tu",
-      body: "Definești benzile de sumă și cine semnează pe fiecare. La trimitere, FinFlow citește suma, proiectul și tipul cheltuielii și construiește lanțul — fără ca solicitantul să aleagă pe cineva „din cap”.",
+      title: "Suma decide cine semnează",
+      body: "Definești benzile de sumă și cine semnează pe fiecare. La trimitere, FinFlow citește suma și construiește lanțul — solicitantul nu alege pe nimeni „din cap”.",
       bullets: [
-        "Trepte pe bandă de sumă: sub prag o semnătură, peste prag trei",
+        "Sub prag o semnătură, peste prag trei",
         "Reguli separate pe proiect, plătitor sau cod bugetar",
-        "Trepte secvențiale (una după alta) sau în paralel (toți deodată)",
-        "Modifici pragul o dată — se aplică tuturor cererilor următoare",
+        "Trepte una după alta sau toți deodată",
+        "Schimbi pragul o dată — se aplică tuturor cererilor următoare",
       ],
       visual: (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {[
-            { band: "≤ 10 000 MDL", chain: "Supervizor", steps: 1 },
-            { band: "10 000 – 100 000", chain: "Supervizor → Director executiv", steps: 2 },
-            { band: "> 100 000 MDL", chain: "Supervizor → Finanțe → Director", steps: 3 },
+            { band: "≤ 10 000", chain: "Supervizor", steps: 1 },
+            { band: "10 000 – 100 000", chain: "Supervizor → Director", steps: 2 },
+            { band: "> 100 000", chain: "Supervizor → Finanțe → Director", steps: 3 },
           ].map((r) => (
-            <div key={r.band} className="rounded-xl border border-border px-3 py-2.5">
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-[11px] font-bold tabular-nums">{r.band}</span>
-                <Badge variant="outline">
-                  {r.steps} {r.steps === 1 ? "semnătură" : "semnături"}
-                </Badge>
+            <div key={r.band} className="rounded-xl border border-border px-3 py-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-sm font-bold tabular-nums">{r.band}</span>
+                <span className="flex items-center gap-1" aria-label={`${r.steps} semnături`}>
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      className={`h-2.5 w-2.5 rounded-full ${i < r.steps ? "bg-primary" : "bg-muted"}`}
+                      aria-hidden="true"
+                    />
+                  ))}
+                </span>
               </div>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: r.steps }).map((_, i) => (
-                  <span key={i} className="h-1.5 flex-1 rounded-full bg-primary/70" />
-                ))}
-                {Array.from({ length: 3 - r.steps }).map((_, i) => (
-                  <span key={`e${i}`} className="h-1.5 flex-1 rounded-full bg-muted" />
-                ))}
-              </div>
-              <p className="mt-1.5 text-[10px] text-muted-foreground">{r.chain}</p>
+              <p className="text-xs text-muted-foreground">{r.chain}</p>
             </div>
           ))}
         </div>
@@ -180,131 +212,142 @@ const multiLevel: FeatureDef = {
     },
     {
       id: "segregare",
+      step: 3,
       badge: "Segregarea responsabilităților",
       title: "Nimeni nu-și aprobă propria cerere",
-      body: "Regula pe care orice auditor o caută prima: persoana care cere banii nu e aceeași cu cea care îi aprobă și nici cu cea care îi execută. FinFlow o impune la nivel de sistem, nu de bună-credință.",
+      body: "Regula pe care orice auditor o caută prima: cine cere banii nu e cine îi aprobă și nici cine îi execută. FinFlow o impune la nivel de sistem, nu de bună-credință.",
       bullets: [
-        "Solicitantul e sărit automat din lanț dacă apare și ca aprobator",
+        "Solicitantul e sărit automat din lanț",
         "Aprobarea și execuția plății sunt roluri diferite",
         "Rechizitele bancare le vede doar cine are treabă cu cererea",
         "Fiecare acces la datele bancare rămâne în jurnal",
       ],
       visual: (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2.5 rounded-xl border border-border px-3 py-2.5">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold">
-              AP
+        <div>
+          <PersonRow
+            initials="AP"
+            name={DEMO.requester}
+            role="a depus cererea"
+            right={<Badge variant="secondary">Solicitant</Badge>}
+          />
+          <div className="flex items-center justify-center gap-2 py-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500/10">
+              <X className="h-5 w-5 text-red-600 dark:text-red-400" aria-hidden="true" />
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[11px] font-semibold">{DEMO.requester}</span>
-              <span className="block text-[10px] text-muted-foreground">a depus cererea</span>
-            </span>
-            <Badge variant="secondary">Solicitant</Badge>
+            <span className="text-sm font-semibold text-red-700 dark:text-red-400">nu poate semna</span>
           </div>
-          {/* Perechea explicită light/dark: pe tema închisă `--destructive` e un roșu ÎNCHIS
-              (0 62% 30%), gândit ca fundal — ca text pe o suprafață închisă devine ilizibil. */}
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5">
-            <div className="mb-1 flex items-center gap-2">
-              <Lock className="h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-400" aria-hidden="true" />
-              <p className="text-[11px] font-bold text-red-700 dark:text-red-400">Nu poate aproba această cerere</p>
-            </div>
-            <p className="text-[10px] text-muted-foreground">
-              Este solicitantul. Sistemul trece treapta la următorul aprobator eligibil.
-            </p>
-          </div>
-          <div className="flex items-center gap-2.5 rounded-xl border border-primary/40 bg-primary/5 px-3 py-2.5">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
-              VB
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[11px] font-semibold">{DEMO.approver1.name}</span>
-              <span className="block truncate text-[10px] text-muted-foreground">{DEMO.approver1.role}</span>
-            </span>
-            <Badge variant="outline">Aprobator</Badge>
+          <DownArrow />
+          <div className="pt-1">
+            <PersonRow
+              initials={DEMO.approver1.initials}
+              name={DEMO.approver1.name}
+              role={DEMO.approver1.role}
+              tone="active"
+              right={<Badge variant="outline">Aprobator</Badge>}
+            />
           </div>
         </div>
       ),
     },
     {
       id: "delegare",
+      step: 4,
       badge: "Delegare",
       title: "Când aprobatorul lipsește, cererea nu stă",
-      body: "Directorul pleacă două săptămâni. În loc să circule parola sau să se aprobe „pe WhatsApp, seara”, deleghezi dreptul de semnătură pe perioada exactă a absenței, către o persoană anume.",
+      body: "Directorul pleacă două săptămâni. În loc să circule parola sau să se aprobe „pe WhatsApp, seara”, dreptul de semnătură trece pe perioada exactă a absenței, către o persoană anume.",
       bullets: [
-        "Delegare cu dată de început și de sfârșit — expiră singură",
-        "În jurnal rămâne și cine a semnat, și în numele cui",
-        "Vezi în orice moment la ce treaptă e cererea și cine urmează",
-        "Delegarea se retrage oricând, fără să afecteze ce s-a aprobat deja",
+        "Cu dată de început și de sfârșit — expiră singură",
+        "În jurnal rămâne cine a semnat și în numele cui",
+        "Vezi oricând la ce treaptă e cererea și cine urmează",
+        "Se retrage oricând, fără să afecteze ce s-a aprobat deja",
       ],
       visual: (
         <div className="space-y-3">
-          <div className="rounded-xl border border-border px-3 py-2.5">
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Delegare activă
-            </p>
-            <p className="text-[11px] font-semibold">
-              {DEMO.approver3.name} → {DEMO.deputy.name}
-            </p>
-            <p className="text-[10px] text-muted-foreground">12–26 martie · drept de aprobare, treapta 3</p>
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2.5">
+            <CalendarClock className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <span className="text-sm font-semibold tabular-nums">12 — 26 martie</span>
           </div>
-          <div className="flex items-center gap-2.5 rounded-xl border border-primary/40 bg-primary/5 px-3 py-2.5">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
-              EG
+          <div className="flex items-center gap-3">
+            <span className="min-w-0 flex-1 rounded-xl border border-border px-3 py-3 text-center opacity-60">
+              <span className="block truncate text-sm font-semibold">{DEMO.approver3.name}</span>
+              <span className="block text-xs text-muted-foreground">plecat</span>
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[11px] font-semibold">{DEMO.deputy.name}</span>
-              <span className="block truncate text-[10px] text-muted-foreground">
-                în numele lui {DEMO.approver3.name}
-              </span>
+            <MoveRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span className="min-w-0 flex-1 rounded-xl border border-primary/40 bg-primary/5 px-3 py-3 text-center">
+              <span className="block truncate text-sm font-semibold">{DEMO.deputy.name}</span>
+              <span className="block text-xs text-muted-foreground">semnează</span>
             </span>
-            <Badge variant="success">Aprobat</Badge>
           </div>
-          <p className="text-[10px] text-muted-foreground">
-            După 26 martie, dreptul se întoarce automat. Nimeni nu trebuie să-și amintească să-l retragă.
+          <p className="text-center text-xs text-muted-foreground">
+            Pe 27 martie dreptul se întoarce singur. Nimeni nu trebuie să-și amintească.
           </p>
         </div>
       ),
     },
     {
       id: "urma",
+      step: 5,
       badge: "Audit",
-      title: "Fiecare aprobare lasă o urmă de hârtie",
-      body: "Nu mai reconstruiești dosarul din e-mailuri și capturi de ecran. Istoricul se scrie singur, în momentul deciziei, și iese ca PDF oficial sau ca export filtrabil când îl cere auditorul ori donatorul.",
+      title: "Dosarul se scrie singur, pe parcurs",
+      body: "Nu mai reconstruiești dosarul din e-mailuri și capturi de ecran. Istoricul se scrie în momentul deciziei și iese ca PDF oficial când îl cere auditorul ori donatorul.",
       bullets: [
-        "Jurnal append-only: nimic nu se editează și nimic nu se șterge",
-        "Formularul oficial, cu toate secțiunile, generat ca PDF",
+        "Jurnal care nu se editează și nu se șterge",
+        "Formularul oficial, generat ca PDF",
         "Filtrezi pe proiect, perioadă, beneficiar sau aprobator",
-        "Export CSV, XLSX și PDF pentru raportarea către finanțator",
+        "Export CSV, XLSX și PDF pentru finanțator",
       ],
       visual: (
-        <div className="space-y-2">
-          {[
-            { t: "10:04", who: DEMO.requester, what: "a trimis cererea", tone: "muted" as const },
-            { t: "11:20", who: DEMO.approver1.name, what: "a aprobat · treapta 1", tone: "ok" as const },
-            { t: "14:47", who: DEMO.approver2.name, what: "a cerut clarificări", tone: "warn" as const },
-            { t: "09:12", who: DEMO.approver2.name, what: "a aprobat · treapta 2", tone: "ok" as const },
-            { t: "09:40", who: DEMO.deputy.name, what: "a aprobat · treapta 3", tone: "ok" as const },
-          ].map((r) => (
-            <div key={`${r.t}-${r.what}`} className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
-              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">{r.t}</span>
-              <span className="min-w-0 flex-1 truncate text-[11px]">
-                <span className="font-semibold">{r.who}</span> {r.what}
-              </span>
-              <span
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                  r.tone === "ok" ? "bg-emerald-500" : r.tone === "warn" ? "bg-amber-500" : "bg-muted-foreground/40"
-                }`}
-                aria-hidden="true"
-              />
-            </div>
-          ))}
-          <div className="flex items-center gap-2 rounded-xl border border-border px-3 py-2.5">
-            <FileText className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-            <span className="flex-1 truncate text-[11px] font-medium">{DEMO.requestNo}-audit.pdf</span>
-            <span className="text-[10px] text-muted-foreground">gata de trimis</span>
+        <div>
+          <ol className="relative space-y-3 pl-6">
+            <span className="absolute bottom-2 left-[7px] top-2 w-px bg-border" aria-hidden="true" />
+            {[
+              { who: DEMO.requester, what: "a trimis cererea", ok: null },
+              { who: DEMO.approver1.name, what: "a aprobat", ok: true },
+              { who: DEMO.approver2.name, what: "a cerut clarificări", ok: false },
+              { who: DEMO.deputy.name, what: `a aprobat pentru ${DEMO.approver3.name}`, ok: true },
+            ].map((r) => (
+              <li key={r.what} className="relative">
+                <span
+                  className={`absolute -left-6 top-1.5 h-[15px] w-[15px] rounded-full border-2 border-background ${
+                    r.ok === true ? "bg-emerald-500" : r.ok === false ? "bg-amber-500" : "bg-muted-foreground/50"
+                  }`}
+                  aria-hidden="true"
+                />
+                <span className="block text-sm font-semibold">{r.who}</span>
+                <span className="block text-xs text-muted-foreground">{r.what}</span>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-border px-3 py-3">
+            <FileCheck2 className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+            <span className="flex-1 truncate text-sm font-medium">Dosar de audit.pdf</span>
+            <span className="shrink-0 text-xs text-muted-foreground">gata</span>
           </div>
         </div>
       ),
+    },
+  ],
+
+  benefits: [
+    {
+      icon: Layers,
+      title: "Complexitatea nu strică acuratețea",
+      desc: "Cererea ajunge la aprobatorii pe care îi cere politica, nu la cine își amintește cineva.",
+    },
+    {
+      icon: GitBranch,
+      title: "Fluxuri pe măsura organizației",
+      desc: "Regula o scrii o dată. De aplicat, o aplică sistemul — la fiecare cerere.",
+    },
+    {
+      icon: UserMinus,
+      title: "Concediul nu mai blochează plata",
+      desc: "Dreptul de semnătură trece pe durata absenței, fără să circule parola nimănui.",
+    },
+    {
+      icon: ClipboardList,
+      title: "Urma rămâne, oricât de complicat e traseul",
+      desc: "Cine, ce și când — într-un jurnal care nu se editează și se exportă.",
     },
   ],
 
@@ -384,105 +427,78 @@ const aiCapture: FeatureDef = {
   heroSub:
     "Urci contractul, factura sau poza actului. Cererea se completează singură cu beneficiarul, codul fiscal, IBAN-ul și suma — apoi AI-ul compară documentul cu ce ai scris și îți arată exact unde nu se potrivesc.",
   heroVisual: (
-    <div className="space-y-2.5">
-      <div className="flex items-center gap-2.5 rounded-xl border border-border px-3 py-2.5">
-        <ScanLine className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-        <span className="flex-1 truncate text-xs font-medium">act-primire-predare-2026.pdf</span>
+    <div>
+      <div className="flex items-center gap-2.5 rounded-xl border border-border px-3 py-3">
+        <ScanLine className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+        <span className="flex-1 truncate text-sm font-medium">act-primire-predare.pdf</span>
         <Badge variant="success">citit</Badge>
       </div>
-      {[
-        { k: "Beneficiar", v: DEMO.vendor, ok: true },
-        { k: "Cod fiscal", v: "1000000000001", ok: true },
-        { k: "IBAN", v: "MD00EXMP0000000000004271", ok: true },
-        { k: "Sumă", v: "148 500,00 MDL", ok: true },
-        { k: "Bancă", v: "nu apare în document", ok: false },
-      ].map((f) => (
-        <div key={f.k} className="flex items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2">
-          <span className="text-[11px] text-muted-foreground">{f.k}</span>
-          <span
-            className={`truncate text-[11px] tabular-nums ${f.ok ? "font-semibold" : "italic text-muted-foreground"}`}
-          >
-            {f.v}
-          </span>
-        </div>
-      ))}
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
-        <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400">Anexa are alt IBAN decât cererea</p>
-        <p className="text-[10px] text-muted-foreground">AI-ul semnalează, omul decide.</p>
+      <DownArrow />
+      <div className="space-y-2">
+        {[
+          { k: "Beneficiar", v: DEMO.vendor },
+          { k: "IBAN", v: "MD00 EXMP …4271" },
+          { k: "Sumă", v: "148 500,00 MDL" },
+        ].map((f) => (
+          <div key={f.k} className="rounded-xl border border-border px-3 py-2.5">
+            <span className="block text-xs text-muted-foreground">{f.k}</span>
+            <span className="block truncate text-sm font-semibold tabular-nums">{f.v}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden="true" />
+        <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+          Anexa are alt IBAN decât cererea
+        </span>
       </div>
     </div>
   ),
 
-  benefits: [
-    {
-      icon: Keyboard,
-      title: "Actele intră fără să tasteze nimeni",
-      desc: "Beneficiar, cod fiscal, IBAN, sumă și scop — scoase direct din act. Timpul se duce pe verificat, nu pe retastat IBAN-uri dintr-un PDF.",
-    },
-    {
-      icon: BadgeCheck,
-      title: "Un dosar curat începe de la date curate",
-      desc: "Suma, valuta și rechizitele corecte din primul pas, nu reparate după ce cererea a trecut deja de două semnături.",
-    },
-    {
-      icon: CircleSlash,
-      title: "Nu inventează. Când nu știe, lasă gol",
-      desc: "Un câmp care nu apare în document rămâne gol, nu ghicit — și e marcat ca necitit, ca să nu-l confunzi cu unul verificat.",
-    },
-    {
-      icon: ClipboardList,
-      title: "Urma începe de la încărcare",
-      desc: "Documentul, ce a citit AI-ul din el și ce a corectat omul rămân împreună în același dosar, până la audit.",
-    },
+  stepsTitle: "De la act încărcat la cerere completată",
+  stepsSub: "Tot ce urmează se întâmplă în câteva secunde, fără să tastezi nimic.",
+  steps: [
+    { icon: Upload, title: "Urci actul", desc: "PDF, poză, Word sau Excel." },
+    { icon: FileText, title: "Se citește orice act", desc: "Nu doar facturi." },
+    { icon: Send, title: "Se alege cine încasează", desc: "Prestatorul, nu tu." },
+    { icon: Languages, title: "Termenii locali", desc: "RO, RU, EN — același rol." },
+    { icon: GitCompare, title: "Se compară cu cererea", desc: "Diferențele ies la lumină." },
   ],
 
-  blocksTitle: "Cum funcționează",
+  blocksTitle: "Fiecare pas, pe îndelete",
   blocks: [
     {
       id: "orice-act",
+      step: 2,
       badge: "Orice tip de act",
       title: "Nu doar facturi — orice act pe care îl are dosarul",
-      body: "Majoritatea instrumentelor de OCR se opresc la factură. Aici, cererea de plată se sprijină pe ce ai tu de fapt în mână: un contract, un act de primire-predare, un proces-verbal, un deviz sau poza unei chitanțe.",
+      body: "Majoritatea instrumentelor de OCR se opresc la factură. Aici, cererea se sprijină pe ce ai tu de fapt în mână: un contract, un act de primire-predare, un deviz sau poza unei chitanțe.",
       bullets: [
-        "Factură, cont de plată, contract, act de primire-predare, proces-verbal, deviz, chitanță, bon, ofertă, invoice străin",
-        "PDF, poză sau scan, Word, Excel, CSV și text",
+        "Contract, act de primire-predare, proces-verbal, deviz, chitanță, ofertă, invoice străin",
+        "PDF, poză sau scan, Word, Excel, CSV",
         "Un PDF scanat, fără strat de text, e citit ca imagine — nu e respins",
         "Extrage și liniile de deviz, nu doar totalul",
       ],
       visual: (
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-1.5">
-            {["Contract", "Factură", "Act primire-predare", "Proces-verbal", "Deviz", "Chitanță", "Ofertă"].map((t) => (
-              <Badge key={t} variant="outline">
-                {t}
-              </Badge>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-2.5">
             {[
               { icon: FileText, label: "PDF" },
               { icon: ImageIcon, label: "Poză / scan" },
               { icon: FileText, label: "Word" },
               { icon: FileSpreadsheet, label: "Excel / CSV" },
             ].map((f) => (
-              <div key={f.label} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2">
-                <f.icon className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-                <span className="truncate text-[11px] font-medium">{f.label}</span>
+              <div key={f.label} className="flex items-center gap-2.5 rounded-xl border border-border px-3 py-3">
+                <f.icon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                <span className="truncate text-sm font-medium">{f.label}</span>
               </div>
             ))}
           </div>
-          <div className="rounded-xl border border-border px-3 py-2.5">
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Liniile de deviz
-            </p>
-            {[
-              { d: "Revizie tehnică echipament", v: "96 000,00" },
-              { d: "Piese de schimb", v: "52 500,00" },
-            ].map((r) => (
-              <div key={r.d} className="flex items-center justify-between gap-3 py-1">
-                <span className="truncate text-[11px]">{r.d}</span>
-                <span className="shrink-0 text-[11px] font-semibold tabular-nums">{r.v}</span>
-              </div>
+          <div className="flex flex-wrap gap-1.5">
+            {["Contract", "Act primire-predare", "Deviz", "Proces-verbal", "Chitanță", "Ofertă"].map((t) => (
+              <Badge key={t} variant="outline">
+                {t}
+              </Badge>
             ))}
           </div>
         </div>
@@ -490,71 +506,75 @@ const aiCapture: FeatureDef = {
     },
     {
       id: "cine-incaseaza",
+      step: 3,
       badge: "Beneficiarul corect",
       title: "Știe cine încasează și cine plătește",
-      body: "Greșeala scumpă nu e o literă citită prost — e plătitul către partea greșită. Pe un act sunt cel puțin două companii, iar în actele de la noi cuvântul „Beneficiar” înseamnă aproape întotdeauna clientul care plătește, nu cel care încasează.",
+      body: "Greșeala scumpă nu e o literă citită prost — e plătitul către partea greșită. Pe un act sunt cel puțin două companii, iar în actele de la noi „Beneficiar” înseamnă aproape întotdeauna clientul care plătește, nu cel care încasează.",
       bullets: [
-        "Beneficiarul plății e Prestatorul / Furnizorul / Executorul — nu organizația ta",
-        "„Beneficiar” și „Autoritatea contractantă” sunt citite ca fiind clientul care plătește",
-        "Partea ale cărei date bancare apar pentru încasare e cea propusă la plată",
-        "Când două companii sunt la fel de plauzibile, întreabă în loc să ghicească",
+        "Beneficiarul plății e Prestatorul — nu organizația ta",
+        "„Beneficiar” și „Autoritatea contractantă” = clientul care plătește",
+        "Partea cu datele bancare pentru încasare e cea propusă la plată",
+        "Când două companii sunt la fel de plauzibile, întreabă",
       ],
       visual: (
-        <div className="space-y-2.5">
-          {[
-            { name: DEMO.vendor, role: "Prestator · încasează", pick: true },
-            { name: "Asociația „Acces Digital”", role: "Beneficiar din contract · plătește", pick: false },
-          ].map((p) => (
-            <div
-              key={p.name}
-              className={`rounded-xl border px-3 py-2.5 ${p.pick ? "border-primary/40 bg-primary/5" : "border-border"}`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="min-w-0">
-                  <span className="block truncate text-[11px] font-semibold">{p.name}</span>
-                  <span className="block truncate text-[10px] text-muted-foreground">{p.role}</span>
-                </span>
-                {p.pick ? <Badge variant="success">Plătit</Badge> : <Badge variant="secondary">Plătitor</Badge>}
-              </div>
+        <div className="space-y-3">
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 px-3 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">{DEMO.vendor}</span>
+                <span className="block text-xs text-muted-foreground">Prestator · încasează</span>
+              </span>
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
             </div>
-          ))}
-          <div className="rounded-xl border border-border bg-muted/40 px-3 py-2.5">
-            <div className="mb-1 flex items-center gap-2">
-              <HelpCircle className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-              <p className="text-[11px] font-bold">Când nu e clar, întreabă</p>
+          </div>
+          <div className="rounded-xl border border-border px-3 py-3 opacity-60">
+            <div className="flex items-center justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">{DEMO.client}</span>
+                <span className="block text-xs text-muted-foreground">„Beneficiar” în contract · plătește</span>
+              </span>
+              <X className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
             </div>
-            <p className="text-[10px] text-muted-foreground">
-              „Actul menționează două companii. Care dintre ele încasează?” — mai bine o întrebare decât un IBAN
-              greșit.
-            </p>
+          </div>
+          <div className="flex items-start gap-2.5 rounded-xl bg-muted/50 px-3 py-3">
+            <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <span className="text-xs leading-relaxed">
+              Când nu e clar, întreabă: <em>„Actul menționează două companii. Care încasează?”</em>
+            </span>
           </div>
         </div>
       ),
     },
     {
       id: "limbi",
+      step: 4,
       badge: "Limbă și terminologie",
       title: "Română, rusă și engleză — plus termenii din actele de aici",
-      body: "Un extractor generic vede „Исполнитель” sau „Bill From” și nu știe ce rol e. Aici terminologia contractuală din Moldova e parte din model: aceleași roluri, oricum ar fi scrise, și codurile fiscale locale recunoscute după formă, nu după etichetă.",
+      body: "Un extractor generic vede „Исполнитель” sau „Bill From” și nu știe ce rol e. Aici terminologia contractuală din Moldova e parte din model: același rol, oricum ar fi scris.",
       bullets: [
-        "Prestator, Furnizor, Vânzător, Antreprenor · Исполнитель, Поставщик, Подрядчик · Supplier, Seller, Bill From",
-        "IDNO = IDNP = cod fiscal = ИДНО — toate ajung în același câmp",
-        "Codul TVA e ținut separat, ca să nu fie confundat cu codul fiscal",
-        "Un cod de 13 cifre e recunoscut ca IDNP chiar dacă e tipărit fără etichetă",
+        "Prestator · Поставщик · Bill From — același rol",
+        "IDNO = IDNP = cod fiscal = ИДНО, toate în același câmp",
+        "Codul TVA e ținut separat, ca să nu fie confundat cu cel fiscal",
+        "Un cod de 13 cifre e recunoscut chiar tipărit fără etichetă",
       ],
       visual: (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {[
-            { src: "Prestator / Поставщик / Bill From", dst: "Beneficiarul plății" },
-            { src: "Beneficiar / Заказчик / Bill To", dst: "Clientul care plătește" },
-            { src: "IDNO · IDNP · cod fiscal · ИДНО", dst: "Cod fiscal (13 cifre)" },
-            { src: "Cod TVA · VAT · Код НДС", dst: "Cod TVA (câmp separat)" },
+            { src: ["Prestator", "Поставщик", "Bill From"], dst: "Beneficiarul plății" },
+            { src: ["Beneficiar", "Заказчик", "Bill To"], dst: "Clientul care plătește" },
+            { src: ["IDNO", "IDNP", "ИДНО"], dst: "Cod fiscal · 13 cifre" },
           ].map((r) => (
-            <div key={r.src} className="rounded-xl border border-border px-3 py-2.5">
-              <p className="mb-1 truncate text-[11px] text-muted-foreground">{r.src}</p>
+            <div key={r.dst} className="rounded-xl border border-border px-3 py-3">
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {r.src.map((t) => (
+                  <span key={t} className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                    {t}
+                  </span>
+                ))}
+              </div>
               <div className="flex items-center gap-2">
-                <Languages className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-                <p className="truncate text-[11px] font-semibold">{r.dst}</p>
+                <ArrowDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="truncate text-sm font-semibold">{r.dst}</span>
               </div>
             </div>
           ))}
@@ -563,46 +583,67 @@ const aiCapture: FeatureDef = {
     },
     {
       id: "comparatie",
+      step: 5,
       badge: "Verificare",
       title: "Compară actul cu cererea și îți arată ambele valori",
-      body: "„2 neconcordanțe” nu ajută pe nimeni. Cine se uită urmează să decidă dacă greșește documentul sau formularul — și nu poate face asta fără cele două valori una lângă alta. Iar tăcerea nu înseamnă acord: câmpurile pe care AI-ul nu le-a putut citi sunt listate separat.",
+      body: "„2 neconcordanțe” nu ajută pe nimeni. Cine se uită urmează să decidă dacă greșește documentul sau formularul — și nu poate fără cele două valori una lângă alta. Iar tăcerea nu înseamnă acord: ce n-a putut fi citit e listat separat.",
       bullets: [
         "Se verifică beneficiarul, codul fiscal, IBAN-ul, banca, suma și valuta",
         "Fiecare diferență arată ce scrie în document și ce scrie în cerere",
         "„Nu am putut citi” e afișat separat de „nu se potrivește”",
-        "Aprobatorul vede semnalul înainte să semneze, nu la raportul de la final de lună",
+        "Aprobatorul vede semnalul înainte să semneze",
       ],
       visual: (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" aria-hidden="true" />
-            <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400">2 neconcordanțe</p>
-          </div>
+        <div className="space-y-3">
           {[
-            { f: "Sumă", doc: "148 500,00 MDL", req: "145 000,00 MDL" },
-            { f: "IBAN", doc: "MD00…4271", req: "MD00…9038" },
+            { f: "Sumă", doc: "148 500,00", req: "145 000,00" },
+            { f: "IBAN", doc: "…4271", req: "…9038" },
           ].map((r) => (
-            <div key={r.f} className="rounded-xl border border-border px-3 py-2.5">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{r.f}</p>
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-[11px]">
-                  în document{" "}
-                  <span className="font-semibold text-amber-700 dark:text-amber-400 tabular-nums">{r.doc}</span>
+            <div key={r.f} className="rounded-xl border border-border px-3 py-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{r.f}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <span>
+                  <span className="block text-xs text-muted-foreground">în document</span>
+                  <span className="block truncate text-sm font-bold tabular-nums text-amber-700 dark:text-amber-400">
+                    {r.doc}
+                  </span>
                 </span>
-                <span className="shrink-0 truncate text-[11px]">
-                  în cerere <span className="font-semibold tabular-nums">{r.req}</span>
+                <span className="border-l border-border pl-3">
+                  <span className="block text-xs text-muted-foreground">în cerere</span>
+                  <span className="block truncate text-sm font-bold tabular-nums">{r.req}</span>
                 </span>
               </div>
             </div>
           ))}
-          <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2">
-            <GitCompare className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span className="text-[10px] text-muted-foreground">
-              4 câmpuri concordante · 1 câmp necitit (bancă)
-            </span>
+          <div className="flex items-center gap-2.5 rounded-xl bg-muted/50 px-3 py-2.5">
+            <GitCompare className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span className="text-xs text-muted-foreground">4 câmpuri concordante · 1 necitit (bancă)</span>
           </div>
         </div>
       ),
+    },
+  ],
+
+  benefits: [
+    {
+      icon: Keyboard,
+      title: "Actele intră fără să tasteze nimeni",
+      desc: "Timpul se duce pe verificat, nu pe retastat IBAN-uri dintr-un PDF.",
+    },
+    {
+      icon: BadgeCheck,
+      title: "Un dosar curat începe de la date curate",
+      desc: "Suma și rechizitele corecte din primul pas, nu reparate după două semnături.",
+    },
+    {
+      icon: CircleSlash,
+      title: "Nu inventează. Când nu știe, lasă gol",
+      desc: "Ce nu apare în document rămâne gol și marcat ca necitit, nu ghicit.",
+    },
+    {
+      icon: ClipboardList,
+      title: "Urma începe de la încărcare",
+      desc: "Documentul, ce a citit AI-ul și ce a corectat omul — în același dosar.",
     },
   ],
 
