@@ -3,6 +3,7 @@ import postgres from "postgres";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import * as schema from "./schema/index";
 import { resolveDatabaseUrl } from "./env";
+import { DOCGEN_ENSURE_STATEMENTS } from "./ensure/docgen";
 
 /**
  * Self-healing schema sync — runs at deploy AFTER migrations (see scripts/vercel-migrate.mjs).
@@ -396,6 +397,9 @@ async function main() {
     `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_is_patent_holder" boolean DEFAULT false NOT NULL`,
     `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_patent_series" varchar(50)`,
     `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_patent_valid_until" varchar(10)`,
+    // Migrarea 0151: registrul de acte (DOCGEN). Tabele NOI pe calea unei cereri — fără heal,
+    // pagina de acte ar da „relation doc_documents does not exist" până când migrarea ajunge.
+    ...DOCGEN_ENSURE_STATEMENTS,
   ];
   for (const stmt of ENSURE_STATEMENTS) {
     try {

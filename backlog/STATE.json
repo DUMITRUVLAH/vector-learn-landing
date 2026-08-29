@@ -4705,6 +4705,316 @@
       "priority": "medium",
       "title": "Formular creare: data necesară +10 zile, UM bucăți, hint evenimente",
       "pr": "https://github.com/DUMITRUVLAH/vector-learn-landing/pull/262"
+    },
+    "DG-101": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-1",
+      "depends_on": [],
+      "priority": "high",
+      "title": "Schema documentelor (doc_documents/lines/links/sequences/audit) + extensie docmerge_templates + migrare + heal sync-schema"
+    },
+    "DG-102": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-1",
+      "depends_on": [
+        "DG-101"
+      ],
+      "priority": "high",
+      "title": "API documente: CRUD + finalizare imutabilă (body_hash) + anulare cu motiv + filtre"
+    },
+    "DG-103": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-1",
+      "depends_on": [
+        "DG-102"
+      ],
+      "priority": "high",
+      "title": "Pagina „Acte” (/business/docs) cu filtre pe tip/proiect/contraparte/stare"
+    },
+    "DG-104": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-2",
+      "depends_on": [
+        "DG-103"
+      ],
+      "priority": "high",
+      "title": "Editor WYSIWYG tip Word (TipTap lazy-loaded, lipire din Word curățată, sanitizare)"
+    },
+    "DG-105": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-2",
+      "depends_on": [
+        "DG-104"
+      ],
+      "priority": "high",
+      "title": "Inserare câmpuri cu „/” + panou lateral; cipuri salvate ca {{...}}"
+    },
+    "DG-106": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-2",
+      "depends_on": [
+        "DG-105"
+      ],
+      "priority": "high",
+      "title": "Biblioteca de șabloane standard RO (act primire-predare, contracte, PV recepție…)"
+    },
+    "DG-107": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-2",
+      "depends_on": [
+        "DG-106"
+      ],
+      "priority": "medium",
+      "title": "Versionare șabloane + previzualizare cu date de test și cu furnizor real"
+    },
+    "DG-108": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-3",
+      "depends_on": [
+        "DG-107"
+      ],
+      "priority": "high",
+      "title": "Catalogul de câmpuri + rezolverul de date (noi/contraparte/proiect/eveniment/total/sumă în litere)"
+    },
+    "DG-109": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-3",
+      "depends_on": [
+        "DG-108"
+      ],
+      "priority": "high",
+      "title": "Formular de completare generat din șablon + selector contraparte cu rechizite + tabel de poziții"
+    },
+    "DG-110": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-3",
+      "depends_on": [
+        "DG-109"
+      ],
+      "priority": "medium",
+      "title": "Contraparte nouă din act: lipire bloc de rechizite + verificare în registrul de firme"
+    },
+    "DG-111": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-3",
+      "depends_on": [
+        "DG-109"
+      ],
+      "priority": "high",
+      "title": "Validare înainte de finalizare (IBAN, IDNO, câmpuri lipsă, sumă, poziții)"
+    },
+    "DG-112": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-4",
+      "depends_on": [
+        "DG-111"
+      ],
+      "priority": "high",
+      "title": "PDF-ul actului (antet/subsol, diacritice, tabel rupt pe pagini, fallback HTML)"
+    },
+    "DG-113": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-4",
+      "depends_on": [
+        "DG-112"
+      ],
+      "priority": "high",
+      "title": "Numerotare automată per tip și an, rezervată tranzacțional la finalizare"
+    },
+    "DG-114": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-4",
+      "depends_on": [
+        "DG-113"
+      ],
+      "priority": "high",
+      "title": "Bloc de semnături + imutabilitate (hash de corp, editare după finalizare → 409)"
+    },
+    "DG-115": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-4",
+      "depends_on": [
+        "DG-114"
+      ],
+      "priority": "medium",
+      "title": "Trimitere pe email prin emailGuard + export .docx"
+    },
+    "DG-116": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-5",
+      "depends_on": [
+        "DG-114"
+      ],
+      "priority": "high",
+      "title": "„Act nou pe baza acestuia”: contract → act de primire-predare / adițional / PV"
+    },
+    "DG-117": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-5",
+      "depends_on": [
+        "DG-116"
+      ],
+      "priority": "high",
+      "title": "„Transformă în PAR”: PAR precompletat din act + PDF atașat automat + legătură dublă"
+    },
+    "DG-118": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-5",
+      "depends_on": [
+        "DG-117"
+      ],
+      "priority": "medium",
+      "title": "Invers: din PAR aprobat / comandă / recepție → actul precompletat"
+    },
+    "DG-119": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-5",
+      "depends_on": [
+        "DG-117"
+      ],
+      "priority": "medium",
+      "title": "Traseul actului: contract → act → PAR → plată → factură (componentă comună cu PAR)"
+    },
+    "DG-120": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-6",
+      "depends_on": [
+        "DG-117"
+      ],
+      "priority": "high",
+      "title": "Dosarul proiectului: acte pe contraparte și tip, contractat vs plătit, ZIP"
+    },
+    "DG-121": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-6",
+      "depends_on": [
+        "DG-120"
+      ],
+      "priority": "medium",
+      "title": "Dosarul contrapărții: istoric acte + semnalarea schimbărilor de rechizite"
+    },
+    "DG-122": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-6",
+      "depends_on": [
+        "DG-120"
+      ],
+      "priority": "medium",
+      "title": "Registrul actelor: export XLSX + ZIP pe filtrele curente"
+    },
+    "DG-123": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-6",
+      "depends_on": [
+        "DG-120"
+      ],
+      "priority": "high",
+      "title": "Permisiuni pe proiect (projectScope/visibility) + jurnal în limbaj omenesc"
+    },
+    "DG-124": {
+      "status": "pending",
+      "attempts": 0,
+      "blockers": [],
+      "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
+      "milestone": "DOCGEN",
+      "phase": "DOCGEN-faza-6",
+      "depends_on": [
+        "DG-113"
+      ],
+      "priority": "medium",
+      "title": "Generare în masă din Excel salvată în registru (reuse generateBatch/zipPdfs)"
     }
   }
 }

@@ -71,3 +71,5 @@ export * from "./platform";
 export * from "./telemetry";
 // Curs oficial BNM — cache global, date publice (FX-001)
 export * from "./bnmRates";
+// Registrul de acte — generare documente → PDF → PAR (DOCGEN-101)
+export * from "./docs";

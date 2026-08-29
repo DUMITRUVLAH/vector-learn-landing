@@ -500,3 +500,43 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 > NU intră în STATE.json-ul acestui repo și NU se construiesc de autopilotul de aici. Pilot ales
 > de owner: **Faza 1 — igiena taskurilor** (digest zilnic + motiv obligatoriu la mutarea
 > termenelor). Build-ul pornește doar la semnalul owner-ului.
+
+---
+
+## Milestone DOCGEN — Modulul de acte (generare documente → PDF → PAR), adăugat 2026-08-29
+
+> Cerere owner: șabloane proprii de acte (act de primire-predare, contracte) editate într-un editor
+> tip Word, completate automat cu **rechizitele furnizorilor** din registru, generate ca PDF,
+> derivate unul din altul (contract → act) și **transformate în PAR-uri**, cu dosare per proiect și
+> per client. Refolosește DOCMERGE (șabloane `{{câmpuri}}`, HTML→PDF Playwright, generare în masă),
+> `par_vendors` (rechizite complete), `par_projects/events`, `amountInWords`, `par_attachments`.
+>
+> Backlog complet cu JTBD, model de date, decizii și riscuri:
+> [`docgen/DOCGEN-BACKLOG.md`](docgen/DOCGEN-BACKLOG.md). O fază = un branch = un PR (§0.2).
+
+| Phase | ID | Title | Status | Spec |
+|-------|----|-------|--------|------|
+| 1 | `DG-101` | Schema documentelor + migrare + heal sync-schema | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 1 | `DG-102` | API documente (CRUD + finalizare imutabilă + anulare) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 1 | `DG-103` | Pagina „Acte" cu filtre în shell-ul business | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 2 | `DG-104` | Editor WYSIWYG tip Word (TipTap, lazy-loaded, sanitizat) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 2 | `DG-105` | Inserare câmpuri cu „/" + panou lateral (cipuri → `{{...}}`) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 2 | `DG-106` | Biblioteca de șabloane standard RO (act primire-predare, contracte…) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 2 | `DG-107` | Versionare șabloane + previzualizare cu date reale | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 3 | `DG-108` | Catalogul de câmpuri + rezolverul de date (noi/contraparte/proiect/total) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 3 | `DG-109` | Formular de completare generat din șablon + tabel de poziții | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 3 | `DG-110` | Contraparte nouă din act: lipire rechizite + verificare în registru | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 3 | `DG-111` | Validare înainte de finalizare (IBAN, IDNO, câmpuri lipsă) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 4 | `DG-112` | PDF-ul actului (antet/subsol, diacritice, tabel pe pagini) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 4 | `DG-113` | Numerotare automată per tip și an, rezervată la finalizare | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 4 | `DG-114` | Bloc de semnături + imutabilitate prin hash de corp | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 4 | `DG-115` | Trimitere pe email (emailGuard) + export .docx | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 5 | `DG-116` | „Act nou pe baza acestuia" (contract → act de primire-predare) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 5 | `DG-117` | **„Transformă în PAR"** — PAR precompletat + PDF atașat automat | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 5 | `DG-118` | Invers: din PAR/comandă/recepție → actul precompletat | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 5 | `DG-119` | Traseul actului: contract → act → PAR → plată → factură | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 6 | `DG-120` | Dosarul proiectului (acte pe contraparte, contractat vs plătit, ZIP) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 6 | `DG-121` | Dosarul contrapărții (istoric acte + schimbări de rechizite) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 6 | `DG-122` | Registrul actelor: export XLSX + ZIP pe filtre | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 6 | `DG-123` | Permisiuni pe proiect + jurnal în limbaj omenesc | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 6 | `DG-124` | Generare în masă din Excel, salvată în registru (reuse DOCMERGE) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
