@@ -11,7 +11,7 @@
  */
 import { callAi } from "./client";
 import { parsePayeeDoc, type PayeeDocFields, type PayeeDocKind } from "../par/payeeDocStub";
-import { normalizePatentDate } from "../../../src/lib/par/patent";
+import { normalizePatentDate, normalizePatentSeries } from "../../../src/lib/par/patent";
 import { isValidIBAN, normalizeIban } from "../../../src/lib/par/iban";
 
 const MAX_AI_TEXT_CHARS = 8000;
@@ -89,7 +89,9 @@ function normalize(json: Record<string, unknown>, fallback: PayeeDocFields): Pay
     iban: iban && isValidIBAN(iban) ? iban : fallback.iban,
     bank: str(json.bank) ?? fallback.bank,
     bic: str(json.bic)?.toUpperCase() ?? fallback.bic,
-    patentSeries: str(json.patentSeries) ?? fallback.patentSeries,
+    // Modelul o întoarce cum e tipărită („seria AA nr. 0123456"), parserul determinist o
+    // curăță — aceeași patentă trebuie să arate la fel indiferent cine a citit-o.
+    patentSeries: normalizePatentSeries(str(json.patentSeries)) ?? fallback.patentSeries,
     patentValidUntil: normalizePatentDate(str(json.patentValidUntil)) ?? fallback.patentValidUntil,
     kind,
     payeeType: typeRaw === "fizic" || typeRaw === "juridic" ? typeRaw : null,

@@ -45,7 +45,7 @@ import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
-import { normalizePatentDate } from "../../src/lib/par/patent";
+import { normalizePatentDate, normalizePatentSeries } from "../../src/lib/par/patent";
 import { generateRequestNo } from "../lib/par/requestNo";
 import { validateIban, normalizeIban } from "../lib/par/validators";
 import { recalcParTotal } from "../lib/par/totals";
@@ -1336,7 +1336,7 @@ parRoutes.patch(
     if (body.payee_is_patent_holder !== undefined)
       updateData.payeeIsPatentHolder = body.payee_is_patent_holder ?? false;
     if (body.payee_patent_series !== undefined)
-      updateData.payeePatentSeries = body.payee_patent_series;
+      updateData.payeePatentSeries = normalizePatentSeries(body.payee_patent_series);
     if (body.payee_patent_valid_until !== undefined)
       updateData.payeePatentValidUntil = normalizePatentDate(body.payee_patent_valid_until);
 

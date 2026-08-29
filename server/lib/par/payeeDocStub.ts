@@ -11,7 +11,7 @@
  * are credit: LLM-ul e un plus, nu o dependență. De aceea e testat pe texte reale de act.
  */
 import { isValidIBAN, isValidBic, normalizeIban } from "../../../src/lib/par/iban";
-import { normalizePatentDate } from "../../../src/lib/par/patent";
+import { normalizePatentDate, normalizePatentSeries } from "../../../src/lib/par/patent";
 
 export type PayeeDocKind = "buletin" | "rechizite" | "patenta" | "unknown";
 
@@ -148,7 +148,7 @@ export function extractPatentSeries(text: string): string | null {
     /\bpatent[ae][^\n]{0,40}?\bnr\.?\s*([A-ZĂÎ]{0,3})\s*(\d{4,10})/i.exec(text);
   if (!m) return null;
   const serie = (m[1] ?? "").toUpperCase().trim();
-  return serie ? `${serie} ${m[2]}` : m[2];
+  return normalizePatentSeries(serie ? `${serie} ${m[2]}` : m[2]);
 }
 
 /**

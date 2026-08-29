@@ -9,6 +9,7 @@ import {
   formatPatentDate,
   hasPatent,
   normalizePatentDate,
+  normalizePatentSeries,
   patentStatus,
   todayIso,
 } from "../patent";
@@ -28,6 +29,33 @@ describe("normalizePatentDate", () => {
     expect(normalizePatentDate("valabilă până la prelungire")).toBeNull();
     expect(normalizePatentDate("")).toBeNull();
     expect(normalizePatentDate(null)).toBeNull();
+  });
+});
+
+describe("normalizePatentSeries", () => {
+  /**
+   * Regresia reală (găsită pe prod, 2026-08-29): modelul AI întoarce seria cum e TIPĂRITĂ pe act
+   * („AA nr. 0123456"), iar parserul determinist — care rulează local, fără cheie — o curăța
+   * („AA 0123456"). Aceeași patentă se scria în două feluri, deci nu mai putea fi căutată în
+   * registru. Local nu se vedea: fără cheie AI, ruta modelului nu se execută niciodată.
+   */
+  it("scrie la fel seria, indiferent cine a citit actul", () => {
+    expect(normalizePatentSeries("AA nr. 0123456")).toBe("AA 0123456");
+    expect(normalizePatentSeries("AA 0123456")).toBe("AA 0123456");
+    expect(normalizePatentSeries("AA0123456")).toBe("AA 0123456");
+    expect(normalizePatentSeries("seria AA nr 0123456")).toBe("AA 0123456");
+    expect(normalizePatentSeries("Seria și nr. AA № 0123456")).toBe("AA 0123456");
+    expect(normalizePatentSeries("aa nr. 0123456")).toBe("AA 0123456");
+  });
+
+  it("acceptă și o patentă doar cu număr", () => {
+    expect(normalizePatentSeries("0123456")).toBe("0123456");
+  });
+
+  it("nu mutilează un format pe care nu-l recunoaște — doar îl curăță de spații", () => {
+    expect(normalizePatentSeries("  AA-BB/2026   nr 77 ")).toBe("AA-BB/2026 nr 77");
+    expect(normalizePatentSeries("")).toBeNull();
+    expect(normalizePatentSeries(null)).toBeNull();
   });
 });
 

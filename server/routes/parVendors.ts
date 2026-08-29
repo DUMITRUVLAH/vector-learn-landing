@@ -17,7 +17,7 @@ import { validateIban } from "../lib/par/validators";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { zodFieldErrorsHook } from "../lib/zodFieldErrors";
 import { splitBankRequisites } from "../lib/par/bankRequisites";
-import { normalizePatentDate } from "../../src/lib/par/patent";
+import { normalizePatentDate, normalizePatentSeries } from "../../src/lib/par/patent";
 
 export const parVendorsRoutes = new Hono<{ Variables: AuthVariables }>();
 parVendorsRoutes.use("*", requireAuth);
@@ -170,7 +170,7 @@ parVendorsRoutes.post(
         // Patenta se ACTUALIZEAZĂ, nu se „completează doar dacă lipsește": un termen nou e
         // exact motivul pentru care beneficiarul e salvat din nou (patenta se prelungește lunar).
         if (body.is_patent_holder != null) patch.isPatentHolder = body.is_patent_holder;
-        if (body.patent_series) patch.patentSeries = body.patent_series;
+        if (body.patent_series) patch.patentSeries = normalizePatentSeries(body.patent_series);
         if (normalizePatentDate(body.patent_valid_until)) patch.patentValidUntil = normalizePatentDate(body.patent_valid_until);
         if (!e.active) patch.active = true;
         if (Object.keys(patch).length) {
@@ -203,7 +203,7 @@ parVendorsRoutes.post(
         contactEmail: body.contact_email ?? null,
         administratorName: body.administrator_name ?? null,
         isPatentHolder: body.is_patent_holder ?? false,
-        patentSeries: body.patent_series ?? null,
+        patentSeries: normalizePatentSeries(body.patent_series),
         patentValidUntil: normalizePatentDate(body.patent_valid_until),
         notes: body.notes ?? null,
       })
@@ -249,7 +249,7 @@ parVendorsRoutes.patch(
       ...(body.contact_email !== undefined ? { contactEmail: body.contact_email } : {}),
       ...(body.administrator_name !== undefined ? { administratorName: body.administrator_name } : {}),
       ...(body.is_patent_holder !== undefined ? { isPatentHolder: body.is_patent_holder ?? false } : {}),
-      ...(body.patent_series !== undefined ? { patentSeries: body.patent_series } : {}),
+      ...(body.patent_series !== undefined ? { patentSeries: normalizePatentSeries(body.patent_series) } : {}),
       ...(body.patent_valid_until !== undefined ? { patentValidUntil: normalizePatentDate(body.patent_valid_until) } : {}),
       ...(body.notes !== undefined ? { notes: body.notes } : {}),
       ...(body.active !== undefined ? { active: body.active } : {}),

@@ -75,6 +75,34 @@ export function normalizePatentDate(input: string | null | undefined): string | 
   return `${String(y).padStart(4, "0")}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+/**
+ * Seria patentei, adusă la o formă unică: „AA 0123456".
+ *
+ * DE CE: aceeași patentă ajunge în sistem pe două căi care o scriu diferit — modelul AI o
+ * întoarce cum e tipărită pe act („seria AA nr. 0123456"), iar parserul determinist o curăță.
+ * Diferența s-a văzut abia pe prod, unde modelul chiar răspunde, iar local (fără cheie) nu.
+ * Două scrieri diferite ale aceluiași număr înseamnă un registru în care nu poți căuta și un
+ * beneficiar care pare să aibă două patente. Normalizarea stă AICI, ca ambele căi să treacă
+ * prin ea.
+ *
+ * Ce nu face: nu inventează o formă pentru ce nu recunoaște — un format neașteptat se întoarce
+ * doar curățat de spații, nu mutilat.
+ */
+export function normalizePatentSeries(input: string | null | undefined): string | null {
+  const raw = (input ?? "").replace(/\s+/g, " ").trim();
+  if (!raw) return null;
+  // Etichetele tipărite înaintea valorii („Seria și nr.", „Patenta nr.") nu fac parte din serie.
+  const withoutLabel = raw
+    .replace(/^(patent[ae]\s+(de\s+[îi]ntreprinz[ăa]tor\s+)?)/i, "")
+    .replace(/^(seri[ai]\s*(și|si)?\s*(nr\.?|№|no\.?)?\s*[:\-]?\s*)/i, "")
+    .trim();
+  const m = /^([A-Za-zĂÂÎȘȚăâîșț]{1,3})\s*(?:nr\.?|№|no\.?)?\s*[:\-]?\s*(\d{4,12})$/.exec(withoutLabel);
+  if (m) return `${m[1].toLocaleUpperCase("ro")} ${m[2]}`;
+  const onlyDigits = /^(\d{4,12})$/.exec(withoutLabel);
+  if (onlyDigits) return onlyDigits[1];
+  return withoutLabel || null;
+}
+
 /** Ziua calendaristică locală a lui `now`, ca ISO "YYYY-MM-DD". */
 export function todayIso(now: Date = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
