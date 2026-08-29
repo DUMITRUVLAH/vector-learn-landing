@@ -34,6 +34,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { extractPlaceholders, renderWithContext } from "../lib/docmerge/placeholders";
 import { SYSTEM_TEMPLATES } from "../lib/docs/systemTemplates";
 import { buildPreviewContext } from "../lib/docs/previewContext";
+import { missingFields, resolveDocumentContext } from "../lib/docs/fieldResolver";
 
 export const docsRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -151,22 +152,61 @@ async function writeAudit(
   });
 }
 
-/** Randează corpul din șablon. Un act fără șablon păstrează corpul primit (import/derivare). */
+/**
+ * Randează corpul din șablon. Un act fără șablon păstrează corpul primit (import/derivare).
+ * Întoarce și câmpurile cerute de șablon, ca apelantul să poată spune ce anume lipsește.
+ */
 async function renderBody(
   tenantId: string,
   templateId: string | null | undefined,
   context: Record<string, string>
-): Promise<{ bodyHtml: string; templateVersion: number }> {
-  if (!templateId) return { bodyHtml: "", templateVersion: 1 };
+): Promise<{ bodyHtml: string; templateVersion: number; placeholders: string[] }> {
+  if (!templateId) return { bodyHtml: "", templateVersion: 1, placeholders: [] };
   const [tpl] = await db
     .select()
     .from(docmergeTemplates)
     .where(and(eq(docmergeTemplates.id, templateId), eq(docmergeTemplates.tenantId, tenantId)));
-  if (!tpl) return { bodyHtml: "", templateVersion: 1 };
+  if (!tpl) return { bodyHtml: "", templateVersion: 1, placeholders: [] };
   return {
     bodyHtml: renderWithContext(tpl.bodyHtml, context),
     templateVersion: tpl.version ?? 1,
+    placeholders: extractPlaceholders(tpl.bodyHtml),
   };
+}
+
+/**
+ * Contextul final al unui act: ce citește serverul din registre BATE ce trimite clientul pentru
+ * rechizite, sume și date de organizație — acolo clientul nu e sursă de adevăr. Câmpurile libere
+ * (text scris de om în formular) rămân cum au venit.
+ */
+async function buildDocumentContext(args: {
+  tenantId: string;
+  vendorId?: string | null;
+  projectId?: string | null;
+  eventId?: string | null;
+  payerId?: string | null;
+  docNumber?: string | null;
+  docDate?: Date | null;
+  totalCents?: number | null;
+  currency?: string | null;
+  userName?: string | null;
+  clientContext?: Record<string, string>;
+}): Promise<Record<string, string>> {
+  const resolved = await resolveDocumentContext({
+    tenantId: args.tenantId,
+    vendorId: args.vendorId,
+    projectId: args.projectId,
+    eventId: args.eventId,
+    payerId: args.payerId,
+    docNumber: args.docNumber,
+    docDate: args.docDate,
+    totalCents: args.totalCents,
+    currency: args.currency,
+    userName: args.userName,
+    basedOn: args.clientContext?.["document.baza"],
+    docPlace: args.clientContext?.["document.loc"],
+  });
+  return { ...(args.clientContext ?? {}), ...resolved };
 }
 
 // ─── Lista ────────────────────────────────────────────────────────────────────
@@ -214,9 +254,33 @@ docsRoutes.post("/documents", zValidator("json", createSchema), async (c) => {
   const user = c.get("user");
   const body = c.req.valid("json");
 
-  const context = body.context ?? {};
-  const { bodyHtml, templateVersion } = await renderBody(user.tenantId, body.templateId, context);
   const { rows, totalCents } = computeLineTotals(body.lines ?? []);
+  const vendorId = body.counterparty?.kind === "vendor" ? body.counterparty?.id ?? null : null;
+
+  const context = await buildDocumentContext({
+    tenantId: user.tenantId,
+    vendorId,
+    projectId: body.projectId,
+    eventId: body.eventId,
+    payerId: body.payerId,
+    docDate: body.docDate ? new Date(body.docDate) : new Date(),
+    totalCents,
+    currency: body.currency ?? "MDL",
+    userName: (user as { name?: string }).name ?? null,
+    clientContext: body.context,
+  });
+  const { bodyHtml, templateVersion, placeholders } = await renderBody(
+    user.tenantId,
+    body.templateId,
+    context
+  );
+
+  // Rechizitele se îngheață din REGISTRU, nu din ce a trimis clientul: dacă furnizorul își schimbă
+  // mâine IBAN-ul, actul de azi rămâne cu cel semnat azi.
+  const snapshot: Record<string, string> = {};
+  for (const [k, v] of Object.entries(context)) {
+    if (k.startsWith("contraparte.")) snapshot[k.replace("contraparte.", "")] = v;
+  }
 
   const [doc] = await db
     .insert(docDocuments)
@@ -232,10 +296,10 @@ docsRoutes.post("/documents", zValidator("json", createSchema), async (c) => {
       payerId: body.payerId ?? null,
       counterpartyKind: body.counterparty?.kind ?? "vendor",
       counterpartyId: body.counterparty?.id ?? null,
-      counterpartyName: body.counterparty?.name ?? null,
-      counterpartySnapshot: body.counterparty?.snapshot
-        ? JSON.stringify(body.counterparty.snapshot)
-        : null,
+      counterpartyName: context["contraparte.denumire"] ?? body.counterparty?.name ?? null,
+      counterpartySnapshot: JSON.stringify(
+        Object.keys(snapshot).length > 0 ? snapshot : body.counterparty?.snapshot ?? {}
+      ),
       context: JSON.stringify(context),
       bodyHtml,
       totalCents,
@@ -251,7 +315,9 @@ docsRoutes.post("/documents", zValidator("json", createSchema), async (c) => {
   }
   await writeAudit(user.tenantId, doc.id, user.id, "created", { title: doc.title });
 
-  return c.json({ ...doc, lines: rows }, 201);
+  // Numărul actului se rezervă abia la finalizare, deci lipsa lui acum e normală — nu o raportăm.
+  const missing = missingFields(placeholders, context).filter((f) => f !== "document.numar");
+  return c.json({ ...doc, lines: rows, missing }, 201);
 });
 
 // ─── Un act, cu tot ce ține de el ─────────────────────────────────────────────
@@ -314,11 +380,6 @@ docsRoutes.put("/documents/:id", zValidator("json", updateSchema), async (c) => 
     );
   }
 
-  const context = body.context ?? (safeJson(doc.context) as Record<string, string>);
-  const rendered = body.context
-    ? await renderBody(user.tenantId, doc.templateId, context)
-    : { bodyHtml: doc.bodyHtml, templateVersion: doc.templateVersion };
-
   let totalCents = doc.totalCents;
   let lines: ReturnType<typeof computeLineTotals>["rows"] | null = null;
   if (body.lines) {
@@ -331,6 +392,30 @@ docsRoutes.put("/documents/:id", zValidator("json", updateSchema), async (c) => 
         .insert(docDocumentLines)
         .values(lines.map((r) => ({ ...r, tenantId: user.tenantId, documentId: doc.id })));
     }
+  }
+
+  const nextVendorId =
+    body.counterparty === undefined
+      ? doc.counterpartyId
+      : body.counterparty.kind === "vendor"
+        ? body.counterparty.id ?? null
+        : null;
+  const context = await buildDocumentContext({
+    tenantId: user.tenantId,
+    vendorId: nextVendorId,
+    projectId: body.projectId === undefined ? doc.projectId : body.projectId,
+    eventId: body.eventId === undefined ? doc.eventId : body.eventId,
+    payerId: body.payerId === undefined ? doc.payerId : body.payerId,
+    docDate: body.docDate ? new Date(body.docDate) : doc.docDate,
+    totalCents,
+    currency: body.currency ?? doc.currency,
+    userName: (user as { name?: string }).name ?? null,
+    clientContext: { ...(safeJson(doc.context) as Record<string, string>), ...(body.context ?? {}) },
+  });
+  const rendered = await renderBody(user.tenantId, doc.templateId, context);
+  const snapshot: Record<string, string> = {};
+  for (const [k, v] of Object.entries(context)) {
+    if (k.startsWith("contraparte.")) snapshot[k.replace("contraparte.", "")] = v;
   }
 
   const [updated] = await db
@@ -346,15 +431,15 @@ docsRoutes.put("/documents/:id", zValidator("json", updateSchema), async (c) => 
       counterpartyId:
         body.counterparty === undefined ? doc.counterpartyId : body.counterparty.id ?? null,
       counterpartyName:
-        body.counterparty === undefined ? doc.counterpartyName : body.counterparty.name ?? null,
-      counterpartySnapshot:
-        body.counterparty === undefined
-          ? doc.counterpartySnapshot
-          : body.counterparty.snapshot
-            ? JSON.stringify(body.counterparty.snapshot)
-            : null,
+        context["contraparte.denumire"] ??
+        (body.counterparty === undefined ? doc.counterpartyName : body.counterparty.name ?? null),
+      counterpartySnapshot: JSON.stringify(
+        Object.keys(snapshot).length > 0
+          ? snapshot
+          : (safeJson(doc.counterpartySnapshot) as Record<string, string>)
+      ),
       context: JSON.stringify(context),
-      bodyHtml: rendered.bodyHtml,
+      bodyHtml: rendered.bodyHtml || doc.bodyHtml,
       totalCents,
       currency: body.currency ?? doc.currency,
       updatedAt: new Date(),
@@ -413,8 +498,28 @@ docsRoutes.post("/documents/:id/finalize", async (c) => {
 
   const year = doc.docDate.getFullYear();
   const docNumber = await reserveNumber(user.tenantId, doc.kind, year);
+
+  // Numărul există abia acum, deci corpul se re-randează cu el — altfel actul semnat ar purta
+  // „{{document.numar}}" exact pe rândul cel mai important. Restul contextului se recitește din
+  // registre, ca sigiliul să acopere datele reale, nu unele vechi de o săptămână.
+  const finalContext = await buildDocumentContext({
+    tenantId: user.tenantId,
+    vendorId: doc.counterpartyKind === "vendor" ? doc.counterpartyId : null,
+    projectId: doc.projectId,
+    eventId: doc.eventId,
+    payerId: doc.payerId,
+    docNumber,
+    docDate: doc.docDate,
+    totalCents,
+    currency: doc.currency,
+    userName: (user as { name?: string }).name ?? null,
+    clientContext: safeJson(doc.context) as Record<string, string>,
+  });
+  const rendered = await renderBody(user.tenantId, doc.templateId, finalContext);
+  const finalBody = rendered.bodyHtml || doc.bodyHtml;
+
   const bodyHash = computeBodyHash({
-    bodyHtml: doc.bodyHtml,
+    bodyHtml: finalBody,
     counterpartyName: doc.counterpartyName,
     counterpartySnapshot: doc.counterpartySnapshot,
     lines,
@@ -429,6 +534,8 @@ docsRoutes.post("/documents/:id/finalize", async (c) => {
       docNumber,
       docYear: year,
       totalCents,
+      bodyHtml: finalBody,
+      context: JSON.stringify(finalContext),
       bodyHash,
       finalizedAt: new Date(),
       updatedAt: new Date(),

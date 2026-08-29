@@ -523,7 +523,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | 2 | `DG-105` | Inserare câmpuri cu „/" + panou lateral (cipuri → `{{...}}`) | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 2 | `DG-106` | Biblioteca de șabloane standard RO (act primire-predare, contracte…) | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 2 | `DG-107` | Versionare șabloane + previzualizare cu date reale | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
-| 3 | `DG-108` | Catalogul de câmpuri + rezolverul de date (noi/contraparte/proiect/total) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 3 | `DG-108` | Catalogul de câmpuri + rezolverul de date (noi/contraparte/proiect/total) | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 3 | `DG-109` | Formular de completare generat din șablon + tabel de poziții | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 3 | `DG-110` | Contraparte nouă din act: lipire rechizite + verificare în registru | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 3 | `DG-111` | Validare înainte de finalizare (IBAN, IDNO, câmpuri lipsă) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |

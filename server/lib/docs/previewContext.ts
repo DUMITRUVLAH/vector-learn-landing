@@ -10,7 +10,8 @@
  */
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/client";
-import { parVendors, parPayers, parSettings } from "../../db/schema/par";
+import { parVendors } from "../../db/schema/par";
+import { resolveDocumentContext } from "./fieldResolver";
 
 /** Valorile de exemplu, când nu s-a ales niciun furnizor. Ținute scurt, dar realiste pentru MD. */
 const SAMPLE: Record<string, string> = {
@@ -56,26 +57,20 @@ export interface PreviewContextOptions {
 export async function buildPreviewContext(
   opts: PreviewContextOptions
 ): Promise<Record<string, string>> {
-  const ctx: Record<string, string> = { ...SAMPLE };
-  if (opts.userName) ctx["utilizator.nume"] = opts.userName;
+  // Exemplele sunt doar plasa de siguranță: peste ele vine ADEVĂRUL din registre, prin același
+  // rezolver folosit la generarea actelor (DG-108). Două implementări ar diverge, iar
+  // previzualizarea ar minți exact acolo unde omul se bazează pe ea.
+  const resolved = await resolveDocumentContext({
+    tenantId: opts.tenantId,
+    vendorId: opts.vendorId,
+    totalCents: 2450000,
+    currency: "MDL",
+    userName: opts.userName,
+  });
+  const ctx: Record<string, string> = { ...SAMPLE, ...resolved };
 
-  const [payer] = await db
-    .select()
-    .from(parPayers)
-    .where(and(eq(parPayers.tenantId, opts.tenantId), eq(parPayers.active, true)))
-    .limit(1);
-  if (payer) {
-    ctx["noi.denumire"] = payer.legalName ?? payer.name;
-    if (payer.idno) ctx["noi.idno"] = payer.idno;
-  }
-
-  const [settings] = await db
-    .select()
-    .from(parSettings)
-    .where(eq(parSettings.tenantId, opts.tenantId))
-    .limit(1);
-  if (settings?.orgLegalName) ctx["noi.denumire"] = settings.orgLegalName;
-
+  // Ce lipsește din fișa furnizorului se SCRIE ca lipsă, nu se acoperă cu exemplul — altfel
+  // previzualizarea ar arăta un act complet, iar cel real ar pleca cu goluri.
   if (opts.vendorId) {
     const [v] = await db
       .select()
@@ -83,14 +78,12 @@ export async function buildPreviewContext(
       .where(and(eq(parVendors.id, opts.vendorId), eq(parVendors.tenantId, opts.tenantId)));
     if (v) {
       const missing = (label: string) => `— ${label} lipsește din fișa furnizorului —`;
-      ctx["contraparte.denumire"] = v.name;
-      ctx["contraparte.idno"] = v.idnp ?? missing("codul fiscal");
-      ctx["contraparte.iban"] = v.iban ?? missing("IBAN-ul");
-      ctx["contraparte.banca"] = v.bank ?? missing("banca");
-      ctx["contraparte.bic"] = v.bicSwift ?? missing("codul bancar");
-      ctx["contraparte.adresa"] = v.legalAddress ?? missing("adresa juridică");
-      ctx["contraparte.administrator"] = v.administratorName ?? missing("administratorul");
-      ctx["contraparte.cod_tva"] = v.vatCode ?? "";
+      if (!v.iban) ctx["contraparte.iban"] = missing("IBAN-ul");
+      if (!v.idnp) ctx["contraparte.idno"] = missing("codul fiscal");
+      if (!v.bank) ctx["contraparte.banca"] = missing("banca");
+      if (!v.bicSwift) ctx["contraparte.bic"] = missing("codul bancar");
+      if (!v.legalAddress) ctx["contraparte.adresa"] = missing("adresa juridică");
+      if (!v.administratorName) ctx["contraparte.administrator"] = missing("administratorul");
     }
   }
 

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "DG-107",
+  "last_completed": "DG-108",
   "iterations": 180,
   "last_run_at": "2026-06-28T00:00:00Z",
   "milestone_status": "VIOLETA: VM1 done (#204-#216). VM3 (feedback 2026-07-16) done — PR #262. VM2: 20 pending.",
@@ -4803,7 +4803,7 @@
       "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-108": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4813,7 +4813,8 @@
         "DG-107"
       ],
       "priority": "high",
-      "title": "Catalogul de câmpuri + rezolverul de date (noi/contraparte/proiect/eveniment/total/sumă în litere)"
+      "title": "Catalogul de câmpuri + rezolverul de date (noi/contraparte/proiect/eveniment/total/sumă în litere)",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-109": {
       "status": "pending",

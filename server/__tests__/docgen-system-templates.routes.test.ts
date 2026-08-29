@@ -157,7 +157,9 @@ describe("DG-106 — organizația începe cu acte gata scrise", () => {
 
     expect(doc.bodyHtml).toContain("MD48ML000002259A19498121");
     expect(doc.bodyHtml).toContain("1234567890123");
-    expect(doc.bodyHtml).toContain("douăzeci și patru de mii cinci sute lei");
+    // Suma în litere e calculată de server din pozițiile actului, NU preluată din context —
+    // de-asta apare forma corectă („cinci sute DE lei"), chiar dacă clientul a trimis alta.
+    expect(doc.bodyHtml).toContain("douăzeci și patru de mii cinci sute de lei 00 bani");
     expect(doc.bodyHtml, "niciun câmp nu rămâne necompletat pe actul trimis la semnat").not.toContain("{{");
   });
 
