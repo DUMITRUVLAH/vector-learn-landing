@@ -31,6 +31,7 @@ vi.mock("@/lib/api/par", async (importOriginal) => {
     getParReportByProject: vi.fn(), getParReportByVendor: vi.fn(), getParReportByEvent: vi.fn(),
     getParReportByChargeTo: vi.fn(), getParReportCurrencyBreakdown: vi.fn(),
     getParReportAging: vi.fn(), getParReportCycleTime: vi.fn(), getParReportBreakdown: vi.fn(),
+    getParReportUrgent: vi.fn(),
     listPayers: vi.fn(), listProjects: vi.fn(), listDepartments: vi.fn(),
   };
 });
@@ -60,6 +61,9 @@ beforeEach(() => {
   }
   api.getParReportByVendor.mockResolvedValue({ items: VENDORS });
   api.getParReportCurrencyBreakdown.mockResolvedValue({ byCurrency: [], totalMdlCents: 3_300_000 });
+  // Raportul încarcă toate dimensiunile într-un singur Promise.all: dacă UNA nu e simulată,
+  // întregul bloc cade în catch și ecranul rămâne gol — testul ar acuza clasamentul degeaba.
+  api.getParReportUrgent.mockResolvedValue({ urgent: { totalUrgent: 0, byRequester: [], byReason: [] } });
   api.getParReportAging.mockResolvedValue({ items: [] });
   api.getParReportCycleTime.mockResolvedValue({ count: 0, avgSubmitToApprovedDays: null, avgSubmitToPaidDays: null });
   api.listPayers.mockResolvedValue({ items: [] });
