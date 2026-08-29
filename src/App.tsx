@@ -40,6 +40,8 @@ const ParReports = lazyWithTimeout(() => import("./pages/par/ParReports").then((
 const ParFolders = lazyWithTimeout(() => import("./pages/par/ParFolders").then((m) => ({ default: m.ParFolders })));
 // FX-001: curs valutar BNM — lazy, ca recharts să nu intre în bundle-ul de login.
 const ParExchange = lazyWithTimeout(() => import("./pages/par/ParExchange").then((m) => ({ default: m.ParExchange })));
+const ParVendors = lazyWithTimeout(() => import("./pages/par/ParVendors"));
+const ParVendorProfile = lazyWithTimeout(() => import("./pages/par/ParVendorProfile"));
 const ParEfacturaQueue = lazyWithTimeout(() => import("./pages/par/ParEfacturaQueue"));
 
 // DOCMERGE
@@ -257,6 +259,9 @@ function Routes() {
   if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParGuardPage requiredRoles={["finance", "par_admin"]}><ParFinanceQueue /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParGuardPage requiredRoles={["par_admin"]}><ParAdminPage /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/efactura")) return <BusinessGuardPage><ParGuardPage requiredRoles={["finance", "par_admin"]}><ParEfacturaQueue /></ParGuardPage></BusinessGuardPage>;
+  // Fișa unui furnizor ÎNAINTE de listă: „/vendors/<id>" începe și el cu „/vendors".
+  if (path.startsWith("/business/par/vendors/")) return <BusinessGuardPage><ParGuardPage><ParVendorProfile /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/vendors")) return <BusinessGuardPage><ParGuardPage><ParVendors /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/exchange")) return <BusinessGuardPage><ParGuardPage><ParExchange /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/folders")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "finance", "par_admin"]}><ParFolders /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "finance", "par_admin"]}><ParReports /></ParGuardPage></BusinessGuardPage>;

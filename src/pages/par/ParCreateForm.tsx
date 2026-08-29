@@ -49,6 +49,7 @@ import {
   type RegistryCompany, type BudgetCodeBalance, type ParTemplate, type ParListRow,
   type ParPrefillResult, type ParLineItemSuggestion, type ParAttachmentAnalysis,
 } from "@/lib/api/par";
+import { VendorSignal } from "@/components/par/VendorSignal";
 import { cn } from "@/lib/utils";
 import { Card, Combobox, Dialog, PastelIcon, Select, Switch, Textarea, chipToneFor } from "@/components/ds";
 import {
@@ -2439,6 +2440,9 @@ export function ParCreateForm() {
                   <option value="">— Introducere manuală —</option>
                   {vendors.filter((v) => !vendorSearch.trim() || `${v.name} ${v.idnp ?? ""} ${v.iban ?? ""}`.toLocaleLowerCase("ro").includes(vendorSearch.trim().toLocaleLowerCase("ro"))).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </Select>
+                {/* VENDOR360: nota și starea relației, chiar în momentul alegerii. O evaluare pe care
+                    o vezi abia pe fișa furnizorului nu influențează decizia care se ia AICI. */}
+                <VendorSignal vendorId={vendorId} />
               </Field>
             ) : (
               <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border p-3">

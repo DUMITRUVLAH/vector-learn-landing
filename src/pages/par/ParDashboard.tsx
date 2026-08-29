@@ -55,6 +55,7 @@ import {
   type BudgetCodeUsage,
   PAR_STATUS_LABELS,
 } from "@/lib/api/par";
+import { PendingRatingPrompt } from "@/components/par/PendingRatingPrompt";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
@@ -305,6 +306,11 @@ export function ParDashboard() {
       }
     >
       <div className="space-y-6">
+
+        {/* Întrebarea „cum a prestat furnizorul?" pentru cererile MELE deja plătite. Apare aici,
+            nu la momentul plății: finanțistul apasă „plătit", dar solicitantul e cel care a văzut
+            dacă marfa a ajuns la timp. */}
+        <PendingRatingPrompt />
 
         {/* "Te așteaptă" — one-click deep links to where decisions are needed */}
         {(inboxCount > 0 || (isFinance && awaitingPayment.length > 0)) && (

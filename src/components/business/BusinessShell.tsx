@@ -195,6 +195,7 @@ const PAR_NAV_GROUPS: NavGroup[] = [
     prefix: "/business/par",
     items: [
       { label: "Acte și contracte", href: "/business/docs", icon: FileText, tone: "sky" },
+      { label: "Furnizori", href: "/business/par/vendors", icon: Building2, tone: "violet" },
       { label: "Foldere proiecte", href: "/business/par/folders", icon: FolderOpen, tone: "teal", roles: ["approver", "finance", "par_admin"] },
       { label: "Rapoarte & statistici", href: "/business/par/reports", icon: BarChart3, tone: "sky", roles: ["approver", "finance", "par_admin"] },
       // Cursul oficial e informație publică — fără restricție de rol; îl folosește oricine

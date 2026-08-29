@@ -10,16 +10,25 @@
  * (`/categories`) nu au voie să fie confundate cu `/:id`.
  */
 const BASE = process.env.BASE ?? process.env.BASE_URL ?? "http://localhost:3155";
-let cookie = "";
+/**
+ * Borcan de cookie-uri, nu o singură valoare: un răspuns care pune ALT cookie nu are voie să șteargă
+ * sesiunea. (Prima versiune rescria variabila la fiecare set-cookie și partea de browser ajungea
+ * nelogată — exact genul de eșec care raportează „pagina e ruptă" când de fapt testul era rupt.)
+ */
+const jar = new Map();
+const cookieHeader = () => [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
 const call = async (method, path, body) => {
   const r = await fetch(BASE + path, {
     method,
-    headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+    headers: { "content-type": "application/json", ...(jar.size ? { cookie: cookieHeader() } : {}) },
     body: body ? JSON.stringify(body) : undefined,
     redirect: "manual",
   });
-  const setCookie = r.headers.getSetCookie?.() ?? [];
-  if (setCookie.length) cookie = setCookie.map((c) => c.split(";")[0]).join("; ");
+  for (const raw of r.headers.getSetCookie?.() ?? []) {
+    const [pair] = raw.split(";");
+    const idx = pair.indexOf("=");
+    if (idx > 0) jar.set(pair.slice(0, idx).trim(), pair.slice(idx + 1).trim());
+  }
   const text = await r.text();
   let json; try { json = JSON.parse(text); } catch { json = text.slice(0, 120); }
   return { status: r.status, json };
@@ -28,8 +37,8 @@ const ok = [], bad = [];
 const check = (name, cond, extra = "") => (cond ? ok : bad).push(`${cond ? "✅" : "❌"} ${name} ${extra}`);
 
 const login = await call("POST", "/api/auth/login", { email: "admin@demo.vectorlearn.io", password: "demo123456" });
-check("login", login.status === 200 && !!cookie, `status=${login.status}`);
-if (!cookie) { console.log(login.json); process.exit(1); }
+check("login", login.status === 200 && jar.size > 0, `status=${login.status}`);
+if (!jar.size) { console.log(login.json); process.exit(1); }
 
 // 1. domenii
 const seed = await call("POST", "/api/par/vendors/categories/seed");
@@ -103,6 +112,54 @@ check("evaluări în așteptare", pend.status === 200 && Array.isArray(pend.json
 check("/categories nu e tratat ca id", cats.status === 200);
 const badId = await call("GET", "/api/par/vendors/nu-e-uuid/profile");
 check("id invalid → 404, nu 500", badId.status === 404, `status=${badId.status}`);
+
+// ─── Browser real (--browser): fișa se DESCHIDE și arată datele, nu doar răspunde 200 ───────
+// Fără pasul ăsta am testa doar API-ul: o pagină care aruncă la login sau se randează goală ar
+// trece verde. Aici cerem explicit URL-ul final, numele furnizorului în pagină și trecerea prin
+// taburi cu conținutul lor.
+if (process.argv.includes("--browser")) {
+  const { existsSync } = await import("node:fs");
+  const CHROME = [
+    process.env.CHROME_PATH,
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium",
+  ].filter(Boolean).find((p) => existsSync(p));
+  if (!CHROME) {
+    check("browser disponibil", false, "setează CHROME_PATH");
+  } else {
+    const { chromium } = await import("playwright-core");
+    const browser = await chromium.launch({ executablePath: CHROME, headless: true });
+    const context = await browser.newContext();
+    await context.addCookies([...jar].map(([name, value]) => ({ name, value, url: BASE })));
+    const page = await context.newPage();
+    const crashes = [];
+    page.on("pageerror", (e) => crashes.push(String(e.message).slice(0, 160)));
+
+    await page.goto(`${BASE}/#/business/par/vendors`, { waitUntil: "domcontentloaded", timeout: 20000 });
+    await page.waitForFunction(() => /Furnizori/.test(document.body?.innerText ?? ""), null, { timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(1200);
+    let text = await page.evaluate(() => document.body?.innerText ?? "");
+    check("lista de furnizori se randează", page.url().includes("/business/par/vendors") && text.includes("Bunicii"), crashes[0] ?? text.slice(0, 100));
+
+    await page.goto(`${BASE}/#/business/par/vendors/${vId}`, { waitUntil: "domcontentloaded", timeout: 20000 });
+    await page.waitForFunction(() => /Plătit în total|nu s-a putut/.test(document.body?.innerText ?? ""), null, { timeout: 20000 }).catch(() => {});
+    text = await page.evaluate(() => document.body?.innerText ?? "");
+    check("fișa furnizorului se deschide", page.url().includes(vId) && text.includes("Bunicii"), crashes[0] ?? text.slice(0, 120));
+    check("fișa arată KPI-urile", text.includes("Plătit în total"), text.slice(0, 120));
+    check("fișa arată semnalele de risc", text.includes("blocat") || text.includes("Blocat"), text.slice(0, 120));
+
+    for (const [tab, expected] of [["Evaluări", "Excelent|stele|evaluări|Nicio evaluare"], ["Oferte", "Prânz corporativ|Nicio ofertă"], ["Documente", "Contract cadru|Niciun document"], ["Note interne", "Furnizor blocat|Nicio notă"]]) {
+      await page.getByRole("tab", { name: new RegExp(tab, "i") }).first().click().catch(() => {});
+      await page.waitForTimeout(500);
+      const body = await page.evaluate(() => document.body?.innerText ?? "");
+      check(`tabul „${tab}" arată conținut`, new RegExp(expected, "i").test(body), body.slice(0, 100));
+    }
+
+    check("nicio eroare JS pe fișă", crashes.length === 0, crashes[0] ?? "");
+    await browser.close();
+  }
+}
 
 console.log(ok.join("\n"));
 if (bad.length) { console.log("\n" + bad.join("\n")); process.exit(1); }

@@ -77,8 +77,14 @@ const AREAS = {
       ["GET", "/api/par/fx/rates", (j) => Array.isArray(j?.rates) && j.rates.some((r) => r.code === "EUR" && r.mdl_per_unit > 0) && typeof j.effective_date === "string"],
       ["GET", "/api/par/fx/convert?from=EUR&to=MDL&amount=100", (j) => typeof j?.rate === "number" && Math.abs(j.result - j.amount * j.rate) < 0.01],
       ["GET", "/api/par/fx/series?codes=EUR,USD&days=7", (j) => Array.isArray(j?.points) && j.points.every((p) => typeof p.date === "string")],
+      // Fișa furnizorului (VENDOR360): verificăm FORMA, nu doar 200 — `vendors` trebuie să fie un
+      // tablou cu agregatele pe care se sprijină filtrele (notă, plătit), iar `/categories` nu are
+      // voie să fie confundat cu `/:id` (garda de uuid ar întoarce 404 pe o rută validă).
+      ["GET", "/api/par/vendors/directory", (j) => Array.isArray(j?.vendors) && j.vendors.every((v) => "ratingAvg" in v && typeof v.paidCents === "number")],
+      ["GET", "/api/par/vendors/categories", (j) => Array.isArray(j?.categories) && Array.isArray(j?.suggestions)],
+      ["GET", "/api/par/vendors/pending-ratings", (j) => Array.isArray(j?.pending)],
     ],
-    routes: ["/business/par", "/business/par/inbox", "/business/par/new", "/business/par/folders", "/business/par/finance", "/business/par/reports", "/business/par/exchange", "/business/par/admin"],
+    routes: ["/business/par", "/business/par/inbox", "/business/par/new", "/business/par/folders", "/business/par/finance", "/business/par/reports", "/business/par/exchange", "/business/par/admin", "/business/par/vendors"],
     deep: ["e2e-par-sweep.mjs", "e2e-par-write-sweep.mjs", "e2e-par-scope.mjs", "e2e-par-timeline-human.mjs", "e2e-par-patenta.mjs"],
   },
   fin: {
