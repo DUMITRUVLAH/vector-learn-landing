@@ -23,7 +23,22 @@ export type HtmlToPdfResult = Uint8Array | null;
  *
  * Returns null if Playwright/Chromium is unavailable (caller handles gracefully).
  */
-export async function htmlToPdfBuffer(html: string): Promise<HtmlToPdfResult> {
+/**
+ * Opțiuni de tipărire. Implicit rămân cele de dinainte (fără antet/subsol, marje zero), ca
+ * generarea în masă să nu-și schimbe rezultatul; actele (DG-112) cer antet, subsol cu numerotare
+ * și marje reale de document oficial.
+ */
+export interface HtmlToPdfOptions {
+  headerTemplate?: string;
+  footerTemplate?: string;
+  displayHeaderFooter?: boolean;
+  margin?: { top?: string; right?: string; bottom?: string; left?: string };
+}
+
+export async function htmlToPdfBuffer(
+  html: string,
+  options: HtmlToPdfOptions = {}
+): Promise<HtmlToPdfResult> {
   try {
     const { chromium } = await import("playwright");
     const browser = await chromium.launch({ args: ["--no-sandbox"] });
@@ -33,7 +48,10 @@ export async function htmlToPdfBuffer(html: string): Promise<HtmlToPdfResult> {
       const pdf = await page.pdf({
         format: "A4",
         printBackground: true,
-        margin: { top: "0", right: "0", bottom: "0", left: "0" },
+        displayHeaderFooter: options.displayHeaderFooter ?? false,
+        ...(options.headerTemplate ? { headerTemplate: options.headerTemplate } : {}),
+        ...(options.footerTemplate ? { footerTemplate: options.footerTemplate } : {}),
+        margin: options.margin ?? { top: "0", right: "0", bottom: "0", left: "0" },
       });
       return pdf;
     } finally {

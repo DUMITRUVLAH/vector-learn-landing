@@ -18,6 +18,7 @@ import {
   Plus,
   Trash2,
   Check,
+  Download,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
@@ -244,6 +245,16 @@ export function DocEditorPage() {
       pageTitle={docId ? "Act" : "Act nou"}
       pageDescription="Alege furnizorul — rechizitele vin din registru. Completează doar ce e specific actului."
       actions={
+        <div className="flex gap-2">
+          {docId && (
+            <a
+              href={`/api/docs/documents/${docId}/pdf`}
+              className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Descarcă PDF
+            </a>
+          )}
         <button
           type="button"
           onClick={() => navigate("/business/docs")}
@@ -252,6 +263,7 @@ export function DocEditorPage() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Înapoi la acte
         </button>
+        </div>
       }
     >
       <div className="p-4 sm:p-6 space-y-6">

@@ -40,7 +40,7 @@ export const SYSTEM_TEMPLATES: SystemTemplate[] = [
 <p>{{document.loc}}, {{document.data}}</p>
 ${PARTIES}
 <p>au încheiat prezentul act, prin care Predătorul a predat, iar Primitorul a primit următoarele bunuri:</p>
-<p><em>[tabelul pozițiilor se completează din act]</em></p>
+<p>{{tabel.pozitii}}</p>
 <p>Valoarea totală: <strong>{{total.suma}} {{total.valuta}}</strong> ({{total.in_litere}}).</p>
 <p>Bunurile au fost predate în stare corespunzătoare, fără obiecții din partea Primitorului.</p>
 <p>Prezentul act a fost întocmit în două exemplare, câte unul pentru fiecare parte.</p>
@@ -55,7 +55,8 @@ ${SIGNATURES}`.trim(),
 <h1>ACT DE PRIMIRE-PREDARE A SERVICIILOR nr. {{document.numar}}</h1>
 <p>{{document.loc}}, {{document.data}}</p>
 ${PARTIES}
-<p>au încheiat prezentul act, prin care Primitorul confirmă prestarea integrală a serviciilor și lipsa obiecțiilor privind volumul, termenele și calitatea acestora.</p>
+<p>au încheiat prezentul act, prin care Primitorul confirmă prestarea integrală a serviciilor și lipsa obiecțiilor privind volumul, termenele și calitatea acestora:</p>
+<p>{{tabel.pozitii}}</p>
 <p>Valoarea serviciilor: <strong>{{total.suma}} {{total.valuta}}</strong> ({{total.in_litere}}).</p>
 <p>În baza: {{document.baza}}. Proiect: {{proiect.nume}}, eveniment: {{eveniment.nume}}.</p>
 ${SIGNATURES}`.trim(),
@@ -106,7 +107,7 @@ ${SIGNATURES}`.trim(),
 <p>{{document.loc}}, {{document.data}}</p>
 ${PARTIES}
 <p>au convenit modificarea contractului menționat, după cum urmează:</p>
-<p><em>[se descriu modificările]</em></p>
+<p>{{tabel.pozitii}}</p>
 <p>Celelalte clauze ale contractului rămân neschimbate. Prezentul act adițional face parte integrantă din contract.</p>
 ${SIGNATURES}`.trim(),
   },
@@ -118,7 +119,9 @@ ${SIGNATURES}`.trim(),
 <h1>PROCES-VERBAL DE RECEPȚIE nr. {{document.numar}}</h1>
 <p>{{document.loc}}, {{document.data}}</p>
 ${PARTIES}
-<p>Comisia de recepție a examinat bunurile/lucrările predate în baza {{document.baza}} și a constatat:</p>
+<p>Comisia de recepție a examinat bunurile/lucrările predate în baza {{document.baza}}:</p>
+<p>{{tabel.pozitii}}</p>
+<p>și a constatat:</p>
 <ul><li>corespunderea cantitativă și calitativă cu cele contractate;</li><li>lipsa deficiențelor care ar împiedica recepția.</li></ul>
 <p>Valoarea recepționată: <strong>{{total.suma}} {{total.valuta}}</strong> ({{total.in_litere}}).</p>
 ${SIGNATURES}`.trim(),
@@ -144,7 +147,7 @@ ${SIGNATURES}`.trim(),
 <p>{{document.loc}}, {{document.data}}</p>
 <p>Către: <strong>{{contraparte.denumire}}</strong>, cod fiscal {{contraparte.idno}}</p>
 <p>{{noi.denumire}} (IDNO {{noi.idno}}) solicită prezentarea ofertei de preț pentru bunurile/serviciile de mai jos, în cadrul proiectului {{proiect.nume}}.</p>
-<p><em>[lista pozițiilor solicitate]</em></p>
+<p>{{tabel.pozitii}}</p>
 <p>Oferta se transmite până la data indicată, cu specificarea prețului unitar, termenului de livrare și condițiilor de plată.</p>
 <p>Persoana de contact: {{utilizator.nume}}, {{utilizator.functie}}.</p>`.trim(),
   },

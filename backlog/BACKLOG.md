@@ -527,7 +527,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | 3 | `DG-109` | Formular de completare generat din șablon + tabel de poziții | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 3 | `DG-110` | Contraparte nouă din act: lipire rechizite + verificare în registru | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 3 | `DG-111` | Validare înainte de finalizare (IBAN, IDNO, câmpuri lipsă) | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
-| 4 | `DG-112` | PDF-ul actului (antet/subsol, diacritice, tabel pe pagini) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 4 | `DG-112` | PDF-ul actului (antet/subsol, diacritice, tabel pe pagini) | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 4 | `DG-113` | Numerotare automată per tip și an, rezervată la finalizare | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 4 | `DG-114` | Bloc de semnături + imutabilitate prin hash de corp | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 4 | `DG-115` | Trimitere pe email (emailGuard) + export .docx | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |

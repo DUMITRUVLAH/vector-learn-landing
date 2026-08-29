@@ -163,6 +163,22 @@ describe("DG-106 — organizația începe cu acte gata scrise", () => {
     expect(doc.bodyHtml, "niciun câmp nu rămâne necompletat pe actul trimis la semnat").not.toContain("{{");
   });
 
+  it("[blocant] un șablon standard învechit se împrospătează la deschiderea bibliotecii", async () => {
+    // Simulăm o organizație instalată acum o lună, cu textul vechi în bază.
+    const list = (await (await app.request("/api/docs/templates")).json()) as { id: string; name: string }[];
+    const act = list.find((t) => t.name === "Act de primire-predare — bunuri")!;
+    await testDb
+      .update(docmergeTemplates)
+      .set({ bodyHtml: "<p>[tabelul pozițiilor se completează din act]</p>" })
+      .where(eq(docmergeTemplates.id, act.id));
+
+    await app.request("/api/docs/templates");
+
+    const [row] = await testDb.select().from(docmergeTemplates).where(eq(docmergeTemplates.id, act.id));
+    expect(row.bodyHtml).toContain("{{tabel.pozitii}}");
+    expect(row.bodyHtml).not.toContain("[tabelul pozițiilor");
+  });
+
   it("[blocant] șablonul standard nu poate fi editat sau șters", async () => {
     const list = (await (await app.request("/api/docs/templates")).json()) as { id: string; isSystem: boolean }[];
     const sys = list.find((t) => t.isSystem)!;

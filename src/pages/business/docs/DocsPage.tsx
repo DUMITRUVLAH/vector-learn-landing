@@ -9,16 +9,7 @@
  * de completare (DG-109) au item-ele lor. Aici e registrul + acțiunile care schimbă starea.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  FileText,
-  Plus,
-  Loader2,
-  AlertCircle,
-  X,
-  CheckCircle2,
-  Ban,
-  Search,
-} from "lucide-react";
+import { FileText, Plus, Loader2, AlertCircle, Search, Download } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -223,6 +214,7 @@ export function DocsPage() {
                   <th className="px-4 py-3 font-medium">Contraparte</th>
                   <th className="px-4 py-3 font-medium text-right">Sumă</th>
                   <th className="px-4 py-3 font-medium">Stare</th>
+                  <th className="px-4 py-3 font-medium sr-only">Acțiuni</th>
                 </tr>
               </thead>
               <tbody>
@@ -253,6 +245,18 @@ export function DocsPage() {
                       >
                         {DOC_STATUS_LABELS[d.status]}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {/* Descărcarea merge direct la API (cookie de sesiune), fără să deschidă actul. */}
+                      <a
+                        href={`/api/docs/documents/${d.id}/pdf`}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Descarcă PDF pentru ${d.docNumber ?? d.title}`}
+                        title="Descarcă PDF"
+                        className="touch-target inline-flex rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <Download className="h-4 w-4" aria-hidden="true" />
+                      </a>
                     </td>
                   </tr>
                 ))}

@@ -37,6 +37,9 @@ import { buildPreviewContext } from "../lib/docs/previewContext";
 import { missingFields, resolveDocumentContext } from "../lib/docs/fieldResolver";
 import { validateIban, validateFiscalId } from "../../src/lib/par/iban";
 import { fieldLabelRo } from "../lib/docs/fieldLabels";
+import { renderDocumentPdf, pdfFileName, buildPrintableHtml } from "../lib/docs/documentPdf";
+import { insertLinesTable, type TableLine } from "../lib/docs/linesTable";
+import { parSettings } from "../db/schema/par";
 
 export const docsRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -170,7 +173,9 @@ async function writeAudit(
 async function renderBody(
   tenantId: string,
   templateId: string | null | undefined,
-  context: Record<string, string>
+  context: Record<string, string>,
+  lines: TableLine[] = [],
+  currency = "MDL"
 ): Promise<{ bodyHtml: string; templateVersion: number; placeholders: string[] }> {
   if (!templateId) return { bodyHtml: "", templateVersion: 1, placeholders: [] };
   const [tpl] = await db
@@ -178,10 +183,14 @@ async function renderBody(
     .from(docmergeTemplates)
     .where(and(eq(docmergeTemplates.id, templateId), eq(docmergeTemplates.tenantId, tenantId)));
   if (!tpl) return { bodyHtml: "", templateVersion: 1, placeholders: [] };
+  // Tabelul se inserează DUPĂ randare: `renderWithContext` escapează valorile (corect), deci un
+  // tabel trimis ca valoare ar ajunge pe hârtie ca text cu &lt;table&gt;.
+  const rendered = insertLinesTable(renderWithContext(tpl.bodyHtml, context), lines, currency);
   return {
-    bodyHtml: renderWithContext(tpl.bodyHtml, context),
+    bodyHtml: rendered,
     templateVersion: tpl.version ?? 1,
-    placeholders: extractPlaceholders(tpl.bodyHtml),
+    // `tabel.pozitii` nu e un câmp de completat, ci un bloc — nu are ce căuta în lista de lipsuri.
+    placeholders: extractPlaceholders(tpl.bodyHtml).filter((p) => p !== "tabel.pozitii"),
   };
 }
 
@@ -283,7 +292,9 @@ docsRoutes.post("/documents", zValidator("json", createSchema), async (c) => {
   const { bodyHtml, templateVersion, placeholders } = await renderBody(
     user.tenantId,
     body.templateId,
-    context
+    context,
+    rows.map((r) => ({ ...r })),
+    body.currency ?? "MDL"
   );
 
   // Rechizitele se îngheață din REGISTRU, nu din ce a trimis clientul: dacă furnizorul își schimbă
@@ -393,6 +404,11 @@ docsRoutes.put("/documents/:id", zValidator("json", updateSchema), async (c) => 
 
   let totalCents = doc.totalCents;
   let lines: ReturnType<typeof computeLineTotals>["rows"] | null = null;
+  const existingLines = await db
+    .select()
+    .from(docDocumentLines)
+    .where(eq(docDocumentLines.documentId, doc.id))
+    .orderBy(docDocumentLines.position);
   if (body.lines) {
     const computed = computeLineTotals(body.lines);
     lines = computed.rows;
@@ -423,7 +439,13 @@ docsRoutes.put("/documents/:id", zValidator("json", updateSchema), async (c) => 
     userName: (user as { name?: string }).name ?? null,
     clientContext: { ...(safeJson(doc.context) as Record<string, string>), ...(body.context ?? {}) },
   });
-  const rendered = await renderBody(user.tenantId, doc.templateId, context);
+  const rendered = await renderBody(
+    user.tenantId,
+    doc.templateId,
+    context,
+    lines ?? existingLines,
+    body.currency ?? doc.currency
+  );
   const snapshot: Record<string, string> = {};
   for (const [k, v] of Object.entries(context)) {
     if (k.startsWith("contraparte.")) snapshot[k.replace("contraparte.", "")] = v;
@@ -567,7 +589,7 @@ docsRoutes.post("/documents/:id/finalize", async (c) => {
     userName: (user as { name?: string }).name ?? null,
     clientContext: safeJson(doc.context) as Record<string, string>,
   });
-  const rendered = await renderBody(user.tenantId, doc.templateId, finalContext);
+  const rendered = await renderBody(user.tenantId, doc.templateId, finalContext, lines, doc.currency);
   const finalBody = blankUnresolved(rendered.bodyHtml || doc.bodyHtml);
 
   const bodyHash = computeBodyHash({
@@ -634,24 +656,50 @@ docsRoutes.post("/documents/:id/cancel", zValidator("json", cancelSchema), async
  */
 async function ensureSystemTemplates(tenantId: string): Promise<void> {
   const existing = await db
-    .select({ name: docmergeTemplates.name })
+    .select({
+      id: docmergeTemplates.id,
+      name: docmergeTemplates.name,
+      bodyHtml: docmergeTemplates.bodyHtml,
+      version: docmergeTemplates.version,
+    })
     .from(docmergeTemplates)
     .where(and(eq(docmergeTemplates.tenantId, tenantId), eq(docmergeTemplates.isSystem, true)));
-  const have = new Set(existing.map((r) => r.name));
-  const missing = SYSTEM_TEMPLATES.filter((t) => !have.has(t.name));
-  if (missing.length === 0) return;
+  const byName = new Map(existing.map((r) => [r.name, r]));
 
-  await db.insert(docmergeTemplates).values(
-    missing.map((t) => ({
-      tenantId,
-      name: t.name,
-      bodyHtml: t.bodyHtml,
-      placeholders: JSON.stringify(extractPlaceholders(t.bodyHtml)),
-      kind: t.kind,
-      category: t.category,
-      isSystem: true,
-    }))
-  );
+  const missing = SYSTEM_TEMPLATES.filter((t) => !byName.has(t.name));
+  if (missing.length > 0) {
+    await db.insert(docmergeTemplates).values(
+      missing.map((t) => ({
+        tenantId,
+        name: t.name,
+        bodyHtml: t.bodyHtml,
+        placeholders: JSON.stringify(extractPlaceholders(t.bodyHtml)),
+        kind: t.kind,
+        category: t.category,
+        isSystem: true,
+      }))
+    );
+  }
+
+  // Șabloanele standard se ÎMPROSPĂTEAZĂ când produsul livrează o versiune mai bună. Fără asta,
+  // o organizație instalată acum o lună rămâne pe veci cu textul vechi — de pildă cu fraza
+  // „[tabelul pozițiilor se completează din act]" în loc de tabelul real. E sigur: nimeni nu le
+  // poate edita (403), deci nu suprascriem munca nimănui; copiile clonate nu sunt atinse.
+  for (const shipped of SYSTEM_TEMPLATES) {
+    const row = byName.get(shipped.name);
+    if (!row || row.bodyHtml === shipped.bodyHtml) continue;
+    await db
+      .update(docmergeTemplates)
+      .set({
+        bodyHtml: shipped.bodyHtml,
+        placeholders: JSON.stringify(extractPlaceholders(shipped.bodyHtml)),
+        kind: shipped.kind,
+        category: shipped.category,
+        version: (row.version ?? 1) + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(docmergeTemplates.id, row.id));
+  }
 }
 
 docsRoutes.get("/templates", async (c) => {
@@ -829,4 +877,93 @@ docsRoutes.post("/templates/:id/preview", async (c) => {
   });
 
   return c.json({ html: renderWithContext(tpl.bodyHtml, context), context });
+});
+
+
+// ─── PDF-ul actului (DG-112) ─────────────────────────────────────────────────
+
+/**
+ * PDF-ul se STOCHEAZĂ la prima generare și se servește de acolo mai departe.
+ *
+ * De ce nu se re-randează la fiecare descărcare: șablonul poate evolua, iar actul descărcat peste
+ * un an trebuie să arate exact ca cel semnat. Un PDF regenerat „la cerere" e o promisiune pe care
+ * n-o poți ține.
+ */
+docsRoutes.get("/documents/:id/pdf", async (c) => {
+  const user = c.get("user");
+  const [doc] = await db
+    .select()
+    .from(docDocuments)
+    .where(and(eq(docDocuments.id, c.req.param("id")), eq(docDocuments.tenantId, user.tenantId)));
+  if (!doc) return c.json({ error: "not_found" }, 404);
+
+  const [settings] = await db
+    .select()
+    .from(parSettings)
+    .where(eq(parSettings.tenantId, user.tenantId))
+    .limit(1);
+  const org = { name: settings?.orgLegalName ?? null, logoUrl: settings?.orgLogoUrl ?? null };
+  const printLines = await db
+    .select()
+    .from(docDocumentLines)
+    .where(eq(docDocumentLines.documentId, doc.id))
+    .orderBy(docDocumentLines.position);
+  const printable = {
+    docNumber: doc.docNumber,
+    title: doc.title,
+    kind: doc.kind,
+    docDate: doc.docDate,
+    bodyHtml: doc.bodyHtml,
+    bodyHash: doc.bodyHash,
+    status: doc.status,
+    counterpartyName: doc.counterpartyName,
+    currency: doc.currency,
+    totalCents: doc.totalCents,
+    lines: printLines.map((l) => ({
+      description: l.description,
+      unit: l.unit,
+      quantity: l.quantity,
+      lineTotalCents: l.lineTotalCents,
+    })),
+  };
+  const fileName = pdfFileName(printable, doc.counterpartyName);
+
+  // Ciorna se poate tipări oricând, dar nu se stochează: se schimbă la fiecare salvare.
+  const canReuse = doc.status !== "draft" && !!doc.pdfUrl;
+  if (canReuse) {
+    const bytes = Buffer.from((doc.pdfUrl ?? "").split(",")[1] ?? "", "base64");
+    await writeAudit(user.tenantId, doc.id, user.id, "downloaded", { cached: true });
+    return new Response(bytes, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${fileName}"`,
+      },
+    });
+  }
+
+  const { pdf, html } = await renderDocumentPdf(printable, org);
+  if (!pdf) {
+    // Chromium lipsă (serverless) — servim HTML-ul tipăribil, nu o eroare: omul poate tipări din
+    // browser cu Ctrl+P și obține același document.
+    return new Response(buildPrintableHtml(printable, org) || html, {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8", "X-Pdf-Fallback": "html" },
+    });
+  }
+
+  if (doc.status !== "draft") {
+    const dataUrl = `data:application/pdf;base64,${Buffer.from(pdf).toString("base64")}`;
+    await db
+      .update(docDocuments)
+      .set({ pdfUrl: dataUrl, updatedAt: new Date() })
+      .where(eq(docDocuments.id, doc.id));
+  }
+  await writeAudit(user.tenantId, doc.id, user.id, "downloaded", { cached: false });
+
+  return new Response(Buffer.from(pdf), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${fileName}"`,
+    },
+  });
 });
