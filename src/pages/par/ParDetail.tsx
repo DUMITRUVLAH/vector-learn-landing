@@ -38,6 +38,7 @@ import {
   Paperclip,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { ParBackdatedBadge } from "@/components/par/ParBackdatedBadge";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { ParApprovalChain } from "@/components/par/ParApprovalChain";
 import { ParTimeline } from "@/components/par/ParTimeline";
@@ -935,11 +936,16 @@ export function ParDetailPage() {
         {/* SECTIONS 1–7: Header grid */}
         <Section num="1–7" title="Informații cerere">
           <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
-            <Field label="1. Data cererii" value={fmtDate(par.dateOfRequest)} />
+            {/* Data cererii, cu semnul „retroactiv" lângă ea când e cazul: cine aprobă trebuie
+                să vadă că cererea e datată înaintea zilei în care a fost depusă. */}
+            <div>
+              <Field label="1. Data cererii" value={fmtDate(par.dateOfRequest)} />
+              <ParBackdatedBadge dateOfRequest={par.dateOfRequest} submittedAt={par.submittedAt} className="mt-1" />
+            </div>
             <Field label="2. Solicitat de" value={par.requestedByName ?? "—"} />
             <Field label="3. Funcție / Cod" value={requestorIdentity || "—"} />
             <Field label="4. Departament" value={par.departmentName ?? "—"} />
-            <Field label="5. Data estimativă de plată" value={fmtDate(par.dateNeeded)} />
+            <Field label="5. Data necesară" value={fmtDate(par.dateNeeded)} />
             <Field label="Plătitor / Organizație" value={par.payerName ?? "—"} />
             <Field label="6. Pentru / Livrare la" value={par.projectName ?? "—"} />
             {/* VM1-04: show event if set */}

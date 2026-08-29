@@ -21,6 +21,7 @@ import { useRouter } from "@/router/HashRouter";
 import { detectPayeeType, type PayeeType } from "@/lib/par/payeeTypeDetector";
 import { patentStatus, formatPatentDate, normalizePatentDate } from "@/lib/par/patent";
 import { plusDays } from "@/lib/par/dates";
+import { backdatedDays, backdatedLabel } from "@/lib/par/backdated";
 import { validateIban, validateFiscalId, isValidBic, type IbanValidation } from "@/lib/par/iban";
 import {
   ATTACHMENT_KIND_ORDER, ATTACHMENT_KIND_LABELS, attachmentKindLabel, KIND_OTHER_MAX_LEN,
@@ -98,6 +99,12 @@ const inputCls =
  * it is a convenience default, never authority — the server re-checks that the user
  * may use the project/payer it receives.
  */
+/**
+ * Câmpurile de dată: aceeași bază, dar plafonate ca lățime. O dată ocupă ~10 caractere; întinsă
+ * pe toată coloana arată ca un câmp de text gol pe care ai uitat să-l completezi (owner, 2026-08-29).
+ */
+const dateInputCls = "h-11 w-full sm:max-w-[11.5rem] rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/45 disabled:cursor-not-allowed disabled:opacity-50";
+
 const LAST_CONTEXT_KEY = "par.lastUsedContext";
 
 interface LastUsedContext {
@@ -133,6 +140,13 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 const today = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * De la câte opțiuni merită o casetă de căutare deasupra unei liste. Sub prag, caseta e un
+ * control în plus care nu ajută pe nimeni — și exact genul de aglomerare pe care owner-ul a
+ * semnalat-o pe „Eveniment" (2026-08-29).
+ */
+const SEARCHABLE_FROM = 8;
 
 /** VM3-03: sugestii pentru unitatea de măsură (Violeta: „adăugăm bucăți… servicii"). Text liber. */
 const UNIT_SUGGESTIONS = ["bucăți", "servicii", "ore", "zile", "sesiuni", "persoane", "luni", "km", "set"];
@@ -211,7 +225,7 @@ function Field({ label, htmlFor, required, hint, error, children }: {
   return (
     <div className="flex flex-col gap-1.5">
       {/* Reserve up to 2 label lines and bottom-align, so inputs on the same grid row line up
-          even when a neighbouring label wraps (e.g. „Data estimativă de plată (data necesară)"). */}
+          even when a neighbouring label wraps (e.g. „Plătitor / Organizație"). */}
       <label htmlFor={htmlFor} className="flex items-end min-h-[2.5rem] text-sm font-medium leading-snug text-foreground">
         <span>{label}{required && <span className="text-destructive ml-1" aria-hidden>*</span>}</span>
       </label>
@@ -485,6 +499,7 @@ export function ParCreateForm() {
   const [draftSavedMessage, setDraftSavedMessage] = useState<string | null>(null);
   const [eventSearch, setEventSearch] = useState("");
   const [newEventName, setNewEventName] = useState("");
+  const [showNewEvent, setShowNewEvent] = useState(false);
   const [budgetSearch, setBudgetSearch] = useState("");
   const [newBudgetCode, setNewBudgetCode] = useState("");
   const [vendorSearch, setVendorSearch] = useState("");
@@ -507,6 +522,8 @@ export function ParCreateForm() {
   const [suggestCursor, setSuggestCursor] = useState(-1);
   /** Set when a picked suggestion carries a payee we did NOT apply (one is already filled). */
   const [payeeConflict, setPayeeConflict] = useState<ParLineItemSuggestion | null>(null);
+  /** Set when a picked suggestion's price was restated in another currency at the BNM rate. */
+  const [priceConvertedFrom, setPriceConvertedFrom] = useState<string | null>(null);
   /** Set when a suggestion's payee WAS applied — so the user sees where it came from. */
   const [payeeFilledFrom, setPayeeFilledFrom] = useState<string | null>(null);
 
@@ -1019,13 +1036,13 @@ export function ParCreateForm() {
     let alive = true;
     setSuggestLoading(true);
     const timer = setTimeout(() => {
-      getLineItemSuggestions(nlDesc.trim())
+      getLineItemSuggestions(nlDesc.trim(), currency)
         .then((r) => { if (alive) { setSuggestions(r.suggestions); setSuggestCursor(-1); } })
         .catch(() => { if (alive) setSuggestions([]); })
         .finally(() => { if (alive) setSuggestLoading(false); });
     }, nlDesc.trim() ? 220 : 0);
     return () => { alive = false; clearTimeout(timer); };
-  }, [nlDesc, suggestOpen]);
+  }, [nlDesc, suggestOpen, currency]);
 
   /**
    * Copy a past line into the "add article" fields, and — this is the part that saves the
@@ -1043,9 +1060,16 @@ export function ParCreateForm() {
     setNlQty(String(s.quantity || 1));
     if (s.currency === currency) {
       setNlPrice(String(s.unitPriceCents / 100));
+      setPriceConvertedFrom(null);
+    } else if (s.targetUnitPriceCents != null && s.targetCurrency === currency) {
+      // Convertit, nu copiat: suma chiar se completează (asta e promisiunea unei liste de ales),
+      // dar spunem din ce sumă și la ce curs, ca să poată fi verificată în loc de crezută.
+      setNlPrice(String(s.targetUnitPriceCents / 100));
+      setPriceConvertedFrom(`Preț convertit din ${fmtMoney(s.unitPriceCents, s.currency)} la cursul BNM de azi. Verifică suma.`);
     } else {
       setNlPrice("");
-      setLineError(`Prețul anterior era în ${s.currency}, cererea e în ${currency} — introdu suma manual.`);
+      setPriceConvertedFrom(null);
+      setLineError(`Prețul anterior era în ${s.currency}, iar cursul BNM nu e disponibil acum — introdu suma în ${currency} manual.`);
     }
     setSuggestOpen(false);
     setSuggestCursor(-1);
@@ -1111,7 +1135,7 @@ export function ParCreateForm() {
       setLineItems((p) => [...p, res.line_item]);
       setTotalCents(res.par_total_estimated_cents);
       setAboveThreshold(res.above_micro_threshold);
-      setNlDesc(""); setNlQty("1"); setNlUnit(""); setNlPrice("");
+      setNlDesc(""); setNlQty("1"); setNlUnit(""); setNlPrice(""); setPriceConvertedFrom(null);
       setFieldErrors((p) => { const { line_items, total, ...rest } = p; void line_items; void total; return rest; });
     } catch (e) {
       setLineError(e instanceof Error ? e.message : "Eroare la adăugare");
@@ -1353,6 +1377,10 @@ export function ParCreateForm() {
   const isAdmin = session?.user?.role === "admin";
   const summaryErrors = Object.entries(fieldErrors).filter(([, v]) => v);
 
+  // Data cererii pusă în urmă: câte zile în urmă e față de azi. Ciorna nu are încă `submittedAt`,
+  // deci referința e ziua curentă — aceeași socoteală pe care o va face aprobatorul mai târziu.
+  const backdatedDaysNow = backdatedDays(dateOfRequest || null, null);
+
   // Feature 2: non-blocking budget overage warning.
   // Soldul vine în MDL; totalul cererii e în moneda ei — convertim înainte de a compara. Fără curs
   // (BNM indisponibil) nu avertizăm deloc: o comparație greșită ar fi mai rea decât tăcerea.
@@ -1367,7 +1395,7 @@ export function ParCreateForm() {
 
   return (
     <AppShell>
-      <div className="max-w-4xl mx-auto px-4 py-5 pb-28 space-y-3">
+      <div className="max-w-6xl mx-auto px-4 py-5 pb-28 space-y-3">
         <div className="flex items-center gap-3">
           <FileText className="h-6 w-6 text-primary flex-shrink-0" aria-hidden />
           <div>
@@ -1418,14 +1446,17 @@ export function ParCreateForm() {
 
         {/* 1–7 Header */}
         <Section n="1–7" title="Detalii cerere" icon={ClipboardList} hint="Cine cere, pentru ce proiect și din ce buget.">
-          {/* Când & scop — datele legate stau împreună (data cererii + data necesară) pe același rând. */}
+          {/* Când, scop și urgență — tot ce ține de „când trebuie plătit" pe un singur rând
+              (cerere owner, 2026-08-29: urgența stătea singură într-un panou propriu, deși e
+              exact același subiect ca datele). Câmpurile de dată sunt înguste: o dată are o
+              lățime cunoscută, iar un input întins pe toată coloana arată ca un câmp de text gol. */}
           <FieldGroup label="Când & scop">
-            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
               <Field label="Data cererii" htmlFor="dor" required>
                 <input
                   id="dor"
                   type="date"
-                  className={inputCls}
+                  className={dateInputCls}
                   value={dateOfRequest}
                   onChange={(e) => {
                     setDateOfRequest(e.target.value);
@@ -1433,12 +1464,17 @@ export function ParCreateForm() {
                     if (!dateNeededTouched && e.target.value) setDateNeeded(plusDays(e.target.value, 10));
                   }}
                 />
+                {/* Backdating is allowed — regularizările există — dar nu în tăcere: spunem aici
+                    că aprobatorul și finanțele vor vedea același semn pe cerere. */}
+                {backdatedDaysNow > 0 && (
+                  <WarnNote text={`${backdatedLabel(backdatedDaysNow)}. Aprobatorul și finanțele văd acest marcaj pe cerere.`} />
+                )}
               </Field>
-              <Field label="Data estimativă de plată (data necesară)" htmlFor="dn" hint="Implicit: data cererii + 10 zile. Ajustează dacă e nevoie.">
+              <Field label="Data necesară" htmlFor="dn" hint="Implicit: data cererii + 10 zile.">
                 <input
                   id="dn"
                   type="date"
-                  className={inputCls}
+                  className={dateInputCls}
                   value={dateNeeded}
                   min={dateOfRequest}
                   onChange={(e) => { setDateNeeded(e.target.value); setDateNeededTouched(true); }}
@@ -1452,25 +1488,26 @@ export function ParCreateForm() {
                   <option value="provide_estimate">Estimare cost</option>
                 </Select>
               </Field>
-            </div>
-          </FieldGroup>
-
-          {/* Urgență (owner request, 2026-08-28): cererile urgente sunt sortate primele peste tot
-              unde le văd aprobatorii/finanțele — inbox, coadă de finanțe, listă, dashboard. */}
-          <FieldGroup label="Urgență">
-            <div className="flex items-center gap-3">
-              <Switch
-                checked={isUrgent}
-                onChange={(next) => {
-                  setIsUrgent(next);
-                  setFieldErrors((p) => ({ ...p, urgent_reason: "", urgent_due_date: "", urgent_reason_note: "" }));
-                }}
-                aria-label="Marchează cererea ca urgentă"
-              />
-              <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden />
-                Cerere urgentă
-              </span>
+              {/* Urgență (owner request, 2026-08-28): cererile urgente sunt sortate primele peste
+                  tot unde le văd aprobatorii/finanțele — inbox, coadă de finanțe, listă, dashboard. */}
+              <div className="flex flex-col gap-1.5">
+                {/* Aceeași înălțime de etichetă ca `Field`, ca butonul să stea pe linia inputurilor. */}
+                <span className="flex items-end min-h-[2.5rem] text-sm font-medium leading-snug text-foreground">Urgență</span>
+                <div className="flex h-11 items-center gap-2">
+                  <Switch
+                    checked={isUrgent}
+                    onChange={(next) => {
+                      setIsUrgent(next);
+                      setFieldErrors((p) => ({ ...p, urgent_reason: "", urgent_due_date: "", urgent_reason_note: "" }));
+                    }}
+                    aria-label="Marchează cererea ca urgentă"
+                  />
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                    <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden />
+                    Cerere urgentă
+                  </span>
+                </div>
+              </div>
             </div>
             {isUrgent && (
               <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1488,12 +1525,11 @@ export function ParCreateForm() {
                     ))}
                   </Select>
                 </Field>
-                <Field label="Termen limită plată" htmlFor="urgentDueDate" required error={fieldErrors.urgent_due_date}
-                  hint="Data până la care plata trebuie efectuată.">
+                <Field label="Termen limită plată" htmlFor="urgentDueDate" required error={fieldErrors.urgent_due_date}>
                   <input
                     id="urgentDueDate"
                     type="date"
-                    className={inputCls}
+                    className={dateInputCls}
                     value={urgentDueDate}
                     onChange={(e) => { setUrgentDueDate(e.target.value); setFieldErrors((p) => ({ ...p, urgent_due_date: "" })); }}
                   />
@@ -1540,9 +1576,13 @@ export function ParCreateForm() {
             </div>
           </FieldGroup>
 
-          {/* Plătitor & proiect — organizația împreună cu proiectul și evenimentul. */}
-          <FieldGroup label="Plătitor & proiect">
-            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Plătitor, proiect, eveniment și cod bugetar — tot contextul financiar pe UN rând
+              (cerere owner, 2026-08-29). Erau două panouri, iar „Buget" rămăsese cu un singur
+              câmp util după ce nota a fost scoasă: două panouri pentru o singură decizie.
+              Căutarea și adăugarea rapidă apar doar când chiar sunt necesare, ca fiecare coloană
+              să rămână un câmp, nu o stivă de trei controale. */}
+          <FieldGroup label="Plătitor, proiect & buget">
+            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
               <Field label="Plătitor / Organizație" htmlFor="payer">
                 <Select id="payer" className="w-full" value={payerId} onChange={(e) => {
                   const next = e.target.value;
@@ -1567,16 +1607,25 @@ export function ParCreateForm() {
               </Field>
               {/* VM1-04: Event — filtered by selected project.
                   VM3-03: când proiectul selectat NU are evenimente, câmpul nu mai dispare mut
-                  („el a dispărut… n-are evenimente") — arătăm un hint + link spre Admin. */}
+                  („el a dispărut… n-are evenimente") — rămâne, cu un rând de explicație. */}
               {(() => {
                 // Events belong to a project. Do not expose events from other projects
                 // before the requester establishes the financial context.
-                const filteredEvents = (projectId ? events.filter((ev) => ev.projectId === projectId) : [])
-                  .filter((ev) => !eventSearch.trim() || ev.name.toLocaleLowerCase("ro").includes(eventSearch.trim().toLocaleLowerCase("ro")));
-                if (filteredEvents.length > 0) {
-                  return (
-                    <Field label="Eveniment" htmlFor="evtId">
-                      <input className={inputCls} value={eventSearch} onChange={(e) => setEventSearch(e.target.value)} placeholder="Caută eveniment…" aria-label="Caută eveniment" />
+                if (!projectId) return null;
+                const projectEvents = events.filter((ev) => ev.projectId === projectId);
+                const filteredEvents = projectEvents.filter((ev) =>
+                  !eventSearch.trim() || ev.name.toLocaleLowerCase("ro").includes(eventSearch.trim().toLocaleLowerCase("ro")));
+                const empty = projectEvents.length === 0;
+                // Fără evenimente, singurul control e cel de adăugare — eticheta i se adresează lui.
+                const addOpen = empty || showNewEvent;
+                return (
+                  <Field label="Eveniment" htmlFor={empty ? "evtNew" : "evtId"}
+                    hint={empty ? "Niciun eveniment pentru acest proiect — scrie-l aici sau project managerul le adaugă în Admin." : undefined}>
+                    {projectEvents.length > SEARCHABLE_FROM && (
+                      <input className={inputCls} value={eventSearch} onChange={(e) => setEventSearch(e.target.value)}
+                        placeholder="Caută eveniment…" aria-label="Caută eveniment" />
+                    )}
+                    {!empty && (
                       <Select id="evtId" className="w-full" value={eventId}
                         onChange={(e) => setEventId(e.target.value)}
                         aria-label="Eveniment">
@@ -1585,48 +1634,43 @@ export function ParCreateForm() {
                           <option key={ev.id} value={ev.id}>{ev.name}</option>
                         ))}
                       </Select>
+                    )}
+                    {addOpen ? (
                       <div className="flex gap-2">
-                        <input className={inputCls} value={newEventName} onChange={(e) => setNewEventName(e.target.value)} placeholder="Eveniment nou" aria-label="Denumire eveniment nou" />
-                        <button type="button" onClick={addQuickEvent} className="px-3 rounded-md border border-input hover:bg-muted" aria-label="Adaugă eveniment"><Plus className="h-4 w-4" /></button>
+                        <input id={empty ? "evtNew" : undefined} className={inputCls} value={newEventName}
+                          onChange={(e) => setNewEventName(e.target.value)}
+                          placeholder={empty ? "Adaugă un eveniment" : "Eveniment nou"}
+                          aria-label={empty ? undefined : "Denumire eveniment nou"} autoFocus={!empty} />
+                        <button type="button" onClick={addQuickEvent} aria-label="Adaugă eveniment"
+                          className="px-3 rounded-md border border-input hover:bg-muted"><Plus className="h-4 w-4" /></button>
                       </div>
-                    </Field>
-                  );
-                }
-                if (projectId) {
-                  // No <label>: there's no form control here, just an informational hint.
-                  return (
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-sm font-medium text-foreground">Eveniment</span>
-                      <div className="flex gap-2">
-                        <input className={inputCls} value={newEventName} onChange={(e) => setNewEventName(e.target.value)} placeholder="Adaugă direct un eveniment" aria-label="Denumire eveniment nou" />
-                        <button type="button" onClick={addQuickEvent} className="px-3 rounded-md border border-input hover:bg-muted"><Plus className="h-4 w-4" /></button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Niciun eveniment pentru acest proiect. Îl poți adăuga direct aici sau project managerul le adaugă în administrare.</p>
-                    </div>
-                  );
-                }
-                return null;
+                    ) : (
+                      <button type="button" onClick={() => setShowNewEvent(true)}
+                        className="inline-flex w-fit items-center gap-1 text-xs text-primary hover:underline min-h-[44px]">
+                        <Plus className="h-3.5 w-3.5" aria-hidden />Eveniment nou
+                      </button>
+                    )}
+                  </Field>
+                );
               })()}
-            </div>
-          </FieldGroup>
-
-          {/* Buget — codul bugetar cu nota lui.
-              Compactat (cerere owner): înainte, „Cod bugetar" stivuia căutare + listă + adăugare
-              rapidă + sold + link de administrare unul sub altul, într-o grilă de 3 coloane din
-              care 2 rămâneau goale — un bloc înalt și aproape gol. Acum: două coloane, adăugarea
-              rapidă apare doar când o ceri, iar soldul și linkul stau pe un singur rând sub ele. */}
-          <FieldGroup label="Buget">
-            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
-              <Field label="Cod bugetar" htmlFor="bc">
-                <input className={inputCls} value={budgetSearch} onChange={(e) => setBudgetSearch(e.target.value)} placeholder="Caută după cod sau denumire…" aria-label="Caută cod bugetar" />
-                <Select id="bc" className="w-full" value={budgetCodeId} onChange={(e) => setBudgetCodeId(e.target.value)} aria-label="Cod bugetar">
-                  <option value="">— Selectează —</option>
-                  {budgetCodes.filter((b) => !!payerId && b.payerId === payerId && (!b.projectId || (!!projectId && b.projectId === projectId)) && (!budgetSearch.trim() || `${b.code} ${b.name}`.toLocaleLowerCase("ro").includes(budgetSearch.trim().toLocaleLowerCase("ro")))).map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
-                </Select>
-              </Field>
-              <Field label="Notă cod bugetar" htmlFor="bcn">
-                <input id="bcn" type="text" placeholder="ex. conform planificării lunare" className={inputCls} value={budgetCodeNote} onChange={(e) => setBudgetCodeNote(e.target.value)} />
-              </Field>
+              {(() => {
+                const eligibleCodes = budgetCodes.filter((b) =>
+                  !!payerId && b.payerId === payerId && (!b.projectId || (!!projectId && b.projectId === projectId)));
+                return (
+                  <Field label="Cod bugetar" htmlFor="bc">
+                    {eligibleCodes.length > SEARCHABLE_FROM && (
+                      <input className={inputCls} value={budgetSearch} onChange={(e) => setBudgetSearch(e.target.value)}
+                        placeholder="Caută după cod sau denumire…" aria-label="Caută cod bugetar" />
+                    )}
+                    <Select id="bc" className="w-full" value={budgetCodeId} onChange={(e) => setBudgetCodeId(e.target.value)} aria-label="Cod bugetar">
+                      <option value="">— Selectează —</option>
+                      {eligibleCodes
+                        .filter((b) => !budgetSearch.trim() || `${b.code} ${b.name}`.toLocaleLowerCase("ro").includes(budgetSearch.trim().toLocaleLowerCase("ro")))
+                        .map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
+                    </Select>
+                  </Field>
+                );
+              })()}
             </div>
 
             {/* Un singur rând pentru tot ce e secundar: soldul, adăugarea rapidă, administrarea. */}
@@ -1802,7 +1846,10 @@ export function ParCreateForm() {
                 </button>
               </div>
             )}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:max-w-md">
+            {/* Cantitate, unitate, preț și butonul — pe UN rând pe desktop. Un articol e o
+                singură propoziție („1 bucată × 2.000 L"), nu patru decizii etajate: stivuite,
+                făceau din caseta de adăugare cea mai înaltă secțiune a formularului. */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-[7rem_10rem_12rem_auto] sm:justify-start sm:items-end">
               <Field label="Cant." htmlFor="nlQty"><input id="nlQty" type="number" min="1" className={inputCls} value={nlQty} onChange={(e) => setNlQty(e.target.value)} /></Field>
               <Field label="UM" htmlFor="nlUnit">
                 {/* VM3-03: sugestii de unități (bucăți, servicii, …) — rămâne text liber */}
@@ -1815,14 +1862,19 @@ export function ParCreateForm() {
                   user doesn't type MDL amounts while the request is in EUR/USD. */}
               <Field label={`Preț/u (${currency})`} htmlFor="nlPrice"><input id="nlPrice" type="number" min="0" placeholder="7000" className={inputCls} value={nlPrice}
                 onChange={(e) => setNlPrice(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLine()} /></Field>
+              {/* No `!parId` gate: addLine() creates the draft on first use, so the button must be
+                  clickable from the very first article (fixes „nu se face albastru" on a fresh form). */}
+              <button type="button" onClick={addLine} disabled={addingLine}
+                className="col-span-2 flex items-center justify-center gap-2 px-4 h-11 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors sm:col-span-1">
+                {addingLine ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}Adaugă articol
+              </button>
             </div>
+            {priceConvertedFrom && (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />{priceConvertedFrom}
+              </p>
+            )}
             {lineError && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="h-3 w-3" aria-hidden />{lineError}</p>}
-            {/* No `!parId` gate: addLine() creates the draft on first use, so the button must be
-                clickable from the very first article (fixes „nu se face albastru" on a fresh form). */}
-            <button type="button" onClick={addLine} disabled={addingLine}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors min-h-[44px]">
-              {addingLine ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}Adaugă articol
-            </button>
           </div>
 
           <div className={cn("flex items-center justify-between p-3 rounded-lg",
@@ -1862,10 +1914,12 @@ export function ParCreateForm() {
         )}
 
         {/* 11 End-use */}
-        <Section n="11" title="Utilizare finală" icon={AlignLeft} hint="Descrie detaliat și specific ce s-a livrat sau prestat — serviciul/bunul, cantitatea sau durata, perioada, locul și beneficiarii. Nu rezuma într-o singură frază generală.">
+        {/* Îndrumarea stă într-un singur loc: exemplul din placeholder o arată mai bine decât o
+            repeta antetul secțiunii (owner, 2026-08-29: „prea pare mult text"). */}
+        <Section n="11" title="Utilizare finală" icon={AlignLeft} hint="Ce s-a livrat sau prestat, concret: serviciul, cantitatea, perioada, locul.">
           <Field label="Descriere" htmlFor="endUse" required={purpose === "execute_payment"} error={fieldErrors.end_use}>
-            <Textarea id="endUse" rows={4}
-              placeholder="Descrie detaliat serviciile/bunurile primite — ex. „Servicii de consultanță psihologică de grup, organizate în cadrul proiectului Digital Safeguard, cu durata de 120–180 min, pe platforma Zoom, pentru beneficiarii proiectului.”"
+            <Textarea id="endUse" rows={3}
+              placeholder="ex. „Servicii de consultanță psihologică de grup, în cadrul proiectului Digital Safeguard, 120–180 min, pe Zoom, pentru beneficiarii proiectului.”"
               className="min-h-[100px] rounded-md border border-input bg-background px-3 py-2.5 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-full resize-y"
               value={endUse} onChange={(e) => { setEndUse(e.target.value); setFieldErrors((p) => ({ ...p, end_use: "" })); }} />
           </Field>
@@ -2484,7 +2538,7 @@ export function ParCreateForm() {
         </Section>
 
         {/* 13 Attachments */}
-        <Section n="13" title="Documente" icon={Paperclip} hint="Anexează factura fiscală, contractul, actul de predare-primire, lista de participanți, raportul narativ, livrabilele — sau „Altul”, scriind ce document este.">
+        <Section n="13" title="Documente" icon={Paperclip} hint="Anexează actele care justifică plata; tipul se alege la fiecare fișier.">
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Tip document" htmlFor="uk">
               <Select id="uk" className="w-full" value={uploadKind} onChange={(e) => setUploadKind(e.target.value as ParAttachmentKind)} aria-label="Tip document">
@@ -2540,7 +2594,7 @@ export function ParCreateForm() {
 
       {/* Sticky action bar */}
       <div className="fixed bottom-0 inset-x-0 z-20 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="max-w-4xl mx-auto px-4 py-3 space-y-2">
+        <div className="max-w-6xl mx-auto px-4 py-3 space-y-2">
           {/* Feature 2: non-blocking budget overage warning */}
           {budgetOverageWarn && (
             <div role="status" className="flex items-center gap-2 p-2 rounded-md border border-warning/40 bg-warning/[0.08] text-xs text-warning">

@@ -631,6 +631,9 @@ export interface ParLineItemSuggestion {
   unit: string | null;
   unitPriceCents: number;
   currency: string;
+  /** The same price at today's BNM rate, in the currency asked for. `null` = fill it by hand. */
+  targetUnitPriceCents: number | null;
+  targetCurrency: string | null;
   quantity: number;
   usageCount: number;
   lastUsedAt: string | null;
@@ -645,9 +648,18 @@ export interface ParLineItemSuggestion {
   };
 }
 
-/** Past line items for the tenant, deduped by description, most-used first. */
-export async function getLineItemSuggestions(q = ""): Promise<{ suggestions: ParLineItemSuggestion[]; total: number }> {
-  const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+/**
+ * The signed-in user's OWN past line items, deduped by description, most-used first.
+ * `currency` is the currency of the request being written: prices come back restated in it.
+ */
+export async function getLineItemSuggestions(
+  q = "",
+  currency?: string
+): Promise<{ suggestions: ParLineItemSuggestion[]; total: number }> {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (currency) params.set("currency", currency);
+  const qs = params.toString() ? `?${params}` : "";
   return api<{ suggestions: ParLineItemSuggestion[]; total: number }>(`/api/par/suggestions/line-items${qs}`);
 }
 

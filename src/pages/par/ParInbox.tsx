@@ -21,6 +21,7 @@ import {
   Textarea,
 } from "@/components/ds";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
+import { ParBackdatedBadge } from "@/components/par/ParBackdatedBadge";
 import { ParUrgentBadge } from "@/components/par/ParUrgentBadge";
 import { useRouter } from "@/router/HashRouter";
 import {
@@ -815,6 +816,10 @@ export default function ParInbox() {
                               <ParUrgentBadge reason={item.urgentReason} reasonNote={item.urgentReasonNote} dueDate={item.urgentDueDate} />
                             </div>
                           )}
+                          {/* Datată în urmă: aprobatorul vede asta înainte de a semna, nu după. */}
+                          <div className="mt-0.5 empty:mt-0">
+                            <ParBackdatedBadge dateOfRequest={item.dateOfRequest} submittedAt={item.submittedAt} />
+                          </div>
                           {/* The Scop column is gone — it said "Execută plata" on every row.
                               The two purposes that are NOT the default still change how you
                               read the request, so they stay, as a chip on the row instead. */}

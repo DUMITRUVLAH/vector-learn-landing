@@ -12,6 +12,12 @@
  * IBAN from a paper copy is where the mistakes come from. Offering what was actually
  * paid before, together with the payee it was paid to, turns a form into a pick-list.
  *
+ * Scoped to the SIGNED-IN requester, not the whole tenant (owner decision, 2026-08-29):
+ * "doar persoana care în trecut a făcut astfel de plăți să apară a lui". A colleague's past
+ * payments are their working context — and their payees' IBANs — not a shared autocomplete.
+ * Mixing them in both spreads the org's payment history through every form and buries your
+ * own repeated lines under someone else's.
+ *
  * Deliberately aggregated in JS, not SQL: prod is Postgres and local/tests are PGlite,
  * and their aggregate/result shapes differ (see CLAUDE.md §3.5.1 DB-portability). We
  * pull a bounded window of recent lines through the query builder and group them here.
@@ -21,6 +27,7 @@ import { and, desc, eq, ilike, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { parLineItems, parRequests } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { getMdlRate } from "../lib/fx";
 
 export const parSuggestionsRoutes = new Hono<{ Variables: AuthVariables }>();
 parSuggestionsRoutes.use("*", requireAuth);
@@ -54,6 +61,14 @@ export interface ParLineItemSuggestion {
   unitPriceCents: number;
   /** Currency of the PAR this price came from — a EUR price must not land in an MDL request. */
   currency: string;
+  /**
+   * The same unit price restated in the currency asked for via `?currency=`, at today's BNM
+   * rate. `null` when nothing was asked for, or when BNM could not be reached — the form then
+   * asks for the amount by hand instead of inventing one.
+   */
+  targetUnitPriceCents: number | null;
+  /** The currency `targetUnitPriceCents` is expressed in; echoes the `currency` query param. */
+  targetCurrency: string | null;
   quantity: number;
   /** How many past requests used this description. Drives the ordering. */
   usageCount: number;
@@ -76,14 +91,55 @@ function normalize(description: string): string {
   return description.trim().toLocaleLowerCase("ro").replace(/\s+/g, " ");
 }
 
+/**
+ * Restate each suggested price in the currency of the request being written.
+ *
+ * Picking "the same thing I paid last month" and getting an EMPTY price field because that
+ * request happened to be in MDL and this one is in USD reads as a broken pick-list — filling the
+ * row is the whole promise. So we convert at today's official BNM rate (the same source the
+ * budget balance and the submit-time threshold use) and the form says so out loud, with the
+ * original amount, so the number is checkable rather than magic.
+ *
+ * Never throws: BNM is an external service on a keystroke-debounced path. No rate → `null` →
+ * the form asks for the amount by hand, which is what it did before this existed.
+ */
+async function priceInTargetCurrency(
+  suggestions: ParLineItemSuggestion[],
+  target: string | null
+): Promise<void> {
+  if (!target) return;
+  const needed = new Set(suggestions.map((s) => s.currency.toUpperCase()));
+  needed.add(target);
+  const rates = new Map<string, number>();
+  for (const code of needed) {
+    try {
+      rates.set(code, await getMdlRate(code));
+    } catch {
+      /* a missing rate only disables conversion for the currencies that need it */
+    }
+  }
+  const targetRate = rates.get(target);
+  if (!targetRate) return;
+  for (const s of suggestions) {
+    const sourceRate = rates.get(s.currency.toUpperCase());
+    if (!sourceRate) continue;
+    s.targetUnitPriceCents = Math.round((s.unitPriceCents * sourceRate) / targetRate);
+  }
+}
+
 // ─── GET /line-items ──────────────────────────────────────────────────────────
 
 parSuggestionsRoutes.get("/line-items", async (c) => {
   const user = c.get("user");
   const q = (c.req.query("q") ?? "").trim();
+  // Currency of the request being filled in. Optional: without it we just hand back the
+  // historical price and let the form decide what to do with it.
+  const target = (c.req.query("currency") ?? "").trim().toUpperCase() || null;
 
   const where = [
     eq(parLineItems.tenantId, user.tenantId),
+    // Own history only — see the file header.
+    eq(parRequests.requestedByUserId, user.id),
     inArray(parRequests.status, [...LEARNABLE_STATUSES]),
   ];
   // Substring match, not prefix: people search by the distinctive word in the middle
@@ -131,6 +187,8 @@ parSuggestionsRoutes.get("/line-items", async (c) => {
       unit: r.unit,
       unitPriceCents: r.unitPriceCents,
       currency: r.currency,
+      targetUnitPriceCents: null,
+      targetCurrency: target,
       quantity: r.quantity,
       usageCount: 1,
       lastUsedAt: used ? new Date(used).toISOString() : null,
@@ -154,6 +212,8 @@ parSuggestionsRoutes.get("/line-items", async (c) => {
       (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? "")
     )
     .slice(0, RESULT_LIMIT);
+
+  await priceInTargetCurrency(suggestions, target);
 
   return c.json({ suggestions, total: suggestions.length });
 });

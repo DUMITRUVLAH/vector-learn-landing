@@ -42,6 +42,7 @@ import {
   Textarea,
 } from "@/components/ds";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
+import { ParBackdatedBadge } from "@/components/par/ParBackdatedBadge";
 import { ParUrgentBadge } from "@/components/par/ParUrgentBadge";
 import {
   getFinanceQueue,
@@ -807,6 +808,9 @@ export default function ParFinanceQueue() {
                           {par.isUrgent && (
                             <ParUrgentBadge reason={par.urgentReason} reasonNote={par.urgentReasonNote} dueDate={par.urgentDueDate} />
                           )}
+                          {/* Datată în urmă: finanțele plătesc într-o perioadă, cererea poate fi
+                              scrisă pentru alta — semnul apare înainte de plată, nu la reconciliere. */}
+                          <ParBackdatedBadge dateOfRequest={par.dateOfRequest} submittedAt={par.submittedAt} />
                         </div>
                         {par.status === "reapproval_required" && (
                           <span className="text-xs font-medium text-warning">

@@ -113,7 +113,7 @@ describe("ParCreateForm — VM3-03 (feedback Violeta)", () => {
   it("nu creează ciornă la deschidere; Salvează ciornă o persistă explicit", async () => {
     mockConfigApis();
     render(<ParCreateForm />);
-    await screen.findByLabelText(/data estimativă de plată/i);
+    await screen.findByLabelText(/data necesară/i);
     expect(parApi.createPar).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /salvează ciornă/i }));

@@ -27,12 +27,14 @@ let tenantA: string;
 let tenantB: string;
 let userA: string;
 let userB: string;
+/** Coleg al lui A, în ACELAȘI tenant — martorul pentru izolarea pe utilizator. */
+let userC: string;
 
 vi.mock("../db/client", () => ({ get db() { return testDb; }, closeDb: async () => {} }));
 vi.mock("../auth/session", () => ({
   SESSION_COOKIE: "vl_session",
   getSessionUser: vi.fn(async (token: string) => {
-    const id = token === "a" ? userA : token === "b" ? userB : null;
+    const id = token === "a" ? userA : token === "b" ? userB : token === "c" ? userC : null;
     if (!id) return null;
     const user = await testDb.query.users.findFirst({ where: eq(users.id, id) });
     return user ? { session: { id: "s" }, user } : null;
@@ -40,6 +42,7 @@ vi.mock("../auth/session", () => ({
 }));
 
 import { parSuggestionsRoutes } from "../routes/parSuggestions";
+import { __primeFxRate } from "../lib/fx";
 import { autosaveVendorFromPar } from "../lib/par/vendorAutoSave";
 import { Hono } from "hono";
 
@@ -61,6 +64,7 @@ async function applyMigrations(pg: PGlite) {
 
 const asA = (p: string) => app.request(p, { headers: { cookie: "vl_session=a" } });
 const asB = (p: string) => app.request(p, { headers: { cookie: "vl_session=b" } });
+const asC = (p: string) => app.request(p, { headers: { cookie: "vl_session=c" } });
 
 interface SuggestionsBody {
   suggestions: Array<{
@@ -68,6 +72,8 @@ interface SuggestionsBody {
     unit: string | null;
     unitPriceCents: number;
     currency: string;
+    targetUnitPriceCents: number | null;
+    targetCurrency: string | null;
     usageCount: number;
     sourceRequestNo: string;
     payee: { name: string | null; iban: string | null; idnp: string | null; bank: string | null };
@@ -127,6 +133,8 @@ beforeAll(async () => {
   tenantA = tA.id;
   const [uA] = await testDb.insert(users).values({ tenantId: tenantA, email: "a@ong.md", passwordHash: "x", name: "A", role: "admin" }).returning();
   userA = uA.id;
+  const [uC] = await testDb.insert(users).values({ tenantId: tenantA, email: "c@ong.md", passwordHash: "x", name: "C", role: "manager" }).returning();
+  userC = uC.id;
 
   const [tB] = await testDb.insert(tenants).values({ name: "ONG B", slug: "ong-b", plan: "starter", appKind: "business" }).returning();
   tenantB = tB.id;
@@ -195,6 +203,49 @@ describe("GET /api/par/suggestions/line-items", () => {
 
     const bodyB = (await (await asB("/api/par/suggestions/line-items")).json()) as SuggestionsBody;
     expect(bodyB.suggestions.map((s) => s.description)).toContain("Secret al lui B");
+  });
+
+  it("[blocant] nu propune articolele unui COLEG din același tenant, doar pe ale tale", async () => {
+    // Decizia owner-ului (2026-08-29): „doar persoana care în trecut a făcut astfel de plăți
+    // să apară a lui, nu și de la ceilalți din organizație". Istoricul de plăți al colegului —
+    // inclusiv IBAN-urile beneficiarilor lui — nu e un autocomplete comun.
+    await seedPar({
+      tenantId: tenantA, userId: userC, requestNo: "PAR-2026-0005", status: "paid",
+      description: "Chirie sala colegul C", unitPriceCents: 500_00, payeeName: "Imobil SRL",
+    });
+
+    const mine = (await (await asA("/api/par/suggestions/line-items")).json()) as SuggestionsBody;
+    expect(mine.suggestions.map((s) => s.description)).not.toContain("Chirie sala colegul C");
+
+    // …iar colegul își vede propriul articol: filtrul e pe autor, nu o ascundere generală.
+    const his = (await (await asC("/api/par/suggestions/line-items")).json()) as SuggestionsBody;
+    expect(his.suggestions.map((s) => s.description)).toContain("Chirie sala colegul C");
+    expect(his.suggestions.map((s) => s.description)).not.toContain("Servicii de audit financiar");
+  });
+
+  it("[blocant] prețul vine convertit în moneda cererii curente, la cursul BNM", async () => {
+    // Bug-ul raportat: alegi un articol dintr-o cerere în MDL într-o cerere în USD și câmpul
+    // „Preț/u" rămâne GOL. Lista de ales trebuie să completeze rândul, nu să-l lase pe jumătate.
+    __primeFxRate("USD", 17.5);
+    await seedPar({
+      tenantId: tenantA, userId: userA, requestNo: "PAR-2026-0006", status: "paid",
+      description: "Licenta software anuala", unitPriceCents: 3_500_00, currency: "MDL",
+    });
+
+    const body = (await (await asA("/api/par/suggestions/line-items?q=licenta&currency=USD")).json()) as SuggestionsBody;
+    const hit = body.suggestions.find((s) => s.description === "Licenta software anuala");
+    expect(hit).toBeDefined();
+    expect(hit!.currency).toBe("MDL");
+    expect(hit!.targetCurrency).toBe("USD");
+    // 3.500,00 MDL / 17,5 = 200,00 USD
+    expect(hit!.targetUnitPriceCents).toBe(200_00);
+  });
+
+  it("fără parametrul `currency` nimic nu se convertește (și nimic nu se strică)", async () => {
+    const body = (await (await asA("/api/par/suggestions/line-items?q=licenta")).json()) as SuggestionsBody;
+    const hit = body.suggestions.find((s) => s.description === "Licenta software anuala");
+    expect(hit!.targetCurrency).toBeNull();
+    expect(hit!.targetUnitPriceCents).toBeNull();
   });
 
   it("cere autentificare", async () => {
