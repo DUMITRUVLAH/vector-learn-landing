@@ -344,6 +344,7 @@ type DocOptions = {
   description: string;
   canonical: string;
   body: string;
+  /** Unul sau mai multe grafuri JSON-LD; fiecare iese în propriul `<script>`. */
   jsonLd?: unknown;
   ogType?: "website" | "article";
 };
@@ -368,12 +369,18 @@ function renderDocument(o: DocOptions): string {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/blog/blog.css">
-${o.jsonLd ? `<script type="application/ld+json">${JSON.stringify(o.jsonLd)}</script>` : ""}
+${(Array.isArray(o.jsonLd) ? o.jsonLd : o.jsonLd ? [o.jsonLd] : [])
+  .map((graph) => `<script type="application/ld+json">${JSON.stringify(graph)}</script>`)
+  .join("\n")}
 </head>
 <body>
 <header class="site-head">
   <div class="site-head__inner">
-    <a class="brand" href="/blog">FinFlow <span>· ghiduri</span></a>
+    <a class="brand" href="${SITE.appUrl}">FinFlow</a>
+    <nav class="site-head__nav" aria-label="Navigare principală">
+      <a href="${SITE.appUrl}">Produsul</a>
+      <a href="/blog">Ghiduri</a>
+    </nav>
     <a class="nav-cta" href="${SITE.loginUrl}">Intră în FinFlow</a>
   </div>
 </header>
@@ -385,7 +392,8 @@ ${o.body}
       propriul produs — o spunem aici, ca să o poți lua în calcul când citești.
     </p>
     <p style="margin:0">
-      <a href="${SITE.appUrl}">Despre FinFlow</a> · <a href="mailto:${SITE.contactEmail}">${SITE.contactEmail}</a>
+      <a href="${SITE.appUrl}">Vezi produsul</a> · <a href="/blog">Toate ghidurile</a> ·
+      <a href="mailto:${SITE.contactEmail}">${SITE.contactEmail}</a>
     </p>
   </div>
 </footer>
@@ -427,6 +435,16 @@ export function renderArticlePage(
     citation: sources.map((s) => ({ "@type": "CreativeWork", name: s.label, url: s.url })),
   };
 
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: SITE.name, item: `${baseUrl}${SITE.appUrl}` },
+      { "@type": "ListItem", position: 2, name: "Ghiduri", item: `${baseUrl}/blog` },
+      { "@type": "ListItem", position: 3, name: article.title, item: canonical },
+    ],
+  };
+
   const bodyBlocks = article.body
     .map((b) => (b.kind === "related" ? renderRelated(b.slugs, all) : renderBlock(b)))
     .join("\n");
@@ -435,7 +453,7 @@ export function renderArticlePage(
   const body = `<main class="wrap wrap--article">
   <article>
     <nav class="breadcrumb" aria-label="Firul Ariadnei">
-      <a href="/blog">Ghiduri</a> · ${esc(spec.label)}
+      <a href="${SITE.appUrl}">FinFlow</a> · <a href="/blog">Ghiduri</a> · ${esc(spec.label)}
     </nav>
 
     <div style="margin-top:1.25rem">${chip(spec)}</div>
@@ -498,7 +516,7 @@ export function renderArticlePage(
     description: article.metaDescription,
     canonical,
     body,
-    jsonLd,
+    jsonLd: [jsonLd, breadcrumbLd],
     ogType: "article",
   });
 }

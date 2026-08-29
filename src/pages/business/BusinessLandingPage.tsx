@@ -105,6 +105,10 @@ const NAV_LINKS: { href: string; label: string }[] = [
   { href: "#flux", label: "Fluxul" },
   { href: "#securitate", label: "Securitate" },
   { href: "#preturi", label: "Prețuri" },
+  // Ghidurile NU sunt o rută a aplicației: sunt pagini pre-randate, servite static de pe /blog
+  // (vezi scripts/build-blog.ts). De aceea e un `<a>` simplu, nu un `Link` de router — un
+  // `Link` ar încerca o navigare pe hash și ar rămâne în SPA, pe o rută inexistentă.
+  { href: "/blog", label: "Ghiduri" },
 ];
 
 function Navbar() {
@@ -1361,6 +1365,9 @@ function Footer() {
           <Link to="/business/login" className="transition-colors hover:text-foreground">
             Autentificare
           </Link>
+          <a href="/blog" className="transition-colors hover:text-foreground">
+            Ghiduri
+          </a>
           <a href={`mailto:${CONTACT_EMAIL}`} className="transition-colors hover:text-foreground">
             Contact
           </a>

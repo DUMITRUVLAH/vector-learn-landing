@@ -93,6 +93,10 @@ img, svg { max-width: 100%; }
 }
 .brand { font-weight: 700; letter-spacing: -0.02em; text-decoration: none; color: inherit; font-size: 1.05rem; }
 .brand span { color: hsl(var(--muted-foreground)); font-weight: 500; }
+.site-head__nav { display: none; gap: 1.25rem; margin-right: auto; margin-left: 1.5rem; font-size: 0.9rem; font-weight: 500; }
+.site-head__nav a { color: hsl(var(--muted-foreground)); text-decoration: none; }
+.site-head__nav a:hover { color: hsl(var(--foreground)); }
+@media (min-width: 640px) { .site-head__nav { display: flex; } }
 .site-head a.nav-cta {
   display: inline-flex; align-items: center; min-height: 2.25rem; padding: 0 0.9rem;
   border-radius: 0.6rem; background: hsl(var(--primary)); color: hsl(var(--primary-foreground));

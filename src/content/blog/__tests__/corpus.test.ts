@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ARTICLES, publishedArticles } from "..";
 import { coverFor } from "../cover";
@@ -79,6 +81,24 @@ describe("legături interne", () => {
         }
       }
     }
+  });
+
+  it("drumul spre landing și înapoi există în ambele sensuri", () => {
+    // Lipsea: din landing nu ajungeai la ghiduri, iar dintr-un articol găsit în Google nu aveai
+    // cum să afli ce produs îl publică. Ambele capete se verifică mecanic, altfel dispar la
+    // prima refacere a meniului.
+    // Calea se ia din rădăcina proiectului: în vitest, `import.meta.url` e un URL http, nu file.
+    const landing = readFileSync(
+      resolve(process.cwd(), "src/pages/business/BusinessLandingPage.tsx"),
+      "utf8",
+    );
+    expect(landing.includes('href="/blog"'), "landing-ul nu trimite spre ghiduri").toBe(true);
+
+    for (const a of published) {
+      const html = renderArticlePage(a, published);
+      expect(html.includes('href="/business"'), `${a.slug}: nu se poate reveni la produs`).toBe(true);
+    }
+    expect(renderListingPage(published)).toContain('href="/business"');
   });
 
   it("fiecare articol se termină cu o direcție spre aplicație", () => {
