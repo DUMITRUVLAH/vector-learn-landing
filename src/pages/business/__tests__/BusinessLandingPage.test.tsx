@@ -27,17 +27,19 @@ function renderPage() {
 }
 
 describe("BusinessLandingPage (FinFlow)", () => {
-  it("spune ce este produsul și duce la creare de cont", () => {
+  it("spune ce este produsul și are o singură ușă de intrare: autentificarea", () => {
     renderPage();
     expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("Nicio plată fără aprobare");
-    const signupLinks = screen.getAllByRole("link", { name: /începe gratuit/i });
-    expect(signupLinks.length).toBeGreaterThan(0);
-    for (const link of signupLinks) {
-      expect(link.getAttribute("href")).toBe("#/business/signup");
-    }
-    for (const link of screen.getAllByRole("link", { name: /autentificare/i })) {
-      expect(link.getAttribute("href")).toBe("#/business/login");
-    }
+
+    // Bug raportat de owner de pe telefon: butoanele duceau direct în formularul de cont nou,
+    // deci cereau cont fix omului care avea deja unul. Toate intrările merg acum în pagina de
+    // autentificare, de unde se poate și crea un workspace nou.
+    const signupLinks = screen.queryAllByRole("link").filter((a) => a.getAttribute("href")?.includes("/business/signup"));
+    expect(signupLinks, "landingul nu trebuie să trimită direct la crearea contului").toHaveLength(0);
+
+    const entry = screen.getAllByRole("link", { name: /intră în cont|autentificare/i });
+    expect(entry.length).toBeGreaterThan(0);
+    for (const link of entry) expect(link.getAttribute("href")).toBe("#/business/login");
   });
 
   it("afișează prețul de 20 $ pentru manageri și 5 $ pentru restul echipei", () => {
