@@ -251,3 +251,50 @@ export function deriveDocument(id: string, kind: string): Promise<DocDetail & { 
     body: JSON.stringify({ kind }),
   });
 }
+
+export interface DossierPaymentRequest {
+  id: string;
+  requestNo: string;
+  status: string;
+  totalEstimatedCents: number;
+  paidAt: string | null;
+}
+
+export interface DossierDocument extends DocListItem {
+  paymentRequests: DossierPaymentRequest[];
+}
+
+export type CurrencyTotals = Record<string, { contractedCents: number; paidCents: number }>;
+
+export interface ProjectDossier {
+  documents: DossierDocument[];
+  totals: CurrencyTotals;
+  byCounterparty: {
+    counterpartyId: string | null;
+    counterpartyName: string;
+    documents: DossierDocument[];
+    totals: CurrencyTotals;
+  }[];
+}
+
+export interface CounterpartyDossier {
+  documents: DossierDocument[];
+  totals: CurrencyTotals;
+  requisiteChanges: { field: string; label: string; onLastAct: string; inRegistry: string }[];
+}
+
+export function getProjectDossier(projectId: string): Promise<ProjectDossier> {
+  return api<ProjectDossier>(`/api/docs/dossier/project/${projectId}`);
+}
+
+export function getCounterpartyDossier(id: string): Promise<CounterpartyDossier> {
+  return api<CounterpartyDossier>(`/api/docs/dossier/counterparty/${id}`);
+}
+
+/** Adresa exportului: aceleași filtre ca lista, ca fișierul să conțină exact ce se vede. */
+export function registerExportUrl(filters: DocFilters = {}): string {
+  const qs = new URLSearchParams(
+    Object.entries(filters).filter(([, v]) => v != null && v !== "") as [string, string][]
+  ).toString();
+  return `/api/docs/export/register.xlsx${qs ? `?${qs}` : ""}`;
+}

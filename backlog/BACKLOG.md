@@ -535,8 +535,8 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | 5 | `DG-117` | **„Transformă în PAR"** — PAR precompletat + PDF atașat automat | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 5 | `DG-118` | Invers: din PAR/comandă/recepție → actul precompletat | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 5 | `DG-119` | Traseul actului: contract → act → PAR → plată → factură | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
-| 6 | `DG-120` | Dosarul proiectului (acte pe contraparte, contractat vs plătit, ZIP) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
-| 6 | `DG-121` | Dosarul contrapărții (istoric acte + schimbări de rechizite) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
-| 6 | `DG-122` | Registrul actelor: export XLSX + ZIP pe filtre | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 6 | `DG-120` | Dosarul proiectului (acte pe contraparte, contractat vs plătit, ZIP) | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 6 | `DG-121` | Dosarul contrapărții (istoric acte + schimbări de rechizite) | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 6 | `DG-122` | Registrul actelor: export XLSX + ZIP pe filtre | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 6 | `DG-123` | Permisiuni pe proiect + jurnal în limbaj omenesc | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 6 | `DG-124` | Generare în masă din Excel, salvată în registru (reuse DOCMERGE) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |

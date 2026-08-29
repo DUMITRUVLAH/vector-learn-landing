@@ -48,6 +48,7 @@ import {
   parPayers,
 } from "../db/schema/par";
 import { generateRequestNo } from "../lib/par/requestNo";
+import { buildProjectDossier, buildCounterpartyDossier } from "../lib/docs/dossier";
 import { mayAccessProject } from "../lib/par/projectScope";
 
 export const docsRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -1389,5 +1390,123 @@ docsRoutes.get("/documents/:id/trail", async (c) => {
       .map((l) => relatedDocs.find((d) => d.id === l.toDocumentId))
       .filter(Boolean),
     paymentRequests: relatedPars,
+  });
+});
+
+
+// ─── Dosare și registru (DG-120, DG-121, DG-122) ─────────────────────────────
+
+docsRoutes.get("/dossier/project/:projectId", async (c) => {
+  const user = c.get("user");
+  if (!(await mayAccessProject(user.id, user.tenantId, c.req.param("projectId"), (user as { role?: string }).role))) {
+    return c.json({ error: "forbidden_project" }, 403);
+  }
+  return c.json(await buildProjectDossier(user.tenantId, c.req.param("projectId")));
+});
+
+docsRoutes.get("/dossier/counterparty/:id", async (c) => {
+  const user = c.get("user");
+  return c.json(await buildCounterpartyDossier(user.tenantId, c.req.param("id")));
+});
+
+/**
+ * Registrul actelor, ca fișier: aceleași filtre ca pe ecran.
+ *
+ * Sumele pleacă NUMERIC, nu ca text — un registru în care „24.500,00" e text nu se poate suma în
+ * Excel, iar auditorul exact asta face prima dată.
+ */
+docsRoutes.get("/export/register.xlsx", async (c) => {
+  const user = c.get("user");
+  const q = c.req.query();
+
+  const filters = [eq(docDocuments.tenantId, user.tenantId)];
+  if (q.status) filters.push(eq(docDocuments.status, q.status));
+  if (q.kind) filters.push(eq(docDocuments.kind, q.kind));
+  if (q.projectId) filters.push(eq(docDocuments.projectId, q.projectId));
+  if (q.counterpartyId) filters.push(eq(docDocuments.counterpartyId, q.counterpartyId));
+  if (q.from) filters.push(gte(docDocuments.docDate, new Date(q.from)));
+  if (q.to) filters.push(lte(docDocuments.docDate, new Date(q.to)));
+  if (q.q) filters.push(ilike(docDocuments.title, `%${q.q}%`));
+
+  const rows = await db
+    .select()
+    .from(docDocuments)
+    .where(and(...filters))
+    .orderBy(desc(docDocuments.docDate));
+
+  const links = rows.length
+    ? await db
+        .select()
+        .from(docDocumentLinks)
+        .where(
+          and(
+            eq(docDocumentLinks.tenantId, user.tenantId),
+            eq(docDocumentLinks.toKind, "par"),
+            inArray(
+              docDocumentLinks.fromDocumentId,
+              rows.map((r) => r.id)
+            )
+          )
+        )
+    : [];
+  const parIds = links.map((l) => l.toParId).filter((x): x is string => !!x);
+  const pars = parIds.length
+    ? await db
+        .select({ id: parRequests.id, requestNo: parRequests.requestNo })
+        .from(parRequests)
+        .where(and(eq(parRequests.tenantId, user.tenantId), inArray(parRequests.id, parIds)))
+    : [];
+
+  // exceljs se încarcă leneș: importul static a rupt cândva TOATE rutele pe serverless.
+  const ExcelJSModule = (await import("exceljs")) as unknown as {
+    default: typeof import("exceljs");
+  };
+  const ExcelJS = ExcelJSModule.default ?? (ExcelJSModule as unknown as typeof import("exceljs"));
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Registrul actelor");
+  ws.columns = [
+    { header: "Nr. act", key: "no", width: 18 },
+    { header: "Data", key: "date", width: 12 },
+    { header: "Tip", key: "kind", width: 26 },
+    { header: "Titlu", key: "title", width: 40 },
+    { header: "Contraparte", key: "party", width: 28 },
+    { header: "Cod fiscal", key: "idno", width: 16 },
+    { header: "Sumă", key: "total", width: 14 },
+    { header: "Valuta", key: "currency", width: 8 },
+    { header: "Stare", key: "status", width: 12 },
+    { header: "Cerere de plată", key: "par", width: 18 },
+  ];
+  ws.getRow(1).font = { bold: true };
+
+  const STATUS_RO: Record<string, string> = { draft: "Ciornă", final: "Finalizat", cancelled: "Anulat" };
+  for (const r of rows) {
+    let snapshot: Record<string, string> = {};
+    try {
+      snapshot = JSON.parse(r.counterpartySnapshot ?? "{}") as Record<string, string>;
+    } catch {
+      snapshot = {};
+    }
+    const parLink = links.find((l) => l.fromDocumentId === r.id);
+    ws.addRow({
+      no: r.docNumber ?? "—",
+      date: r.docDate.toLocaleDateString("ro-MD"),
+      kind: DOC_KIND_LABEL[r.kind] ?? r.kind,
+      title: r.title,
+      party: r.counterpartyName ?? "—",
+      idno: snapshot.idno ?? "",
+      total: r.totalCents / 100,
+      currency: r.currency,
+      status: STATUS_RO[r.status] ?? r.status,
+      par: pars.find((p) => p.id === parLink?.toParId)?.requestNo ?? "",
+    });
+  }
+  ws.getColumn("total").numFmt = "#,##0.00";
+
+  const buffer = await wb.xlsx.writeBuffer();
+  return new Response(Buffer.from(buffer), {
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="registrul-actelor.xlsx"`,
+    },
   });
 });

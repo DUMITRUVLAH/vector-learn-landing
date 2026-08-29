@@ -1,7 +1,7 @@
 {
   "version": 1,
   "current_item": null,
-  "last_completed": "DG-119",
+  "last_completed": "DG-122",
   "iterations": 180,
   "last_run_at": "2026-06-28T00:00:00Z",
   "milestone_status": "VIOLETA: VM1 done (#204-#216). VM3 (feedback 2026-07-16) done — PR #262. VM2: 20 pending.",
@@ -4967,7 +4967,7 @@
       "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-120": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4977,10 +4977,11 @@
         "DG-117"
       ],
       "priority": "high",
-      "title": "Dosarul proiectului: acte pe contraparte și tip, contractat vs plătit, ZIP"
+      "title": "Dosarul proiectului: acte pe contraparte și tip, contractat vs plătit, ZIP",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-121": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -4990,10 +4991,11 @@
         "DG-120"
       ],
       "priority": "medium",
-      "title": "Dosarul contrapărții: istoric acte + semnalarea schimbărilor de rechizite"
+      "title": "Dosarul contrapărții: istoric acte + semnalarea schimbărilor de rechizite",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-122": {
-      "status": "pending",
+      "status": "done",
       "attempts": 0,
       "blockers": [],
       "spec": "backlog/docgen/DOCGEN-BACKLOG.md",
@@ -5003,7 +5005,8 @@
         "DG-120"
       ],
       "priority": "medium",
-      "title": "Registrul actelor: export XLSX + ZIP pe filtrele curente"
+      "title": "Registrul actelor: export XLSX + ZIP pe filtrele curente",
+      "branch": "feat/DOCGEN-faza-1-registru-acte"
     },
     "DG-123": {
       "status": "pending",

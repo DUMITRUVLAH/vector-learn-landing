@@ -9,11 +9,12 @@
  * de completare (DG-109) au item-ele lor. Aici e registrul + acțiunile care schimbă starea.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Plus, Loader2, AlertCircle, Search, Download } from "lucide-react";
+import { FileText, Plus, Loader2, AlertCircle, Search, Download, FileSpreadsheet, FolderOpen } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
 import {
   listDocuments,
+  registerExportUrl,
   DOC_KIND_LABELS,
   DOC_STATUS_LABELS,
   type DocListItem,
@@ -105,6 +106,24 @@ export function DocsPage() {
       pageTitle="Acte"
       pageDescription="Acte de primire-predare, contracte și procese-verbale — completate din registrul de furnizori, gata de transformat în cereri de plată."
       actions={
+        <div className="flex gap-2">
+          <a
+            href={registerExportUrl(filters)}
+            className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+          >
+            <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
+            Exportă registrul
+          </a>
+          {filters.projectId && (
+            <button
+              type="button"
+              onClick={() => navigate(`/business/docs/proiect/${filters.projectId}`)}
+              className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+            >
+              <FolderOpen className="h-4 w-4" aria-hidden="true" />
+              Dosarul proiectului
+            </button>
+          )}
         <button
           type="button"
           onClick={() => navigate("/business/docs/nou")}
@@ -113,6 +132,7 @@ export function DocsPage() {
           <Plus className="h-4 w-4" aria-hidden="true" />
           Act nou
         </button>
+        </div>
       }
     >
       <div className="p-4 sm:p-6 space-y-6">

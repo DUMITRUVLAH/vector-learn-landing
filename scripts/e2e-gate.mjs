@@ -111,6 +111,7 @@ const AREAS = {
     api: [
       ["GET", "/api/docs/documents", (j) => Array.isArray(j)],
       ["GET", "/api/docs/documents?status=final", (j) => Array.isArray(j) && j.every((d) => d.status === "final")],
+      ["GET", "/api/docs/templates", (j) => Array.isArray(j) && j.some((t) => t.isSystem)],
     ],
     routes: ["/business/docs", "/business/docs/nou", "/business/docs/templates"],
     deep: [],
