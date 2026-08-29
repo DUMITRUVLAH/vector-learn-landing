@@ -50,7 +50,7 @@ import {
   type ParPrefillResult, type ParLineItemSuggestion, type ParAttachmentAnalysis,
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
-import { Card, Dialog, PastelIcon, Select, Switch, Textarea, chipToneFor } from "@/components/ds";
+import { Card, Combobox, Dialog, PastelIcon, Select, Switch, Textarea, chipToneFor } from "@/components/ds";
 import {
   URGENT_REASON_ORDER, URGENT_REASON_LABELS, URGENT_REASON_NOTE_MAX_LEN, isUrgentReasonCode,
 } from "@/lib/par/urgentReasons";
@@ -194,13 +194,6 @@ function fileToDataUrl(file: File): Promise<string> {
 }
 const today = () => new Date().toISOString().slice(0, 10);
 
-/**
- * De la câte opțiuni merită o casetă de căutare deasupra unei liste. Sub prag, caseta e un
- * control în plus care nu ajută pe nimeni — și exact genul de aglomerare pe care owner-ul a
- * semnalat-o pe „Eveniment" (2026-08-29).
- */
-const SEARCHABLE_FROM = 8;
-
 /** VM3-03: sugestii pentru unitatea de măsură (Violeta: „adăugăm bucăți… servicii"). Text liber. */
 const UNIT_SUGGESTIONS = ["bucăți", "servicii", "ore", "zile", "sesiuni", "persoane", "luni", "km", "set"];
 /** What an untouched UM field means. Matches the placeholder shown in the input. */
@@ -311,10 +304,15 @@ function WarnNote({ text }: { text?: string }) {
 }
 
 /** A titled sub-section inside a Section. Each related group (dates, requestor, payer…) gets its
- *  own bordered panel so the big card reads as a few clear blocks, easier to interpret. */
+ *  own bordered panel so the big card reads as a few clear blocks, easier to interpret.
+ *
+ *  Pe telefon panoul rămâne doar eticheta: pagină + card + panou însemnau trei rânduri de
+ *  padding unul în altul, iar câmpurile ajungeau la ~300px pe un ecran de 390px („vezi pe
+ *  mobile ce îngustă e secțiunea", owner 2026-08-29). Nu e nimic de delimitat oricum: pe o
+ *  singură coloană, grupurile se citesc deja unul după altul. */
 function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-border bg-muted/20 p-3 sm:p-4 space-y-3">
+    <section className="space-y-3 sm:rounded-lg sm:border sm:border-border sm:bg-muted/20 sm:p-4">
       <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</h3>
       {children}
     </section>
@@ -347,7 +345,7 @@ function Section({ id, n, title, icon: Icon, hint, children }: {
   id?: string; n: string; title: string; icon: LucideIcon; hint?: string; children: React.ReactNode;
 }) {
   return (
-    <Card id={id} tone="dashboard" className="scroll-mt-24 space-y-3 p-4 sm:p-5">
+    <Card id={id} tone="dashboard" className="scroll-mt-24 space-y-3 p-3 sm:p-5">
       <div className="flex items-center gap-3">
         <PastelIcon tone={chipToneFor(title)} size={32}>
           <Icon className="h-4 w-4" />
@@ -567,10 +565,8 @@ export function ParCreateForm() {
   const [uploadKindOther, setUploadKindOther] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
   const [draftSavedMessage, setDraftSavedMessage] = useState<string | null>(null);
-  const [eventSearch, setEventSearch] = useState("");
   const [newEventName, setNewEventName] = useState("");
   const [showNewEvent, setShowNewEvent] = useState(false);
-  const [budgetSearch, setBudgetSearch] = useState("");
   const [newBudgetCode, setNewBudgetCode] = useState("");
   const [vendorSearch, setVendorSearch] = useState("");
 
@@ -1526,7 +1522,9 @@ export function ParCreateForm() {
 
   return (
     <AppShell>
-      <div className="max-w-6xl mx-auto px-4 py-5 pb-28 space-y-3">
+      {/* Fără padding propriu pe telefon: shell-ul dă deja px-5, iar cardul încă p-3. Trei
+          rânduri de spațiu însemnau ~90px pierduți dintr-un ecran de 390 (owner, 2026-08-29). */}
+      <div className="max-w-6xl mx-auto px-0 sm:px-4 py-5 pb-48 md:pb-32 space-y-3">
         <div className="flex items-center gap-3">
           <FileText className="h-6 w-6 text-primary flex-shrink-0" aria-hidden />
           <div>
@@ -1744,27 +1742,22 @@ export function ParCreateForm() {
                 // before the requester establishes the financial context.
                 if (!projectId) return null;
                 const projectEvents = events.filter((ev) => ev.projectId === projectId);
-                const filteredEvents = projectEvents.filter((ev) =>
-                  !eventSearch.trim() || ev.name.toLocaleLowerCase("ro").includes(eventSearch.trim().toLocaleLowerCase("ro")));
                 const empty = projectEvents.length === 0;
                 // Fără evenimente, singurul control e cel de adăugare — eticheta i se adresează lui.
                 const addOpen = empty || showNewEvent;
                 return (
                   <Field label="Eveniment" htmlFor={empty ? "evtNew" : "evtId"}
                     hint={empty ? "Niciun eveniment pentru acest proiect — scrie-l aici sau project managerul le adaugă în Admin." : undefined}>
-                    {projectEvents.length > SEARCHABLE_FROM && (
-                      <input className={inputCls} value={eventSearch} onChange={(e) => setEventSearch(e.target.value)}
-                        placeholder="Caută eveniment…" aria-label="Caută eveniment" />
-                    )}
                     {!empty && (
-                      <Select id="evtId" className="w-full" value={eventId}
-                        onChange={(e) => setEventId(e.target.value)}
-                        aria-label="Eveniment">
-                        <option value="">— Selectează —</option>
-                        {filteredEvents.map((ev) => (
-                          <option key={ev.id} value={ev.id}>{ev.name}</option>
-                        ))}
-                      </Select>
+                      <Combobox
+                        id="evtId"
+                        aria-label="Eveniment"
+                        value={eventId}
+                        onChange={setEventId}
+                        options={projectEvents.map((ev) => ({ value: ev.id, label: ev.name }))}
+                        placeholder="Caută sau alege…"
+                        emptyText="Niciun eveniment cu acest nume"
+                      />
                     )}
                     {addOpen ? (
                       <div className="flex gap-2">
@@ -1789,16 +1782,16 @@ export function ParCreateForm() {
                   !!payerId && b.payerId === payerId && (!b.projectId || (!!projectId && b.projectId === projectId)));
                 return (
                   <Field label="Cod bugetar" htmlFor="bc">
-                    {eligibleCodes.length > SEARCHABLE_FROM && (
-                      <input className={inputCls} value={budgetSearch} onChange={(e) => setBudgetSearch(e.target.value)}
-                        placeholder="Caută după cod sau denumire…" aria-label="Caută cod bugetar" />
-                    )}
-                    <Select id="bc" className="w-full" value={budgetCodeId} onChange={(e) => setBudgetCodeId(e.target.value)} aria-label="Cod bugetar">
-                      <option value="">— Selectează —</option>
-                      {eligibleCodes
-                        .filter((b) => !budgetSearch.trim() || `${b.code} ${b.name}`.toLocaleLowerCase("ro").includes(budgetSearch.trim().toLocaleLowerCase("ro")))
-                        .map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
-                    </Select>
+                    <Combobox
+                      id="bc"
+                      aria-label="Cod bugetar"
+                      value={budgetCodeId}
+                      onChange={setBudgetCodeId}
+                      options={eligibleCodes.map((b) => ({ value: b.id, label: b.code, hint: b.name }))}
+                      placeholder={payerId ? "Caută după cod sau denumire…" : "Alege întâi plătitorul"}
+                      emptyText={payerId ? "Niciun cod bugetar care să se potrivească" : "Alege întâi plătitorul"}
+                      disabled={!payerId}
+                    />
                   </Field>
                 );
               })()}
@@ -2724,7 +2717,11 @@ export function ParCreateForm() {
       </div>
 
       {/* Sticky action bar */}
-      <div className="fixed bottom-0 inset-x-0 z-20 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      {/* Bara de acțiuni. Pe mobil stă DEASUPRA navigării de jos (56px): amândouă erau
+          `fixed bottom-0 z-20`, așa că bara nimerea sub tab-uri — totalul apărea tăiat, iar
+          „Trimite pentru aprobare" era complet acoperit. Cererea nu se putea trimite de pe
+          telefon (owner, 2026-08-29). Pe ≥md navigarea de jos nu există, deci bara coboară. */}
+      <div className="fixed bottom-14 md:bottom-0 inset-x-0 z-30 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="max-w-6xl mx-auto px-4 py-3 space-y-2">
           {/* Feature 2: non-blocking budget overage warning */}
           {budgetOverageWarn && (

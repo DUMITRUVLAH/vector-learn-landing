@@ -14,6 +14,9 @@ export type { BadgeProps, BadgeVariant, StatusBadgeProps } from "./Badge";
 export { Button } from "./Button";
 export type { ButtonProps, ButtonSize, ButtonVariant } from "./Button";
 
+export { Combobox } from "./Combobox";
+export type { ComboboxProps, ComboboxOption } from "./Combobox";
+
 export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./Card";
 export type { CardProps } from "./Card";
 

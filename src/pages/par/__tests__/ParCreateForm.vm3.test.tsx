@@ -212,7 +212,9 @@ describe("ParCreateForm — VM3-03 (feedback Violeta)", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("Eveniment")).toBeInTheDocument();
     });
-    expect(screen.getByRole("option", { name: "Conferința anuală" })).toBeInTheDocument();
+    // Eveniment e un combobox: opțiunile apar când îl deschizi, nu în DOM tot timpul.
+    fireEvent.focus(screen.getByLabelText("Eveniment"));
+    expect(await screen.findByRole("option", { name: "Conferința anuală" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Eveniment străin" })).not.toBeInTheDocument();
     expect(screen.queryByText(/niciun eveniment pentru acest proiect/i)).not.toBeInTheDocument();
   });
