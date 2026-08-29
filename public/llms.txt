@@ -1,0 +1,23 @@
+# FinFlow
+
+> FinFlow controlează plățile unei organizații: cereri de plată, lanț de aprobare pe praguri, execuție în finanțe și legătura cu factura e-Factura, pe o singură platformă.
+
+## Docs
+
+- [FinFlow — pagina principală](https://www.finflow.best/): Prezintă cele trei module (gestiune financiară, aprobări de plăți/PAR, administrare rezidenți IT Park), fluxul cerere → aprobare → plată → factură, și prețurile pe utilizator.
+
+## Key Facts
+
+- Produs: platformă SaaS de control financiar pentru organizații (business-to-business).
+- Module: gestiune financiară (facturi, extrase bancare, salarii, active), aprobări de plăți (PAR — cerere, lanț de aprobare pe praguri, execuție), administrare rezidenți IT Park (declarații MITP).
+- Fiecare cerere de plată are un lanț de aprobare configurabil pe praguri și un jurnal de audit.
+- Plata se leagă automat de factura emisă prin SIA „e-Factura" (Moldova); dacă lipsește, sistemul trimite un reminder.
+- Preț: 20 USD/lună per utilizator-manager (aprobator, finanțe, administrator), 5 USD/lună per membru echipă (solicitant).
+- Fără card bancar la crearea contului.
+- Limbă principală a produsului: română.
+
+## Contact
+
+- Website: https://www.finflow.best/
+- Email: contact@finflow.best
+- Login: https://www.finflow.best/#/business/login

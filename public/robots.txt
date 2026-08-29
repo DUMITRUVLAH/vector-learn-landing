@@ -1,4 +1,45 @@
 User-agent: *
 Allow: /
 
+# AI crawlers — allowed for AI search visibility (GEO)
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: GoogleOther
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: FacebookBot
+Allow: /
+
+# Aggressive low-value crawler — blocked
+User-agent: Bytespider
+Disallow: /
+
+# AI usage preferences (IETF draft: contentsignals.org)
+Content-Signal: ai-train=no, search=yes, ai-retrieval=yes
+
 Sitemap: https://www.finflow.best/sitemap.xml
