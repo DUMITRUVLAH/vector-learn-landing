@@ -138,6 +138,15 @@ writeFileSync(
           continue: true,
         },
         { handle: "filesystem" },
+        // Un fișier cu hash care NU există trebuie să dea 404, nu pagina SPA.
+        // Bug 2026-08-29 („eroarea asta e mereu"): fără regula asta, `/assets/<chunk>.js` lipsă
+        // cădea în fallback-ul de mai jos și primea `200` + index.html. Browserul refuza HTML-ul
+        // ca modul → „Failed to fetch dynamically imported module", iar service worker-ul, văzând
+        // un răspuns `ok`, îl cache-uia PERMANENT sub URL-ul de JavaScript — de unde caracterul
+        // „mereu": hash-ul unui chunk nemodificat rămâne același la deploy-urile următoare, deci
+        // se cerea la infinit exact intrarea otrăvită. Un 404 curat nu se cache-uiește și spune
+        // adevărul: fila e veche, trebuie reîncărcată (src/lib/staleChunk.ts face asta singur).
+        { src: "/assets/(.*)", status: 404 },
         {
           src: "/(.*)",
           dest: "/index.html",

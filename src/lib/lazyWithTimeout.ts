@@ -1,4 +1,5 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
+import { isStaleChunkError, recoverFromStaleChunk } from "./staleChunk";
 
 /** Long enough that a slow connection still finishes a normal chunk load; short enough that a
  * genuinely stuck request doesn't leave the user staring at a spinner for minutes. */
@@ -42,6 +43,18 @@ export function lazyWithTimeout<T extends ComponentType<any>>(
       factory(),
       LAZY_IMPORT_TIMEOUT_MS,
       "Failed to fetch dynamically imported module: timed out",
-    ),
+    ).catch((error: unknown) => {
+      // Recuperăm AICI, nu după ce eroarea urcă în ErrorBoundary: acolo ajunge deja ca
+      // „pagina a crăpat" — se scrie în consola browserului, pleacă un raport de crash către
+      // Consola Platformă (și un email către owner la fiecare hash nou de chunk), și abia apoi
+      // se reîncarcă. Or asta nu e un crash al aplicației, e o filă rămasă în urma unui deploy.
+      // Dacă reload-ul chiar pornește, ținem promisiunea nerezolvată: Suspense rămâne pe
+      // fallback până când pagina se schimbă, fără flash de eroare.
+      const message = error instanceof Error ? error.message : String(error);
+      if (isStaleChunkError(message) && recoverFromStaleChunk()) {
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw error;
+    }),
   );
 }
