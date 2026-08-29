@@ -55,7 +55,10 @@ function check(name, ok, detail = "") {
 const AREAS = {
   par: {
     label: "PAR",
-    match: /(server\/(routes|lib)\/par|server\/db\/schema\/par|src\/(pages|components)\/business\/[Pp]ar|src\/lib\/(api\/)?par)/,
+    // Paginile PAR trăiesc în `src/pages/par/`, NU în `src/pages/business/par/` — tiparul vechi
+    // cerea o cale care nu există, deci o schimbare în ParCreateForm/ParDashboard nu declanșa
+    // zona PAR: poarta rula doar nucleul și raporta verde fără să atingă niciun ecran de cerere.
+    match: /(server\/(routes|lib)\/par|server\/db\/schema\/par|src\/(pages|components)\/([Pp]ar\/|business\/[Pp]ar)|src\/lib\/(api\/)?par)/,
     // Fiecare verificare INVOCĂ ruta și îi validează forma răspunsului (CLAUDE.md §3.5.1quater).
     api: [
       ["GET", "/api/par", (j) => Array.isArray(j?.requests)],
@@ -151,6 +154,10 @@ function changedFiles() {
     ...out("git", ["diff", "--name-only", "HEAD"]),
     ...out("git", ["ls-files", "--others", "--exclude-standard"]),
     ...out("git", ["diff", "--name-only", "HEAD~1", "HEAD"]),
+    // …și TOATĂ livrarea față de `main`, nu doar ultimul commit: după un rebase sau când
+    // livrezi două commit-uri (feature + fix de unealtă), `HEAD~1` arată doar pe ultimul —
+    // poarta raporta „nicio zonă detectată" fix pe schimbarea pe care urma s-o trimiți în prod.
+    ...out("git", ["diff", "--name-only", "origin/main...HEAD"]),
   ];
 }
 
