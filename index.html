@@ -40,22 +40,92 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
+        "@type": "Organization",
+        "@id": "https://www.finflow.best/#organization",
         "name": "FinFlow",
         "url": "https://www.finflow.best/",
+        "logo": "https://www.finflow.best/finflow-mark.png",
+        "description": "FinFlow — controlul financiar complet: gestiune financiară, aprobări de plăți (PAR) și administrare rezidenți IT, într-o singură platformă.",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "email": "contact@finflow.best",
+          "contactType": "customer service",
+          "availableLanguage": ["Romanian"]
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "@id": "https://www.finflow.best/#software",
+        "name": "FinFlow",
+        "url": "https://www.finflow.best/",
+        "description": "Controlul financiar complet: gestiune financiară, aprobări de plăți și administrare rezidenți IT, într-o singură platformă.",
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web",
-        "description": "Controlul financiar complet: gestiune financiară, aprobări de plăți și administrare rezidenți IT, într-o singură platformă.",
+        "inLanguage": "ro",
         "offers": {
-          "@type": "Offer",
-          "price": "5",
-          "priceCurrency": "USD"
-        }
+          "@type": "AggregateOffer",
+          "lowPrice": "5",
+          "highPrice": "20",
+          "priceCurrency": "USD",
+          "offerCount": "2",
+          "offers": [
+            { "@type": "Offer", "name": "Membru echipă", "price": "5", "priceCurrency": "USD" },
+            { "@type": "Offer", "name": "Manager (aprobator / finanțe / administrator)", "price": "20", "priceCurrency": "USD" }
+          ]
+        },
+        "featureList": [
+          "Gestiune financiară (facturi, extrase bancare, salarii, active)",
+          "Aprobări de plăți (PAR) cu lanț de aprobare pe praguri",
+          "Legătură automată cu factura e-Factura",
+          "Administrare rezidenți IT Park"
+        ],
+        "author": { "@id": "https://www.finflow.best/#organization" }
       }
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!--
+        GEO §7 (server-side rendering): crawlerele AI (GPTBot, ClaudeBot, PerplexityBot) nu
+        execută JavaScript — văd doar acest HTML brut. React înlocuiește sincron conținutul de
+        mai jos la mount (createRoot(...).render în src/main.tsx), deci vizitatorii reali nu-l
+        văd niciodată; e strict un rezumat pentru boți, nu conținut ascuns de utilizatori.
+      -->
+      <main>
+        <h1>Nicio plată fără aprobare. Nicio aprobare fără urmă.</h1>
+        <p>
+          FinFlow este o platformă de control financiar pentru organizații: cereri de plată,
+          aprobări și execuție — un singur traseu, cu dovada la capăt.
+        </p>
+        <section>
+          <h2>Module</h2>
+          <ul>
+            <li>Gestiune financiară — facturi, extrase bancare, salarii, active.</li>
+            <li>
+              Aprobări de plăți (PAR) — fiecare cerere are un lanț de aprobare configurabil pe
+              praguri și un jurnal de audit.
+            </li>
+            <li>Administrare rezidenți IT Park — declarații MITP.</li>
+          </ul>
+        </section>
+        <section>
+          <h2>Cum funcționează</h2>
+          <p>
+            Plata nu poate depăși ce s-a aprobat. FinFlow caută factura emisă prin SIA
+            „e-Factura” și o leagă de cerere; dacă lipsește, trimite un reminder.
+          </p>
+        </section>
+        <section>
+          <h2>Preț</h2>
+          <p>20 USD/lună per utilizator-manager (aprobator, finanțe, administrator).</p>
+          <p>5 USD/lună per membru echipă (solicitant). Fără card bancar la creare.</p>
+        </section>
+        <p><a href="#/business/login">Intră în cont</a></p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
