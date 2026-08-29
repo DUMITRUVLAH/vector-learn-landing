@@ -17,6 +17,7 @@ import { validateIban } from "../lib/par/validators";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { zodFieldErrorsHook } from "../lib/zodFieldErrors";
 import { splitBankRequisites } from "../lib/par/bankRequisites";
+import { normalizePatentDate } from "../../src/lib/par/patent";
 
 export const parVendorsRoutes = new Hono<{ Variables: AuthVariables }>();
 parVendorsRoutes.use("*", requireAuth);
@@ -37,6 +38,14 @@ const vendorSchema = z.object({
   contact_phone: z.string().max(100).optional().nullable(),
   contact_email: z.string().email().max(255).optional().nullable(),
   administrator_name: z.string().max(300).optional().nullable(),
+  /**
+   * Patenta de întreprinzător (persoană fizică). Termenul se normalizează la ISO înainte de
+   * scriere — un „12.03.2026" tastat de om nu are voie să intre ca text liber, altfel
+   * `patentStatus` nu-l poate compara și avertismentul de expirare se stinge tăcut.
+   */
+  is_patent_holder: z.boolean().optional().nullable(),
+  patent_series: z.string().max(50).optional().nullable(),
+  patent_valid_until: z.string().max(20).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
   active: z.boolean().optional(),
 });
@@ -158,6 +167,11 @@ parVendorsRoutes.post(
         if (!e.contactPhone && body.contact_phone) patch.contactPhone = body.contact_phone;
         if (!e.contactEmail && body.contact_email) patch.contactEmail = body.contact_email;
         if (!e.administratorName && body.administrator_name) patch.administratorName = body.administrator_name;
+        // Patenta se ACTUALIZEAZĂ, nu se „completează doar dacă lipsește": un termen nou e
+        // exact motivul pentru care beneficiarul e salvat din nou (patenta se prelungește lunar).
+        if (body.is_patent_holder != null) patch.isPatentHolder = body.is_patent_holder;
+        if (body.patent_series) patch.patentSeries = body.patent_series;
+        if (normalizePatentDate(body.patent_valid_until)) patch.patentValidUntil = normalizePatentDate(body.patent_valid_until);
         if (!e.active) patch.active = true;
         if (Object.keys(patch).length) {
           const [updated] = await db
@@ -188,6 +202,9 @@ parVendorsRoutes.post(
         contactPhone: body.contact_phone ?? null,
         contactEmail: body.contact_email ?? null,
         administratorName: body.administrator_name ?? null,
+        isPatentHolder: body.is_patent_holder ?? false,
+        patentSeries: body.patent_series ?? null,
+        patentValidUntil: normalizePatentDate(body.patent_valid_until),
         notes: body.notes ?? null,
       })
       .returning();
@@ -231,6 +248,9 @@ parVendorsRoutes.patch(
       ...(body.contact_phone !== undefined ? { contactPhone: body.contact_phone } : {}),
       ...(body.contact_email !== undefined ? { contactEmail: body.contact_email } : {}),
       ...(body.administrator_name !== undefined ? { administratorName: body.administrator_name } : {}),
+      ...(body.is_patent_holder !== undefined ? { isPatentHolder: body.is_patent_holder ?? false } : {}),
+      ...(body.patent_series !== undefined ? { patentSeries: body.patent_series } : {}),
+      ...(body.patent_valid_until !== undefined ? { patentValidUntil: normalizePatentDate(body.patent_valid_until) } : {}),
       ...(body.notes !== undefined ? { notes: body.notes } : {}),
       ...(body.active !== undefined ? { active: body.active } : {}),
       updatedAt: new Date(),

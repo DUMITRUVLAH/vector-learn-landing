@@ -376,6 +376,19 @@ export const parVendors = pgTable(
     contactPhone: varchar("contact_phone", { length: 100 }),
     contactEmail: varchar("contact_email", { length: 255 }),
     administratorName: varchar("administrator_name", { length: 300 }),
+    /**
+     * Patenta de întreprinzător (migrare 0150).
+     *
+     * O persoană fizică din Moldova poate presta legal servicii pe baza unei patente, care are
+     * un termen de valabilitate SCURT (se prelungește lunar). Plata către un patentar cu patenta
+     * expirată e o problemă fiscală reală pentru plătitor, de aceea termenul stă în registru și
+     * e verificat de fiecare dată când beneficiarul e refolosit (src/lib/par/patent.ts).
+     */
+    isPatentHolder: boolean("is_patent_holder").notNull().default(false),
+    /** Seria și numărul patentei, exact cum sunt tipărite (ex. "AA 0123456"). */
+    patentSeries: varchar("patent_series", { length: 50 }),
+    /** Ultima zi de valabilitate, ca text ISO "YYYY-MM-DD" — o zi calendaristică, fără fus orar. */
+    patentValidUntil: varchar("patent_valid_until", { length: 10 }),
     notes: text("notes"),
     active: boolean("active").notNull().default(true),
     /** Vendor compliance — Feature 1 (contafirm.md registry) */
@@ -507,6 +520,15 @@ export const parRequests = pgTable(
     payeeBank: varchar("payee_bank", { length: 300 }),
     /** Feature 1: persoană fizică ("fizic") sau juridică ("juridic"). Null = unset/legacy. */
     payeeType: varchar("payee_type", { length: 10 }),
+    /**
+     * Patenta beneficiarului, copiată pe cerere la fel ca restul rechizitelor (migrare 0150).
+     * Cererea trebuie să rămână citibilă peste un an fără a depinde de registru: aprobatorul
+     * vede ce patentă era valabilă ATUNCI, nu ce scrie azi în par_vendors.
+     */
+    payeeIsPatentHolder: boolean("payee_is_patent_holder").notNull().default(false),
+    payeePatentSeries: varchar("payee_patent_series", { length: 50 }),
+    /** Ultima zi de valabilitate, text ISO "YYYY-MM-DD". */
+    payeePatentValidUntil: varchar("payee_patent_valid_until", { length: 10 }),
     /** Section 13 */
     attachmentsPresent: boolean("attachments_present").notNull().default(false),
     attachmentsNote: text("attachments_note"),

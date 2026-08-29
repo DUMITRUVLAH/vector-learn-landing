@@ -50,6 +50,7 @@ import { cn } from "@/lib/utils";
 import { Alert, Badge, Button, Card, Checkbox, Input, Label, Select, Switch, Tabs, Textarea } from "@/components/ds";
 import { validateIban } from "@/lib/par/iban";
 import { PAR_EVENT_TITLES, eventTitle, humanizeDetail } from "@/lib/par/timelineHumanize";
+import { patentStatus, formatPatentDate } from "@/lib/par/patent";
 import {
   type RuleDraft, type ApproverPick, type GroupedRule,
   ruleScopeKey, buildDoaRows, groupDoaRows, emptyRuleDraft,
@@ -3058,7 +3059,7 @@ function VendorSection({ vendors, onReload, normalizing, normalizeResult, onNorm
   // Pre-fill vendor form from registry pick
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const emptyVendorForm = () => ({ name: "", idnp: "", vat_code: "", iban: "", bank: "", bic_swift: "", legal_address: "", administrator_name: "", contact_name: "", contact_phone: "", contact_email: "" });
+  const emptyVendorForm = () => ({ name: "", idnp: "", vat_code: "", iban: "", bank: "", bic_swift: "", legal_address: "", administrator_name: "", contact_name: "", contact_phone: "", contact_email: "", patent_series: "", patent_valid_until: "" });
   const [form, setForm] = useState<Record<string, string>>(emptyVendorForm());
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -3087,14 +3088,23 @@ function VendorSection({ vendors, onReload, normalizing, normalizeResult, onNorm
   };
 
   const startAdd = () => { setForm(emptyVendorForm()); setShowForm(true); setEditingId(null); setSaveError(null); };
-  const startEdit = (v: ParVendor) => { setForm({ ...emptyVendorForm(), name: v.name, idnp: v.idnp ?? "", vat_code: v.vatCode ?? "", iban: v.iban ?? "", bank: v.bank ?? "", bic_swift: v.bicSwift ?? "", legal_address: v.legalAddress ?? "", administrator_name: v.administratorName ?? "", contact_name: v.contactName ?? "", contact_phone: v.contactPhone ?? "", contact_email: v.contactEmail ?? "" }); setEditingId(v.id); setShowForm(false); };
+  const startEdit = (v: ParVendor) => { setForm({ ...emptyVendorForm(), name: v.name, idnp: v.idnp ?? "", vat_code: v.vatCode ?? "", iban: v.iban ?? "", bank: v.bank ?? "", bic_swift: v.bicSwift ?? "", legal_address: v.legalAddress ?? "", administrator_name: v.administratorName ?? "", contact_name: v.contactName ?? "", contact_phone: v.contactPhone ?? "", contact_email: v.contactEmail ?? "", patent_series: v.patentSeries ?? "", patent_valid_until: v.patentValidUntil ?? "" }); setEditingId(v.id); setShowForm(false); };
   const cancel = () => { setShowForm(false); setEditingId(null); setForm(emptyVendorForm()); };
 
   const handleSave = async () => {
     setSaving(true);
     setSaveError(null);
     try {
-      const payload = { name: form.name, idnp: form.idnp || null, vat_code: form.vat_code || null, iban: form.iban || null, bank: form.bank || null, bic_swift: form.bic_swift || null, legal_address: form.legal_address || null, administrator_name: form.administrator_name || null, contact_name: form.contact_name || null, contact_phone: form.contact_phone || null, contact_email: form.contact_email || null };
+      const payload = {
+        name: form.name, idnp: form.idnp || null, vat_code: form.vat_code || null, iban: form.iban || null,
+        bank: form.bank || null, bic_swift: form.bic_swift || null, legal_address: form.legal_address || null,
+        administrator_name: form.administrator_name || null, contact_name: form.contact_name || null,
+        contact_phone: form.contact_phone || null, contact_email: form.contact_email || null,
+        // Patenta: bifa se deduce din date — cine completează seria sau termenul lucrează pe patentă.
+        patent_series: form.patent_series || null,
+        patent_valid_until: form.patent_valid_until || null,
+        is_patent_holder: !!(form.patent_series || form.patent_valid_until),
+      };
       if (editingId) {
         await updateVendor(editingId, payload);
       } else {
@@ -3129,10 +3139,15 @@ function VendorSection({ vendors, onReload, normalizing, normalizeResult, onNorm
         { id: "contact_name", label: "Persoană de contact", placeholder: "Prenume Nume" },
         { id: "contact_phone", label: "Telefon", placeholder: "+373…" },
         { id: "contact_email", label: "Email", placeholder: "office@companie.md" },
-      ] as { id: string; label: string; placeholder: string }[]).map((field) => (
+        // Patenta de întreprinzător: doar persoanele fizice o au, dar câmpul stă mereu în formular
+        // — un registru cu câmpuri care apar și dispar e mai greu de completat decât unul care
+        // rămâne gol. Termenul se scrie ca dată, ca să poată fi comparat (src/lib/par/patent.ts).
+        { id: "patent_series", label: "Patentă — seria și nr.", placeholder: "AA 0123456" },
+        { id: "patent_valid_until", label: "Patentă — valabilă până la", placeholder: "2026-08-31", type: "date" },
+      ] as { id: string; label: string; placeholder: string; type?: string }[]).map((field) => (
         <div key={field.id}>
           <label htmlFor={`vnd-${field.id}`} className="text-xs font-medium text-muted-foreground block mb-1">{field.label}</label>
-          <Input id={`vnd-${field.id}`} type="text" value={form[field.id] ?? ""} onChange={(e) => setForm((f) => ({ ...f, [field.id]: e.target.value }))}
+          <Input id={`vnd-${field.id}`} type={field.type ?? "text"} value={form[field.id] ?? ""} onChange={(e) => setForm((f) => ({ ...f, [field.id]: e.target.value }))}
             placeholder={field.placeholder} className="w-full rounded-md border border-border bg-background text-sm px-2 py-1.5 min-h-[40px]" aria-label={field.label} />
         </div>
       ))}
@@ -3221,17 +3236,18 @@ function VendorSection({ vendors, onReload, normalizing, normalizeResult, onNorm
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">IBAN</th>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Cod bancar</th>
               <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Bancă</th>
+              <th className="text-left p-3 text-xs font-semibold text-muted-foreground">Patentă</th>
               <th className="text-right p-3 text-xs font-semibold text-muted-foreground sr-only">Acțiuni</th>
             </tr>
           </thead>
           <tbody>
             {vendors.length === 0 && (
-              <tr><td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">Niciun beneficiar salvat. Beneficiarii apar și automat, din cererile trimise.</td></tr>
+              <tr><td colSpan={8} className="p-6 text-center text-sm text-muted-foreground">Niciun beneficiar salvat. Beneficiarii apar și automat, din cererile trimise.</td></tr>
             )}
             {vendors.map((v) => (
               <tr key={v.id} className="border-t border-border">
                 {editingId === v.id ? (
-                  <td colSpan={7} className="p-0">{renderVendorForm(true)}</td>
+                  <td colSpan={8} className="p-0">{renderVendorForm(true)}</td>
                 ) : (
                   <>
                     <td className="p-3 text-foreground">{v.name}</td>
@@ -3240,6 +3256,30 @@ function VendorSection({ vendors, onReload, normalizing, normalizeResult, onNorm
                     <td className="p-3 text-foreground font-mono text-xs whitespace-nowrap">{v.iban || <span className="font-sans text-muted-foreground">—</span>}</td>
                     <td className="p-3 text-foreground font-mono text-xs whitespace-nowrap">{v.bicSwift || <span className="font-sans text-muted-foreground">—</span>}</td>
                     <td className="p-3 text-foreground">{v.bank || <span className="text-muted-foreground">—</span>}</td>
+                    {/* Patenta expirată se vede din LISTĂ, nu doar când deschizi beneficiarul:
+                        altfel nimeni nu află până la plată. */}
+                    <td className="p-3">{(() => {
+                      const st = patentStatus({ isPatentHolder: v.isPatentHolder, patentSeries: v.patentSeries, patentValidUntil: v.patentValidUntil });
+                      if (st.status === "none") return <span className="text-muted-foreground">—</span>;
+                      return (
+                        <span className={cn(
+                          "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap",
+                          st.status === "expired"
+                            ? "bg-destructive/10 text-destructive"
+                            : st.status === "valid"
+                              ? "bg-success/10 text-success"
+                              // text-foreground, nu text-warning-foreground: acela e ALB (pentru fundal
+                              // plin) și ar fi ilizibil pe galbenul transparent de aici.
+                              : "bg-warning/15 text-foreground",
+                        )} title={st.message ?? undefined}>
+                          {st.status === "expired"
+                            ? `Expirată ${formatPatentDate(v.patentValidUntil)}`
+                            : st.status === "unknown"
+                              ? "Fără termen"
+                              : `până la ${formatPatentDate(v.patentValidUntil)}`}
+                        </span>
+                      );
+                    })()}</td>
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button type="button" onClick={() => startEdit(v)}

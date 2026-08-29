@@ -387,6 +387,15 @@ async function main() {
     `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "urgent_reason_note" text`,
     `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "urgent_due_date" timestamp with time zone`,
     `CREATE INDEX IF NOT EXISTS "par_requests_urgent_idx" ON "par_requests" ("is_urgent")`,
+    // Migrarea 0150: patenta de întreprinzător a beneficiarului. Flagurile sunt NOT NULL DEFAULT
+    // false — healul generic le-ar adăuga fără modificatori, deci rândurile existente ar rămâne
+    // NULL și formularul ar citi „nedefinit" în loc de „fără patentă".
+    `ALTER TABLE "par_vendors" ADD COLUMN IF NOT EXISTS "is_patent_holder" boolean DEFAULT false NOT NULL`,
+    `ALTER TABLE "par_vendors" ADD COLUMN IF NOT EXISTS "patent_series" varchar(50)`,
+    `ALTER TABLE "par_vendors" ADD COLUMN IF NOT EXISTS "patent_valid_until" varchar(10)`,
+    `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_is_patent_holder" boolean DEFAULT false NOT NULL`,
+    `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_patent_series" varchar(50)`,
+    `ALTER TABLE "par_requests" ADD COLUMN IF NOT EXISTS "payee_patent_valid_until" varchar(10)`,
   ];
   for (const stmt of ENSURE_STATEMENTS) {
     try {

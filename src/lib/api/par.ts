@@ -57,6 +57,11 @@ export interface ParRequest {
   payeeBank: string | null;
   /** Feature 1: "fizic" (persoană fizică) | "juridic" (persoană juridică). Null = unset/legacy. */
   payeeType?: "fizic" | "juridic" | null;
+  /** Patenta de întreprinzător a beneficiarului, copiată pe cerere (vezi src/lib/par/patent.ts). */
+  payeeIsPatentHolder?: boolean | null;
+  payeePatentSeries?: string | null;
+  /** Ultima zi de valabilitate, ISO "YYYY-MM-DD". */
+  payeePatentValidUntil?: string | null;
   attachmentsPresent: boolean;
   attachmentsNote: string | null;
   currency: string;
@@ -261,6 +266,11 @@ export interface ParVendor {
   bankAccount?: string | null; bankAccountCurrency?: string | null;
   legalAddress?: string | null; contactName?: string | null; contactPhone?: string | null;
   contactEmail?: string | null; administratorName?: string | null;
+  /** Patentă de întreprinzător (doar persoane fizice) — vezi src/lib/par/patent.ts. */
+  isPatentHolder?: boolean | null;
+  patentSeries?: string | null;
+  /** Ultima zi de valabilitate, ISO "YYYY-MM-DD". */
+  patentValidUntil?: string | null;
 }
 
 // ─── PAR CRUD ─────────────────────────────────────────────────────────────────
@@ -296,6 +306,11 @@ export interface UpdateParPayload extends CreateParPayload {
   payee_bank?: string | null;
   /** Feature 1: persoană fizică sau juridică */
   payee_type?: "fizic" | "juridic" | null;
+  /** Patenta beneficiarului (persoană fizică) — se salvează și în registru la trimitere. */
+  payee_is_patent_holder?: boolean | null;
+  payee_patent_series?: string | null;
+  /** ISO "YYYY-MM-DD". */
+  payee_patent_valid_until?: string | null;
   attachments_present?: boolean;
   attachments_note?: string | null;
   // VM1-03: RON removed from supported currencies.
@@ -1126,6 +1141,7 @@ export async function createVendor(payload: {
   bank_account?: string | null; bank_account_currency?: string | null;
   legal_address?: string | null; contact_name?: string | null; contact_phone?: string | null;
   contact_email?: string | null; administrator_name?: string | null;
+  is_patent_holder?: boolean | null; patent_series?: string | null; patent_valid_until?: string | null;
 }): Promise<ParVendor> {
   return api("/api/par/vendors", { method: "POST", body: JSON.stringify(payload) });
 }
@@ -1135,6 +1151,7 @@ export async function updateVendor(id: string, payload: Partial<{
   bank_account?: string | null; bank_account_currency?: string | null;
   legal_address?: string | null; contact_name?: string | null; contact_phone?: string | null;
   contact_email?: string | null; administrator_name?: string | null;
+  is_patent_holder?: boolean | null; patent_series?: string | null; patent_valid_until?: string | null;
 }>): Promise<ParVendor> {
   return api(`/api/par/vendors/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
 }
@@ -1826,6 +1843,52 @@ export async function prefillParFromDocument(file: File): Promise<ParPrefillResu
   const formData = new FormData();
   formData.append("file", file);
   const res = await fetch("/api/par/ai-prefill", {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Ce fel de act personal al beneficiarului a fost încărcat. */
+export type ParPayeeDocKind = "buletin" | "rechizite" | "patenta" | "unknown";
+
+/** Rezultatul citirii unui act personal — completează DOAR blocul beneficiarului. */
+export interface ParPayeeDocResult {
+  kind: ParPayeeDocKind;
+  name: string | null;
+  idnp: string | null;
+  address: string | null;
+  iban: string | null;
+  bank: string | null;
+  bic: string | null;
+  patentSeries: string | null;
+  /** ISO "YYYY-MM-DD". */
+  patentValidUntil: string | null;
+  payeeType: "fizic" | "juridic" | null;
+  /** Numele câmpurilor chiar completate — interfața spune ce a luat din act. */
+  filled: string[];
+  isStub: boolean;
+  aiUnavailable?: "no_key" | "feature_disabled" | "budget_exceeded" | "api_error";
+}
+
+/**
+ * Citește actul PERSONAL al beneficiarului (buletin, rechizite bancare, patentă) și întoarce
+ * câmpurile lui. Separat de `prefillParFromDocument`, care citește actul comercial (factura,
+ * contractul) și decide cine încasează.
+ */
+export async function readPayeeDocument(
+  file: File,
+  kind: "buletin" | "rechizite" | "patenta" | "auto" = "auto",
+): Promise<ParPayeeDocResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("kind", kind);
+  const res = await fetch("/api/par/ai-prefill/payee-doc", {
     method: "POST",
     body: formData,
     credentials: "include",

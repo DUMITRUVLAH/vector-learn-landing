@@ -12,12 +12,14 @@ import {
   FileText, Loader2, Plus, Trash2, Upload, X, AlertCircle, CheckCircle2, Paperclip, Save,
   Search, Building2, BookmarkPlus, BookOpen, Sparkles, Info, Pencil,
   ClipboardList, ListChecks, AlignLeft, Wallet, ChevronDown, Globe, AlertTriangle,
+  IdCard, Landmark, ScrollText, CalendarClock,
   type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { useSession } from "@/hooks/useSession";
 import { useRouter } from "@/router/HashRouter";
 import { detectPayeeType, type PayeeType } from "@/lib/par/payeeTypeDetector";
+import { patentStatus, formatPatentDate, normalizePatentDate } from "@/lib/par/patent";
 import { plusDays } from "@/lib/par/dates";
 import { validateIban, validateFiscalId, isValidBic, type IbanValidation } from "@/lib/par/iban";
 import {
@@ -36,6 +38,7 @@ import {
   searchRegistryCompanies, getBudgetCodeBalance,
   listParTemplates, saveParTemplate, instantiateParTemplate,
   prefillParFromDocument,
+  readPayeeDocument,
   getLineItemSuggestions,
   formatMDL,
   type ParRequest, type ParLineItem, type ParAttachment,
@@ -384,6 +387,8 @@ export function ParCreateForm() {
   const [eventId, setEventId] = useState(""); // VM1-04
   const [budgetCodeId, setBudgetCodeId] = useState("");
   const [budgetCodeNote, setBudgetCodeNote] = useState("");
+  /** Adăugarea rapidă de cod bugetar apare la cerere — altfel ținea un rând gol în permanență. */
+  const [showNewBudgetCode, setShowNewBudgetCode] = useState(false);
   // Classification. chargeTo stays a fixed default; VF-501 makes purpose selectable so the
   // "obtain quotations" flow (RFQ + quotes) is reachable from the UI.
   const [purpose, setPurpose] = useState<ParPurpose>("execute_payment");
@@ -403,6 +408,29 @@ export function ParCreateForm() {
   const [payeeAdministrator, setPayeeAdministrator] = useState("");
   // Feature 1: persoană fizică vs juridică toggle
   const [payeeType, setPayeeType] = useState<PayeeType>("juridic");
+  /**
+   * Patenta de întreprinzător (doar persoană fizică). Termenul e ținut ca ISO "YYYY-MM-DD",
+   * adică exact formatul lui `<input type="date">` și al coloanei din registru — nicio conversie
+   * pe drum, deci nicio dată care se schimbă cu o zi în funcție de fusul orar.
+   */
+  const [payeeIsPatentHolder, setPayeeIsPatentHolder] = useState(false);
+  const [payeePatentSeries, setPayeePatentSeries] = useState("");
+  const [payeePatentValidUntil, setPayeePatentValidUntil] = useState("");
+  /** Starea patentei — un singur calcul, folosit și la chenar, și la text (src/lib/par/patent.ts). */
+  const patentCheck = useMemo(
+    () => patentStatus({
+      isPatentHolder: payeeIsPatentHolder,
+      patentSeries: payeePatentSeries,
+      patentValidUntil: payeePatentValidUntil,
+    }),
+    [payeeIsPatentHolder, payeePatentSeries, payeePatentValidUntil],
+  );
+  /** Încărcarea actelor personale ale beneficiarului (buletin / rechizite / patentă). */
+  const [payeeDocBusy, setPayeeDocBusy] = useState<"buletin" | "rechizite" | "patenta" | null>(null);
+  const [payeeDocNote, setPayeeDocNote] = useState<string | null>(null);
+  const [payeeDocError, setPayeeDocError] = useState<string | null>(null);
+  const payeeDocKindRef = useRef<"buletin" | "rechizite" | "patenta">("buletin");
+  const payeeDocFileRef = useRef<HTMLInputElement>(null);
   /**
    * Analiza IBAN-ului tastat — o singură sursă pentru: eroarea de câmp, bifa de „valid",
    * țara beneficiarului (care decide formatul codului fiscal) și cerințele de plată externă.
@@ -595,6 +623,9 @@ export function ParCreateForm() {
           setPayeeIban(existing.payeeIban ?? "");
           setPayeeBank(existing.payeeBank ?? "");
           setPayeeType((existing.payeeType as PayeeType | null) ?? "juridic");
+          setPayeeIsPatentHolder(!!existing.payeeIsPatentHolder);
+          setPayeePatentSeries(existing.payeePatentSeries ?? "");
+          setPayeePatentValidUntil(existing.payeePatentValidUntil ?? "");
           // Reveal the payee fields on edit when the draft already has a beneficiary.
           if (existing.vendorId || existing.payeeName || existing.payeeIban) setPayeeMethod("manual");
           setAttachmentsPresent(!!existing.attachmentsPresent);
@@ -630,6 +661,9 @@ export function ParCreateForm() {
       payee_name: payeeName || null, payee_idnp: payeeIdnp || null,
       payee_iban: payeeIban || null, payee_bank: payeeBank || null,
       payee_type: payeeType,
+      payee_is_patent_holder: payeeIsPatentHolder,
+      payee_patent_series: payeePatentSeries || null,
+      payee_patent_valid_until: payeePatentValidUntil || null,
       attachments_present: attachmentsPresent, attachments_note: attachmentsNote || null,
       currency,
       is_urgent: isUrgent,
@@ -639,7 +673,8 @@ export function ParCreateForm() {
     });
   }, [dateOfRequest, requestorTitle, requestorCode, payerId, departmentId, dateNeeded, projectId, eventId, budgetCodeId,
       budgetCodeNote, purpose, chargeTo, endUse, vendorId, payeeName,
-      payeeIdnp, payeeIban, payeeBank, payeeType, attachmentsPresent, attachmentsNote, currency,
+      payeeIdnp, payeeIban, payeeBank, payeeType, payeeIsPatentHolder, payeePatentSeries,
+      payeePatentValidUntil, attachmentsPresent, attachmentsNote, currency,
       isUrgent, urgentReason, urgentReasonNote, urgentDueDate]);
 
   const ensureDraft = useCallback(async (): Promise<string> => {
@@ -722,6 +757,72 @@ export function ParCreateForm() {
   };
 
   // VM1-13: AI Prefill — upload document, extract fields, propose to user
+  /**
+   * Actele PERSONALE ale beneficiarului: buletinul dă numele și IDNP-ul, certificatul de
+   * rechizite dă IBAN-ul/banca, patenta dă seria și TERMENUL.
+   *
+   * ENRICH, NU CLOBBER: completează doar câmpurile goale — ce a scris sau a corectat omul rămâne
+   * cum l-a lăsat. Singura excepție e patenta: ea se prelungește, deci termenul din actul proaspăt
+   * încărcat îl înlocuiește pe cel vechi (altfel avertismentul de expirare ar rămâne aprins
+   * degeaba, după ce patenta chiar a fost prelungită).
+   */
+  const handlePayeeDocFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const kind = payeeDocKindRef.current;
+    setPayeeDocError(null);
+    setPayeeDocNote(null);
+    setPayeeDocBusy(kind);
+    try {
+      const r = await readPayeeDocument(file, kind);
+      const took: string[] = [];
+      const fill = (
+        value: string | null,
+        current: string,
+        set: (v: string) => void,
+        label: string,
+      ) => {
+        if (!value || current.trim()) return;
+        set(value);
+        took.push(label);
+      };
+      fill(r.name, payeeName, setPayeeName, "numele");
+      fill(r.idnp, payeeIdnp, setPayeeIdnp, "IDNP-ul");
+      fill(r.address, payeeLegalAddress, setPayeeLegalAddress, "adresa");
+      fill(r.iban, payeeIban, setPayeeIban, "IBAN-ul");
+      fill(r.bank, payeeBank, setPayeeBank, "banca");
+      fill(r.bic, payeeBic, setPayeeBic, "codul bancar");
+      if (r.patentSeries || r.patentValidUntil) {
+        setPayeeIsPatentHolder(true);
+        setPayeeType("fizic");
+        if (r.patentSeries) { setPayeePatentSeries(r.patentSeries); took.push("seria patentei"); }
+        if (r.patentValidUntil) { setPayeePatentValidUntil(r.patentValidUntil); took.push("termenul patentei"); }
+      }
+      // Un act personal descrie o PERSOANĂ: un buletin nu poate aparține unei companii.
+      if (kind === "buletin") setPayeeType("fizic");
+      // Beneficiarul citit din act e cel introdus acum, nu cel ales anterior din registru.
+      if (took.length > 0 && payeeMethod !== "saved") setVendorId("");
+      setPayeeDocNote(
+        took.length > 0
+          ? `Am completat: ${took.join(", ")}. Verifică valorile înainte de trimitere.`
+          : r.filled.length > 0
+            ? "Câmpurile erau deja completate — nu am suprascris nimic."
+            : "Nu am putut citi date din acest act. Completează manual câmpurile.",
+      );
+    } catch (err) {
+      setPayeeDocError(err instanceof Error ? err.message : "Actul nu a putut fi citit.");
+    } finally {
+      setPayeeDocBusy(null);
+    }
+  };
+
+  /** Deschide selectorul de fișier pentru un anumit tip de act. */
+  const pickPayeeDoc = (kind: "buletin" | "rechizite" | "patenta") => {
+    payeeDocKindRef.current = kind;
+    payeeDocFileRef.current?.click();
+  };
+
   const handleAiPrefillFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1104,6 +1205,11 @@ export function ParCreateForm() {
       setPayeeBic(v.bicSwift ?? "");
       setPayeeLegalAddress(v.legalAddress ?? "");
       setPayeeAdministrator(v.administratorName ?? "");
+      // Patenta vine din registru odată cu rechizitele. Aici se vede dacă termenul salvat a
+      // expirat între timp — motivul pentru care e ținut pe beneficiar, nu doar pe cerere.
+      setPayeeIsPatentHolder(!!v.isPatentHolder);
+      setPayeePatentSeries(v.patentSeries ?? "");
+      setPayeePatentValidUntil(v.patentValidUntil ?? "");
       // Feature 1: auto-detect from vendor name
       const detected = detectPayeeType(v.name);
       if (detected) setPayeeType(detected);
@@ -1128,6 +1234,7 @@ export function ParCreateForm() {
       setBudgetCodes((prev) => [...prev, created]);
       setBudgetCodeId(created.id);
       setNewBudgetCode("");
+      setShowNewBudgetCode(false);
     } catch (e) { setError(e instanceof Error ? e.message : "Codul bugetar nu a putut fi adăugat"); }
   };
 
@@ -1503,51 +1610,71 @@ export function ParCreateForm() {
             </div>
           </FieldGroup>
 
-          {/* Buget — codul bugetar cu nota lui. */}
+          {/* Buget — codul bugetar cu nota lui.
+              Compactat (cerere owner): înainte, „Cod bugetar" stivuia căutare + listă + adăugare
+              rapidă + sold + link de administrare unul sub altul, într-o grilă de 3 coloane din
+              care 2 rămâneau goale — un bloc înalt și aproape gol. Acum: două coloane, adăugarea
+              rapidă apare doar când o ceri, iar soldul și linkul stau pe un singur rând sub ele. */}
           <FieldGroup label="Buget">
-            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
               <Field label="Cod bugetar" htmlFor="bc">
                 <input className={inputCls} value={budgetSearch} onChange={(e) => setBudgetSearch(e.target.value)} placeholder="Caută după cod sau denumire…" aria-label="Caută cod bugetar" />
                 <Select id="bc" className="w-full" value={budgetCodeId} onChange={(e) => setBudgetCodeId(e.target.value)} aria-label="Cod bugetar">
                   <option value="">— Selectează —</option>
                   {budgetCodes.filter((b) => !!payerId && b.payerId === payerId && (!b.projectId || (!!projectId && b.projectId === projectId)) && (!budgetSearch.trim() || `${b.code} ${b.name}`.toLocaleLowerCase("ro").includes(budgetSearch.trim().toLocaleLowerCase("ro")))).map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
                 </Select>
-                {payerId && <div className="flex gap-2">
-                  <input className={inputCls} value={newBudgetCode} onChange={(e) => setNewBudgetCode(e.target.value)} placeholder="Cod bugetar nou" aria-label="Cod bugetar nou" />
-                  <button type="button" onClick={addQuickBudgetCode} className="px-3 rounded-md border border-input hover:bg-muted"><Plus className="h-4 w-4" /></button>
-                </div>}
-                {/* Feature 2: budget balance */}
-                {budgetCodeId && (
-                  budgetBalanceLoading ? (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />Se calculează soldul...
-                    </span>
-                  ) : budgetBalance ? (
-                    <span className={cn(
-                      "text-xs font-medium flex items-center gap-1",
-                      budgetBalance.fxUnavailable
-                        ? "text-muted-foreground"
-                        : budgetBalance.availableCents <= 0 && budgetBalance.allocatedCents > 0
-                          ? "text-destructive"
-                          : "text-success"
-                    )}>
-                      {budgetBalance.fxUnavailable
-                        ? "Plafon în valută — curs BNM indisponibil, soldul nu poate fi calculat"
-                        : budgetBalance.allocatedCents > 0
-                          ? `Disponibil: ${fmtMoney(budgetBalance.availableOriginalCents ?? budgetBalance.availableCents, budgetBalance.currency ?? "MDL")} din ${fmtMoney(budgetBalance.allocatedOriginalCents ?? budgetBalance.allocatedCents, budgetBalance.currency ?? "MDL")}`
-                          : "Fără plafon alocat"}
-                    </span>
-                  ) : null
-                )}
-                {isAdmin && (
-                  <a href="#/business/par/admin" className="text-xs text-primary hover:underline w-fit">
-                    Gestionează codurile / departamentele / proiectele în Admin →
-                  </a>
-                )}
               </Field>
               <Field label="Notă cod bugetar" htmlFor="bcn">
                 <input id="bcn" type="text" placeholder="ex. conform planificării lunare" className={inputCls} value={budgetCodeNote} onChange={(e) => setBudgetCodeNote(e.target.value)} />
               </Field>
+            </div>
+
+            {/* Un singur rând pentru tot ce e secundar: soldul, adăugarea rapidă, administrarea. */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+              {budgetCodeId && (
+                budgetBalanceLoading ? (
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden />Se calculează soldul...
+                  </span>
+                ) : budgetBalance ? (
+                  <span className={cn(
+                    "font-medium flex items-center gap-1",
+                    budgetBalance.fxUnavailable
+                      ? "text-muted-foreground"
+                      : budgetBalance.availableCents <= 0 && budgetBalance.allocatedCents > 0
+                        ? "text-destructive"
+                        : "text-success"
+                  )}>
+                    {budgetBalance.fxUnavailable
+                      ? "Plafon în valută — curs BNM indisponibil, soldul nu poate fi calculat"
+                      : budgetBalance.allocatedCents > 0
+                        ? `Disponibil: ${fmtMoney(budgetBalance.availableOriginalCents ?? budgetBalance.availableCents, budgetBalance.currency ?? "MDL")} din ${fmtMoney(budgetBalance.allocatedOriginalCents ?? budgetBalance.allocatedCents, budgetBalance.currency ?? "MDL")}`
+                        : "Fără plafon alocat"}
+                  </span>
+                ) : null
+              )}
+              {payerId && (
+                showNewBudgetCode ? (
+                  <span className="flex items-center gap-2">
+                    <input className={cn(inputCls, "h-9 w-44")} value={newBudgetCode} autoFocus
+                      onChange={(e) => setNewBudgetCode(e.target.value)} placeholder="Cod bugetar nou" aria-label="Cod bugetar nou" />
+                    <button type="button" onClick={addQuickBudgetCode} aria-label="Adaugă codul bugetar"
+                      className="px-3 py-2 rounded-md border border-input hover:bg-muted min-h-[44px]"><Plus className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => { setShowNewBudgetCode(false); setNewBudgetCode(""); }}
+                      className="text-muted-foreground hover:text-foreground min-h-[44px] px-1">Renunță</button>
+                  </span>
+                ) : (
+                  <button type="button" onClick={() => setShowNewBudgetCode(true)}
+                    className="inline-flex items-center gap-1 text-primary hover:underline min-h-[44px]">
+                    <Plus className="h-3.5 w-3.5" aria-hidden />Cod bugetar nou
+                  </button>
+                )
+              )}
+              {isAdmin && (
+                <a href="#/business/par/admin" className="text-primary hover:underline">
+                  Gestionează codurile / departamentele / proiectele în Admin →
+                </a>
+              )}
             </div>
           </FieldGroup>
         </Section>
@@ -1828,6 +1955,52 @@ export function ParCreateForm() {
               aria-label="Alege document pentru analiză AI"
               onChange={handleAiPrefillFile}
             />
+
+            {/* Actele PERSONALE ale beneficiarului, separat de actul comercial de mai sus.
+                O persoană fizică nu are factură cu rechizite: are buletin, un certificat bancar
+                și (dacă lucrează pe patentă) patenta. Fiecare completează altceva, deci fiecare
+                are butonul lui — un singur „încarcă document" le-ar citi pe toate mai prost. */}
+            <div className="rounded-lg border border-border bg-background/70 p-3 space-y-2">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                <IdCard className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                Beneficiar persoană fizică? Încarcă actele lui — completez câmpurile din ele.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {([
+                  { kind: "buletin", icon: IdCard, label: "Buletin", hint: "nume, IDNP, adresă" },
+                  { kind: "rechizite", icon: Landmark, label: "Rechizite bancare", hint: "IBAN, bancă, cod bancar" },
+                  { kind: "patenta", icon: ScrollText, label: "Patentă", hint: "serie + termen" },
+                ] as const).map((d) => (
+                  <button
+                    key={d.kind}
+                    type="button"
+                    onClick={() => pickPayeeDoc(d.kind)}
+                    disabled={payeeDocBusy !== null}
+                    className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50 min-h-[44px]"
+                  >
+                    {payeeDocBusy === d.kind
+                      ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden />
+                      : <d.icon className="h-4 w-4 shrink-0 text-primary" aria-hidden />}
+                    <span className="min-w-0">
+                      <span className="block font-medium text-foreground truncate">{d.label}</span>
+                      <span className="block text-xs text-muted-foreground truncate">{d.hint}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {payeeDocNote && (
+                <p className="flex items-start gap-1.5 text-xs text-muted-foreground" role="status">
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
+                  <span>{payeeDocNote}</span>
+                </p>
+              )}
+              {payeeDocError && (
+                <p className="flex items-start gap-1.5 text-xs text-destructive" role="alert">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span>{payeeDocError}</span>
+                </p>
+              )}
+            </div>
           </div>
           )}
 
@@ -2176,6 +2349,90 @@ export function ParCreateForm() {
                   </span>
                 </p>
               )}
+              {/* Patenta de întreprinzător — există DOAR la persoană fizică. Termenul e scurt
+                  (se prelungește lunar), deci starea lui se arată aici, lângă câmp, nu într-un
+                  raport pe care nu-l deschide nimeni înainte de plată. */}
+              {payeeType === "fizic" && (
+                <div className={cn(
+                  "rounded-lg border p-3 space-y-2",
+                  patentCheck.status === "expired"
+                    ? "border-destructive/50 bg-destructive/5"
+                    : patentCheck.status === "expiring" || patentCheck.status === "unknown"
+                      ? "border-warning/50 bg-warning/10"
+                      : "border-border bg-muted/30",
+                )}>
+                  <label className="flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-input accent-primary"
+                      checked={payeeIsPatentHolder}
+                      onChange={(e) => setPayeeIsPatentHolder(e.target.checked)}
+                    />
+                    <ScrollText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                    Lucrează în baza patentei de întreprinzător
+                  </label>
+                  {payeeIsPatentHolder && (
+                    <>
+                      <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <Field label="Seria și nr. patentei" htmlFor="ppser" hint="ex. AA 0123456">
+                          <input id="ppser" type="text" maxLength={50} placeholder="AA 0123456" className={inputCls}
+                            value={payeePatentSeries} onChange={(e) => setPayeePatentSeries(e.target.value)} />
+                        </Field>
+                        <Field label="Valabilă până la" htmlFor="ppval" hint="ultima zi de valabilitate">
+                          <input id="ppval" type="date" className={inputCls}
+                            value={payeePatentValidUntil}
+                            onChange={(e) => setPayeePatentValidUntil(normalizePatentDate(e.target.value) ?? e.target.value)} />
+                        </Field>
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={() => pickPayeeDoc("patenta")}
+                            disabled={payeeDocBusy !== null}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-muted disabled:opacity-50 min-h-[44px]"
+                          >
+                            {payeeDocBusy === "patenta"
+                              ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                              : <Upload className="h-4 w-4" aria-hidden />}
+                            Încarcă patenta
+                          </button>
+                        </div>
+                      </div>
+                      {patentCheck.message && (
+                        <p
+                          role={patentCheck.status === "expired" ? "alert" : "status"}
+                          className={cn(
+                            "flex items-start gap-1.5 text-xs",
+                            patentCheck.status === "expired"
+                              ? "text-destructive font-medium"
+                              : patentCheck.status === "valid"
+                                ? "text-muted-foreground"
+                                : "text-foreground",
+                          )}
+                        >
+                          {patentCheck.status === "expired" ? (
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                          ) : patentCheck.status === "valid" ? (
+                            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
+                          ) : (
+                            <CalendarClock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
+                          )}
+                          <span>{patentCheck.message}</span>
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              {/* Un singur input de fișier pentru toate actele personale — tipul îl dă butonul
+                  apăsat (payeeDocKindRef), ca butoanele să poată trăi în două locuri diferite. */}
+              <input
+                ref={payeeDocFileRef}
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.docx,.txt"
+                className="sr-only"
+                aria-label="Alege actul beneficiarului (buletin, rechizite sau patentă)"
+                onChange={handlePayeeDocFile}
+              />
               <Collapsible
                 summary="Detalii bancă & reprezentant"
                 defaultOpen

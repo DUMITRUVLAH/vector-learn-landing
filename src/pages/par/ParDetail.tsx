@@ -72,6 +72,7 @@ import {
 import { downloadParPdf } from "@/lib/parPdf";
 import { openParAttachment } from "@/lib/parFiles";
 import { validateIban } from "@/lib/par/iban";
+import { patentStatus, formatPatentDate } from "@/lib/par/patent";
 import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
 import { parAccessMessage, type ParAccessMessage } from "@/lib/par/accessMessage";
 import { ApiError } from "@/lib/api";
@@ -791,6 +792,19 @@ export function ParDetailPage() {
     [par?.payeeIban]
   );
   const payeeIbanWarning = payeeIbanInfo && !payeeIbanInfo.ok ? payeeIbanInfo.message : null;
+  /**
+   * Patenta beneficiarului, verificată la DESCHIDEREA cererii, nu la completarea ei: între
+   * trimitere și plată pot trece săptămâni, iar patenta se prelungește lunar. Aprobatorul și
+   * finanțele trebuie să vadă starea de AZI, nu pe cea de la depunere.
+   */
+  const payeePatent = useMemo(
+    () => patentStatus({
+      isPatentHolder: par?.payeeIsPatentHolder,
+      patentSeries: par?.payeePatentSeries,
+      patentValidUntil: par?.payeePatentValidUntil,
+    }),
+    [par?.payeeIsPatentHolder, par?.payeePatentSeries, par?.payeePatentValidUntil]
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // De ce a picat încărcarea, în cuvinte (serverul trimite `reason` + contul curent).
@@ -1048,7 +1062,44 @@ export function ParDetailPage() {
               ) : null}
             />
             <Field label="Bancă" value={par.payeeBank} />
+            {payeePatent.status !== "none" && (
+              <Field
+                label="Patentă de întreprinzător"
+                value={
+                  <span className="flex flex-col gap-0.5">
+                    <span>{par.payeePatentSeries || "serie necunoscută"}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {par.payeePatentValidUntil
+                        ? `valabilă până la ${formatPatentDate(par.payeePatentValidUntil)}`
+                        : "fără termen completat"}
+                    </span>
+                  </span>
+                }
+              />
+            )}
           </dl>
+          {/* Patenta expirată e o problemă a PLĂTITORULUI, nu a beneficiarului — de aceea
+              avertismentul stă aici, la aprobatori și la finanțe, nu doar în formular. */}
+          {payeePatent.message && payeePatent.status !== "valid" && (
+            <p
+              className={cn(
+                "mt-3 flex items-start gap-1.5 rounded-lg border px-3 py-2 text-xs text-foreground",
+                payeePatent.status === "expired"
+                  ? "border-destructive/40 bg-destructive/10"
+                  : "border-warning/40 bg-warning/10"
+              )}
+              role={payeePatent.status === "expired" ? "alert" : "status"}
+            >
+              <AlertTriangle
+                className={cn(
+                  "mt-0.5 h-3.5 w-3.5 shrink-0",
+                  payeePatent.status === "expired" ? "text-destructive" : "text-warning"
+                )}
+                aria-hidden
+              />
+              <span>{payeePatent.message}</span>
+            </p>
+          )}
           {payeeIbanWarning && (
             <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground" role="status">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />

@@ -45,6 +45,7 @@ import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
+import { normalizePatentDate } from "../../src/lib/par/patent";
 import { generateRequestNo } from "../lib/par/requestNo";
 import { validateIban, normalizeIban } from "../lib/par/validators";
 import { recalcParTotal } from "../lib/par/totals";
@@ -128,6 +129,13 @@ const updateParSchema = z.object({
   payee_bank: z.string().max(300).optional().nullable(),
   /** Feature 1: "fizic" (persoană fizică) | "juridic" (persoană juridică) */
   payee_type: z.enum(["fizic", "juridic"]).optional().nullable(),
+  /**
+   * Patenta de întreprinzător a beneficiarului (doar persoană fizică). Termenul se normalizează
+   * la ISO la scriere: comparăm date, nu șiruri scrise fiecare altfel.
+   */
+  payee_is_patent_holder: z.boolean().optional().nullable(),
+  payee_patent_series: z.string().max(50).optional().nullable(),
+  payee_patent_valid_until: z.string().max(20).optional().nullable(),
   // Section 13
   attachments_present: z.boolean().optional(),
   attachments_note: z.string().max(2000).optional().nullable(),
@@ -415,6 +423,9 @@ parRoutes.post("/:id/duplicate", async (c) => {
       payeeIdnp: canSeePayee ? source.payeeIdnp : null,
       payeeIban: canSeePayee ? source.payeeIban : null,
       payeeBank: canSeePayee ? source.payeeBank : null,
+      payeeIsPatentHolder: canSeePayee ? source.payeeIsPatentHolder : false,
+      payeePatentSeries: canSeePayee ? source.payeePatentSeries : null,
+      payeePatentValidUntil: canSeePayee ? source.payeePatentValidUntil : null,
       attachmentsPresent: false,
       currency: source.currency,
       totalEstimatedCents: 0,
@@ -1025,6 +1036,11 @@ parRoutes.get("/:id", async (c) => {
         payeeIdnp: null,
         payeeIban: null,
         payeeBank: null,
+        // Patenta e tot dată personală a beneficiarului (serie + termen) — se ascunde împreună
+        // cu restul rechizitelor, altfel redactarea GDPR ar avea o portiță.
+        payeeIsPatentHolder: false,
+        payeePatentSeries: null,
+        payeePatentValidUntil: null,
       };
 
   // PAR-109: body hash integrity check on display
@@ -1233,6 +1249,9 @@ parRoutes.patch(
       payeeIdnp?: string | null;
       payeeIban?: string | null;
       payeeBank?: string | null;
+      payeeIsPatentHolder?: boolean;
+      payeePatentSeries?: string | null;
+      payeePatentValidUntil?: string | null;
     } = {};
 
     if (body.vendor_id) {
@@ -1252,6 +1271,11 @@ parRoutes.patch(
         payeeIdnp: vendor.idnp ?? null,
         payeeIban: vendor.iban ?? null,
         payeeBank: vendor.bank ?? null,
+        // Patenta vine din registru odată cu restul rechizitelor: dacă e expirată, cererea
+        // poartă termenul cu ea și avertismentul apare la aprobator, nu doar la cel care scrie.
+        payeeIsPatentHolder: vendor.isPatentHolder ?? false,
+        payeePatentSeries: vendor.patentSeries ?? null,
+        payeePatentValidUntil: vendor.patentValidUntil ?? null,
       };
     } else if (body.vendor_id === null) {
       // Explicitly clearing vendor
@@ -1306,6 +1330,15 @@ parRoutes.patch(
     }
     // Feature 1: payee_type is always accepted regardless of vendor_id
     if (body.payee_type !== undefined) updateData.payeeType = body.payee_type;
+    // Patenta: acceptată indiferent de vendor_id, ca payee_type — cel care completează poate
+    // avea o patentă prelungită mai nouă decât cea din registru, iar snapshotul de mai jos o
+    // suprascrie doar dacă tocmai s-a ales un beneficiar salvat.
+    if (body.payee_is_patent_holder !== undefined)
+      updateData.payeeIsPatentHolder = body.payee_is_patent_holder ?? false;
+    if (body.payee_patent_series !== undefined)
+      updateData.payeePatentSeries = body.payee_patent_series;
+    if (body.payee_patent_valid_until !== undefined)
+      updateData.payeePatentValidUntil = normalizePatentDate(body.payee_patent_valid_until);
 
     // Merge vendor snapshot (overrides inline if vendor_id was provided)
     if (Object.keys(vendorSnapshot).length > 0) {
@@ -1317,6 +1350,12 @@ parRoutes.patch(
         updateData.payeeIdnp = vendorSnapshot.payeeIdnp;
       if (vendorSnapshot.payeeIban !== undefined)
         updateData.payeeIban = vendorSnapshot.payeeIban;
+      if (vendorSnapshot.payeeIsPatentHolder !== undefined)
+        updateData.payeeIsPatentHolder = vendorSnapshot.payeeIsPatentHolder;
+      if (vendorSnapshot.payeePatentSeries !== undefined)
+        updateData.payeePatentSeries = vendorSnapshot.payeePatentSeries;
+      if (vendorSnapshot.payeePatentValidUntil !== undefined)
+        updateData.payeePatentValidUntil = vendorSnapshot.payeePatentValidUntil;
       if (vendorSnapshot.payeeBank !== undefined)
         updateData.payeeBank = vendorSnapshot.payeeBank;
     }

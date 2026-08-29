@@ -89,6 +89,9 @@ export async function autosaveVendorFromPar(
         payeeIban: parRequests.payeeIban,
         payeeBank: parRequests.payeeBank,
         payeeType: parRequests.payeeType,
+        payeeIsPatentHolder: parRequests.payeeIsPatentHolder,
+        payeePatentSeries: parRequests.payeePatentSeries,
+        payeePatentValidUntil: parRequests.payeePatentValidUntil,
       })
       .from(parRequests)
       .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
@@ -105,12 +108,20 @@ export async function autosaveVendorFromPar(
     const bank = (split.bank ?? "").trim();
     const bicSwift = split.bankCode ?? "";
     const vatCode = split.vatCode ?? "";
+    // Patenta merge în registru ca dată vie, nu ca istorie: termenul cel mai NOU e cel corect,
+    // fiindcă patenta se prelungește. Vezi `enrichVendor`, unde e singura excepție de la
+    // regula „completează doar ce lipsește".
+    const patent = {
+      isPatentHolder: !!par.payeeIsPatentHolder,
+      series: (par.payeePatentSeries ?? "").trim(),
+      validUntil: (par.payeePatentValidUntil ?? "").trim(),
+    };
     // A nameless payee is not a registry entry — there'd be nothing to search for later.
     if (!name) return { outcome: "skipped", vendorId: par.vendorId ?? null };
 
     // Already linked to a saved vendor → top up whatever that record is missing.
     if (par.vendorId) {
-      const updated = await enrichVendor(par.vendorId, tenantId, { iban, idnp, bank, bicSwift, vatCode });
+      const updated = await enrichVendor(par.vendorId, tenantId, { iban, idnp, bank, bicSwift, vatCode, patent });
       return { outcome: updated ? "updated" : "matched", vendorId: par.vendorId };
     }
 
@@ -132,7 +143,7 @@ export async function autosaveVendorFromPar(
       candidates.find((v) => normalizeName(v.name) === wantedName);
 
     if (match) {
-      const updated = await enrichVendor(match.id, tenantId, { iban, idnp, bank, bicSwift, vatCode });
+      const updated = await enrichVendor(match.id, tenantId, { iban, idnp, bank, bicSwift, vatCode, patent });
       await linkVendor(parId, tenantId, match.id);
       return { outcome: updated ? "updated" : "matched", vendorId: match.id };
     }
@@ -149,6 +160,9 @@ export async function autosaveVendorFromPar(
         vatCode: vatCode || null,
         // par_requests stores "fizic"/"juridic"; par_vendors speaks individual/company.
         kind: par.payeeType === "fizic" ? "individual" : "company",
+        isPatentHolder: patent.isPatentHolder,
+        patentSeries: patent.series || null,
+        patentValidUntil: patent.validUntil || null,
         active: true,
       })
       .returning({ id: parVendors.id });
@@ -166,7 +180,14 @@ export async function autosaveVendorFromPar(
 async function enrichVendor(
   vendorId: string,
   tenantId: string,
-  incoming: { iban: string; idnp: string; bank: string; bicSwift: string; vatCode: string }
+  incoming: {
+    iban: string;
+    idnp: string;
+    bank: string;
+    bicSwift: string;
+    vatCode: string;
+    patent?: { isPatentHolder: boolean; series: string; validUntil: string };
+  }
 ): Promise<boolean> {
   const [row] = await db
     .select({
@@ -175,18 +196,30 @@ async function enrichVendor(
       bank: parVendors.bank,
       bicSwift: parVendors.bicSwift,
       vatCode: parVendors.vatCode,
+      patentValidUntil: parVendors.patentValidUntil,
     })
     .from(parVendors)
     .where(and(eq(parVendors.id, vendorId), eq(parVendors.tenantId, tenantId)));
   if (!row) return false;
 
-  const patch: Record<string, string | Date> = {};
+  const patch: Record<string, string | Date | boolean> = {};
   // Doar câmpurile goale se completează — ce a curat un om rămâne cum l-a lăsat.
   if (!row.iban && incoming.iban) patch.iban = incoming.iban;
   if (!row.idnp && incoming.idnp) patch.idnp = incoming.idnp;
   if (!row.bank && incoming.bank) patch.bank = incoming.bank;
   if (!row.bicSwift && incoming.bicSwift) patch.bicSwift = incoming.bicSwift;
   if (!row.vatCode && incoming.vatCode) patch.vatCode = incoming.vatCode;
+  // EXCEPȚIA de la „doar câmpurile goale": patenta se prelungește, deci un termen mai NOU pe
+  // cerere trebuie să înlocuiască termenul vechi din registru. Altfel registrul ar rămâne
+  // pentru totdeauna cu prima patentă și ar striga „expirată" la fiecare plată următoare.
+  const inc = incoming.patent;
+  if (inc?.isPatentHolder) {
+    patch.isPatentHolder = true;
+    if (inc.series) patch.patentSeries = inc.series;
+    if (inc.validUntil && (!row.patentValidUntil || inc.validUntil > row.patentValidUntil)) {
+      patch.patentValidUntil = inc.validUntil;
+    }
+  }
   if (Object.keys(patch).length === 0) return false;
   patch.updatedAt = new Date();
   await db

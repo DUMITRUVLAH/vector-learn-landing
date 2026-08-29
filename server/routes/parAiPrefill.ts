@@ -21,6 +21,8 @@ import { extractParParties } from "../lib/ai/parExtractor";
 import { choosePayee } from "../lib/par/choosePayee";
 import { parseAmountInWords } from "../lib/par/amountInWords";
 import type { PayeeCandidate } from "../lib/par/parPartyTypes";
+import { extractPayeeDoc } from "../lib/ai/payeeDocExtractor";
+import type { PayeeDocKind } from "../lib/par/payeeDocStub";
 import { extractPdfText } from "../lib/ai/pdfText";
 import { extractOfficeText } from "../lib/ai/officeText";
 import { db } from "../db/client";
@@ -178,35 +180,11 @@ parAiPrefillRoutes.post(
       return c.json({ error: "Fișierul este prea mare (max 8 MB)." }, 413);
     }
 
-    const buf = Buffer.from(await f.arrayBuffer());
-
-    // Extract text from the file — ANY format the user might have of an act.
-    //   image        → sent to the model as an image (vision)
-    //   PDF          → text layer; a SCANNED pdf has none, so the PDF itself is sent to the model
-    //   docx / xlsx  → real text extraction (these are ZIPs: toString("utf8") produced garbage)
-    //   csv / txt    → plain text
-    // A file we cannot read as text is still forwarded to the model as an attachment rather than
-    // failing — that is what "orice tip de act" means in practice.
-    let rawText = "";
-    let imageDataUrl: string | undefined;
-    let fileDataUrl: string | undefined;
-    const isPdf = mimeType === "application/pdf" || /\.pdf$/i.test(fileName);
-
-    try {
-      if (mimeType.startsWith("image/")) {
-        imageDataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
-      } else if (isPdf) {
-        rawText = await extractPdfText(buf);
-        if (rawText.trim().length < MIN_USABLE_TEXT_CHARS) {
-          // Scanned / photographed act: no text layer. The provider renders the pages itself.
-          fileDataUrl = `data:application/pdf;base64,${buf.toString("base64")}`;
-        }
-      } else {
-        rawText = await extractOfficeText(buf, fileName, mimeType);
-      }
-    } catch {
-      rawText = "";
-    }
+    const { rawText, imageDataUrl, fileDataUrl } = await readUploadedDoc(
+      Buffer.from(await f.arrayBuffer()),
+      fileName,
+      mimeType,
+    );
 
     // Audit/AI-usage log references this via a `uuid` entity_id column, so it MUST be a real UUID.
     const prefillId = randomUUID();
@@ -327,6 +305,148 @@ parAiPrefillRoutes.post(
       isStub: extraction.isStub,
     };
 
+    return c.json(result);
+  },
+);
+
+// ─── citirea fișierului încărcat ──────────────────────────────────────────────
+
+/**
+ * Scoate din fișier ce poate citi modelul — ORICE format în care omul are actul.
+ *   imagine      → trimisă modelului ca imagine (vision)
+ *   PDF          → stratul de text; un PDF SCANAT nu are, deci se trimite PDF-ul însuși
+ *   docx / xlsx  → extragere reală de text (sunt ZIP-uri: toString("utf8") dădea gunoi)
+ *   csv / txt    → text simplu
+ * Un fișier pe care nu-l putem citi ca text tot ajunge la model ca atașament, în loc să eșueze
+ * — asta înseamnă „orice tip de act" în practică.
+ */
+async function readUploadedDoc(
+  buf: Buffer,
+  fileName: string,
+  mimeType: string,
+): Promise<{ rawText: string; imageDataUrl?: string; fileDataUrl?: string }> {
+  let rawText = "";
+  let imageDataUrl: string | undefined;
+  let fileDataUrl: string | undefined;
+  const isPdf = mimeType === "application/pdf" || /\.pdf$/i.test(fileName);
+  try {
+    if (mimeType.startsWith("image/")) {
+      imageDataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
+    } else if (isPdf) {
+      rawText = await extractPdfText(buf);
+      if (rawText.trim().length < MIN_USABLE_TEXT_CHARS) {
+        fileDataUrl = `data:application/pdf;base64,${buf.toString("base64")}`;
+      }
+    } else {
+      rawText = await extractOfficeText(buf, fileName, mimeType);
+    }
+  } catch {
+    rawText = "";
+  }
+  return { rawText, imageDataUrl, fileDataUrl };
+}
+
+// ─── POST /api/par/ai-prefill/payee-doc ───────────────────────────────────────
+
+/** Câmpurile beneficiarului citite dintr-un act personal (buletin / rechizite / patentă). */
+export interface ParPayeeDocResult {
+  kind: PayeeDocKind;
+  name: string | null;
+  idnp: string | null;
+  address: string | null;
+  iban: string | null;
+  bank: string | null;
+  bic: string | null;
+  patentSeries: string | null;
+  /** ISO "YYYY-MM-DD". */
+  patentValidUntil: string | null;
+  payeeType: "fizic" | "juridic" | null;
+  /** Câmpurile chiar completate — interfața spune omului CE a luat din act. */
+  filled: string[];
+  isStub: boolean;
+  aiUnavailable?: "no_key" | "feature_disabled" | "budget_exceeded" | "api_error";
+}
+
+/**
+ * Actul personal al beneficiarului, separat de actul comercial.
+ *
+ * Un buletin nu are furnizor și client, iar un certificat de rechizite nu are sumă — trecute
+ * prin extractorul de facturi ieșeau aproape goale. Aici fiecare tip de act e cerut explicit
+ * (butonul apăsat de om devine `kind`), iar răspunsul completează DOAR blocul beneficiarului.
+ */
+parAiPrefillRoutes.post(
+  "/payee-doc",
+  requirePARRole("requestor", "approver", "finance", "par_admin"),
+  async (c) => {
+    const user = c.get("user");
+
+    let formData: FormData;
+    try {
+      formData = await c.req.formData();
+    } catch {
+      return c.json({ error: "Cererea trebuie să fie multipart/form-data cu câmpul 'file'." }, 400);
+    }
+
+    const file = formData.get("file");
+    if (!file || typeof file === "string") {
+      return c.json({ error: "Câmpul 'file' lipsește sau nu este un fișier." }, 400);
+    }
+    const kindRaw = formData.get("kind");
+    const kindHint: PayeeDocKind | "auto" =
+      kindRaw === "buletin" || kindRaw === "rechizite" || kindRaw === "patenta" ? kindRaw : "auto";
+
+    const f = file as File;
+    if (f.size > 8_000_000) return c.json({ error: "Fișierul este prea mare (max 8 MB)." }, 413);
+
+    const fileName = f.name ?? "";
+    const mimeType = f.type || "application/octet-stream";
+    const { rawText, imageDataUrl, fileDataUrl } = await readUploadedDoc(
+      Buffer.from(await f.arrayBuffer()),
+      fileName,
+      mimeType,
+    );
+
+    const extraction = await extractPayeeDoc(rawText, {
+      kindHint,
+      imageDataUrl,
+      fileDataUrl,
+      fileName: fileName || "document.pdf",
+      tenantId: user.tenantId,
+      userId: user.id,
+      // entity_id din ai_audit_log e o coloană uuid — un id „inventat" ca text ar da 500 la scriere.
+      prefillId: randomUUID(),
+    });
+
+    const filled = (
+      [
+        ["name", extraction.name],
+        ["idnp", extraction.idnp],
+        ["address", extraction.address],
+        ["iban", extraction.iban],
+        ["bank", extraction.bank],
+        ["bic", extraction.bic],
+        ["patentSeries", extraction.patentSeries],
+        ["patentValidUntil", extraction.patentValidUntil],
+      ] as const
+    )
+      .filter(([, v]) => !!v)
+      .map(([k]) => k);
+
+    const result: ParPayeeDocResult = {
+      kind: extraction.kind,
+      name: extraction.name,
+      idnp: extraction.idnp,
+      address: extraction.address,
+      iban: extraction.iban,
+      bank: extraction.bank,
+      bic: extraction.bic,
+      patentSeries: extraction.patentSeries,
+      patentValidUntil: extraction.patentValidUntil,
+      payeeType: extraction.payeeType,
+      filled,
+      isStub: extraction.isStub,
+      ...(extraction.unavailable ? { aiUnavailable: extraction.unavailable } : {}),
+    };
     return c.json(result);
   },
 );
