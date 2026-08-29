@@ -39,6 +39,9 @@ export { Dialog, Sheet } from "./Overlay";
 export type { DialogProps, SheetProps } from "./Overlay";
 export type { EmptyStateProps } from "./EmptyState";
 
+export { LanguageSwitcher } from "./LanguageSwitcher";
+export type { LanguageSwitcherProps } from "./LanguageSwitcher";
+
 export { KpiTile } from "./KpiTile";
 export type { KpiTileProps } from "./KpiTile";
 

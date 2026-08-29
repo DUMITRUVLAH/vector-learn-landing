@@ -51,7 +51,8 @@ import {
 } from "lucide-react";
 import { Link } from "@/router/HashRouter";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
-import { Badge, Button, Card, Input, Label, Textarea } from "@/components/ds";
+import { Badge, Button, Card, Input, LanguageSwitcher, Label, Textarea } from "@/components/ds";
+import { useT, type TranslationKey } from "@/lib/i18n";
 
 /** Adresa pe care ajung cererile de demo. Un singur loc de schimbat. */
 const CONTACT_EMAIL = "contact@finflow.best";
@@ -99,19 +100,21 @@ export function BusinessLandingPage() {
 
 /* ─────────────────────────── Navbar ─────────────────────────── */
 
-const NAV_LINKS: { href: string; label: string }[] = [
-  { href: "#ai", label: "AI" },
-  { href: "#aprobari", label: "Aprobări" },
-  { href: "#flux", label: "Fluxul" },
-  { href: "#securitate", label: "Securitate" },
-  { href: "#preturi", label: "Prețuri" },
+/** Ancorele rămân în română: sunt adrese, nu text — schimbarea lor ar rupe linkurile trimise. */
+const NAV_LINKS: { href: string; labelKey: TranslationKey }[] = [
+  { href: "#ai", labelKey: "landing.nav.ai" },
+  { href: "#aprobari", labelKey: "landing.nav.approvals" },
+  { href: "#flux", labelKey: "landing.nav.flow" },
+  { href: "#securitate", labelKey: "landing.nav.security" },
+  { href: "#preturi", labelKey: "landing.nav.pricing" },
   // Ghidurile NU sunt o rută a aplicației: sunt pagini pre-randate, servite static de pe /blog
   // (vezi scripts/build-blog.ts). De aceea e un `<a>` simplu, nu un `Link` de router — un
   // `Link` ar încerca o navigare pe hash și ar rămâne în SPA, pe o rută inexistentă.
-  { href: "/blog", label: "Ghiduri" },
+  { href: "/blog", labelKey: "landing.nav.guides" },
 ];
 
 function Navbar() {
+  const { t } = useT();
   return (
     <nav className="fixed top-0 inset-x-0 z-50 glass">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-4">
@@ -122,14 +125,17 @@ function Navbar() {
         <div className="hidden lg:flex items-center gap-6 text-sm font-medium text-muted-foreground">
           {NAV_LINKS.map((l) => (
             <a key={l.href} href={l.href} className="hover:text-foreground transition-colors">
-              {l.label}
+              {t(l.labelKey)}
             </a>
           ))}
         </div>
-        <Button size="sm" href="/business/login">
-          <LogIn className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          Autentificare
-        </Button>
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher variant="segmented" showIcon={false} />
+          <Button size="sm" href="/business/login">
+            <LogIn className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            {t("landing.nav.login")}
+          </Button>
+        </div>
       </div>
     </nav>
   );
@@ -138,6 +144,7 @@ function Navbar() {
 /* ─────────────────────────── Hero ─────────────────────────── */
 
 function Hero() {
+  const { t } = useT();
   return (
     <section className="pt-24 sm:pt-32 pb-8 sm:pb-14 px-4 sm:px-6 relative">
       <div className="absolute top-20 -left-40 h-80 w-80 rounded-full bg-primary/5 blur-3xl pointer-events-none" aria-hidden="true" />
@@ -146,9 +153,9 @@ function Hero() {
       <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-14">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold leading-[1.08] mb-5 tracking-tight">
-            Nicio plată fără aprobare.{" "}
+            {t("landing.hero.titleLead")}{" "}
             <span className="text-gradient relative lg:whitespace-nowrap">
-              Nicio aprobare fără urmă
+              {t("landing.hero.titleAccent")}
               {/* Sublinierea e ancorată la o linie de text; sub 1024 px titlul se rupe pe două
                   rânduri, așa că o ascundem în loc s-o lăsăm să traverseze ruptura. */}
               <svg className="hidden lg:block absolute -bottom-1 left-0 w-full" viewBox="0 0 300 12" fill="none" aria-hidden="true">
@@ -158,21 +165,21 @@ function Hero() {
             .
           </h1>
           <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto mb-8">
-            Cereri de plată, aprobări și execuție — un singur traseu, cu dovada la capăt.
+            {t("landing.hero.subtitle")}
           </p>
           <div className="flex gap-3 justify-center flex-col sm:flex-row">
             <Button size="lg" href="/business/login" className="h-12 rounded-xl px-8 text-base">
-              Intră în cont <ArrowRight className="ml-2 h-5 w-5" aria-hidden="true" />
+              {t("landing.hero.ctaPrimary")} <ArrowRight className="ml-2 h-5 w-5" aria-hidden="true" />
             </Button>
             <a
               href="#flux"
               className="inline-flex items-center justify-center gap-2 h-12 px-8 rounded-xl border border-border bg-card text-base font-medium hover:bg-muted transition-colors touch-target"
             >
-              Vezi fluxul
+              {t("landing.hero.ctaSecondary")}
             </a>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            Nu ai cont? Îl creezi din aceeași pagină · fără card bancar
+            {t("landing.hero.note")}
           </p>
         </div>
 

@@ -295,8 +295,8 @@ export function ParDashboard() {
 
   return (
     <AppShell
-      pageTitle={t("dashboard.title")}
-      pageDescription={t("dashboard.subtitle")}
+      pageTitle={t("par.dashboard.title")}
+      pageDescription={t("par.dashboard.subtitle")}
       actions={
         <Button onClick={() => navigate("/business/par/new")} aria-label="Cerere PAR nouă">
           <Plus className="h-4 w-4" aria-hidden />
@@ -336,9 +336,9 @@ export function ParDashboard() {
         {/* MOB-003: pe telefon, KPI-urile stăteau câte unul pe rând — 4 numere ocupau 4 ecrane
             de derulare. Două coloane le aduc pe toate în primul ecran, fără să le înghesuie. */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
-          <KpiTile label={t("dashboard.total")} value={requests.length} tone="indigo" icon={<FileText className="h-5 w-5" />} />
-          <KpiTile label={t("dashboard.active")} value={formatMDL(totalActive)} tone="amber" icon={<Clock className="h-5 w-5" />} />
-          <KpiTile label={t("dashboard.paid")} value={formatMDL(totalPaid)} tone="emerald" icon={<Landmark className="h-5 w-5" />} />
+          <KpiTile label={t("par.dashboard.total")} value={requests.length} tone="indigo" icon={<FileText className="h-5 w-5" />} />
+          <KpiTile label={t("par.dashboard.active")} value={formatMDL(totalActive)} tone="amber" icon={<Clock className="h-5 w-5" />} />
+          <KpiTile label={t("par.dashboard.paid")} value={formatMDL(totalPaid)} tone="emerald" icon={<Landmark className="h-5 w-5" />} />
         </div>
 
         {/* VF-202: budget alerts (finance/par_admin only) */}

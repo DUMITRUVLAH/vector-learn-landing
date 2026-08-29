@@ -57,7 +57,7 @@ import { onParBadgeRefresh } from "@/lib/par/badgeBus";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { api } from "@/lib/api";
 import { cachedOnce, peekResolved } from "@/lib/sessionCache";
-import { Avatar, PageHeader, SidebarNavItem, type ChipTone } from "@/components/ds";
+import { Avatar, LanguageSwitcher, PageHeader, SidebarNavItem, type ChipTone } from "@/components/ds";
 
 /** Titlul din `index.html` — la care revenim când shell-ul iese din ecran (ex. logout). */
 const DEFAULT_DOCUMENT_TITLE = "FinFlow — Controlul financiar complet";
@@ -664,6 +664,9 @@ export function BusinessShell({
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
           <div className="flex-1" />
+          {/* Comutatorul stă lângă clopoțel, în rândul de utilitare: e chrome de
+              aplicație, nu conținut de pagină, și rămâne în același loc pe toate rutele. */}
+          <LanguageSwitcher variant="compact" />
           <NotificationBell />
         </header>
 

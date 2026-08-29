@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "check-refs": "node scripts/check-undefined-refs.mjs",
+    "i18n:scan": "node scripts/i18n-scan.mjs",
+    "i18n:check": "vitest run src/lib/i18n",
     "smoke": "node scripts/e2e-gate.mjs --browser",
     "lint": "eslint . --ext .ts,.tsx --max-warnings 100",
     "test": "vitest",

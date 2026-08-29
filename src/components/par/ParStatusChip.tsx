@@ -41,7 +41,7 @@ interface ParStatusChipProps {
 
 export function ParStatusChip({ status, className }: ParStatusChipProps) {
   const { t } = useT();
-  const label = t(`status.${status}`); // VF-304: bilingual status labels
+  const label = t(`par.status.${status}`); // VF-304: etichete de status bilingve
   return (
     <span
       className={cn(

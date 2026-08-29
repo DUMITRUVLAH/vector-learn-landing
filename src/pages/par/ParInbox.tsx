@@ -620,8 +620,8 @@ export default function ParInbox() {
 
   return (
     <AppShell
-      pageTitle={t("inbox.title")}
-      pageDescription={t("inbox.subtitle")}
+      pageTitle={t("par.inbox.title")}
+      pageDescription={t("par.inbox.subtitle")}
       actions={
         <>
           <Button variant="outline" size="icon" onClick={loadInbox} disabled={loading} aria-label="Reîncarcă inbox">
