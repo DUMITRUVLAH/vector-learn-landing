@@ -10,6 +10,9 @@ export interface DocmergeTemplate {
   placeholders: string[];
   sourceFormat: string;
   updatedAt: string;
+  /** DG-104: tipul actului — aceeași bibliotecă ține și șabloanele de acte. */
+  kind?: string;
+  category?: string | null;
 }
 
 export interface DocmergeTemplateFull extends DocmergeTemplate {
@@ -21,11 +24,15 @@ export interface DocmergeTemplateFull extends DocmergeTemplate {
 export interface CreateTemplateBody {
   name: string;
   bodyHtml: string;
+  kind?: string;
+  category?: string | null;
 }
 
 export interface UpdateTemplateBody {
   name?: string;
   bodyHtml?: string;
+  kind?: string;
+  category?: string | null;
 }
 
 export interface PreviewTemplateBody {

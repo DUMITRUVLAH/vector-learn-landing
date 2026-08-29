@@ -43,6 +43,7 @@ import {
   Search,
   Menu,
   X,
+  FileStack,
 } from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
@@ -158,7 +159,10 @@ const NAV_GROUPS: NavGroup[] = [
     // DG-103: registrul de acte — un singur rând, vizibil oriunde în Business Suite.
     section: "Acte",
     prefix: "/business/docs",
-    items: [{ label: "Acte și contracte", href: "/business/docs", icon: FileText, tone: "sky" }],
+    items: [
+      { label: "Acte și contracte", href: "/business/docs", icon: FileText, tone: "sky" },
+      { label: "Șabloane de acte", href: "/business/docs/templates", icon: FileStack, tone: "violet" },
+    ],
   },
   {
     // DocMerge — secțiune separată, vizibilă doar când ești pe /business/docmerge/*

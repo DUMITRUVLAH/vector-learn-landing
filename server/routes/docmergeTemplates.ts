@@ -25,6 +25,7 @@ import {
   sampleContext,
 } from "../lib/docmerge/placeholders";
 import { parseWorkbook, autoMap as autoMapExcel } from "../lib/docmerge/excelImport";
+import { sanitizeTemplateHtml } from "../lib/docs/sanitizeHtml";
 import { generateBatch } from "../lib/docmerge/generateBatch";
 import { buildPdfZip } from "../lib/docmerge/zipPdfs";
 
@@ -40,11 +41,16 @@ docmergeTemplatesRoutes.use("/*", requireAuth);
 const createTemplateSchema = z.object({
   name: z.string().min(1, "Denumirea este obligatorie").max(200),
   bodyHtml: z.string().min(1, "Corpul template-ului este obligatoriu"),
+  // DG-104: același depozit ține și șabloanele de acte (act de primire-predare, contracte).
+  kind: z.string().max(50).optional(),
+  category: z.string().max(100).nullish(),
 });
 
 const updateTemplateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   bodyHtml: z.string().min(1).optional(),
+  kind: z.string().max(50).optional(),
+  category: z.string().max(100).nullish(),
 });
 
 const previewTemplateSchema = z.object({
@@ -58,8 +64,11 @@ docmergeTemplatesRoutes.post(
   zValidator("json", createTemplateSchema),
   async (c) => {
     const user = c.get("user");
-    const { name, bodyHtml } = c.req.valid("json");
+    const { name, bodyHtml: rawBody, kind, category } = c.req.valid("json");
 
+    // DG-104: corpul ajunge randat în aplicație ȘI în PDF, iar API-ul poate fi apelat direct,
+    // ocolind editorul — deci curățarea trăiește aici, nu doar în browser.
+    const bodyHtml = sanitizeTemplateHtml(rawBody);
     const detected = extractPlaceholders(bodyHtml);
 
     const [row] = await db
@@ -69,6 +78,8 @@ docmergeTemplatesRoutes.post(
         name,
         bodyHtml,
         placeholders: JSON.stringify(detected),
+        ...(kind ? { kind } : {}),
+        ...(category !== undefined ? { category: category ?? null } : {}),
       })
       .returning();
 
@@ -156,14 +167,16 @@ docmergeTemplatesRoutes.put(
 
     if (!existing) return c.json({ error: "not_found" }, 404);
 
-    const newBody = body.bodyHtml ?? existing.bodyHtml;
+    const newBody = body.bodyHtml ? sanitizeTemplateHtml(body.bodyHtml) : existing.bodyHtml;
     const detected = extractPlaceholders(newBody);
 
     const [row] = await db
       .update(docmergeTemplates)
       .set({
         ...(body.name ? { name: body.name } : {}),
-        ...(body.bodyHtml ? { bodyHtml: body.bodyHtml } : {}),
+        ...(body.bodyHtml ? { bodyHtml: newBody } : {}),
+        ...(body.kind ? { kind: body.kind } : {}),
+        ...(body.category !== undefined ? { category: body.category ?? null } : {}),
         placeholders: JSON.stringify(detected),
         updatedAt: new Date(),
       })

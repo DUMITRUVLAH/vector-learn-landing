@@ -519,7 +519,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | 1 | `DG-101` | Schema documentelor + migrare + heal sync-schema | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 1 | `DG-102` | API documente (CRUD + finalizare imutabilă + anulare) | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 1 | `DG-103` | Pagina „Acte" cu filtre în shell-ul business | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
-| 2 | `DG-104` | Editor WYSIWYG tip Word (TipTap, lazy-loaded, sanitizat) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
+| 2 | `DG-104` | Editor WYSIWYG tip Word (TipTap, lazy-loaded, sanitizat) | done ✅ | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 2 | `DG-105` | Inserare câmpuri cu „/" + panou lateral (cipuri → `{{...}}`) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 2 | `DG-106` | Biblioteca de șabloane standard RO (act primire-predare, contracte…) | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
 | 2 | `DG-107` | Versionare șabloane + previzualizare cu date reale | pending | [backlog](docgen/DOCGEN-BACKLOG.md) |
