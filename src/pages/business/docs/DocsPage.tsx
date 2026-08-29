@@ -15,6 +15,7 @@ import { useRouter } from "@/router/HashRouter";
 import { listPar, type ParListRow } from "@/lib/api/par";
 import { listDocTemplates, type DocTemplateListItem } from "@/lib/api/docs";
 import { BulkGenerateDialog } from "./BulkGenerateDialog";
+import { downloadDocumentPdf } from "@/lib/docs/documentPdfClient";
 import {
   listDocuments,
   createDocumentFromPar,
@@ -106,8 +107,15 @@ export function DocsPage() {
   const openParPicker = useCallback(async () => {
     setPickingPar(true);
     try {
-      const { requests } = await listPar({ status: "approved" });
-      setPars(requests);
+      // Nu doar „approved": actul de primire-predare se face și cât cererea e la finanțe, și după
+      // plată. Filtrul îngust arăta „nicio cerere" unei organizații care avea zeci.
+      const batches = await Promise.all(
+        ["approved", "in_finance", "paid"].map((status) =>
+          listPar({ status }).then((r) => r.requests).catch(() => [])
+        )
+      );
+      const seen = new Set<string>();
+      setPars(batches.flat().filter((p) => (seen.has(p.id) ? false : seen.add(p.id))));
     } catch {
       setPars([]);
     }
@@ -318,16 +326,21 @@ export function DocsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {/* Descărcarea merge direct la API (cookie de sesiune), fără să deschidă actul. */}
-                      <a
-                        href={`/api/docs/documents/${d.id}/pdf`}
-                        onClick={(e) => e.stopPropagation()}
+                      {/* PDF-ul se randează în browser: pe producție serverul n-are chromium. */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void downloadDocumentPdf(d.id).catch(() =>
+                            setError("PDF-ul nu a putut fi generat.")
+                          );
+                        }}
                         aria-label={`Descarcă PDF pentru ${d.docNumber ?? d.title}`}
                         title="Descarcă PDF"
                         className="touch-target inline-flex rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
                       >
                         <Download className="h-4 w-4" aria-hidden="true" />
-                      </a>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -393,7 +406,8 @@ export function DocsPage() {
               ))}
               {pars.length === 0 && (
                 <li className="p-3 text-sm text-muted-foreground">
-                  Nicio cerere aprobată deocamdată.
+                  Nicio cerere aprobată, în finanțe sau plătită deocamdată. Actul se poate face și
+                  direct, cu „Act nou".
                 </li>
               )}
             </ul>

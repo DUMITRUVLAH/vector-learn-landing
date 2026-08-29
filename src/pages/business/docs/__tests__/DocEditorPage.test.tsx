@@ -69,6 +69,11 @@ const updateDocument = vi.fn();
 const finalizeDocument = vi.fn();
 const convertDocumentToPar = vi.fn();
 const emailDocument = vi.fn();
+const downloadDocumentPdf = vi.fn();
+
+vi.mock("@/lib/docs/documentPdfClient", () => ({
+  downloadDocumentPdf: (...a: unknown[]) => downloadDocumentPdf(...a),
+}));
 const getDocumentTrail = vi.fn();
 const listDerivableKinds = vi.fn();
 const deriveDocument = vi.fn();
@@ -516,5 +521,56 @@ describe("DG-115 — trimiterea pe email, din interfață", () => {
     render(<DocEditorPage />);
     await waitFor(() => expect(getDocument).toHaveBeenCalled());
     expect(screen.queryByRole("button", { name: /Trimite pe email/i })).toBeNull();
+  });
+});
+
+
+describe("Fix prod — PDF-ul se face în browser, contrapartea se poate adăuga oricând", () => {
+  it("[blocant] „Descarcă PDF” generează fișierul, nu deschide o pagină HTML", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue(FINAL_DOC);
+    downloadDocumentPdf.mockResolvedValue(true);
+    render(<DocEditorPage />);
+
+    // E buton, nu link: un <a> către API întorcea HTML pe producție (chromium lipsește pe Vercel).
+    const btn = await screen.findByRole("button", { name: /Descarcă PDF/i });
+    await userEvent.click(btn);
+    await waitFor(() => expect(downloadDocumentPdf).toHaveBeenCalledWith("doc-1"));
+  });
+
+  it("[blocant] eșecul randării spune ce să faci, nu lasă butonul mut", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue(FINAL_DOC);
+    downloadDocumentPdf.mockRejectedValue(new Error("canvas failed"));
+    render(<DocEditorPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Descarcă PDF/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/nu a putut fi generat/);
+  });
+
+  it("[blocant] cu registrul gol, tot se poate adăuga contrapartea", async () => {
+    // Bug raportat de owner: butonul de adăugare apărea doar după ce tastai 2 litere, iar într-un
+    // registru gol nu apărea niciodată — actul rămânea fără parte, deci nefinalizabil.
+    const par = await import("@/lib/api/par");
+    vi.mocked(par.listVendors).mockResolvedValue({ items: [] });
+    currentPath = "/business/docs/nou";
+    render(<DocEditorPage />);
+
+    expect(await screen.findByRole("button", { name: /Adaugă furnizor nou/i })).toBeInTheDocument();
+    expect(screen.getByText(/Registrul de furnizori e gol/)).toBeInTheDocument();
+  });
+
+  it("[normal] contrapartea aleasă se poate schimba", async () => {
+    const par = await import("@/lib/api/par");
+    vi.mocked(par.listVendors).mockResolvedValue({ items: [VENDOR] });
+    currentPath = "/business/docs/nou";
+    render(<DocEditorPage />);
+
+    await userEvent.type(await screen.findByLabelText("Contrapartea"), "Teh");
+    await userEvent.click(await screen.findByRole("button", { name: /Tehnica Nouă/ }));
+    expect(await screen.findByText("MD48ML000002259A19498121")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Schimbă contrapartea/i }));
+    expect(screen.queryByText("MD48ML000002259A19498121")).toBeNull();
   });
 });

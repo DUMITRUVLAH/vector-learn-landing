@@ -636,7 +636,12 @@ docsRoutes.post("/documents/:id/finalize", async (c) => {
     if (!check.ok) missing.push(`Cod fiscal contraparte: ${check.message ?? "invalid"}`);
   }
 
-  if (missing.length > 0) return c.json({ error: "incomplete", missing }, 400);
+  // Fără duplicate: „Contrapartea (denumirea)" și „Denumirea contrapărții" sunt același lucru, iar
+  // un mesaj care repetă aceeași lipsă de două ori pare o defecțiune.
+  const uniqueMissing = [...new Set(missing)].filter(
+    (m, _i, all) => !(m === "Denumirea contrapărții" && all.includes("Contrapartea (denumirea)"))
+  );
+  if (uniqueMissing.length > 0) return c.json({ error: "incomplete", missing: uniqueMissing }, 400);
 
   const year = doc.docDate.getFullYear();
   const docNumber = await reserveNumber(user.tenantId, doc.kind, year);
@@ -2013,4 +2018,111 @@ docsRoutes.post("/export/zip", async (c) => {
       "Content-Disposition": `attachment; filename="acte.zip"`,
     },
   });
+});
+
+
+// ─── Tipărire în browser (fix prod: chromium lipsește pe serverless) ─────────
+
+/**
+ * HTML-ul tipăribil al actului, servit ca pagină (nu ca descărcare).
+ *
+ * De ce există: pe Vercel nu rulează chromium, deci randarea PDF pe server întoarce mereu HTML —
+ * iar owner-ul primea o pagină web în loc de fișier. Acum browserul face PDF-ul din acest HTML
+ * (aceeași tehnică folosită deja pentru formularul PAR), deci merge oriunde.
+ */
+docsRoutes.get("/documents/:id/print", async (c) => {
+  const user = c.get("user");
+  const [doc] = await db
+    .select()
+    .from(docDocuments)
+    .where(and(eq(docDocuments.id, c.req.param("id")), eq(docDocuments.tenantId, user.tenantId)));
+  if (!doc) return c.json({ error: "not_found" }, 404);
+  if (!maySeeDocument(doc.projectId, await visibilityFilter(user as { id: string; tenantId: string; role?: string }))) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  const lines = await db
+    .select()
+    .from(docDocumentLines)
+    .where(eq(docDocumentLines.documentId, doc.id))
+    .orderBy(docDocumentLines.position);
+  const [settings] = await db
+    .select()
+    .from(parSettings)
+    .where(eq(parSettings.tenantId, user.tenantId))
+    .limit(1);
+
+  const html = buildPrintableHtml(
+    {
+      docNumber: doc.docNumber,
+      title: doc.title,
+      kind: doc.kind,
+      docDate: doc.docDate,
+      // Pe hârtie nu apar niciodată acolade — nici pe ciornă. Un câmp fără valoare e un rând de
+      // completat cu pixul, exact ca pe un formular tipizat.
+      bodyHtml: blankUnresolved(doc.bodyHtml),
+      bodyHash: doc.bodyHash,
+      status: doc.status,
+      counterpartyName: doc.counterpartyName,
+      counterpartySnapshot: safeJson(doc.counterpartySnapshot) as Record<string, string>,
+      currency: doc.currency,
+      totalCents: doc.totalCents,
+      lines: lines.map((l) => ({
+        description: l.description,
+        unit: l.unit,
+        quantity: l.quantity,
+        lineTotalCents: l.lineTotalCents,
+      })),
+    },
+    { name: settings?.orgLegalName ?? null, logoUrl: settings?.orgLogoUrl ?? null }
+  );
+
+  return c.json({
+    html,
+    fileName: pdfFileName(
+      { docNumber: doc.docNumber, title: doc.title, kind: doc.kind, docDate: doc.docDate, bodyHtml: "", bodyHash: null, status: doc.status },
+      doc.counterpartyName
+    ),
+    hasStoredPdf: !!doc.pdfUrl,
+    status: doc.status,
+  });
+});
+
+/**
+ * Stochează PDF-ul randat în browser. Browserul devine „imprimanta", serverul păstrează rezultatul —
+ * ca atașamentul la cererea de plată și ZIP-ul să existe și pe producție, unde chromium lipsește.
+ */
+docsRoutes.put("/documents/:id/pdf", async (c) => {
+  const user = c.get("user");
+  const [doc] = await db
+    .select()
+    .from(docDocuments)
+    .where(and(eq(docDocuments.id, c.req.param("id")), eq(docDocuments.tenantId, user.tenantId)));
+  if (!doc) return c.json({ error: "not_found" }, 404);
+  if (!maySeeDocument(doc.projectId, await visibilityFilter(user as { id: string; tenantId: string; role?: string }))) {
+    return c.json({ error: "not_found" }, 404);
+  }
+  if (doc.status === "draft") {
+    // Ciorna se schimbă la fiecare salvare; a stoca PDF-ul ei ar însemna să servim mai târziu o
+    // versiune care nu mai există.
+    return c.json({ stored: false, reason: "draft" });
+  }
+
+  let base64 = "";
+  try {
+    const body = (await c.req.json()) as { base64?: string };
+    base64 = (body?.base64 ?? "").trim();
+  } catch {
+    base64 = "";
+  }
+  if (!base64 || base64.length > 12_000_000) {
+    return c.json({ error: "invalid_pdf" }, 400);
+  }
+
+  await db
+    .update(docDocuments)
+    .set({ pdfUrl: `data:application/pdf;base64,${base64}`, updatedAt: new Date() })
+    .where(eq(docDocuments.id, doc.id));
+
+  return c.json({ stored: true });
 });

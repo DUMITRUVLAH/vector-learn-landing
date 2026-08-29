@@ -50,6 +50,7 @@ import {
 import { listVendors, listProjects, type ParVendor, type ParProject } from "@/lib/api/par";
 import { fieldLabel } from "@/lib/docs/fieldCatalog";
 import { NewVendorPanel } from "./NewVendorPanel";
+import { downloadDocumentPdf } from "@/lib/docs/documentPdfClient";
 
 /**
  * Cantitatea și prețul se țin ca TEXT cât timp omul tastează.
@@ -128,6 +129,7 @@ export function DocEditorPage() {
   const [trail, setTrail] = useState<DocTrail | null>(null);
   const [derivableKinds, setDerivableKinds] = useState<string[]>([]);
   const [emailNotice, setEmailNotice] = useState<string | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const dirty = useRef(false);
 
   const total = useMemo(
@@ -327,6 +329,20 @@ export function DocEditorPage() {
     }
   }, [docId, doc?.counterpartyName]);
 
+  /** PDF-ul se face în browser — pe producție serverul n-are chromium (vezi documentPdfClient). */
+  const downloadPdf = useCallback(async () => {
+    if (!docId) return;
+    setPdfBusy(true);
+    setError(null);
+    try {
+      await downloadDocumentPdf(docId);
+    } catch {
+      setError("PDF-ul nu a putut fi generat. Reîncearcă sau folosește exportul pentru Word.");
+    } finally {
+      setPdfBusy(false);
+    }
+  }, [docId]);
+
   const filteredVendors = useMemo(() => {
     const q = vendorQuery.trim().toLowerCase();
     if (!q) return vendors.slice(0, 8);
@@ -368,13 +384,19 @@ export function DocEditorPage() {
             </button>
           )}
           {docId && (
-            <a
-              href={`/api/docs/documents/${docId}/pdf`}
-              className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+            <button
+              type="button"
+              disabled={pdfBusy}
+              onClick={() => void downloadPdf()}
+              className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted disabled:opacity-50"
             >
-              <Download className="h-4 w-4" aria-hidden="true" />
+              {pdfBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Download className="h-4 w-4" aria-hidden="true" />
+              )}
               Descarcă PDF
-            </a>
+            </button>
           )}
         <button
           type="button"
@@ -581,9 +603,9 @@ export function DocEditorPage() {
                 className="touch-target mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
               />
 
-              {!selectedVendor && vendorQuery.trim().length >= 2 && (
+              {!selectedVendor && !addingVendor && (
                 <ul className="mt-2 divide-y divide-border rounded-lg border border-border">
-                  {filteredVendors.map((v) => (
+                  {(vendorQuery.trim().length >= 2 ? filteredVendors : []).map((v) => (
                     <li key={v.id}>
                       <button
                         type="button"
@@ -601,9 +623,14 @@ export function DocEditorPage() {
                       </button>
                     </li>
                   ))}
-                  {filteredVendors.length === 0 && (
+                  {vendorQuery.trim().length >= 2 && filteredVendors.length === 0 && (
                     <li className="p-3 text-sm text-muted-foreground">
                       Niciun furnizor găsit în registru.
+                    </li>
+                  )}
+                  {vendorQuery.trim().length < 2 && vendors.length === 0 && (
+                    <li className="p-3 text-sm text-muted-foreground">
+                      Registrul de furnizori e gol — adaugă primul furnizor de aici.
                     </li>
                   )}
                   <li>
@@ -636,6 +663,18 @@ export function DocEditorPage() {
               )}
 
               {selectedVendor && (
+                <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    touch();
+                    setVendorId("");
+                    setVendorQuery("");
+                  }}
+                  className="touch-target mt-2 text-sm text-primary hover:underline"
+                >
+                  Schimbă contrapartea
+                </button>
                 <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
                   <div>
                     <dt className="text-xs text-muted-foreground">Cod fiscal</dt>
@@ -654,6 +693,7 @@ export function DocEditorPage() {
                     <dd className="text-foreground">{selectedVendor.legalAddress ?? "—"}</dd>
                   </div>
                 </dl>
+                </>
               )}
             </section>
 

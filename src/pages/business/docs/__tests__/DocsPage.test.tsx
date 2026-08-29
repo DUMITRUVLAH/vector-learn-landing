@@ -35,6 +35,10 @@ vi.mock("@/router/HashRouter", () => ({
   ),
 }));
 
+vi.mock("@/lib/docs/documentPdfClient", () => ({
+  downloadDocumentPdf: vi.fn().mockResolvedValue(true),
+}));
+
 vi.mock("@/lib/api/par", () => ({
   listPar: vi.fn().mockResolvedValue({
     requests: [
@@ -183,5 +187,22 @@ describe("DG-118 — actul dintr-o cerere de plată", () => {
 
     await waitFor(() => expect(createDocumentFromPar).toHaveBeenCalledWith("par-1"));
     expect(navigate).toHaveBeenCalledWith("/business/docs/doc-from-par");
+  });
+});
+
+
+describe("Fix prod — cererile de plată din care se poate face un act", () => {
+  it("[blocant] se caută în TOATE stările utile, nu doar „aprobat”", async () => {
+    // Bug raportat de owner: dialogul spunea „nicio cerere aprobată" într-o organizație cu zeci
+    // de cereri — pentru că actul se face și cât cererea e la finanțe, și după plată.
+    const par = await import("@/lib/api/par");
+    listDocuments.mockResolvedValue([]);
+    render(<DocsPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Act dintr-o cerere/i }));
+    await waitFor(() => {
+      const statuses = vi.mocked(par.listPar).mock.calls.map((c) => (c[0] as { status?: string })?.status);
+      expect(statuses).toEqual(expect.arrayContaining(["approved", "in_finance", "paid"]));
+    });
   });
 });
