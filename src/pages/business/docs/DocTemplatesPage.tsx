@@ -6,15 +6,20 @@
  * (docmerge_templates) — o singură bibliotecă, două moduri de folosire.
  */
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
-import { FileText, Plus, Loader2, AlertCircle, ArrowLeft, Save, Copy } from "lucide-react";
+import { FileText, Plus, Loader2, AlertCircle, ArrowLeft, Save, Copy, Eye, History, RotateCcw } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { getTemplate, createTemplate, updateTemplate } from "@/lib/api/docmerge";
 import {
   listDocTemplates,
   cloneDocTemplate,
+  listTemplateVersions,
+  restoreTemplateVersion,
+  previewDocTemplate,
   DOC_KIND_LABELS,
   type DocTemplateListItem,
+  type DocTemplateVersion,
 } from "@/lib/api/docs";
+import { listVendors, type ParVendor } from "@/lib/api/par";
 /**
  * Editorul (TipTap/ProseMirror) e cea mai grea bucată din tot modulul — ~108 KB gzip. Lista de
  * șabloane nu are nevoie de el, deci se încarcă abia când chiar deschizi un șablon. Așa pagina
@@ -41,6 +46,10 @@ export function DocTemplatesPage() {
   const [kind, setKind] = useState("act_primire_predare");
   const [body, setBody] = useState(EMPTY_BODY);
   const [saving, setSaving] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewVendorId, setPreviewVendorId] = useState("");
+  const [vendors, setVendors] = useState<ParVendor[]>([]);
+  const [versions, setVersions] = useState<DocTemplateVersion[] | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,6 +105,54 @@ export function DocTemplatesPage() {
       }
     },
     [load, startEdit]
+  );
+
+  /** Previzualizarea cu un furnizor real e singura care spune adevărul despre un șablon. */
+  const preview = useCallback(
+    async (vendorId: string) => {
+      if (!editingId) return;
+      setError(null);
+      try {
+        const res = await previewDocTemplate(editingId, vendorId || null);
+        setPreviewHtml(res.html);
+      } catch {
+        setError("Previzualizarea nu a putut fi generată.");
+      }
+    },
+    [editingId]
+  );
+
+  const openPreview = useCallback(async () => {
+    try {
+      const { items } = await listVendors();
+      setVendors(items);
+    } catch {
+      setVendors([]);
+    }
+    await preview(previewVendorId);
+  }, [preview, previewVendorId]);
+
+  const openVersions = useCallback(async () => {
+    if (!editingId) return;
+    try {
+      setVersions(await listTemplateVersions(editingId));
+    } catch {
+      setError("Nu am putut încărca istoricul versiunilor.");
+    }
+  }, [editingId]);
+
+  const restore = useCallback(
+    async (version: number) => {
+      if (!editingId) return;
+      try {
+        await restoreTemplateVersion(editingId, version);
+        await startEdit(editingId);
+        await openVersions();
+      } catch {
+        setError("Nu am putut reveni la versiunea aleasă.");
+      }
+    },
+    [editingId, startEdit, openVersions]
   );
 
   const save = useCallback(async () => {
@@ -187,6 +244,102 @@ export function DocTemplatesPage() {
                 </select>
               </div>
             </div>
+
+            {editingId && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void openPreview()}
+                  className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+                >
+                  <Eye className="h-4 w-4" aria-hidden="true" />
+                  Previzualizează
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void openVersions()}
+                  className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+                >
+                  <History className="h-4 w-4" aria-hidden="true" />
+                  Istoric versiuni
+                </button>
+              </div>
+            )}
+
+            {versions && (
+              <div className="rounded-lg border border-border p-4">
+                <p className="text-sm font-medium text-foreground">Istoric versiuni</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Actele generate rămân pe versiunea lor — revenirea creează o versiune nouă, nu
+                  rescrie trecutul.
+                </p>
+                <ul className="mt-3 space-y-2">
+                  {versions.map((v) => (
+                    <li key={v.id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-muted-foreground">
+                        Versiunea {v.version} · {new Date(v.createdAt).toLocaleString("ro-MD")}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void restore(v.version)}
+                        disabled={isSystem}
+                        className="touch-target inline-flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-muted disabled:opacity-50"
+                      >
+                        <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                        Revino la ea
+                      </button>
+                    </li>
+                  ))}
+                  {versions.length === 0 && (
+                    <li className="text-sm text-muted-foreground">
+                      Încă nicio versiune salvată — apare una la prima modificare a corpului.
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {previewHtml !== null && (
+              <div className="rounded-lg border border-border p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-foreground">Previzualizare</p>
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="preview-vendor" className="text-xs text-muted-foreground">
+                      Cu datele furnizorului
+                    </label>
+                    <select
+                      id="preview-vendor"
+                      value={previewVendorId}
+                      onChange={(e) => {
+                        setPreviewVendorId(e.target.value);
+                        void preview(e.target.value);
+                      }}
+                      className="touch-target rounded-lg border border-border bg-background px-2 py-1 text-sm text-foreground"
+                    >
+                      <option value="">Date de exemplu</option>
+                      {vendors.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewHtml(null)}
+                      className="touch-target rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted"
+                    >
+                      Închide
+                    </button>
+                  </div>
+                </div>
+                <iframe
+                  title="Previzualizarea actului"
+                  srcDoc={previewHtml}
+                  sandbox=""
+                  className="mt-3 h-96 w-full rounded-lg border border-border bg-white"
+                />
+              </div>
+            )}
 
             <Suspense
               fallback={

@@ -146,3 +146,32 @@ export function listDocTemplates(): Promise<DocTemplateListItem[]> {
 export function cloneDocTemplate(id: string): Promise<{ id: string; name: string }> {
   return api<{ id: string; name: string }>(`/api/docs/templates/${id}/clone`, { method: "POST" });
 }
+
+export interface DocTemplateVersion {
+  id: string;
+  version: number;
+  name: string;
+  createdAt: string;
+}
+
+export function listTemplateVersions(id: string): Promise<DocTemplateVersion[]> {
+  return api<DocTemplateVersion[]>(`/api/docs/templates/${id}/versions`);
+}
+
+export function restoreTemplateVersion(
+  id: string,
+  version: number
+): Promise<{ version: number; restoredFrom: number }> {
+  return api(`/api/docs/templates/${id}/restore/${version}`, { method: "POST" });
+}
+
+/** Previzualizare cu date de exemplu sau, mult mai util, cu rechizitele unui furnizor real. */
+export function previewDocTemplate(
+  id: string,
+  vendorId?: string | null
+): Promise<{ html: string }> {
+  return api<{ html: string }>(`/api/docs/templates/${id}/preview`, {
+    method: "POST",
+    body: JSON.stringify({ vendorId: vendorId ?? null }),
+  });
+}

@@ -26,6 +26,7 @@ import {
 } from "../lib/docmerge/placeholders";
 import { parseWorkbook, autoMap as autoMapExcel } from "../lib/docmerge/excelImport";
 import { sanitizeTemplateHtml } from "../lib/docs/sanitizeHtml";
+import { docTemplateVersions } from "../db/schema/docs";
 import { generateBatch } from "../lib/docmerge/generateBatch";
 import { buildPdfZip } from "../lib/docmerge/zipPdfs";
 
@@ -160,6 +161,8 @@ docmergeTemplatesRoutes.put(
         id: docmergeTemplates.id,
         bodyHtml: docmergeTemplates.bodyHtml,
         isSystem: docmergeTemplates.isSystem,
+        version: docmergeTemplates.version,
+        name: docmergeTemplates.name,
       })
       .from(docmergeTemplates)
       .where(
@@ -185,9 +188,15 @@ docmergeTemplatesRoutes.put(
     const newBody = body.bodyHtml ? sanitizeTemplateHtml(body.bodyHtml) : existing.bodyHtml;
     const detected = extractPlaceholders(newBody);
 
+    // DG-107: fiecare salvare care schimbă corpul e o versiune nouă. Documentele generate rămân
+    // legate de versiunea lor, deci un act semnat nu se schimbă când șablonul evoluează.
+    const bodyChanged = !!body.bodyHtml && newBody !== existing.bodyHtml;
+    const nextVersion = bodyChanged ? (existing.version ?? 1) + 1 : existing.version ?? 1;
+
     const [row] = await db
       .update(docmergeTemplates)
       .set({
+        ...(bodyChanged ? { version: nextVersion } : {}),
         ...(body.name ? { name: body.name } : {}),
         ...(body.bodyHtml ? { bodyHtml: newBody } : {}),
         ...(body.kind ? { kind: body.kind } : {}),
@@ -202,6 +211,41 @@ docmergeTemplatesRoutes.put(
         )
       )
       .returning();
+
+    if (bodyChanged) {
+      // Prima versiune nu are cine s-o scrie la creare (șabloanele pot veni și din seed sau din
+      // clonare), așa că o coborâm în istoric ACUM, cu corpul de dinaintea acestei salvări.
+      // Fără asta, „revenire la versiunea 1" ar fi un buton care nu are la ce să se întoarcă.
+      const baselineVersion = existing.version ?? 1;
+      const [hasBaseline] = await db
+        .select({ id: docTemplateVersions.id })
+        .from(docTemplateVersions)
+        .where(
+          and(
+            eq(docTemplateVersions.templateId, id),
+            eq(docTemplateVersions.version, baselineVersion)
+          )
+        );
+      if (!hasBaseline) {
+        await db.insert(docTemplateVersions).values({
+          tenantId: user.tenantId,
+          templateId: id,
+          version: baselineVersion,
+          name: existing.name ?? row.name,
+          bodyHtml: existing.bodyHtml,
+          createdByUserId: user.id,
+        });
+      }
+
+      await db.insert(docTemplateVersions).values({
+        tenantId: user.tenantId,
+        templateId: id,
+        version: nextVersion,
+        name: row.name,
+        bodyHtml: newBody,
+        createdByUserId: user.id,
+      });
+    }
 
     return c.json({
       ...row,

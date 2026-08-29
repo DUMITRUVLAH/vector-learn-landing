@@ -27,11 +27,13 @@ import {
   docDocumentLinks,
   docNumberSequences,
   docAudit,
+  docTemplateVersions,
 } from "../db/schema/docs";
 import { docmergeTemplates } from "../db/schema/docmergeTemplates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { extractPlaceholders, renderWithContext } from "../lib/docmerge/placeholders";
 import { SYSTEM_TEMPLATES } from "../lib/docs/systemTemplates";
+import { buildPreviewContext } from "../lib/docs/previewContext";
 
 export const docsRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -558,4 +560,114 @@ docsRoutes.post("/templates/:id/clone", async (c) => {
     .returning();
 
   return c.json(copy, 201);
+});
+
+
+// ─── Versiuni și previzualizare (DG-107) ─────────────────────────────────────
+
+/** Istoricul versiunilor unui șablon, cel mai nou primul. */
+docsRoutes.get("/templates/:id/versions", async (c) => {
+  const user = c.get("user");
+  const rows = await db
+    .select({
+      id: docTemplateVersions.id,
+      version: docTemplateVersions.version,
+      name: docTemplateVersions.name,
+      createdAt: docTemplateVersions.createdAt,
+    })
+    .from(docTemplateVersions)
+    .where(
+      and(
+        eq(docTemplateVersions.templateId, c.req.param("id")),
+        eq(docTemplateVersions.tenantId, user.tenantId)
+      )
+    )
+    .orderBy(desc(docTemplateVersions.version));
+  return c.json(rows);
+});
+
+/**
+ * Revenirea la o versiune veche NU rescrie istoricul: creează o versiune nouă cu acel conținut.
+ * Altfel, actele care poartă „versiunea 3" ar arăta brusc altceva decât la semnare.
+ */
+docsRoutes.post("/templates/:id/restore/:version", async (c) => {
+  const user = c.get("user");
+  const templateId = c.req.param("id");
+  const version = Number(c.req.param("version"));
+
+  const [old] = await db
+    .select()
+    .from(docTemplateVersions)
+    .where(
+      and(
+        eq(docTemplateVersions.templateId, templateId),
+        eq(docTemplateVersions.tenantId, user.tenantId),
+        eq(docTemplateVersions.version, version)
+      )
+    );
+  if (!old) return c.json({ error: "not_found" }, 404);
+
+  const [tpl] = await db
+    .select()
+    .from(docmergeTemplates)
+    .where(and(eq(docmergeTemplates.id, templateId), eq(docmergeTemplates.tenantId, user.tenantId)));
+  if (!tpl) return c.json({ error: "not_found" }, 404);
+  if (tpl.isSystem) return c.json({ error: "system_template" }, 403);
+
+  const nextVersion = (tpl.version ?? 1) + 1;
+  const [updated] = await db
+    .update(docmergeTemplates)
+    .set({
+      bodyHtml: old.bodyHtml,
+      placeholders: JSON.stringify(extractPlaceholders(old.bodyHtml)),
+      version: nextVersion,
+      updatedAt: new Date(),
+    })
+    .where(eq(docmergeTemplates.id, templateId))
+    .returning();
+
+  await db.insert(docTemplateVersions).values({
+    tenantId: user.tenantId,
+    templateId,
+    version: nextVersion,
+    name: updated.name,
+    bodyHtml: old.bodyHtml,
+    createdByUserId: user.id,
+  });
+
+  return c.json({ id: updated.id, version: nextVersion, restoredFrom: version });
+});
+
+/**
+ * Previzualizare: cu date de exemplu sau — mult mai util — cu un furnizor real din registru.
+ * Corpul întors e deja randat, deci se vede exact ce va conține actul.
+ */
+docsRoutes.post("/templates/:id/preview", async (c) => {
+  const user = c.get("user");
+  const [tpl] = await db
+    .select()
+    .from(docmergeTemplates)
+    .where(
+      and(
+        eq(docmergeTemplates.id, c.req.param("id")),
+        eq(docmergeTemplates.tenantId, user.tenantId)
+      )
+    );
+  if (!tpl) return c.json({ error: "not_found" }, 404);
+
+  let vendorId: string | null = null;
+  try {
+    const body = (await c.req.json()) as { vendorId?: string | null };
+    vendorId = body?.vendorId ?? null;
+  } catch {
+    vendorId = null;
+  }
+
+  const context = await buildPreviewContext({
+    tenantId: user.tenantId,
+    vendorId,
+    userName: (user as { name?: string }).name ?? null,
+  });
+
+  return c.json({ html: renderWithContext(tpl.bodyHtml, context), context });
 });

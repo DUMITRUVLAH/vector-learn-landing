@@ -53,9 +53,10 @@ describe("DG-101 — registrul de acte există după migrare", () => {
     tenantId = await seedTenant(client);
   }, 120_000);
 
-  it("migrarea 0151 e ultima și creează toate tabelele modulului", async () => {
-    const entries = journalEntries();
-    expect(entries[entries.length - 1].tag).toBe("0151_docgen");
+  it("migrarea modulului e în jurnal și creează toate tabelele", async () => {
+    // Nu „ultima": modulul va primi și alte migrări (0152 a adus istoricul de versiuni). Ce
+    // contează e că e ÎN jurnal, deci se aplică pe orice bază nouă.
+    expect(journalEntries().map((e) => e.tag)).toContain("0151_docgen");
 
     for (const table of [
       "doc_documents",
@@ -63,6 +64,7 @@ describe("DG-101 — registrul de acte există după migrare", () => {
       "doc_document_links",
       "doc_number_sequences",
       "doc_audit",
+      "doc_template_versions",
     ]) {
       const res = await client.query<{ t: string | null }>(
         `select to_regclass('public."${table}"') as t`

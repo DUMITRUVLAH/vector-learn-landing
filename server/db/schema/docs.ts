@@ -192,6 +192,37 @@ export const docAudit = pgTable(
   })
 );
 
+/**
+ * DG-107 — istoricul șabloanelor.
+ *
+ * De ce: un act semnat trebuie să rămână exact cum a fost semnat, chiar dacă șablonul se schimbă
+ * mâine. Documentul reține `template_version`, iar aici se păstrează corpul fiecărei versiuni —
+ * altfel „versiunea 1" ar fi doar un număr fără conținut în spate.
+ */
+export const docTemplateVersions = pgTable(
+  "doc_template_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    templateId: uuid("template_id")
+      .notNull()
+      .references(() => docmergeTemplates.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    name: varchar("name", { length: 200 }).notNull(),
+    bodyHtml: text("body_html").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    templateIdx: index("doc_template_versions_template_idx").on(t.templateId),
+    tenantIdx: index("doc_template_versions_tenant_idx").on(t.tenantId),
+    versionUniq: uniqueIndex("doc_template_versions_uniq").on(t.templateId, t.version),
+  })
+);
+
+export type DocTemplateVersion = typeof docTemplateVersions.$inferSelect;
 export type DocDocument = typeof docDocuments.$inferSelect;
 export type NewDocDocument = typeof docDocuments.$inferInsert;
 export type DocDocumentLine = typeof docDocumentLines.$inferSelect;

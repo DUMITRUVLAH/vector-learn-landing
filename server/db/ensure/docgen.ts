@@ -86,6 +86,18 @@ export const DOCGEN_ENSURE_STATEMENTS: string[] = [
     "details" text,
     "created_at" timestamp with time zone DEFAULT now() NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS "doc_template_versions" (
+    "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+    "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+    "template_id" uuid NOT NULL,
+    "version" integer NOT NULL,
+    "name" varchar(200) NOT NULL,
+    "body_html" text NOT NULL,
+    "created_by_user_id" uuid,
+    "created_at" timestamp with time zone DEFAULT now() NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS "doc_template_versions_template_idx" ON "doc_template_versions" ("template_id")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "doc_template_versions_uniq" ON "doc_template_versions" ("template_id","version")`,
   `CREATE INDEX IF NOT EXISTS "doc_documents_tenant_idx" ON "doc_documents" ("tenant_id")`,
   `CREATE INDEX IF NOT EXISTS "doc_documents_status_idx" ON "doc_documents" ("tenant_id","status")`,
   `CREATE INDEX IF NOT EXISTS "doc_documents_project_idx" ON "doc_documents" ("project_id")`,

@@ -23,6 +23,12 @@ vi.mock("@/hooks/useBusinessSession", () => ({
   }),
 }));
 
+vi.mock("@/lib/api/par", () => ({
+  listVendors: vi.fn().mockResolvedValue({
+    items: [{ id: "v1", name: 'SRL "Tehnica Nouă"' }],
+  }),
+}));
+
 vi.mock("@/router/HashRouter", () => ({
   useRouter: () => ({ path: "/business/docs/templates", navigate: vi.fn() }),
   Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode; [k: string]: unknown }) => (
@@ -35,6 +41,9 @@ vi.mock("@/router/HashRouter", () => ({
 
 const listDocTemplates = vi.fn();
 const cloneDocTemplate = vi.fn();
+const listTemplateVersions = vi.fn();
+const restoreTemplateVersion = vi.fn();
+const previewDocTemplate = vi.fn();
 
 vi.mock("@/lib/api/docs", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/docs")>("@/lib/api/docs");
@@ -42,6 +51,9 @@ vi.mock("@/lib/api/docs", async () => {
     ...actual,
     listDocTemplates: (...a: unknown[]) => listDocTemplates(...a),
     cloneDocTemplate: (...a: unknown[]) => cloneDocTemplate(...a),
+    listTemplateVersions: (...a: unknown[]) => listTemplateVersions(...a),
+    restoreTemplateVersion: (...a: unknown[]) => restoreTemplateVersion(...a),
+    previewDocTemplate: (...a: unknown[]) => previewDocTemplate(...a),
   };
 });
 
@@ -156,5 +168,63 @@ describe("DG-104 — șabloanele se scriu în aplicație", () => {
     ]);
     render(<DocTemplatesPage />);
     expect(await screen.findByText(/Act de primire-predare · 2 câmpuri/)).toBeInTheDocument();
+  });
+});
+
+
+describe("DG-107 — previzualizare și istoric", () => {
+  const TPL = {
+    id: "tpl-1",
+    name: "Act propriu",
+    placeholders: ["contraparte.iban"],
+    kind: "act_primire_predare",
+    category: null,
+    isSystem: false,
+    version: 3,
+    updatedAt: "",
+  };
+
+  async function openEditor() {
+    listDocTemplates.mockResolvedValue([TPL]);
+    getTemplate.mockResolvedValue({
+      ...TPL,
+      bodyHtml: "<p>{{contraparte.iban}}</p>",
+      tenantId: "t",
+      createdAt: "",
+      sourceFormat: "html",
+    });
+    render(<DocTemplatesPage />);
+    await userEvent.click(await screen.findByText("Act propriu"));
+    await waitFor(() => expect(getTemplate).toHaveBeenCalled());
+  }
+
+  it("[blocant] previzualizarea cu un furnizor real cere serverului contextul acelui furnizor", async () => {
+    previewDocTemplate.mockResolvedValue({ html: "<p>MD48ML000002259A19498121</p>" });
+    await openEditor();
+
+    await userEvent.click(await screen.findByRole("button", { name: /Previzualizează/i }));
+    await waitFor(() => expect(previewDocTemplate).toHaveBeenCalledWith("tpl-1", null));
+
+    await userEvent.selectOptions(await screen.findByLabelText(/Cu datele furnizorului/i), "v1");
+    await waitFor(() => expect(previewDocTemplate).toHaveBeenLastCalledWith("tpl-1", "v1"));
+
+    // Randarea se face în iframe izolat (sandbox), nu injectată în pagină.
+    expect(await screen.findByTitle("Previzualizarea actului")).toHaveAttribute("sandbox", "");
+  });
+
+  it("[blocant] istoricul listează versiunile, iar revenirea cere serverului versiunea aleasă", async () => {
+    listTemplateVersions.mockResolvedValue([
+      { id: "v3", version: 3, name: "Act propriu", createdAt: "2026-03-12T10:00:00.000Z" },
+      { id: "v2", version: 2, name: "Act propriu", createdAt: "2026-03-01T10:00:00.000Z" },
+    ]);
+    restoreTemplateVersion.mockResolvedValue({ version: 4, restoredFrom: 2 });
+    await openEditor();
+
+    await userEvent.click(await screen.findByRole("button", { name: /Istoric versiuni/i }));
+    expect(await screen.findByText(/Versiunea 2/)).toBeInTheDocument();
+
+    const rows = screen.getAllByRole("button", { name: /Revino la ea/i });
+    await userEvent.click(rows[1]); // a doua = versiunea 2
+    await waitFor(() => expect(restoreTemplateVersion).toHaveBeenCalledWith("tpl-1", 2));
   });
 });
