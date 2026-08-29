@@ -156,7 +156,11 @@ docmergeTemplatesRoutes.put(
 
     // Verify ownership
     const [existing] = await db
-      .select({ id: docmergeTemplates.id, bodyHtml: docmergeTemplates.bodyHtml })
+      .select({
+        id: docmergeTemplates.id,
+        bodyHtml: docmergeTemplates.bodyHtml,
+        isSystem: docmergeTemplates.isSystem,
+      })
       .from(docmergeTemplates)
       .where(
         and(
@@ -166,6 +170,17 @@ docmergeTemplatesRoutes.put(
       );
 
     if (!existing) return c.json({ error: "not_found" }, 404);
+    // DG-106: șabloanele livrate cu produsul se clonează, nu se editează — altfel formularea pe
+    // care se sprijină toate actele viitoare poate fi stricată din trei click-uri.
+    if (existing.isSystem) {
+      return c.json(
+        {
+          error: "system_template",
+          message: "Șablonul standard nu se editează. Fă-i o copie și modifică copia.",
+        },
+        403
+      );
+    }
 
     const newBody = body.bodyHtml ? sanitizeTemplateHtml(body.bodyHtml) : existing.bodyHtml;
     const detected = extractPlaceholders(newBody);
@@ -200,6 +215,17 @@ docmergeTemplatesRoutes.put(
 docmergeTemplatesRoutes.delete("/templates/:id", async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
+
+  const [existing] = await db
+    .select({ isSystem: docmergeTemplates.isSystem })
+    .from(docmergeTemplates)
+    .where(and(eq(docmergeTemplates.id, id), eq(docmergeTemplates.tenantId, user.tenantId)));
+  if (existing?.isSystem) {
+    return c.json(
+      { error: "system_template", message: "Șablonul standard nu se șterge." },
+      403
+    );
+  }
 
   const deleted = await db
     .delete(docmergeTemplates)

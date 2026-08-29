@@ -6,16 +6,15 @@
  * (docmerge_templates) — o singură bibliotecă, două moduri de folosire.
  */
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
-import { FileText, Plus, Loader2, AlertCircle, ArrowLeft, Save } from "lucide-react";
+import { FileText, Plus, Loader2, AlertCircle, ArrowLeft, Save, Copy } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
+import { getTemplate, createTemplate, updateTemplate } from "@/lib/api/docmerge";
 import {
-  listTemplates,
-  getTemplate,
-  createTemplate,
-  updateTemplate,
-  type DocmergeTemplate,
-} from "@/lib/api/docmerge";
-import { DOC_KIND_LABELS } from "@/lib/api/docs";
+  listDocTemplates,
+  cloneDocTemplate,
+  DOC_KIND_LABELS,
+  type DocTemplateListItem,
+} from "@/lib/api/docs";
 /**
  * Editorul (TipTap/ProseMirror) e cea mai grea bucată din tot modulul — ~108 KB gzip. Lista de
  * șabloane nu are nevoie de el, deci se încarcă abia când chiar deschizi un șablon. Așa pagina
@@ -30,12 +29,14 @@ const EMPTY_BODY =
   "<h1>ACT DE PRIMIRE-PREDARE</h1><p>Încheiat astăzi, {{document.data}}, între:</p>";
 
 export function DocTemplatesPage() {
-  const [templates, setTemplates] = useState<DocmergeTemplate[]>([]);
+  const [templates, setTemplates] = useState<DocTemplateListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** Un șablon standard se deschide ca să-l vezi, nu ca să-l strici — se salvează doar copia. */
+  const [isSystem, setIsSystem] = useState(false);
   const [name, setName] = useState("");
   const [kind, setKind] = useState("act_primire_predare");
   const [body, setBody] = useState(EMPTY_BODY);
@@ -45,7 +46,7 @@ export function DocTemplatesPage() {
     setLoading(true);
     setError(null);
     try {
-      setTemplates(await listTemplates());
+      setTemplates(await listDocTemplates());
     } catch {
       setError("Nu am putut încărca șabloanele.");
     } finally {
@@ -62,6 +63,7 @@ export function DocTemplatesPage() {
     setName("");
     setKind("act_primire_predare");
     setBody(EMPTY_BODY);
+    setIsSystem(false);
     setEditing(true);
   }, []);
 
@@ -73,11 +75,28 @@ export function DocTemplatesPage() {
       setName(tpl.name);
       setKind(tpl.kind ?? "act_primire_predare");
       setBody(tpl.bodyHtml);
+      setIsSystem(templates.find((t) => t.id === id)?.isSystem ?? false);
       setEditing(true);
     } catch {
       setError("Nu am putut deschide șablonul.");
     }
   }, []);
+
+  /** Clonarea e singurul drum de la un șablon standard la unul al organizației. */
+  const clone = useCallback(
+    async (id: string) => {
+      setError(null);
+      try {
+        const copy = await cloneDocTemplate(id);
+        await load();
+        await startEdit(copy.id);
+        setIsSystem(false);
+      } catch {
+        setError("Șablonul nu a putut fi clonat.");
+      }
+    },
+    [load, startEdit]
+  );
 
   const save = useCallback(async () => {
     if (!name.trim()) return;
@@ -180,10 +199,26 @@ export function DocTemplatesPage() {
               <DocTemplateEditor value={body} onChange={setBody} />
             </Suspense>
 
+            {isSystem && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-4 py-3">
+                <p className="text-sm text-muted-foreground">
+                  Șablon standard, livrat cu produsul — se poate folosi și clona, dar nu se editează.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => editingId && void clone(editingId)}
+                  className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+                >
+                  <Copy className="h-4 w-4" aria-hidden="true" />
+                  Clonează ca șablon propriu
+                </button>
+              </div>
+            )}
+
             <div className="flex justify-end">
               <button
                 type="button"
-                disabled={saving || !name.trim()}
+                disabled={saving || !name.trim() || isSystem}
                 onClick={() => void save()}
                 className="touch-target inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
@@ -220,20 +255,36 @@ export function DocTemplatesPage() {
         ) : (
           <ul className="divide-y divide-border rounded-lg border border-border">
             {templates.map((t) => (
-              <li key={t.id}>
+              <li key={t.id} className="flex items-center gap-2 p-2">
                 <button
                   type="button"
                   onClick={() => void startEdit(t.id)}
-                  className="flex w-full items-center justify-between gap-4 p-4 text-left hover:bg-muted/40"
+                  className="flex flex-1 items-center justify-between gap-4 rounded-md p-2 text-left hover:bg-muted/40"
                 >
                   <span>
-                    <span className="block text-sm font-medium text-foreground">{t.name}</span>
+                    <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      {t.name}
+                      {t.isSystem && (
+                        <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                          Standard
+                        </span>
+                      )}
+                    </span>
                     <span className="block text-xs text-muted-foreground">
                       {DOC_KIND_LABELS[t.kind ?? "other"] ?? "Alt document"} ·{" "}
                       {t.placeholders.length} câmpuri
                     </span>
                   </span>
                   <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Clonează ${t.name}`}
+                  title="Clonează"
+                  onClick={() => void clone(t.id)}
+                  className="touch-target rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <Copy className="h-4 w-4" aria-hidden="true" />
                 </button>
               </li>
             ))}

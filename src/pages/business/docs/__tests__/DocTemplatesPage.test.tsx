@@ -32,6 +32,19 @@ vi.mock("@/router/HashRouter", () => ({
   ),
 }));
 
+
+const listDocTemplates = vi.fn();
+const cloneDocTemplate = vi.fn();
+
+vi.mock("@/lib/api/docs", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api/docs")>("@/lib/api/docs");
+  return {
+    ...actual,
+    listDocTemplates: (...a: unknown[]) => listDocTemplates(...a),
+    cloneDocTemplate: (...a: unknown[]) => cloneDocTemplate(...a),
+  };
+});
+
 const listTemplates = vi.fn();
 const getTemplate = vi.fn();
 const createTemplate = vi.fn();
@@ -48,13 +61,13 @@ const { DocTemplatesPage } = await import("@/pages/business/docs/DocTemplatesPag
 
 beforeEach(() => {
   vi.clearAllMocks();
+  listDocTemplates.mockResolvedValue([]);
   createTemplate.mockResolvedValue({ id: "tpl-new" });
   updateTemplate.mockResolvedValue({ id: "tpl-1" });
 });
 
 describe("DG-104 — șabloanele se scriu în aplicație", () => {
   it("[blocant] fără șabloane, ecranul cheamă la primul, nu arată o listă goală", async () => {
-    listTemplates.mockResolvedValue([]);
     render(<DocTemplatesPage />);
 
     expect(await screen.findByText("Niciun șablon încă")).toBeInTheDocument();
@@ -62,7 +75,6 @@ describe("DG-104 — șabloanele se scriu în aplicație", () => {
   });
 
   it("[blocant] bara de instrumente are nume în română pe fiecare buton", async () => {
-    listTemplates.mockResolvedValue([]);
     render(<DocTemplatesPage />);
     await userEvent.click(await screen.findByRole("button", { name: /Creează primul șablon/i }));
 
@@ -82,7 +94,6 @@ describe("DG-104 — șabloanele se scriu în aplicație", () => {
   });
 
   it("[blocant] salvarea trimite corpul și tipul actului la API", async () => {
-    listTemplates.mockResolvedValue([]);
     render(<DocTemplatesPage />);
     await userEvent.click(await screen.findByRole("button", { name: /Creează primul șablon/i }));
 
@@ -108,8 +119,8 @@ describe("DG-104 — șabloanele se scriu în aplicație", () => {
   });
 
   it("[blocant] un șablon existent se deschide cu corpul lui și se salvează pe același id", async () => {
-    listTemplates.mockResolvedValue([
-      { id: "tpl-1", name: "Act de primire-predare", placeholders: ["contraparte.iban"], sourceFormat: "html", updatedAt: "", kind: "act_primire_predare" },
+    listDocTemplates.mockResolvedValue([
+      { id: "tpl-1", name: "Act de primire-predare", placeholders: ["contraparte.iban"], kind: "act_primire_predare", category: "Acte de predare", isSystem: false, version: 1, updatedAt: "" },
     ]);
     getTemplate.mockResolvedValue({
       id: "tpl-1",
@@ -140,8 +151,8 @@ describe("DG-104 — șabloanele se scriu în aplicație", () => {
   });
 
   it("[normal] lista arată tipul actului și câte câmpuri are șablonul", async () => {
-    listTemplates.mockResolvedValue([
-      { id: "tpl-1", name: "Act de primire-predare", placeholders: ["a", "b"], sourceFormat: "html", updatedAt: "", kind: "act_primire_predare" },
+    listDocTemplates.mockResolvedValue([
+      { id: "tpl-1", name: "Act de primire-predare", placeholders: ["a", "b"], kind: "act_primire_predare", category: null, isSystem: false, version: 1, updatedAt: "" },
     ]);
     render(<DocTemplatesPage />);
     expect(await screen.findByText(/Act de primire-predare · 2 câmpuri/)).toBeInTheDocument();

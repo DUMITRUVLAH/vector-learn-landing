@@ -30,7 +30,8 @@ import {
 } from "../db/schema/docs";
 import { docmergeTemplates } from "../db/schema/docmergeTemplates";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
-import { renderWithContext } from "../lib/docmerge/placeholders";
+import { extractPlaceholders, renderWithContext } from "../lib/docmerge/placeholders";
+import { SYSTEM_TEMPLATES } from "../lib/docs/systemTemplates";
 
 export const docsRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -457,4 +458,104 @@ docsRoutes.post("/documents/:id/cancel", zValidator("json", cancelSchema), async
 
   await writeAudit(user.tenantId, doc.id, user.id, "cancelled", { reason });
   return c.json(updated);
+});
+
+
+// ─── Biblioteca de șabloane de acte (DG-106) ─────────────────────────────────
+
+/**
+ * Instalează, o singură dată per organizație, șabloanele livrate cu produsul.
+ *
+ * De ce la citire și nu la seed: organizațiile există deja (unele de luni de zile) și nimeni nu
+ * rulează un seed pe producție. Așa, prima deschidere a bibliotecii le aduce. Idempotent: se
+ * inserează doar cele care lipsesc, după (nume + is_system), deci rularea repetată nu duplică
+ * nimic și nu atinge ce a editat organizația.
+ */
+async function ensureSystemTemplates(tenantId: string): Promise<void> {
+  const existing = await db
+    .select({ name: docmergeTemplates.name })
+    .from(docmergeTemplates)
+    .where(and(eq(docmergeTemplates.tenantId, tenantId), eq(docmergeTemplates.isSystem, true)));
+  const have = new Set(existing.map((r) => r.name));
+  const missing = SYSTEM_TEMPLATES.filter((t) => !have.has(t.name));
+  if (missing.length === 0) return;
+
+  await db.insert(docmergeTemplates).values(
+    missing.map((t) => ({
+      tenantId,
+      name: t.name,
+      bodyHtml: t.bodyHtml,
+      placeholders: JSON.stringify(extractPlaceholders(t.bodyHtml)),
+      kind: t.kind,
+      category: t.category,
+      isSystem: true,
+    }))
+  );
+}
+
+docsRoutes.get("/templates", async (c) => {
+  const user = c.get("user");
+  await ensureSystemTemplates(user.tenantId);
+
+  const rows = await db
+    .select({
+      id: docmergeTemplates.id,
+      name: docmergeTemplates.name,
+      kind: docmergeTemplates.kind,
+      category: docmergeTemplates.category,
+      isSystem: docmergeTemplates.isSystem,
+      version: docmergeTemplates.version,
+      placeholders: docmergeTemplates.placeholders,
+      updatedAt: docmergeTemplates.updatedAt,
+    })
+    .from(docmergeTemplates)
+    .where(eq(docmergeTemplates.tenantId, user.tenantId))
+    .orderBy(desc(docmergeTemplates.updatedAt));
+
+  return c.json(
+    rows.map((r) => ({
+      ...r,
+      placeholders: (() => {
+        try {
+          const p: unknown = JSON.parse(r.placeholders);
+          return Array.isArray(p) ? (p as string[]) : [];
+        } catch {
+          return [];
+        }
+      })(),
+    }))
+  );
+});
+
+/**
+ * Clonarea: singurul mod de a porni de la un șablon standard. Copia aparține organizației și se
+ * poate edita liber, iar originalul rămâne intact pentru toți ceilalți.
+ */
+docsRoutes.post("/templates/:id/clone", async (c) => {
+  const user = c.get("user");
+  const [src] = await db
+    .select()
+    .from(docmergeTemplates)
+    .where(
+      and(
+        eq(docmergeTemplates.id, c.req.param("id")),
+        eq(docmergeTemplates.tenantId, user.tenantId)
+      )
+    );
+  if (!src) return c.json({ error: "not_found" }, 404);
+
+  const [copy] = await db
+    .insert(docmergeTemplates)
+    .values({
+      tenantId: user.tenantId,
+      name: `${src.name} (copie)`,
+      bodyHtml: src.bodyHtml,
+      placeholders: src.placeholders,
+      kind: src.kind,
+      category: src.category,
+      isSystem: false,
+    })
+    .returning();
+
+  return c.json(copy, 201);
 });

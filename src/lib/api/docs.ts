@@ -126,3 +126,23 @@ export const DOC_STATUS_LABELS: Record<DocStatus, string> = {
   final: "Finalizat",
   cancelled: "Anulat",
 };
+
+export interface DocTemplateListItem {
+  id: string;
+  name: string;
+  kind: string;
+  category: string | null;
+  isSystem: boolean;
+  version: number;
+  placeholders: string[];
+  updatedAt: string;
+}
+
+/** Biblioteca de acte. La prima deschidere instalează șabloanele standard ale produsului. */
+export function listDocTemplates(): Promise<DocTemplateListItem[]> {
+  return api<DocTemplateListItem[]>("/api/docs/templates");
+}
+
+export function cloneDocTemplate(id: string): Promise<{ id: string; name: string }> {
+  return api<{ id: string; name: string }>(`/api/docs/templates/${id}/clone`, { method: "POST" });
+}

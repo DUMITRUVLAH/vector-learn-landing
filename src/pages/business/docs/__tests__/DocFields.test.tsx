@@ -70,6 +70,19 @@ vi.mock("@/router/HashRouter", () => ({
   ),
 }));
 
+
+const listDocTemplates = vi.fn();
+const cloneDocTemplate = vi.fn();
+
+vi.mock("@/lib/api/docs", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api/docs")>("@/lib/api/docs");
+  return {
+    ...actual,
+    listDocTemplates: (...a: unknown[]) => listDocTemplates(...a),
+    cloneDocTemplate: (...a: unknown[]) => cloneDocTemplate(...a),
+  };
+});
+
 const listTemplates = vi.fn();
 const createTemplate = vi.fn();
 
@@ -84,6 +97,7 @@ const { DocTemplatesPage } = await import("@/pages/business/docs/DocTemplatesPag
 
 beforeEach(() => {
   vi.clearAllMocks();
+  listDocTemplates.mockResolvedValue([]);
   listTemplates.mockResolvedValue([]);
   createTemplate.mockResolvedValue({ id: "tpl-new" });
 });
