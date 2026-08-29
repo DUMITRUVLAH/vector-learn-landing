@@ -402,6 +402,18 @@ async function main() {
     // pagina de acte ar da „relation doc_documents does not exist" până când migrarea ajunge.
     ...DOCGEN_ENSURE_STATEMENTS,
     ...PAR_VENDOR_PROFILE_ENSURE_STATEMENTS,
+    // Migrarea 0154 (audit perf): indexuri compuse/parțiale pe interogările hot-path ale PAR —
+    // fără migrări fiabile pe prod, indexurile trebuie create explicit aici, nu doar în migrare.
+    `CREATE INDEX IF NOT EXISTS "par_payer_modules_tenant_module_idx" ON "par_payer_modules" ("tenant_id","module_key")`,
+    `CREATE INDEX IF NOT EXISTS "par_requests_tenant_created_idx" ON "par_requests" ("tenant_id","created_at" DESC)`,
+    `CREATE INDEX IF NOT EXISTS "par_requests_tenant_status_submitted_idx" ON "par_requests" ("tenant_id","status","submitted_at" DESC)`,
+    `CREATE INDEX IF NOT EXISTS "par_requests_tenant_date_of_request_idx" ON "par_requests" ("tenant_id","date_of_request")`,
+    `CREATE INDEX IF NOT EXISTS "par_requests_tenant_purpose_status_idx" ON "par_requests" ("tenant_id","purpose","status")`,
+    `CREATE INDEX IF NOT EXISTS "par_requests_project_idx" ON "par_requests" ("project_id")`,
+    `CREATE INDEX IF NOT EXISTS "par_requests_event_idx" ON "par_requests" ("event_id")`,
+    `CREATE INDEX IF NOT EXISTS "par_requests_budget_code_idx" ON "par_requests" ("budget_code_id")`,
+    `CREATE INDEX IF NOT EXISTS "par_requests_department_idx" ON "par_requests" ("department_id")`,
+    `CREATE INDEX IF NOT EXISTS "par_approvals_tenant_pending_unlocked_idx" ON "par_approvals" ("tenant_id") WHERE "decision" = 'pending' AND "locked" = false`,
   ];
   for (const stmt of ENSURE_STATEMENTS) {
     try {

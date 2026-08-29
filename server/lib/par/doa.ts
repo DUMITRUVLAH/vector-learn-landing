@@ -80,15 +80,23 @@ export async function resolveApprovalChain(
 
   if (matching.length === 0) {
     // No DOA rule matches → DON'T leave the PAR with zero approval steps (that made it status
-    // "pending_approval" with nobody assigned → stuck forever, invisible in every inbox). Fall back
-    // to ONE role-based approval step: approverUserId=null means "any approver/par_admin can decide",
-    // so the request is always approvable. Admins should still seed a real DOA matrix; this is the net.
+    // "pending_approval" with nobody assigned → stuck forever, invisible in every inbox).
+    //
+    // SECURITY (audit 2026-08-29): plasa asta cădea în direcția PERMISIVĂ. O organizație cu benzi
+    // 0–10.000 și 10.000–100.000, fără bandă nemărginită, primea pentru o cerere de 5.000.000 un
+    // lanț de UN SINGUR pas, „orice aprobator" — adică suma cea mai mare din sistem cerea cea mai
+    // slabă autorizare. Un fallback trebuie să eșueze în direcția prudentă: dacă nu știm ce lanț
+    // se aplică, cerem lanțul CEL MAI EXIGENT pe care organizația l-a definit vreodată (banda cu
+    // pragul maxim), iar dacă nu există nicio matrice, un singur pas rezervat autorității de
+    // escaladare (par_admin), nu oricărui aprobator.
+    const fallback = await highestDefinedChain(tenantId, chargeTo, departmentId, payerId, projectId);
+    if (fallback.length > 0) return fallback;
     return [
       {
         step: 1,
-        approverRoleLabel: "Aprobator",
+        approverRoleLabel: "Aprobator (fără matrice DOA)",
         approverUserId: null,
-        approverParRole: "approver",
+        approverParRole: "par_admin",
       },
     ];
   }
@@ -119,6 +127,45 @@ export async function resolveApprovalChain(
     });
 
   return steps;
+}
+
+/**
+ * Lanțul celei mai mari benzi definite de organizație — folosit când suma nu cade în nicio bandă.
+ * „Cea mai mare" = banda cu `min_amount_cents` maxim; e cea gândită pentru cele mai mari sume,
+ * deci și cea mai exigentă. Filtrele de context (charge_to, departament, plătitor, proiect) rămân
+ * aceleași ca în potrivirea normală, ca fallback-ul să nu importe pașii altui plătitor.
+ */
+async function highestDefinedChain(
+  tenantId: string,
+  chargeTo: string | null | undefined,
+  departmentId: string | null | undefined,
+  payerId: string | null | undefined,
+  projectId: string | null | undefined
+): Promise<ApprovalStep[]> {
+  const rows = await db
+    .select()
+    .from(parDoaMatrix)
+    .where(and(eq(parDoaMatrix.tenantId, tenantId), eq(parDoaMatrix.active, true)));
+  const contextual = rows.filter((row) => {
+    if (row.chargeTo != null && row.chargeTo !== chargeTo) return false;
+    if (row.departmentId != null && row.departmentId !== departmentId) return false;
+    if (row.payerId && row.payerId !== payerId) return false;
+    if (row.projectId && row.projectId !== projectId) return false;
+    return true;
+  });
+  if (contextual.length === 0) return [];
+  const topMin = Math.max(...contextual.map((row) => row.minAmountCents ?? 0));
+  const band = contextual.filter((row) => (row.minAmountCents ?? 0) === topMin);
+  const byStep = new Map<number, typeof band>();
+  for (const row of band) byStep.set(row.step, [...(byStep.get(row.step) ?? []), row]);
+  return Array.from(byStep.entries())
+    .sort(([a], [b]) => a - b)
+    .flatMap(([, group]) => group.map((row) => ({
+      step: row.step,
+      approverRoleLabel: row.approverRoleLabel,
+      approverUserId: row.approverUserId ?? null,
+      approverParRole: row.approverParRole ?? null,
+    })));
 }
 
 /**

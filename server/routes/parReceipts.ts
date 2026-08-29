@@ -14,6 +14,8 @@ import { parRequests, parLineItems, parReceipts, parReceiptLines, parAudit } fro
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
+import { canViewPar } from "../lib/par/visibility";
+import { mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 
 export const parReceiptsRoutes = new Hono<{ Variables: AuthVariables }>();
 parReceiptsRoutes.use("*", requireAuth);
@@ -36,9 +38,8 @@ parReceiptsRoutes.get("/:id/receipts", async (c) => {
 
   const [par] = await db.select().from(parRequests).where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
   if (!par) return c.json({ error: "not_found" }, 404);
-  const roles = await getUserPARRoles(user.id, tenantId);
-  const canSee = par.requestedByUserId === user.id || roles.some((r) => ["approver", "finance", "par_admin"].includes(r));
-  if (!canSee) return c.json({ error: "not_found" }, 404);
+  // SECURITY (audit 2026-08-29): regula de vizualizare (rol + arie) trăiește într-un singur loc.
+  if (!(await canViewPar(user, tenantId, par))) return c.json({ error: "not_found" }, 404);
 
   const receipts = await db
     .select()
@@ -67,6 +68,13 @@ parReceiptsRoutes.post("/:id/receipts", zValidator("json", receiptSchema), async
   if (!roles.some((r) => ["finance", "par_admin"].includes(r))) {
     return c.json({ error: "forbidden: finance or admin role required" }, 403);
   }
+  // SECURITY (audit 2026-08-29): rolul era verificat, ARIA nu — un ofițer de finanțe dintr-un alt
+  // proiect/plătitor putea acționa pe cererea altcuiva (iar recepția e intrarea în verificarea
+  // 3-way, deci debloca poarta de plată a unei cereri care nu era a lui).
+  const inScope = par.projectId
+    ? await mayAccessProject(user.id, tenantId, par.projectId, user.role ?? undefined)
+    : await mayAccessPayer(user.id, tenantId, par.payerId, user.role ?? undefined);
+  if (!inScope) return c.json({ error: "not_found" }, 404);
   if (par.status !== "in_finance") {
     return c.json({ error: `conflict: receipt only on in_finance PARs (status '${par.status}')` }, 400);
   }

@@ -118,6 +118,7 @@ import { finCronRoutes } from "./routes/finCron";
 // DOCMERGE module (DOCMERGE-001)
 import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
 import { docsRoutes } from "./routes/docs";
+import { denyWhenImpersonating, logImpersonatedWrites } from "./middleware/impersonationGuard";
 
 export const app = new Hono();
 
@@ -176,9 +177,34 @@ app.use("/api/business/auth/login", authRateLimit);
 app.use("/api/business/auth/signup", authRateLimit);
 app.use("/api/business/auth/forgot-password", authRateLimit);
 app.use("/api/business/auth/reset-password", authRateLimit);
-app.use("/api/par/invites/accept", authRateLimit);
+// SECURITY (audit 2026-08-29): rutele de mai jos erau NELIMITATE, deși fiecare e o poartă de
+// autentificare: `/2fa/verify` acceptă un cod de 6 cifre (forță brută în minute), `accept-invite`
+// verifică o parolă, iar căile Google consumă un token de invitație. Regula veche pentru
+// `/api/par/invites/accept` nu corespundea NICIUNEI rute — acceptarea invitațiilor trăiește în
+// auth.ts — deci era o gardă moartă care dădea impresia de acoperire.
+app.use("/api/auth/2fa/verify", authRateLimit);
+app.use("/api/auth/accept-invite", authRateLimit);
+app.use("/api/auth/google/join", authRateLimit);
+app.use("/api/auth/google/accept-matched-invite", authRateLimit);
 app.use("/api/par/ai-prefill/*", expensiveRateLimit);
 app.use("/api/itpark/ai/*", expensiveRateLimit);
+// Încărcarea unui atașament PAR și reconcilierea rulează extractorul LLM la fiecare cerere
+// (server/routes/parAttachments.ts) — cost real în bani, deci aceeași poartă ca restul AI-ului.
+app.use("/api/par/:id/attachments", expensiveRateLimit);
+app.use("/api/par/:id/attachments/*", expensiveRateLimit);
+
+// SECURITY (audit 2026-08-29) — impersonare (vezi middleware/impersonationGuard.ts).
+// Deciziile care mută bani sau produc o semnătură nu se iau dintr-o sesiune împrumutată:
+// altfel dosarul ar purta semnătura clientului pentru o decizie luată de altcineva.
+app.use("/api/par/:id/approve", denyWhenImpersonating);
+app.use("/api/par/:id/reject", denyWhenImpersonating);
+app.use("/api/par/:id/reapprove", denyWhenImpersonating);
+app.use("/api/par/:id/pay", denyWhenImpersonating);
+app.use("/api/par/:id/finance", denyWhenImpersonating);
+app.use("/api/par/:id/purchase-order", denyWhenImpersonating);
+app.use("/api/par/bulk-approve", denyWhenImpersonating);
+// Restul scrierilor sunt permise, dar lasă urmă cu actorul REAL, nu cu utilizatorul împrumutat.
+app.use("/api/*", logImpersonatedWrites);
 
 const allowedOrigins = [
   "http://localhost:5173",

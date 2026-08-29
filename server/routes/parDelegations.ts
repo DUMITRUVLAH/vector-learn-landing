@@ -16,6 +16,8 @@ import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
+import { writeAuditLog } from "../lib/auditLogger";
+import { clientIp } from "../lib/clientIp";
 
 export const parDelegationsRoutes = new Hono<{ Variables: AuthVariables }>();
 parDelegationsRoutes.use("*", requireAuth);
@@ -83,6 +85,18 @@ parDelegationsRoutes.post("/", zValidator("json", createSchema), async (c) => {
     return c.json({ error: "self_delegation", detail: "Nu te poți delega pe tine însuți." }, 400);
   }
 
+  // SECURITY (audit 2026-08-29): ruta nu cerea NICIUN rol creatorului, deși comentariul de mai jos
+  // presupune că delegarea e „creată de cineva care deține deja autoritatea". Fără verificare,
+  // oricine din organizație putea fabrica un transfer de autoritate de aprobare. Nu poți delega
+  // ce nu ai.
+  const creatorRoles = await getUserPARRoles(user.id, tenantId);
+  if (!creatorRoles.includes("approver") && !creatorRoles.includes("par_admin")) {
+    return c.json(
+      { error: "forbidden", detail: "Doar un aprobator își poate delega autoritatea de aprobare." },
+      403,
+    );
+  }
+
   const startsAt = new Date(starts_at);
   const endsAt = new Date(ends_at);
   if (endsAt <= startsAt) {
@@ -133,6 +147,18 @@ parDelegationsRoutes.post("/", zValidator("json", createSchema), async (c) => {
     .values({ tenantId, fromUserId: user.id, toUserId: to_user_id, startsAt, endsAt })
     .returning();
 
+  // Un transfer de autoritate de aprobare trebuie să lase urmă: fără el, întrebarea „cine avea
+  // dreptul să aprobe pe 14 martie?" nu are răspuns (audit 2026-08-29).
+  await writeAuditLog({
+    tenantId,
+    actorId: user.id,
+    actionType: "par_delegation_created",
+    targetType: "par_delegation",
+    targetId: row.id,
+    newValue: { fromUserId: user.id, toUserId: to_user_id, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() },
+    ipAddress: clientIp(c),
+  });
+
   return c.json(row, 201);
 });
 
@@ -148,7 +174,18 @@ parDelegationsRoutes.delete("/:id", async (c) => {
     ? and(eq(parDelegations.id, id), eq(parDelegations.tenantId, tenantId))
     : and(eq(parDelegations.id, id), eq(parDelegations.tenantId, tenantId), eq(parDelegations.fromUserId, user.id));
 
-  const [deleted] = await db.update(parDelegations).set({ active: false }).where(where).returning({ id: parDelegations.id });
+  const [deleted] = await db.update(parDelegations).set({ active: false }).where(where).returning({
+    id: parDelegations.id, fromUserId: parDelegations.fromUserId, toUserId: parDelegations.toUserId,
+  });
   if (!deleted) return c.json({ error: "not_found" }, 404);
+  await writeAuditLog({
+    tenantId,
+    actorId: user.id,
+    actionType: "par_delegation_revoked",
+    targetType: "par_delegation",
+    targetId: deleted.id,
+    oldValue: { fromUserId: deleted.fromUserId, toUserId: deleted.toUserId },
+    ipAddress: clientIp(c),
+  });
   return c.json({ ok: true });
 });

@@ -58,6 +58,7 @@ import {
   type Section16Payload,
   type PayPayload,
 } from "@/lib/api/par";
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_LABEL, attachmentTooLargeMessage } from "@/lib/par/attachmentLimits";
 import { openParAttachment } from "@/lib/parFiles";
 import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
 import { useRouter } from "@/router/HashRouter";
@@ -261,6 +262,13 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
       setError("Suma reală trebuie să fie un număr pozitiv (în MDL).");
       return;
     }
+    // PERF: uploaded as base64 JSON — see attachmentLimits.ts for why the cap is 3 MB, not 10.
+    // Checked again here (not just in the file input's onChange) in case a bigger file was
+    // dropped in some other way; the upload must never even attempt an oversized payload.
+    if (proofFile && proofFile.size > MAX_ATTACHMENT_BYTES) {
+      setError(attachmentTooLargeMessage(proofFile.name));
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -397,11 +405,21 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
               id="proof-file"
               type="file"
               accept="application/pdf,image/*"
-              onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                if (f && f.size > MAX_ATTACHMENT_BYTES) {
+                  setError(attachmentTooLargeMessage(f.name));
+                  e.target.value = "";
+                  setProofFile(null);
+                  return;
+                }
+                setError(null);
+                setProofFile(f);
+              }}
               className="w-full text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-primary/90 file:cursor-pointer"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              {proofFile ? `Se atașează la dosar: ${proofFile.name}` : "Confirmarea de plată se atașează la dosarul cererii (secțiunea Atașamente)."}
+              {proofFile ? `Se atașează la dosar: ${proofFile.name}` : `Confirmarea de plată se atașează la dosarul cererii (secțiunea Atașamente) — max ${MAX_ATTACHMENT_LABEL}.`}
             </p>
           </div>
         </div>

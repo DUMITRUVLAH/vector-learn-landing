@@ -11,6 +11,7 @@
 import type { Context } from "hono";
 import { db } from "../db/client";
 import { loginEvents } from "../db/schema/platform";
+import { clientIp } from "./clientIp";
 
 export type LoginApp = "business" | "learn" | "parent";
 export type LoginMethod = "password" | "google" | "invite" | "signup" | "reset";
@@ -29,9 +30,7 @@ export interface LoginEventInput {
 /** IP-ul real din spatele proxy-ului Vercel/Cloudflare. */
 export function clientIp(c: Context): string | null {
   return (
-    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
-    c.req.header("cf-connecting-ip") ??
-    null
+    clientIp(c) ?? null
   );
 }
 

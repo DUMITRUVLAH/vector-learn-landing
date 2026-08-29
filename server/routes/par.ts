@@ -62,6 +62,7 @@ import { getActiveDelegators, getDelegatedAuthority } from "../lib/par/delegatio
 import { resolveViewerDecision } from "../lib/par/decisionAuthority";
 import { enabledPayerIds, hasPayerModuleEntitlement } from "../middleware/requireModuleEntitlement";
 import { canViewPar, isWorkspaceAdminRole } from "../lib/par/visibility";
+import { archiveApprovalsBeforeReset } from "../lib/par/approvalArchive";
 import { isUrgentReasonCode } from "../../src/lib/par/urgentReasons";
 
 export const parRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -1758,6 +1759,10 @@ parRoutes.post("/:id/reopen", async (c) => {
     );
   }
 
+  // Deciziile deja date se arhivează în audit ÎNAINTE de ștergere (audit 2026-08-29) — altfel
+  // semnăturile versiunii anterioare dispăreau fără urmă. Vezi lib/par/approvalArchive.ts.
+  await archiveApprovalsBeforeReset(tenantId, parId, user.id, "reopen");
+
   // Clear the stale approval rows — a fresh chain is generated on the next submit.
   await db
     .delete(parApprovals)
@@ -1829,6 +1834,9 @@ parRoutes.post("/:id/withdraw", async (c) => {
         ne(parApprovals.decision, "pending")
       )
     );
+
+  // Deciziile date se păstrează în audit înainte să dispară lanțul (audit 2026-08-29).
+  await archiveApprovalsBeforeReset(tenantId, parId, user.id, "withdraw");
 
   // Lanțul stale dispare; submitPAR îl regenerează la re-trimitere.
   await db

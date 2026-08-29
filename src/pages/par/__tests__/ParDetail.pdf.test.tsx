@@ -3,7 +3,8 @@
  * Tests: T-PAR-115-1, T-PAR-115-2
  *
  * T-PAR-115-1 [blocant]: Given /app/par/:id, page renders without crash and Download PDF button exists
- * T-PAR-115-2 [normal]: clicking Download PDF calls downloadParPdf and uploadAttachment (kind=par_pdf)
+ * T-PAR-115-2 [normal]: clicking Download PDF calls buildParPdfDoc (dynamically imported) and
+ *   uploadAttachment (kind=par_pdf), reusing the SAME generated document for both.
  *
  * @vitest-environment jsdom
  */
@@ -53,19 +54,23 @@ vi.mock("html2canvas", () => ({
   }),
 }));
 
-// Mock parPdf module — downloadParPdf resolves immediately
+// Mock parPdf module — buildParPdfDoc (the dynamically-imported entry point ParDetail's
+// download handler calls) resolves immediately with a fake jsPDF-shaped document.
 // NOTE: vi.mock is hoisted so we can't use a variable here; use vi.fn() directly
 vi.mock("@/lib/parPdf", async () => {
   const actual = await vi.importActual("@/lib/parPdf");
   return {
     ...actual,
-    downloadParPdf: vi.fn().mockResolvedValue(undefined),
+    buildParPdfDoc: vi.fn().mockResolvedValue({
+      save: vi.fn(),
+      output: vi.fn().mockReturnValue("data:application/pdf;base64,MOCK"),
+    }),
   };
 });
 
 // Helper to get the mock after module init
-function getMockDownload() {
-  return parPdf.downloadParPdf as ReturnType<typeof vi.fn>;
+function getMockBuild() {
+  return parPdf.buildParPdfDoc as ReturnType<typeof vi.fn>;
 }
 
 // ─── Fixture ──────────────────────────────────────────────────────────────────
@@ -219,7 +224,7 @@ describe("ParDetailPage — T-PAR-115-2 [normal]: PDF download + attachment", ()
     });
   });
 
-  it("calls downloadParPdf when Download PDF button is clicked", async () => {
+  it("calls buildParPdfDoc when Download PDF button is clicked, then uploads the same document", async () => {
     render(<ParDetailPage />);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /descarcă formularul par ca pdf/i })).toBeInTheDocument();
@@ -228,15 +233,20 @@ describe("ParDetailPage — T-PAR-115-2 [normal]: PDF download + attachment", ()
     const btn = screen.getByRole("button", { name: /descarcă formularul par ca pdf/i });
     fireEvent.click(btn);
 
+    // Exactly ONE rasterization for the click — reused for both the local download and the
+    // attachment upload (the bug this refactor fixed: html2canvas used to run twice).
     await waitFor(() => {
-      expect(getMockDownload()).toHaveBeenCalledTimes(1);
+      expect(getMockBuild()).toHaveBeenCalledTimes(1);
+    }, { timeout: 5000 });
+    await waitFor(() => {
+      expect(parApi.uploadAttachment).toHaveBeenCalledTimes(1);
     }, { timeout: 5000 });
   });
 
   it("button shows loading state during generation", async () => {
-    let resolveDownload!: () => void;
-    getMockDownload().mockImplementationOnce(
-      () => new Promise<void>((res) => { resolveDownload = res; })
+    let resolveDownload!: (doc: { save: () => void; output: () => string }) => void;
+    getMockBuild().mockImplementationOnce(
+      () => new Promise((res) => { resolveDownload = res; })
     );
 
     render(<ParDetailPage />);
@@ -251,7 +261,7 @@ describe("ParDetailPage — T-PAR-115-2 [normal]: PDF download + attachment", ()
     }, { timeout: 1000 });
 
     // Resolve and clean up
-    resolveDownload();
+    resolveDownload({ save: () => {}, output: () => "data:application/pdf;base64,MOCK" });
   });
 
   it("calls getPar on load to fetch the full ParDetail", async () => {

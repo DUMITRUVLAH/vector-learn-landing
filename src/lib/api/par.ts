@@ -508,7 +508,13 @@ export type ParListRow = ParRequest & {
   docs?: ParDocsSummary;
 };
 
-export async function listPar(filters: ListParFilters = {}): Promise<{
+export async function listPar(
+  filters: ListParFilters = {},
+  // PERF: ParDashboard's search box fires one request per settled (debounced) query; a `signal`
+  // lets the caller cancel a request that's still in flight once a newer one starts, so a slow
+  // response for an old query can't land after a faster one for the current query.
+  opts: { signal?: AbortSignal } = {}
+): Promise<{
   requests: ParListRow[];
   total: number;
 }> {
@@ -523,7 +529,7 @@ export async function listPar(filters: ListParFilters = {}): Promise<{
   if (filters.min_total != null) params.set("min_total", String(filters.min_total));
   if (filters.max_total != null) params.set("max_total", String(filters.max_total));
   const qs = params.toString();
-  return api(`/api/par${qs ? `?${qs}` : ""}`);
+  return api(`/api/par${qs ? `?${qs}` : ""}`, { signal: opts.signal });
 }
 
 /** Submit a PAR (transition from draft → pending_approval, PAR-107) */

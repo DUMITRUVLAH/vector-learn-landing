@@ -43,7 +43,7 @@ import {
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { getActiveDelegators, getDelegatedAuthority } from "../lib/par/delegations";
 import { stepMatchesViewer } from "../lib/par/decisionAuthority";
-import { blocksOnApprovalLimit } from "../lib/par/approvalLimit";
+import { blocksOnApprovalLimit, minApprovalLimitCents } from "../lib/par/approvalLimit";
 import { approvalProgressAfterDecision } from "../lib/par/approvalProgress";
 import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import {
@@ -244,18 +244,27 @@ async function approveParStep(
   const progress = approvalProgressAfterDecision(approvalSteps, activeStep.id);
   const isFinalApproval = progress.state === "complete";
   const isParAdmin = roles.includes("par_admin");
+  // VF-302: dacă semnează pe pasul altcuiva (un delegator), semnătura/titlul se adnotează.
+  // Calculat înainte de plafon: autoritatea delegată aduce cu ea și LIMITA delegatorului.
+  const viaDelegation =
+    activeStep.approverUserId != null && activeStep.approverUserId !== userId && delegators.has(activeStep.approverUserId);
+
   if (isFinalApproval && !isParAdmin) {
-    const [approverRow] = await db
-      .select({ limit: parMembers.approvalLimitCents })
+    // SECURITY (audit 2026-08-29): plafonul efectiv = minimul dintre limita celui care semnează
+    // ȘI limitele celor prin care exercită autoritatea. Vezi lib/par/approvalLimit.ts.
+    const actsOnOwnAuthority = roles.includes("approver");
+    const relevantUserIds = [
+      userId,
+      ...(viaDelegation && activeStep.approverUserId ? [activeStep.approverUserId] : []),
+      // Pas pe rol, semnat de cineva care NU are rol de aprobator propriu: autoritatea vine
+      // exclusiv prin delegare, deci se aplică limitele tuturor delegatorilor activi.
+      ...(!actsOnOwnAuthority && !viaDelegation ? [...delegators] : []),
+    ];
+    const limitRows = await db
+      .select({ userId: parMembers.userId, limit: parMembers.approvalLimitCents })
       .from(parMembers)
-      .where(
-        and(
-          eq(parMembers.tenantId, tenantId),
-          eq(parMembers.userId, userId),
-          eq(parMembers.role, "approver")
-        )
-      );
-    const limitCents = approverRow?.limit ?? null;
+      .where(and(eq(parMembers.tenantId, tenantId), inArray(parMembers.userId, relevantUserIds)));
+    const limitCents = minApprovalLimitCents(limitRows, relevantUserIds);
     const amountMdlCents = par.totalMdlCents ?? par.totalEstimatedCents;
     if (blocksOnApprovalLimit({ isFinalApproval, isParAdmin, approverLimitCents: limitCents, amountMdlCents })) {
       await writeAudit({
@@ -268,10 +277,6 @@ async function approveParStep(
       };
     }
   }
-
-  // VF-302: if acting on a step assigned to someone else (a delegator), annotate the signature/title.
-  const viaDelegation =
-    activeStep.approverUserId != null && activeStep.approverUserId !== userId && delegators.has(activeStep.approverUserId);
 
   // signature_name is a HUMAN field: it lands in the signature block on the detail page and on the
   // printed PAR PDF. When the client omits it (bulk approve, keyboard shortcut), fall back to the
@@ -897,6 +902,15 @@ parApprovalsRoutes.post("/:id/reapprove", async (c) => {
     .from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
   if (!par) return c.json({ error: "not_found" }, 404);
+
+  // SECURITY (audit 2026-08-29): re-aprobarea depășirii era singura decizie de aprobare fără
+  // gardă de segregare a sarcinilor. `approveParStep` refuză dur auto-aprobarea (mai sus în
+  // fișier), dar aici lipsea — deci un solicitant care are și rol de aprobator își putea aproba
+  // singur depășirea propriei cereri și trimite plata mai departe. Controlul „plata efectivă a
+  // depășit estimatul cu peste 10%" se auto-anula astfel.
+  if (par.requestedByUserId === user.id) {
+    return c.json({ error: "forbidden: cannot re-approve your own PAR (self-approval)" }, 403);
+  }
   if (par.projectId ? !(await mayAccessProject(user.id, tenantId, par.projectId, user.role)) : !(await mayAccessPayer(user.id, tenantId, par.payerId, user.role))) {
     return c.json({ error: "not_found" }, 404);
   }
@@ -906,6 +920,52 @@ parApprovalsRoutes.post("/:id/reapprove", async (c) => {
       { error: `conflict: PAR status is '${par.status}', expected reapproval_required` },
       409
     );
+  }
+
+  // A doua parte a aceleiași reguli: depășirea se acoperă de cineva care CHIAR a semnat această
+  // cerere (sau de autoritatea de escaladare, par_admin) — nu de orice aprobator din arie care
+  // n-a văzut-o niciodată. Sursa adevărului pentru „cine a semnat" e jurnalul de audit:
+  // `par_approvals.approver_user_id` e cine era ASIGNAT, nu cine a decis (pașii pe rol îl au null).
+  const isParAdmin = roles.includes("par_admin");
+  if (!isParAdmin) {
+    const signed = await db
+      .select({ id: parAudit.id })
+      .from(parAudit)
+      .where(and(
+        eq(parAudit.tenantId, tenantId),
+        eq(parAudit.parId, parId),
+        eq(parAudit.event, "approved"),
+        eq(parAudit.actorUserId, user.id),
+      ))
+      .limit(1);
+    if (signed.length === 0) {
+      return c.json(
+        { error: "forbidden: only an approver who signed this PAR (or a par_admin) may re-approve the overage" },
+        403
+      );
+    }
+
+    // Și plafonul DOA se aplică sumei EFECTIV plătite, nu celei estimate — altfel depășirea ar fi
+    // exact portița prin care se semnează peste limită.
+    const [pmt] = await db
+      .select({ actual: parPayments.actualAmountCents })
+      .from(parPayments)
+      .where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId)));
+    const actualCents = pmt?.actual ?? null;
+    if (actualCents != null) {
+      const limitRows = await db
+        .select({ userId: parMembers.userId, limit: parMembers.approvalLimitCents })
+        .from(parMembers)
+        .where(and(eq(parMembers.tenantId, tenantId), eq(parMembers.userId, user.id)));
+      const limitCents = minApprovalLimitCents(limitRows, [user.id]);
+      if (blocksOnApprovalLimit({ isFinalApproval: true, isParAdmin: false, approverLimitCents: limitCents, amountMdlCents: actualCents })) {
+        await writeAudit({
+          tenantId, parId, actorUserId: user.id, event: "approval_limit_exceeded",
+          detail: `Overage re-approval blocked: paid ${actualCents} cents exceeds approver limit ${limitCents} cents.`,
+        });
+        return c.json({ error: "over_approval_limit", limit_cents: limitCents, amount_cents: actualCents }, 403);
+      }
+    }
   }
 
   const now = new Date();

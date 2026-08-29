@@ -22,6 +22,9 @@ import { createSession, revokeSession, SESSION_COOKIE } from "../auth/session";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { recordLoginEvent } from "../lib/loginEvents";
 import { applyDefaultsToTenant, getModuleDefaults } from "../lib/platformModules";
+import { isReservedPlatformEmail } from "../lib/platformOwner";
+import { hasTwoFactorEnabled } from "../lib/auth/twoFactorGate";
+import { clientIp } from "../lib/clientIp";
 
 const loginSchema = z.object({
   email: z.string().email().max(255),
@@ -74,6 +77,10 @@ businessAuthRoutes.post("/auth/signup", zValidator("json", signupSchema), async 
   // Store + look up emails lowercased (matches the invite/Google convention) so "Bob@x" and
   // "bob@x" can't create two separate workspaces for the same person.
   const email = body.email.trim().toLowerCase();
+
+  // SECURITY (audit 2026-08-29): emailurile de proprietar de platformă nu se pot revendica prin
+  // creare de cont — vezi lib/platformOwner.isReservedPlatformEmail.
+  if (isReservedPlatformEmail(email)) return c.json({ error: "email_reserved" }, 403);
 
   const existing = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (existing) return c.json({ error: "email_taken" }, 409);
@@ -139,7 +146,7 @@ businessAuthRoutes.post("/auth/signup", zValidator("json", signupSchema), async 
   // Drepturile de modul ale workspace-ului nou, din implicitele platformei.
   await applyDefaultsToTenant(tenant.id, user.id);
 
-  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? null;
+  const ipAddress = clientIp(c) ?? null;
   const userAgent = c.req.header("user-agent") ?? null;
   const { token, expiresAt } = await createSession(user.id, {
     ipAddress: ipAddress ?? undefined,
@@ -213,8 +220,24 @@ businessAuthRoutes.post("/auth/login", zValidator("json", loginSchema), async (c
     return fail("workspace_suspended", 403);
   }
 
-  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? null;
+  const ipAddress = clientIp(c) ?? null;
   const userAgent = c.req.header("user-agent") ?? null;
+
+  // SECURITY (audit 2026-08-29): ruta asta emitea sesiune completă fără să se uite la 2FA, deci
+  // al doilea factor era ocolibil pentru oricine îl activase. Aceeași poartă ca /api/auth/login.
+  if (await hasTwoFactorEnabled(user.id)) {
+    const pending = await createSession(user.id, {
+      ipAddress: ipAddress ?? undefined,
+      userAgent: userAgent ?? undefined,
+      twoFactorPending: true,
+    });
+    setSessionCookie(c, pending.token, pending.expiresAt);
+    await recordLoginEvent(c, {
+      email: user.email, success: true, app: "business", method: "password",
+      userId: user.id, tenantId: tenant.id, failureReason: null,
+    });
+    return c.json({ requiresTwoFactor: true });
+  }
 
   const { token, expiresAt } = await createSession(user.id, {
     ipAddress: ipAddress ?? undefined,

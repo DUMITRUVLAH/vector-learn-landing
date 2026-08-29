@@ -37,3 +37,37 @@ export function blocksOnApprovalLimit(input: ApprovalLimitInput): boolean {
   if (approverLimitCents == null) return false;
   return amountMdlCents > approverLimitCents;
 }
+
+
+/**
+ * SECURITY (audit 2026-08-29) — plafonul efectiv al unei semnături date PRIN DELEGARE.
+ *
+ * Bug-ul: `approveParStep` citea plafonul CELUI CARE APASĂ, dintr-un rând `par_members` cu
+ * `role='approver'`. Cine primea autoritatea prin delegare nu are un asemenea rând, deci limita
+ * ieșea `null` = nelimitat: A, cu plafon de 50.000, îi deleagă lui B, iar B semnează final o
+ * cerere de 2.000.000 pe care A nu avea dreptul s-o semneze. Delegarea transfera autoritatea
+ * FĂRĂ să transfere și limita ei.
+ *
+ * Regula corectă: plafonul efectiv e MINIMUL plafoanelor tuturor celor prin care se exercită
+ * autoritatea — cel care semnează și delegatorii lui. „Nelimitat" (null) participă ca +∞, dar
+ * dacă ORICINE din lanț are o limită numerică, ea se aplică. O delegare nu poate crea autoritate
+ * pe care delegatorul nu o avea.
+ *
+ * Al doilea defect reparat aici: limita se citea doar de pe rândul `role='approver'`, deci o
+ * limită pusă pe rândul `finance` al aceleiași persoane era ignorată complet. Acum se ia minimul
+ * peste TOATE rândurile de membru ale acelei persoane — o limită e o limită, indiferent pe ce rol
+ * a fost scrisă.
+ */
+export function minApprovalLimitCents(
+  rows: Array<{ userId: string; limit: number | null }>,
+  relevantUserIds: readonly string[]
+): number | null {
+  const relevant = new Set(relevantUserIds);
+  let min: number | null = null;
+  for (const row of rows) {
+    if (!relevant.has(row.userId)) continue;
+    if (row.limit == null) continue;
+    min = min == null ? row.limit : Math.min(min, row.limit);
+  }
+  return min;
+}

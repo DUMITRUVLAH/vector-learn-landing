@@ -70,7 +70,6 @@ import {
   type ParAttachmentAnalysis,
   PAR_STATUS_LABELS,
 } from "@/lib/api/par";
-import { downloadParPdf } from "@/lib/parPdf";
 import { openParAttachment } from "@/lib/parFiles";
 import { validateIban } from "@/lib/par/iban";
 import { patentStatus, formatPatentDate } from "@/lib/par/patent";
@@ -247,46 +246,19 @@ function PdfDownloadButton({ par, onAttached }: PdfButtonProps) {
     setStatus("generating");
     setErrMsg(null);
     try {
-      await downloadParPdf(par);
+      // PERF: html2canvas (~174 KB gzip) + jsPDF only load when someone actually clicks
+      // "Download PDF" — not on every /business/par/:id visit.
+      const { buildParPdfDoc, parPdfFileName } = await import("@/lib/parPdf");
+      // ONE rasterization, reused for both destinations: the local download AND the PAR
+      // attachment upload used to each run their own independent html2canvas snapshot of the
+      // same form on a single click.
+      const pdf = await buildParPdfDoc(par);
+      const fileName = parPdfFileName(par);
+      pdf.save(fileName);
       try {
-        const { jsPDF } = await import("jspdf");
-        const html2canvas = (await import("html2canvas")).default;
-        const { buildParHtml } = await import("@/lib/parPdf");
-        const host = document.createElement("div");
-        host.style.position = "fixed";
-        host.style.left = "-10000px";
-        host.style.top = "0";
-        host.style.background = "#ffffff";
-        host.innerHTML = buildParHtml(par);
-        document.body.appendChild(host);
-        const node = host.firstElementChild as HTMLElement;
-        try {
-          if (document.fonts?.ready) await document.fonts.ready;
-          const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false });
-          const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-          const pageW = 210;
-          const imgW = pageW;
-          const imgH = (canvas.height * imgW) / canvas.width;
-          const jpeg = canvas.toDataURL("image/jpeg", 0.92);
-          if (imgH <= 297) {
-            pdf.addImage(jpeg, "JPEG", 0, 0, imgW, imgH);
-          } else {
-            let remaining = imgH;
-            let offset = 0;
-            while (remaining > 0) {
-              pdf.addImage(jpeg, "JPEG", 0, -offset, imgW, imgH);
-              remaining -= 297;
-              offset += 297;
-              if (remaining > 0) pdf.addPage();
-            }
-          }
-          const dataUrl = pdf.output("datauristring");
-          const fileSafe = (par.requestNo ?? `par-${par.id.slice(0, 8)}`).replace(/[^\w-]+/g, "_");
-          await uploadAttachment(par.id, { file_name: `PAR_Form_${fileSafe}.pdf`, file_url: dataUrl, mime: "application/pdf", kind: "par_pdf" });
-          onAttached();
-        } finally {
-          document.body.removeChild(host);
-        }
+        const dataUrl = pdf.output("datauristring");
+        await uploadAttachment(par.id, { file_name: fileName, file_url: dataUrl, mime: "application/pdf", kind: "par_pdf" });
+        onAttached();
       } catch {
         console.warn("[PAR-115] attachment save failed (download succeeded)");
       }

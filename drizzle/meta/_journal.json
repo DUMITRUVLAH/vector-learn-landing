@@ -1072,6 +1072,13 @@
       "when": 1787000200010,
       "tag": "0153_par_vendor_profile",
       "breakpoints": true
+    },
+    {
+      "idx": 154,
+      "version": "7",
+      "when": 1787000200011,
+      "tag": "0154_par_perf_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,7 @@ import { parDepartments, parMemberProfiles, parPayerMembers, parPayers, parProje
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
+import { accessiblePayerIds, accessibleProjectIds } from "../lib/par/projectScope";
 
 export const parProfilesRoutes = new Hono<{ Variables: AuthVariables }>();
 parProfilesRoutes.use("*", requireAuth);
@@ -107,6 +108,19 @@ parProfilesRoutes.put("/:id/projects", parUuidGuard("id"), requirePARRole("par_a
   ));
   if (!member) return c.json({ error: "member_not_found" }, 404);
   const projectIds = [...new Set(c.req.valid("json").project_ids)];
+  // SECURITY (audit 2026-08-29): se valida doar că proiectele/plătitorii EXISTĂ în tenant — nu că
+  // cel care acordă accesul îl are el însuși, și nici că nu-și modifică propriul rând. Un par_admin
+  // restrâns la un plătitor își putea trimite propriul id în URL, lista tuturor plătitorilor în
+  // corp, și obținea acces la toate cererile, IBAN-urile și rapoartele workspace-ului. Un
+  // administrator nu poate acorda mai mult decât are, și nu-și extinde singur aria.
+  const actor = c.get("user");
+  if (actor.id === userId) {
+    return c.json({ error: "forbidden_self_scope", detail: "Nu-ți poți modifica propria arie de acces." }, 403);
+  }
+  const actorProjects = await accessibleProjectIds(actor.id, tenantId, actor.role ?? undefined);
+  if (actorProjects !== null && projectIds.some((id) => !actorProjects.includes(id))) {
+    return c.json({ error: "forbidden_out_of_scope", detail: "Nu poți acorda acces la un proiect pe care nu-l ai." }, 403);
+  }
   if (projectIds.length) {
     const valid = await db.select({ id: parProjects.id }).from(parProjects).where(and(
       eq(parProjects.tenantId, tenantId),
@@ -127,6 +141,19 @@ parProfilesRoutes.put("/:id/payers", parUuidGuard("id"), requirePARRole("par_adm
     eq(parMembers.tenantId, tenantId), eq(parMembers.userId, userId),
   ));
   if (!member) return c.json({ error: "member_not_found" }, 404);
+  // SECURITY (audit 2026-08-29): se valida doar că proiectele/plătitorii EXISTĂ în tenant — nu că
+  // cel care acordă accesul îl are el însuși, și nici că nu-și modifică propriul rând. Un par_admin
+  // restrâns la un plătitor își putea trimite propriul id în URL, lista tuturor plătitorilor în
+  // corp, și obținea acces la toate cererile, IBAN-urile și rapoartele workspace-ului. Un
+  // administrator nu poate acorda mai mult decât are, și nu-și extinde singur aria.
+  const actor = c.get("user");
+  if (actor.id === userId) {
+    return c.json({ error: "forbidden_self_scope", detail: "Nu-ți poți modifica propria arie de acces." }, 403);
+  }
+  const actorPayers = await accessiblePayerIds(actor.id, tenantId, actor.role ?? undefined);
+  if (actorPayers !== null && payerIds.some((id) => !actorPayers.includes(id))) {
+    return c.json({ error: "forbidden_out_of_scope", detail: "Nu poți acorda acces la un plătitor pe care nu-l ai." }, 403);
+  }
   if (payerIds.length) {
     const valid = await db.select({ id: parPayers.id }).from(parPayers).where(and(
       eq(parPayers.tenantId, tenantId), inArray(parPayers.id, payerIds), eq(parPayers.active, true),

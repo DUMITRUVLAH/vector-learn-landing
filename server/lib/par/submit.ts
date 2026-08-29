@@ -28,6 +28,7 @@ import { resolveApprovalChain } from "./doa";
 import { toMdlCents } from "../fx";
 import { computeParBodyHash, type ParBodyForHash } from "./integrity";
 import { notifySubmitted } from "../../services/par/notify";
+import { archiveApprovalsBeforeReset } from "./approvalArchive";
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -205,6 +206,10 @@ export async function submitPAR(params: {
     })),
   };
   const bodyHash = computeParBodyHash(bodyForHash);
+
+  // Re-trimitere după „modificări cerute": deciziile anterioare se arhivează în audit înainte de
+  // a fi șterse (audit 2026-08-29) — vezi lib/par/approvalArchive.ts.
+  await archiveApprovalsBeforeReset(tenantId, parId, par.requestedByUserId ?? null, "resubmit");
 
   // Invalidate any existing approval rows for re-submit after changes_requested
   await db

@@ -27,6 +27,8 @@ import { parUuidGuard } from "../middleware/parUuidGuard";
 import { generateRequestNo } from "../lib/par/requestNo";
 import { recalcParTotal } from "../lib/par/totals";
 import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
+import { canViewPar } from "../lib/par/visibility";
+import { accessiblePayerIds, accessibleProjectIds, mayAccessProject } from "../lib/par/projectScope";
 
 export const parTemplatesRoutes = new Hono<{ Variables: AuthVariables }>();
 parTemplatesRoutes.use("*", requireAuth);
@@ -117,6 +119,14 @@ parTemplatesRoutes.post(
         .where(and(eq(parRequests.id, body.parId), eq(parRequests.tenantId, tenantId)));
       if (!par) return c.json({ error: "par_not_found" }, 404);
 
+      // SECURITY (audit 2026-08-29): cererea-sursă se citea doar cu `tenantId`, iar snapshot-ul
+      // rezultat (IBAN, IDNP, destinația fondurilor, liniile) se întorcea în răspuns. Adică
+      // „exfiltrare prin șablon": oricine cunoștea un id de cerere din alt proiect îi obținea
+      // rechizitele. Aceeași regulă de vizualizare ca peste tot.
+      if (!(await canViewPar(c.get("user"), tenantId, par))) {
+        return c.json({ error: "par_not_found" }, 404);
+      }
+
       const lines = await db
         .select()
         .from(parLineItems)
@@ -204,14 +214,35 @@ parTemplatesRoutes.post(
 
 /** GET /api/par/templates — list all templates for tenant */
 parTemplatesRoutes.get("/", async (c) => {
-  const tenantId = c.get("user").tenantId;
+  const user = c.get("user");
+  const tenantId = user.tenantId;
   const rows = await db
     .select()
     .from(parTemplates)
     .where(eq(parTemplates.tenantId, tenantId))
     .orderBy(asc(parTemplates.name));
 
-  const templates = rows.map((r) => {
+  // SECURITY (audit 2026-08-29): listarea întorcea TOATE șabloanele tenantului, cu IBAN/IDNP-ul
+  // din snapshot, fără nicio verificare de arie. Un șablon poartă rechizitele bancare ale unui
+  // beneficiar, deci se vede doar dacă e al tău sau dacă proiectul/plătitorul lui e în aria ta.
+  const [scopedProjects, scopedPayers] = await Promise.all([
+    accessibleProjectIds(user.id, tenantId, user.role ?? undefined),
+    accessiblePayerIds(user.id, tenantId, user.role ?? undefined),
+  ]);
+  const unrestricted = scopedProjects === null && scopedPayers === null;
+  const visible = unrestricted
+    ? rows
+    : rows.filter((r) => {
+        if (r.createdByUserId === user.id) return true;
+        let snap: TemplateSnapshot | null = null;
+        try { snap = JSON.parse(r.snapshot) as TemplateSnapshot; } catch { return false; }
+        if (snap?.projectId) return scopedProjects?.includes(snap.projectId) ?? false;
+        // Snapshot-ul nu poartă plătitorul, deci fără proiect nu există arie de verificat →
+        // îl vede doar autorul lui.
+        return false;
+      });
+
+  const templates = visible.map((r) => {
     let snapshot: TemplateSnapshot | null = null;
     try {
       snapshot = JSON.parse(r.snapshot) as TemplateSnapshot;
@@ -280,6 +311,15 @@ parTemplatesRoutes.post("/:id/instantiate", async (c) => {
     snapshot = JSON.parse(tmpl.snapshot) as TemplateSnapshot;
   } catch {
     return c.json({ error: "template_snapshot_invalid" }, 500);
+  }
+
+  // SECURITY (audit 2026-08-29): `POST /api/par` verifică `mayAccessProject` înainte de a crea o
+  // cerere pe un proiect; instanțierea unui șablon copia `snapshot.projectId` fără nicio
+  // verificare, deci se puteau crea cereri imputate unui proiect străin, rutate către aprobatorii
+  // acelui proiect.
+  const actor = c.get("user");
+  if (snapshot.projectId && !(await mayAccessProject(actor.id, tenantId, snapshot.projectId, actor.role ?? undefined))) {
+    return c.json({ error: "forbidden_project_scope" }, 403);
   }
 
   // Fetch settings (used for currency below).

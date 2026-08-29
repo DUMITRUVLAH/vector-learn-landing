@@ -26,6 +26,7 @@ import {
 } from "../lib/par/invites";
 
 import { parUuidGuard } from "../middleware/parUuidGuard";
+import { isReservedPlatformEmail } from "../lib/platformOwner";
 
 export const parInvitesRoutes = new Hono<{ Variables: AuthVariables }>();
 parInvitesRoutes.use("*", requireAuth);
@@ -43,6 +44,10 @@ parInvitesRoutes.post("/", requirePARRole("par_admin"), zValidator("json", invit
   const tenantId = user.tenantId;
   const { email, par_role, payer_ids } = c.req.valid("json");
   const normalizedEmail = email.toLowerCase();
+  // SECURITY (audit 2026-08-29): o invitație către emailul de proprietar al platformei era prima
+  // verigă a unui lanț de preluare completă (tokenul brut vine chiar în răspunsul acestei rute,
+  // iar accept-invite creează contul fără nicio dovadă de posesie a cutiei poștale).
+  if (isReservedPlatformEmail(normalizedEmail)) return c.json({ error: "email_reserved" }, 403);
   const payerIds = [...new Set(payer_ids)];
   const validPayers = await db.select({ id: parPayers.id }).from(parPayers).where(and(
     eq(parPayers.tenantId, tenantId), inArray(parPayers.id, payerIds), eq(parPayers.active, true),

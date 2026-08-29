@@ -13,7 +13,7 @@
  *
  * Design: tokeni Vector 365, light + dark, WCAG AA.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeftRight,
   ArrowDownRight,
@@ -28,8 +28,11 @@ import {
   Search,
   TrendingUp,
 } from "lucide-react";
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BusinessShell } from "@/components/business/BusinessShell";
+// PERF: recharts (~90 KB gzip) only loads once someone actually opens the history chart —
+// same lazyWithTimeout() pattern App.tsx uses for whole pages (see PERF-003 comment there).
+import { lazyWithTimeout } from "@/lib/lazyWithTimeout";
+const ParFxLineChart = lazyWithTimeout(() => import("@/components/par/ParFxLineChart"));
 import { Alert, Button, Card, EmptyState, Input, Label, Select, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { EMOJI_FONT_STACK, flagOf } from "@/lib/par/currencyFlag";
@@ -401,44 +404,17 @@ function HistoryChart({
       ) : data.length === 0 ? (
         <EmptyState compact title="Nu avem încă istoric" />
       ) : (
-        <ResponsiveContainer width="100%" height={240}>
-          <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-            <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={24} />
-            <YAxis
-              tick={{ fontSize: 11 }}
-              tickLine={false}
-              axisLine={false}
-              domain={["auto", "auto"]}
-              width={48}
-              tickFormatter={(v) => Number(v).toFixed(2)}
-            />
-            <Tooltip
-              formatter={(v, name) => [`${formatRate(Number(v))} MDL`, String(name)]}
-              labelFormatter={(_l, payload) => {
-                const iso = (payload?.[0]?.payload as { iso?: string } | undefined)?.iso;
-                return iso ? formatDateRo(iso) : "";
-              }}
-              contentStyle={{
-                background: "hsl(var(--card))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: "var(--radius)",
-                fontSize: 12,
-                color: "hsl(var(--foreground))",
-              }}
-            />
-            {SERIES_CODES.map((code) => (
-              <Line
-                key={code}
-                type="monotone"
-                dataKey={code}
-                stroke={SERIES_COLOR[code]}
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
+        // Skeleton matches the ResponsiveContainer's fixed height (240) so the chunk fetch
+        // never shifts layout — same reason PERF-003 uses a single, sized Suspense fallback.
+        <Suspense fallback={<Skeleton className="h-[240px] w-full rounded-lg" />}>
+          <ParFxLineChart
+            data={data}
+            seriesCodes={SERIES_CODES}
+            seriesColor={SERIES_COLOR}
+            formatRate={formatRate}
+            formatDateRo={formatDateRo}
+          />
+        </Suspense>
       )}
       {stepDays > 1 && data.length > 0 ? (
         <p className="mt-3 text-xs text-muted-foreground">

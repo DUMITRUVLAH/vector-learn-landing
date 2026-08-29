@@ -20,6 +20,7 @@ import { accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/p
 import { enabledPayerIds, hasPayerModuleEntitlement } from "../middleware/requireModuleEntitlement";
 import { writeAuditLog } from "../lib/auditLogger";
 import { getMdlRate } from "../lib/fx";
+import { clientIp } from "../lib/clientIp";
 
 export const parBudgetCodesRoutes = new Hono<{ Variables: AuthVariables }>();
 parBudgetCodesRoutes.use("*", requireAuth);
@@ -377,7 +378,7 @@ parBudgetCodesRoutes.post(
       targetType: "par_budget_code",
       targetId: row.id,
       newValue: row,
-      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      ipAddress: clientIp(c),
     });
     return c.json(row, 201);
   }
@@ -434,7 +435,7 @@ parBudgetCodesRoutes.patch(
       targetId: id,
       oldValue: existing,
       newValue: row,
-      ipAddress: c.req.header("x-forwarded-for") ?? null,
+      ipAddress: clientIp(c),
     });
     return c.json(row);
   }
@@ -466,7 +467,7 @@ parBudgetCodesRoutes.delete("/:id{[0-9a-fA-F-]{36}}", requirePARRole("par_admin"
     targetId: id,
     oldValue: existing,
     newValue: row,
-    ipAddress: c.req.header("x-forwarded-for") ?? null,
+    ipAddress: clientIp(c),
   });
   return c.json({ ok: true });
 });

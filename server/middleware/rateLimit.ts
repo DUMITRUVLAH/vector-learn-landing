@@ -16,20 +16,22 @@
  */
 import { rateLimiter } from "hono-rate-limiter";
 import type { Context } from "hono";
+import { clientIp } from "../lib/clientIp";
 
 /**
  * IP-ul real al clientului. Pe Vercel/proxy, `x-forwarded-for` e o listă „client, proxy1, proxy2";
  * primul element e clientul. Fără antet (local) cădem pe o constantă — local nu are rost să
  * limităm după IP, dar contorul rămâne funcțional pentru teste.
  */
-function clientIp(c: Context): string {
-  const fwd = c.req.header("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0]!.trim();
-  return c.req.header("x-real-ip") ?? "local";
+function ipKey(c: Context): string {
+  // SECURITY (audit 2026-08-29): se lua PRIMUL element din `x-forwarded-for` — adică fix partea
+  // pe care o trimite clientul. Un atacator schimba antetul la fiecare cerere și limitarea de
+  // rată dispărea. `lib/clientIp` ia elementul pus de proxy, nu pe cel trimis de client.
+  return clientIp(c) ?? "local";
 }
 
 function keyFor(c: Context): string {
-  return `${clientIp(c)}:${new URL(c.req.url).pathname}`;
+  return `${ipKey(c)}:${new URL(c.req.url).pathname}`;
 }
 
 /**

@@ -10,8 +10,9 @@
  * CORE: backlog/par/PAR-CORE.md §6
  * Design system: Vector 365 tokens only, light + dark, WCAG AA
  */
-import { useState, useEffect, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useKeepAliveState, hasKeepAlive } from "@/hooks/useKeepAliveState";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { Plus, Search, Filter, Loader2, FileText, AlertCircle, Inbox, Landmark, ArrowRight, SlidersHorizontal, X, Clock, Copy } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import {
@@ -145,6 +146,12 @@ export function ParDashboard() {
   const [projectsMap, setProjectsMap] = useKeepAliveState<Record<string, string>>("par.projectsMap", {});
   const [purposeFilter, setPurposeFilter] = useState<ParPurpose | "">(saved.purpose ?? "");
   const [searchQ, setSearchQ] = useState(saved.q ?? "");
+  // PERF: the search box updates on every keystroke (so typing feels responsive), but the
+  // network request — and the cache key below — only follow the SETTLED value, 300ms after the
+  // user stops typing. Before this, each keystroke fired its own `GET /api/par?q=…` and (worse)
+  // changed `listKey`, which made the whole list disappear behind a "Se încarcă…" spinner on
+  // every letter (see `loading`/`searching` split below).
+  const debouncedSearchQ = useDebouncedValue(searchQ, 300);
   // VF-105: advanced filters (date range + total range in MDL units as strings)
   const [dateFrom, setDateFrom] = useState(saved.dateFrom ?? "");
   const [dateTo, setDateTo] = useState(saved.dateTo ?? "");
@@ -153,10 +160,17 @@ export function ParDashboard() {
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   // Lista se ține minte între navigări, dar CHEIA include filtrele: altfel, venind dintr-un
   // folder cu alt filtru, ai vedea o clipă rândurile filtrului anterior.
-  const listKey = `par.list:${JSON.stringify({ statusFilter, purposeFilter, searchQ, dateFrom, dateTo, minTotal, maxTotal })}`;
+  const listKey = `par.list:${JSON.stringify({ statusFilter, purposeFilter, searchQ: debouncedSearchQ, dateFrom, dateTo, minTotal, maxTotal })}`;
   const [requests, setRequests] = useKeepAliveState<(ParRequest & { above_micro_threshold: boolean })[]>(listKey, []);
   // Dacă avem deja lista în memorie, nu mai pornim de la „se încarcă": ecranul e gata desenat.
   const [loading, setLoading] = useState(() => !hasKeepAlive(listKey));
+  // PERF: re-căutări (filtru schimbat cu lista deja pe ecran) NU mai ascund lista din spatele
+  // spinner-ului de mai sus — doar `loading` (prima încărcare, fără date în memorie) face asta.
+  // `searching` e indicatorul discret care înlocuiește iconița lupei cât timp cererea e în zbor.
+  const [searching, setSearching] = useState(false);
+  // Ultima cerere pornită „câștigă": un răspuns întârziat pentru o căutare veche nu are voie să
+  // suprascrie rezultatul unei căutări mai noi care s-a întors mai repede.
+  const requestSeqRef = useRef(0);
 
   // VM1-04: event filter (client-side only — applied after fetch)
   const [events, setEvents] = useKeepAliveState<ParEvent[]>("par.events", []);
@@ -231,33 +245,57 @@ export function ParDashboard() {
 
   // Load data
   useEffect(() => {
+    const controller = new AbortController();
+    // Own sequence id: even if the abort doesn't reach the network in time (mocked fetch in
+    // tests, or a request already past its abort-check point), a stale response can never
+    // overwrite a newer one once applied.
+    const seq = ++requestSeqRef.current;
+    // Blocking "loading" (hides the list) only for a combination we've never shown anything
+    // for — a genuinely first visit. `requests.length` (NOT in the dep array on purpose — it's
+    // only a snapshot of "is there something on screen right now") covers the case the old
+    // `!hasKeepAlive(listKey)` check missed: typing a search term always produces a brand-new,
+    // never-cached `listKey`, so that check alone re-triggered the full-page spinner on every
+    // settled keystroke even though a perfectly good list was already on screen.
+    const isFirstEverLoad = !hasKeepAlive(listKey) && requests.length === 0;
+
     const load = async () => {
-      // Cu date în memorie împrospătăm TĂCUT (stale-while-revalidate): un spinner peste un
-      // ecran deja corect e chiar „pagina se generează de la zero" pe care o vede omul.
-      if (!hasKeepAlive(listKey)) setLoading(true);
+      // Prima încărcare, fără nimic pe ecran încă → spinner de pagină, cum era înainte.
+      // O re-căutare/re-filtrare cu lista deja vizibilă → doar indicatorul discret de lângă
+      // câmpul de căutare; rândurile rămân pe ecran până sosesc cele noi.
+      if (isFirstEverLoad) setLoading(true);
+      else setSearching(true);
       setError(null);
       try {
         const minN = parseFloat(minTotal.replace(",", "."));
         const maxN = parseFloat(maxTotal.replace(",", "."));
-        const res = await listPar({
-          status: statusFilter || undefined,
-          purpose: purposeFilter || undefined,
-          q: searchQ || undefined,
-          date_from: dateFrom || undefined,
-          date_to: dateTo || undefined,
-          min_total: Number.isFinite(minN) ? Math.round(minN * 100) : undefined,
-          max_total: Number.isFinite(maxN) ? Math.round(maxN * 100) : undefined,
-        });
+        const res = await listPar(
+          {
+            status: statusFilter || undefined,
+            purpose: purposeFilter || undefined,
+            q: debouncedSearchQ || undefined,
+            date_from: dateFrom || undefined,
+            date_to: dateTo || undefined,
+            min_total: Number.isFinite(minN) ? Math.round(minN * 100) : undefined,
+            max_total: Number.isFinite(maxN) ? Math.round(maxN * 100) : undefined,
+          },
+          { signal: controller.signal }
+        );
+        if (requestSeqRef.current !== seq) return; // o căutare mai nouă a pornit între timp
         setRequests(res.requests);
       } catch (e: unknown) {
+        if (controller.signal.aborted || requestSeqRef.current !== seq) return;
         setError(e instanceof Error ? e.message : "Eroare la încărcare");
       } finally {
-        setLoading(false);
+        if (requestSeqRef.current === seq) {
+          setLoading(false);
+          setSearching(false);
+        }
       }
     };
     load();
+    return () => controller.abort();
     // `listKey` conține deja toate filtrele; îl adăugăm ca dependență explicită.
-  }, [statusFilter, purposeFilter, searchQ, dateFrom, dateTo, minTotal, maxTotal, listKey, setRequests]);
+  }, [statusFilter, purposeFilter, debouncedSearchQ, dateFrom, dateTo, minTotal, maxTotal, listKey, setRequests]);
 
   // Derived sections — apply event + project filters client-side (VM1-04 / VM1-10).
   const filteredByEvent = (eventFilter
@@ -382,15 +420,17 @@ export function ParDashboard() {
 
         {/* Filters */}
         <div className="flex flex-wrap gap-3 items-center">
-          {/* Search */}
+          {/* Search — the icon becomes a discreet spinner while a re-search is in flight; the
+              list underneath stays on screen (`searching`, not the page-level `loading`). */}
           <div className="min-w-[200px] flex-1">
             <Input
               type="search"
               placeholder="Caută după număr..."
-              icon={<Search className="h-4 w-4" />}
+              icon={searching ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Search className="h-4 w-4" aria-hidden />}
               value={searchQ}
               onChange={(e) => setSearchQ(e.target.value)}
               aria-label="Caută cereri PAR după număr"
+              aria-busy={searching}
             />
           </div>
 

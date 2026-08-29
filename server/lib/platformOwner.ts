@@ -23,3 +23,24 @@ export function isPlatformOwnerEmail(email: string | null | undefined): boolean 
   if (!email) return false;
   return platformOwnerEmails().includes(email.trim().toLowerCase());
 }
+
+/**
+ * SECURITY (audit 2026-08-29) — emailurile de proprietar sunt REZERVATE: nicio cale de creare
+ * de cont nu are voie să producă un utilizator cu un asemenea email.
+ *
+ * De ce: `requirePlatformAdmin` recunoaște proprietarul DUPĂ EMAIL, iar `users` e unic pe
+ * `(tenant_id, email)` — deci același email poate exista în alt workspace. Nicăieri în aplicație
+ * nu se verifică posesia cutiei poștale. Lanțul complet, patru cereri: signup liber → invitație
+ * către emailul proprietarului în workspace-ul propriu (verificarea „userul există deja" e
+ * scoped pe tenant) → tokenul brut vine chiar în răspunsul API → accept-invite cu parolă proprie
+ * → cont cu emailul proprietarului → `/api/platform/*` + impersonare pe orice client plătitor.
+ *
+ * Garda asta închide lanțul la sursă. `requirePlatformAdmin` are a doua barieră (fallback-ul pe
+ * email moare de îndată ce există un rând real în `platform_admins`).
+ */
+export function isReservedPlatformEmail(email: string | null | undefined): boolean {
+  return isPlatformOwnerEmail(email);
+}
+
+/** Răspunsul standard pentru o încercare de a revendica un email rezervat. */
+export const RESERVED_EMAIL_ERROR = { error: "email_reserved" } as const;

@@ -18,6 +18,7 @@ import type { MiddlewareHandler } from "hono";
 import { recordError } from "../lib/errorTelemetry";
 import { alertOwnerOnNewError } from "../lib/errorAlerts";
 import type { User } from "../db/schema";
+import { clientIp } from "../lib/clientIp";
 
 /** Contextul de utilizator e disponibil doar pe rutele care au trecut prin requireAuth. */
 function actorOf(c: { get: (k: string) => unknown }): { tenantId: string | null; userId: string | null; email: string | null } {
@@ -85,7 +86,7 @@ export const errorCapture: MiddlewareHandler = async (c, next) => {
     userId: actor.userId,
     userEmail: actor.email,
     userAgent: c.req.header("user-agent") ?? null,
-    ipAddress: c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+    ipAddress: clientIp(c) ?? null,
   }).then((result) => {
     if (result?.isNew) {
       void alertOwnerOnNewError({

@@ -23,6 +23,7 @@ import { patentStatus, formatPatentDate, normalizePatentDate } from "@/lib/par/p
 import { plusDays } from "@/lib/par/dates";
 import { backdatedDays, backdatedLabel } from "@/lib/par/backdated";
 import { validateIban, validateFiscalId, isValidBic, type IbanValidation } from "@/lib/par/iban";
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_LABEL, attachmentTooLargeMessage } from "@/lib/par/attachmentLimits";
 import {
   ATTACHMENT_KIND_ORDER, ATTACHMENT_KIND_LABELS, attachmentKindLabel, KIND_OTHER_MAX_LEN,
 } from "@/lib/par/attachmentKinds";
@@ -623,13 +624,14 @@ export function ParCreateForm() {
     let alive = true;
     (async () => {
       try {
-        const [depts, projs, evts, codes, vends, tmplRes, recentRes] = await Promise.all([
+        // PERF: these 9 requests are all independent of each other (none needs another's
+        // result) — one Promise.all instead of two sequential ones lets them all fly at once,
+        // so the page's total wait is the SLOWEST single request, not two round-trips stacked.
+        const [depts, projs, evts, codes, vends, tmplRes, recentRes, payerRes, profileRes] = await Promise.all([
           listDepartments(), listProjects(), listEvents(), listBudgetCodes(), listVendors(),
           listParTemplates().catch(() => ({ templates: [] })),
           // Cererile din care se poate „repeta" — doar pe formularul gol, și non-blocant.
           editId ? Promise.resolve({ requests: [] as ParListRow[] }) : listPar().catch(() => ({ requests: [] as ParListRow[] })),
-        ]);
-        const [payerRes, profileRes] = await Promise.all([
           Promise.resolve().then(() => listPayers()).catch(() => ({ items: [] })),
           Promise.resolve().then(() => getMyParProfile()).catch(() => ({ profile: null, projectIds: [] })),
         ]);
@@ -1320,7 +1322,8 @@ export function ParCreateForm() {
           setError(`${file.name}: tip neacceptat (PDF, imagini, Word, Excel, PowerPoint, text/CSV, ZIP).`);
           continue;
         }
-        if (file.size > 10 * 1024 * 1024) { setError(`${file.name}: depășește 10 MB.`); continue; }
+        // PERF: uploaded as base64 JSON (see attachmentLimits.ts for why 3 MB, not 10 MB).
+        if (file.size > MAX_ATTACHMENT_BYTES) { setError(attachmentTooLargeMessage(file.name)); continue; }
         const dataUrl = await fileToDataUrl(file);
         const att = await uploadAttachment(draftId, {
           file_name: file.name, file_url: dataUrl, mime: file.type, kind: uploadKind, size_bytes: file.size,
@@ -2690,7 +2693,7 @@ export function ParCreateForm() {
                 accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff,.heic,.heif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.txt,.csv,.rtf,.zip"
                 onChange={onUpload} disabled={uploadingFile || attachments.length >= 10 || uploadKindOtherMissing} aria-label="Alege fișierele" />
             </label>
-            <span className="text-xs text-muted-foreground">PDF, imagini, Word, Excel, PowerPoint, CSV, ZIP — max 10 MB · {attachments.length}/10 fișiere</span>
+            <span className="text-xs text-muted-foreground">PDF, imagini, Word, Excel, PowerPoint, CSV, ZIP — max {MAX_ATTACHMENT_LABEL} · {attachments.length}/10 fișiere</span>
           </div>
           {attachments.length > 0 && (
             <ul className="space-y-2" aria-label="Fișiere atașate">

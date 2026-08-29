@@ -36,6 +36,8 @@ import { applyTenRule } from "../lib/par/payment";
 import { evaluateMatch } from "../lib/par/threeWayMatch";
 import { findVendorByIban, shouldAutoSaveVendor } from "../lib/par/vendorAutoSave";
 import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
+import { buildBodyForHash } from "../lib/par/submit";
+import { verifyParBodyHash } from "../lib/par/integrity";
 
 export const parPaymentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parPaymentsRoutes.use("*", requireAuth);
@@ -433,6 +435,39 @@ parPaymentsRoutes.post(
           409
         );
       }
+    }
+
+    // SECURITY (audit 2026-08-29): momentul în care banii pleacă era singurul de pe tot fluxul
+    // care NU re-verifica sigiliul de integritate. Aprobarea îl verifică (parApprovals.ts), plata
+    // nu — deci o modificare a IBAN-ului sau a sumei strecurată ÎNTRE ultima semnătură și
+    // execuție trecea neobservată exact acolo unde contează. Aceeași verificare, aceeași funcție.
+    if (par.bodyHash) {
+      const bodyForHash = await buildBodyForHash(parId, tenantId);
+      if (bodyForHash) {
+        const integrity = verifyParBodyHash(bodyForHash, par.bodyHash);
+        if (!integrity.valid) {
+          await writeAudit({
+            tenantId, parId, actorUserId: user.id, event: "integrity_mismatch",
+            detail: `Payment blocked: ${integrity.detail ?? "body hash mismatch"}`,
+          });
+          return c.json(
+            { error: "integrity_violation: PAR body was modified after approval — payment blocked",
+              detail: integrity.detail },
+            409
+          );
+        }
+      }
+    }
+
+    // Segregarea sarcinilor: cine a cerut plata nu ar trebui să fie și cel care o execută.
+    // NU blocăm — într-un ONG mic aceeași persoană chiar ține și cererea, și banca, iar plata a
+    // fost deja aprobată de altcineva (auto-aprobarea e interzisă dur în parApprovals.ts). Dar
+    // excepția se scrie explicit în audit, ca să fie vizibilă în dosar și în timeline, nu tăcută.
+    if (par.requestedByUserId === user.id) {
+      await writeAudit({
+        tenantId, parId, actorUserId: user.id, event: "sod_self_payment",
+        detail: "Plata a fost înregistrată de chiar solicitantul cererii (segregare a sarcinilor neasigurată).",
+      });
     }
 
     const [settings] = await db

@@ -27,10 +27,21 @@ import { and, desc, eq, ilike, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { parLineItems, parRequests } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { requirePARRole } from "../middleware/requirePARRole";
 import { getMdlRate } from "../lib/fx";
 
 export const parSuggestionsRoutes = new Hono<{ Variables: AuthVariables }>();
 parSuggestionsRoutes.use("*", requireAuth);
+/**
+ * SECURITY (audit 2026-08-29), apărare în adâncime: răspunsul conține IDNP-ul și IBAN-ul
+ * beneficiarilor, deci ruta cere explicit un rol PAR, nu doar un cont autentificat.
+ *
+ * Filtrul care contează rămâne cel din interogare — istoricul PROPRIU al celui autentificat
+ * (`requestedByUserId = user.id`). Un cont fără roluri PAR nu are oricum istoric propriu, deci
+ * garda nu schimbă ce vede cineva azi; e aici ca următoarea modificare a interogării să nu poată
+ * deschide din greșeală rechizitele bancare către tot workspace-ul.
+ */
+parSuggestionsRoutes.use("*", requirePARRole("requestor", "approver", "finance", "par_admin"));
 
 /**
  * Statuses worth learning from — must stay a subset of `parStatusEnum` (server/db/schema/par.ts),

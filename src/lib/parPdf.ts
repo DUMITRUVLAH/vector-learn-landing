@@ -362,11 +362,21 @@ export function buildParHtml(par: ParDetail): string {
 
 // ─── Download ──────────────────────────────────────────────────────────────────────────────────
 
+/** The file name a generated PAR form PDF is saved/attached under (shared by both destinations). */
+export function parPdfFileName(par: ParDetail): string {
+  const fileSafe = (par.requestNo ?? `par-${par.id.slice(0, 8)}`).replace(/[^\w-]+/g, "_");
+  return `PAR_Form_${fileSafe}.pdf`;
+}
+
 /**
- * Generate and download the PAR form as an A4 PDF.
- * Does NOT require any arguments beyond the fully-loaded ParDetail object.
+ * Rasterize the PAR form into a jsPDF document — the expensive part (html2canvas snapshot of the
+ * hidden DOM node) — WITHOUT saving it to disk. Callers decide what to do with the resulting
+ * document: `downloadParPdf()` below just calls `.save()`; ParDetail's "Download PDF" button also
+ * uploads the same document as a PAR attachment via `.output("datauristring")`. Both reuse this ONE
+ * rasterization — previously the download path and the attachment-upload path each ran their own
+ * independent html2canvas snapshot of the same content on a single click.
  */
-export async function downloadParPdf(par: ParDetail): Promise<void> {
+export async function buildParPdfDoc(par: ParDetail): Promise<jsPDF> {
   const host = document.createElement("div");
   host.style.position = "fixed";
   host.style.left = "-10000px";
@@ -406,9 +416,17 @@ export async function downloadParPdf(par: ParDetail): Promise<void> {
       }
     }
 
-    const fileSafe = (par.requestNo ?? `par-${par.id.slice(0, 8)}`).replace(/[^\w-]+/g, "_");
-    pdf.save(`PAR_Form_${fileSafe}.pdf`);
+    return pdf;
   } finally {
     document.body.removeChild(host);
   }
+}
+
+/**
+ * Generate and download the PAR form as an A4 PDF.
+ * Does NOT require any arguments beyond the fully-loaded ParDetail object.
+ */
+export async function downloadParPdf(par: ParDetail): Promise<void> {
+  const pdf = await buildParPdfDoc(par);
+  pdf.save(parPdfFileName(par));
 }

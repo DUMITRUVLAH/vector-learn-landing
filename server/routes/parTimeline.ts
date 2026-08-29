@@ -39,6 +39,9 @@ parTimelineRoutes.get("/:id/timeline", async (c) => {
       tenantId: parRequests.tenantId,
       // Needed by canViewPar: an unsubmitted draft is private to its author.
       status: parRequests.status,
+      // Needed by canViewPar: aria de proiect/plătitor (audit 2026-08-29).
+      projectId: parRequests.projectId,
+      payerId: parRequests.payerId,
     })
     .from(parRequests)
     .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));

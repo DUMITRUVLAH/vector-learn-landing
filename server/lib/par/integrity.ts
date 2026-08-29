@@ -104,10 +104,27 @@ export function computeParBodyHash(body: ParBodyForHash): string {
 export function verifyParBodyHash(
   body: ParBodyForHash,
   expectedHash: string
-): { valid: boolean; detail?: string } {
+): { valid: boolean; detail?: string; note?: "vendor_autolink" } {
   const computed = computeParBodyHash(body);
   if (computed === expectedHash) {
     return { valid: true };
+  }
+  // FIX (audit 2026-08-29) — un fals-pozitiv care ar fi făcut alarma inutilă.
+  //
+  // `vendorId` face parte din corpul sigilat, dar NU e un câmp semnat de aprobator: e un pointer
+  // intern către registrul de furnizori. La înregistrarea plății, `autoLinkVendorOnPayment` îl
+  // completează automat (null → id) când auto-salvarea de la submit nu apucase s-o facă. Rezultatul
+  // era că orice vizualizare ulterioară raporta „corp modificat după semnare" pe cereri perfect
+  // curate — iar o alarmă care sună degeaba e o alarmă pe care nimeni n-o mai crede.
+  //
+  // Toleranța e strict asta: corpul se acceptă dacă diferă DOAR prin `vendorId` completat dintr-un
+  // null. Orice schimbare de beneficiar, IBAN, sumă sau linii rămâne o violare de integritate, iar
+  // un `vendorId` schimbat dintr-o valoare în ALTA (nu din null) la fel.
+  if (body.vendorId != null) {
+    const asSealed = computeParBodyHash({ ...body, vendorId: null });
+    if (asSealed === expectedHash) {
+      return { valid: true, note: "vendor_autolink" };
+    }
   }
   return {
     valid: false,

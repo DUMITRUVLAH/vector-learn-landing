@@ -20,6 +20,7 @@ import { z } from "zod";
 import { SESSION_COOKIE, getSessionUser } from "../auth/session";
 import { recordError } from "../lib/errorTelemetry";
 import { alertOwnerOnNewError } from "../lib/errorAlerts";
+import { clientIp } from "../lib/clientIp";
 
 export const telemetryRoutes = new Hono();
 
@@ -52,7 +53,7 @@ function rateLimited(ip: string): boolean {
 }
 
 telemetryRoutes.post("/error", zValidator("json", reportSchema), async (c) => {
-  const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? "unknown";
+  const ip = clientIp(c) ?? c.req.header("cf-connecting-ip") ?? "unknown";
   if (rateLimited(ip)) return c.json({ ok: true, throttled: true });
 
   const body = c.req.valid("json");

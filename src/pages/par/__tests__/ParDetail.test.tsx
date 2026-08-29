@@ -41,6 +41,8 @@ vi.mock("@/components/par/ParApprovalChain", () => ({
 
 vi.mock("@/lib/parPdf", () => ({
   downloadParPdf: vi.fn().mockResolvedValue(undefined),
+  buildParPdfDoc: vi.fn().mockResolvedValue({ save: vi.fn(), output: vi.fn().mockReturnValue("data:application/pdf;base64,MOCK") }),
+  parPdfFileName: vi.fn().mockReturnValue("PAR_Form_test.pdf"),
   buildParHtml: vi.fn().mockReturnValue("<div></div>"),
 }));
 

@@ -16,6 +16,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { tenants } from "./tenants";
 import { users } from "./users";
 
@@ -177,6 +178,10 @@ export const parPayerModules = pgTable(
   (t) => ({
     payerIdx: index("par_payer_modules_payer_idx").on(t.payerId),
     uniq: uniqueIndex("par_payer_modules_payer_key_uniq").on(t.payerId, t.moduleKey),
+    /** PERF audit: requireModuleEntitlement runs on every /api/par/* request and filters by
+     * tenant_id + module_key (payer_id is optional, added only when scoped to one payer); the
+     * existing index is (payer_id, module_key) and doesn't serve the tenant-wide lookup. */
+    tenantModuleIdx: index("par_payer_modules_tenant_module_idx").on(t.tenantId, t.moduleKey),
   })
 );
 
@@ -582,6 +587,39 @@ export const parRequests = pgTable(
     statusIdx: index("par_requests_status_idx").on(t.status),
     requestedByIdx: index("par_requests_requested_by_idx").on(t.requestedByUserId),
     urgentIdx: index("par_requests_urgent_idx").on(t.isUrgent),
+    /**
+     * PERF audit (migrare 0153) — indexuri compuse pentru interogările tenant-scoped care azi
+     * fac scan pe index single-column + sort/filtru în memorie:
+     *  - listarea principală (GET /api/par, server/routes/par.ts) filtrează tenant_id și
+     *    sortează desc(is_urgent), desc(created_at);
+     *  - inbox-ul de aprobări (server/routes/parApprovals.ts) filtrează tenant_id+status și
+     *    sortează desc(is_urgent), desc(submitted_at);
+     *  - rapoartele/exportul (server/routes/parReports.ts) filtrează pe interval de
+     *    date_of_request;
+     *  - coada de finanțe (server/routes/parPayments.ts) filtrează tenant_id+purpose+status.
+     * is_urgent nu intră în aceste compuse (are deja index propriu, cardinalitate mică, iar un
+     * index compus cu el ar trebui refăcut dacă ordinea de sortare se schimbă) — rămâne un
+     * follow-up dacă profilarea din prod arată nevoie.
+     */
+    tenantCreatedIdx: index("par_requests_tenant_created_idx").on(t.tenantId, t.createdAt),
+    tenantStatusSubmittedIdx: index("par_requests_tenant_status_submitted_idx").on(
+      t.tenantId,
+      t.status,
+      t.submittedAt
+    ),
+    tenantDateOfRequestIdx: index("par_requests_tenant_date_of_request_idx").on(
+      t.tenantId,
+      t.dateOfRequest
+    ),
+    tenantPurposeStatusIdx: index("par_requests_tenant_purpose_status_idx").on(
+      t.tenantId,
+      t.purpose,
+      t.status
+    ),
+    projectIdx: index("par_requests_project_idx").on(t.projectId),
+    eventIdx: index("par_requests_event_idx").on(t.eventId),
+    budgetCodeIdx: index("par_requests_budget_code_idx").on(t.budgetCodeId),
+    departmentIdx: index("par_requests_department_idx").on(t.departmentId),
   })
 );
 
@@ -650,6 +688,16 @@ export const parApprovals = pgTable(
     parIdx: index("par_approvals_par_idx").on(t.parId),
     tenantIdx: index("par_approvals_tenant_idx").on(t.tenantId),
     statusIdx: index("par_approvals_decision_idx").on(t.decision),
+    /**
+     * PERF audit (migrare 0153): inbox-ul de aprobări (parApprovals.ts) citește TOATE pașii
+     * "pending, unlocked" ai tenantului la fiecare încărcare — un scan pe indexul simplu de
+     * tenant peste toate deciziile (approved/rejected/changes_requested rămân în tabelă).
+     * Index parțial: mic, acoperă exact rândurile active, se auto-elimină din index pe măsură
+     * ce pașii se decid.
+     */
+    pendingUnlockedIdx: index("par_approvals_tenant_pending_unlocked_idx")
+      .on(t.tenantId)
+      .where(sql`${t.decision} = 'pending' AND ${t.locked} = false`),
   })
 );
 

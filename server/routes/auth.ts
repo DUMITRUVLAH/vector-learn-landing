@@ -31,6 +31,9 @@ import { hashInviteToken } from "../lib/par/invites";
 import { grantInvitePayerScope } from "../lib/par/inviteScope";
 import { sendPasswordResetEmail, passwordResetUrl } from "../lib/auth/accountEmails";
 import { encrypt, decrypt } from "../lib/crypto";
+import { isReservedPlatformEmail } from "../lib/platformOwner";
+import { hasTwoFactorEnabled } from "../lib/auth/twoFactorGate";
+import { clientIp } from "../lib/clientIp";
 
 const signupSchema = z.object({
   tenantName: z.string().min(2).max(200),
@@ -70,6 +73,10 @@ export const authRoutes = new Hono<{ Variables: AuthVariables }>();
 
 authRoutes.post("/signup", zValidator("json", signupSchema), async (c) => {
   const body = c.req.valid("json");
+  // SECURITY (audit 2026-08-29): emailurile care conferă autoritate de superadmin nu pot fi
+  // revendicate prin creare de cont — nicăieri în aplicație nu se verifică posesia cutiei
+  // poștale. Vezi lib/platformOwner.isReservedPlatformEmail pentru lanțul complet de atac.
+  if (isReservedPlatformEmail(body.email)) return c.json({ error: "email_reserved" }, 403);
   const existingEmail = await db.query.users.findFirst({
     where: eq(users.email, body.email),
   });
@@ -143,13 +150,10 @@ authRoutes.post("/login", zValidator("json", loginSchema), async (c) => {
   // PLATFORM-001: workspace suspendat din Consola Platformă.
   if (tenant.status === "suspended") return fail("workspace_suspended", 403);
 
-  // AUTH-004: check if 2FA is enabled for this user
-  const tfRow = await db.query.twoFactorSettings.findFirst({
-    where: eq(twoFactorSettings.userId, user.id),
-  });
-  const has2FA = !!(tfRow && tfRow.enabledAt);
+  // AUTH-004: 2FA — aceeași poartă ca pe /api/business/auth/login (lib/auth/twoFactorGate).
+  const has2FA = await hasTwoFactorEnabled(user.id);
 
-  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? null;
+  const ipAddress = clientIp(c) ?? null;
   const userAgent = c.req.header("user-agent") ?? null;
 
   if (has2FA) {
@@ -532,6 +536,10 @@ authRoutes.post("/accept-invite", zValidator("json", acceptInviteSchema), async 
   }
 
   const emailLower = invite.email.toLowerCase();
+  // SECURITY (audit 2026-08-29): emailurile care conferă autoritate de superadmin nu pot fi
+  // revendicate prin creare de cont — nicăieri în aplicație nu se verifică posesia cutiei
+  // poștale. Vezi lib/platformOwner.isReservedPlatformEmail pentru lanțul complet de atac.
+  if (isReservedPlatformEmail(emailLower)) return c.json({ error: "email_reserved" }, 403);
 
   // P2: scope lookup to the invite's tenant (users unique on (tenantId, email)).
   const existingUser = await db.query.users.findFirst({
@@ -554,9 +562,7 @@ authRoutes.post("/accept-invite", zValidator("json", acceptInviteSchema), async 
   }
 
   const ipAddress =
-    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
-    c.req.header("cf-connecting-ip") ??
-    undefined;
+    clientIp(c) ?? undefined;
   const userAgent = c.req.header("user-agent") ?? undefined;
 
   // P3: wrap all mutations in a transaction + atomic token consumption.
@@ -908,9 +914,7 @@ authRoutes.get("/google/callback", async (c) => {
   }
 
   const ipAddress =
-    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
-    c.req.header("cf-connecting-ip") ??
-    undefined;
+    clientIp(c) ?? undefined;
   const userAgent = c.req.header("user-agent") ?? undefined;
 
   // SHELL-503: resolve a pending invite if one was carried through the OAuth round-trip.
@@ -1077,6 +1081,11 @@ authRoutes.get("/google/callback", async (c) => {
           .where(eq(tenants.id, inviteTenant.id));
       }
 
+  // SECURITY (audit 2026-08-29): emailurile care conferă autoritate de superadmin nu pot fi
+  // revendicate prin creare de cont — nicăieri în aplicație nu se verifică posesia cutiei
+  // poștale. Vezi lib/platformOwner.isReservedPlatformEmail pentru lanțul complet de atac.
+      if (isReservedPlatformEmail(profile.email)) return fail("google_failed");
+
       // P3: atomic transaction — consume token + create user + create par_members.
       // P2: store email lowercased.
       type UserRow2 = typeof users.$inferSelect;
@@ -1201,9 +1210,13 @@ const createWorkspaceSchema = z.object({ name: z.string().min(2).max(200).option
 authRoutes.post("/google/create-workspace", zValidator("json", createWorkspaceSchema), async (c) => {
   const pending = readPendingGoogle(c);
   if (!pending) return c.json({ error: "no_pending_identity" }, 401);
+  // SECURITY (audit 2026-08-29): emailurile care conferă autoritate de superadmin nu pot fi
+  // revendicate prin creare de cont — nicăieri în aplicație nu se verifică posesia cutiei
+  // poștale. Vezi lib/platformOwner.isReservedPlatformEmail pentru lanțul complet de atac.
+  if (isReservedPlatformEmail(pending.email)) return c.json({ error: "email_reserved" }, 403);
   const { name } = c.req.valid("json");
 
-  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? undefined;
+  const ipAddress = clientIp(c) ?? undefined;
   const userAgent = c.req.header("user-agent") ?? undefined;
 
   const baseName = (name?.trim() || pending.name || pending.email.split("@")[0]);
@@ -1271,6 +1284,8 @@ const joinWithInviteSchema = z.object({ token: z.string().min(1).max(500) });
 authRoutes.post("/google/join", zValidator("json", joinWithInviteSchema), async (c) => {
   const pending = readPendingGoogle(c);
   if (!pending) return c.json({ error: "no_pending_identity" }, 401);
+  // SECURITY (audit 2026-08-29): vezi lib/platformOwner.isReservedPlatformEmail.
+  if (isReservedPlatformEmail(pending.email)) return c.json({ error: "email_reserved" }, 403);
   // Accept either a raw token or a full invite URL/hash containing ?token=… .
   const rawInput = c.req.valid("json").token.trim();
   const token = (rawInput.match(/token=([^&\s]+)/)?.[1] ?? rawInput);
@@ -1289,7 +1304,7 @@ authRoutes.post("/google/join", zValidator("json", joinWithInviteSchema), async 
     await db.update(tenants).set({ appKind: "business", updatedAt: new Date() }).where(eq(tenants.id, inviteTenant.id));
   }
 
-  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? undefined;
+  const ipAddress = clientIp(c) ?? undefined;
   const userAgent = c.req.header("user-agent") ?? undefined;
 
   type UserRow3 = typeof users.$inferSelect;
@@ -1368,6 +1383,8 @@ authRoutes.post("/google/join", zValidator("json", joinWithInviteSchema), async 
 authRoutes.post("/google/accept-matched-invite", async (c) => {
   const pending = readPendingGoogle(c);
   if (!pending) return c.json({ error: "no_pending_identity" }, 401);
+  // SECURITY (audit 2026-08-29): vezi lib/platformOwner.isReservedPlatformEmail.
+  if (isReservedPlatformEmail(pending.email)) return c.json({ error: "email_reserved" }, 403);
 
   // Same deterministic order as GET /google/pending so we consume exactly the invite that was shown.
   const invite = await db.query.parInvites.findFirst({
@@ -1386,7 +1403,7 @@ authRoutes.post("/google/accept-matched-invite", async (c) => {
     await db.update(tenants).set({ appKind: "business", updatedAt: new Date() }).where(eq(tenants.id, inviteTenant.id));
   }
 
-  const ipAddress = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? c.req.header("cf-connecting-ip") ?? undefined;
+  const ipAddress = clientIp(c) ?? undefined;
   const userAgent = c.req.header("user-agent") ?? undefined;
 
   type UserRowM = typeof users.$inferSelect;

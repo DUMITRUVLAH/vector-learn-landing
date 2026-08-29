@@ -18,6 +18,9 @@ export function BusinessLoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // AUTH-004: serverul poate cere al doilea factor (sesiunea rămâne „pending" până la verificare).
+  const [twoFactorStep, setTwoFactorStep] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
 
   // Show error from Google OAuth callback (?error=...). The codes are emitted by
   // GET /api/auth/google/callback in server/routes/auth.ts — keep them in sync.
@@ -44,10 +47,14 @@ export function BusinessLoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await api("/api/business/auth/login", {
+      const res = await api<{ requiresTwoFactor?: boolean }>("/api/business/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
+      if (res?.requiresTwoFactor) {
+        setTwoFactorStep(true);
+        return;
+      }
       navigate("/business/dashboard");
     } catch (err) {
       if (err instanceof ApiError) {
@@ -67,6 +74,78 @@ export function BusinessLoginPage() {
       setLoading(false);
     }
   };
+
+  const submitTotp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      await api("/api/auth/2fa/verify", {
+        method: "POST",
+        body: JSON.stringify({ code: totpCode.trim() }),
+      });
+      navigate("/business/dashboard");
+    } catch (err) {
+      if (err instanceof ApiError && (err.code === "invalid_code" || err.code === "invalid_totp_code")) {
+        setError("Cod incorect. Încercați din nou sau folosiți un cod de recuperare.");
+      } else if (err instanceof ApiError && err.code === "session_expired") {
+        setError("Sesiunea a expirat. Reconectați-vă.");
+        setTwoFactorStep(false);
+      } else {
+        setError("Nu pot verifica codul. Încercați din nou.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (twoFactorStep) {
+    return (
+      <AuthLayout
+        title="Verificare în doi pași"
+        subtitle="Introduceți codul din aplicația de autentificare"
+        headerLogo={<FinFlowLogo width={80} variant="color" />}
+      >
+        <form onSubmit={submitTotp} className="space-y-4">
+          <div>
+            <label htmlFor="bs-totp" className="block text-sm font-semibold mb-1.5">
+              Cod de verificare
+            </label>
+            <input
+              id="bs-totp"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              required
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value)}
+              placeholder="123456"
+              className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-sm tracking-widest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+            />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Puteți folosi și un cod de recuperare.
+            </p>
+          </div>
+
+          {error && (
+            <div role="alert" className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-target"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LogIn className="h-4 w-4" aria-hidden="true" />}
+            Verifică
+          </button>
+        </form>
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout
