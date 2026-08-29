@@ -21,7 +21,10 @@ export interface HumanTimelineEvent {
 
 // ─── Titluri și pictograme ────────────────────────────────────────────────────
 
-const EVENT_TITLES: Record<string, string> = {
+/** Catalogul de evenimente PAR, cu titlul lor omenesc. Sursa unică — și pentru filtrele din
+ *  „Administrare PAR → Audit", ca să nu existe două dicționare care divergă (docs/solutions
+ *  frontend/one-concept-one-label.md). */
+export const PAR_EVENT_TITLES: Record<string, string> = {
   created: "Cerere creată",
   created_from_template: "Creată dintr-un șablon",
   duplicated_from: "Copiată după altă cerere",
@@ -86,7 +89,7 @@ const EVENT_ICONS: Record<string, string> = {
 };
 
 export function eventTitle(event: string): string {
-  if (EVENT_TITLES[event]) return EVENT_TITLES[event];
+  if (PAR_EVENT_TITLES[event]) return PAR_EVENT_TITLES[event];
   const words = event.replace(/_/g, " ").trim();
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Activitate";
 }
