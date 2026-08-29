@@ -53,6 +53,7 @@ import { Link } from "@/router/HashRouter";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Badge, Button, Card, Input, LanguageSwitcher, Label, Textarea } from "@/components/ds";
 import { useT, type TranslationKey } from "@/lib/i18n";
+import { TRUSTED_BY } from "@/data/trustedBy";
 
 /** Adresa pe care ajung cererile de demo. Un singur loc de schimbat. */
 const CONTACT_EMAIL = "contact@finflow.best";
@@ -338,25 +339,6 @@ function HeroMock() {
 
 /* ─────────────────────────── Utilizat de ─────────────────────────── */
 
-/**
- * Logourile organizațiilor care folosesc platforma. Fișierele stau în `public/logos/`,
- * descărcate de pe site-urile lor oficiale.
- *
- * Rămân COLORATE (cerere owner). Ca să funcționeze și pe tema închisă — unde un logotip
- * bleumarin devine invizibil — fiecare stă pe o plăcuță albă. Plăcuța e albă în ambele teme,
- * intenționat: e suprafața pe care logourile astea au fost desenate.
- */
-const TRUSTED_BY: { name: string; src: string; size: string }[] = [
-  // Înălțimea e per logo: la aceeași înălțime, o siglă pătrată pare de două ori mai mare
-  // decât un logotip lat. Cifrele de mai jos egalizează mărimea *optică*, nu pe cea în pixeli.
-  { name: "ATIC", src: "/logos/atic.png", size: "h-9 sm:h-10" },
-  { name: "Tekwill", src: "/logos/tekwill.png", size: "h-7 sm:h-8" },
-  { name: "Tekwill Academy", src: "/logos/tekwill-academy.svg", size: "h-8 sm:h-9" },
-  { name: "Inotek", src: "/logos/inotek.png", size: "h-6 sm:h-7" },
-  { name: "Clubul Tinerilor Makeri", src: "/logos/ctm.png", size: "h-7 sm:h-8" },
-  { name: "iHUB", src: "/logos/ihub.png", size: "h-7 sm:h-8" },
-];
-
 function TrustedBy() {
   return (
     <section aria-labelledby="utilizat-de" className="px-4 pb-14 pt-6 sm:px-6">
@@ -498,9 +480,11 @@ interface FeatureSectionProps {
   visual: ReactNode;
   reverse?: boolean;
   muted?: boolean;
+  /** Trimitere către pagina de feature dedicată, când există una. */
+  link?: { label: string; href: string };
 }
 
-function FeatureSection({ id, badge, title, subtitle, bullets, visual, reverse, muted }: FeatureSectionProps) {
+function FeatureSection({ id, badge, title, subtitle, bullets, visual, reverse, muted, link }: FeatureSectionProps) {
   return (
     <section
       id={id}
@@ -519,6 +503,14 @@ function FeatureSection({ id, badge, title, subtitle, bullets, visual, reverse, 
               </li>
             ))}
           </ul>
+          {link && (
+            <Link
+              to={link.href}
+              className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-primary no-underline transition-all hover:gap-2.5"
+            >
+              {link.label} <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          )}
         </div>
         <div className={reverse ? "order-1" : "order-1 lg:order-2"}>
           <Card tone="dashboard" className="p-4 shadow-xl sm:p-6">
@@ -588,6 +580,7 @@ function DoaSection() {
       ]}
       reverse
       muted
+      link={{ label: "Vezi cum se construiește lanțul", href: "/business/features/aprobari-multi-nivel" }}
       visual={
         <div className="space-y-2">
           {[

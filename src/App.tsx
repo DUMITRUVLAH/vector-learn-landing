@@ -67,6 +67,9 @@ const PlatformConsolePage = lazyWithTimeout(() => import("./pages/business/platf
 // SHELL-503: PAR invite acceptance (public — no auth guard)
 const InvitePage = lazyWithTimeout(() => import("./pages/business/InvitePage").then((m) => ({ default: m.InvitePage })));
 const WelcomePage = lazyWithTimeout(() => import("./pages/business/WelcomePage").then((m) => ({ default: m.WelcomePage })));
+// Pagini publice de feature — /business/features/<slug>. Un singur chunk pentru toate
+// (shell + conținut), încărcat doar când cineva chiar deschide o astfel de pagină.
+const FeatureRoute = lazyWithTimeout(() => import("./pages/business/features/FeatureRoute").then((m) => ({ default: m.FeatureRoute })));
 
 // FinDesk — /business/fin/*
 const FinHome = lazyWithTimeout(() => import("./pages/fin/FinHome").then((m) => ({ default: m.FinHome })));
@@ -179,6 +182,12 @@ function Routes() {
   if (path.startsWith("/business/welcome")) return <WelcomePage />;
 
   // Business landing + login + account lifecycle (all PUBLIC — no session required)
+  {
+    // Pagini publice de feature (`/business/features/<slug>`) — înaintea landing-ului,
+    // ca prefixul mai lung să câștige.
+    const featMatch = path.match(/^\/business\/features\/([^/?#]+)/);
+    if (featMatch) return <FeatureRoute slug={featMatch[1]} />;
+  }
   if (path === "/business" || path === "/business/") return <BusinessLandingPage />;
   if (path.startsWith("/business/login")) return <BusinessLoginPage />;
   if (path.startsWith("/business/signup")) return <BusinessSignupPage />;
