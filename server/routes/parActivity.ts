@@ -21,7 +21,7 @@ import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
-import { accessibleProjectIds, accessiblePayerIds } from "../lib/par/projectScope";
+import { accessiblePayerIds, accessibleProjectIds, accessibleScopes } from "../lib/par/projectScope";
 import { isWorkspaceAdminRole } from "../lib/par/roles";
 
 export const parActivityRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -58,10 +58,7 @@ async function visibilityConditions(
     if (notOthersDraft) conditions.push(notOthersDraft);
   }
 
-  const [scopedProjects, scopedPayers] = await Promise.all([
-    accessibleProjectIds(userId, tenantId, tenantRole),
-    accessiblePayerIds(userId, tenantId, tenantRole),
-  ]);
+  const { projects: scopedProjects, payers: scopedPayers } = await accessibleScopes(userId, tenantId, tenantRole);
   if (scopedProjects !== null) {
     conditions.push(scopedProjects.length ? inArray(parRequests.projectId, scopedProjects) : eq(parRequests.projectId, NEVER));
   }

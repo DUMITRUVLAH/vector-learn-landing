@@ -287,20 +287,29 @@ export async function submitPAR(params: {
 
 export async function buildBodyForHash(
   parId: string,
-  tenantId: string
+  tenantId: string,
+  /**
+   * PERF (audit 2026-08-29): apelanții care AU deja cererea și liniile în memorie (ex. GET
+   * /api/par/:id, care tocmai le-a citit) le pot da mai departe. Fără asta, verificarea de
+   * integritate re-citea din DB exact aceleași două rânduri, la fiecare deschidere de detaliu.
+   */
+  preloaded?: {
+    par: typeof parRequests.$inferSelect;
+    lineItems: Array<typeof parLineItems.$inferSelect>;
+  }
 ): Promise<ParBodyForHash | null> {
-  const [par] = await db
+  const par = preloaded?.par ?? (await db
     .select()
     .from(parRequests)
-    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId))))[0];
 
   if (!par) return null;
 
-  const lineItems = await db
+  const lineItems = preloaded?.lineItems ?? (await db
     .select()
     .from(parLineItems)
     .where(and(eq(parLineItems.parId, parId), eq(parLineItems.tenantId, tenantId)))
-    .orderBy(asc(parLineItems.position));
+    .orderBy(asc(parLineItems.position)));
 
   return {
     requestNo: par.requestNo,

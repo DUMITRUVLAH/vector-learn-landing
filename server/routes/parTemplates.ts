@@ -28,7 +28,7 @@ import { generateRequestNo } from "../lib/par/requestNo";
 import { recalcParTotal } from "../lib/par/totals";
 import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
 import { canViewPar } from "../lib/par/visibility";
-import { accessiblePayerIds, accessibleProjectIds, mayAccessProject } from "../lib/par/projectScope";
+import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessProject } from "../lib/par/projectScope";
 
 export const parTemplatesRoutes = new Hono<{ Variables: AuthVariables }>();
 parTemplatesRoutes.use("*", requireAuth);
@@ -225,10 +225,7 @@ parTemplatesRoutes.get("/", async (c) => {
   // SECURITY (audit 2026-08-29): listarea întorcea TOATE șabloanele tenantului, cu IBAN/IDNP-ul
   // din snapshot, fără nicio verificare de arie. Un șablon poartă rechizitele bancare ale unui
   // beneficiar, deci se vede doar dacă e al tău sau dacă proiectul/plătitorul lui e în aria ta.
-  const [scopedProjects, scopedPayers] = await Promise.all([
-    accessibleProjectIds(user.id, tenantId, user.role ?? undefined),
-    accessiblePayerIds(user.id, tenantId, user.role ?? undefined),
-  ]);
+  const { projects: scopedProjects, payers: scopedPayers } = await accessibleScopes(user.id, tenantId, user.role ?? undefined);
   const unrestricted = scopedProjects === null && scopedPayers === null;
   const visible = unrestricted
     ? rows

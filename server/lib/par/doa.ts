@@ -7,7 +7,7 @@
  */
 import { db } from "../../db/client";
 import { parDoaMatrix, parRequests, parApprovals } from "../../db/schema/par";
-import { and, eq, or, isNull, lte, gte } from "drizzle-orm";
+import { and, eq, or, isNull, lte, gte, inArray } from "drizzle-orm";
 
 export interface ApprovalStep {
   step: number;
@@ -182,24 +182,31 @@ export async function backfillStuckApprovalChains(tenantId: string): Promise<num
     .where(and(eq(parRequests.tenantId, tenantId), eq(parRequests.status, "pending_approval")));
   if (candidates.length === 0) return 0;
 
-  let healed = 0;
-  for (const par of candidates) {
-    const steps = await db
-      .select({ step: parApprovals.step })
-      .from(parApprovals)
-      .where(and(eq(parApprovals.parId, par.id), eq(parApprovals.tenantId, tenantId)));
-    // A real chain has at least one step ≥ 1 (step 0 is just the requestor's submit signature).
-    if (steps.some((s) => s.step >= 1)) continue;
-    await db.insert(parApprovals).values({
+  // PERF (audit 2026-08-29): bucla făcea o interogare per cerere `pending_approval`, iar funcția
+  // e apelată NECONDIȚIONAT la fiecare deschidere de inbox. Cu 200 de cereri în așteptare asta
+  // însemna 200 de dus-întorsuri (~4 s pe Postgres-ul din producție) ca să constate, în 99,9% din
+  // cazuri, că nu e nimic de vindecat. Aceeași muncă în două interogări: pașii tuturor
+  // candidaților dintr-o dată, apoi un singur INSERT în lot.
+  const parIds = candidates.map((p) => p.id);
+  const existingSteps = await db
+    .select({ parId: parApprovals.parId, step: parApprovals.step })
+    .from(parApprovals)
+    .where(and(eq(parApprovals.tenantId, tenantId), inArray(parApprovals.parId, parIds)));
+  // A real chain has at least one step ≥ 1 (step 0 is just the requestor's submit signature).
+  const withChain = new Set(existingSteps.filter((s) => s.step >= 1).map((s) => s.parId));
+  const stuck = parIds.filter((id) => !withChain.has(id));
+  if (stuck.length === 0) return 0;
+
+  await db.insert(parApprovals).values(
+    stuck.map((parId) => ({
       tenantId,
-      parId: par.id,
+      parId,
       step: 1,
       approverUserId: null,
       approverRoleLabel: "Aprobator",
-      decision: "pending",
+      decision: "pending" as const,
       locked: false,
-    });
-    healed++;
-  }
-  return healed;
+    }))
+  );
+  return stuck.length;
 }

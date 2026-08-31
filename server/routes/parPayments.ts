@@ -35,7 +35,7 @@ import { notifyPaid } from "../services/par/notify";
 import { applyTenRule } from "../lib/par/payment";
 import { evaluateMatch } from "../lib/par/threeWayMatch";
 import { findVendorByIban, shouldAutoSaveVendor } from "../lib/par/vendorAutoSave";
-import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
+import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { buildBodyForHash } from "../lib/par/submit";
 import { verifyParBodyHash } from "../lib/par/integrity";
 
@@ -185,9 +185,7 @@ parPaymentsRoutes.get("/finance", async (c) => {
       )
     )
     .orderBy(desc(parRequests.isUrgent), desc(parRequests.createdAt));
-  const [projectScope, payerScope] = await Promise.all([
-    accessibleProjectIds(user.id, tenantId, user.role), accessiblePayerIds(user.id, tenantId, user.role),
-  ]);
+  const { projects: projectScope, payers: payerScope } = await accessibleScopes(user.id, tenantId, user.role);
   const queue = rawQueue.filter((par) => par.projectId
     ? projectScope === null || projectScope.includes(par.projectId)
     : !!par.payerId && (payerScope === null || payerScope.includes(par.payerId)));

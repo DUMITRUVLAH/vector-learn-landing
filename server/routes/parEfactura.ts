@@ -40,7 +40,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { parUuidGuard } from "../middleware/parUuidGuard";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { canViewPar } from "../lib/par/visibility";
-import { accessiblePayerIds, accessibleProjectIds } from "../lib/par/projectScope";
+import { accessiblePayerIds, accessibleProjectIds, accessibleScopes } from "../lib/par/projectScope";
 import { encrypt } from "../lib/crypto";
 import { loadSfsConfig } from "../lib/fin/sfsConfig";
 import { EfacturaMdClient, EFACTURA_MD_STATUS } from "../lib/efacturaMoldova";
@@ -158,10 +158,7 @@ parEfacturaRoutes.get("/", async (c) => {
     .innerJoin(parRequests, eq(parRequests.id, parEinvoices.parId))
     .where(and(eq(parEinvoices.tenantId, tenantId), eq(parRequests.status, "paid")));
 
-  const [projectScope, payerScope] = await Promise.all([
-    accessibleProjectIds(user.id, tenantId, user.role),
-    accessiblePayerIds(user.id, tenantId, user.role),
-  ]);
+  const { projects: projectScope, payers: payerScope } = await accessibleScopes(user.id, tenantId, user.role);
   const visible = rows.filter(({ par }) =>
     par.projectId
       ? projectScope === null || projectScope.includes(par.projectId)

@@ -32,13 +32,21 @@ export async function mayAccessProject(userId: string, tenantId: string, project
   return ids === null || ids.includes(projectId);
 }
 
-export async function accessiblePayerIds(userId: string, tenantId: string, tenantRole?: string): Promise<string[] | null> {
+export async function accessiblePayerIds(
+  userId: string,
+  tenantId: string,
+  tenantRole?: string,
+  /** Proiectele deja calculate de apelant — vezi `accessibleScopes`. */
+  precomputedProjects?: string[] | null
+): Promise<string[] | null> {
   if (tenantRole === "admin" || tenantRole === "manager") return null;
   const [direct, projects] = await Promise.all([
     db.select({ payerId: parPayerMembers.payerId }).from(parPayerMembers).where(and(
       eq(parPayerMembers.tenantId, tenantId), eq(parPayerMembers.userId, userId),
     )),
-    accessibleProjectIds(userId, tenantId, tenantRole),
+    precomputedProjects !== undefined
+      ? Promise.resolve(precomputedProjects)
+      : accessibleProjectIds(userId, tenantId, tenantRole),
   ]);
   const ids = new Set(direct.map((row) => row.payerId));
   if (projects?.length) {
@@ -54,4 +62,24 @@ export async function mayAccessPayer(userId: string, tenantId: string, payerId: 
   if (!payerId) return false;
   const ids = await accessiblePayerIds(userId, tenantId, tenantRole);
   return ids === null || ids.includes(payerId);
+}
+
+
+/**
+ * Ambele arii, calculate o singură dată.
+ *
+ * PERF (audit 2026-08-29): tiparul `Promise.all([accessibleProjectIds(…), accessiblePayerIds(…)])`
+ * apărea în opt rute — dar `accessiblePayerIds` apelează INTERN `accessibleProjectIds`, deci
+ * paralelizarea rula aceleași două-trei interogări de două ori. Pe pagina de rapoarte, unde zece
+ * cereri pleacă simultan, asta însemna zeci de interogări de autorizare duplicate, împinse prin
+ * trei conexiuni. Aici se calculează proiectele o dată și se dau mai departe.
+ */
+export async function accessibleScopes(
+  userId: string,
+  tenantId: string,
+  tenantRole?: string
+): Promise<{ projects: string[] | null; payers: string[] | null }> {
+  const projects = await accessibleProjectIds(userId, tenantId, tenantRole);
+  const payers = await accessiblePayerIds(userId, tenantId, tenantRole, projects);
+  return { projects, payers };
 }

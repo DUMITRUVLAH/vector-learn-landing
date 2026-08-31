@@ -11,7 +11,7 @@ import { parDoaMatrix, parMembers, parProjects } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
-import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
+import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 
 export const parDoaRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -79,9 +79,7 @@ const doaRowUpdateSchema = doaRowBase.partial().refine(bandIsCoherent, bandError
 /** GET /api/par/doa — list all active DOA matrix rows */
 parDoaRoutes.get("/", requirePARRole("par_admin", "approver", "finance"), async (c) => {
   const user = c.get("user"); const tenantId = user.tenantId;
-  const [payerScope, projectScope] = await Promise.all([
-    accessiblePayerIds(user.id, tenantId, user.role), accessibleProjectIds(user.id, tenantId, user.role),
-  ]);
+  const { projects: projectScope, payers: payerScope } = await accessibleScopes(user.id, tenantId, user.role);
   const conditions = [eq(parDoaMatrix.tenantId, tenantId)];
   if (payerScope !== null) conditions.push(payerScope.length
     ? or(isNull(parDoaMatrix.payerId), inArray(parDoaMatrix.payerId, payerScope))!

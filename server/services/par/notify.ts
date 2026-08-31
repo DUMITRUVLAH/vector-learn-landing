@@ -191,13 +191,34 @@ async function notifyApprovers(params: {
     recipients = [...new Set(rows.map((r) => r.userId))];
   }
 
-  for (const userId of recipients) {
-    await sendInApp({ tenantId: ctx.tenantId, recipientUserId: userId, body: inAppBody, parId: ctx.parId });
-    const u = await getUser(userId, ctx.tenantId);
-    if (u?.email) {
-      await sendEmail({ tenantId: ctx.tenantId, toAddress: u.email, subject, body: emailBody });
-    }
-  }
+  // PERF (audit 2026-08-29): bucla era complet secvențială — per destinatar un INSERT, un SELECT
+  // și un apel HTTP către Resend, toate `await`-uite pe calea cererii. Cu cinci aprobatori,
+  // trimiterea unei cereri însemna ~15 dus-întorsuri înlănțuite, iar utilizatorul aștepta
+  // secunde bune pentru munca de notificare, nu pentru propria acțiune.
+  //
+  // Acum: un singur SELECT pentru toți destinatarii, iar notificările pleacă în paralel.
+  // `allSettled`, nu `all`: un email eșuat nu are voie să anuleze restul (notificarea a fost
+  // dintotdeauna best-effort).
+  const recipientRows = recipients.length
+    ? await db
+        .select({ id: users.id, name: users.name, email: users.email })
+        .from(users)
+        .where(and(eq(users.tenantId, ctx.tenantId), inArray(users.id, recipients)))
+    : [];
+  const emailById = new Map(recipientRows.map((u) => [u.id, u.email]));
+
+  await Promise.allSettled(
+    recipients.flatMap((userId) => {
+      const tasks = [
+        sendInApp({ tenantId: ctx.tenantId, recipientUserId: userId, body: inAppBody, parId: ctx.parId }),
+      ];
+      const email = emailById.get(userId);
+      if (email) {
+        tasks.push(sendEmail({ tenantId: ctx.tenantId, toAddress: email, subject, body: emailBody }));
+      }
+      return tasks;
+    })
+  );
 }
 
 /** Send one in-app notification. Silently absorbs errors. */

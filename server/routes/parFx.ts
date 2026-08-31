@@ -31,6 +31,23 @@ export const parFxRoutes = new Hono<{ Variables: AuthVariables }>();
 
 parFxRoutes.use("*", requireAuth);
 
+/**
+ * PERF (audit 2026-08-29): `middleware/httpCache.ts` pune `no-store` pe tot `/api/*`, deci
+ * cursul oficial — care se schimbă o dată pe zi, la ora BNM — se re-descărca la fiecare
+ * navigare, din fiecare tab. E singura familie de rute PAR unde memorarea e sigură fără riscul
+ * de a arăta cuiva date financiare vechi: cursul unei zile nu se mai schimbă retroactiv, iar
+ * `private` îl ține în browserul unui singur utilizator, niciodată într-un proxy comun.
+ *
+ * Restul rutelor PAR rămân `no-store` intenționat: o listă de cereri sau o coadă de aprobări
+ * memorată chiar și 30 de secunde ar arăta o decizie deja luată ca fiind încă în așteptare.
+ */
+parFxRoutes.use("*", async (c, next) => {
+  await next();
+  if (c.req.method === "GET" && c.res.status === 200) {
+    c.header("Cache-Control", "private, max-age=300");
+  }
+});
+
 /** Valutele scoase în față: cele în care ONG-urile din Moldova chiar primesc granturi. */
 const PINNED = ["EUR", "USD", "RON", "GBP", "UAH", "RUB"];
 

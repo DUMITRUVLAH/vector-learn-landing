@@ -55,7 +55,7 @@ import { autosaveVendorFromPar } from "../lib/par/vendorAutoSave";
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { buildApprovalSheetLines, type SheetLine } from "../lib/par/approvalSheet";
 import { winAnsiSafe } from "../lib/par/pdfText";
-import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
+import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { explainMissingPar, parDenial } from "../lib/par/accessReason";
 import { getDesignatedApprovers, projectAllowsApprover } from "../lib/par/projectApprovers";
 import { getActiveDelegators, getDelegatedAuthority } from "../lib/par/delegations";
@@ -64,6 +64,7 @@ import { enabledPayerIds, hasPayerModuleEntitlement } from "../middleware/requir
 import { canViewPar, isWorkspaceAdminRole } from "../lib/par/visibility";
 import { archiveApprovalsBeforeReset } from "../lib/par/approvalArchive";
 import { isUrgentReasonCode } from "../../src/lib/par/urgentReasons";
+import { attachmentPreviewUrl } from "../lib/par/attachmentUrls";
 
 export const parRoutes = new Hono<{ Variables: AuthVariables }>();
 parRoutes.use("*", requireAuth);
@@ -762,10 +763,7 @@ parRoutes.get("/", async (c) => {
   // here previously leaked every other payer's PARs (payee IBAN/IDNP) — GET /api/par/:id already
   // scopes par_admin, so the list must match it. (PARQA scope-isolation gate.)
   {
-    const [scopedProjects, scopedPayers] = await Promise.all([
-      accessibleProjectIds(user.id, tenantId, user.role),
-      accessiblePayerIds(user.id, tenantId, user.role),
-    ]);
+    const { projects: scopedProjects, payers: scopedPayers } = await accessibleScopes(user.id, tenantId, user.role);
     if (scopedProjects !== null && scopedPayers !== null) {
       const scopedRequest = or(
         ...(scopedProjects.length ? [inArray(parRequests.projectId, scopedProjects)] : []),
@@ -1007,10 +1005,31 @@ parRoutes.get("/:id", async (c) => {
     .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)))
     .orderBy(asc(parApprovals.step));
 
-  const attachments = await db
-    .select()
+  // PERF (audit 2026-08-29): `select()` aducea și `file_url`, care e un data-URL base64 de
+  // megabyți (până la 10 fișiere × 15.000.000 de caractere). Fiecare deschidere de detaliu
+  // transporta astfel toate fișierele atașate, deși interfața le deschide prin
+  // `/attachments/:id/preview`; peste ~4,5 MB răspunsul depășește și limita funcției Vercel.
+  // Se trimit metadatele, iar `fileUrl` devine adresa de preview — tipul rămâne string, iar
+  // codul care îl deschide direct funcționează la fel.
+  const attachmentRows = await db
+    .select({
+      id: parAttachments.id,
+      parId: parAttachments.parId,
+      tenantId: parAttachments.tenantId,
+      fileName: parAttachments.fileName,
+      kind: parAttachments.kind,
+      kindOther: parAttachments.kindOther,
+      analysis: parAttachments.analysis,
+      uploadedBy: parAttachments.uploadedBy,
+      createdAt: parAttachments.createdAt,
+      updatedAt: parAttachments.updatedAt,
+    })
     .from(parAttachments)
     .where(and(eq(parAttachments.parId, parId), eq(parAttachments.tenantId, tenantId)));
+  const attachments = attachmentRows.map((a) => ({
+    ...a,
+    fileUrl: attachmentPreviewUrl(parId, a.id),
+  }));
 
   const [payment] = await db
     .select()
@@ -1047,7 +1066,8 @@ parRoutes.get("/:id", async (c) => {
   // PAR-109: body hash integrity check on display
   let bodyHashValid: boolean | null = null;
   if (par.bodyHash && par.status !== "draft" && par.status !== "changes_requested") {
-    const bodyForHash = await buildBodyForHash(parId, tenantId);
+    // Cererea și liniile sunt deja în memorie — nu le mai citim a doua oară (audit 2026-08-29).
+    const bodyForHash = await buildBodyForHash(parId, tenantId, { par, lineItems });
     if (bodyForHash) {
       const integrityResult = verifyParBodyHash(bodyForHash, par.bodyHash);
       bodyHashValid = integrityResult.valid;
@@ -1080,41 +1100,38 @@ parRoutes.get("/:id", async (c) => {
   const userName = (id: string | null | undefined) =>
     (id && userRows.find((u) => u.id === id)?.name) || null;
 
-  const [dept] = par.departmentId
-    ? await db
-        .select({ name: parDepartments.name })
-        .from(parDepartments)
-        .where(and(eq(parDepartments.tenantId, tenantId), eq(parDepartments.id, par.departmentId)))
-    : [];
-
-  const [proj] = par.projectId
-    ? await db
-        .select({ name: parProjects.name })
-        .from(parProjects)
-        .where(and(eq(parProjects.tenantId, tenantId), eq(parProjects.id, par.projectId)))
-    : [];
-
-  const [payer] = par.payerId
-    ? await db
-        .select({ name: parPayers.name })
-        .from(parPayers)
-        .where(and(eq(parPayers.tenantId, tenantId), eq(parPayers.id, par.payerId)))
-    : [];
-
-  const [bc] = par.budgetCodeId
-    ? await db
-        .select({ code: parBudgetCodes.code, name: parBudgetCodes.name })
-        .from(parBudgetCodes)
-        .where(and(eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.id, par.budgetCodeId)))
-    : [];
-
+  // PERF (audit 2026-08-29): cele cinci căutări de etichetă (departament, proiect, plătitor, cod
+  // bugetar, eveniment) rulau una după alta, deși niciuna nu depinde de rezultatul celeilalte.
+  // Pe Postgres-ul din producție asta însemna cinci dus-întorsuri înlănțuite la fiecare
+  // deschidere de cerere; acum e unul singur, cât cel mai lent dintre ele.
   const evId = (par as { eventId?: string | null }).eventId ?? null;
-  const [evt] = evId
-    ? await db
-        .select({ name: parEvents.name })
-        .from(parEvents)
-        .where(and(eq(parEvents.tenantId, tenantId), eq(parEvents.id, evId)))
-    : [];
+  const [deptRows, projRows, payerRows, bcRows, evtRows] = await Promise.all([
+    par.departmentId
+      ? db.select({ name: parDepartments.name }).from(parDepartments)
+          .where(and(eq(parDepartments.tenantId, tenantId), eq(parDepartments.id, par.departmentId)))
+      : Promise.resolve([] as Array<{ name: string }>),
+    par.projectId
+      ? db.select({ name: parProjects.name }).from(parProjects)
+          .where(and(eq(parProjects.tenantId, tenantId), eq(parProjects.id, par.projectId)))
+      : Promise.resolve([] as Array<{ name: string }>),
+    par.payerId
+      ? db.select({ name: parPayers.name }).from(parPayers)
+          .where(and(eq(parPayers.tenantId, tenantId), eq(parPayers.id, par.payerId)))
+      : Promise.resolve([] as Array<{ name: string }>),
+    par.budgetCodeId
+      ? db.select({ code: parBudgetCodes.code, name: parBudgetCodes.name }).from(parBudgetCodes)
+          .where(and(eq(parBudgetCodes.tenantId, tenantId), eq(parBudgetCodes.id, par.budgetCodeId)))
+      : Promise.resolve([] as Array<{ code: string; name: string }>),
+    evId
+      ? db.select({ name: parEvents.name }).from(parEvents)
+          .where(and(eq(parEvents.tenantId, tenantId), eq(parEvents.id, evId)))
+      : Promise.resolve([] as Array<{ name: string }>),
+  ]);
+  const [dept] = deptRows;
+  const [proj] = projRows;
+  const [payer] = payerRows;
+  const [bc] = bcRows;
+  const [evt] = evtRows;
 
   // The viewer's authority over this PAR, computed with the SAME rules the approve/reject endpoints
   // enforce (server/lib/par/decisionAuthority.ts). Without it the detail page had to guess, and its

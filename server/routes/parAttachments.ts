@@ -26,6 +26,7 @@ import { extractParParties } from "../lib/ai/parExtractor";
 import { choosePayee } from "../lib/par/choosePayee";
 import { randomUUID } from "node:crypto";
 import { mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
+import { attachmentPreviewUrl } from "../lib/par/attachmentUrls";
 
 export const parAttachmentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parAttachmentsRoutes.use("*", requireAuth);
@@ -214,14 +215,15 @@ parAttachmentsRoutes.get("/:parId/attachments", async (c) => {
       kindOther: parAttachments.kindOther,
       uploadedBy: parAttachments.uploadedBy,
       createdAt: parAttachments.createdAt,
-      // Note: fileUrl intentionally included for download
-      fileUrl: parAttachments.fileUrl,
       analysis: parAttachments.analysis,
     })
     .from(parAttachments)
     .where(and(eq(parAttachments.parId, parId), eq(parAttachments.tenantId, tenantId)));
 
-  return c.json({ items });
+  // PERF (audit 2026-08-29): `file_url` e un data-URL base64 de megabyți. Lista îl trimitea
+  // integral pentru fiecare fișier, deși deschiderea se face prin ruta de preview de mai jos.
+  // `fileUrl` rămâne în răspuns, dar ca adresă — nu ca fișierul însuși.
+  return c.json({ items: items.map((a) => ({ ...a, fileUrl: attachmentPreviewUrl(parId, a.id) })) });
 });
 
 type ReconcileCheck = { field: string; expected: string | number | null; found: string | number | null; matches: boolean | null };
@@ -336,7 +338,11 @@ parAttachmentsRoutes.get("/:parId/attachments/:attId/preview", async (c) => {
   const safeName = attachment.fileName.replace(/[\r\n"]/g, "_");
   c.header("Content-Type", match[1]);
   c.header("Content-Disposition", `inline; filename="${safeName}"`);
-  c.header("Cache-Control", "private, max-age=60");
+  // Conținutul unui atașament nu se schimbă niciodată pentru același id (o modificare = alt
+  // atașament), iar de la auditul din 29.08.2026 ruta asta e singura cale prin care interfața
+  // deschide fișierele — deci merită o memorare reală, nu 60 de secunde. `private`: rămâne în
+  // browserul unui singur utilizator, verificarea de acces s-a făcut deja mai sus.
+  c.header("Cache-Control", "private, max-age=3600");
   c.header("X-Content-Type-Options", "nosniff");
   return c.body(bytes);
 });

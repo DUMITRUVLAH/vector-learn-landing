@@ -45,7 +45,7 @@ import { getActiveDelegators, getDelegatedAuthority } from "../lib/par/delegatio
 import { stepMatchesViewer } from "../lib/par/decisionAuthority";
 import { blocksOnApprovalLimit, minApprovalLimitCents } from "../lib/par/approvalLimit";
 import { approvalProgressAfterDecision } from "../lib/par/approvalProgress";
-import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
+import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import {
   notifyStepAdvanced,
   notifyFullyApprovedToFinance,
@@ -462,9 +462,7 @@ parApprovalsRoutes.get("/inbox", async (c) => {
       requestedByUserId: r.requestedByUserId,
     });
   }
-  const [accessibleProjects, accessiblePayers] = await Promise.all([
-    accessibleProjectIds(user.id, tenantId, user.role), accessiblePayerIds(user.id, tenantId, user.role),
-  ]);
+  const { projects: accessibleProjects, payers: accessiblePayers } = await accessibleScopes(user.id, tenantId, user.role);
 
   // Filter to steps the current user can decide
   const mySteps = pendingSteps.filter((s) => {
@@ -505,14 +503,17 @@ parApprovalsRoutes.get("/inbox", async (c) => {
 
   const parIds = [...new Set(mySteps.map((s) => s.parId))];
 
-  // Fetch the corresponding PAR headers
+  // PERF (audit 2026-08-29): se aduceau TOATE cererile `pending_approval` ale tenantului și abia
+  // apoi se păstrau cele din `parIds`, cu `Array.includes` (căutare liniară) — muncă pătratică pe
+  // un set care oricum era deja cunoscut. Filtrul intră în SQL.
   const pars = await db
     .select()
     .from(parRequests)
     .where(
       and(
         eq(parRequests.tenantId, tenantId),
-        eq(parRequests.status, "pending_approval")
+        eq(parRequests.status, "pending_approval"),
+        inArray(parRequests.id, parIds)
       )
     )
     .orderBy(desc(parRequests.isUrgent), desc(parRequests.submittedAt));
@@ -524,7 +525,7 @@ parApprovalsRoutes.get("/inbox", async (c) => {
     .where(eq(parSettings.tenantId, tenantId));
   const threshold = settings?.threshold ?? 1000000;
 
-  const inboxPars = pars.filter((p) => parIds.includes(p.id));
+  const inboxPars = pars;
 
   // Resolve display names so approver cards show people/projects, not UUIDs.
   const projectIds = [...new Set(inboxPars.map((p) => p.projectId).filter((v): v is string => !!v))];
@@ -576,16 +577,27 @@ parApprovalsRoutes.get("/inbox", async (c) => {
     ? await db.select({ id: users.id, name: users.name, email: users.email }).from(users)
         .where(and(eq(users.tenantId, tenantId), inArray(users.id, chainUserIds)))
     : [];
+  const chainUserById = new Map(chainUserRows.map((r) => [r.id, r]));
   const chainUserName = (id: string | null) => {
     if (!id) return null;
-    const u = chainUserRows.find((r) => r.id === id);
+    const u = chainUserById.get(id);
     return u?.name || u?.email || null;
   };
 
+  // PERF (audit 2026-08-29): `chainOf` filtra și sorta TOATE rândurile de lanț pentru FIECARE
+  // cerere din inbox — O(cereri × pași), plus un `find` liniar prin utilizatori la fiecare nume.
+  // Cu 200 de cereri în inbox erau zeci de mii de comparații degeaba. Gruparea se face o dată.
+  const chainByPar = new Map<string, typeof chainRows>();
+  for (const row of chainRows) {
+    if (row.step <= 0) continue;
+    const list = chainByPar.get(row.parId);
+    if (list) list.push(row);
+    else chainByPar.set(row.parId, [row]);
+  }
+  for (const list of chainByPar.values()) list.sort((a, b) => a.step - b.step);
+
   const chainOf = (parId: string) => {
-    const steps = chainRows
-      .filter((s) => s.parId === parId && s.step > 0)
-      .sort((a, b) => a.step - b.step);
+    const steps = chainByPar.get(parId) ?? [];
     return {
       steps_total: steps.length,
       steps_approved: steps.filter((s) => s.decision === "approved").length,
@@ -660,14 +672,25 @@ parApprovalsRoutes.post("/bulk-approve", zValidator("json", bulkApproveSchema), 
   const tenantId = user.tenantId;
   const { par_ids, comment, signatureName } = c.req.valid("json");
 
-  const results = [];
-  for (const parId of [...new Set(par_ids)]) {
-    const r = await approveParStep(user.id, tenantId, user.role, parId, { comment, signatureName });
-    results.push(
-      r.ok
-        ? { id: parId, ok: true, status: r.status }
-        : { id: parId, ok: false, error: r.error }
+  // PERF (audit 2026-08-29): aprobarea în masă rula strict secvențial — până la 25 × ~15
+  // dus-întorsuri = 20-60 s, adică peste plafonul funcției serverless: exact acțiunea „scap de
+  // toate deodată" era cea care nu se termina niciodată. Cererile sunt independente între ele,
+  // deci se procesează în valuri mici. Concurență mică intenționat: poolul are `max: 3`
+  // conexiuni, iar un val prea larg le-ar epuiza și ar bloca restul aplicației.
+  const CONCURRENCY = 4;
+  const ids = [...new Set(par_ids)];
+  const results: Array<{ id: string; ok: boolean; status?: string; error?: string }> = [];
+  for (let i = 0; i < ids.length; i += CONCURRENCY) {
+    const batch = ids.slice(i, i + CONCURRENCY);
+    const settled = await Promise.all(
+      batch.map(async (parId) => {
+        const r = await approveParStep(user.id, tenantId, user.role, parId, { comment, signatureName });
+        return r.ok
+          ? { id: parId, ok: true, status: r.status }
+          : { id: parId, ok: false, error: r.error };
+      })
     );
+    results.push(...settled);
   }
 
   const approved = results.filter((r) => r.ok).length;

@@ -14,7 +14,7 @@ import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
-import { accessiblePayerIds, accessibleProjectIds } from "../lib/par/projectScope";
+import { accessiblePayerIds, accessibleProjectIds, accessibleScopes } from "../lib/par/projectScope";
 
 export const parAuditRoutes = new Hono<{ Variables: AuthVariables }>();
 parAuditRoutes.use("*", requireAuth);
@@ -114,10 +114,7 @@ parAuditRoutes.get("/", async (c) => {
   // Aria: aceleași reguli ca lista de cereri (server/routes/par.ts). FIX (audit 2026-08-29):
   // filtrul pe proiect elimina din jurnal cererile FĂRĂ proiect (cele la nivel de plătitor), deci
   // un par_admin restrâns nu vedea în audit exact cererile pe care le vede în listă.
-  const [projectScope, payerScope] = await Promise.all([
-    accessibleProjectIds(user.id, tenantId, user.role),
-    accessiblePayerIds(user.id, tenantId, user.role),
-  ]);
+  const { projects: projectScope, payers: payerScope } = await accessibleScopes(user.id, tenantId, user.role);
   if (projectScope !== null && payerScope !== null) {
     const scoped = or(
       ...(projectScope.length ? [inArray(parRequests.projectId, projectScope)] : []),
