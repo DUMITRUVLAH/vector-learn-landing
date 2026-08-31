@@ -49,7 +49,7 @@
 
 ## 4. Fazele
 
-### Faza 1 — Locul unic și cele trei reclamații (în lucru)
+### Faza 1 — Locul unic și cele trei reclamații ✅ LIVRATĂ pe `main` (2026-08-31, verificată pe producție)
 
 | ID | Titlu | Criterii cheie |
 |----|-------|----------------|
@@ -99,6 +99,14 @@
 |----|-------|----------------|
 | `DC-120` | Toate documentele în fișa furnizorului | O singură listă: acte generate + fișiere încărcate, cu etichetă de sursă; filtrele din registru funcționează și aici. |
 | `DC-121` | Contractat vs. plătit, per furnizor și proiect | Total contractat, total plătit din PAR-uri executate, rest — pe valute separate, fără adunări false. |
+
+## 4bis. Backlog descoperit în Faza 1 (nu s-a construit acum)
+
+- **Formularul PAR se tipărește tot ca poză** (`src/lib/parPdf.ts` folosește html2canvas + jsPDF, ca
+  actele înainte de DC-102). Aceeași reparație se poate refolosi: generatorul vectorial există deja.
+  Bonus: html2canvas iese din pachetul frontend (592 KB necomprimat azi).
+- **Exportul „pentru Word" e HTML servit ca `.doc`.** Arată bine, dar nu e `.docx` nativ — vezi DC-111.
+- Editorul de șabloane încarcă TipTap (356 KB) pe ruta lui; de urmărit când se adaugă importul Word.
 
 ## 5. Ce NU se construiește (decis explicit)
 
