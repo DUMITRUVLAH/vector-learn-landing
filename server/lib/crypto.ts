@@ -28,8 +28,15 @@ const DEV_KEY = "dev-key-do-not-use-in-production-32";
  * rămână citibile. Fiecare astfel de citire lasă un avertisment: sunt datele care mai trebuie
  * re-criptate.
  */
-const usingDefaultKeyInProd = () =>
-  process.env.NODE_ENV === "production" && !process.env.ENCRYPTION_KEY;
+const usingDefaultKeyInProd = () => {
+  if (process.env.ENCRYPTION_KEY) return false;
+  if (process.env.NODE_ENV !== "production") return false;
+  // Pe Vercel, NODE_ENV e "production" și în preview. Fail-closed se aplică DOAR deployment-ului
+  // de producție (clientul plătitor); un preview fără cheie rămâne pe cheia implicită, cu
+  // avertismentul de mai jos — altfel ar trebui să dublăm secretul în fiecare mediu, iar un
+  // secret scris în preview cu ALTĂ cheie ar deveni ilizibil în producție (aceeași bază de date).
+  return (process.env.VERCEL_ENV ?? "production") === "production";
+};
 
 if (usingDefaultKeyInProd()) {
   console.error(
