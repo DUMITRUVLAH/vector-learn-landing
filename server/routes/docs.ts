@@ -39,6 +39,7 @@ import { validateIban, validateFiscalId } from "../../src/lib/par/iban";
 import { fieldLabelRo } from "../lib/docs/fieldLabels";
 import { renderPrintablePdf, pdfFileName, buildPrintableHtml } from "../lib/docs/documentPdf";
 import { insertLinesTable, type TableLine } from "../lib/docs/linesTable";
+import { blankUnresolved, unresolvedFields } from "../lib/docs/blanks";
 import {
   parVendors,
   parSettings,
@@ -117,15 +118,6 @@ const updateSchema = createSchema.partial().omit({ templateId: true });
 const cancelSchema = z.object({
   reason: z.string().min(3, "Motivul anulării e obligatoriu").max(500),
 });
-
-/**
- * Pe un act FINALIZAT nu au ce căuta acolade: dacă un câmp n-a avut sursă, se tipărește un rând de
- * completat cu pixul, cum arată orice formular tipizat. „{{noi.administrator}}" pe un act dus la
- * semnat e o eroare vizibilă a produsului; „____" e o practică normală.
- */
-function blankUnresolved(html: string): string {
-  return html.replace(/\{\{[\wăâîșț.]+\}\}/gi, "__________");
-}
 
 function safeJson(raw: string | null): Record<string, unknown> {
   if (!raw) return {};
@@ -310,6 +302,9 @@ docsRoutes.get("/documents", async (c) => {
       currency: docDocuments.currency,
       finalizedAt: docDocuments.finalizedAt,
       cancelledAt: docDocuments.cancelledAt,
+      // DC-103: lista nu cară corpul actului (ar fi zeci de KB per rând), dar butonul „Descarcă"
+      // trebuie să știe dacă documentul are rânduri necompletate, ca să întrebe înainte.
+      hasBlanks: sql<boolean>`${docDocuments.bodyHtml} like '%{{%'`,
     })
     .from(docDocuments)
     .where(and(...filters))
@@ -448,6 +443,10 @@ docsRoutes.get("/documents/:id", async (c) => {
     lines,
     links,
     integrity,
+    // DC-103: rândurile care vor ieși goale pe hârtie, pe nume și în română. Din ele se compune
+    // întrebarea de dinainte de descărcare — „chiar scoți actul așa?" — fără ca omul să fie
+    // nevoit să compare documentul cu șablonul.
+    unresolved: unresolvedFields(doc.bodyHtml).map(fieldLabelRo),
     audit: audit.map((a) => ({ ...a, details: safeJson(a.details) })),
   });
 });
@@ -582,8 +581,26 @@ async function reserveNumber(tenantId: string, kind: string, year: number): Prom
   return `${prefix}-${year}-${String(seq.lastNumber).padStart(4, "0")}`;
 }
 
+/**
+ * Finalizarea, cu întrebare în loc de zid (DC-103).
+ *
+ * Owner-ul a cerut explicit: lipsa unui IBAN sau a unui câmp din șablon NU trebuie să blocheze
+ * actul — trebuie să întrebe. „Chiar vrei să scoți actul fără IBAN?" e o decizie a omului care
+ * semnează; un refuz sec doar l-ar trimite să facă actul în Word, adică în afara registrului.
+ *
+ * Rămân BLOCANTE doar lucrurile fără de care actul nu e act: titlul, măcar o poziție, o sumă
+ * pozitivă. Restul (rechizite lipsă, câmpuri necompletate, IBAN cu cifră de control greșită) se
+ * întoarce ca `needs_confirmation` + lista în română, iar al doilea apel cu `confirm: true` trece.
+ */
 docsRoutes.post("/documents/:id/finalize", async (c) => {
   const user = c.get("user");
+  let confirmed = false;
+  try {
+    const body = (await c.req.json()) as { confirm?: boolean } | null;
+    confirmed = body?.confirm === true;
+  } catch {
+    confirmed = false; // fără corp = fără confirmare, exact ca înainte
+  }
   const [doc] = await db
     .select()
     .from(docDocuments)
@@ -600,11 +617,12 @@ docsRoutes.post("/documents/:id/finalize", async (c) => {
 
   // Ce lipsește se spune pe nume, în română — nu „validation error".
   const missing: string[] = [];
+  const warnings: string[] = [];
   if (!doc.title.trim()) missing.push("Titlul actului");
-  if (!doc.counterpartyName?.trim()) missing.push("Denumirea furnizorului");
   if (lines.length === 0) missing.push("Cel puțin o poziție în act");
   const totalCents = lines.reduce((s, l) => s + l.lineTotalCents, 0);
   if (totalCents <= 0) missing.push("Suma actului (mai mare ca zero)");
+  if (!doc.counterpartyName?.trim()) warnings.push("Denumirea furnizorului");
 
   // DG-111: rechizitele contrapărții pe care ȘABLONUL le cere trebuie să existe. Un act de plată
   // semnat cu rândul de IBAN gol e mai rău decât un act neemis: ajunge la bancă și se întoarce.
@@ -626,31 +644,49 @@ docsRoutes.post("/documents/:id/finalize", async (c) => {
   const templatePlaceholders = doc.templateId
     ? (await renderBody(user.tenantId, doc.templateId, preflightContext)).placeholders
     : [];
-  // Blocăm DOAR pe datele care trimit banii undeva: denumirea, codul fiscal, IBAN-ul. Adresa
-  // juridică sau numele administratorului lipsă se completează cu pixul pe act — dacă am bloca și
-  // pe ele, jumătate din actele reale n-ar putea fi semnate, iar oamenii ar ocoli poarta.
+  // Întrebăm doar pe datele care trimit banii undeva: denumirea, codul fiscal, IBAN-ul. Restul
+  // câmpurilor fără sursă (numele administratorului nostru, locul întocmirii) se completează cu
+  // pixul — dacă am întreba și pentru ele, dialogul ar apărea la FIECARE act și oamenii l-ar
+  // închide fără să-l citească, adică exact opusul scopului. Lista completă a rândurilor rămase
+  // goale se arată separat, la export (câmpul `unresolved` din fișa actului).
   const PAYMENT_CRITICAL = ["contraparte.denumire", "contraparte.idno", "contraparte.iban"];
   for (const field of missingFields(templatePlaceholders, preflightContext)) {
-    if (PAYMENT_CRITICAL.includes(field)) missing.push(fieldLabelRo(field));
+    if (PAYMENT_CRITICAL.includes(field)) warnings.push(fieldLabelRo(field));
   }
 
-  // Valorile care EXISTĂ trebuie și să fie corecte: un IBAN cu cifră de control greșită prins aici
-  // costă 30 de secunde; prins după plată, costă un transfer returnat.
+  // Valorile care EXISTĂ, dar sunt greșite, se spun tot ca avertisment — dar cu motivul la vedere:
+  // un IBAN cu cifră de control greșită prins aici costă 30 de secunde, prins după plată costă un
+  // transfer returnat.
   const iban = preflightContext["contraparte.iban"];
   if (iban) {
     const check = validateIban(iban);
-    if (!check.ok) missing.push(`IBAN furnizor: ${check.message ?? "invalid"}`);
+    if (!check.ok) warnings.push(`IBAN furnizor: ${check.message ?? "invalid"}`);
   }
   const fiscal = preflightContext["contraparte.idno"];
   if (fiscal) {
     const check = validateFiscalId(fiscal);
-    if (!check.ok) missing.push(`Cod fiscal furnizor: ${check.message ?? "invalid"}`);
+    if (!check.ok) warnings.push(`Cod fiscal furnizor: ${check.message ?? "invalid"}`);
   }
 
   // Fără duplicate: „Contrapartea (denumirea)" și „Denumirea contrapărții" sunt același lucru, iar
   // un mesaj care repetă aceeași lipsă de două ori pare o defecțiune.
   const uniqueMissing = [...new Set(missing)];
-  if (uniqueMissing.length > 0) return c.json({ error: "incomplete", missing: uniqueMissing }, 400);
+  const uniqueWarnings = [...new Set(warnings)].filter((w) => !uniqueMissing.includes(w));
+  if (uniqueMissing.length > 0) {
+    return c.json({ error: "incomplete", missing: uniqueMissing, warnings: uniqueWarnings }, 400);
+  }
+  if (uniqueWarnings.length > 0 && !confirmed) {
+    return c.json(
+      {
+        error: "needs_confirmation",
+        missing: [],
+        warnings: uniqueWarnings,
+        message:
+          "Actul se poate finaliza așa, dar câteva câmpuri rămân necompletate. Pe hârtie vor apărea rânduri de completat cu pixul.",
+      },
+      400
+    );
+  }
 
   const year = doc.docDate.getFullYear();
   const docNumber = await reserveNumber(user.tenantId, doc.kind, year);

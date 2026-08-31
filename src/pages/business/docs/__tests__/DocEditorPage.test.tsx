@@ -332,10 +332,86 @@ describe("DG-109 — completarea unui act", () => {
     await waitFor(() => expect(getDocument).toHaveBeenCalled());
     await userEvent.click(await screen.findByRole("button", { name: /Finalizează/ }));
 
-    await waitFor(() => expect(finalizeDocument).toHaveBeenCalledWith("doc-1"));
+    await waitFor(() => expect(finalizeDocument).toHaveBeenCalledWith("doc-1", false));
     // Rămânem pe act: numărul și acțiunile noi apar aici, nu în listă.
     expect(await screen.findByText(/Act finalizat: ACT-2026-0007/)).toBeInTheDocument();
     expect(navigate).not.toHaveBeenCalledWith("/business/par/documente");
+  });
+
+  it("[blocant] rechizitele lipsă întreabă, iar confirmarea chiar semnează actul (DC-103)", async () => {
+    currentPath = "/business/par/documente/doc-1";
+    // Prima citire = ciornă; după confirmare, actul recitit are număr.
+    getDocument
+      .mockResolvedValueOnce({ ...FINAL_DOC, status: "draft", docNumber: null })
+      .mockResolvedValue(FINAL_DOC);
+    // Prima apăsare: serverul cere confirmare, pe nume. A doua: semnează.
+    finalizeDocument
+      .mockRejectedValueOnce(
+        Object.assign(new Error("needs_confirmation"), {
+          body: { error: "needs_confirmation", warnings: ["IBAN furnizor"], missing: [] },
+        })
+      )
+      .mockResolvedValue(FINAL_DOC);
+    render(<DocEditorPage />);
+
+    await waitFor(() => expect(getDocument).toHaveBeenCalled());
+    await userEvent.click(await screen.findByRole("button", { name: /Finalizează/ }));
+
+    const dialog = await screen.findByRole("dialog", { name: /fără toate rechizitele/i });
+    expect(within(dialog).getByText("IBAN furnizor")).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole("button", { name: /Finalizează oricum/ }));
+    await waitFor(() => expect(finalizeDocument).toHaveBeenLastCalledWith("doc-1", true));
+    expect(await screen.findByText(/Act finalizat: ACT-2026-0007/)).toBeInTheDocument();
+  });
+
+  it("[blocant] butonul „Completez acum” NU semnează actul", async () => {
+    currentPath = "/business/par/documente/doc-1";
+    getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
+    finalizeDocument.mockRejectedValue(
+      Object.assign(new Error("needs_confirmation"), {
+        body: { error: "needs_confirmation", warnings: ["IBAN furnizor"], missing: [] },
+      })
+    );
+    render(<DocEditorPage />);
+
+    await waitFor(() => expect(getDocument).toHaveBeenCalled());
+    await userEvent.click(await screen.findByRole("button", { name: /Finalizează/ }));
+    const dialog = await screen.findByRole("dialog", { name: /fără toate rechizitele/i });
+    await userEvent.click(within(dialog).getByRole("button", { name: /Completez acum/ }));
+
+    expect(finalizeDocument).toHaveBeenCalledTimes(1);
+    expect(finalizeDocument).not.toHaveBeenCalledWith("doc-1", true);
+  });
+
+  it("[blocant] descărcarea PDF întreabă când actul are rânduri necompletate, apoi descarcă", async () => {
+    currentPath = "/business/par/documente/doc-1";
+    getDocument.mockResolvedValue({ ...FINAL_DOC, unresolved: ["IBAN furnizor", "Locul întocmirii"] });
+    downloadDocumentPdf.mockResolvedValue(true);
+    render(<DocEditorPage />);
+
+    await waitFor(() => expect(getDocument).toHaveBeenCalled());
+    await userEvent.click(await screen.findByRole("button", { name: /Descarcă PDF/ }));
+
+    const dialog = await screen.findByRole("dialog", { name: /rânduri necompletate/i });
+    expect(within(dialog).getByText("Locul întocmirii")).toBeInTheDocument();
+    // Întrebarea vine ÎNAINTE de fișier: nimic nu s-a descărcat încă.
+    expect(downloadDocumentPdf).not.toHaveBeenCalled();
+
+    await userEvent.click(within(dialog).getByRole("button", { name: /Descarcă PDF oricum/ }));
+    await waitFor(() => expect(downloadDocumentPdf).toHaveBeenCalledWith("doc-1"));
+  });
+
+  it("actul complet se descarcă direct, fără întrebare", async () => {
+    currentPath = "/business/par/documente/doc-1";
+    getDocument.mockResolvedValue({ ...FINAL_DOC, unresolved: [] });
+    downloadDocumentPdf.mockResolvedValue(true);
+    render(<DocEditorPage />);
+
+    await waitFor(() => expect(getDocument).toHaveBeenCalled());
+    await userEvent.click(await screen.findByRole("button", { name: /Descarcă PDF/ }));
+    await waitFor(() => expect(downloadDocumentPdf).toHaveBeenCalledWith("doc-1"));
+    expect(screen.queryByRole("dialog", { name: /rânduri necompletate/i })).not.toBeInTheDocument();
   });
 
   it("[blocant] după finalizare actul se RECITEȘTE — răspunsul brut n-are jurnal și albea pagina", async () => {

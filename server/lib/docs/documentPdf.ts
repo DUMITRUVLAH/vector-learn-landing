@@ -14,6 +14,7 @@
  * HTML-ul tipăribil rămâne — previzualizarea și exportul pentru Word îl folosesc.
  */
 import { renderDocumentPdfBuffer } from "./pdfDocument";
+import { blankUnresolved } from "./blanks";
 
 export interface PrintableLine {
   description: string;
@@ -122,7 +123,7 @@ export function buildPrintableHtml(doc: PrintableDocument, org: PrintableOrg): s
   const seal = doc.bodyHash
     ? `<div class="doc-meta">Amprentă document: ${escapeHtml(doc.bodyHash.slice(0, 16))}…</div>`
     : "";
-  const body = doc.bodyHtml.trim() ? doc.bodyHtml : fallbackBody(doc);
+  const body = printableBody(doc);
   return `<!doctype html>
 <html lang="ro"><head><meta charset="utf-8"><title>${escapeHtml(doc.docNumber ?? doc.title)}</title>
 <style>${STYLES}</style></head>
@@ -136,9 +137,13 @@ export interface RenderedDocument {
   html: string;
 }
 
-/** Corpul care ajunge în PDF: șablonul completat sau, dacă actul n-are corp, documentul minim. */
+/**
+ * Corpul care ajunge în fișier: șablonul completat sau, dacă actul n-are corp, documentul minim.
+ * `blankUnresolved` e aplicat AICI, într-un singur loc — altfel un act ar arăta cu acolade sau fără,
+ * după butonul apăsat (PDF, Word, previzualizare).
+ */
 function printableBody(doc: PrintableDocument): string {
-  return doc.bodyHtml.trim() ? doc.bodyHtml : fallbackBody(doc);
+  return blankUnresolved(doc.bodyHtml.trim() ? doc.bodyHtml : fallbackBody(doc));
 }
 
 /** Doar PDF-ul, pentru căile care nu au nevoie și de HTML (ZIP, e-mail, atașament la cerere). */

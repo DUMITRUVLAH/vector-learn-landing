@@ -20,6 +20,8 @@ export interface DocListItem {
   currency: string;
   finalizedAt: string | null;
   cancelledAt: string | null;
+  /** DC-103: actul are rânduri necompletate — butonul de descărcare întreabă înainte. */
+  hasBlanks?: boolean;
 }
 
 export interface DocLine {
@@ -50,6 +52,8 @@ export interface DocDetail extends DocListItem {
   eventId?: string | null;
   templateVersion?: number;
   missing?: string[];
+  /** DC-103: câmpurile care ies ca rânduri de completat cu pixul, deja traduse în română. */
+  unresolved?: string[];
   integrity?: DocIntegrity;
   bodyHtml: string;
   bodyHash: string | null;
@@ -125,8 +129,15 @@ export function updateDocument(id: string, body: UpdateDocBody): Promise<DocDeta
   });
 }
 
-export function finalizeDocument(id: string): Promise<DocDetail> {
-  return api<DocDetail>(`/api/docs/documents/${id}/finalize`, { method: "POST" });
+/**
+ * Finalizează actul. Fără `confirm`, serverul întoarce 400 `needs_confirmation` + lista
+ * rechizitelor lipsă (DC-103) — dialogul le arată, iar al doilea apel, cu `confirm`, semnează.
+ */
+export function finalizeDocument(id: string, confirm = false): Promise<DocDetail> {
+  return api<DocDetail>(`/api/docs/documents/${id}/finalize`, {
+    method: "POST",
+    body: JSON.stringify({ confirm }),
+  });
 }
 
 export function cancelDocument(id: string, reason: string): Promise<DocDetail> {

@@ -106,30 +106,71 @@ async function draftWith(vendorId: string) {
   return ((await res.json()) as { id: string }).id;
 }
 
-describe("DG-111 — nimic nu se semnează cu rechizite lipsă sau greșite", () => {
-  it("[blocant] IBAN lipsă din fișa furnizorului oprește finalizarea, pe nume", async () => {
+describe("DG-111 / DC-103 — rechizitele lipsă întreabă, nu blochează", () => {
+  it("[blocant] IBAN lipsă cere confirmare, pe nume — și actul rămâne ciornă până se confirmă", async () => {
     const id = await draftWith(await vendor({ idnp: "1234567890123", iban: null }));
     const res = await app.request(`/api/docs/documents/${id}/finalize`, { method: "POST" });
 
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string; missing: string[] };
-    expect(body.error).toBe("incomplete");
-    expect(body.missing.join(" ")).toContain("IBAN furnizor");
+    const body = (await res.json()) as { error: string; warnings: string[]; message: string };
+    // DC-103 (decizia owner-ului): lipsa IBAN-ului e o întrebare, nu un zid.
+    expect(body.error).toBe("needs_confirmation");
+    expect(body.warnings.join(" ")).toContain("IBAN furnizor");
     // Mesajul e citibil, nu „contraparte.iban".
-    expect(body.missing.join(" ")).not.toContain("contraparte.iban");
+    expect(body.warnings.join(" ")).not.toContain("contraparte.iban");
 
     const after = (await (await app.request(`/api/docs/documents/${id}`)).json()) as { status: string };
     expect(after.status).toBe("draft");
   });
 
-  it("[blocant] un IBAN cu cifră de control greșită e oprit, deși câmpul e completat", async () => {
+  it("[blocant] confirmat explicit, actul FĂRĂ IBAN se finalizează și primește număr", async () => {
+    const id = await draftWith(await vendor({ idnp: "1234567890123", iban: null }));
+    const res = await app.request(`/api/docs/documents/${id}/finalize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true }),
+    });
+    expect(res.status).toBe(200);
+    const doc = (await res.json()) as { status: string; docNumber: string; bodyHtml: string };
+    expect(doc.status).toBe("final");
+    expect(doc.docNumber).toMatch(/^ACT-\d{4}-\d{4}$/);
+    // Rândul rămâne de completat cu pixul — dar fără acolade pe hârtie.
+    expect(doc.bodyHtml).toContain("__________");
+    expect(doc.bodyHtml).not.toContain("{{");
+  });
+
+  it("[blocant] un IBAN cu cifră de control greșită cere confirmare, cu motivul la vedere", async () => {
     const id = await draftWith(
       await vendor({ idnp: "1234567890123", iban: "MD00ML000002259A19498121" })
     );
     const res = await app.request(`/api/docs/documents/${id}/finalize`, { method: "POST" });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { missing: string[] };
-    expect(body.missing.join(" ")).toMatch(/IBAN furnizor/);
+    const body = (await res.json()) as { error: string; warnings: string[] };
+    expect(body.error).toBe("needs_confirmation");
+    expect(body.warnings.join(" ")).toMatch(/IBAN furnizor/);
+  });
+
+  it("[blocant] actul fără poziții rămâne OPRIT chiar și confirmat — nu e act, e o foaie goală", async () => {
+    const vid = await vendor({ idnp: "1234567890123", iban: "MD48ML000002259A19498121" });
+    const created = await app.request("/api/docs/documents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        templateId,
+        kind: "act_primire_predare",
+        title: "Act gol",
+        counterparty: { kind: "vendor", id: vid },
+        lines: [],
+      }),
+    });
+    const { id } = (await created.json()) as { id: string };
+    const res = await app.request(`/api/docs/documents/${id}/finalize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("incomplete");
   });
 
   it("[blocant] cu rechizitele complete și corecte, actul se finalizează", async () => {

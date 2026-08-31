@@ -195,8 +195,11 @@ describe("Fix prod — pagina de tipărit", () => {
 
     const fin = await app.request(`/api/docs/documents/${id}/finalize`, { method: "POST" });
     expect(fin.status).toBe(400);
-    const body = (await fin.json()) as { missing: string[] };
-    expect(new Set(body.missing).size).toBe(body.missing.length);
-    expect(body.missing.filter((m) => m.toLowerCase().includes("denumire"))).toHaveLength(1);
+    const body = (await fin.json()) as { missing: string[]; warnings: string[] };
+    // DC-103: lipsa contrapărții a devenit întrebare, nu zid — dar tot o singură dată, oricât de
+    // multe surse ar semnala-o („Contrapartea (denumirea)" și „Denumirea contrapărții" = același lucru).
+    const spuse = [...body.missing, ...body.warnings];
+    expect(new Set(spuse).size).toBe(spuse.length);
+    expect(spuse.filter((m) => m.toLowerCase().includes("denumire"))).toHaveLength(1);
   });
 });

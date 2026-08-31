@@ -28,6 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import { docPath, docsNewPath, docsProjectDossierPath } from "@/lib/docs/paths";
 import { DocsTabs } from "./DocsTabs";
+import { BlanksConfirmDialog } from "./BlanksConfirmDialog";
 
 function formatMoney(cents: number, currency: string): string {
   return `${(cents / 100).toLocaleString("ro-MD", {
@@ -77,6 +78,8 @@ export function DocsPage() {
   const [pars, setPars] = useState<ParListRow[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [templates, setTemplates] = useState<DocTemplateListItem[]>([]);
+  /** DC-103: actul pe care omul vrea să-l descarce, dar care are rânduri necompletate. */
+  const [pendingPdf, setPendingPdf] = useState<DocListItem | null>(null);
 
 
   const load = useCallback(async () => {
@@ -333,11 +336,16 @@ export function DocsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {/* PDF-ul se randează în browser: pe producție serverul n-are chromium. */}
+                      {/* PDF-ul se scrie pe server (DC-102). Dacă actul are rânduri necompletate,
+                          întrebăm o dată înainte — la fel ca în fișa actului. */}
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (d.hasBlanks) {
+                            setPendingPdf(d);
+                            return;
+                          }
                           void downloadDocumentPdf(d.id).catch(() =>
                             setError("PDF-ul nu a putut fi generat.")
                           );
@@ -356,6 +364,23 @@ export function DocsPage() {
           </div>
         )}
       </div>
+
+      {pendingPdf && (
+        <BlanksConfirmDialog
+          title="Scoți actul cu rânduri necompletate?"
+          intro={`„${pendingPdf.title}" are câmpuri fără valoare. În PDF ele apar ca rânduri de completat cu pixul.`}
+          fields={["Deschide actul ca să vezi exact ce lipsește"]}
+          confirmLabel="Descarcă PDF oricum"
+          onCancel={() => setPendingPdf(null)}
+          onConfirm={() => {
+            const target = pendingPdf;
+            setPendingPdf(null);
+            void downloadDocumentPdf(target.id).catch(() =>
+              setError("PDF-ul nu a putut fi generat.")
+            );
+          }}
+        />
+      )}
 
       {bulkOpen && (
         <BulkGenerateDialog

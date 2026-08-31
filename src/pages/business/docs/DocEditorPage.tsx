@@ -56,6 +56,7 @@ import { fieldLabel } from "@/lib/docs/fieldCatalog";
 import { parseMoneyRo, formatMoneyRo } from "@/lib/docs/money";
 import { downloadDocumentPdf, ensureStoredPdf, fetchPrintable } from "@/lib/docs/documentPdfClient";
 import { DocPreviewDialog } from "./DocPreviewDialog";
+import { BlanksConfirmDialog } from "./BlanksConfirmDialog";
 import { docPath, docsListPath, documentIdFromPath } from "@/lib/docs/paths";
 
 /**
@@ -130,6 +131,14 @@ export function DocEditorPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState<string[]>([]);
+  /**
+   * DC-103: ce anume întrebăm înainte de hârtie. `finalize` vine cu rechizitele lipsă semnalate de
+   * server; `pdf`/`word` vin cu rândurile care ies goale, ca omul să nu descopere golurile abia în
+   * fișierul trimis contrapărții.
+   */
+  const [blanksPrompt, setBlanksPrompt] = useState<
+    { kind: "finalize" | "pdf" | "word"; fields: string[] } | null
+  >(null);
   const [trail, setTrail] = useState<DocTrail | null>(null);
   const [derivableKinds, setDerivableKinds] = useState<string[]>([]);
   const [emailNotice, setEmailNotice] = useState<string | null>(null);
@@ -336,12 +345,12 @@ export function DocEditorPage() {
     dirty.current = true;
   }, []);
 
-  const finalize = useCallback(async () => {
+  const finalize = useCallback(async (confirm = false) => {
     if (!docId) return;
     setError(null);
     try {
       if (dirty.current) await save();
-      await finalizeDocument(docId);
+      await finalizeDocument(docId, confirm);
       // Recitim actul: răspunsul de la finalizare e rândul brut, fără jurnal și fără poziții, iar
       // ecranul le folosește. Un obiect „aproape complet" pus în stare a albit pagina.
       const finalized = await getDocument(docId);
@@ -354,15 +363,22 @@ export function DocEditorPage() {
           : "Act finalizat."
       );
     } catch (e) {
-      const body = (e as { body?: { missing?: string[]; message?: string } }).body;
-      if (body?.missing?.length) {
+      const body = (e as {
+        body?: { error?: string; missing?: string[]; warnings?: string[]; message?: string };
+      }).body;
+      // Rechizite lipsă: nu e un refuz, e o întrebare (DC-103). Zidul rămâne doar pentru ce face
+      // actul să nu fie act — titlu, poziții, sumă.
+      if (body?.error === "needs_confirmation" && body.warnings?.length) {
+        setMissing(body.warnings);
+        setBlanksPrompt({ kind: "finalize", fields: body.warnings });
+      } else if (body?.missing?.length) {
         setMissing(body.missing);
         setError(`Nu pot finaliza — lipsește: ${body.missing.join(", ")}.`);
       } else {
         setError(body?.message ?? "Actul nu a putut fi finalizat.");
       }
     }
-  }, [docId, save, navigate]);
+  }, [docId, save]);
 
   /**
    * „Transformă în PAR" — motivul pentru care există modulul. Dacă actul are deja o cerere, serverul
@@ -458,7 +474,7 @@ export function DocEditorPage() {
     }
   }, [docId, doc, save]);
 
-  /** PDF-ul se face în browser — pe producție serverul n-are chromium (vezi documentPdfClient). */
+  /** PDF-ul se scrie pe server (DC-102) și se salvează de aici ca fișier. */
   const downloadPdf = useCallback(async () => {
     if (!docId) return;
     setPdfBusy(true);
@@ -471,6 +487,22 @@ export function DocEditorPage() {
       setPdfBusy(false);
     }
   }, [docId]);
+
+  /** Rândurile care ies goale pe hârtie — lista din fișa actului, calculată de server. */
+  const blanks = doc?.unresolved ?? [];
+
+  /** Orice ieșire pe hârtie trece pe aici: dacă sunt goluri, se întreabă o dată, apoi se execută. */
+  const exportWithConfirm = useCallback(
+    (kind: "pdf" | "word") => {
+      if (blanks.length > 0) {
+        setBlanksPrompt({ kind, fields: blanks });
+        return;
+      }
+      if (kind === "pdf") void downloadPdf();
+      else if (docId) window.location.href = wordExportUrl(docId);
+    },
+    [blanks, downloadPdf, docId]
+  );
 
   const importPartiesFromPar = useCallback(async () => {
     try {
@@ -511,13 +543,14 @@ export function DocEditorPage() {
             </button>
           )}
           {docId && (
-            <a
-              href={wordExportUrl(docId)}
+            <button
+              type="button"
+              onClick={() => exportWithConfirm("word")}
               className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
             >
               <FileType className="h-4 w-4" aria-hidden="true" />
               Descarcă pentru Word
-            </a>
+            </button>
           )}
           {docId && doc?.status === "final" && (
             <button
@@ -533,7 +566,7 @@ export function DocEditorPage() {
             <button
               type="button"
               disabled={pdfBusy}
-              onClick={() => void downloadPdf()}
+              onClick={() => exportWithConfirm("pdf")}
               className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted disabled:opacity-50"
             >
               {pdfBusy ? (
@@ -1149,12 +1182,43 @@ export function DocEditorPage() {
         )}
       </div>
 
+      {blanksPrompt && (
+        <BlanksConfirmDialog
+          title={
+            blanksPrompt.kind === "finalize"
+              ? "Finalizezi actul fără toate rechizitele?"
+              : "Scoți actul cu rânduri necompletate?"
+          }
+          intro={
+            blanksPrompt.kind === "finalize"
+              ? "Actul se poate semna așa, dar aceste date lipsesc din registru:"
+              : "Documentul se descarcă imediat, însă aceste câmpuri vor ieși goale:"
+          }
+          fields={blanksPrompt.fields}
+          confirmLabel={
+            blanksPrompt.kind === "finalize"
+              ? "Finalizează oricum"
+              : blanksPrompt.kind === "word"
+                ? "Descarcă oricum"
+                : "Descarcă PDF oricum"
+          }
+          onCancel={() => setBlanksPrompt(null)}
+          onConfirm={() => {
+            const { kind } = blanksPrompt;
+            setBlanksPrompt(null);
+            if (kind === "finalize") void finalize(true);
+            else if (kind === "pdf") void downloadPdf();
+            else if (docId) window.location.href = wordExportUrl(docId);
+          }}
+        />
+      )}
+
       <DocPreviewDialog
         open={previewOpen}
         html={previewHtml}
         loading={previewLoading}
         downloading={pdfBusy}
-        onDownloadPdf={() => void downloadPdf()}
+        onDownloadPdf={() => exportWithConfirm("pdf")}
         onClose={() => setPreviewOpen(false)}
       />
     </BusinessShell>
