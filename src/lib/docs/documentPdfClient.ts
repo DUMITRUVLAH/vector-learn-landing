@@ -12,12 +12,13 @@
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { api } from "@/lib/api";
+import { A4_WIDTH_PX, PAGE_MARGIN_MM, PX_PER_MM, type PrintableResponse } from "./printable";
 
-export interface PrintableResponse {
-  html: string;
-  fileName: string;
-  hasStoredPdf: boolean;
-  status: string;
+export type { PrintableResponse };
+
+/** HTML-ul tipăribil al actului — sursa unică pentru previzualizare, PDF și e-mail. */
+export function fetchPrintable(documentId: string): Promise<PrintableResponse> {
+  return api<PrintableResponse>(`/api/docs/documents/${documentId}/print`);
 }
 
 /** Randează HTML-ul într-un PDF A4, cu paginare pe înălțime. */
@@ -26,7 +27,11 @@ async function htmlToPdf(html: string): Promise<jsPDF> {
   host.style.position = "fixed";
   host.style.left = "-10000px";
   host.style.top = "0";
-  host.style.width = "794px"; // A4 la 96dpi — altfel textul se rupe altfel decât la tipar
+  host.style.width = `${A4_WIDTH_PX}px`; // A4 la 96dpi — altfel textul se rupe altfel decât la tipar
+  // Marginile se pun pe GAZDĂ, nu prin CSS pe `body`: HTML-ul e injectat cu innerHTML, deci un
+  // selector `body` din el ar nimeri corpul aplicației, nu foaia pe care o fotografiem.
+  host.style.boxSizing = "border-box";
+  host.style.padding = `${PAGE_MARGIN_MM.top * PX_PER_MM}px ${PAGE_MARGIN_MM.right * PX_PER_MM}px ${PAGE_MARGIN_MM.bottom * PX_PER_MM}px ${PAGE_MARGIN_MM.left * PX_PER_MM}px`;
   host.style.background = "#ffffff";
   host.innerHTML = html;
   document.body.appendChild(host);
@@ -71,7 +76,7 @@ async function htmlToPdf(html: string): Promise<jsPDF> {
  * owner-ul. Acum, înainte de trimitere, browserul randează și încarcă documentul.
  */
 export async function ensureStoredPdf(documentId: string): Promise<boolean> {
-  const printable = await api<PrintableResponse>(`/api/docs/documents/${documentId}/print`);
+  const printable = await fetchPrintable(documentId);
   if (printable.hasStoredPdf) return true;
   if (printable.status === "draft") return false;
 
@@ -89,7 +94,7 @@ export async function ensureStoredPdf(documentId: string): Promise<boolean> {
  * Actele finalizate își trimit PDF-ul înapoi la server, o singură dată.
  */
 export async function downloadDocumentPdf(documentId: string): Promise<boolean> {
-  const printable = await api<PrintableResponse>(`/api/docs/documents/${documentId}/print`);
+  const printable = await fetchPrintable(documentId);
   const pdf = await htmlToPdf(printable.html);
   pdf.save(printable.fileName);
 

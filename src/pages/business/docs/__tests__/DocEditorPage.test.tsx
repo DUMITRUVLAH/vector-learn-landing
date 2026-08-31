@@ -73,10 +73,12 @@ const emailDocument = vi.fn();
 const downloadDocumentPdf = vi.fn();
 
 const ensureStoredPdf = vi.fn();
+const fetchPrintable = vi.fn();
 
 vi.mock("@/lib/docs/documentPdfClient", () => ({
   downloadDocumentPdf: (...a: unknown[]) => downloadDocumentPdf(...a),
   ensureStoredPdf: (...a: unknown[]) => ensureStoredPdf(...a),
+  fetchPrintable: (...a: unknown[]) => fetchPrintable(...a),
 }));
 const getDocumentTrail = vi.fn();
 const listDerivableKinds = vi.fn();
@@ -622,4 +624,100 @@ describe("Fix prod — PDF-ul se face în browser, contrapartea se poate adăuga
   });
 
 
+});
+
+/**
+ * Previzualizarea — cerința owner-ului: „trebuie să fie previzualizează".
+ *
+ * Ce demonstrează, în ordinea valorii:
+ *  1. butonul CHEAMĂ serverul și afișează foaia (nu doar deschide un dialog gol — §3.5.1quater:
+ *     se testează acțiunea, nu afișarea controlului);
+ *  2. ciorna nesalvată se salvează ÎNAINTE, altfel previzualizarea ar arăta varianta veche;
+ *  3. actul finalizat se previzualizează fără să încerce o salvare (ar primi 409);
+ *  4. HTML-ul intră în `<iframe>`, cu marginile paginii — nu injectat în pagina aplicației.
+ */
+describe("Previzualizarea actului", () => {
+  const PRINTABLE = {
+    html: '<!doctype html><html><head><style>body{margin:0}</style></head><body><h1>Act de primire-predare</h1></body></html>',
+    fileName: "ACT-2026-0007.pdf",
+    hasStoredPdf: false,
+    status: "draft",
+  };
+
+  it("[blocant] „Previzualizează” cere foaia de la server și o arată în iframe", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
+    fetchPrintable.mockResolvedValue(PRINTABLE);
+    render(<DocEditorPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Previzualizează/i }));
+
+    await waitFor(() => expect(fetchPrintable).toHaveBeenCalledWith("doc-1"));
+    const frame = await screen.findByTitle("Previzualizarea actului");
+    expect(frame).toBeInTheDocument();
+    const srcDoc = frame.getAttribute("srcdoc") ?? "";
+    expect(srcDoc).toContain("Act de primire-predare");
+    // Marginile foii sunt adăugate pe ecran: `@page` nu se aplică nici în iframe, nici la PDF.
+    expect(srcDoc).toContain("padding:18mm 16mm 20mm 16mm");
+  });
+
+  it("[blocant] ciorna nesalvată se salvează ÎNAINTE de previzualizare — altfel arată varianta veche", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
+    const order: string[] = [];
+    updateDocument.mockImplementation(async () => {
+      order.push("save");
+      return { ...FINAL_DOC, status: "draft", docNumber: null, missing: [] };
+    });
+    fetchPrintable.mockImplementation(async () => {
+      order.push("print");
+      return PRINTABLE;
+    });
+    render(<DocEditorPage />);
+
+    await userEvent.type(await screen.findByLabelText("Titlul actului"), "!");
+    await userEvent.click(screen.getByRole("button", { name: /Previzualizează/i }));
+
+    await waitFor(() => expect(order).toContain("print"));
+    expect(order[0]).toBe("save");
+  });
+
+  it("[blocant] actul finalizat se previzualizează fără să încerce o salvare", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue(FINAL_DOC);
+    fetchPrintable.mockResolvedValue({ ...PRINTABLE, status: "final" });
+    render(<DocEditorPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Previzualizează/i }));
+
+    await waitFor(() => expect(fetchPrintable).toHaveBeenCalledWith("doc-1"));
+    expect(updateDocument).not.toHaveBeenCalled();
+  });
+
+  it("[blocant] din previzualizare descarci PDF-ul, fără să închizi dialogul", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue(FINAL_DOC);
+    fetchPrintable.mockResolvedValue({ ...PRINTABLE, status: "final" });
+    downloadDocumentPdf.mockResolvedValue(true);
+    render(<DocEditorPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Previzualizează/i }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: /Descarcă PDF/i }));
+
+    await waitFor(() => expect(downloadDocumentPdf).toHaveBeenCalledWith("doc-1"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("[blocant] dacă foaia nu se poate face, dialogul nu rămâne gol — spune ce s-a întâmplat", async () => {
+    currentPath = "/business/docs/doc-1";
+    getDocument.mockResolvedValue(FINAL_DOC);
+    fetchPrintable.mockRejectedValue(new Error("print failed"));
+    render(<DocEditorPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Previzualizează/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Previzualizarea nu a putut fi generată/);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 });

@@ -132,9 +132,34 @@ try {
     await shot(page, "05-act-finalizat");
     await scanVisible(page, "act finalizat");
 
-    for (const name of [/Descarcă PDF/, /Transformă în cerere de plată/, /Trimite pe email/]) {
+    for (const name of [/Previzualizează/, /Descarcă PDF/, /Transformă în cerere de plată/, /Trimite pe email/]) {
       const exists = await page.getByRole("button", { name }).count();
       if (!exists) note("act finalizat", "bug", `lipsește acțiunea ${name}`);
+    }
+
+    // ── Previzualizarea ──────────────────────────────────────────────────────
+    // Se APASĂ, nu doar se constată că butonul există: foaia vine de la server, iar un dialog
+    // care se deschide gol e exact bug-ul pe care un test „butonul se randează" nu-l vede.
+    await page.getByRole("button", { name: /Previzualizează/ }).first().click();
+    const dialog = page.getByRole("dialog");
+    await dialog.waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
+    const frame = page.frameLocator('iframe[title="Previzualizarea actului"]');
+    const sheetText = await frame
+      .locator("body")
+      .innerText()
+      .catch(() => "");
+    if (sheetText.trim().length < 40) {
+      note("previzualizare", "bug", `foaia din previzualizare e goală (${sheetText.trim().length} caractere)`);
+    }
+    if (sheetText.includes("{{")) {
+      note("previzualizare", "bug", "au rămas acolade necompletate pe foaie");
+    }
+    await shot(page, "05b-previzualizare");
+    // Închiderea repune ecranul în starea de lucru — altfel dialogul rămâne peste tot ce urmează.
+    await dialog.getByRole("button", { name: "Închide previzualizarea" }).click();
+    await page.waitForTimeout(500);
+    if (await page.getByRole("dialog").count()) {
+      note("previzualizare", "bug", "dialogul nu se închide de la «Închide»");
     }
   }
 

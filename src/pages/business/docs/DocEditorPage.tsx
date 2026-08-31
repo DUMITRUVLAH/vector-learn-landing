@@ -26,6 +26,7 @@ import {
   ShieldAlert,
   Mail,
   FileType,
+  Eye,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
@@ -53,7 +54,8 @@ import {
 import { listProjects, createVendor, type ParProject } from "@/lib/api/par";
 import { fieldLabel } from "@/lib/docs/fieldCatalog";
 import { parseMoneyRo, formatMoneyRo } from "@/lib/docs/money";
-import { downloadDocumentPdf, ensureStoredPdf } from "@/lib/docs/documentPdfClient";
+import { downloadDocumentPdf, ensureStoredPdf, fetchPrintable } from "@/lib/docs/documentPdfClient";
+import { DocPreviewDialog } from "./DocPreviewDialog";
 
 /**
  * Cantitatea și prețul se țin ca TEXT cât timp omul tastează.
@@ -134,6 +136,9 @@ export function DocEditorPage() {
   const [derivableKinds, setDerivableKinds] = useState<string[]>([]);
   const [emailNotice, setEmailNotice] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const dirty = useRef(false);
 
   const total = useMemo(
@@ -430,6 +435,31 @@ export function DocEditorPage() {
     }
   }, [docId, doc?.counterpartyName]);
 
+  /**
+   * „Previzualizează" — aceeași foaie din care se face PDF-ul, deschisă pe loc.
+   *
+   * Ciorna nesalvată se salvează întâi: serverul compune HTML-ul din actul din bază, deci fără
+   * pasul ăsta previzualizarea ar arăta varianta de acum două minute — exact genul de minciună
+   * care face oamenii să nu mai aibă încredere în buton.
+   */
+  const openPreview = useCallback(async () => {
+    if (!docId) return;
+    setPreviewOpen(true);
+    setPreviewHtml(null);
+    setPreviewLoading(true);
+    setError(null);
+    try {
+      if (dirty.current && (!doc || doc.status === "draft")) await save();
+      const printable = await fetchPrintable(docId);
+      setPreviewHtml(printable.html);
+    } catch {
+      setPreviewOpen(false);
+      setError("Previzualizarea nu a putut fi generată. Reîncearcă sau descarcă PDF-ul.");
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [docId, doc, save]);
+
   /** PDF-ul se face în browser — pe producție serverul n-are chromium (vezi documentPdfClient). */
   const downloadPdf = useCallback(async () => {
     if (!docId) return;
@@ -471,7 +501,17 @@ export function DocEditorPage() {
             : "Alege furnizorul — rechizitele vin din registru. Completează doar ce e specific actului."
       }
       actions={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {docId && (
+            <button
+              type="button"
+              onClick={() => void openPreview()}
+              className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+            >
+              <Eye className="h-4 w-4" aria-hidden="true" />
+              Previzualizează
+            </button>
+          )}
           {docId && (
             <a
               href={wordExportUrl(docId)}
@@ -1110,6 +1150,15 @@ export function DocEditorPage() {
           </>
         )}
       </div>
+
+      <DocPreviewDialog
+        open={previewOpen}
+        html={previewHtml}
+        loading={previewLoading}
+        downloading={pdfBusy}
+        onDownloadPdf={() => void downloadPdf()}
+        onClose={() => setPreviewOpen(false)}
+      />
     </BusinessShell>
   );
 }
