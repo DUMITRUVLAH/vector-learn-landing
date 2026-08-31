@@ -37,7 +37,7 @@ import { buildPreviewContext } from "../lib/docs/previewContext";
 import { missingFields, resolveDocumentContext } from "../lib/docs/fieldResolver";
 import { validateIban, validateFiscalId } from "../../src/lib/par/iban";
 import { fieldLabelRo } from "../lib/docs/fieldLabels";
-import { renderDocumentPdf, pdfFileName, buildPrintableHtml } from "../lib/docs/documentPdf";
+import { renderPrintablePdf, pdfFileName, buildPrintableHtml } from "../lib/docs/documentPdf";
 import { insertLinesTable, type TableLine } from "../lib/docs/linesTable";
 import {
   parVendors,
@@ -71,6 +71,16 @@ const KIND_PREFIX: Record<string, string> = {
   act_compensare: "COMP",
   other: "DOC",
 };
+
+/** Antetul actului (denumirea și logoul organizației) — aceleași date în PDF, ZIP și e-mail. */
+async function loadOrg(tenantId: string): Promise<{ name: string | null; logoUrl: string | null }> {
+  const [settings] = await db
+    .select()
+    .from(parSettings)
+    .where(eq(parSettings.tenantId, tenantId))
+    .limit(1);
+  return { name: settings?.orgLegalName ?? null, logoUrl: settings?.orgLogoUrl ?? null };
+}
 
 const lineSchema = z.object({
   description: z.string().min(1, "Denumirea poziției e obligatorie"),
@@ -1017,15 +1027,8 @@ docsRoutes.get("/documents/:id/pdf", async (c) => {
     });
   }
 
-  const { pdf, html } = await renderDocumentPdf(printable, org);
-  if (!pdf) {
-    // Chromium lipsă (serverless) — servim HTML-ul tipăribil, nu o eroare: omul poate tipări din
-    // browser cu Ctrl+P și obține același document.
-    return new Response(buildPrintableHtml(printable, org) || html, {
-      status: 200,
-      headers: { "Content-Type": "text/html; charset=utf-8", "X-Pdf-Fallback": "html" },
-    });
-  }
+  // DC-102: PDF adevărat, scris pe server (fără chromium) — deci și pe producție, nu doar local.
+  const pdf = await renderPrintablePdf(printable, org);
 
   if (doc.status !== "draft") {
     const dataUrl = `data:application/pdf;base64,${Buffer.from(pdf).toString("base64")}`;
@@ -1758,22 +1761,19 @@ docsRoutes.post("/documents/:id/email", async (c) => {
     status: doc.status,
   };
   const fileName = pdfFileName(printable, doc.counterpartyName);
-  const pdfBase64 = doc.pdfUrl ? doc.pdfUrl.split(",")[1] ?? null : null;
-
-  // Un e-mail care scrie „vă transmitem atașat" și pleacă gol e mai rău decât un e-mail netrimis:
-  // contrapartea crede că a primit actul. Pe producție PDF-ul se randează în browser (chromium
-  // lipsește pe serverless), deci aici doar refuzăm până când el există.
+  const org = await loadOrg(user.tenantId);
+  // Un e-mail care scrie „vă transmitem atașat" și pleacă gol e mai rău decât un e-mail netrimis.
+  // Înainte (DG-115) PDF-ul exista doar dacă cineva îl descărcase din browser, deci trimiterea era
+  // refuzată. DC-102 îl scrie pe server, deci îl generăm aici dacă lipsește — și îl păstrăm.
+  let pdfBase64 = doc.pdfUrl ? doc.pdfUrl.split(",")[1] ?? null : null;
   if (!pdfBase64) {
-    await writeAudit(user.tenantId, doc.id, user.id, "emailed", { to, sent: false, reason: "no_pdf" });
-    return c.json(
-      {
-        sent: false,
-        reason: "no_pdf",
-        message:
-          "Actul nu are încă PDF generat, iar un e-mail fără act n-are rost. Descarcă PDF-ul o dată, apoi trimite.",
-      },
-      200
-    );
+    pdfBase64 = (await renderPrintablePdf(printable, org)).toString("base64");
+    if (doc.status !== "draft") {
+      await db
+        .update(docDocuments)
+        .set({ pdfUrl: `data:application/pdf;base64,${pdfBase64}`, updatedAt: new Date() })
+        .where(eq(docDocuments.id, doc.id));
+    }
   }
 
   const result = await sendDocumentEmail({
@@ -1959,8 +1959,8 @@ docsRoutes.post("/bulk", async (c) => {
 });
 
 /**
- * ZIP cu PDF-urile actelor alese. Un SINGUR browser pentru tot lotul (BatchPdfRenderer): N
- * lansări de chromium ar epuiza memoria serverului la al zecelea act.
+ * ZIP cu PDF-urile actelor alese. Actele semnate păstrează PDF-ul stocat (ZIP-ul trebuie să conțină
+ * exact ce s-a semnat); restul se scriu pe loc — DC-102, deci fără chromium și fără limita lui.
  */
 docsRoutes.post("/export/zip", async (c) => {
   const user = c.get("user");
@@ -1989,9 +1989,8 @@ docsRoutes.post("/export/zip", async (c) => {
     .limit(1);
   const org = { name: settings?.orgLegalName ?? null, logoUrl: settings?.orgLogoUrl ?? null };
 
-  const renderer = await BatchPdfRenderer.create();
   const files: { name: string; pdf: Uint8Array }[] = [];
-  try {
+  {
     for (const doc of docs) {
       const printable = {
         docNumber: doc.docNumber,
@@ -2012,18 +2011,12 @@ docsRoutes.post("/export/zip", async (c) => {
         files.push({ name, pdf: Buffer.from(doc.pdfUrl.split(",")[1] ?? "", "base64") });
         continue;
       }
-      if (!renderer) continue;
-      files.push({ name, pdf: await renderer.render(buildPrintableHtml(printable, org)) });
+      files.push({ name, pdf: await renderPrintablePdf(printable, org) });
     }
-  } finally {
-    await renderer?.close();
   }
 
   if (files.length === 0) {
-    return c.json(
-      { error: "pdf_unavailable", message: "Nu s-a putut genera niciun PDF (chromium indisponibil)." },
-      503
-    );
+    return c.json({ error: "not_found" }, 404);
   }
 
   const zip = await buildPdfZip(files);
@@ -2104,10 +2097,14 @@ docsRoutes.get("/documents/:id/print", async (c) => {
 });
 
 /**
- * Stochează PDF-ul randat în browser. Browserul devine „imprimanta", serverul păstrează rezultatul —
- * ca atașamentul la cererea de plată și ZIP-ul să existe și pe producție, unde chromium lipsește.
+ * Scrie PDF-ul actului finalizat și îl păstrează, fără să-l descarce nimeni.
+ *
+ * Înlocuiește vechiul `PUT /documents/:id/pdf`, prin care BROWSERUL încărca fișierul pe care îl
+ * fotografiase. Acela era și o gaură: oricine putea suprascrie PDF-ul unui act semnat cu orice
+ * conținut, iar registrul ar fi servit mai departe minciuna. Acum octeții se nasc pe server, din
+ * corpul sigilat al actului.
  */
-docsRoutes.put("/documents/:id/pdf", async (c) => {
+docsRoutes.post("/documents/:id/pdf/ensure", async (c) => {
   const user = c.get("user");
   const [doc] = await db
     .select()
@@ -2117,29 +2114,46 @@ docsRoutes.put("/documents/:id/pdf", async (c) => {
   if (!maySeeDocument(doc.projectId, await visibilityFilter(user as { id: string; tenantId: string; role?: string }))) {
     return c.json({ error: "not_found" }, 404);
   }
-  if (doc.status === "draft") {
-    // Ciorna se schimbă la fiecare salvare; a stoca PDF-ul ei ar însemna să servim mai târziu o
-    // versiune care nu mai există.
-    return c.json({ stored: false, reason: "draft" });
-  }
+  if (doc.pdfUrl) return c.json({ stored: false, hasPdf: true });
 
-  let base64 = "";
-  try {
-    const body = (await c.req.json()) as { base64?: string };
-    base64 = (body?.base64 ?? "").trim();
-  } catch {
-    base64 = "";
-  }
-  if (!base64 || base64.length > 12_000_000) {
-    return c.json({ error: "invalid_pdf" }, 400);
-  }
+  const org = await loadOrg(user.tenantId);
+  const lines = await db
+    .select()
+    .from(docDocumentLines)
+    .where(eq(docDocumentLines.documentId, doc.id))
+    .orderBy(docDocumentLines.position);
+  const pdf = await renderPrintablePdf(
+    {
+      docNumber: doc.docNumber,
+      title: doc.title,
+      kind: doc.kind,
+      docDate: doc.docDate,
+      bodyHtml: doc.bodyHtml,
+      bodyHash: doc.bodyHash,
+      status: doc.status,
+      counterpartyName: doc.counterpartyName,
+      counterpartySnapshot: safeJson(doc.counterpartySnapshot) as Record<string, string>,
+      currency: doc.currency,
+      totalCents: doc.totalCents,
+      lines: lines.map((l) => ({
+        description: l.description,
+        unit: l.unit,
+        quantity: l.quantity,
+        lineTotalCents: l.lineTotalCents,
+      })),
+    },
+    org
+  );
+
+  // Ciorna se schimbă la fiecare salvare: PDF-ul ei se produce, dar nu se păstrează — altfel am
+  // servi mai târziu o versiune care nu mai există.
+  if (doc.status === "draft") return c.json({ stored: false, hasPdf: true });
 
   await db
     .update(docDocuments)
-    .set({ pdfUrl: `data:application/pdf;base64,${base64}`, updatedAt: new Date() })
+    .set({ pdfUrl: `data:application/pdf;base64,${pdf.toString("base64")}`, updatedAt: new Date() })
     .where(eq(docDocuments.id, doc.id));
-
-  return c.json({ stored: true });
+  return c.json({ stored: true, hasPdf: true });
 });
 
 

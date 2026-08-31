@@ -12,6 +12,7 @@
  * trebuie să aibă răspuns și când livrarea a fost oprită de politica de mediu.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { eq } from "drizzle-orm";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import * as fs from "node:fs";
@@ -109,22 +110,23 @@ async function finalizedDoc() {
 }
 
 describe("DG-115 — trimiterea actului", () => {
-  it("[blocant] fără PDF generat, e-mailul NU pleacă — ar promite un atașament inexistent", async () => {
-    // Bug raportat de owner: „s-a dus email, dar fără act". Pe producție PDF-ul se randează în
-    // browser, deci pe server poate lipsi; textul spunea totuși „vă transmitem atașat".
+  it("[blocant] actul fără PDF descărcat pleacă totuși cu atașament — se generează la trimitere", async () => {
+    // Istoric: owner-ul a primit „s-a dus email, dar fără act", pentru că PDF-ul exista doar dacă
+    // cineva îl descărcase din browser. DC-102 îl scrie pe server, deci trimiterea nu mai depinde
+    // de un pas manual — dar atașamentul trebuie să existe, altfel textul minte iar.
     const created = await app.request("/api/docs/documents", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         kind: "act_primire_predare",
-        title: "Act fără PDF",
+        title: "Act fără PDF descărcat",
         counterparty: { kind: "vendor", id: vendorId },
         lines: [{ description: "Serviciu", quantity: 1, unitPriceCents: 100000 }],
       }),
     });
     const { id } = (await created.json()) as { id: string };
     await app.request(`/api/docs/documents/${id}/finalize`, { method: "POST" });
-    // NU descărcăm PDF-ul, deci nu există stocat.
+    // NU descărcăm PDF-ul: exact situația în care e-mailul pleca gol.
 
     fetchSpy.mockClear();
     const res = await app.request(`/api/docs/documents/${id}/email`, {
@@ -132,11 +134,19 @@ describe("DG-115 — trimiterea actului", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ to: "furnizor@example.com" }),
     });
-    const body = (await res.json()) as { sent: boolean; reason: string; message: string };
-    expect(body.sent).toBe(false);
-    expect(body.reason).toBe("no_pdf");
-    expect(body.message).toMatch(/Descarcă PDF/);
-    expect(fetchSpy, "nu se cheamă serviciul de e-mail").not.toHaveBeenCalled();
+    const body = (await res.json()) as { sent: boolean; reason?: string };
+    expect(body.reason).not.toBe("no_pdf");
+
+    // Și, mai important: actul are acum PDF păstrat, deci ZIP-ul și atașamentul la cererea de
+    // plată văd același fișier.
+    const [stored] = await testDb
+      .select()
+      .from(schema.docDocuments)
+      .where(eq(schema.docDocuments.id, id));
+    expect(stored.pdfUrl ?? "").toMatch(/^data:application\/pdf;base64,/);
+    expect(Buffer.from((stored.pdfUrl ?? "").split(",")[1] ?? "", "base64").subarray(0, 5).toString("latin1")).toBe(
+      "%PDF-"
+    );
   });
 
   it("[blocant] în afara producției NU pleacă niciun e-mail real", async () => {

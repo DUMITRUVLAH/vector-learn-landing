@@ -113,7 +113,7 @@ describe("Fix prod — pagina de tipărit", () => {
     expect(out.fileName).toMatch(/\.pdf$/);
   });
 
-  it("[blocant] PDF-ul randat în browser se poate stoca pentru un act finalizat", async () => {
+  it("[blocant] actul finalizat își scrie PDF-ul pe server și îl păstrează", async () => {
     const id = await draft();
     await app.request(`/api/docs/documents/${id}/finalize`, { method: "POST" });
 
@@ -122,35 +122,51 @@ describe("Fix prod — pagina de tipărit", () => {
     };
     expect(before.hasStoredPdf).toBe(false);
 
-    const put = await app.request(`/api/docs/documents/${id}/pdf`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ base64: Buffer.from("%PDF-1.4 test").toString("base64") }),
+    const ensure = await app.request(`/api/docs/documents/${id}/pdf/ensure`, { method: "POST" });
+    expect(ensure.status).toBe(200);
+    expect((await ensure.json()) as { stored: boolean; hasPdf: boolean }).toEqual({
+      stored: true,
+      hasPdf: true,
     });
-    expect(put.status).toBe(200);
-    expect(((await put.json()) as { stored: boolean }).stored).toBe(true);
 
     const after = (await (await app.request(`/api/docs/documents/${id}/print`)).json()) as {
       hasStoredPdf: boolean;
     };
     expect(after.hasStoredPdf).toBe(true);
 
-    // Iar descărcarea de pe server servește exact octeții stocați.
+    // Iar descărcarea servește exact octeții păstrați.
     const pdf = await app.request(`/api/docs/documents/${id}/pdf`);
     expect(pdf.status).toBe(200);
-    expect(new TextDecoder().decode(new Uint8Array(await pdf.arrayBuffer()))).toContain("%PDF-1.4");
+    const bytes = new Uint8Array(await pdf.arrayBuffer());
+    expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe("%PDF-");
+  });
+
+  it("[blocant] nimeni nu mai poate încărca un PDF peste actul semnat", async () => {
+    // Vechiul `PUT /documents/:id/pdf` lăsa BROWSERUL să trimită octeții. Adică oricine autentificat
+    // putea înlocui PDF-ul unui act semnat cu orice fișier, iar registrul l-ar fi servit mai departe
+    // ca probă. Ruta nu mai există; PDF-ul se naște doar din corpul sigilat, pe server.
+    const id = await draft();
+    await app.request(`/api/docs/documents/${id}/finalize`, { method: "POST" });
+
+    const put = await app.request(`/api/docs/documents/${id}/pdf`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ base64: Buffer.from("%PDF-1.4 fals").toString("base64") }),
+    });
+    expect(put.status).toBe(404);
   });
 
   it("[blocant] ciorna NU își stochează PDF-ul — se schimbă la fiecare salvare", async () => {
     const id = await draft();
-    const put = await app.request(`/api/docs/documents/${id}/pdf`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ base64: Buffer.from("%PDF").toString("base64") }),
-    });
-    const body = (await put.json()) as { stored: boolean; reason: string };
+    const ensure = await app.request(`/api/docs/documents/${id}/pdf/ensure`, { method: "POST" });
+    const body = (await ensure.json()) as { stored: boolean; hasPdf: boolean };
     expect(body.stored).toBe(false);
-    expect(body.reason).toBe("draft");
+    expect(body.hasPdf).toBe(true);
+
+    const printed = (await (await app.request(`/api/docs/documents/${id}/print`)).json()) as {
+      hasStoredPdf: boolean;
+    };
+    expect(printed.hasStoredPdf).toBe(false);
   });
 
   it("[blocant] pagina de tipărit a altui tenant nu se citește", async () => {

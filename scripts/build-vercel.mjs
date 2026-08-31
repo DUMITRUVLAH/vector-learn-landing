@@ -13,7 +13,8 @@
  * Run AFTER `vite build` (frontend → dist/). Produces .vercel/output/ which Vercel deploys.
  */
 import { build } from "esbuild";
-import { cpSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { cpSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 const OUT = ".vercel/output";
 rmSync(OUT, { recursive: true, force: true });
@@ -44,6 +45,9 @@ await build({
     // never required at runtime on the fallback path (the import throws before resolution).
     "playwright",
     "chromium-bidi",
+    // pdfmake: vezi pasul 2a — se livrează ca pachet, în .func/node_modules, pentru că pdfkit și
+    // fontkit citesc fișiere de date relativ la `__dirname`, care nu supraviețuiește bundle-ului.
+    "pdfmake/src/printer.js",
     // NOTE: exceljs USED to be external here — that was a latent prod bug. The Build Output
     // API .func directory ships ONLY the bundled index.mjs (no node_modules), so an external
     // package can NEVER "resolve at runtime": `await import("exceljs")` threw "Cannot find
@@ -57,6 +61,54 @@ await build({
   },
   logLevel: "info",
 });
+
+// 2a. pdfmake, ca PACHET, nu ca bundle.
+//
+// De ce nu-l bundluim: pdfkit/fontkit citesc fișiere de date de pe disc cu `__dirname + "/data.trie"`.
+// Într-un bundle ESM `__dirname` nu există, iar fișierele nici n-ar fi acolo — deci prima cerere de
+// PDF ar muri în producție cu „__dirname is not defined", exact clasa de bug a lecției exceljs
+// (un pachet „extern" care nu se poate rezolva la rulare). Copiem închiderea de dependențe în
+// `.func/node_modules`, de unde Node îl rezolvă normal.
+function packageDir(name, fromDir) {
+  let dir = fromDir;
+  for (;;) {
+    const candidate = `${dir}/node_modules/${name}`;
+    if (existsSync(`${candidate}/package.json`)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) throw new Error(`pachetul ${name} nu a fost găsit pornind de la ${fromDir}`);
+    dir = parent;
+  }
+}
+
+function copyPackageClosure(name, destRoot, fromDir = process.cwd(), seen = new Set()) {
+  if (seen.has(name)) return seen;
+  seen.add(name);
+  const dir = packageDir(name, fromDir);
+  mkdirSync(dirname(`${destRoot}/${name}`), { recursive: true });
+  cpSync(dir, `${destRoot}/${name}`, { recursive: true, dereference: true });
+  const pkg = JSON.parse(readFileSync(`${dir}/package.json`, "utf8"));
+  for (const dep of Object.keys(pkg.dependencies ?? {})) {
+    copyPackageClosure(dep, destRoot, dir, seen);
+  }
+  return seen;
+}
+
+const pdfPackages = copyPackageClosure("pdfmake", `${FN}/node_modules`);
+console.log(`📦 pdfmake + ${pdfPackages.size - 1} dependențe copiate lângă funcție.`);
+
+// 2b. Fonturile actelor, lângă funcție.
+// PDF-ul contractelor se scrie cu pdfmake și are nevoie de fișierele .ttf (Tinos, metric-compatibil
+// cu Times New Roman). Pachetul serverless conține DOAR index.mjs — un `import` de .ttf n-ar
+// exista la rulare, exact ca lecția exceljs. De aceea le copiem fizic: server/lib/docs/pdfFonts.ts
+// le caută în `assets/fonts` relativ la fișierul funcției.
+mkdirSync(`${FN}/assets/fonts`, { recursive: true });
+cpSync("server/assets/fonts", `${FN}/assets/fonts`, { recursive: true });
+const shippedFonts = readdirSync(`${FN}/assets/fonts`).filter((f) => f.endsWith(".ttf"));
+if (shippedFonts.length < 4) {
+  throw new Error(
+    `Fonturile actelor lipsesc din pachet (${shippedFonts.length}/4). Fără ele, PDF-ul contractelor ar pica în producție.`
+  );
+}
 
 writeFileSync(
   `${FN}/.vc-config.json`,

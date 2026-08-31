@@ -6,10 +6,14 @@
  * între pagini. O pagină web tipărită se vede de la distanță și strică impresia exact în momentul
  * în care ceri o semnătură.
  *
- * Randarea folosește Playwright prin `htmlToPdfBuffer` (DOCMERGE-003) — aceeași cale ca facturile,
- * cu fallback curat când chromium lipsește (serverless): apelantul primește null și servește HTML.
+ * DC-102: randarea NU mai trece prin chromium. Pe Vercel el nu există, deci calea veche întorcea
+ * mereu null, iar browserul „fotografia" pagina cu html2canvas — o imagine JPEG tăiată la fiecare
+ * 297 mm, fără text de căutat. Acum PDF-ul se scrie direct, ca text vectorial (`pdfDocument.ts`),
+ * pe server: același fișier ajunge în descărcare, în e-mail, în ZIP și în atașamentul cererii.
+ *
+ * HTML-ul tipăribil rămâne — previzualizarea și exportul pentru Word îl folosesc.
  */
-import { htmlToPdfBuffer } from "../docmerge/htmlToPdf";
+import { renderDocumentPdfBuffer } from "./pdfDocument";
 
 export interface PrintableLine {
   description: string;
@@ -45,7 +49,9 @@ const STYLES = `
   @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
   * { box-sizing: border-box; }
   body {
-    font-family: "DejaVu Serif", "Times New Roman", Georgia, serif;
+    /* Aceeași familie ca PDF-ul: Tinos e metric-compatibil cu Times New Roman, deci rândurile se
+       rup în același loc în ambele fișiere. Word are Times pe orice mașină; Tinos e rezerva. */
+    font-family: "Times New Roman", Tinos, "Liberation Serif", Georgia, serif;
     font-size: 11.5pt; line-height: 1.45; color: #111; margin: 0;
   }
   h1 { font-size: 15pt; text-align: center; margin: 0 0 10pt; text-transform: uppercase; letter-spacing: .3pt; }
@@ -62,24 +68,6 @@ const STYLES = `
   table:last-of-type { page-break-inside: avoid; }
   .doc-meta { font-size: 8.5pt; color: #666; text-align: right; margin-bottom: 8pt; }
 `;
-
-/** Antetul/subsolul Playwright cer HTML propriu, cu clasele lui speciale de numerotare. */
-function headerTemplate(org: PrintableOrg): string {
-  const logo = org.logoUrl
-    ? `<img src="${org.logoUrl}" style="height:9mm;max-width:45mm;object-fit:contain" />`
-    : "";
-  return `<div style="width:100%;padding:0 16mm;font-family:Helvetica,Arial,sans-serif;font-size:8pt;color:#555;display:flex;align-items:center;justify-content:space-between">
-    <span>${escapeHtml(org.name ?? "")}</span>${logo}
-  </div>`;
-}
-
-function footerTemplate(doc: PrintableDocument): string {
-  const label = doc.docNumber ? `${escapeHtml(doc.docNumber)} · ` : "";
-  return `<div style="width:100%;padding:0 16mm;font-family:Helvetica,Arial,sans-serif;font-size:8pt;color:#555;display:flex;justify-content:space-between">
-    <span>${label}${doc.docDate.toLocaleDateString("ro-MD")}</span>
-    <span>pagina <span class="pageNumber"></span> din <span class="totalPages"></span></span>
-  </div>`;
-}
 
 export function escapeHtml(value: string): string {
   return value
@@ -142,24 +130,33 @@ export function buildPrintableHtml(doc: PrintableDocument, org: PrintableOrg): s
 }
 
 export interface RenderedDocument {
-  /** PDF-ul, sau null când Playwright/chromium nu e disponibil. */
-  pdf: Uint8Array | null;
-  /** HTML-ul tipăribil — servit ca fallback, tot el a stat la baza PDF-ului. */
+  /** PDF-ul actului. Nu mai poate fi null: nu depinde de niciun binar din mediu. */
+  pdf: Buffer;
+  /** HTML-ul tipăribil — aceeași sursă, folosită la previzualizare și la exportul pentru Word. */
   html: string;
+}
+
+/** Corpul care ajunge în PDF: șablonul completat sau, dacă actul n-are corp, documentul minim. */
+function printableBody(doc: PrintableDocument): string {
+  return doc.bodyHtml.trim() ? doc.bodyHtml : fallbackBody(doc);
+}
+
+/** Doar PDF-ul, pentru căile care nu au nevoie și de HTML (ZIP, e-mail, atașament la cerere). */
+export function renderPrintablePdf(doc: PrintableDocument, org: PrintableOrg): Promise<Buffer> {
+  return renderDocumentPdfBuffer(printableBody(doc), {
+    docNumber: doc.docNumber,
+    title: doc.title,
+    docDate: doc.docDate,
+    bodyHash: doc.bodyHash,
+    orgName: org.name,
+  });
 }
 
 export async function renderDocumentPdf(
   doc: PrintableDocument,
   org: PrintableOrg
 ): Promise<RenderedDocument> {
-  const html = buildPrintableHtml(doc, org);
-  const pdf = await htmlToPdfBuffer(html, {
-    headerTemplate: headerTemplate(org),
-    footerTemplate: footerTemplate(doc),
-    displayHeaderFooter: true,
-    margin: { top: "24mm", right: "16mm", bottom: "22mm", left: "16mm" },
-  });
-  return { pdf, html };
+  return { pdf: await renderPrintablePdf(doc, org), html: buildPrintableHtml(doc, org) };
 }
 
 /** Nume de fișier lizibil pentru descărcare: „ACT-2026-0007_Tehnica-Noua.pdf". */

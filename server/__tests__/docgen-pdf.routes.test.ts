@@ -7,11 +7,11 @@
  *  1. un act finalizat produce un PDF real (`%PDF`), cu numele fișierului lizibil;
  *  2. PDF-ul se STOCHEAZĂ: a doua descărcare nu re-randează, deci actul descărcat peste un an
  *     arată exact ca cel semnat, chiar dacă șablonul s-a schimbat între timp;
- *  3. lipsa chromium-ului (serverless) NU e o eroare: se servește HTML tipăribil.
+ *  3. fișierul livrat conține TEXTUL actului, nu o poză cu el (DC-102).
  *
- * Randarea e mock-uită deliberat: aici verificăm CONTRACTUL rutei (stocare, antet, fallback), nu
- * dacă Playwright desenează corect — ăla e testul lui, și n-are ce căuta într-o suită care trebuie
- * să ruleze în CI fără browser.
+ * Randarea NU mai e mock-uită: generatorul e cod propriu, rulează în milisecunde și nu are nevoie
+ * de niciun browser. Mock-ul de dinainte (chromium) ascundea exact defectul reclamat de owner —
+ * ruta „trecea" în timp ce omul primea o imagine.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
@@ -30,16 +30,18 @@ let vendorId: string;
 
 /** Câte apeluri a primit randarea — dovada că a doua descărcare vine din stocare. */
 const renderCalls = { count: 0 };
-let renderReturnsNull = false;
 
-vi.mock("../lib/docmerge/htmlToPdf", () => ({
-  htmlToPdfBuffer: async () => {
-    renderCalls.count += 1;
-    if (renderReturnsNull) return null;
-    // Un PDF minim, dar valid ca semnătură de fișier.
-    return new TextEncoder().encode("%PDF-1.4\n%…document…\n%%EOF");
-  },
-}));
+vi.mock("../lib/docs/pdfDocument", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/docs/pdfDocument")>();
+  return {
+    ...actual,
+    // Numărăm apelurile, dar lăsăm generatorul ADEVĂRAT să scrie fișierul.
+    renderDocumentPdfBuffer: async (...args: Parameters<typeof actual.renderDocumentPdfBuffer>) => {
+      renderCalls.count += 1;
+      return actual.renderDocumentPdfBuffer(...args);
+    },
+  };
+});
 
 vi.mock("../db/client", () => ({
   get db() {
@@ -114,7 +116,6 @@ async function finalizedDoc() {
 
 describe("DG-112 — actul ca PDF", () => {
   it("[blocant] un act finalizat se descarcă drept PDF, cu nume de fișier lizibil", async () => {
-    renderReturnsNull = false;
     const id = await finalizedDoc();
 
     const res = await app.request(`/api/docs/documents/${id}/pdf`);
@@ -127,7 +128,6 @@ describe("DG-112 — actul ca PDF", () => {
   });
 
   it("[blocant] a doua descărcare vine din stocare, nu dintr-o randare nouă", async () => {
-    renderReturnsNull = false;
     const id = await finalizedDoc();
 
     renderCalls.count = 0;
@@ -139,17 +139,23 @@ describe("DG-112 — actul ca PDF", () => {
     expect(renderCalls.count, "actul semnat nu se re-randează la fiecare descărcare").toBe(1);
   });
 
-  it("[blocant] fără chromium se servește HTML tipăribil, nu o eroare", async () => {
-    renderReturnsNull = true;
+  it("[blocant] fișierul livrat conține textul actului, nu o poză cu el", async () => {
     const id = await finalizedDoc();
 
     const res = await app.request(`/api/docs/documents/${id}/pdf`);
     expect(res.status).toBe(200);
-    expect(res.headers.get("X-Pdf-Fallback")).toBe("html");
-    const html = await res.text();
-    expect(html).toContain("<!doctype html>");
-    expect(html).toContain("Act de primire-predare");
-    renderReturnsNull = false;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+
+    const { extractText, getDocumentProxy } = await import("unpdf");
+    const pdf = await getDocumentProxy(bytes);
+    const { text } = await extractText(pdf, { mergePages: true });
+    const flat = Array.isArray(text) ? text.join("\n") : text;
+
+    // Calea veche (html2canvas) livra o imagine: aici n-ar veni niciun cuvânt înapoi.
+    expect(flat).toContain("ACT DE PRIMIRE-PREDARE");
+    expect(flat).toContain("Laptop");
+    expect(flat).toMatch(/ACT-\d{4}-\d{4}/);
+    expect(flat).toMatch(/pagina 1 din 1/);
   });
 
   it("[blocant] actul altei organizații nu se descarcă", async () => {
@@ -164,7 +170,6 @@ describe("DG-112 — actul ca PDF", () => {
   });
 
   it("[normal] descărcarea lasă urmă în jurnal", async () => {
-    renderReturnsNull = false;
     const id = await finalizedDoc();
     await app.request(`/api/docs/documents/${id}/pdf`);
 

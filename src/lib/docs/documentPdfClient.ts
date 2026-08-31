@@ -1,113 +1,67 @@
 /**
- * Fix prod — PDF-ul actului se face ÎN BROWSER.
+ * DC-102 — PDF-ul actului se cere serverului, nu se mai fotografiază în browser.
  *
- * Ce s-a întâmplat: pe Vercel nu rulează chromium, deci randarea pe server întorcea mereu HTML,
- * iar „Descarcă PDF" deschidea o pagină web în loc să salveze un fișier. Aceeași problemă a fost
- * rezolvată deja în aplicație pentru formularul PAR (src/lib/parPdf.ts): randăm HTML-ul cu
- * html2canvas și îl împachetăm cu jsPDF. Ambele sunt deja dependențe.
+ * Ce era: pe Vercel nu există chromium, deci PDF-ul se făcea aici cu html2canvas + jsPDF — o
+ * imagine JPEG a paginii, tăiată la fiecare 297 mm prin mijlocul rândului, fără text de căutat sau
+ * copiat. Owner-ul l-a descris exact: „parcă e un fișier HTML; Word-ul e ok".
  *
- * Bonus important: după ce browserul a produs PDF-ul unui act finalizat, îl trimitem serverului să-l
- * păstreze — ca atașamentul la cererea de plată și ZIP-ul să existe și pe producție.
+ * Ce e acum: serverul scrie un PDF adevărat (text vectorial, antet, „pagina X din Y", tabele care
+ * își repetă antetul) și îl păstrează pentru actele finalizate. Browserul doar descarcă fișierul —
+ * deci același document ajunge și în e-mail, și în ZIP, și ca atașament la cererea de plată, nu
+ * doar la cel care a apăsat butonul.
  */
-import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas";
 import { api } from "@/lib/api";
-import { A4_WIDTH_PX, PAGE_MARGIN_MM, PX_PER_MM, type PrintableResponse } from "./printable";
+import type { PrintableResponse } from "./printable";
 
-export type { PrintableResponse };
+export type { PrintableResponse } from "./printable";
 
-/** HTML-ul tipăribil al actului — sursa unică pentru previzualizare, PDF și e-mail. */
+/** HTML-ul tipăribil (previzualizarea și exportul pentru Word pleacă de aici). */
 export function fetchPrintable(documentId: string): Promise<PrintableResponse> {
   return api<PrintableResponse>(`/api/docs/documents/${documentId}/print`);
 }
 
-/** Randează HTML-ul într-un PDF A4, cu paginare pe înălțime. */
-async function htmlToPdf(html: string): Promise<jsPDF> {
-  const host = document.createElement("div");
-  host.style.position = "fixed";
-  host.style.left = "-10000px";
-  host.style.top = "0";
-  host.style.width = `${A4_WIDTH_PX}px`; // A4 la 96dpi — altfel textul se rupe altfel decât la tipar
-  // Marginile se pun pe GAZDĂ, nu prin CSS pe `body`: HTML-ul e injectat cu innerHTML, deci un
-  // selector `body` din el ar nimeri corpul aplicației, nu foaia pe care o fotografiem.
-  host.style.boxSizing = "border-box";
-  host.style.padding = `${PAGE_MARGIN_MM.top * PX_PER_MM}px ${PAGE_MARGIN_MM.right * PX_PER_MM}px ${PAGE_MARGIN_MM.bottom * PX_PER_MM}px ${PAGE_MARGIN_MM.left * PX_PER_MM}px`;
-  host.style.background = "#ffffff";
-  host.innerHTML = html;
-  document.body.appendChild(host);
-
-  try {
-    if (document.fonts?.ready) await document.fonts.ready;
-    const canvas = await html2canvas(host, {
-      scale: 2,
-      backgroundColor: "#ffffff",
-      useCORS: true,
-      logging: false,
-    });
-
-    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-    const pageW = 210;
-    const imgH = (canvas.height * pageW) / canvas.width;
-    const jpeg = canvas.toDataURL("image/jpeg", 0.92);
-
-    if (imgH <= 297) {
-      pdf.addImage(jpeg, "JPEG", 0, 0, pageW, imgH);
-    } else {
-      let remaining = imgH;
-      let offset = 0;
-      while (remaining > 0) {
-        pdf.addImage(jpeg, "JPEG", 0, -offset, pageW, imgH);
-        remaining -= 297;
-        offset += 297;
-        if (remaining > 0) pdf.addPage();
-      }
-    }
-    return pdf;
-  } finally {
-    document.body.removeChild(host);
-  }
+/** Numele fișierului anunțat de server; dacă lipsește, unul rezonabil. */
+function fileNameFrom(header: string | null, fallback: string): string {
+  const match = header ? /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header) : null;
+  return match ? decodeURIComponent(match[1]) : fallback;
 }
 
 /**
- * Se asigură că actul are PDF stocat pe server — fără să descarce nimic pe disc.
+ * Salvează pe disc PDF-ul actului. Întoarce `true` dacă fișierul a ajuns la om.
  *
- * De ce: trimiterea pe e-mail atașează PDF-ul stocat, iar pe producție el se naște doar în browser.
- * Fără pasul ăsta, e-mailul pleca scriind „vă transmitem atașat" și fără act — exact ce a pățit
- * owner-ul. Acum, înainte de trimitere, browserul randează și încarcă documentul.
- */
-export async function ensureStoredPdf(documentId: string): Promise<boolean> {
-  const printable = await fetchPrintable(documentId);
-  if (printable.hasStoredPdf) return true;
-  if (printable.status === "draft") return false;
-
-  const pdf = await htmlToPdf(printable.html);
-  const base64 = pdf.output("datauristring").split(",")[1] ?? "";
-  const res = await api<{ stored: boolean }>(`/api/docs/documents/${documentId}/pdf`, {
-    method: "PUT",
-    body: JSON.stringify({ base64 }),
-  });
-  return res.stored;
-}
-
-/**
- * Descarcă actul ca PDF. Întoarce `true` dacă fișierul a fost salvat.
- * Actele finalizate își trimit PDF-ul înapoi la server, o singură dată.
+ * `credentials: "include"` pentru că sesiunea e pe cookie, ca la restul aplicației.
  */
 export async function downloadDocumentPdf(documentId: string): Promise<boolean> {
-  const printable = await fetchPrintable(documentId);
-  const pdf = await htmlToPdf(printable.html);
-  pdf.save(printable.fileName);
+  const res = await fetch(`/api/docs/documents/${documentId}/pdf`, { credentials: "include" });
+  if (!res.ok) throw new Error(`pdf_failed_${res.status}`);
 
-  if (printable.status !== "draft" && !printable.hasStoredPdf) {
-    try {
-      const base64 = pdf.output("datauristring").split(",")[1] ?? "";
-      await api(`/api/docs/documents/${documentId}/pdf`, {
-        method: "PUT",
-        body: JSON.stringify({ base64 }),
-      });
-    } catch {
-      // Stocarea e un bonus (atașament la PAR, ZIP): dacă pică, omul are deja fișierul în mână.
-    }
+  const blob = await res.blob();
+  const name = fileNameFrom(res.headers.get("content-disposition"), `${documentId}.pdf`);
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    // Fără revocare, fiecare descărcare ar ține în memorie o copie a fișierului până la refresh.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
   return true;
+}
+
+/**
+ * Se asigură că actul finalizat are PDF-ul scris și păstrat pe server, fără să descarce nimic.
+ *
+ * Rămâne apelat înainte de trimiterea pe e-mail: dacă generarea pică (fonturi lipsă, act gol),
+ * vrem să aflăm ÎNAINTE de a promite contrapărții „vă transmitem atașat", nu după.
+ */
+export async function ensureStoredPdf(documentId: string): Promise<boolean> {
+  const res = await api<{ stored: boolean; hasPdf: boolean }>(
+    `/api/docs/documents/${documentId}/pdf/ensure`,
+    { method: "POST" }
+  );
+  return res.hasPdf;
 }

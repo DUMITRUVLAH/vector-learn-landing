@@ -22,18 +22,18 @@ let userId: string;
 
 let renderCount = 0;
 
-vi.mock("../lib/docmerge/htmlToPdf", () => ({
-  htmlToPdfBuffer: async () => new TextEncoder().encode("%PDF-1.4\nx\n%%EOF"),
-  BatchPdfRenderer: {
-    create: async () => ({
-      render: async () => {
-        renderCount += 1;
-        return new TextEncoder().encode("%PDF-1.4\nbatch\n%%EOF");
-      },
-      close: async () => {},
-    }),
-  },
-}));
+// DC-102: ZIP-ul nu mai depinde de chromium — actele se scriu cu generatorul propriu. Numărăm
+// apelurile ca să știm că fiecare act din lot chiar a fost randat, dar fișierele sunt reale.
+vi.mock("../lib/docs/pdfDocument", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/docs/pdfDocument")>();
+  return {
+    ...actual,
+    renderDocumentPdfBuffer: async (...args: Parameters<typeof actual.renderDocumentPdfBuffer>) => {
+      renderCount += 1;
+      return actual.renderDocumentPdfBuffer(...args);
+    },
+  };
+});
 
 vi.mock("../db/client", () => ({
   get db() {
@@ -146,7 +146,7 @@ describe("DG-124 — generare în masă", () => {
     expect(((await res.json()) as { error: string }).error).toBe("too_many_rows");
   });
 
-  it("[blocant] ZIP-ul folosește UN singur browser pentru tot lotul", async () => {
+  it("[blocant] ZIP-ul conține câte un PDF pentru fiecare act din lot", async () => {
     const created = (await (
       await app.request("/api/docs/bulk", {
         method: "POST",
@@ -173,7 +173,7 @@ describe("DG-124 — generare în masă", () => {
 
     const bytes = new Uint8Array(await res.arrayBuffer());
     expect(String.fromCharCode(bytes[0], bytes[1])).toBe("PK");
-    expect(renderCount, "trei acte randate în aceeași instanță de browser").toBe(3);
+    expect(renderCount, "fiecare act din lot are propriul fișier").toBe(3);
   });
 
   it("[blocant] ZIP-ul nu scoate acte din alte organizații", async () => {

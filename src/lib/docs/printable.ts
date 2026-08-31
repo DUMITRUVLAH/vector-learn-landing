@@ -14,18 +14,13 @@ export interface PrintableResponse {
 }
 
 /**
- * Marginile foii, în milimetri — aceleași cu `@page` din stilurile actului
- * (server/lib/docs/documentPdf.ts).
+ * Marginile foii, în milimetri — aceleași cu ale PDF-ului (`server/lib/docs/pdfDocument.ts`).
  *
- * De ce sunt repetate aici: `@page` guvernează DOAR tipărirea reală din browser. html2canvas
- * (care face PDF-ul) și iframe-ul de previzualizare o ignoră complet, deci fără marginile astea
- * textul iese lipit de marginea foii — se vede de la distanță că nu e un act, ci o pagină web.
+ * De ce sunt repetate aici: `@page` guvernează DOAR tipărirea reală din browser, iar previzualizarea
+ * e un `<iframe>` care o ignoră. Fără marginile astea, foaia de pe ecran ar arăta altfel decât
+ * fișierul descărcat — adică previzualizarea ar minți exact înainte de o semnătură.
  */
 export const PAGE_MARGIN_MM = { top: 18, right: 16, bottom: 20, left: 16 } as const;
-
-/** A4 la 96dpi: 210mm = 794px. Constanta leagă milimetrii de pixelii pe care îi vede html2canvas. */
-export const A4_WIDTH_PX = 794;
-export const PX_PER_MM = A4_WIDTH_PX / 210;
 
 /**
  * Aceleași margini, pe ecran: previzualizarea trebuie să arate exact ca PDF-ul, altfel nu e o

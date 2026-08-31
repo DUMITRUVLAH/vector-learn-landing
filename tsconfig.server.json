@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["server/**/*.ts", "drizzle.config.ts"]
+  "include": ["server/**/*.ts", "server/types/*.d.ts", "drizzle.config.ts"]
 }
