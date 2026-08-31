@@ -9,8 +9,9 @@
  *  1. **O singură apăsare e de ajuns.** Nota generală e singurul câmp obligatoriu; criteriile și
  *     comentariul sunt ascunse sub „Adaugă detalii". Un formular lung după fiecare plată ar fi
  *     închis de toată lumea, iar fișele ar rămâne goale.
- *  2. **„Mai târziu" chiar înseamnă mai târziu.** Amânarea se ține local (7 zile) — omul nu e
- *     întrebat din nou la fiecare încărcare de pagină. Cererea rămâne în „de evaluat" pe fișă.
+ *  2. **„Mai târziu" chiar înseamnă mai târziu.** Popup-ul întreabă o singură dată despre o
+ *     cerere, oricum ai închide dialogul (buton, X, Esc, fundal) — vezi `@/lib/par/ratingPrompt`.
+ *     Cererea rămâne în „de evaluat" pe fișa furnizorului, deci nota se poate da oricând.
  *  3. **Nimic nu se pierde la eroare de rețea.** Dacă salvarea pică, dialogul rămâne deschis cu
  *     textul scris și spune ce s-a întâmplat.
  */
@@ -32,7 +33,6 @@ export interface VendorRatingDialogProps {
   onSaved?: () => void;
   /** Text pentru butonul secundar; „Mai târziu" în popup, „Renunță" în fișă. */
   dismissLabel?: string;
-  onDismiss?: () => void;
 }
 
 const CRITERIA = [
@@ -51,7 +51,6 @@ export function VendorRatingDialog({
   requestNo,
   onSaved,
   dismissLabel = "Mai târziu",
-  onDismiss,
 }: VendorRatingDialogProps) {
   const [stars, setStars] = useState<number | null>(null);
   const [criteria, setCriteria] = useState<Record<string, number | null>>({});
@@ -109,14 +108,7 @@ export function VendorRatingDialog({
       }
       footer={
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button
-            variant="ghost"
-            onClick={() => {
-              onDismiss?.();
-              onClose();
-            }}
-            disabled={saving}
-          >
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
             {dismissLabel}
           </Button>
           <Button onClick={() => void save()} disabled={stars == null || saving}>
