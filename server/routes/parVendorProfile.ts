@@ -388,6 +388,9 @@ parVendorProfileRoutes.get("/directory", async (c) => {
 // Evaluări de dat (popup-ul de după plată)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Cât de proaspătă trebuie să fie plata ca să merite o întrebare (fereastra de la §pending-ratings). */
+export const RATING_PROMPT_FRESH_DAYS = 14;
+
 /**
  * GET /api/par/vendors/pending-ratings — cererile MELE plătite, cu furnizor cunoscut, pe care nu
  * le-am evaluat încă ȘI despre care nu am fost întrebat niciodată. Alimentează popup-ul de după plată.
@@ -402,8 +405,6 @@ parVendorProfileRoutes.get("/directory", async (c) => {
  *    mai amintește cum a fost prestat serviciul, iar o coadă de cereri vechi ar produce exact
  *    senzația de hărțuire raportată. Ce nu s-a evaluat rămâne evaluabil din fișa furnizorului.
  */
-/** Cât de proaspătă trebuie să fie plata ca să merite o întrebare. */
-export const RATING_PROMPT_FRESH_DAYS = 14;
 parVendorProfileRoutes.get("/pending-ratings", async (c) => {
   const user = c.get("user");
   const freshSince = new Date(Date.now() - RATING_PROMPT_FRESH_DAYS * 24 * 60 * 60 * 1000);
