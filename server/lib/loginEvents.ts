@@ -27,12 +27,14 @@ export interface LoginEventInput {
   failureReason?: string | null;
 }
 
-/** IP-ul real din spatele proxy-ului Vercel/Cloudflare. */
-export function clientIp(c: Context): string | null {
-  return (
-    clientIp(c) ?? null
-  );
-}
+/**
+ * IP-ul real din spatele proxy-ului Vercel/Cloudflare.
+ *
+ * Implementarea trăiește în `lib/clientIp` (audit 2026-08-29: se lua PRIMUL element din
+ * X-Forwarded-For, adică valoarea trimisă de client). Re-exportat de aici pentru apelanții
+ * care îl importau din acest modul.
+ */
+export { clientIp };
 
 export async function recordLoginEvent(c: Context, input: LoginEventInput): Promise<void> {
   try {

@@ -1602,6 +1602,10 @@ parRoutes.patch(
       .where(
         and(
           eq(parLineItems.id, lineId),
+          // `parId` în WHERE, ca ștergerea de mai jos: linia e citită mai sus cu parId, deci azi
+          // e sigur, dar o modificare care mută citirea ar face din asta un update peste cererea
+          // altcuiva. Apărare în adâncime (audit 2026-08-29).
+          eq(parLineItems.parId, parId),
           eq(parLineItems.tenantId, tenantId)
         )
       )
@@ -1808,6 +1812,15 @@ parRoutes.post("/:id/withdraw", async (c) => {
   const isAdmin = roles.includes("par_admin");
   if (par.requestedByUserId !== user.id && !isAdmin) {
     return c.json({ error: "forbidden: only the author can withdraw this PAR" }, 403);
+  }
+  // Retragerea șterge lanțul de aprobări al altcuiva, deci un par_admin o poate face doar în aria
+  // lui — altfel un administrator restrâns pe un plătitor anula decizii din alt proiect
+  // (audit 2026-08-29).
+  if (par.requestedByUserId !== user.id) {
+    const inScope = par.projectId
+      ? await mayAccessProject(user.id, tenantId, par.projectId, user.role)
+      : await mayAccessPayer(user.id, tenantId, par.payerId, user.role);
+    if (!inScope) return c.json({ error: "not_found" }, 404);
   }
   // Doar cât timp NU e aprobată. 'approved'/'in_finance'/'paid' sunt deja decise — acolo calea e
   // anularea, nu retragerea; 'draft'/'changes_requested' sunt deja editabile.

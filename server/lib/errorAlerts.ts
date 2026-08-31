@@ -12,7 +12,7 @@
  *
  * Best-effort din cap până în coadă: dacă alerta eșuează, eroarea rămâne oricum în consolă.
  */
-import { eq } from "drizzle-orm";
+import { eq, gt, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { errorGroups } from "../db/schema/telemetry";
 import { platformOwnerEmails } from "./platformOwner";
@@ -22,10 +22,31 @@ const REALERT_AFTER_MS = 24 * 60 * 60 * 1000;
 
 const sentTimestamps: number[] = [];
 
-function underHourlyCap(): boolean {
+/**
+ * SECURITY (audit 2026-08-29): plafonul orar trăia DOAR în memoria instanței. Pe Vercel fiecare
+ * invocare poate ateriza pe altă instanță, deci plafonul se resetează singur — iar `POST
+ * /api/telemetry/error` e public. Cineva putea genera tipuri noi de erori la nesfârșit și, cu
+ * ele, un val de emailuri către proprietar: cutia poștală inundată, iar reputația de expeditor
+ * (Resend suspendă în jurul a 5% bounce) arsă de trafic fabricat.
+ *
+ * Plafonul se numără acum din `error_groups.alerted_at`, care e comun tuturor instanțelor.
+ * Memoria rămâne ca scurtătură ieftină pentru cazul obișnuit.
+ */
+async function underHourlyCap(): Promise<boolean> {
   const cutoff = Date.now() - 60 * 60 * 1000;
   while (sentTimestamps.length > 0 && sentTimestamps[0] < cutoff) sentTimestamps.shift();
-  return sentTimestamps.length < MAX_ALERTS_PER_HOUR;
+  if (sentTimestamps.length >= MAX_ALERTS_PER_HOUR) return false;
+  try {
+    const [row] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(errorGroups)
+      .where(gt(errorGroups.alertedAt, new Date(cutoff)));
+    return (row?.c ?? 0) < MAX_ALERTS_PER_HOUR;
+  } catch {
+    // Dacă interogarea eșuează, rămâne plafonul din memorie — mai bine o alertă în plus decât
+    // niciuna, dar niciodată fără plafon.
+    return true;
+  }
 }
 
 function appUrl(): string {
@@ -51,7 +72,7 @@ export async function alertOwnerOnNewError(ctx: AlertContext): Promise<void> {
       .where(eq(errorGroups.id, ctx.groupId));
     if (!group) return;
     if (group.alertedAt && Date.now() - group.alertedAt.getTime() < REALERT_AFTER_MS) return;
-    if (!underHourlyCap()) {
+    if (!(await underHourlyCap())) {
       console.warn("[errorAlerts] hourly cap reached — alert suppressed (eroarea rămâne în consolă)");
       return;
     }

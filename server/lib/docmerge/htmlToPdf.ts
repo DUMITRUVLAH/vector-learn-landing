@@ -35,6 +35,45 @@ export interface HtmlToPdfOptions {
   margin?: { top?: string; right?: string; bottom?: string; left?: string };
 }
 
+
+/**
+ * SECURITY (audit 2026-08-29) — SSRF / citire de fișiere locale prin șabloanele de acte.
+ *
+ * `page.setContent(html)` randează HTML scris de utilizator (`docmergeTemplates.bodyHtml`) într-un
+ * Chromium pornit cu `--no-sandbox`. Fără filtru, un `<img src="file:///etc/passwd">` sau un fetch
+ * către `http://169.254.169.254/` (metadatele instanței) pleacă din server, cu rețeaua lui. Pe
+ * Vercel Chromium lipsește, deci acolo nu se exploata; pe self-host/Docker/dev, da.
+ *
+ * Regula: pagina are voie să încarce DOAR `data:` și `https:` către internetul public. Orice
+ * `file:`, orice IP privat/loopback/link-local și orice schemă exotică sunt refuzate în `route`.
+ */
+const PRIVATE_HOST = /^(localhost|127\.|0\.|10\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?|metadata\.google\.internal)/i;
+
+export function isAllowedResourceUrl(rawUrl: string): boolean {
+  if (rawUrl.startsWith("data:")) return true;
+  let u: URL;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (u.protocol === "about:" || u.protocol === "blob:") return true;
+  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+  if (PRIVATE_HOST.test(u.hostname)) return false;
+  return true;
+}
+
+/** Aplică filtrul de mai sus pe o pagină Playwright. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function lockDownPage(page: any): Promise<void> {
+  await page.route("**/*", (route: any) => {
+    const url = route.request().url();
+    if (isAllowedResourceUrl(url)) return route.continue();
+    console.warn("[htmlToPdf] resursă blocată:", url.slice(0, 120));
+    return route.abort();
+  });
+}
+
 export async function htmlToPdfBuffer(
   html: string,
   options: HtmlToPdfOptions = {}
@@ -44,6 +83,7 @@ export async function htmlToPdfBuffer(
     const browser = await chromium.launch({ args: ["--no-sandbox"] });
     try {
       const page = await browser.newPage();
+      await lockDownPage(page);
       await page.setContent(html, { waitUntil: "networkidle" });
       const pdf = await page.pdf({
         format: "A4",
@@ -97,6 +137,8 @@ export class BatchPdfRenderer {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const page = await this.browser.newPage();
     try {
+      // Același filtru ca în `htmlToPdfBuffer` — șablonul e HTML scris de utilizator.
+      await lockDownPage(page);
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       await page.setContent(html, { waitUntil: "networkidle" });
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access

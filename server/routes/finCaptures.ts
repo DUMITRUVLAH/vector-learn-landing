@@ -42,6 +42,7 @@ import {
   downloadCapture,
   isStorageConfigured,
 } from "../lib/storage/captureStorage";
+import { isSafeTenantObjectPath } from "../lib/storage/safePath";
 
 export const finCapturesRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -870,7 +871,13 @@ finCapturesRoutes.post("/captures/finalize", zValidator("json", finalizeSchema),
   > = [];
   for (const item of items) {
     // Tenant safety: the path must live under the tenant's folder (signed URLs are issued that way).
-    if (!item.path.startsWith(`${user.tenantId}/`)) {
+    //
+    // SECURITY (audit 2026-08-29): `startsWith` singur NU e o gardă de tenant. Calea ajunge
+    // concatenată într-un URL către Supabase Storage, cu cheia service-role (fără RLS), iar
+    // normalizarea de URL rezolvă `..`: "AAA/../BBB/x.pdf" are pathname-ul "BBB/x.pdf", deci
+    // prefixul trecea verificarea și se citea fișierul altui tenant. Acum forma cerută e strictă
+    // — <uuid tenant>/<nume simplu> — și orice `..` sau `/` în plus e refuzat.
+    if (!isSafeTenantObjectPath(item.path, user.tenantId)) {
       results.push({ ok: false, fileName: item.fileName, error: "forbidden_path" });
       continue;
     }

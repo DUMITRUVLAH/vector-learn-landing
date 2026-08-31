@@ -35,6 +35,7 @@ import { requirePARRole } from "../middleware/requirePARRole";
 import { accessiblePayerIds, accessibleProjectIds } from "../lib/par/projectScope";
 import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
 import { URGENT_REASON_LABELS, type UrgentReasonCode } from "../../src/lib/par/urgentReasons";
+import { neutralizeFormula } from "../lib/fin/exportCsv";
 
 type ReportVariables = AuthVariables & { parReportScope: SQL };
 export const parReportsRoutes = new Hono<{ Variables: ReportVariables }>();
@@ -659,7 +660,9 @@ parReportsRoutes.get("/export.csv", async (c) => {
     r.submittedAt ?? "",
     r.approvedAt ?? "",
     r.paidAt ?? "",
-  ].map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  // Injecție de formule: o celulă care începe cu = + - @ e executată de Excel. Numele
+  // beneficiarului vine adesea dintr-un PDF extern (audit 2026-08-29) — vezi lib/fin/exportCsv.
+  ].map((v) => `"${neutralizeFormula(String(v ?? "")).replace(/"/g, '""')}"`).join(",")).join("\n");
 
   const csv = header + csvRows;
 

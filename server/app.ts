@@ -1,7 +1,11 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
+import { getCookie } from "hono/cookie";
+import { SESSION_COOKIE, getSessionUser } from "./auth/session";
+import { platformAdmins } from "./db/schema/par";
+import { isPlatformOwnerEmail } from "./lib/platformOwner";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { db } from "./db/client";
 import { tenants, users } from "./db/schema";
 import { authRoutes } from "./routes/auth";
@@ -366,7 +370,35 @@ app.get("/api/health", async (c) => {
   }
 });
 
+/**
+ * True doar pentru un superadmin de platformă autentificat. Folosit ca să decidem CÂT
+ * detaliu are voie să vadă un endpoint public de diagnostic. Nu aruncă niciodată: un
+ * health-check nu trebuie să pice pentru că sesiunea e invalidă.
+ */
+async function isPlatformAdminRequest(c: Context): Promise<boolean> {
+  try {
+    const token = getCookie(c, SESSION_COOKIE);
+    if (!token) return false;
+    const result = await getSessionUser(token);
+    if (!result) return false;
+    const [row] = await db
+      .select({ id: platformAdmins.id })
+      .from(platformAdmins)
+      .where(eq(platformAdmins.userId, result.user.id));
+    return !!row || isPlatformOwnerEmail(result.user.email);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * SECURITY (audit 2026-08-29): endpointul era public și întorcea numărul de tenanți și de
+ * utilizatori — adică exact metrica de business a produsului, oricui o cerea. Un health-check
+ * trebuie să răspundă „merge / nu merge"; cifrele stau în spatele autentificării de platformă.
+ * Mesajul brut de eroare al driverului (nume de tabele, host, user) intra tot în răspuns.
+ */
 app.get("/api/health/db", async (c) => {
+  const detailed = await isPlatformAdminRequest(c);
   try {
     const tablesResult = await db.execute(
       sql`SELECT count(*)::int as table_count FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE '\\_\\_%' ESCAPE '\\'`
@@ -376,6 +408,7 @@ app.get("/api/health/db", async (c) => {
       | Array<{ table_count: number }>
       | undefined;
     const tableRow = tableRows?.[0];
+    if (!detailed) return c.json({ ok: true });
     const [tenantCount] = await db.select({ c: sql<number>`count(*)::int` }).from(tenants);
     const [userCount] = await db.select({ c: sql<number>`count(*)::int` }).from(users);
     return c.json({
@@ -384,7 +417,11 @@ app.get("/api/health/db", async (c) => {
       counts: { tenants: tenantCount.c, users: userCount.c },
     });
   } catch (error) {
-    return c.json({ ok: false, error: error instanceof Error ? error.message : "unknown" }, 503);
+    console.error("[health/db]", error);
+    return c.json(
+      detailed ? { ok: false, error: error instanceof Error ? error.message : "unknown" } : { ok: false },
+      503
+    );
   }
 });
 

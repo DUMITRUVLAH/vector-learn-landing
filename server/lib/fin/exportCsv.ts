@@ -16,11 +16,24 @@ const UTF8_BOM = "﻿";
  */
 export function escapeCsvField(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "";
-  const str = String(value);
+  const str = neutralizeFormula(String(value));
   if (/[;"'\r\n]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
+}
+
+/**
+ * SECURITY (audit 2026-08-29) — injecție de formule în foaia de calcul.
+ *
+ * Excel și LibreOffice interpretează o celulă care începe cu `=`, `+`, `-`, `@` (sau TAB/CR) ca
+ * formulă, nu ca text. Numele beneficiarului dintr-un PAR e adesea extras de AI dintr-un PDF
+ * trimis din exterior, deci un „furnizor" putea pune `=WEBSERVICE(...)` sau o formulă DDE în
+ * numele lui, iar exportul deschis de contabilitate o executa pe stația lor. Prefixul cu apostrof
+ * e convenția care spune „asta e text": se vede la fel în celulă, dar nu se mai evaluează.
+ */
+export function neutralizeFormula(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 }
 
 /** Formatează un număr de cenți în lei cu 2 zecimale */

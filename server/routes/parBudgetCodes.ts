@@ -24,6 +24,9 @@ import { clientIp } from "../lib/clientIp";
 
 export const parBudgetCodesRoutes = new Hono<{ Variables: AuthVariables }>();
 parBudgetCodesRoutes.use("*", requireAuth);
+// SECURITY (audit 2026-08-29), apărare în adâncime: codurile bugetare și alocările lor sunt date
+// financiare interne. Datele erau deja filtrate pe arie, dar ruta accepta orice cont autentificat.
+parBudgetCodesRoutes.use("*", requirePARRole("requestor", "approver", "finance", "par_admin"));
 // Guard the nested `/:id/balance`; the bare `/:id` (PATCH/DELETE) is UUID-constrained at the route
 // level so the literal `/usage` route is never shadowed by a wildcard guard.
 parBudgetCodesRoutes.use("/:id/:action/*", parUuidGuard("id"));

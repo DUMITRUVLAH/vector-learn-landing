@@ -6,7 +6,7 @@
  * Mounted in app.ts: app.route("/api/par/audit", parAuditRoutes)
  */
 import { Hono, type Context } from "hono";
-import { and, eq, gte, lte, desc, sql, inArray, type SQL } from "drizzle-orm";
+import { and, eq, gte, lte, desc, sql, inArray, isNull, or, type SQL } from "drizzle-orm";
 import { db } from "../db/client";
 import { parAudit, parRequests, parPayers, parProjects, parEvents } from "../db/schema/par";
 import { messages } from "../db/schema/messages";
@@ -14,7 +14,7 @@ import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
-import { accessibleProjectIds } from "../lib/par/projectScope";
+import { accessiblePayerIds, accessibleProjectIds } from "../lib/par/projectScope";
 
 export const parAuditRoutes = new Hono<{ Variables: AuthVariables }>();
 parAuditRoutes.use("*", requireAuth);
@@ -111,10 +111,22 @@ parAuditRoutes.get("/", async (c) => {
   conditions.push(entitledPayers.length
     ? inArray(parRequests.payerId, entitledPayers)
     : eq(parRequests.id, "00000000-0000-0000-0000-000000000000"));
-  const projectScope = await accessibleProjectIds(user.id, tenantId, user.role);
-  if (projectScope !== null) conditions.push(projectScope.length
-    ? inArray(parRequests.projectId, projectScope)
-    : eq(parRequests.projectId, "00000000-0000-0000-0000-000000000000"));
+  // Aria: aceleași reguli ca lista de cereri (server/routes/par.ts). FIX (audit 2026-08-29):
+  // filtrul pe proiect elimina din jurnal cererile FĂRĂ proiect (cele la nivel de plătitor), deci
+  // un par_admin restrâns nu vedea în audit exact cererile pe care le vede în listă.
+  const [projectScope, payerScope] = await Promise.all([
+    accessibleProjectIds(user.id, tenantId, user.role),
+    accessiblePayerIds(user.id, tenantId, user.role),
+  ]);
+  if (projectScope !== null && payerScope !== null) {
+    const scoped = or(
+      ...(projectScope.length ? [inArray(parRequests.projectId, projectScope)] : []),
+      ...(payerScope.length
+        ? [and(isNull(parRequests.projectId), inArray(parRequests.payerId, payerScope))]
+        : []),
+    );
+    conditions.push(scoped ?? eq(parRequests.id, "00000000-0000-0000-0000-000000000000"));
+  }
   const payerId = c.req.query("payer_id");
   const projectId = c.req.query("project_id");
   const eventId = c.req.query("event_id");
