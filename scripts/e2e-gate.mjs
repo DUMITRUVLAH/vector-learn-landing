@@ -426,7 +426,11 @@ async function deepSuites(base, areas) {
       execFileSync("node", [path.join("scripts", s)], {
         cwd: ROOT,
         stdio: "pipe",
-        env: { ...process.env, BASE_URL: base, BASE: base },
+        // Suitele dedicate primesc și contul cu care se autentifică poarta. Fără asta,
+        // `e2e-crud.mjs` cădea pe implicitul lui — contul demo din PRODUCȚIE, care local trăiește
+        // într-o organizație `learn` — și raporta `wrong_app` la login. Un roșu care nu spunea
+        // nimic despre cod, doar despre nepotrivirea dintre seed și script.
+        env: { ...process.env, BASE_URL: base, BASE: base, SMOKE_EMAIL: ADMIN, SMOKE_PASSWORD: PW },
         timeout: 300000,
       });
       check(s, true);
