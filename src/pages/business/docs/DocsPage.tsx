@@ -26,6 +26,8 @@ import {
   type DocFilters,
 } from "@/lib/api/docs";
 import { cn } from "@/lib/utils";
+import { docPath, docsNewPath, docsProjectDossierPath } from "@/lib/docs/paths";
+import { DocsTabs } from "./DocsTabs";
 
 function formatMoney(cents: number, currency: string): string {
   return `${(cents / 100).toLocaleString("ro-MD", {
@@ -126,13 +128,15 @@ export function DocsPage() {
       try {
         const doc = await createDocumentFromPar(parId);
         setPickingPar(false);
-        navigate(`/business/docs/${doc.id}`);
+        navigate(docPath(doc.id));
       } catch {
         setError("Actul nu a putut fi creat din cererea aleasă.");
       }
     },
     [navigate]
   );
+
+  const projectFilterId = filters.projectId ?? "";
 
   const totalShown = useMemo(
     () => docs.reduce((s, d) => (d.status === "cancelled" ? s : s + d.totalCents), 0),
@@ -143,7 +147,7 @@ export function DocsPage() {
     // Antetul paginii aparține shell-ului (un singur chrome în Business Suite) — de aceea
     // titlul, descrierea și acțiunea principală se dau ca props, nu se desenează aici.
     <BusinessShell
-      pageTitle="Acte"
+      pageTitle="Documente"
       pageDescription="Acte de primire-predare, contracte și procese-verbale — completate din registrul de furnizori, gata de transformat în cereri de plată."
       actions={
         <div className="flex gap-2">
@@ -176,7 +180,9 @@ export function DocsPage() {
           {filters.projectId && (
             <button
               type="button"
-              onClick={() => navigate(`/business/docs/proiect/${filters.projectId}`)}
+              // Constanta locală: în interiorul callback-ului TypeScript nu mai știe că
+              // `filters.projectId` a fost verificat mai sus.
+              onClick={() => navigate(docsProjectDossierPath(projectFilterId))}
               className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
             >
               <FolderOpen className="h-4 w-4" aria-hidden="true" />
@@ -185,7 +191,7 @@ export function DocsPage() {
           )}
         <button
           type="button"
-          onClick={() => navigate("/business/docs/nou")}
+          onClick={() => navigate(docsNewPath())}
           className="touch-target inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
@@ -195,6 +201,7 @@ export function DocsPage() {
       }
     >
       <div className="p-4 sm:p-6 space-y-6">
+        <DocsTabs active="documents" />
         <div className="flex flex-wrap items-center gap-3">
           <label className="sr-only" htmlFor="docs-search">
             Caută după titlu
@@ -274,7 +281,7 @@ export function DocsPage() {
             </p>
             <button
               type="button"
-              onClick={() => navigate("/business/docs/nou")}
+              onClick={() => navigate(docsNewPath())}
               className="touch-target mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
@@ -300,7 +307,7 @@ export function DocsPage() {
                 {docs.map((d) => (
                   <tr
                     key={d.id}
-                    onClick={() => navigate(`/business/docs/${d.id}`)}
+                    onClick={() => navigate(docPath(d.id))}
                     className="cursor-pointer border-t border-border hover:bg-muted/40"
                   >
                     <td className="px-4 py-3 font-mono text-xs text-foreground">

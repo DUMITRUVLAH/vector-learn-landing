@@ -1,4 +1,5 @@
 import { HashRouter, useRouter } from "./router/HashRouter";
+import { DOCS_BASE, DOCS_LEGACY_BASE, migrateLegacyDocsPath } from "./lib/docs/paths";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { BranchProvider } from "./contexts/BranchContext";
 import { Suspense, useEffect, useState } from "react";
@@ -49,6 +50,7 @@ const DocDossierPage = lazyWithTimeout(() => import("./pages/business/docs/DocDo
 const DocEditorPage = lazyWithTimeout(() => import("./pages/business/docs/DocEditorPage").then((m) => ({ default: m.DocEditorPage })));
 const DocTemplatesPage = lazyWithTimeout(() => import("./pages/business/docs/DocTemplatesPage").then((m) => ({ default: m.DocTemplatesPage })));
 const DocsPage = lazyWithTimeout(() => import("./pages/business/docs/DocsPage").then((m) => ({ default: m.DocsPage })));
+
 const DocMergeTemplatesPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeTemplatesPage").then((m) => ({ default: m.DocMergeTemplatesPage })));
 const DocMergeJobPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeJobPage").then((m) => ({ default: m.DocMergeJobPage })));
 const DocMergeWizardPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeWizardPage").then((m) => ({ default: m.DocMergeWizardPage })));
@@ -248,6 +250,19 @@ function Routes() {
   if (path.startsWith("/business/platform-admin")) return <BusinessGuardPage><PlatformAdminPage /></BusinessGuardPage>;
   if (path.startsWith("/business/platform")) return <BusinessGuardPage><PlatformConsolePage /></BusinessGuardPage>;
 
+  // DC-101: documentele stau sub PAR, ca meniul din stânga să nu se schimbe la navigare.
+  // Trebuie testate ÎNAINTEA rutelor PAR: `/business/par/:id` (fișa cererii) ar înghiți
+  // `/business/par/documente`. Linkurile vechi `/business/docs/*` (trimise pe email) redirecționează.
+  if (path.startsWith(DOCS_LEGACY_BASE)) return <RedirectHash to={migrateLegacyDocsPath(path)} />;
+  if (path.startsWith(`${DOCS_BASE}/proiect/`) || path.startsWith(`${DOCS_BASE}/contraparte/`))
+    return <BusinessGuardPage><DocDossierPage /></BusinessGuardPage>;
+  if (path.startsWith(`${DOCS_BASE}/nou`)) return <BusinessGuardPage><DocEditorPage /></BusinessGuardPage>;
+  if (path.startsWith(`${DOCS_BASE}/sabloane`)) return <BusinessGuardPage><DocTemplatesPage /></BusinessGuardPage>;
+  // Fișa unui act: `/business/par/documente/<uuid>`. Lista rămâne pe calea exactă.
+  if (new RegExp(`^${DOCS_BASE}/[0-9a-f-]{8,}`, "i").test(path))
+    return <BusinessGuardPage><DocEditorPage /></BusinessGuardPage>;
+  if (path.startsWith(DOCS_BASE)) return <BusinessGuardPage><DocsPage /></BusinessGuardPage>;
+
   // PAR routes under /business/par/* — ParGuardPage (VM1-01 Decizia 9) hides the whole
   // module from users with zero PAR roles, even on direct URL access.
   if (path.startsWith("/business/par/onboarding")) return <BusinessGuardPage><ParGuardPage requiredRoles={["par_admin"]}><ParOnboarding /></ParGuardPage></BusinessGuardPage>;
@@ -271,14 +286,6 @@ function Routes() {
   if (path.startsWith("/business/par")) return <BusinessGuardPage><ParGuardPage><ParDashboard /></ParGuardPage></BusinessGuardPage>;
 
   // DOCMERGE-001/002/003/004: Document Merge — more specific routes first
-  // DG-103: registrul de acte. ÎNAINTEA lui /business/docmerge, ca prefixul mai scurt să nu-l înghită.
-  if (path.startsWith("/business/docs/proiect/") || path.startsWith("/business/docs/contraparte/"))
-    return <BusinessGuardPage><DocDossierPage /></BusinessGuardPage>;
-  if (path.startsWith("/business/docs/nou")) return <BusinessGuardPage><DocEditorPage /></BusinessGuardPage>;
-  if (path.startsWith("/business/docs/templates")) return <BusinessGuardPage><DocTemplatesPage /></BusinessGuardPage>;
-  // Fișa unui act: /business/docs/<uuid>. Lista rămâne pe /business/docs exact.
-  if (/^\/business\/docs\/[0-9a-f-]{8,}/i.test(path)) return <BusinessGuardPage><DocEditorPage /></BusinessGuardPage>;
-  if (path.startsWith("/business/docs")) return <BusinessGuardPage><DocsPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/wizard")) return <BusinessGuardPage><DocMergeWizardPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge")) return <BusinessGuardPage><DocMergeTemplatesPage /></BusinessGuardPage>;

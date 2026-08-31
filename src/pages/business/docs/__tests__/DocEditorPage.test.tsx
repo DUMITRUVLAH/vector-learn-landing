@@ -14,7 +14,7 @@ import userEvent from "@testing-library/user-event";
 import type { DocDetail } from "@/lib/api/docs";
 
 const navigate = vi.fn();
-let currentPath = "/business/docs/nou";
+let currentPath = "/business/par/documente/nou";
 
 vi.mock("@/hooks/useBusinessSession", () => ({
   useBusinessSession: () => ({
@@ -142,7 +142,7 @@ const FINAL_DOC: DocDetail = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  currentPath = "/business/docs/nou";
+  currentPath = "/business/par/documente/nou";
   apiMock.mockResolvedValue({
     name: "SRL Alfa",
     idnp: "1002600012345",
@@ -310,7 +310,7 @@ describe("DG-109 — completarea unui act", () => {
   });
 
   it("[blocant] un act finalizat se deschide în citire, fără câmpuri editabile", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     render(<DocEditorPage />);
 
@@ -321,7 +321,7 @@ describe("DG-109 — completarea unui act", () => {
   });
 
   it("[blocant] după finalizare rămâi pe act și vezi numărul primit", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     // Prima citire = ciornă; a doua (după finalizare) = actul cu număr.
     getDocument
       .mockResolvedValueOnce({ ...FINAL_DOC, status: "draft", docNumber: null })
@@ -335,11 +335,11 @@ describe("DG-109 — completarea unui act", () => {
     await waitFor(() => expect(finalizeDocument).toHaveBeenCalledWith("doc-1"));
     // Rămânem pe act: numărul și acțiunile noi apar aici, nu în listă.
     expect(await screen.findByText(/Act finalizat: ACT-2026-0007/)).toBeInTheDocument();
-    expect(navigate).not.toHaveBeenCalledWith("/business/docs");
+    expect(navigate).not.toHaveBeenCalledWith("/business/par/documente");
   });
 
   it("[blocant] după finalizare actul se RECITEȘTE — răspunsul brut n-are jurnal și albea pagina", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
     // Exact forma răspunsului serverului la finalize: rândul din tabel, fără `audit`/`lines`.
     finalizeDocument.mockResolvedValue({ id: "doc-1", status: "final", docNumber: "ACT-2026-0007" });
@@ -354,7 +354,7 @@ describe("DG-109 — completarea unui act", () => {
   });
 
   it("[blocant] un refuz de finalizare arată exact ce lipsește", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
     finalizeDocument.mockRejectedValue(
       Object.assign(new Error("incomplete"), {
@@ -367,7 +367,7 @@ describe("DG-109 — completarea unui act", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Finalizează/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Cel puțin o poziție în act/);
-    expect(navigate).not.toHaveBeenCalledWith("/business/docs");
+    expect(navigate).not.toHaveBeenCalledWith("/business/par/documente");
   });
 
   it("[normal] pozițiile se adaugă și se șterg", async () => {
@@ -393,7 +393,7 @@ describe("DG-109 — completarea unui act", () => {
 
 describe("DG-117 — actul devine cerere de plată", () => {
   it("[blocant] butonul apare doar pe un act finalizat și duce la PAR-ul creat", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     // Pe ciornă butonul nu are ce căuta: nu poți cere plata pentru un act nesemnat.
     getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
     const draftView = render(<DocEditorPage />);
@@ -411,7 +411,7 @@ describe("DG-117 — actul devine cerere de plată", () => {
   });
 
   it("[blocant] a doua cerere din același act se face doar după confirmare", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     convertDocumentToPar
       .mockRejectedValueOnce(
@@ -429,7 +429,7 @@ describe("DG-117 — actul devine cerere de plată", () => {
   });
 
   it("[blocant] dacă omul refuză confirmarea, nu se creează nimic", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     convertDocumentToPar.mockRejectedValue(
       Object.assign(new Error("already"), { body: { error: "already_converted", parId: "par-1" } })
@@ -448,7 +448,7 @@ describe("DG-117 — actul devine cerere de plată", () => {
 
 describe("DG-116 + DG-119 — actele derivate și traseul", () => {
   it("[blocant] traseul arată contractul-sursă și cererea de plată, cu linkuri reale", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     getDocumentTrail.mockResolvedValue({
       document: FINAL_DOC,
@@ -463,14 +463,14 @@ describe("DG-116 + DG-119 — actele derivate și traseul", () => {
     render(<DocEditorPage />);
 
     const trail = await screen.findByRole("region", { name: "Traseul actului" });
-    expect(within(trail).getByText("CTR-2026-0003")).toHaveAttribute("href", "#/business/docs/ctr-1");
+    expect(within(trail).getByText("CTR-2026-0003")).toHaveAttribute("href", "#/business/par/documente/ctr-1");
     expect(within(trail).getByText("PAR-2026-0007")).toHaveAttribute("href", "#/business/par/par-7");
     // Starea se spune omenește: „aprobată", nu „approved".
     expect(within(trail).getByText(/aprobată/)).toBeInTheDocument();
   });
 
   it("[blocant] alegerea unui tip derivat creează actul și te duce la el", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     listDerivableKinds.mockResolvedValue({ kinds: ["act_primire_predare", "proces_verbal"] });
     deriveDocument.mockResolvedValue({ ...FINAL_DOC, id: "doc-derived", status: "draft" });
@@ -480,11 +480,11 @@ describe("DG-116 + DG-119 — actele derivate și traseul", () => {
     await userEvent.selectOptions(select, "proces_verbal");
 
     await waitFor(() => expect(deriveDocument).toHaveBeenCalledWith("doc-1", "proces_verbal"));
-    expect(navigate).toHaveBeenCalledWith("/business/docs/doc-derived");
+    expect(navigate).toHaveBeenCalledWith("/business/par/documente/doc-derived");
   });
 
   it("[normal] pe o ciornă nu se oferă derivare — n-are ce moșteni încă", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
     render(<DocEditorPage />);
     await waitFor(() => expect(getDocument).toHaveBeenCalled());
@@ -496,7 +496,7 @@ describe("DG-116 + DG-119 — actele derivate și traseul", () => {
 
 describe("DG-123 — jurnalul actului, în cuvinte", () => {
   it("[blocant] acțiunile apar traduse, nu ca nume tehnice", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue({
       ...FINAL_DOC,
       audit: [
@@ -518,7 +518,7 @@ describe("DG-123 — jurnalul actului, în cuvinte", () => {
 
 describe("DG-114 — sigiliul, în interfață", () => {
   it("[blocant] actul sigilat își arată amprenta, cel rupt strigă", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue({
       ...FINAL_DOC,
       integrity: { sealed: true, valid: true, hash: "a".repeat(64) },
@@ -540,7 +540,7 @@ describe("DG-114 — sigiliul, în interfață", () => {
 
 describe("DG-115 — trimiterea pe email, din interfață", () => {
   it("[blocant] livrarea oprită de mediu se spune ca atare, nu ca eroare", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     emailDocument.mockResolvedValue({
       sent: false,
@@ -561,7 +561,7 @@ describe("DG-115 — trimiterea pe email, din interfață", () => {
   });
 
   it("[blocant] PDF-ul se generează ÎNAINTE de trimitere, ca actul să chiar ajungă atașat", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     ensureStoredPdf.mockResolvedValue(true);
     emailDocument.mockResolvedValue({ sent: true, to: "furnizor@example.com" });
@@ -578,7 +578,7 @@ describe("DG-115 — trimiterea pe email, din interfață", () => {
   });
 
   it("[blocant] trimiterea reușită confirmă destinatarul", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     emailDocument.mockResolvedValue({ sent: true, to: "furnizor@example.com" });
     ensureStoredPdf.mockResolvedValue(true);
@@ -591,7 +591,7 @@ describe("DG-115 — trimiterea pe email, din interfață", () => {
   });
 
   it("[normal] pe o ciornă nu se oferă trimiterea — se trimite ce e semnat", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
     render(<DocEditorPage />);
     await waitFor(() => expect(getDocument).toHaveBeenCalled());
@@ -602,7 +602,7 @@ describe("DG-115 — trimiterea pe email, din interfață", () => {
 
 describe("Fix prod — PDF-ul se face în browser, contrapartea se poate adăuga oricând", () => {
   it("[blocant] „Descarcă PDF” generează fișierul, nu deschide o pagină HTML", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     downloadDocumentPdf.mockResolvedValue(true);
     render(<DocEditorPage />);
@@ -614,7 +614,7 @@ describe("Fix prod — PDF-ul se face în browser, contrapartea se poate adăuga
   });
 
   it("[blocant] eșecul randării spune ce să faci, nu lasă butonul mut", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     downloadDocumentPdf.mockRejectedValue(new Error("canvas failed"));
     render(<DocEditorPage />);
@@ -645,7 +645,7 @@ describe("Previzualizarea actului", () => {
   };
 
   it("[blocant] „Previzualizează” cere foaia de la server și o arată în iframe", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
     fetchPrintable.mockResolvedValue(PRINTABLE);
     render(<DocEditorPage />);
@@ -662,7 +662,7 @@ describe("Previzualizarea actului", () => {
   });
 
   it("[blocant] ciorna nesalvată se salvează ÎNAINTE de previzualizare — altfel arată varianta veche", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue({ ...FINAL_DOC, status: "draft", docNumber: null });
     const order: string[] = [];
     updateDocument.mockImplementation(async () => {
@@ -683,7 +683,7 @@ describe("Previzualizarea actului", () => {
   });
 
   it("[blocant] actul finalizat se previzualizează fără să încerce o salvare", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     fetchPrintable.mockResolvedValue({ ...PRINTABLE, status: "final" });
     render(<DocEditorPage />);
@@ -695,7 +695,7 @@ describe("Previzualizarea actului", () => {
   });
 
   it("[blocant] din previzualizare descarci PDF-ul, fără să închizi dialogul", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     fetchPrintable.mockResolvedValue({ ...PRINTABLE, status: "final" });
     downloadDocumentPdf.mockResolvedValue(true);
@@ -710,7 +710,7 @@ describe("Previzualizarea actului", () => {
   });
 
   it("[blocant] dacă foaia nu se poate face, dialogul nu rămâne gol — spune ce s-a întâmplat", async () => {
-    currentPath = "/business/docs/doc-1";
+    currentPath = "/business/par/documente/doc-1";
     getDocument.mockResolvedValue(FINAL_DOC);
     fetchPrintable.mockRejectedValue(new Error("print failed"));
     render(<DocEditorPage />);

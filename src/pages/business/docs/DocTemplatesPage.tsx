@@ -20,6 +20,7 @@ import {
   type DocTemplateVersion,
 } from "@/lib/api/docs";
 import { listVendors, type ParVendor } from "@/lib/api/par";
+import { DocsTabs } from "./DocsTabs";
 /**
  * Editorul (TipTap/ProseMirror) e cea mai grea bucată din tot modulul — ~108 KB gzip. Lista de
  * șabloane nu are nevoie de el, deci se încarcă abia când chiar deschizi un șablon. Așa pagina
@@ -176,7 +177,7 @@ export function DocTemplatesPage() {
 
   return (
     <BusinessShell
-      pageTitle="Șabloane de acte"
+      pageTitle="Documente"
       pageDescription="Formulările organizației, editate aici — câmpurile se completează din registrul de furnizori când generezi actul."
       actions={
         !editing ? (
@@ -192,6 +193,7 @@ export function DocTemplatesPage() {
       }
     >
       <div className="p-4 sm:p-6 space-y-6">
+        {!editing && <DocsTabs active="templates" />}
         {error && (
           <div
             role="alert"

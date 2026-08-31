@@ -56,6 +56,7 @@ import { fieldLabel } from "@/lib/docs/fieldCatalog";
 import { parseMoneyRo, formatMoneyRo } from "@/lib/docs/money";
 import { downloadDocumentPdf, ensureStoredPdf, fetchPrintable } from "@/lib/docs/documentPdfClient";
 import { DocPreviewDialog } from "./DocPreviewDialog";
+import { docPath, docsListPath, documentIdFromPath } from "@/lib/docs/paths";
 
 /**
  * Cantitatea și prețul se țin ca TEXT cât timp omul tastează.
@@ -95,12 +96,9 @@ const AUDIT_LABELS: Record<string, string> = {
 
 export function DocEditorPage() {
   const { path, navigate } = useRouter();
-  const docId = useMemo(() => {
-    // Ruta se citește fără prefix fix: dacă mâine actele se mută sub alt segment, pagina nu se rupe.
-    const m = path.match(/\/docs\/([^/?]+)/);
-    const id = m?.[1];
-    return id && id !== "nou" && id !== "templates" ? id : null;
-  }, [path]);
+  // Citirea id-ului stă în `@/lib/docs/paths`, comună cu ruta veche și cu testele: un prefix
+  // scris de mână aici s-ar rupe tăcut la următoarea mutare a modulului.
+  const docId = useMemo(() => documentIdFromPath(path), [path]);
 
   const [doc, setDoc] = useState<DocDetail | null>(null);
   const [templates, setTemplates] = useState<DocTemplateListItem[]>([]);
@@ -316,7 +314,7 @@ export function DocEditorPage() {
       } else {
         const created = await createDocument(payload());
         setMissing((created as DocDetail).missing ?? []);
-        navigate(`/business/docs/${created.id}`);
+        navigate(docPath(created.id));
       }
       setSavedAt(new Date());
       dirty.current = false;
@@ -404,7 +402,7 @@ export function DocEditorPage() {
       setError(null);
       try {
         const created = await deriveDocument(docId, kind);
-        navigate(`/business/docs/${created.id}`);
+        navigate(docPath(created.id));
       } catch {
         setError("Actul derivat nu a putut fi creat.");
       }
@@ -548,7 +546,7 @@ export function DocEditorPage() {
           )}
         <button
           type="button"
-          onClick={() => navigate("/business/docs")}
+          onClick={() => navigate(docsListPath())}
           className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -686,7 +684,7 @@ export function DocEditorPage() {
                   {(trail.basedOn ?? []).map((d) => (
                     <li key={d.id}>
                       <span className="text-muted-foreground">În baza: </span>
-                      <a href={`#/business/docs/${d.id}`} className="text-primary hover:underline">
+                      <a href={`#${docPath(d.id)}`} className="text-primary hover:underline">
                         {d.docNumber ?? d.title}
                       </a>
                       <span className="text-muted-foreground"> · {DOC_STATUS_LABELS[d.status] ?? d.status}</span>
@@ -695,7 +693,7 @@ export function DocEditorPage() {
                   {(trail.derived ?? []).map((d) => (
                     <li key={d.id}>
                       <span className="text-muted-foreground">A născut: </span>
-                      <a href={`#/business/docs/${d.id}`} className="text-primary hover:underline">
+                      <a href={`#${docPath(d.id)}`} className="text-primary hover:underline">
                         {d.docNumber ?? d.title}
                       </a>
                       <span className="text-muted-foreground"> · {DOC_STATUS_LABELS[d.status] ?? d.status}</span>

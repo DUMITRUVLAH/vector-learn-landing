@@ -62,7 +62,7 @@ vi.mock("@/hooks/useBusinessSession", () => ({
 }));
 
 vi.mock("@/router/HashRouter", () => ({
-  useRouter: () => ({ path: "/business/docs/templates", navigate: vi.fn() }),
+  useRouter: () => ({ path: "/business/par/documente/sabloane", navigate: vi.fn() }),
   Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode; [k: string]: unknown }) => (
     <a href={`#${to}`} {...rest}>
       {children}

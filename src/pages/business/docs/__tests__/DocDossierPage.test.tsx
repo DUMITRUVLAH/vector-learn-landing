@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 
 const navigate = vi.fn();
-let currentPath = "/business/docs/proiect/p1";
+let currentPath = "/business/par/documente/proiect/p1";
 
 vi.mock("@/hooks/useBusinessSession", () => ({
   useBusinessSession: () => ({
@@ -73,7 +73,7 @@ const DOC = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  currentPath = "/business/docs/proiect/p1";
+  currentPath = "/business/par/documente/proiect/p1";
 });
 
 describe("DG-120 — dosarul proiectului", () => {
@@ -103,7 +103,7 @@ describe("DG-120 — dosarul proiectului", () => {
 
 describe("DG-121 — dosarul contrapărții", () => {
   it("[blocant] avertizează când IBAN-ul din registru diferă de cel de pe ultimul act", async () => {
-    currentPath = "/business/docs/contraparte/v1";
+    currentPath = "/business/par/documente/contraparte/v1";
     getCounterpartyDossier.mockResolvedValue({
       documents: [DOC],
       totals: { MDL: { contractedCents: 2450000, paidCents: 0 } },
@@ -120,7 +120,7 @@ describe("DG-121 — dosarul contrapărții", () => {
   });
 
   it("[blocant] fără schimbări, nu apare niciun avertisment fals", async () => {
-    currentPath = "/business/docs/contraparte/v1";
+    currentPath = "/business/par/documente/contraparte/v1";
     getCounterpartyDossier.mockResolvedValue({
       documents: [DOC],
       totals: { MDL: { contractedCents: 2450000, paidCents: 0 } },

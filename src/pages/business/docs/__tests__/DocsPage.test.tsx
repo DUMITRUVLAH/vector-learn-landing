@@ -27,7 +27,7 @@ vi.mock("@/hooks/useBusinessSession", () => ({
 const navigate = vi.fn();
 
 vi.mock("@/router/HashRouter", () => ({
-  useRouter: () => ({ path: "/business/docs", navigate }),
+  useRouter: () => ({ path: "/business/par/documente", navigate }),
   Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode; [k: string]: unknown }) => (
     <a href={`#${to}`} {...rest}>
       {children}
@@ -120,7 +120,7 @@ const DETAIL: DocDetail = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  window.location.hash = "#/business/docs";
+  window.location.hash = "#/business/par/documente";
 });
 
 describe("DG-103 — registrul de acte", () => {
@@ -162,7 +162,7 @@ describe("DG-103 — registrul de acte", () => {
     render(<DocsPage />);
 
     await userEvent.click(await screen.findByRole("button", { name: /Creează primul act/i }));
-    expect(navigate).toHaveBeenCalledWith("/business/docs/nou");
+    expect(navigate).toHaveBeenCalledWith("/business/par/documente/nou");
   });
 
   it("[blocant] un rând deschide actul, cu id-ul lui în adresă", async () => {
@@ -170,7 +170,7 @@ describe("DG-103 — registrul de acte", () => {
     render(<DocsPage />);
 
     await userEvent.click(await screen.findByText("Act de primire-predare — echipament IT"));
-    expect(navigate).toHaveBeenCalledWith("/business/docs/doc-1");
+    expect(navigate).toHaveBeenCalledWith("/business/par/documente/doc-1");
   });
 });
 
@@ -186,7 +186,7 @@ describe("DG-118 — actul dintr-o cerere de plată", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: /PAR-2026-0004/ }));
 
     await waitFor(() => expect(createDocumentFromPar).toHaveBeenCalledWith("par-1"));
-    expect(navigate).toHaveBeenCalledWith("/business/docs/doc-from-par");
+    expect(navigate).toHaveBeenCalledWith("/business/par/documente/doc-from-par");
   });
 });
 

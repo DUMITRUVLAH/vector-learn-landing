@@ -43,7 +43,6 @@ import {
   Search,
   Menu,
   X,
-  FileStack,
 } from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
@@ -54,6 +53,7 @@ import { useParRoles } from "@/hooks/useParRoles";
 import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { getParInbox, getFinanceQueue } from "@/lib/api/par";
 import { onParBadgeRefresh } from "@/lib/par/badgeBus";
+import { DOCS_BASE } from "@/lib/docs/paths";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { api } from "@/lib/api";
 import { cachedOnce, peekResolved } from "@/lib/sessionCache";
@@ -156,12 +156,12 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    // DG-103: registrul de acte — un singur rând, vizibil oriunde în Business Suite.
-    section: "Acte",
-    prefix: "/business/docs",
+    // DC-101: un SINGUR rând de meniu pentru tot ce ține de documente. Șabloanele erau al doilea
+    // rând; acum sunt o filă în pagină — owner-ul a cerut explicit „doar o intrare, nu dublu".
+    section: "Documente",
+    prefix: DOCS_BASE,
     items: [
-      { label: "Acte și contracte", href: "/business/docs", icon: FileText, tone: "sky" },
-      { label: "Șabloane de acte", href: "/business/docs/templates", icon: FileStack, tone: "violet" },
+      { label: "Documente", href: DOCS_BASE, icon: FileText, tone: "sky" },
     ],
   },
   {
@@ -194,7 +194,7 @@ const PAR_NAV_GROUPS: NavGroup[] = [
     section: "Analiză",
     prefix: "/business/par",
     items: [
-      { label: "Acte și contracte", href: "/business/docs", icon: FileText, tone: "sky" },
+      { label: "Documente", href: DOCS_BASE, icon: FileText, tone: "sky" },
       { label: "Furnizori", href: "/business/par/vendors", icon: Building2, tone: "violet" },
       { label: "Foldere proiecte", href: "/business/par/folders", icon: FolderOpen, tone: "teal", roles: ["approver", "finance", "par_admin"] },
       { label: "Rapoarte & statistici", href: "/business/par/reports", icon: BarChart3, tone: "sky", roles: ["approver", "finance", "par_admin"] },

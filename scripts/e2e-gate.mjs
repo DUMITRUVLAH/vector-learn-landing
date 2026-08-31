@@ -112,14 +112,14 @@ const AREAS = {
   docgen: {
     label: "Acte (DOCGEN)",
     // Atenție la ordine: „docs" prinde și rutele, și schema, și clientul API al modulului de acte.
-    match: /(server\/routes\/docs|server\/db\/(schema\/docs|ensure\/docgen)|src\/pages\/business\/docs|src\/lib\/api\/docs)/,
+    match: /(server\/routes\/docs|server\/db\/(schema\/docs|ensure\/docgen)|src\/pages\/business\/docs|src\/lib\/(api|docs)\/docs|src\/lib\/docs\/)/,
     // Verificăm FORMA, nu doar 200: lista trebuie să fie un tablou de acte, nu un obiect de eroare.
     api: [
       ["GET", "/api/docs/documents", (j) => Array.isArray(j)],
       ["GET", "/api/docs/documents?status=final", (j) => Array.isArray(j) && j.every((d) => d.status === "final")],
       ["GET", "/api/docs/templates", (j) => Array.isArray(j) && j.some((t) => t.isSystem)],
     ],
-    routes: ["/business/docs", "/business/docs/nou", "/business/docs/templates"],
+    routes: ["/business/par/documente", "/business/par/documente/nou", "/business/par/documente/sabloane"],
     // Parcursul UX complet (act nou → furnizor → poziții → finalizare → acțiuni), cu capturi.
     deep: ["e2e-docgen-ux.mjs"],
   },

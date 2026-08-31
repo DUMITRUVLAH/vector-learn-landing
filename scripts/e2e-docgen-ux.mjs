@@ -64,7 +64,7 @@ try {
   await page.waitForTimeout(2500);
 
   // ── Registrul de acte ──────────────────────────────────────────────────────
-  await page.goto(`${BASE}/#/business/docs`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/#/business/par/documente`, { waitUntil: "networkidle" });
   await page.waitForTimeout(1200);
   await shot(page, "01-registru");
   await scanVisible(page, "registru");
@@ -123,7 +123,7 @@ try {
   await scanVisible(page, "după finalizare");
 
   // ── Actul finalizat, din listă ─────────────────────────────────────────────
-  await page.goto(`${BASE}/#/business/docs`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/#/business/par/documente`, { waitUntil: "networkidle" });
   await page.waitForTimeout(1200);
   const firstRow = page.locator("table tbody tr").first();
   if (await firstRow.count()) {
@@ -164,13 +164,13 @@ try {
   }
 
   // ── Șabloane ───────────────────────────────────────────────────────────────
-  await page.goto(`${BASE}/#/business/docs/templates`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/#/business/par/documente/sabloane`, { waitUntil: "networkidle" });
   await page.waitForTimeout(1500);
   await shot(page, "06-sabloane");
   await scanVisible(page, "șabloane");
 
   // ── Dosarul contrapărții (link direct din act) ─────────────────────────────
-  await page.goto(`${BASE}/#/business/docs?kind=act_primire_predare`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/#/business/par/documente?kind=act_primire_predare`, { waitUntil: "networkidle" });
   await page.waitForTimeout(1200);
   await shot(page, "07-filtre");
   await scanVisible(page, "filtre");

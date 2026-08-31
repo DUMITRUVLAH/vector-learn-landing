@@ -21,6 +21,7 @@ import {
   type DossierDocument,
 } from "@/lib/api/docs";
 import { listProjects, listVendors } from "@/lib/api/par";
+import { docPath, docsListPath, dossierTargetFromPath } from "@/lib/docs/paths";
 
 function money(cents: number, currency: string): string {
   return `${(cents / 100).toLocaleString("ro-MD", {
@@ -65,7 +66,7 @@ function DocumentsTable({ documents }: { documents: DossierDocument[] }) {
           {documents.map((d) => (
             <tr
               key={d.id}
-              onClick={() => navigate(`/business/docs/${d.id}`)}
+              onClick={() => navigate(docPath(d.id))}
               className="cursor-pointer border-t border-border hover:bg-muted/40"
             >
               <td className="px-3 py-2 font-mono text-xs">{d.docNumber ?? "—"}</td>
@@ -90,13 +91,7 @@ function DocumentsTable({ documents }: { documents: DossierDocument[] }) {
 
 export function DocDossierPage() {
   const { path, navigate } = useRouter();
-  const target = useMemo(() => {
-    const project = path.match(/\/docs\/proiect\/([^/?]+)/);
-    if (project) return { kind: "project" as const, id: project[1] };
-    const party = path.match(/\/docs\/contraparte\/([^/?]+)/);
-    if (party) return { kind: "counterparty" as const, id: party[1] };
-    return null;
-  }, [path]);
+  const target = useMemo(() => dossierTargetFromPath(path), [path]);
 
   const [projectDossier, setProjectDossier] = useState<ProjectDossier | null>(null);
   const [partyDossier, setPartyDossier] = useState<CounterpartyDossier | null>(null);
@@ -142,7 +137,7 @@ export function DocDossierPage() {
       actions={
         <button
           type="button"
-          onClick={() => navigate("/business/docs")}
+          onClick={() => navigate(docsListPath())}
           className="touch-target inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
