@@ -1,29 +1,34 @@
 /**
  * PAR-VENDOR360 — de câte ori are voie să apară întrebarea „cum a prestat furnizorul?".
  *
- * Owner, 2026-08-31: „la finflow mereu mă întreabă de la ultimul PAR când fac refresh, trebuie să
- * fie doar o dată". Două lucruri o produceau, iar reparat doar primul rămânea la fel de enervant:
+ * Owner, 2026-08-31 (a doua oară): „iar m-am logat și mi-a apărut să dau feedback. Trebuie să mă
+ * întrebe doar o dată, direct după ce trimit PAR-ul, și gata — nu de mai multe ori."
  *
- *  1. urma se scria DOAR când apăsai „Mai târziu". Închiderea cu X, cu Esc sau pe fundal nu lăsa
- *     nimic în urmă, deci următoarea încărcare a tabloului de bord punea exact aceeași întrebare,
- *     despre exact aceeași cerere.
- *  2. chiar și cu punctul 1 reparat, cine are zeci de cereri plătite neevaluate ar fi primit un
- *     popup la FIECARE refresh — altă cerere de fiecare dată, aceeași senzație de hărțuire.
+ * Regula, în trei condiții care se verifică în această ordine:
+ *  1. **Cel mult o întrebare pe sesiune.** Cine are cinci plăți neevaluate nu primește cinci
+ *     popup-uri la cinci refresh-uri. Memoria stă în `sessionStorage`: ține cât ține fila.
+ *  2. **O singură întrebare per cerere, pentru totdeauna.** Urma se scrie la DESCHIDEREA
+ *     dialogului, nu la apăsarea unui buton — închiderea cu X, cu Esc sau pe fundal contează tot
+ *     ca „a fost întrebat".
+ *  3. **Doar plăți proaspete** (fereastra e a serverului, `RATING_PROMPT_FRESH_DAYS`). O plată
+ *     veche de luni de zile nu mai merită un popup.
  *
- * Regula devine deci: **o întrebare per cerere, o singură dată, și cel mult una pe zi.** Ce nu s-a
- * evaluat nu se pierde: rămâne în „de evaluat" pe fișa furnizorului, cu buton de evaluat oricând.
- * Un popup care tace e o pagubă mult mai mică decât unul care nu se lasă închis.
+ * Unde stă memoria și de ce în două locuri:
+ *  - **serverul** (`par_requests.rating_prompted_at`, via `markRatingAsked`) e sursa de adevăr:
+ *    fără el, o autentificare nouă — alt calculator, fereastră privată, stocare curățată — punea
+ *    exact aceeași întrebare. Exact asta a pățit owner-ul;
+ *  - **`localStorage`** rămâne ca gardă instantanee: acoperă momentul dintre deschiderea
+ *    dialogului și confirmarea de la server, și cazul în care apelul de marcare pică (offline).
  *
- * Memoria stă în `localStorage`, nu în baza de date: e o comoditate strict personală, iar cel mai
- * rău lucru care se poate întâmpla pe un calculator nou e să fii întrebat încă o dată.
+ * Ce nu s-a evaluat nu se pierde: cererea rămâne cu buton de evaluat pe fișa furnizorului, iar
+ * evaluările date se văd acolo, pe „Prezentare" și lângă cererea care le-a generat.
  */
 
 export const RATING_PROMPT_KEY = "par:rating-prompt";
 /** Cheia veche („amânare 7 zile"), citită doar ca să nu reîntrebăm pe cine a apăsat deja „Mai târziu". */
 const LEGACY_SNOOZE_KEY = "par:rating-snooze";
-
-/** Cel mult o întrebare pe zi, oricâte cereri plătite ar aștepta o notă. */
-export const RATING_PROMPT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+/** Cheia de sesiune: „în fila asta am întrebat deja o dată". */
+export const RATING_PROMPT_SESSION_KEY = "par:rating-prompt-session";
 
 /**
  * Câte cereri ținem minte că au fost întrebate. Serverul întoarce cel mult 10 candidați (cele mai
@@ -44,17 +49,14 @@ export const EMPTY_RATING_PROMPT_MEMORY: RatingPromptMemory = { asked: {}, lastS
 /**
  * Care cerere merită întrebată acum — sau niciuna.
  *
- * Ordinea condițiilor contează: pauza de 24h se verifică ÎNAINTE de căutarea unei cereri, ca o zi
- * cu multe refresh-uri să însemne o singură întrebare, nu una per cerere neevaluată.
+ * Aici rămâne doar condiția 2 (o singură dată per cerere). Condiția 1 (una pe sesiune) se verifică
+ * separat, cu `askedThisSession`, ca să poată fi testată și dezactivată independent; condiția 3
+ * (prospețimea plății) o aplică serverul, care oricum știe data plății.
  */
 export function chooseNextRating<T extends { parId: string }>(
   pending: readonly T[],
   memory: RatingPromptMemory,
-  now: number = Date.now(),
 ): T | null {
-  // Un `lastShownAt` din viitor (ceas dat înapoi) intră tot aici: mai bine tăcem o zi decât să
-  // întrebăm din nou pe cineva care tocmai a închis popup-ul.
-  if (memory.lastShownAt !== null && now - memory.lastShownAt < RATING_PROMPT_COOLDOWN_MS) return null;
   return pending.find((p) => memory.asked[p.parId] === undefined) ?? null;
 }
 
@@ -71,7 +73,8 @@ export function rememberAsked(
   const keys = Object.keys(asked);
   if (keys.length > MAX_REMEMBERED) {
     // Tăiem cele mai vechi intrări. Cel mai rău efect posibil: o cerere veche de tot, rămasă
-    // neevaluată după alte 200 de plăți, mai primește o întrebare.
+    // neevaluată după alte 200 de plăți, mai primește o întrebare — dacă serverul n-a apucat să
+    // o marcheze, ceea ce e deja improbabil.
     keys
       .sort((a, b) => asked[a] - asked[b])
       .slice(0, keys.length - MAX_REMEMBERED)
@@ -126,5 +129,24 @@ export function writeRatingPromptMemory(memory: RatingPromptMemory): void {
     localStorage.setItem(RATING_PROMPT_KEY, JSON.stringify(memory));
   } catch {
     /* fără stocare nu putem ține minte nimic; întrebăm din nou data viitoare — acceptabil */
+  }
+}
+
+/** A fost deja pusă o întrebare în fila asta? (condiția 1) */
+export function askedThisSession(): boolean {
+  try {
+    return sessionStorage.getItem(RATING_PROMPT_SESSION_KEY) === "1";
+  } catch {
+    // Fără `sessionStorage` rămân condițiile 2 și 3 — nu e motiv să întrebăm mai des, dar nici
+    // motiv să tăcem de tot.
+    return false;
+  }
+}
+
+export function markAskedThisSession(): void {
+  try {
+    sessionStorage.setItem(RATING_PROMPT_SESSION_KEY, "1");
+  } catch {
+    /* la fel: fără stocare de sesiune rămâne garda per cerere, care e cea care contează */
   }
 }

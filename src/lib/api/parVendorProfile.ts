@@ -289,6 +289,17 @@ export function listPendingRatings(): Promise<{ pending: PendingRating[] }> {
   return api("/api/par/vendors/pending-ratings");
 }
 
+/**
+ * „Am întrebat despre cererea asta." Se apelează la DESCHIDEREA popup-ului, ca marcajul să existe
+ * chiar dacă omul închide dialogul cu X sau dă refresh — vezi `@/lib/par/ratingPrompt`.
+ */
+export function markRatingAsked(parId: string): Promise<{ ok: boolean; marked: boolean }> {
+  return api("/api/par/vendors/pending-ratings/asked", {
+    method: "POST",
+    body: JSON.stringify({ par_id: parId }),
+  });
+}
+
 // ─── Note interne ─────────────────────────────────────────────────────────────
 
 export function listVendorNotes(id: string): Promise<{ notes: VendorNote[] }> {

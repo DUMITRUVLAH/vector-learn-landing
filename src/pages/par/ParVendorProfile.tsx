@@ -126,6 +126,8 @@ export default function ParVendorProfile() {
   const [categories, setCategories] = useState<VendorCategory[]>([]);
 
   const [rateOpen, setRateOpen] = useState(false);
+  /** Cererea pentru care se dă nota (din tabelul de cereri); `null` = evaluare de sine stătătoare. */
+  const [rateTarget, setRateTarget] = useState<{ parId: string; requestNo: string } | null>(null);
   const [blockOpen, setBlockOpen] = useState(false);
   const [offerOpen, setOfferOpen] = useState(false);
   const [docOpen, setDocOpen] = useState(false);
@@ -200,6 +202,9 @@ export default function ParVendorProfile() {
   }
 
   const v = profile.vendor;
+  /** parId → nota dată pentru acea cerere; prima (cea mai recentă) câștigă. */
+  const ratingByPar = new Map<string, VendorRating>();
+  for (const r of ratings) if (r.parId && !ratingByPar.has(r.parId)) ratingByPar.set(r.parId, r);
 
   return (
     <BusinessShell
@@ -211,7 +216,7 @@ export default function ParVendorProfile() {
       ].filter(Boolean).join(" · ")}
       actions={
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setRateOpen(true)}>
+          <Button onClick={() => { setRateTarget(null); setRateOpen(true); }}>
             <Star className="h-4 w-4" aria-hidden="true" />
             Evaluează
           </Button>
@@ -301,7 +306,14 @@ export default function ParVendorProfile() {
           ]}
         />
 
-        {tab === "overview" && <OverviewTab profile={profile} />}
+        {tab === "overview" && (
+          <OverviewTab
+            profile={profile}
+            ratings={ratings}
+            onSeeAll={() => setTab("ratings")}
+            onRate={() => { setRateTarget(null); setRateOpen(true); }}
+          />
+        )}
 
         {tab === "requests" && (
           <Card className="overflow-x-auto p-0">
@@ -321,6 +333,7 @@ export default function ParVendorProfile() {
                     <th className="p-3">Scop</th>
                     <th className="p-3">Status</th>
                     <th className="p-3 text-right">Sumă</th>
+                    <th className="p-3">Nota dată</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -344,6 +357,17 @@ export default function ParVendorProfile() {
                       <td className="p-3 text-right font-medium tabular-nums">
                         {formatMDL(r.actualAmountCents ?? r.totalMdlCents ?? r.totalEstimatedCents)}
                         {r.currency !== "MDL" && <span className="ml-1 text-xs text-muted-foreground">({r.currency})</span>}
+                      </td>
+                      {/* Nota se vede lângă cererea care a generat-o: „cine a zis, la ce cerere". */}
+                      <td className="p-3">
+                        <RequestRatingCell
+                          rating={ratingByPar.get(r.id) ?? null}
+                          canRate={r.status === "paid"}
+                          onRate={() => {
+                            setRateTarget({ parId: r.id, requestNo: r.requestNo });
+                            setRateOpen(true);
+                          }}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -387,6 +411,8 @@ export default function ParVendorProfile() {
         onClose={() => setRateOpen(false)}
         vendorId={id}
         vendorName={v.name}
+        parId={rateTarget?.parId ?? null}
+        requestNo={rateTarget?.requestNo ?? null}
         dismissLabel="Renunță"
         onSaved={refreshAll}
       />
@@ -454,10 +480,27 @@ function Row({ label, value }: { label: string; value: string | null | undefined
   );
 }
 
-function OverviewTab({ profile }: { profile: VendorProfile }) {
+function OverviewTab({
+  profile,
+  ratings,
+  onSeeAll,
+  onRate,
+}: {
+  profile: VendorProfile;
+  ratings: VendorRating[];
+  onSeeAll: () => void;
+  onRate: () => void;
+}) {
   const v = profile.vendor;
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      {/*
+        Părerile stau PRIMELE, nu după rechizite: „merită să mai lucrăm cu ei?" e întrebarea pentru
+        care deschizi fișa, iar owner-ul a cerut explicit ca feedbackul și stelele date de pe cereri
+        să se vadă aici, nu doar într-un tab (2026-08-31).
+      */}
+      <FeedbackCard summary={profile.ratings} ratings={ratings} onSeeAll={onSeeAll} onRate={onRate} />
+
       <Card className="p-4">
         <h2 className="mb-2 font-medium text-foreground">Identificare și rechizite</h2>
         <dl className="flex flex-col">
@@ -483,25 +526,156 @@ function OverviewTab({ profile }: { profile: VendorProfile }) {
           <Row label="Ultima plată" value={fmtDate(profile.kpis.lastPaidAt)} />
         </dl>
       </Card>
+    </div>
+  );
+}
 
-      {profile.ratings.count > 0 && (
-        <Card className="p-4 lg:col-span-2">
-          <h2 className="mb-3 font-medium text-foreground">Cum a prestat, pe criterii</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <CriterionBar label="Calitate" value={profile.ratings.quality} />
-            <CriterionBar label="Termen" value={profile.ratings.timeliness} />
-            <CriterionBar label="Preț / valoare" value={profile.ratings.price} />
-            <CriterionBar label="Comunicare" value={profile.ratings.communication} />
+/** Câte păreri încap pe „Prezentare" înainte să trimitem omul în tabul cu toate. */
+const OVERVIEW_RATINGS = 3;
+
+/**
+ * „Ce au zis colegii" — nota medie, criteriile și ULTIMELE păreri scrise, cu tot cu cererea de la
+ * care au venit. Cardul se afișează și când nu există nicio evaluare: un card lipsă nu explică
+ * nimic, iar întrebarea „de ce nu văd notele?" e exact ce a pus owner-ul.
+ */
+function FeedbackCard({
+  summary,
+  ratings,
+  onSeeAll,
+  onRate,
+}: {
+  summary: VendorProfile["ratings"];
+  ratings: VendorRating[];
+  onSeeAll: () => void;
+  onRate: () => void;
+}) {
+  const recent = ratings.slice(0, OVERVIEW_RATINGS);
+  return (
+    <Card className="flex flex-col gap-4 p-4 lg:col-span-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-medium text-foreground">Ce au zis colegii</h2>
+        {ratings.length > recent.length && (
+          <Button variant="ghost" size="sm" onClick={onSeeAll}>
+            Vezi toate evaluările ({ratings.length})
+          </Button>
+        )}
+      </div>
+
+      {summary.count === 0 ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-muted-foreground">
+            Nicio evaluare încă. După fiecare cerere plătită, solicitantul e întrebat o dată cum a
+            fost prestat serviciul — nota și comentariul apar aici.
+          </p>
+          <Button size="sm" onClick={onRate}>
+            <Star className="h-4 w-4" aria-hidden="true" />
+            Evaluează acum
+          </Button>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-6">
+            <div className="flex flex-col">
+              <span className="text-3xl font-semibold tabular-nums text-foreground">
+                {summary.avg?.toFixed(1) ?? "—"}
+              </span>
+              <StarRating value={summary.avg} count={summary.count} />
+            </div>
+            <div className="grid min-w-[16rem] flex-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <CriterionBar label="Calitate" value={summary.quality} />
+              <CriterionBar label="Termen" value={summary.timeliness} />
+              <CriterionBar label="Preț / valoare" value={summary.price} />
+              <CriterionBar label="Comunicare" value={summary.communication} />
+            </div>
           </div>
-          {profile.ratings.wouldUseAgainPct != null && (
-            <p className="mt-3 text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">{profile.ratings.wouldUseAgainPct}%</span> dintre cei care
+
+          {summary.wouldUseAgainPct != null && (
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{summary.wouldUseAgainPct}%</span> dintre cei care
               au răspuns ar mai lucra cu acest furnizor.
             </p>
           )}
-        </Card>
+
+          {recent.length > 0 && (
+            <ul className="flex flex-col gap-3 border-t border-border pt-3">
+              {recent.map((r) => (
+                <li key={r.id}>
+                  <RatingEntry rating={r} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * O părere, așa cum se citește peste șase luni: cine, la ce cerere, câte stele, ce a scris.
+ * Aceeași bucată pe „Prezentare" și în tabul „Evaluări" — acolo primește și butonul de ștergere.
+ */
+function RatingEntry({ rating, onDelete }: { rating: VendorRating; onDelete?: () => void }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <StarRating value={rating.stars} size="sm" />
+          <span className="text-sm font-medium text-foreground">{rating.authorName ?? "Coleg"}</span>
+          {rating.requestNo && (
+            <span className="text-xs text-muted-foreground">la cererea {rating.requestNo}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">{fmtDate(rating.createdAt)}</span>
+          {onDelete && (
+            <Button variant="ghost" size="sm" aria-label="Șterge evaluarea" onClick={onDelete}>
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          )}
+        </div>
+      </div>
+      {rating.comment && <p className="text-sm text-foreground">{rating.comment}</p>}
+      {rating.wouldUseAgain != null && (
+        <p className="text-xs text-muted-foreground">
+          {rating.wouldUseAgain ? "Ar mai lucra cu ei." : "Nu ar mai lucra cu ei."}
+        </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Nota dată pentru o cerere anume, în tabelul de cereri. Dacă e dată, se văd stelele și începutul
+ * comentariului; dacă plata s-a făcut și nimeni n-a notat, butonul deschide dialogul pe cererea aia.
+ */
+function RequestRatingCell({
+  rating,
+  canRate,
+  onRate,
+}: {
+  rating: VendorRating | null;
+  canRate: boolean;
+  onRate: () => void;
+}) {
+  if (rating) {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <StarRating value={rating.stars} size="sm" />
+        {rating.comment && (
+          <span className="max-w-[16rem] truncate text-xs text-muted-foreground" title={rating.comment}>
+            {rating.comment}
+          </span>
+        )}
+      </div>
+    );
+  }
+  if (!canRate) return <span className="text-xs text-muted-foreground">—</span>;
+  return (
+    <Button variant="ghost" size="sm" onClick={onRate}>
+      <Star className="h-4 w-4" aria-hidden="true" />
+      Evaluează
+    </Button>
   );
 }
 
@@ -573,31 +747,8 @@ function RatingsTab({
       </Card>
 
       {ratings.map((r) => (
-        <Card key={r.id} className="flex flex-col gap-2 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <StarRating value={r.stars} size="sm" />
-              <span className="text-sm font-medium text-foreground">{r.authorName ?? "Coleg"}</span>
-              {r.requestNo && <span className="text-xs text-muted-foreground">la cererea {r.requestNo}</span>}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{fmtDate(r.createdAt)}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label="Șterge evaluarea"
-                onClick={() => void onDelete(r.id)}
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            </div>
-          </div>
-          {r.comment && <p className="text-sm text-foreground">{r.comment}</p>}
-          {r.wouldUseAgain != null && (
-            <p className="text-xs text-muted-foreground">
-              {r.wouldUseAgain ? "Ar mai lucra cu ei." : "Nu ar mai lucra cu ei."}
-            </p>
-          )}
+        <Card key={r.id} className="p-4">
+          <RatingEntry rating={r} onDelete={() => void onDelete(r.id)} />
         </Card>
       ))}
     </div>

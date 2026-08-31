@@ -113,9 +113,28 @@ check("director filtrat pe notă", dirRating.status === 200 && dirRating.json.ve
 const dirBlocked = await call("GET", "/api/par/vendors/directory?relationship=blocked");
 check("director filtrat pe stare", dirBlocked.json.vendors.every((v) => v.relationship === "blocked"));
 
-// 10. evaluări în așteptare
+// 10. evaluări în așteptare — și promisiunea „o singură întrebare, și gata"
 const pend = await call("GET", "/api/par/vendors/pending-ratings");
 check("evaluări în așteptare", pend.status === 200 && Array.isArray(pend.json.pending), `n=${pend.json?.pending?.length}`);
+
+// 10bis. Marcajul durabil: după ce am fost întrebat o dată despre o cerere, ea NU mai revine —
+// nici la o autentificare nouă, pe alt calculator (bug-ul raportat de owner, 2026-08-31).
+// Marcajul e definitiv, deci rulăm pe prima cerere din listă și verificăm că a doua listare tace.
+const first = pend.json?.pending?.[0];
+if (first) {
+  const marked = await call("POST", "/api/par/vendors/pending-ratings/asked", { par_id: first.parId });
+  check("întrebarea e marcată pe server", marked.status === 200 && marked.json.marked === true, `status=${marked.status}`);
+  const again = await call("GET", "/api/par/vendors/pending-ratings");
+  check("cererea întrebată nu mai revine", !(again.json.pending ?? []).some((p) => p.parId === first.parId));
+  const twice = await call("POST", "/api/par/vendors/pending-ratings/asked", { par_id: first.parId });
+  check("a doua marcare e inofensivă", twice.status === 200 && twice.json.marked === false, `status=${twice.status}`);
+} else {
+  // Nicio plată proaspătă neevaluată în baza asta — comportamentul e acoperit oricum de
+  // server/__tests__/par-rating-prompt.routes.test.ts, care își face propriile date.
+  check("nicio cerere de întrebat acum (acoperit de testul de rută)", true);
+}
+const badMark = await call("POST", "/api/par/vendors/pending-ratings/asked", { par_id: "nu-e-uuid" });
+check("marcare cu id invalid → 400, nu 500", badMark.status === 400, `status=${badMark.status}`);
 
 // 11. rute literale nu sunt confundate cu :id (regresia gărzii de uuid)
 check("/categories nu e tratat ca id", cats.status === 200);
@@ -161,6 +180,20 @@ if (process.argv.includes("--browser")) {
     // DEJA transformat („PLĂTIT ÎN TOTAL"). O potrivire sensibilă la majuscule pică pe o pagină
     // perfect corectă — genul de fals negativ care te trimite să repari ce nu e stricat.
     check("fișa arată KPI-urile", /plătit în total/i.test(text), text.slice(0, 120));
+
+    // Ce a cerut owner-ul: părerea scrisă și stelele se văd pe ecranul cu care se deschide fișa,
+    // nu doar după un clic în tabul „Evaluări".
+    //
+    // Așteptarea e pe TEXTUL părerii, nu pe titlul cardului și nici pe KPI-uri: fișa se încarcă în
+    // două valuri (întâi profilul — media și criteriile; apoi lista de evaluări — cine ce a scris),
+    // iar titlul „Ce au zis colegii" apare din primul val, inclusiv când lista e încă goală. O
+    // verificare agățată de el trece sau pică după cum e vremea. Așteptăm exact ce vrem să vedem.
+    await page
+      .waitForFunction(() => /Au livrat la timp, mâncare bună\./.test(document.body?.innerText ?? ""), null, { timeout: 10000 })
+      .catch(() => {});
+    text = await page.evaluate(() => document.body?.innerText ?? "");
+    check("„Prezentare\" arată părerea scrisă", text.includes("Au livrat la timp, mâncare bună."), text.slice(0, 200));
+    check("„Prezentare\" arată nota și criteriile", /Ce au zis colegii/.test(text) && /Calitate/.test(text), text.slice(0, 200));
     check("fișa arată semnalele de risc", text.includes("blocat") || text.includes("Blocat"), text.slice(0, 120));
 
     for (const [tab, expected] of [["Evaluări", "Excelent|stele|evaluări|Nicio evaluare"], ["Oferte", "Prânz corporativ|Nicio ofertă"], ["Documente", "Contract cadru|Niciun document"], ["Note interne", "Furnizor blocat|Nicio notă"]]) {

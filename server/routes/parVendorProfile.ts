@@ -13,7 +13,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { parVendors, parRequests, parPayments, parQuotes } from "../db/schema/par";
 import {
@@ -390,13 +390,23 @@ parVendorProfileRoutes.get("/directory", async (c) => {
 
 /**
  * GET /api/par/vendors/pending-ratings — cererile MELE plătite, cu furnizor cunoscut, pe care nu
- * le-am evaluat încă. Alimentează popup-ul care apare după plată.
+ * le-am evaluat încă ȘI despre care nu am fost întrebat niciodată. Alimentează popup-ul de după plată.
  *
  * Doar cererile proprii: cel care a cerut serviciul e cel care a văzut cum a fost prestat. Finanțele
  * pot evalua oricând din fișă, dar nu sunt bătute la cap cu popup-uri pentru cereri străine.
+ *
+ * Două filtre țin promisiunea „o singură întrebare, și gata" (owner, 2026-08-31):
+ *  - `rating_prompted_at IS NULL` — cererea despre care s-a întrebat deja nu mai revine NICIODATĂ,
+ *    nici după o autentificare nouă pe alt calculator (urma din localStorage nu ajungea acolo);
+ *  - fereastra de prospețime — o plată veche de luni de zile nu mai merită un popup: nimeni nu-și
+ *    mai amintește cum a fost prestat serviciul, iar o coadă de cereri vechi ar produce exact
+ *    senzația de hărțuire raportată. Ce nu s-a evaluat rămâne evaluabil din fișa furnizorului.
  */
+/** Cât de proaspătă trebuie să fie plata ca să merite o întrebare. */
+export const RATING_PROMPT_FRESH_DAYS = 14;
 parVendorProfileRoutes.get("/pending-ratings", async (c) => {
   const user = c.get("user");
+  const freshSince = new Date(Date.now() - RATING_PROMPT_FRESH_DAYS * 24 * 60 * 60 * 1000);
   const rows = rowsOf(
     await db
       .select({
@@ -422,7 +432,9 @@ parVendorProfileRoutes.get("/pending-ratings", async (c) => {
           eq(parRequests.tenantId, user.tenantId),
           eq(parRequests.requestedByUserId, user.id),
           eq(parRequests.status, "paid"),
-          isNull(parVendorRatings.id)
+          isNull(parVendorRatings.id),
+          isNull(parRequests.ratingPromptedAt),
+          gte(parRequests.paidAt, freshSince)
         )
       )
       .orderBy(desc(parRequests.paidAt))
@@ -441,6 +453,39 @@ parVendorProfileRoutes.get("/pending-ratings", async (c) => {
     })),
   });
 });
+
+/**
+ * POST /api/par/vendors/pending-ratings/asked — „am întrebat despre cererea asta".
+ *
+ * Se apelează în momentul DESCHIDERII popup-ului, nu la închiderea lui: dacă omul dă refresh cu
+ * dialogul pe ecran, întrebarea rămâne pusă. Marcajul e definitiv — indiferent dacă a dat notă, a
+ * apăsat „Mai târziu" sau a închis cu X, nu-l mai întrebăm a doua oară despre aceeași cerere.
+ *
+ * Scrie doar pe cererile PROPRII: nimeni nu poate stinge întrebarea altcuiva. Idempotent — a doua
+ * apelare nu suprascrie momentul primei întrebări (`IS NULL` în WHERE).
+ */
+parVendorProfileRoutes.post(
+  "/pending-ratings/asked",
+  zValidator("json", z.object({ par_id: z.string().uuid() }), zodFieldErrorsHook),
+  async (c) => {
+    const user = c.get("user");
+    const rows = await db
+      .update(parRequests)
+      .set({ ratingPromptedAt: new Date() })
+      .where(
+        and(
+          eq(parRequests.id, c.req.valid("json").par_id),
+          eq(parRequests.tenantId, user.tenantId),
+          eq(parRequests.requestedByUserId, user.id),
+          isNull(parRequests.ratingPromptedAt)
+        )
+      )
+      .returning({ id: parRequests.id });
+    // `ok` și când nu s-a schimbat nimic (deja marcată, sau cererea altcuiva): clientul nu are ce
+    // face cu diferența, iar un 404 l-ar face să reîncerce degeaba.
+    return c.json({ ok: true, marked: rowsOf(rows).length > 0 });
+  }
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fișa unui furnizor

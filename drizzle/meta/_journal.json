@@ -1079,6 +1079,13 @@
       "when": 1787000200011,
       "tag": "0154_par_perf_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 155,
+      "version": "7",
+      "when": 1787000200012,
+      "tag": "0155_par_rating_prompted_at",
+      "breakpoints": true
     }
   ]
 }

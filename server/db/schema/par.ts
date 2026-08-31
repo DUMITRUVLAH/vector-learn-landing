@@ -573,6 +573,16 @@ export const parRequests = pgTable(
     paidAt: timestamp("paid_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     /**
+     * Momentul în care solicitantul a fost întrebat „cum a prestat furnizorul?" pentru ACEASTĂ
+     * cerere. Se scrie o singură dată, la deschiderea popup-ului, și nu se mai șterge.
+     *
+     * De ce în baza de date și nu în `localStorage`: urma din browser dispare la altă mașină, în
+     * fereastră privată sau după curățarea stocării — iar owner-ul a fost întrebat din nou exact
+     * așa, după o nouă autentificare (2026-08-31). Întrebarea trebuie să fie o singură dată per
+     * cerere, oriunde s-ar autentifica omul.
+     */
+    ratingPromptedAt: timestamp("rating_prompted_at", { withTimezone: true }),
+    /**
      * PAR-107: SHA-256 hex hash of (header + line items + payee) at submit time.
      * Used to verify body immutability on display and on PDF (PAR-109 §AC).
      * Null until first submit. Regenerated on re-submit after changes_requested.

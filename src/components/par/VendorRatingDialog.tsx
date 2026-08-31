@@ -10,8 +10,10 @@
  *     comentariul sunt ascunse sub „Adaugă detalii". Un formular lung după fiecare plată ar fi
  *     închis de toată lumea, iar fișele ar rămâne goale.
  *  2. **„Mai târziu" chiar înseamnă mai târziu.** Popup-ul întreabă o singură dată despre o
- *     cerere, oricum ai închide dialogul (buton, X, Esc, fundal) — vezi `@/lib/par/ratingPrompt`.
- *     Cererea rămâne în „de evaluat" pe fișa furnizorului, deci nota se poate da oricând.
+ *     cerere, oricum ai închide dialogul (buton, X, Esc, fundal), iar urma rămâne pe server — deci
+ *     nici o autentificare nouă, pe alt calculator, nu reia întrebarea (vezi
+ *     `@/lib/par/ratingPrompt`). Cererea rămâne evaluabilă oricând din fișa furnizorului, unde
+ *     nota și comentariul se și văd, lângă cererea care le-a generat.
  *  3. **Nimic nu se pierde la eroare de rețea.** Dacă salvarea pică, dialogul rămâne deschis cu
  *     textul scris și spune ce s-a întâmplat.
  */
