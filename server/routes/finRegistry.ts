@@ -31,7 +31,10 @@ finRegistryRoutes.use("/*", requireAuth);
  *   tenantId — filter by tenantId (optional); if omitted returns both global + tenant rates
  */
 finRegistryRoutes.get("/tax-rates", async (c) => {
-  const { country, kind, date, tenantId: tenantIdParam } = c.req.query();
+  // SEC: `tenantId` NU se mai citește din query. Îl accepta ca filtru, deci oricine autentificat
+  // putea cere cotele altei organizații scriind alt id în URL — izolarea dintre chiriași nu poate
+  // depinde de un parametru pe care îl alege clientul.
+  const { country, kind, date } = c.req.query();
   const user = c.get("user");
 
   const conditions = [];
@@ -52,10 +55,9 @@ finRegistryRoutes.get("/tax-rates", async (c) => {
     );
   }
 
-  // Scope: global rates (tenantId IS NULL) + current tenant's rates
-  const resolvedTenantId = tenantIdParam ?? user.tenantId;
+  // Scope: cotele globale (tenantId IS NULL) + cele ale organizației DIN SESIUNE.
   conditions.push(
-    or(isNull(finTaxRates.tenantId), eq(finTaxRates.tenantId, resolvedTenantId))
+    or(isNull(finTaxRates.tenantId), eq(finTaxRates.tenantId, user.tenantId))
   );
 
   const rows = await db
@@ -71,11 +73,19 @@ finRegistryRoutes.get("/tax-rates", async (c) => {
  */
 finRegistryRoutes.get("/tax-rates/:id", async (c) => {
   const id = c.req.param("id");
+  const user = c.get("user");
 
+  // SEC: interogarea nu avea NICIUN filtru pe organizație — un id ghicit sau aflat dintr-un export
+  // întorcea cota altei organizații. Cotele globale (tenantId NULL) rămân vizibile tuturor.
   const rows = await db
     .select()
     .from(finTaxRates)
-    .where(eq(finTaxRates.id, id))
+    .where(
+      and(
+        eq(finTaxRates.id, id),
+        or(isNull(finTaxRates.tenantId), eq(finTaxRates.tenantId, user.tenantId))
+      )
+    )
     .limit(1);
 
   if (rows.length === 0) {
@@ -86,7 +96,6 @@ finRegistryRoutes.get("/tax-rates/:id", async (c) => {
 });
 
 const createTaxRateSchema = z.object({
-  tenantId: z.string().uuid().optional().nullable(),
   country: z.string().length(2),
   kind: z.enum(["vat", "income_tax", "social_contribution", "dividend_tax", "other"]),
   name: z.string().min(1).max(200),
@@ -118,7 +127,9 @@ finRegistryRoutes.post("/tax-rates", zValidator("json", createTaxRateSchema), as
   const [created] = await db
     .insert(finTaxRates)
     .values({
-      tenantId: body.tenantId ?? user.tenantId,
+      // SEC: cota se scrie ÎNTOTDEAUNA în organizația din sesiune. `body.tenantId` ar fi permis
+      // unui administrator să insereze cote în registrul altei organizații.
+      tenantId: user.tenantId,
       country: body.country.toUpperCase(),
       kind: body.kind,
       name: body.name,
@@ -142,7 +153,8 @@ finRegistryRoutes.post("/tax-rates", zValidator("json", createTaxRateSchema), as
  *   tenantId — if omitted, returns global + tenant accounts
  */
 finRegistryRoutes.get("/chart-of-accounts", async (c) => {
-  const { country, tenantId: tenantIdParam } = c.req.query();
+  // SEC: la fel ca la cote — organizația vine din sesiune, nu din query.
+  const { country } = c.req.query();
   const user = c.get("user");
 
   const conditions = [];
@@ -151,10 +163,9 @@ finRegistryRoutes.get("/chart-of-accounts", async (c) => {
     conditions.push(eq(finChartOfAccounts.country, country.toUpperCase()));
   }
 
-  // Scope: global accounts (tenantId IS NULL) + current tenant's accounts
-  const resolvedTenantId = tenantIdParam ?? user.tenantId;
+  // Scope: conturile globale (tenantId IS NULL) + cele ale organizației din sesiune.
   conditions.push(
-    or(isNull(finChartOfAccounts.tenantId), eq(finChartOfAccounts.tenantId, resolvedTenantId))
+    or(isNull(finChartOfAccounts.tenantId), eq(finChartOfAccounts.tenantId, user.tenantId))
   );
 
   const rows = await db

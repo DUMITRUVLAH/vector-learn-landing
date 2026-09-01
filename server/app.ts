@@ -121,6 +121,7 @@ import { finCronRoutes } from "./routes/finCron";
 
 // DOCMERGE module (DOCMERGE-001)
 import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
+import { publicErrorMessage } from "./lib/publicError";
 import { docsRoutes } from "./routes/docs";
 import { denyWhenImpersonating, logImpersonatedWrites } from "./middleware/impersonationGuard";
 
@@ -149,7 +150,8 @@ app.onError((err, c) => {
       });
     }
   });
-  return c.json({ error: err.message }, 500);
+  // SEC: în producție clientul primește un cod generic, nu mesajul intern (vezi lib/publicError).
+  return c.json({ error: publicErrorMessage(err.message) }, 500);
 });
 
 app.use("*", logger());
