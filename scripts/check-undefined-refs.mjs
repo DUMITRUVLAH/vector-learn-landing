@@ -21,6 +21,19 @@ const FATAL_CODES = ["TS2304", "TS2552"]; // undefined references → runtime Re
 // când tsc nu poate parsa fișierul, nu mai raportează DELOC TS2304 pentru el, deci exact
 // verificarea pentru care există poarta dispare în tăcere. Un fișier care nu se parsează nu
 // se poate nici construi, deci gatearea pe ele nu blochează nimic legitim.
+// Declarații DUBLATE. Adăugate 2026-09-01, după ce un cherry-pick a reaplicat un bloc pe care
+// main îl avea deja: fișierul a ajuns cu `const words` de două ori. `vite build` nu compilează
+// codul de server, iar poarta asta gatea doar pe TS2304 — deci commit-ul a trecut de build și de
+// teste, dar SERVERUL nu mai pornea deloc (esbuild: "The symbol words has already been declared").
+// Un simbol declarat de două ori nu se poate rula, deci gatearea pe el nu blochează nimic legitim.
+// NU includem TS2300 („Duplicate identifier"): el apare și pentru TIPURI declarate de două ori,
+// care dispar la compilare și nu pot rupe nimic la rulare — repo-ul are deja un astfel de caz.
+// Gatăm doar pe duplicatele care există și după ce tipurile sunt șterse.
+const DUPLICATE_CODES = [
+  "TS2451", // Cannot redeclare block-scoped variable — esbuild refuză fișierul
+  "TS2393", // Duplicate function implementation
+];
+
 const SYNTAX_CODES = [
   "TS1002", // Unterminated string literal
   "TS1003", // Identifier expected
@@ -45,7 +58,7 @@ for (const proj of projects) {
   }
   const lines = out
     .split("\n")
-    .filter((l) => [...FATAL_CODES, ...SYNTAX_CODES].some((c) => l.includes(`error ${c}:`)));
+    .filter((l) => [...FATAL_CODES, ...SYNTAX_CODES, ...DUPLICATE_CODES].some((c) => l.includes(`error ${c}:`)));
   fatal.push(...lines.map((l) => `[${proj}] ${l.trim()}`));
 }
 

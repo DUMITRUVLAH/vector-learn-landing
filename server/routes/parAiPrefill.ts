@@ -249,26 +249,6 @@ parAiPrefillRoutes.post(
       }
     }
 
-    // Suma ÎN LITERE bate cifra citită din tabel. Într-un PDF ordinea rândurilor se amestecă:
-    // pe contul de plată al owner-ului „23042" a ajuns pe alt rând decât „TOTAL", modelul a citit
-    // 23 442 lei, iar parserul determinist n-a găsit nicio sumă. Litera e sursa legală de adevăr,
-    // deci o folosim când o putem citi și valuta se potrivește — marcând câmpul „de verificat"
-    // când corectează o cifră deja extrasă.
-    const words = parseAmountInWords(rawText);
-    let amountCents = choice.amountCents;
-    let amountConfidence = extraction.amountConfidence;
-    let amountLowConf: boolean | undefined;
-    if (words && (words.currency ?? "MDL") === choice.currency) {
-      if (amountCents == null) {
-        amountCents = words.cents;
-        amountConfidence = Math.max(amountConfidence, 0.9);
-      } else if (amountCents !== words.cents) {
-        amountCents = words.cents;
-        amountConfidence = Math.min(amountConfidence, 0.6);
-        amountLowConf = true;
-      }
-    }
-
     const payee = choice.payee;
     // Honest confidence: the regex stub has no contextual understanding, so its output is
     // capped below the 0.7 low-confidence threshold — EVERY stub-filled field renders
