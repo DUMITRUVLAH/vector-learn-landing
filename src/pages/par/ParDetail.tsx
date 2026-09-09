@@ -116,6 +116,8 @@ function parseAttachmentAnalysis(raw: string | null | undefined): ParAttachmentA
 }
 
 // VF-203: format minor units in the PAR's currency (MDL keeps the "L" symbol).
+// Orice sumă care aparține cererii (linii, total, plata reală) trece pe aici — `formatMDL`
+// rămâne doar pentru sumele care chiar sunt în lei (echivalentul MDL, bugetele).
 function fmtCurrency(cents: number, currency: string): string {
   if (currency === "MDL") return formatMDL(cents);
   const v = (cents / 100).toLocaleString("ro-MD", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1002,8 +1004,8 @@ export function ParDetailPage() {
                     <td className="p-2 text-foreground">{it.description}</td>
                     <td className="p-2 text-right text-foreground">{it.quantity}</td>
                     <td className="p-2 text-muted-foreground text-xs">{it.unit ?? "—"}</td>
-                    <td className="p-2 text-right text-foreground whitespace-nowrap">{formatMDL(it.unitPriceCents)}</td>
-                    <td className="p-2 text-right font-semibold text-foreground whitespace-nowrap">{formatMDL(it.lineTotalCents)}</td>
+                    <td className="p-2 text-right text-foreground whitespace-nowrap">{fmtCurrency(it.unitPriceCents, par.currency)}</td>
+                    <td className="p-2 text-right font-semibold text-foreground whitespace-nowrap">{fmtCurrency(it.lineTotalCents, par.currency)}</td>
                   </tr>
                 ))}
                 {(par.line_items ?? []).length === 0 && (
@@ -1209,7 +1211,7 @@ export function ParDetailPage() {
               <Field label="Alocat la" value={par.payment.assignedToUserId} />
               {par.payment.paymentDate && <Field label="Data plății" value={fmtDate(par.payment.paymentDate)} />}
               {par.payment.paymentRef && <Field label="Referință" value={<code className="text-xs">{par.payment.paymentRef}</code>} />}
-              {par.payment.actualAmountCents != null && <Field label="Sumă reală" value={formatMDL(par.payment.actualAmountCents)} />}
+              {par.payment.actualAmountCents != null && <Field label="Sumă reală" value={fmtCurrency(par.payment.actualAmountCents, par.currency)} />}
             </dl>
             <div className="mt-3 pt-3 border-t border-border">
               <dl className="grid grid-cols-2 gap-x-4 gap-y-2">

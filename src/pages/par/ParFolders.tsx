@@ -39,6 +39,7 @@ import { ParStatusChip } from "@/components/par/ParStatusChip";
 import { useRouter } from "@/router/HashRouter";
 import {
   downloadDosar,
+  formatCurrency,
   formatMDL,
   getPar,
   listEvents,
@@ -72,6 +73,12 @@ import { openParAttachment } from "@/lib/parFiles";
 import { cn } from "@/lib/utils";
 import { Alert, Badge, Button, Card, EmptyState, Input, KpiTile, PastelIcon, Skeleton } from "@/components/ds";
 import type { ChipTone } from "@/components/ds";
+
+// Suma unei cereri într-o listă: în lei când avem echivalentul MDL fixat la submit (așa se
+// adună cu celelalte în folder), altfel în moneda ei — o cerere în USD nu se scrie cu „L".
+function fmtRowAmount(row: { totalMdlCents?: number | null; totalEstimatedCents: number; currency: string }): string {
+  return row.totalMdlCents != null ? formatMDL(row.totalMdlCents) : formatCurrency(row.totalEstimatedCents, row.currency);
+}
 
 // ─── Row primitives ───────────────────────────────────────────────────────────
 
@@ -563,7 +570,7 @@ function ParListing({ loc, rows }: { loc: FolderLocation; rows: ParListRow[] }) 
             </span>
             <ParStatusChip status={row.status} />
             <span className="hidden text-xs font-medium tabular-nums text-foreground sm:block">
-              {formatMDL(row.totalMdlCents ?? row.totalEstimatedCents)}
+              {fmtRowAmount(row)}
             </span>
             <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden />
           </a>
@@ -654,7 +661,7 @@ function ParDocuments({
             <p className="mt-1 text-sm text-muted-foreground">
               {par.payeeName || "Beneficiar nespecificat"} ·{" "}
               <span className="font-medium text-foreground">
-                {formatMDL(par.totalMdlCents ?? par.totalEstimatedCents)}
+                {fmtRowAmount(par)}
               </span>
               {par.projectName ? ` · ${par.projectName}` : ""}
               {par.eventName ? ` · ${par.eventName}` : ""}
@@ -709,7 +716,7 @@ function ParDocuments({
                 <Banknote className="h-4 w-4 text-muted-foreground" aria-hidden />
                 <span className="text-muted-foreground">Sumă achitată:</span>
                 <span className="font-medium tabular-nums text-foreground">
-                  {formatMDL(payment.actualAmountCents)}
+                  {formatCurrency(payment.actualAmountCents, par.currency)}
                 </span>
               </span>
             )}

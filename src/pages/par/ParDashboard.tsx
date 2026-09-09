@@ -48,6 +48,7 @@ import {
   listProjects,
   listDepartments,
   listBudgetCodes,
+  formatCurrency,
   formatMDL,
   type ParRequest,
   type ParStatus,
@@ -323,14 +324,18 @@ export function ParDashboard() {
     }
   };
 
-  // Summary totals
+  // Summary totals. KPI-urile sunt în lei, deci fiecare cerere intră cu echivalentul ei MDL
+  // (fixat la submit); fără el — ciorne, sau FX indisponibil — rămâne suma proprie, care pentru
+  // o cerere în MDL e aceeași valoare. Altfel adunam dolari peste lei într-o singură cifră.
+  const mdlOf = (r: ParRequest) => r.totalMdlCents ?? r.totalEstimatedCents;
+
   const totalActive = requests
     .filter((r) => !["cancelled", "rejected", "paid"].includes(r.status))
-    .reduce((sum, r) => sum + r.totalEstimatedCents, 0);
+    .reduce((sum, r) => sum + mdlOf(r), 0);
 
   const totalPaid = requests
     .filter((r) => r.status === "paid")
-    .reduce((sum, r) => sum + r.totalEstimatedCents, 0);
+    .reduce((sum, r) => sum + mdlOf(r), 0);
 
   return (
     <AppShell
@@ -659,7 +664,7 @@ function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, h
                 onClick={() => onRowClick(r.id)}
                 onKeyDown={(e) => e.key === "Enter" && onRowClick(r.id)}
                 tabIndex={0}
-                aria-label={`PAR ${r.requestNo}, ${PAR_STATUS_LABELS[r.status]}, ${formatMDL(r.totalEstimatedCents)}`}
+                aria-label={`PAR ${r.requestNo}, ${PAR_STATUS_LABELS[r.status]}, ${formatCurrency(r.totalEstimatedCents, r.currency)}`}
               >
                 <TableCell className="font-medium text-foreground">{r.requestNo}</TableCell>
                 <TableCell className="hidden text-muted-foreground sm:table-cell">
@@ -675,8 +680,9 @@ function Section({ title, count, requests, onRowClick, onRepeat, emptyMessage, h
                   })()}
                 </TableCell>
                 <TableCell className="text-right font-medium tabular-nums">
+                  {/* Suma cererii se scrie în moneda ei — „1.500,00 USD", nu „1.500,00 L". */}
                   <span className={r.above_micro_threshold ? "text-warning" : "text-foreground"}>
-                    {formatMDL(r.totalEstimatedCents)}
+                    {formatCurrency(r.totalEstimatedCents, r.currency)}
                   </span>
                 </TableCell>
                 <TableCell>
