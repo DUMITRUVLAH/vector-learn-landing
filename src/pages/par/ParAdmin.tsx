@@ -380,7 +380,13 @@ function approverDisplayName(pick: { userId: string | null; parRole: string | nu
     const role = ROLE_OPTIONS.find((o) => o.value === pick.parRole)?.label ?? pick.parRole;
     return `Oricine cu rolul ${role}`;
   }
-  return pick.label || "Aprobator";
+  // Nici persoană, nici rol: pentru motorul de aprobare (decisionAuthority.ts) pasul ăsta e „oricine
+  // cu rolul Aprobator" — inclusiv orice admin/manager de organizație, care primește par_admin
+  // implicit. Eticheta lui poate fi numele unui om, rămas dintr-o configurare veche; afișat ca atare,
+  // ecranul promitea că semnează acea persoană, în timp ce cererea ateriza în inbox-ul altcuiva.
+  return pick.label
+    ? `Oricine cu rolul ${PAR_ROLE_LABELS.approver} · etichetat „${pick.label}"`
+    : `Oricine cu rolul ${PAR_ROLE_LABELS.approver}`;
 }
 
 interface ApprovalRuleBuilderProps {

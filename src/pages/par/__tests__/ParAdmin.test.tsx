@@ -130,6 +130,28 @@ describe("ParAdmin — PAR-116", () => {
     expect(screen.queryByLabelText("Pasul de aprobare")).toBeNull();
   });
 
+  // Un pas fără persoană și fără rol decide oricine are rolul Aprobator (inclusiv adminii de
+  // organizație, cu par_admin implicit). Dacă ecranul îi scrie eticheta ca pe un nume de om,
+  // configurația pare pinuită pe acea persoană, iar cererea apare în inbox-ul altcuiva.
+  it("[blocant] un pas fără persoană și fără rol nu se dă drept o persoană anume", async () => {
+    const { listParDoaMatrix } = await import("@/lib/api/par");
+    (listParDoaMatrix as ReturnType<typeof vi.fn>).mockResolvedValue({
+      rows: [{
+        id: "doa-1", tenantId: "t-1", chargeTo: null, departmentId: null, payerId: null, projectId: null,
+        approvalMode: "sequential", minAmountCents: 0, maxAmountCents: null, step: 1,
+        approverRoleLabel: "Ana Chirita", approverUserId: null, approverParRole: null,
+        active: true, createdAt: "", updatedAt: "",
+      }],
+    });
+
+    render(<ParAdmin isAdmin={true} />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Aprobare/i }));
+
+    expect(await screen.findByText(/Oricine cu rolul Aprobator/)).toBeDefined();
+    expect(screen.queryByText("Ana Chirita")).toBeNull();
+  });
+
   // T-PAR-116-3 [normal] Settings tab — modify threshold, save calls updateParSettings
   it("Settings tab shows threshold field and saves", async () => {
     const { updateParSettings } = await import("@/lib/api/par");
