@@ -21,7 +21,7 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { isWorkspaceAdminRole } from "../lib/par/visibility";
 import { parUuidGuard } from "../middleware/parUuidGuard";
-import { extractPdfText } from "../lib/ai/pdfText";
+import { readUploadedDoc } from "../lib/ai/readUploadedDoc";
 import { extractParParties } from "../lib/ai/parExtractor";
 import { choosePayee } from "../lib/par/choosePayee";
 import { randomUUID } from "node:crypto";
@@ -259,13 +259,13 @@ async function analyzeAttachmentAgainstPar(
   if (!match) throw new Error("analysis_unavailable");
   const mime = match[1];
   const buffer = Buffer.from(match[2], "base64");
-  let rawText = "";
-  let imageDataUrl: string | undefined;
-  if (mime === "application/pdf") rawText = await extractPdfText(buffer).catch(() => "");
-  else if (mime.startsWith("image/")) imageDataUrl = attachment.fileUrl;
-  else rawText = buffer.toString("utf8");
+  // ACEEAȘI citire ca la prefill (`readUploadedDoc`). Varianta locală de dinainte făcea
+  // `toString("utf8")` pe orice nu era PDF sau imagine: un .docx/.xlsx e un ZIP, deci extractorul
+  // primea gunoi binar și raporta „sumă: document 0" pe un act care scria 6000 MDL. Un PDF scanat
+  // (fără strat de text) ajunge acum la model ca fișier, nu ca text gol.
+  const { rawText, imageDataUrl, fileDataUrl } = await readUploadedDoc(buffer, attachment.fileName, mime);
   const extraction = await extractParParties(rawText, {
-    imageDataUrl, tenantId: par.tenantId, userId: actorUserId, prefillId: randomUUID(),
+    imageDataUrl, fileDataUrl, tenantId: par.tenantId, userId: actorUserId, prefillId: randomUUID(),
   });
   const choice = choosePayee(extraction, null);
   // Compare against the party the PAR actually names, not the one the extractor would recommend.
@@ -273,8 +273,10 @@ async function analyzeAttachmentAgainstPar(
   // document where the tenant is the provider is the OTHER party — so every requisite check came
   // back "neverificat" (and the beneficiary a false mismatch) on a perfectly matching document.
   const payee = matchPartyToPar(choice, par);
+  const amountCents = choice.amountCents === 0 ? null : choice.amountCents;
   const checks: ReconcileCheck[] = [
-    { field: "sumă", expected: par.totalEstimatedCents, found: choice.amountCents, matches: choice.amountCents == null ? null : choice.amountCents === par.totalEstimatedCents },
+    // 0 nu e o sumă citită din act, ci o extragere eșuată — se raportează „nedetectat", nu diferență.
+    { field: "sumă", expected: par.totalEstimatedCents, found: amountCents, matches: amountCents == null ? null : amountCents === par.totalEstimatedCents },
     { field: "valută", expected: par.currency, found: choice.currency, matches: !choice.currency ? null : choice.currency === par.currency },
     { field: "beneficiar", expected: par.payeeName, found: payee?.name ?? null, matches: !payee?.name || !par.payeeName ? null : norm(payee.name) === norm(par.payeeName) },
     { field: "IDNO/IDNP", expected: par.payeeIdnp, found: payee?.idno ?? null, matches: !payee?.idno || !par.payeeIdnp ? null : norm(payee.idno) === norm(par.payeeIdnp) },

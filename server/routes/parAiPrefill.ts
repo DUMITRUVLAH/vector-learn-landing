@@ -23,8 +23,7 @@ import { parseAmountInWords } from "../lib/par/amountInWords";
 import type { PayeeCandidate } from "../lib/par/parPartyTypes";
 import { extractPayeeDoc } from "../lib/ai/payeeDocExtractor";
 import type { PayeeDocKind } from "../lib/par/payeeDocStub";
-import { extractPdfText } from "../lib/ai/pdfText";
-import { extractOfficeText } from "../lib/ai/officeText";
+import { readUploadedDoc } from "../lib/ai/readUploadedDoc";
 import { db } from "../db/client";
 import { parPayers, parSettings } from "../db/schema/par";
 
@@ -114,12 +113,6 @@ export interface ParPrefillResult {
   /** true if the extraction used the mock stub (no API key) */
   isStub: boolean;
 }
-
-/**
- * Below this many characters a PDF's text layer is treated as absent (a scan often yields a few
- * stray glyphs from a watermark or page number, not content).
- */
-const MIN_USABLE_TEXT_CHARS = 200;
 
 // ─── helper ───────────────────────────────────────────────────────────────────
 
@@ -308,43 +301,6 @@ parAiPrefillRoutes.post(
     return c.json(result);
   },
 );
-
-// ─── citirea fișierului încărcat ──────────────────────────────────────────────
-
-/**
- * Scoate din fișier ce poate citi modelul — ORICE format în care omul are actul.
- *   imagine      → trimisă modelului ca imagine (vision)
- *   PDF          → stratul de text; un PDF SCANAT nu are, deci se trimite PDF-ul însuși
- *   docx / xlsx  → extragere reală de text (sunt ZIP-uri: toString("utf8") dădea gunoi)
- *   csv / txt    → text simplu
- * Un fișier pe care nu-l putem citi ca text tot ajunge la model ca atașament, în loc să eșueze
- * — asta înseamnă „orice tip de act" în practică.
- */
-async function readUploadedDoc(
-  buf: Buffer,
-  fileName: string,
-  mimeType: string,
-): Promise<{ rawText: string; imageDataUrl?: string; fileDataUrl?: string }> {
-  let rawText = "";
-  let imageDataUrl: string | undefined;
-  let fileDataUrl: string | undefined;
-  const isPdf = mimeType === "application/pdf" || /\.pdf$/i.test(fileName);
-  try {
-    if (mimeType.startsWith("image/")) {
-      imageDataUrl = `data:${mimeType};base64,${buf.toString("base64")}`;
-    } else if (isPdf) {
-      rawText = await extractPdfText(buf);
-      if (rawText.trim().length < MIN_USABLE_TEXT_CHARS) {
-        fileDataUrl = `data:application/pdf;base64,${buf.toString("base64")}`;
-      }
-    } else {
-      rawText = await extractOfficeText(buf, fileName, mimeType);
-    }
-  } catch {
-    rawText = "";
-  }
-  return { rawText, imageDataUrl, fileDataUrl };
-}
 
 // ─── POST /api/par/ai-prefill/payee-doc ───────────────────────────────────────
 
