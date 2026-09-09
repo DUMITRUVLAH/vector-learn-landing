@@ -24,7 +24,7 @@ import {
   ParRequest,
   ParLineItem,
 } from "../../db/schema/par";
-import { resolveApprovalChain } from "./doa";
+import { resolveApprovalChain, type ApprovalStep } from "./doa";
 import { toMdlCents } from "../fx";
 import { computeParBodyHash, type ParBodyForHash } from "./integrity";
 import { notifySubmitted } from "../../services/par/notify";
@@ -92,6 +92,29 @@ export interface SubmitError {
  * Execute the full submit flow for a PAR.
  * Caller is responsible for verifying the PAR exists and belongs to the user's tenant.
  */
+/**
+ * Segregarea sarcinilor la trimitere: nimeni nu-și semnează propria cerere.
+ *
+ * Varianta veche ștergea doar `approverUserId` din pasul solicitantului, deci pasul rămânea în lanț
+ * ca „pe rol" — adică ORICINE cu rolul Aprobator, dar sub numele lui. O aprobare în două semnături
+ * (X + Y) depusă de X devenea tăcut „Y + oricine", iar ecranele continuau să scrie „X"
+ * (ATIC, 2026-09-09).
+ *
+ * Acum slotul solicitantului se ELIMINĂ, atât timp cât în regulă mai rămâne cel puțin un aprobator.
+ * Dacă el era singurul, cererea nu poate rămâne fără semnătură: pasul escaladează explicit la
+ * „Administrator PAR" — aceeași autoritate ca fallback-ul „fără matrice DOA", nu „oricine".
+ */
+export function chainWithoutSelfApproval(chain: ApprovalStep[], actorUserId: string): ApprovalStep[] {
+  const withoutSelf = chain.filter((step) => step.approverUserId !== actorUserId);
+  if (withoutSelf.length > 0) return withoutSelf;
+  return chain.map((step) => ({
+    ...step,
+    approverUserId: null,
+    approverParRole: "par_admin",
+    approverRoleLabel: `${step.approverRoleLabel} → Administrator PAR (solicitantul nu se aprobă singur)`,
+  }));
+}
+
 export async function submitPAR(params: {
   parId: string;
   tenantId: string;
@@ -164,16 +187,7 @@ export async function submitPAR(params: {
     projectId: par.projectId ?? undefined,
   });
 
-  // Self-approval prevention: if the requestor (actorUserId) appears in a step as the specific
-  // approver, we skip to the next eligible approver (or leave the step but flag it so the
-  // requestor cannot decide it — the flag is: approverUserId stays, but the route will 403 self).
-  // For this release: when approverUserId === actorUserId, we null out the specific user so the
-  // step falls to role-based routing (any other user with the required par_role can approve it).
-  const sanitizedChain = chain.map((step) => ({
-    ...step,
-    approverUserId:
-      step.approverUserId === actorUserId ? null : step.approverUserId,
-  }));
+  const sanitizedChain = chainWithoutSelfApproval(chain, actorUserId);
 
   // Compute body hash for immutability (PAR-109)
   const bodyForHash: ParBodyForHash = {

@@ -43,20 +43,25 @@ export type ViewerContext = {
   allowedOnProject: boolean;
 };
 
+/** Rolul cerut de un pas „pe rol", căutat într-un set de roluri (proprii sau primite prin delegare). */
+function roleStepMatches(required: string | null, roles: string[]): boolean {
+  if (!required || required === "approver") return roles.includes("approver");
+  return roles.includes(required);
+}
+
 /** Pure: is this ONE step decidable by the viewer (ignoring lock/status)? */
 export function stepMatchesViewer(step: DecidableStep, ctx: ViewerContext): boolean {
-  const isAdmin = ctx.parRoles.includes("par_admin");
-  const isApprover = ctx.parRoles.includes("approver") || isAdmin;
-
   // PARQA-007: a role-based step may require a SPECIFIC par_role (e.g. "finance").
-  const canDecideRoleStep = (required: string | null) => {
-    if (isAdmin) return true;
-    if (!required || required === "approver") return isApprover;
-    return ctx.parRoles.includes(required);
-  };
-
+  //
+  // Directivă owner (2026-09-09): semnează DOAR cine e pus în regula de aprobare. `par_admin` nu
+  // mai e cheie universală — administrarea workspace-ului (invitații, plătitori, matricea DOA) nu
+  // e același lucru cu dreptul de a aproba o plată. Cum adminii/managerii organizației primesc
+  // par_admin IMPLICIT (requirePARRole.ts), regula veche „par_admin decide orice" făcea din fiecare
+  // administrator un aprobator pe toate cererile — inclusiv pe pași care poartă numele altcuiva.
+  // Un pas care cere explicit rolul „Administrator PAR" (inclusiv escaladarea când nu se
+  // potrivește nicio regulă) rămâne al lor: acolo alegerea e scrisă în configurație.
   if (step.approverUserId === ctx.userId) return true;
-  if (step.approverUserId === null && ctx.allowedOnProject && canDecideRoleStep(step.approverParRole)) return true;
+  if (step.approverUserId === null && ctx.allowedOnProject && roleStepMatches(step.approverParRole, ctx.parRoles)) return true;
   if (step.approverUserId != null && ctx.delegators.has(step.approverUserId)) return true;
   // A delegation hands over the delegator's authority, which on the default chain is a ROLE, not a
   // pinned step — otherwise "sign for me while I'm away" never applied to anything.
@@ -65,10 +70,8 @@ export function stepMatchesViewer(step: DecidableStep, ctx: ViewerContext): bool
     step.approverUserId === null &&
     delegated.length > 0 &&
     (ctx.delegatedAllowedOnProject ?? false) &&
-    (delegated.includes("par_admin") ||
-      (!step.approverParRole || step.approverParRole === "approver"
-        ? delegated.includes("approver")
-        : delegated.includes(step.approverParRole)))
+    // Delegarea transmite rolurile delegatarului, nu o autoritate universală — aceeași regulă ca mai sus.
+    roleStepMatches(step.approverParRole, delegated)
   ) {
     return true;
   }

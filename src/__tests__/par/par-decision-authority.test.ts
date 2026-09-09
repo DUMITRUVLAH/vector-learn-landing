@@ -89,8 +89,29 @@ describe("PAR decision authority", () => {
     expect(decide(financeStep).can_approve).toBe(false);
     expect(decide(financeStep).reason).toBe("not_your_step");
     expect(decide(financeStep, ctx({ parRoles: ["finance"] })).can_approve).toBe(true);
-    // par_admin overrides every required role.
-    expect(decide(financeStep, ctx({ parRoles: ["par_admin"] })).can_approve).toBe(true);
+    // par_admin NU mai e cheie universală (directivă owner, 2026-09-09): un pas care cere rolul
+    // „finance" nu e al administratorului doar pentru că administrează workspace-ul.
+    expect(decide(financeStep, ctx({ parRoles: ["par_admin"] })).can_approve).toBe(false);
+  });
+
+  it("[blocant] par_admin nu aprobă un pas generic doar pentru că e administrator", () => {
+    // Adminii/managerii organizației primesc par_admin IMPLICIT, deci regula veche („par_admin
+    // decide orice") îi punea aprobatori pe TOATE cererile — inclusiv pe pași care poartă numele
+    // altcuiva. Administrarea workspace-ului nu e dreptul de a aproba o plată.
+    const generic = [step({ approverUserId: null, approverParRole: null })];
+    expect(decide(generic, ctx({ parRoles: ["par_admin"] })).can_approve).toBe(false);
+    expect(decide(generic, ctx({ parRoles: ["par_admin"] })).reason).toBe("not_your_step");
+    // …dar rămâne al lui când regula CERE explicit rolul de administrator (inclusiv escaladarea
+    // „fără matrice DOA"), și când e numit personal în pas.
+    expect(decide([step({ approverParRole: "par_admin" })], ctx({ parRoles: ["par_admin"] })).can_approve).toBe(true);
+    expect(decide([step({ approverUserId: ME })], ctx({ parRoles: ["par_admin"] })).can_approve).toBe(true);
+  });
+
+  it("[blocant] o delegare de la un par_admin nu deschide pașii altor roluri", () => {
+    const financeStep = [step({ approverParRole: "finance" })];
+    expect(stepMatchesViewer(financeStep[0], ctx({
+      parRoles: [], delegators: new Set([OTHER]), delegatedRoles: ["par_admin"], delegatedAllowedOnProject: true,
+    }))).toBe(false);
   });
 
   it("T-DA-6 [normal] delegation grants a step; project scoping narrows role-based steps only", () => {

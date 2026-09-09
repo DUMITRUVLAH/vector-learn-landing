@@ -14,7 +14,8 @@ import { describe, it, expect, vi } from "vitest";
 // submit.ts so Vitest workers never boot an embedded Postgres instance for unit-only assertions.
 vi.mock("../../../db/client", () => ({ db: {} }));
 
-import { validateParForSubmit, type SubmitValidationError } from "../submit";
+import { validateParForSubmit, chainWithoutSelfApproval, type SubmitValidationError } from "../submit";
+import type { ApprovalStep } from "../doa";
 import { computeParBodyHash, verifyParBodyHash, type ParBodyForHash } from "../integrity";
 import type { ParRequest, ParLineItem } from "../../db/schema/par";
 
@@ -200,5 +201,43 @@ describe("computeParBodyHash", () => {
     const result = verifyParBodyHash(tampered, hash);
     expect(result.valid).toBe(false);
     expect(result.detail).toBeDefined();
+  });
+});
+
+// ─── Segregarea sarcinilor la trimitere ───────────────────────────────────────
+
+describe("chainWithoutSelfApproval — solicitantul nu se aprobă singur", () => {
+  const st = (over: Partial<ApprovalStep>): ApprovalStep => ({
+    step: 1, approverRoleLabel: "Aprobator", approverUserId: null, approverParRole: null, ...over,
+  });
+
+  it("[blocant] slotul solicitantului se elimină când mai rămâne un aprobator", () => {
+    // Regula: Ana + Irina, în paralel. Ana depune cererea ⇒ semnează Irina, singură.
+    // Înainte, pasul Anei rămânea în lanț cu approverUserId=null — adică ORICINE cu rol de
+    // Aprobator putea semna în locul ei, sub numele ei.
+    const chain = [
+      st({ step: 1, approverUserId: "ana", approverRoleLabel: "Ana Chirita" }),
+      st({ step: 1, approverUserId: "irina", approverRoleLabel: "Irina Oriol" }),
+    ];
+    const out = chainWithoutSelfApproval(chain, "ana");
+    expect(out).toHaveLength(1);
+    expect(out[0].approverUserId).toBe("irina");
+  });
+
+  it("[blocant] când solicitantul era singurul aprobator, pasul escaladează la par_admin", () => {
+    const chain = [st({ step: 1, approverUserId: "ana", approverRoleLabel: "Ana Chirita" })];
+    const out = chainWithoutSelfApproval(chain, "ana");
+    expect(out).toHaveLength(1);
+    expect(out[0].approverUserId).toBeNull();
+    expect(out[0].approverParRole).toBe("par_admin");
+    expect(out[0].approverRoleLabel).toContain("Administrator PAR");
+  });
+
+  it("un lanț care nu-l conține pe solicitant rămâne neatins", () => {
+    const chain = [
+      st({ step: 1, approverUserId: "irina" }),
+      st({ step: 2, approverUserId: null, approverParRole: "finance" }),
+    ];
+    expect(chainWithoutSelfApproval(chain, "ana")).toEqual(chain);
   });
 });
