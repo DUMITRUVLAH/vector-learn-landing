@@ -80,7 +80,11 @@ const doaRowUpdateSchema = doaRowBase.partial().refine(bandIsCoherent, bandError
 parDoaRoutes.get("/", requirePARRole("par_admin", "approver", "finance"), async (c) => {
   const user = c.get("user"); const tenantId = user.tenantId;
   const { projects: projectScope, payers: payerScope } = await accessibleScopes(user.id, tenantId, user.role);
-  const conditions = [eq(parDoaMatrix.tenantId, tenantId)];
+  // DELETE dezactivează rândul (soft delete), nu îl șterge. Fără filtrul ăsta lista întorcea și
+  // aprobatorii șterși: ecranul de setări îi arăta din nou, iar următoarea salvare a regulii îi
+  // recrea ca rânduri ACTIVE — un aprobator eliminat revenea singur în lanț. Motorul de aprobare
+  // (lib/par/doa.ts) filtrează deja pe `active`, deci asta doar aliniază lista la ce se aplică.
+  const conditions = [eq(parDoaMatrix.tenantId, tenantId), eq(parDoaMatrix.active, true)];
   if (payerScope !== null) conditions.push(payerScope.length
     ? or(isNull(parDoaMatrix.payerId), inArray(parDoaMatrix.payerId, payerScope))!
     : isNull(parDoaMatrix.payerId));

@@ -71,6 +71,9 @@ export function buildDoaRows(draft: RuleDraft): DoaRowPayload[] {
 export function groupDoaRows(rows: ParDoaRow[]): GroupedRule[] {
   const map = new Map<string, ParDoaRow[]>();
   for (const r of rows) {
+    // Ștergerea unui aprobator dezactivează rândul, nu îl elimină. Un rând inactiv nu mai are voie
+    // să apară în regulă: altfel îl vezi în listă și, la următoarea salvare, îl scrii înapoi activ.
+    if (r.active === false) continue;
     const k = ruleScopeKey(r);
     const arr = map.get(k);
     if (arr) arr.push(r);

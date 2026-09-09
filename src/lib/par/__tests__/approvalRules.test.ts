@@ -93,6 +93,20 @@ describe("groupDoaRows", () => {
     expect(groups[0].draft.approvers.map((a) => a.userId)).toEqual(["u1", "u2", "u3"]);
   });
 
+  it("[blocant] un aprobator șters (rând dezactivat) nu mai apare în regulă", () => {
+    // Ștergerea din ecranul de setări dezactivează rândul. Dacă tot ajunge în regulă, îl vezi în
+    // listă și următoarea salvare îl recreează activ — aprobatorul eliminat revine singur.
+    const rows = persist(buildDoaRows(baseDraft({
+      mode: "sequential", approvers: [pick("u1", "Ana"), pick("u2", "Bob"), pick("u3", "Cyn")],
+    })));
+    rows[1] = { ...rows[1], active: false };
+
+    const groups = groupDoaRows(rows);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].draft.approvers.map((a) => a.userId)).toEqual(["u1", "u3"]);
+    expect(groups[0].rows).toHaveLength(2);
+  });
+
   it("ruleScopeKey distinguishes payer/project/amount", () => {
     expect(ruleScopeKey({ payerId: "a", projectId: "b", departmentId: null, chargeTo: null, minAmountCents: 0, maxAmountCents: null }))
       .not.toBe(ruleScopeKey({ payerId: "a", projectId: "b", departmentId: null, chargeTo: null, minAmountCents: 100, maxAmountCents: null }));
