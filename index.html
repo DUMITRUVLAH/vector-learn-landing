@@ -90,10 +90,16 @@
     <div id="root">
       <!--
         GEO §7 (server-side rendering): crawlerele AI (GPTBot, ClaudeBot, PerplexityBot) nu
-        execută JavaScript — văd doar acest HTML brut. React înlocuiește sincron conținutul de
-        mai jos la mount (createRoot(...).render în src/main.tsx), deci vizitatorii reali nu-l
-        văd niciodată; e strict un rezumat pentru boți, nu conținut ascuns de utilizatori.
+        execută JavaScript — văd doar acest HTML brut. E strict un rezumat pentru boți, nu
+        conținut ascuns de utilizatori.
+
+        Împachetat în <noscript> pentru că React NU înlocuiește conținutul instant: până se
+        descarcă și se parsează bundle-ul, browserul afișa acest text nestilizat (negru pe alb)
+        la fiecare încărcare, pe orice rută — index.html e servit pentru toate URL-urile SPA.
+        În <noscript>, browserele cu JS nu îl randează deloc, iar boții fără JS îl citesc din
+        sursă exact ca înainte.
       -->
+      <noscript>
       <main>
         <h1>Nicio plată fără aprobare. Nicio aprobare fără urmă.</h1>
         <p>
@@ -125,6 +131,7 @@
         </section>
         <p><a href="#/business/login">Intră în cont</a></p>
       </main>
+      </noscript>
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
