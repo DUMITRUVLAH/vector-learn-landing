@@ -15,6 +15,8 @@ import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { enabledPayerIds } from "../middleware/requireModuleEntitlement";
 import { accessiblePayerIds, accessibleProjectIds, accessibleScopes } from "../lib/par/projectScope";
+import { renderDosarPagesPdf } from "../lib/par/dosarPdf";
+import { DOC_FONT_FAMILY } from "../lib/docs/pdfFonts";
 
 export const parAuditRoutes = new Hono<{ Variables: AuthVariables }>();
 parAuditRoutes.use("*", requireAuth);
@@ -81,17 +83,54 @@ parAuditRoutes.get("/export.xlsx", async (c) => {
 parAuditRoutes.get("/export.pdf", async (c) => {
   const user = c.get("user"); const tenantId = user.tenantId;
   const rows = await auditExportRows(tenantId, exportConditions(c, tenantId, await enabledPayerIds(tenantId, "par"), await accessibleProjectIds(user.id, tenantId, user.role)));
-  const { PDFDocument, StandardFonts } = await import("pdf-lib");
-  const doc = await PDFDocument.create(); const font = await doc.embedFont(StandardFonts.Helvetica);
-  let page = doc.addPage([842, 595]); let y = 565;
-  const addLine = (line: string, bold = false) => {
-    if (y < 28) { page = doc.addPage([842, 595]); y = 565; }
-    page.drawText(line.replace(/[^\x20-\x7E]/g, "?"), { x: 24, y, size: bold ? 11 : 8, font }); y -= bold ? 18 : 12;
-  };
-  addLine("Audit PAR", true);
-  rows.forEach((r) => addLine(`${r.createdAt.toISOString().slice(0, 16)} | ${r.requestNo ?? "-"} | ${r.status ?? "-"} | ${r.payerName ?? "-"} | ${r.projectName ?? "-"} | ${r.actorName ?? "-"} | ${r.event}`.slice(0, 180)));
-  const bytes = await doc.save(); c.header("Content-Type", "application/pdf"); c.header("Content-Disposition", "attachment; filename=par-audit.pdf");
-  return c.body(Buffer.from(bytes));
+  // Exportul se scria cu Helvetica (WinAnsi) și cu `[^\x20-\x7E] → "?"`: „Ștefan Țurcanu" ieșea
+  // „?tefan ?urcanu", iar orice rând în rusă devenea un șir de semne de întrebare — într-un
+  // document pentru auditori. Se scrie acum ca tabel, cu fontul care are diacritice și chirilice.
+  const bytes = await renderDosarPagesPdf({
+    pageSize: "A4",
+    pageOrientation: "landscape",
+    pageMargins: [24, 28, 24, 28],
+    info: { title: "Audit PAR", creator: "FinFlow" },
+    defaultStyle: { font: DOC_FONT_FAMILY, fontSize: 8 },
+    content: [
+      { text: "Audit PAR", bold: true, fontSize: 13, margin: [0, 0, 0, 8] },
+      {
+        table: {
+          headerRows: 1,
+          widths: [70, 68, 58, "*", "*", "*", 80],
+          body: [
+            ["Data", "Nr. cerere", "Status", "Plătitor", "Proiect", "Cine", "Eveniment"].map((t) => ({
+              text: t,
+              bold: true,
+              fontSize: 7.5,
+              color: "#5b6472",
+            })),
+            ...rows.map((r) => [
+              { text: r.createdAt.toISOString().slice(0, 16).replace("T", " "), fontSize: 7.5 },
+              { text: r.requestNo ?? "—", fontSize: 7.5 },
+              { text: r.status ?? "—", fontSize: 7.5 },
+              { text: r.payerName ?? "—", fontSize: 7.5 },
+              { text: r.projectName ?? "—", fontSize: 7.5 },
+              { text: r.actorName ?? "—", fontSize: 7.5 },
+              { text: r.event, fontSize: 7.5 },
+            ]),
+          ],
+        },
+        layout: {
+          hLineWidth: () => 0.4,
+          vLineWidth: () => 0,
+          hLineColor: () => "#c9ced8",
+          paddingTop: () => 3,
+          paddingBottom: () => 3,
+          paddingLeft: () => 0,
+          paddingRight: () => 6,
+        },
+      },
+    ],
+  });
+  c.header("Content-Type", "application/pdf");
+  c.header("Content-Disposition", "attachment; filename=\"par-audit.pdf\"");
+  return c.body(bytes);
 });
 
 /** GET /api/par/audit — paginated, filtered audit log. */

@@ -154,6 +154,31 @@ corecte; (3) moneda cererii apare în antetul coloanelor, cu echivalentul MDL de
 (4) semnăturile poartă nume, funcție și data aprobării; (5) dosarul conține formularul chiar dacă
 nimeni nu l-a atașat; (6) când un formular semnat e atașat, NU se adaugă o dublură.
 
+## VM4-09 — Pătratele din documente: fontul livrat nu avea chirilice — **done**
+
+**Feedback owner (10.09.2026):** „vezi de ce apar aceste pătrate care nu au nicio logică" — pe
+formularul PAR și pe fișa dosarului, în „Destinația plății" și în denumirea băncii.
+
+**Cauza:** fișierele `server/assets/fonts/Tinos-*.ttf` din repo erau un SUBSET latin (1506 glife)
+al build-ului 1.340. Textul rusesc al cererii („наименование товаров", „ф." din denumirea băncii)
+nu avea glife, iar pdfmake desena `.notdef` — pătratele. În Moldova, unde multe denumiri și
+descrieri sunt în rusă, asta rupea documente reale, nu cazuri exotice.
+
+**Livrat:**
+- fonturile complete (3209 glife: latină + latină extinsă + greacă + chirilică), **aceeași
+  versiune 1.340 și aceleași metrici** — verificat: lățimea unui șir de probă e identică, deci
+  parita­tea cu Times New Roman din actele DOCGEN rămâne neatinsă;
+- exportul PDF al auditului (`GET /api/par/audit/export.pdf`) nu mai scrie cu Helvetica și nu mai
+  înlocuiește tot ce nu e ASCII cu „?" („Ștefan Țurcanu" ieșea „?tefan ?urcanu"): e tabel, cu
+  același font;
+- test de regresie prin generatorul real: un caracter fără glifă iese la extragere ca U+0000, deci
+  testul cade dacă cineva livrează din nou un subset. Verificat că PICĂ pe fonturile vechi.
+
+**AC:** (1) text românesc + rusesc extras corect din PDF, pe normal și pe bold/italic; (2) metrici
+identice cu subsetul anterior; (3) auditul exportat păstrează diacriticele.
+
+---
+
 ## VM4-08 — Curățenie: ștergerea generatorului de formular din browser — **pending**
 
 `src/lib/parPdf.ts` (+ cele 454 de linii de teste) nu mai e folosit de nicio pagină după VM4-07.
