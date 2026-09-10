@@ -191,8 +191,19 @@ export interface ParInboxItem extends ParRequest {
   my_decided_at?: string | null;
 }
 
-/** Evenimentele de decizie din jurnalul de audit, așa cum le întoarce scope=decided. */
-export type ParDecisionEvent = "approved" | "rejected" | "changes_requested" | "overage_reapproved";
+/**
+ * Ce scrie în coloana „Decizia mea" pe scope=decided.
+ *
+ * Primele patru vin din jurnalul de audit (butoane apăsate de om). `submit_signature` e semnătura
+ * de la depunere: rândul 14 al cererii proprii, semnat automat la trimitere — o cerere la care ai
+ * pus semnătura fără să decizi nimic pe cererea altcuiva.
+ */
+export type ParDecisionEvent =
+  | "approved"
+  | "rejected"
+  | "changes_requested"
+  | "overage_reapproved"
+  | "submit_signature";
 
 export interface ParPayment {
   id: string;

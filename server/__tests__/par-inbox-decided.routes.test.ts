@@ -240,6 +240,48 @@ describe("GET /api/par/inbox?scope=decided — istoricul deciziilor mele", () =>
     expect(history.find((r) => r.id === changesId)?.my_decision).toBe("changes_requested");
   });
 
+  it("[blocant] cererea proprie, semnată automat la depunere, apare în istoric", async () => {
+    // Rândul 14 (SOLICITANT) se scrie `approved` la trimitere, fără eveniment de audit. Aprobatorul
+    // care își depune propria cerere vedea „autoapprove" pe ecranul cererii, dar nimic în istoric.
+    const parId = await seedPar("PAR-2026-DEC6", approverBId);
+    await testDb.insert(parApprovals).values({
+      tenantId,
+      parId,
+      step: 0,
+      approverUserId: approverAId,
+      approverRoleLabel: "Requestor",
+      decision: "approved",
+      decidedAt: new Date("2026-07-02T09:00:00Z"),
+      locked: false,
+    });
+
+    const row = (await decidedAs(approverAId)).find((r) => r.id === parId);
+    expect(row?.my_decision).toBe("submit_signature");
+    expect(row?.my_decided_at).toBeTruthy();
+    // Semnătura de depunere nu e o decizie luată: cererea rămâne în inboxul aprobatorului real.
+    expect((await pendingAs(approverBId)).map((r) => r.id)).toContain(parId);
+  });
+
+  it("[normal] decizia apăsată de om are prioritate față de semnătura de la depunere", async () => {
+    const parId = await seedPar("PAR-2026-DEC7", approverAId);
+    await testDb.insert(parApprovals).values({
+      tenantId,
+      parId,
+      step: 0,
+      approverUserId: approverAId,
+      approverRoleLabel: "Requestor",
+      decision: "approved",
+      decidedAt: new Date("2026-07-02T09:00:00Z"),
+      locked: false,
+    });
+
+    callerUserId = () => approverAId;
+    expect((await post(`/api/par/${parId}/reject`, { comment: "Nu mai e nevoie" })).status).toBe(200);
+    callerUserId = () => requestorId;
+
+    expect((await decidedAs(approverAId)).find((r) => r.id === parId)?.my_decision).toBe("rejected");
+  });
+
   it("[blocant] istoricul respectă scopul: fără acces la plătitor, cererea nu se mai vede", async () => {
     // Rol de tenant obișnuit + nicio calitate de membru pe plătitor → aria accesibilă e goală.
     // Istoricul nu are voie să fie o portiță către ce nu mai ai dreptul să vezi.

@@ -274,6 +274,23 @@ describe("ParInbox", () => {
       expect(screen.queryByLabelText(/Selectează PAR-2026-0009/)).toBeNull();
     });
 
+    // Cerut de owner (2026-09-10): cererea proprie e semnată automat la depunere ("autoapprove"),
+    // deci trebuie să se vadă și ea aici — dar ca semnătură, nu ca decizie luată pe cererea altuia.
+    it("arată cererea proprie semnată la depunere cu eticheta ei", async () => {
+      vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [], total: 0 });
+      vi.spyOn(parApi, "getParInboxDecided").mockResolvedValue({
+        inbox: [{ ...decided(), my_decision: "submit_signature" as const }],
+        total: 1,
+      });
+
+      render(<ParInbox />);
+      fireEvent.click(screen.getByRole("tab", { name: /Deciziile mele/ }));
+
+      await waitFor(() => expect(screen.getByText("PAR-2026-0009")).toBeTruthy());
+      expect(screen.getByText("Semnat la depunere")).toBeTruthy();
+      expect(screen.queryByText("Aprobat")).toBeNull();
+    });
+
     it("spune ce va apărea acolo când nu ai decis încă nimic", async () => {
       vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [], total: 0 });
       vi.spyOn(parApi, "getParInboxDecided").mockResolvedValue({ inbox: [], total: 0 });

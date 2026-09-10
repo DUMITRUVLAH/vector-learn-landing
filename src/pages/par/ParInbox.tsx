@@ -94,6 +94,9 @@ const MY_DECISION_META: Record<string, { label: string; className: string }> = {
   overage_reapproved: { label: "Reaprobat (depășire)", className: "bg-success/10 text-success" },
   rejected: { label: "Respins", className: "bg-destructive/10 text-destructive" },
   changes_requested: { label: "Modificări cerute", className: "bg-warning/10 text-warning" },
+  // Cererea ta: semnată la depunere, nu decisă de tine. Alt ton, ca să nu se citească drept
+  // aprobare dată pe cererea altcuiva.
+  submit_signature: { label: "Semnat la depunere", className: "bg-muted text-foreground" },
 };
 
 type InboxSortKey = "requestNo" | "payeeName" | "projectName" | "requestedByName" | "totalEstimatedCents" | "submittedAt" | "myDecidedAt";
@@ -792,7 +795,7 @@ export default function ParInbox() {
             <p className="text-sm">{decidedMode ? "Nu ai decis încă nicio cerere." : "Nicio cerere în așteptare."}</p>
             <p className="text-xs">
               {decidedMode
-                ? "Aici rămân cererile pe care le-ai aprobat, respins sau trimis la modificări."
+                ? "Aici rămân cererile pe care le-ai aprobat, respins, trimis la modificări sau semnat la depunere."
                 : "Vei vedea cererile PAR care necesită decizia ta."}
             </p>
           </div>

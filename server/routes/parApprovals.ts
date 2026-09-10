@@ -522,6 +522,21 @@ async function hydrateParRows(tenantId: string, pars: ParRow[]) {
  */
 const MY_DECISION_EVENTS = ["approved", "rejected", "changes_requested", "overage_reapproved"] as const;
 
+/**
+ * A doua sursă: semnătura pe care o dai fără să apeși nimic.
+ *
+ * La depunere, rândul 14 (SOLICITANT) se scrie deja `approved`, pe numele celui care a trimis
+ * cererea — iar dacă el era și pe lanțul de aprobare, pasul lui se ELIMINĂ (segregarea sarcinilor,
+ * vezi `chainWithoutSelfApproval`). Din afară asta arată exact ca o aprobare automată. Numai că nu
+ * trece prin ruta de `/approve`, deci nu lasă niciun eveniment în `par_audit` — și cererile proprii
+ * lipseau din „Deciziile mele", deși aveau semnătura omului pe ele (cererea owner-ului, 2026-09-10).
+ *
+ * Rămâne o etichetă separată, nu „Aprobat": e o semnătură de depunere, nu o decizie luată pe cererea
+ * altcuiva. Pasul 0 e singurul care se poate citi direct din `par_approvals` fără ambiguitate — el
+ * e mereu fixat pe utilizatorul care a depus, niciodată pe rol și niciodată prin delegare.
+ */
+const SUBMIT_SIGNATURE = "submit_signature";
+
 async function decidedByMe(userId: string, tenantId: string, tenantRole: string, limitRaw?: string) {
   const parsed = Number(limitRaw);
   const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 500) : 200;
@@ -542,9 +557,31 @@ async function decidedByMe(userId: string, tenantId: string, tenantRole: string,
   for (const d of decisions) {
     if (!latest.has(d.parId)) latest.set(d.parId, { event: d.event, at: d.createdAt });
   }
+
+  // Semnăturile de la depunere intră doar acolo unde nu am luat între timp o decizie explicită —
+  // o decizie apăsată de om spune mai mult decât semnătura automată de pe aceeași cerere.
+  const submitSignatures = await db
+    .select({ parId: parApprovals.parId, decidedAt: parApprovals.decidedAt })
+    .from(parApprovals)
+    .where(and(
+      eq(parApprovals.tenantId, tenantId),
+      eq(parApprovals.approverUserId, userId),
+      eq(parApprovals.step, 0),
+      eq(parApprovals.decision, "approved"),
+    ));
+  for (const s of submitSignatures) {
+    if (!latest.has(s.parId)) latest.set(s.parId, { event: SUBMIT_SIGNATURE, at: s.decidedAt });
+  }
+
   if (latest.size === 0) return { inbox: [], total: 0 };
 
-  const parIds = [...latest.keys()].slice(0, limit);
+  // Sortarea trebuie făcută ÎNAINTE de limită: cu două surse, ordinea de inserare în hartă nu mai e
+  // cronologică, iar un `slice` pe ea ar tăia exact semnăturile de ieri și le-ar păstra pe cele de
+  // acum trei luni.
+  const parIds = [...latest.entries()]
+    .sort((a, b) => (b[1].at?.getTime() ?? 0) - (a[1].at?.getTime() ?? 0))
+    .slice(0, limit)
+    .map(([id]) => id);
   const pars = await db
     .select()
     .from(parRequests)
