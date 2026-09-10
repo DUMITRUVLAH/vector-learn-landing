@@ -12,7 +12,12 @@
  *   - fonturile vin de la Google Fonts (vezi `index.html`);
  *   - exporturile (CSV/PDF/XLSX) folosesc `URL.createObjectURL` → `blob:` la img/media;
  *   - login-ul Google și Stripe Checkout se fac prin redirect de nivel superior, deci au nevoie
- *     doar de `form-action`, nu de `frame-src`.
+ *     doar de `form-action`, nu de `frame-src`;
+ *   - vizualizatorul de documente PAR randează atașamentul adus autentificat, ca `blob:`, într-un
+ *     `<iframe>` (`src/components/par/ParAttachmentViewer.tsx`) → `frame-src 'self' blob:`. Fără el,
+ *     `default-src 'self'` bloca vizualizatorul cu „This content is blocked". Nu slăbește nimic:
+ *     `blob:` e conținut pe care CHIAR pagina noastră l-a creat, iar `frame-ancestors 'none'`
+ *     rămâne neatins — noi încadrăm, nu suntem încadrați.
  *
  * `frame-ancestors 'none'` + `X-Frame-Options: DENY` sunt intenționat duplicate: primul e
  * standardul, al doilea acoperă browserele/proxy-urile care încă nu-l citesc pe primul.
@@ -26,6 +31,7 @@ const CSP = [
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
+  "frame-src 'self' blob:",
   "connect-src 'self'",
   "worker-src 'self' blob:",
   "object-src 'none'",

@@ -1255,7 +1255,7 @@ export function ParDetailPage() {
                   <li key={att.id} className="rounded-md border border-border p-2 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
                       <Paperclip className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" aria-hidden />
-                      <button type="button" onClick={() => openParAttachment(att.fileUrl, att.fileName, par.id, att.id)} className="max-w-full truncate text-left text-primary hover:underline" aria-label={`Deschide ${att.fileName} în browser`}>
+                      <button type="button" onClick={() => openParAttachment(att.fileUrl, att.fileName, par.id, att.id)} className="max-w-full truncate text-left text-primary hover:underline" aria-label={`Deschide ${att.fileName}`}>
                         {att.fileName}
                       </button>
                       <span className="text-xs text-muted-foreground">

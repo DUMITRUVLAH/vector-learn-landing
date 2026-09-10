@@ -737,7 +737,7 @@ function AttachmentsModal({ par, onClose }: AttachmentsModalProps) {
                     type="button"
                     onClick={() => void openParAttachment(att.fileUrl, att.fileName, par.id, att.id)}
                     className="text-sm text-primary hover:underline truncate block max-w-full text-left"
-                    aria-label={`Descarcă ${att.fileName}`}
+                    aria-label={`Deschide ${att.fileName}`}
                   >
                     {att.fileName}
                   </button>
