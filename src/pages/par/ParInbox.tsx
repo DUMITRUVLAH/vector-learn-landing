@@ -307,6 +307,32 @@ function DecisionModal({ par, type, onClose, onSuccess, defaultSignatureName }: 
           </div>
         </div>
 
+        {/* VM5-05: aprobarea din inbox (buton pe rând sau tasta „a") trecea pe lângă avertisment —
+            fișa cererii îl arăta, dar aici se semnează cel mai des, fără să se deschidă cererea. */}
+        {type === "approve" && (par.document_warnings ?? 0) > 0 && (
+          <div className="flex items-start gap-2 border-b border-warning/40 bg-warning/10 p-4 text-sm">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+            <div>
+              <p className="font-semibold text-foreground">
+                {par.document_warnings === 1
+                  ? "Un document nu corespunde cererii"
+                  : `${par.document_warnings} nepotriviri între documente și cerere`}
+              </p>
+              <p className="text-muted-foreground">
+                Verificarea automată a găsit diferențe față de datele cererii.{" "}
+                <button
+                  type="button"
+                  onClick={() => window.location.assign(`#/business/par/${par.id}`)}
+                  className="underline hover:text-foreground"
+                >
+                  Deschide cererea
+                </button>{" "}
+                ca să vezi exact ce diferă, sau semnează în cunoștință de cauză.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {/* Comment */}

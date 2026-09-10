@@ -66,6 +66,46 @@ describe("orderSignatureSlots()", () => {
     expect(approvers.map((a) => a.id)).toEqual(["cu-data", "fara-data"]);
   });
 
+  /**
+   * Regresie găsită pe date REALE (ATIC, PAR-2026-0024): pasul 1 are două rânduri pentru aceeași
+   * persoană — cel fixat pe ea plus unul bazat pe rol, rămas din driftul reparat pe 10 septembrie.
+   * Formularul o tipărea semnând în ambele casete, ca și cum ar fi fost doi aprobatori.
+   */
+  it("nu tipărește același om de două ori pe același pas", () => {
+    const { approvers } = orderSignatureSlots([
+      row({ id: "rol", step: 1, approverUserId: null, signatureName: "Irina Oriol", decidedAt: "2026-09-08T10:00:00Z" }),
+      row({ id: "fixat", step: 1, approverUserId: "u-irina", approverName: "Irina Oriol", decidedAt: "2026-09-08T10:05:00Z" }),
+    ]);
+    expect(approvers).toHaveLength(1);
+    expect(approvers[0].id).toBe("rol"); // semnătura dată prima rămâne pe hârtie
+  });
+
+  it("două persoane diferite pe același pas rămân două casete (nivel paralel real)", () => {
+    const { approvers } = orderSignatureSlots([
+      row({ id: "ana", step: 1, approverUserId: "u-ana", approverName: "Ana Chirita", decidedAt: "2026-09-08T10:00:00Z" }),
+      row({ id: "irina", step: 1, approverUserId: "u-irina", approverName: "Irina Oriol", decidedAt: "2026-09-08T11:00:00Z" }),
+    ]);
+    expect(approvers.map((a) => a.id)).toEqual(["ana", "irina"]);
+  });
+
+  it("rândurile fără nicio identitate nu se contopesc între ele", () => {
+    // Două semnături care încă lipsesc rămân două casete goale — altfel formularul ar ascunde
+    // faptul că mai e nevoie de o semnătură.
+    const { approvers } = orderSignatureSlots([
+      row({ id: "gol-1", step: 1, decision: "pending", decidedAt: null }),
+      row({ id: "gol-2", step: 1, decision: "pending", decidedAt: null }),
+    ]);
+    expect(approvers).toHaveLength(2);
+  });
+
+  it("un om care semnează la pași diferiți primește caseta lui la fiecare pas", () => {
+    const { approvers } = orderSignatureSlots([
+      row({ id: "p1", step: 1, approverUserId: "u-ana", decidedAt: "2026-09-08T10:00:00Z" }),
+      row({ id: "p2", step: 2, approverUserId: "u-ana", decidedAt: "2026-09-08T12:00:00Z" }),
+    ]);
+    expect(approvers.map((a) => a.id)).toEqual(["p1", "p2"]);
+  });
+
   it("o listă goală nu produce nimic de tipărit", () => {
     expect(orderSignatureSlots([])).toEqual({ requestor: null, approvers: [] });
   });
