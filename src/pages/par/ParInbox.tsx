@@ -26,6 +26,7 @@ import { ParUrgentBadge } from "@/components/par/ParUrgentBadge";
 import { useRouter } from "@/router/HashRouter";
 import {
   getParInbox,
+  getParInboxDecided,
   listPayers,
   listEvents,
   approvePar,
@@ -83,24 +84,43 @@ function shortFileName(name: string, max = 20): string {
   return `${stem.slice(0, max - 4)}…${stem.slice(-3)}${ext}`;
 }
 
-type InboxSortKey = "requestNo" | "payeeName" | "projectName" | "requestedByName" | "totalEstimatedCents" | "submittedAt";
+/**
+ * Ce am decis eu pe cererea asta — doar în fila de istoric. `overage_reapproved` e tot o aprobare
+ * (re-semnarea unei depășiri de 10%), dar merită spus pe nume: nu e semnătura inițială.
+ */
+const MY_DECISION_META: Record<string, { label: string; className: string }> = {
+  approved: { label: "Aprobat", className: "bg-success/10 text-success" },
+  overage_reapproved: { label: "Reaprobat (depășire)", className: "bg-success/10 text-success" },
+  rejected: { label: "Respins", className: "bg-destructive/10 text-destructive" },
+  changes_requested: { label: "Modificări cerute", className: "bg-warning/10 text-warning" },
+};
 
-/** Filter (by project) + sort the inbox rows for the Excel-style table. */
+type InboxSortKey = "requestNo" | "payeeName" | "projectName" | "requestedByName" | "totalEstimatedCents" | "submittedAt" | "myDecidedAt";
+
+/**
+ * Filter (by project) + sort the inbox rows for the Excel-style table.
+ *
+ * `urgentFirst` e adevărat doar pe cererile care încă așteaptă o decizie. În istoric, urgența e o
+ * proprietate a trecutului: dacă ar continua să sară în capul listei, ar rupe ordinea cronologică,
+ * care e singurul lucru după care cauți acolo.
+ */
 function sortFilterInbox(
   items: ParInboxItem[],
   projectFilter: string,
   sort: { key: InboxSortKey; dir: "asc" | "desc" },
+  urgentFirst = true,
 ): ParInboxItem[] {
   const filtered = projectFilter ? items.filter((i) => (i.projectName ?? "") === projectFilter) : items;
   const dir = sort.dir === "asc" ? 1 : -1;
   return [...filtered].sort((a, b) => {
     // Urgență (owner request, 2026-08-28): urgente primele indiferent de coloana aleasă de om —
     // altfel sortarea implicită după "submittedAt" ar anula ordinea urgent-primul dată de server.
-    if (a.isUrgent !== b.isUrgent) return a.isUrgent ? -1 : 1;
+    if (urgentFirst && a.isUrgent !== b.isUrgent) return a.isUrgent ? -1 : 1;
     if (sort.key === "totalEstimatedCents") return (a.totalEstimatedCents - b.totalEstimatedCents) * dir;
-    if (sort.key === "submittedAt") {
-      const ta = a.submittedAt ? Date.parse(a.submittedAt) : 0;
-      const tb = b.submittedAt ? Date.parse(b.submittedAt) : 0;
+    if (sort.key === "submittedAt" || sort.key === "myDecidedAt") {
+      const field = sort.key === "submittedAt" ? "submittedAt" : "my_decided_at";
+      const ta = a[field] ? Date.parse(a[field] as string) : 0;
+      const tb = b[field] ? Date.parse(b[field] as string) : 0;
       return (ta - tb) * dir;
     }
     const va = String((a[sort.key as keyof ParInboxItem] as string | null) ?? "");
@@ -474,6 +494,17 @@ export default function ParInbox() {
   const [items, setItems] = useState<ParInboxItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Fila curentă. Inboxul arată doar ce așteaptă semnătura ta, așa că o cerere dispare din el în
+   * secunda în care ai decis-o — iar aprobatorul care voia să verifice ce a semnat săptămâna
+   * trecută nu avea unde să se uite (cererea owner-ului, 2026-09-10). Istoricul se încarcă la
+   * prima intrare pe filă, nu la fiecare deschidere a inboxului: e o listă pe care o consulți rar.
+   */
+  const [tab, setTab] = useState<"pending" | "decided">("pending");
+  const [decidedItems, setDecidedItems] = useState<ParInboxItem[] | null>(null);
+  const [decidedLoading, setDecidedLoading] = useState(false);
+  const [decidedError, setDecidedError] = useState<string | null>(null);
   // Current user's name — pre-fills the signature field in the decision modal.
   const [myName, setMyName] = useState("");
 
@@ -504,7 +535,7 @@ export default function ParInbox() {
   const [eventOptions, setEventOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [sort, setSort] = useState<{ key: InboxSortKey; dir: "asc" | "desc" }>({ key: "submittedAt", dir: "desc" });
   const toggleSort = (key: InboxSortKey) =>
-    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "submittedAt" || key === "totalEstimatedCents" ? "desc" : "asc" }));
+    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "submittedAt" || key === "myDecidedAt" || key === "totalEstimatedCents" ? "desc" : "asc" }));
 
   const toggleSelect = (id: string) =>
     setSelectedIds((prev) => {
@@ -532,9 +563,26 @@ export default function ParInbox() {
     }
   }, []);
 
+  const loadDecided = useCallback(async () => {
+    setDecidedLoading(true);
+    setDecidedError(null);
+    try {
+      const data = await getParInboxDecided();
+      setDecidedItems(data.inbox);
+    } catch (err: unknown) {
+      setDecidedError(err instanceof Error ? err.message : "Eroare la încărcarea istoricului");
+    } finally {
+      setDecidedLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadInbox();
   }, [loadInbox]);
+
+  useEffect(() => {
+    if (tab === "decided" && decidedItems === null && !decidedLoading) loadDecided();
+  }, [tab, decidedItems, decidedLoading, loadDecided]);
 
   useEffect(() => {
     Promise.all([listPayers(), listEvents()]).then(([p, e]) => {
@@ -574,22 +622,26 @@ export default function ParInbox() {
       const at = Math.min(cursor, rows.length - 1);
       const item = rows[at];
 
+      // În istoric rândurile sunt deja decise: „a" ar deschide un modal de aprobare pentru o
+      // cerere semnată acum două săptămâni. Rămân doar navigarea și deschiderea.
+      const readOnly = tab === "decided";
+
       switch (e.key) {
         case "j": case "ArrowDown":
           e.preventDefault(); setCursor((c) => Math.min(c + 1, rows.length - 1)); break;
         case "k": case "ArrowUp":
           e.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); break;
-        case "a": e.preventDefault(); handleAction(item, "approve"); break;
-        case "m": e.preventDefault(); handleAction(item, "request_changes"); break;
-        case "r": e.preventDefault(); handleAction(item, "reject"); break;
-        case "x": e.preventDefault(); toggleSelect(item.id); break;
+        case "a": if (readOnly) break; e.preventDefault(); handleAction(item, "approve"); break;
+        case "m": if (readOnly) break; e.preventDefault(); handleAction(item, "request_changes"); break;
+        case "r": if (readOnly) break; e.preventDefault(); handleAction(item, "reject"); break;
+        case "x": if (readOnly) break; e.preventDefault(); toggleSelect(item.id); break;
         case "Enter": e.preventDefault(); navigate(`/business/par/${item.id}`); break;
         default: break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cursor, navigate, toggleSelect]);
+  }, [cursor, navigate, toggleSelect, tab]);
 
   // Keep the highlighted row in view when moving with the keyboard.
   useEffect(() => {
@@ -600,6 +652,9 @@ export default function ParInbox() {
     setModalTarget(null);
     setLastOutcome(outcome);
     await loadInbox();
+    // Ce tocmai am semnat trebuie să fie acolo când trec pe istoric — altfel fila arată o listă
+    // veche, fără cererea de acum 3 secunde, exact cea pe care omul o caută.
+    setDecidedItems(null);
     // The sidebar pill polls on a 60s timer of its own — without this it keeps
     // claiming "4" while the list already shows 3.
     requestParBadgeRefresh();
@@ -611,6 +666,7 @@ export default function ParInbox() {
     setBulkOpen(false);
     setSelectedIds(new Set());
     await loadInbox();
+    setDecidedItems(null);
     requestParBadgeRefresh();
   };
 
@@ -618,14 +674,27 @@ export default function ParInbox() {
   const toggleSelectAll = () =>
     setSelectedIds(allSelected ? new Set() : new Set(items.map((i) => i.id)));
 
+  // Cele două file împart aceeași bară de filtre, același tabel și aceeași sortare — diferă doar
+  // sursa rândurilor și faptul că în istoric nu mai ai ce decide.
+  const decidedMode = tab === "decided";
+  const viewItems = decidedMode ? decidedItems ?? [] : items;
+  const viewLoading = decidedMode ? decidedLoading : loading;
+  const viewError = decidedMode ? decidedError : error;
+
   return (
     <AppShell
       pageTitle={t("par.inbox.title")}
       pageDescription={t("par.inbox.subtitle")}
       actions={
         <>
-          <Button variant="outline" size="icon" onClick={loadInbox} disabled={loading} aria-label="Reîncarcă inbox">
-            <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} aria-hidden="true" />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={decidedMode ? loadDecided : loadInbox}
+            disabled={viewLoading}
+            aria-label={decidedMode ? "Reîncarcă istoricul deciziilor" : "Reîncarcă inbox"}
+          >
+            <RefreshCcw className={cn("h-4 w-4", viewLoading && "animate-spin")} aria-hidden="true" />
           </Button>
           <Button variant="outline" onClick={() => navigate("/business/par")}>
             Toate cererile
@@ -634,6 +703,37 @@ export default function ParInbox() {
       }
     >
       <div className="space-y-6">
+
+        {/* Cele două stări ale aceleiași liste: ce aștepți să decizi și ce ai decis deja.
+            Contorul stă pe filă, nu deasupra tabelului, pentru că e motivul pentru care intri. */}
+        <div className="flex w-fit gap-1 rounded-lg border border-border bg-muted/40 p-1" role="tablist" aria-label="Filtrează inboxul">
+          {([
+            ["pending", "De decis", loading ? null : items.length],
+            ["decided", "Deciziile mele", decidedItems?.length ?? null],
+          ] as const).map(([key, label, count]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => {
+                setTab(key);
+                setCursor(0);
+                setSelectedIds(new Set());
+                // Fiecare filă are altă coloană „de referință": ce a intrat ultimul vs ce am
+                // semnat ultima dată. Iar „Decizia mea" nici nu există pe cererile în așteptare.
+                setSort({ key: key === "decided" ? "myDecidedAt" : "submittedAt", dir: "desc" });
+              }}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                tab === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+              {count != null && <span className="ml-1.5 text-xs text-muted-foreground">{count}</span>}
+            </button>
+          ))}
+        </div>
 
         {/* Ce s-a întâmplat cu ultima decizie. O cerere care rămâne în listă după "Aprobă" nu e o
             eroare — e un lanț cu mai mulți pași — dar tăcerea de dinainte o făcea să pară una. */}
@@ -661,14 +761,14 @@ export default function ParInbox() {
         )}
 
         {/* Content */}
-        {loading && (
+        {viewLoading && (
           <div className="flex items-center justify-center py-16 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin mr-2" aria-hidden="true" />
             <span>Se încarcă…</span>
           </div>
         )}
 
-        {!loading && error && (
+        {!viewLoading && viewError && (
           <div
             className="flex items-start gap-3 p-4 rounded-lg bg-destructive/10 text-destructive text-sm"
             role="alert"
@@ -676,22 +776,26 @@ export default function ParInbox() {
             <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
             <div>
               <p className="font-medium">Eroare la încărcare</p>
-              <p>{error}</p>
+              <p>{viewError}</p>
             </div>
           </div>
         )}
 
-        {!loading && !error && items.length === 0 && (
+        {!viewLoading && !viewError && viewItems.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
             <Inbox className="h-12 w-12 opacity-40" aria-hidden="true" />
-            <p className="text-sm">Nicio cerere în așteptare.</p>
-            <p className="text-xs">Vei vedea cererile PAR care necesită decizia ta.</p>
+            <p className="text-sm">{decidedMode ? "Nu ai decis încă nicio cerere." : "Nicio cerere în așteptare."}</p>
+            <p className="text-xs">
+              {decidedMode
+                ? "Aici rămân cererile pe care le-ai aprobat, respins sau trimis la modificări."
+                : "Vei vedea cererile PAR care necesită decizia ta."}
+            </p>
           </div>
         )}
 
-        {!loading && !error && items.length > 0 && (() => {
-          const projectOptions = [...new Set(items.map((i) => i.projectName).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, "ro"));
-          const rows = sortFilterInbox(items, projectFilter, sort).filter((item) => {
+        {!viewLoading && !viewError && viewItems.length > 0 && (() => {
+          const projectOptions = [...new Set(viewItems.map((i) => i.projectName).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b, "ro"));
+          const rows = sortFilterInbox(viewItems, projectFilter, sort, !decidedMode).filter((item) => {
             const submitted = item.submittedAt ? new Date(item.submittedAt) : null;
             const min = minTotal ? Number(minTotal) * 100 : null;
             const max = maxTotal ? Number(maxTotal) * 100 : null;
@@ -720,7 +824,7 @@ export default function ParInbox() {
               <div className="rounded-lg border border-border bg-card p-3 space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm text-muted-foreground">
-                    {rows.length} din {items.length} {items.length === 1 ? "cerere" : "cereri"}
+                    {rows.length} din {viewItems.length} {viewItems.length === 1 ? "cerere" : "cereri"}
                   </p>
                   <Select
                     value={projectFilter}
@@ -754,7 +858,10 @@ export default function ParInbox() {
               {/* A shortcut nobody knows about saves nobody any time — say it out loud. */}
               <p className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 <span className="font-medium">Tastatură:</span>
-                {[["j / k", "navighează"], ["a", "aprobă"], ["m", "cere modificări"], ["r", "respinge"], ["x", "selectează"], ["Enter", "deschide"]].map(([key, what]) => (
+                {(decidedMode
+                  ? [["j / k", "navighează"], ["Enter", "deschide"]]
+                  : [["j / k", "navighează"], ["a", "aprobă"], ["m", "cere modificări"], ["r", "respinge"], ["x", "selectează"], ["Enter", "deschide"]]
+                ).map(([key, what]) => (
                   <span key={key} className="inline-flex items-center gap-1">
                     <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-2xs text-foreground">{key}</kbd>
                     {what}
@@ -768,16 +875,23 @@ export default function ParInbox() {
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="bg-muted/50 border-b border-border">
-                      <th className="w-8 px-3 py-3">
-                        <Checkbox checked={allSelected} onChange={toggleSelectAll} aria-label="Selectează tot" />
-                      </th>
+                      {!decidedMode && (
+                        <th className="w-8 px-3 py-3">
+                          <Checkbox checked={allSelected} onChange={toggleSelectAll} aria-label="Selectează tot" />
+                        </th>
+                      )}
                       {/* The three decision buttons lead the row. They used to sit last,
                           past the horizontal scroll edge — so the only thing this screen
                           exists to do was the one thing you could not see. Everything to
                           the right of them is evidence for that decision, in the order an
                           approver reads it: WHO, HOW MUCH, WHAT FOR. */}
-                      <th className="w-[104px] whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">Acțiuni</th>
+                      {decidedMode
+                        ? <Th k="myDecidedAt" label="Decizia mea" />
+                        : <th className="w-[104px] whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">Acțiuni</th>}
                       <Th k="requestNo" label="Nr." />
+                      {/* Ce am semnat eu ≠ unde a ajuns cererea: am aprobat-o, dar poate a fost
+                          respinsă la pasul următor sau e deja plătită. */}
+                      {decidedMode && <th className="whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">Stare cerere</th>}
                       <Th k="payeeName" label="Beneficiar" />
                       <Th k="totalEstimatedCents" label="Sumă" align="right" />
                       <th className="whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">Servicii / descriere</th>
@@ -799,16 +913,31 @@ export default function ParInbox() {
                           idx === Math.min(cursor, rows.length - 1) && "bg-primary/5 ring-1 ring-inset ring-primary/30",
                         )}
                       >
-                        <td className="px-3 py-3 align-middle">
-                          <Checkbox checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} aria-label={`Selectează ${item.requestNo}`} />
-                        </td>
-                        <td className="px-3 py-3 align-middle">
-                          <div className="flex items-center gap-0.5">
-                            <button onClick={() => handleAction(item, "approve")} title="Aprobă" aria-label={`Aprobă ${item.requestNo}`} className="rounded-md p-1.5 text-success hover:bg-success/10"><CheckCircle className="h-4 w-4" aria-hidden="true" /></button>
-                            <button onClick={() => handleAction(item, "request_changes")} title="Solicită modificări" aria-label={`Solicită modificări la ${item.requestNo}`} className="rounded-md p-1.5 text-warning hover:bg-warning/10"><MessageSquare className="h-4 w-4" aria-hidden="true" /></button>
-                            <button onClick={() => handleAction(item, "reject")} title="Respinge" aria-label={`Respinge ${item.requestNo}`} className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"><XCircle className="h-4 w-4" aria-hidden="true" /></button>
-                          </div>
-                        </td>
+                        {!decidedMode && (
+                          <td className="px-3 py-3 align-middle">
+                            <Checkbox checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} aria-label={`Selectează ${item.requestNo}`} />
+                          </td>
+                        )}
+                        {decidedMode ? (
+                          <td className="whitespace-nowrap px-3 py-3 align-middle">
+                            <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold", MY_DECISION_META[item.my_decision ?? ""]?.className ?? "bg-muted text-muted-foreground")}>
+                              {MY_DECISION_META[item.my_decision ?? ""]?.label ?? item.my_decision}
+                            </span>
+                            <div className="mt-0.5 text-xs text-muted-foreground">
+                              {item.my_decided_at
+                                ? new Date(item.my_decided_at).toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit", year: "2-digit" })
+                                : "—"}
+                            </div>
+                          </td>
+                        ) : (
+                          <td className="px-3 py-3 align-middle">
+                            <div className="flex items-center gap-0.5">
+                              <button onClick={() => handleAction(item, "approve")} title="Aprobă" aria-label={`Aprobă ${item.requestNo}`} className="rounded-md p-1.5 text-success hover:bg-success/10"><CheckCircle className="h-4 w-4" aria-hidden="true" /></button>
+                              <button onClick={() => handleAction(item, "request_changes")} title="Solicită modificări" aria-label={`Solicită modificări la ${item.requestNo}`} className="rounded-md p-1.5 text-warning hover:bg-warning/10"><MessageSquare className="h-4 w-4" aria-hidden="true" /></button>
+                              <button onClick={() => handleAction(item, "reject")} title="Respinge" aria-label={`Respinge ${item.requestNo}`} className="rounded-md p-1.5 text-destructive hover:bg-destructive/10"><XCircle className="h-4 w-4" aria-hidden="true" /></button>
+                            </div>
+                          </td>
+                        )}
                         <td className="px-3 py-3 align-middle">
                           <button onClick={() => navigate(`/business/par/${item.id}`)} className="whitespace-nowrap font-mono text-foreground hover:text-primary hover:underline">{item.requestNo}</button>
                           {item.isUrgent && (
@@ -848,6 +977,11 @@ export default function ParInbox() {
                             </div>
                           )}
                         </td>
+                        {decidedMode && (
+                          <td className="whitespace-nowrap px-3 py-3 align-middle">
+                            <ParStatusChip status={item.status} />
+                          </td>
+                        )}
                         <td className="min-w-[130px] max-w-[190px] px-3 py-3 align-middle font-medium text-foreground"><span className="line-clamp-3" title={item.payeeName ?? ""}>{item.payeeName ?? "—"}</span></td>
                         <td className="whitespace-nowrap px-3 py-3 text-right align-middle font-mono font-semibold text-foreground">{formatMDL(item.totalEstimatedCents)}</td>
                         <td className="min-w-[150px] max-w-[220px] px-3 py-3 align-middle text-foreground"><span className="line-clamp-3" title={item.endUse ?? ""}>{item.endUse || "—"}</span></td>

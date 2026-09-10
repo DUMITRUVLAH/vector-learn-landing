@@ -180,7 +180,13 @@ export interface ParInboxItem extends ParRequest {
   projectName?: string | null;
   requestedByName?: string | null;
   attachments?: Array<{ id: string; fileName: string; kind: string }>;
+  /** Doar în istoric (scope=decided): ce am decis eu pe cererea asta și când. */
+  my_decision?: ParDecisionEvent;
+  my_decided_at?: string | null;
 }
+
+/** Evenimentele de decizie din jurnalul de audit, așa cum le întoarce scope=decided. */
+export type ParDecisionEvent = "approved" | "rejected" | "changes_requested" | "overage_reapproved";
 
 export interface ParPayment {
   id: string;
@@ -553,6 +559,14 @@ export async function submitPar(id: string): Promise<ParRequest & { over_budget?
 /** Get PARs awaiting the current user's approval decision */
 export async function getParInbox(): Promise<{ inbox: ParInboxItem[]; total: number }> {
   return api<{ inbox: ParInboxItem[]; total: number }>("/api/par/inbox");
+}
+
+/**
+ * Cererile pe care utilizatorul curent le-a DECIS deja (aprobate, respinse, trimise la modificări).
+ * Inboxul le scoate din listă în momentul deciziei; asta e singurul loc din care se mai văd.
+ */
+export async function getParInboxDecided(): Promise<{ inbox: ParInboxItem[]; total: number }> {
+  return api<{ inbox: ParInboxItem[]; total: number }>("/api/par/inbox?scope=decided");
 }
 
 export interface ApprovePayload {

@@ -387,12 +387,205 @@ async function approveParStep(
   return { ok: true, status: newStatus, body: { ...finalPar, chain_status: "complete" } };
 }
 
+// ─── Shared row hydration (inbox + decision history) ─────────────────────────
+// Numele, lanțul de semnături și atașamentele unei liste de cereri. Trăia inline în handlerul de
+// inbox; istoricul deciziilor are nevoie de exact aceleași coloane, iar o a doua copie ar fi
+// început imediat să difere de prima.
+
+type ParRow = typeof parRequests.$inferSelect;
+
+async function hydrateParRows(tenantId: string, pars: ParRow[]) {
+  if (pars.length === 0) return [];
+  const parIds = [...new Set(pars.map((p) => p.id))];
+
+  const [settings] = await db
+    .select({ threshold: parSettings.microPurchaseThresholdCents })
+    .from(parSettings)
+    .where(eq(parSettings.tenantId, tenantId));
+  const threshold = settings?.threshold ?? 1000000;
+
+  // Resolve display names so approver cards show people/projects, not UUIDs.
+  const projectIds = [...new Set(pars.map((p) => p.projectId).filter((v): v is string => !!v))];
+  const requestorIds = [...new Set(pars.map((p) => p.requestedByUserId).filter((v): v is string => !!v))];
+  const projRows = projectIds.length
+    ? await db.select({ id: parProjects.id, name: parProjects.name }).from(parProjects)
+        .where(and(eq(parProjects.tenantId, tenantId), inArray(parProjects.id, projectIds)))
+    : [];
+  const userRows = requestorIds.length
+    ? await db.select({ id: users.id, name: users.name }).from(users)
+        .where(and(eq(users.tenantId, tenantId), inArray(users.id, requestorIds)))
+    : [];
+  const projName = (id: string | null) => (id && projRows.find((r) => r.id === id)?.name) || null;
+  const reqName = (id: string | null) => (id && userRows.find((r) => r.id === id)?.name) || null;
+  const attachmentRows = await db.select({
+    id: parAttachments.id,
+    parId: parAttachments.parId,
+    fileName: parAttachments.fileName,
+    kind: parAttachments.kind,
+  }).from(parAttachments).where(and(
+    eq(parAttachments.tenantId, tenantId),
+    inArray(parAttachments.parId, parIds),
+  ));
+
+  // Cât de lung e lanțul acestei cereri. Fără asta, un aprobator care semnează pasul 1 dintr-un
+  // lanț de 2 vede aceeași cerere reapărând în inbox și crede că aprobarea "nu a mers" / că cererea
+  // "nu se duce în coada de finanțe" — exact reclamația din ATIC, unde matricea DOA are un pas 2
+  // "Oricine · PAR Admin" pe care tot el trebuie să-l semneze.
+  const chainRows = await db
+    .select({
+      parId: parApprovals.parId,
+      step: parApprovals.step,
+      decision: parApprovals.decision,
+      approverUserId: parApprovals.approverUserId,
+      approverRoleLabel: parApprovals.approverRoleLabel,
+      signatureName: parApprovals.signatureName,
+      decidedAt: parApprovals.decidedAt,
+    })
+    .from(parApprovals)
+    .where(and(eq(parApprovals.tenantId, tenantId), inArray(parApprovals.parId, parIds)));
+
+  // Numele semnatarilor: cine a semnat deja și cine e pinuit pe un pas care încă așteaptă.
+  const chainUserIds = [...new Set(chainRows.map((s) => s.approverUserId).filter((v): v is string => !!v))];
+  const chainUserRows = chainUserIds.length
+    ? await db.select({ id: users.id, name: users.name, email: users.email }).from(users)
+        .where(and(eq(users.tenantId, tenantId), inArray(users.id, chainUserIds)))
+    : [];
+  const chainUserById = new Map(chainUserRows.map((r) => [r.id, r]));
+  const chainUserName = (id: string | null) => {
+    if (!id) return null;
+    const u = chainUserById.get(id);
+    return u?.name || u?.email || null;
+  };
+
+  // PERF (audit 2026-08-29): `chainOf` filtra și sorta TOATE rândurile de lanț pentru FIECARE
+  // cerere din inbox — O(cereri × pași), plus un `find` liniar prin utilizatori la fiecare nume.
+  // Cu 200 de cereri în inbox erau zeci de mii de comparații degeaba. Gruparea se face o dată.
+  const chainByPar = new Map<string, typeof chainRows>();
+  for (const row of chainRows) {
+    if (row.step <= 0) continue;
+    const list = chainByPar.get(row.parId);
+    if (list) list.push(row);
+    else chainByPar.set(row.parId, [row]);
+  }
+  for (const list of chainByPar.values()) list.sort((a, b) => a.step - b.step);
+
+  const chainOf = (parId: string) => {
+    const steps = chainByPar.get(parId) ?? [];
+    return {
+      steps_total: steps.length,
+      steps_approved: steps.filter((s) => s.decision === "approved").length,
+      // Cine a semnat deja — numele contează mai mult decât numărul: aprobatorul vrea să știe
+      // dacă cererea a trecut pe la directorul de program înainte să pună el semnătura.
+      approvals_done: steps
+        .filter((s) => s.decision === "approved")
+        .map((s) => ({
+          step: s.step,
+          name: chainUserName(s.approverUserId) ?? s.signatureName ?? null,
+          roleLabel: s.approverRoleLabel ?? null,
+          decidedAt: s.decidedAt,
+        })),
+      // Câți mai trebuie și cine — inclusiv pasul curent al celui care se uită acum.
+      approvals_pending: steps
+        .filter((s) => s.decision === "pending")
+        .map((s) => ({
+          step: s.step,
+          name: chainUserName(s.approverUserId),
+          roleLabel: s.approverRoleLabel ?? null,
+        })),
+    };
+  };
+
+  return pars.map((p) => ({
+    ...p,
+    above_micro_threshold: p.totalEstimatedCents > threshold,
+    ...chainOf(p.id),
+    projectName: projName(p.projectId),
+    requestedByName: reqName(p.requestedByUserId),
+    attachments: attachmentRows
+      .filter((attachment) => attachment.parId === p.id)
+      .map(({ parId: _parId, ...attachment }) => attachment),
+  }));
+}
+
+// ─── GET /api/par/inbox?scope=decided ────────────────────────────────────────
+/**
+ * Istoricul deciziilor mele — „ce am aprobat eu până acum".
+ *
+ * Inboxul arată doar ce așteaptă semnătura ta, deci o cerere dispare din el în secunda în care ai
+ * decis-o; un aprobator care voia să vadă ce a semnat săptămâna trecută nu avea unde să se uite
+ * (cererea owner-ului, 2026-09-10).
+ *
+ * De ce din `par_audit` și nu din `par_approvals`: pasul NU își rescrie `approver_user_id` când e
+ * decis — un pas atribuit pe rol rămâne cu NULL, iar unul semnat prin delegare rămâne pe numele
+ * delegantului. Singura evidență a cui a apăsat butonul este actorul din jurnalul de audit.
+ */
+const MY_DECISION_EVENTS = ["approved", "rejected", "changes_requested", "overage_reapproved"] as const;
+
+async function decidedByMe(userId: string, tenantId: string, tenantRole: string, limitRaw?: string) {
+  const parsed = Number(limitRaw);
+  const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 500) : 200;
+
+  const decisions = await db
+    .select({ parId: parAudit.parId, event: parAudit.event, createdAt: parAudit.createdAt })
+    .from(parAudit)
+    .where(and(
+      eq(parAudit.tenantId, tenantId),
+      eq(parAudit.actorUserId, userId),
+      inArray(parAudit.event, [...MY_DECISION_EVENTS]),
+    ))
+    .orderBy(desc(parAudit.createdAt));
+
+  // Ultima decizie per cerere: o cerere întoarsă la solicitant și re-aprobată apare o dată, cu
+  // decizia curentă, nu de trei ori. Rândurile vin deja de la nou la vechi.
+  const latest = new Map<string, { event: string; at: Date | null }>();
+  for (const d of decisions) {
+    if (!latest.has(d.parId)) latest.set(d.parId, { event: d.event, at: d.createdAt });
+  }
+  if (latest.size === 0) return { inbox: [], total: 0 };
+
+  const parIds = [...latest.keys()].slice(0, limit);
+  const pars = await db
+    .select()
+    .from(parRequests)
+    .where(and(eq(parRequests.tenantId, tenantId), inArray(parRequests.id, parIds)));
+
+  // Aceeași limită de vizibilitate ca inboxul: dacă între timp ai fost scos de pe proiect, cererea
+  // nu mai apare. Istoricul nu e o portiță de acces la ce nu mai ai voie să vezi.
+  const { projects: accessibleProjects, payers: accessiblePayers } = await accessibleScopes(userId, tenantId, tenantRole);
+  const visible = pars.filter((p) =>
+    p.projectId
+      ? accessibleProjects === null || accessibleProjects.includes(p.projectId)
+      : !!p.payerId && (accessiblePayers === null || accessiblePayers.includes(p.payerId))
+  );
+
+  const inbox = (await hydrateParRows(tenantId, visible))
+    .map((row) => {
+      const mine = latest.get(row.id)!;
+      return {
+        ...row,
+        // Pasul e istorie acum — ce contează e ce am decis și când.
+        my_step: null,
+        my_step_label: null,
+        my_decision: mine.event,
+        my_decided_at: mine.at,
+      };
+    })
+    .sort((a, b) => (b.my_decided_at?.getTime() ?? 0) - (a.my_decided_at?.getTime() ?? 0));
+
+  return { inbox, total: inbox.length };
+}
+
 // ─── GET /api/par/inbox ───────────────────────────────────────────────────────
 // Returns PARs where the current user is the approver of the currently active (unlocked, pending) step.
 
 parApprovalsRoutes.get("/inbox", async (c) => {
   const user = c.get("user");
   const tenantId = user.tenantId;
+
+  // ?scope=decided → istoricul propriilor decizii, nu cererile care așteaptă (vezi decidedByMe).
+  if (c.req.query("scope") === "decided") {
+    return c.json(await decidedByMe(user.id, tenantId, user.role, c.req.query("limit")));
+  }
 
   const roles = await getUserPARRoles(user.id, tenantId);
   const isApprover = roles.includes("approver") || roles.includes("par_admin");
@@ -518,123 +711,12 @@ parApprovalsRoutes.get("/inbox", async (c) => {
     )
     .orderBy(desc(parRequests.isUrgent), desc(parRequests.submittedAt));
 
-  // Join with relevant steps
-  const [settings] = await db
-    .select({ threshold: parSettings.microPurchaseThresholdCents })
-    .from(parSettings)
-    .where(eq(parSettings.tenantId, tenantId));
-  const threshold = settings?.threshold ?? 1000000;
-
-  const inboxPars = pars;
-
-  // Resolve display names so approver cards show people/projects, not UUIDs.
-  const projectIds = [...new Set(inboxPars.map((p) => p.projectId).filter((v): v is string => !!v))];
-  const requestorIds = [...new Set(inboxPars.map((p) => p.requestedByUserId).filter((v): v is string => !!v))];
-  const projRows = projectIds.length
-    ? await db.select({ id: parProjects.id, name: parProjects.name }).from(parProjects)
-        .where(and(eq(parProjects.tenantId, tenantId), inArray(parProjects.id, projectIds)))
-    : [];
-  const userRows = requestorIds.length
-    ? await db.select({ id: users.id, name: users.name }).from(users)
-        .where(and(eq(users.tenantId, tenantId), inArray(users.id, requestorIds)))
-    : [];
-  const projName = (id: string | null) => (id && projRows.find((r) => r.id === id)?.name) || null;
-  const reqName = (id: string | null) => (id && userRows.find((r) => r.id === id)?.name) || null;
-  const attachmentRows = parIds.length
-    ? await db.select({
-        id: parAttachments.id,
-        parId: parAttachments.parId,
-        fileName: parAttachments.fileName,
-        kind: parAttachments.kind,
-      }).from(parAttachments).where(and(
-        eq(parAttachments.tenantId, tenantId),
-        inArray(parAttachments.parId, parIds),
-      ))
-    : [];
-
-  // Cât de lung e lanțul acestei cereri. Fără asta, un aprobator care semnează pasul 1 dintr-un
-  // lanț de 2 vede aceeași cerere reapărând în inbox și crede că aprobarea "nu a mers" / că cererea
-  // "nu se duce în coada de finanțe" — exact reclamația din ATIC, unde matricea DOA are un pas 2
-  // "Oricine · PAR Admin" pe care tot el trebuie să-l semneze.
-  const chainRows = parIds.length
-    ? await db
-        .select({
-          parId: parApprovals.parId,
-          step: parApprovals.step,
-          decision: parApprovals.decision,
-          approverUserId: parApprovals.approverUserId,
-          approverRoleLabel: parApprovals.approverRoleLabel,
-          signatureName: parApprovals.signatureName,
-          decidedAt: parApprovals.decidedAt,
-        })
-        .from(parApprovals)
-        .where(and(eq(parApprovals.tenantId, tenantId), inArray(parApprovals.parId, parIds)))
-    : [];
-
-  // Numele semnatarilor: cine a semnat deja și cine e pinuit pe un pas care încă așteaptă.
-  const chainUserIds = [...new Set(chainRows.map((s) => s.approverUserId).filter((v): v is string => !!v))];
-  const chainUserRows = chainUserIds.length
-    ? await db.select({ id: users.id, name: users.name, email: users.email }).from(users)
-        .where(and(eq(users.tenantId, tenantId), inArray(users.id, chainUserIds)))
-    : [];
-  const chainUserById = new Map(chainUserRows.map((r) => [r.id, r]));
-  const chainUserName = (id: string | null) => {
-    if (!id) return null;
-    const u = chainUserById.get(id);
-    return u?.name || u?.email || null;
-  };
-
-  // PERF (audit 2026-08-29): `chainOf` filtra și sorta TOATE rândurile de lanț pentru FIECARE
-  // cerere din inbox — O(cereri × pași), plus un `find` liniar prin utilizatori la fiecare nume.
-  // Cu 200 de cereri în inbox erau zeci de mii de comparații degeaba. Gruparea se face o dată.
-  const chainByPar = new Map<string, typeof chainRows>();
-  for (const row of chainRows) {
-    if (row.step <= 0) continue;
-    const list = chainByPar.get(row.parId);
-    if (list) list.push(row);
-    else chainByPar.set(row.parId, [row]);
-  }
-  for (const list of chainByPar.values()) list.sort((a, b) => a.step - b.step);
-
-  const chainOf = (parId: string) => {
-    const steps = chainByPar.get(parId) ?? [];
+  const inbox = (await hydrateParRows(tenantId, pars)).map((row) => {
+    const myStep = mySteps.find((s) => s.parId === row.id);
     return {
-      steps_total: steps.length,
-      steps_approved: steps.filter((s) => s.decision === "approved").length,
-      // Cine a semnat deja — numele contează mai mult decât numărul: aprobatorul vrea să știe
-      // dacă cererea a trecut pe la directorul de program înainte să pună el semnătura.
-      approvals_done: steps
-        .filter((s) => s.decision === "approved")
-        .map((s) => ({
-          step: s.step,
-          name: chainUserName(s.approverUserId) ?? s.signatureName ?? null,
-          roleLabel: s.approverRoleLabel ?? null,
-          decidedAt: s.decidedAt,
-        })),
-      // Câți mai trebuie și cine — inclusiv pasul curent al celui care se uită acum.
-      approvals_pending: steps
-        .filter((s) => s.decision === "pending")
-        .map((s) => ({
-          step: s.step,
-          name: chainUserName(s.approverUserId),
-          roleLabel: s.approverRoleLabel ?? null,
-        })),
-    };
-  };
-
-  const inbox = inboxPars.map((p) => {
-    const myStep = mySteps.find((s) => s.parId === p.id);
-    return {
-      ...p,
-      above_micro_threshold: p.totalEstimatedCents > threshold,
+      ...row,
       my_step: myStep?.step ?? null,
       my_step_label: myStep?.approverRoleLabel ?? null,
-      ...chainOf(p.id),
-      projectName: projName(p.projectId),
-      requestedByName: reqName(p.requestedByUserId),
-      attachments: attachmentRows
-        .filter((attachment) => attachment.parId === p.id)
-        .map(({ parId: _parId, ...attachment }) => attachment),
     };
   });
 

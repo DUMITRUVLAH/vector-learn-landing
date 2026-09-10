@@ -223,6 +223,62 @@ describe("ParInbox", () => {
     expect(screen.getByText(/Mai trebuie 2: tu → Ion Director/)).toBeTruthy();
   });
 
+  // Cerut de owner (2026-09-10): "de ce la inbox aprobare nu pot sa vad cele care le-am aprobat in
+  // trecut". Inboxul le scoate din listă la decizie; fila "Deciziile mele" e singurul loc din care
+  // se mai văd — și acolo nu mai are ce decide.
+  describe("fila Deciziile mele", () => {
+    const decided = () =>
+      makeInboxItem({
+        id: "par-decided-001",
+        requestNo: "PAR-2026-0009",
+        status: "in_finance",
+        my_step: null,
+        my_step_label: null,
+        my_decision: "approved",
+        my_decided_at: "2026-09-01T10:00:00.000Z",
+      });
+
+    it("încarcă istoricul abia la intrarea pe filă și arată decizia luată", async () => {
+      vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [], total: 0 });
+      const history = vi.spyOn(parApi, "getParInboxDecided").mockResolvedValue({ inbox: [decided()], total: 1 });
+
+      render(<ParInbox />);
+      await waitFor(() => expect(screen.getByText("Nicio cerere în așteptare.")).toBeTruthy());
+      // Lista rar consultată nu se aduce la fiecare deschidere a inboxului.
+      expect(history).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("tab", { name: /Deciziile mele/ }));
+
+      await waitFor(() => expect(screen.getByText("PAR-2026-0009")).toBeTruthy());
+      expect(screen.getByText("Aprobat")).toBeTruthy();
+      // Ce am semnat eu ≠ unde a ajuns cererea.
+      expect(screen.getByTestId("status-chip").textContent).toBe("in_finance");
+    });
+
+    it("nu oferă butoane de decizie pe o cerere deja decisă", async () => {
+      vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [], total: 0 });
+      vi.spyOn(parApi, "getParInboxDecided").mockResolvedValue({ inbox: [decided()], total: 1 });
+
+      render(<ParInbox />);
+      fireEvent.click(screen.getByRole("tab", { name: /Deciziile mele/ }));
+
+      await waitFor(() => expect(screen.getByText("PAR-2026-0009")).toBeTruthy());
+      expect(screen.queryByLabelText(/Aprobă PAR-2026-0009/)).toBeNull();
+      expect(screen.queryByLabelText(/Respinge PAR-2026-0009/)).toBeNull();
+      expect(screen.queryByLabelText(/Selectează PAR-2026-0009/)).toBeNull();
+    });
+
+    it("spune ce va apărea acolo când nu ai decis încă nimic", async () => {
+      vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [], total: 0 });
+      vi.spyOn(parApi, "getParInboxDecided").mockResolvedValue({ inbox: [], total: 0 });
+
+      render(<ParInbox />);
+      fireEvent.click(screen.getByRole("tab", { name: /Deciziile mele/ }));
+
+      await waitFor(() => expect(screen.getByText("Nu ai decis încă nicio cerere.")).toBeTruthy());
+    });
+  });
+
   it("shows error state on API failure", async () => {
     vi.spyOn(parApi, "getParInbox").mockRejectedValue(new Error("Network error"));
 
