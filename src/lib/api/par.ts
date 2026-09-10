@@ -863,6 +863,39 @@ export async function executePayment(
   });
 }
 
+// ─── VM4-04: dovezile de plată (ordinul de plată / extrasul ștampilat) ───────
+
+export interface ParPaymentProofItem {
+  id: string;
+  requestNo: string;
+  payeeName: string | null;
+  payeeIban: string | null;
+  projectName: string | null;
+  endUse: string | null;
+  currency: string | null;
+  totalEstimatedCents: number;
+  paidAt: string | null;
+  actualAmountCents: number | null;
+  paymentDate: string | null;
+  paymentRef: string | null;
+  proofs: { id: string; fileName: string }[];
+}
+
+export interface ParPaymentProofsResponse {
+  items: ParPaymentProofItem[];
+  total: number;
+  /** Câte plăți așteaptă dovada (indiferent de filtrul cerut). */
+  missingCount: number;
+  /** Câte plăți sunt în total în perimetrul utilizatorului. */
+  paidCount: number;
+}
+
+export async function getPaymentProofsQueue(
+  filter: "missing" | "all" = "missing"
+): Promise<ParPaymentProofsResponse> {
+  return api(`/api/par/payment-proofs?filter=${filter}`);
+}
+
 /**
  * VM4-01 — anulează o plată înregistrată din greșeală. PAR-ul revine la `in_finance`, cu suma
  * și referința păstrate (se re-plătește corectat) și cu motivul în jurnal.

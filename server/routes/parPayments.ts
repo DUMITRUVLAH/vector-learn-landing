@@ -5,6 +5,7 @@
  *   GET  /api/par/finance                         → finance queue (approved execute_payment + in_finance + reapproval_required)
  *   POST /api/par/:id/finance                     → write section 16; PAR → in_finance
  *   POST /api/par/:id/pay                         → record actual payment; 10% rule; PAR → paid or reapproval_required
+ *   GET  /api/par/payment-proofs                  → VM4-04: plăți fără ordin de plată în dosar
  *   POST /api/par/:id/unpay                       → VM4-01: anulează plata înregistrată din greșeală; PAR → in_finance
  *   POST /api/par/:id/finance-return              → VM4-02: finanțele refuză plata; PAR → changes_requested
  *
@@ -627,6 +628,101 @@ parPaymentsRoutes.post(
     }
   }
 );
+
+// ─── VM4-04: GET /api/par/payment-proofs — plățile fără ordin de plată în dosar ──
+// Violeta (finanțe): „extrasele bancare vin a 2-a zi cu ștampila băncii în PDF… când am 20 sau 30
+// de plăți trebuie să mă duc jos cu split la fiecare act". Dovada NU poate fi atașată la momentul
+// plății (documentul ștampilat nu există încă), deci ecranul ăsta adună într-un singur loc
+// plățile care încă așteaptă dovada — de acolo se atașează toate odată.
+//
+// Coada e DERIVATĂ (cereri plătite fără atașament de tip `payment_order`), nu un tabel nou:
+// atașezi ordinul de plată oriunde în aplicație și cererea dispare de aici singură.
+
+parPaymentsRoutes.get("/payment-proofs", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+
+  const roles = await getUserPARRoles(user.id, tenantId);
+  if (!roles.includes("finance") && !roles.includes("par_admin")) {
+    return c.json({ error: "forbidden: finance or par_admin role required" }, 403);
+  }
+
+  // „missing" (implicit) = treaba de făcut; „all" = și cele care au deja dovada, pentru verificare.
+  const filter = (c.req.query("filter") ?? "missing").toLowerCase();
+
+  const paidPars = await db
+    .select()
+    .from(parRequests)
+    .where(and(eq(parRequests.tenantId, tenantId), eq(parRequests.status, "paid")))
+    .orderBy(desc(parRequests.paidAt));
+
+  const { projects: projectScope, payers: payerScope } = await accessibleScopes(user.id, tenantId, user.role);
+  const visible = paidPars.filter((par) => par.projectId
+    ? projectScope === null || projectScope.includes(par.projectId)
+    : !!par.payerId && (payerScope === null || payerScope.includes(par.payerId)));
+
+  const parIds = visible.map((p) => p.id);
+  const payments = parIds.length
+    ? await db
+        .select()
+        .from(parPayments)
+        .where(and(eq(parPayments.tenantId, tenantId), inArray(parPayments.parId, parIds)))
+    : [];
+  const paymentByPar = new Map(payments.map((p) => [p.parId, p]));
+
+  const proofRows = parIds.length
+    ? await db
+        .select({ parId: parAttachments.parId, id: parAttachments.id, fileName: parAttachments.fileName })
+        .from(parAttachments)
+        .where(and(
+          eq(parAttachments.tenantId, tenantId),
+          inArray(parAttachments.parId, parIds),
+          eq(parAttachments.kind, "payment_order"),
+        ))
+    : [];
+  const proofsByPar = new Map<string, { id: string; fileName: string }[]>();
+  for (const row of proofRows) {
+    const list = proofsByPar.get(row.parId) ?? [];
+    list.push({ id: row.id, fileName: row.fileName });
+    proofsByPar.set(row.parId, list);
+  }
+
+  const projectIds = [...new Set(visible.map((p) => p.projectId).filter((v): v is string => !!v))];
+  const projRows = projectIds.length
+    ? await db.select({ id: parProjects.id, name: parProjects.name }).from(parProjects)
+        .where(and(eq(parProjects.tenantId, tenantId), inArray(parProjects.id, projectIds)))
+    : [];
+  const projName = (id: string | null) => (id && projRows.find((r) => r.id === id)?.name) || null;
+
+  const items = visible
+    .map((p) => {
+      const payment = paymentByPar.get(p.id) ?? null;
+      const proofs = proofsByPar.get(p.id) ?? [];
+      return {
+        id: p.id,
+        requestNo: p.requestNo,
+        payeeName: p.payeeName,
+        payeeIban: p.payeeIban,
+        projectName: projName(p.projectId),
+        endUse: p.endUse,
+        currency: p.currency,
+        totalEstimatedCents: p.totalEstimatedCents,
+        paidAt: p.paidAt?.toISOString() ?? null,
+        actualAmountCents: payment?.actualAmountCents ?? null,
+        paymentDate: payment?.paymentDate?.toISOString() ?? null,
+        paymentRef: payment?.paymentRef ?? null,
+        proofs,
+      };
+    })
+    .filter((item) => (filter === "all" ? true : item.proofs.length === 0));
+
+  return c.json({
+    items,
+    total: items.length,
+    missingCount: visible.filter((p) => (proofsByPar.get(p.id) ?? []).length === 0).length,
+    paidCount: visible.length,
+  });
+});
 
 // ─── VM4-01: POST /api/par/:id/unpay — anulează o plată înregistrată din greșeală ──
 // Violeta (finanțe): „din greșeală am apăsat plătit… cum să fac recall la acest PAR, să nu fie

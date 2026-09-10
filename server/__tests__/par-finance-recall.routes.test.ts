@@ -17,6 +17,8 @@
  *   4. POST /:id/finance-return din `in_finance` → 200, status `changes_requested` (editabil de
  *      solicitant), audit `finance_returned`.
  *   5. /finance-return pe o cerere plătită → 409 (întâi se anulează plata).
+ *   6. VM4-04: GET /payment-proofs listează plățile FĂRĂ atașament `payment_order` și le scoate
+ *      din coadă imediat ce dovada e atașată.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
@@ -29,6 +31,7 @@ import { tenants, users } from "../db/schema";
 import {
   parRequests,
   parPayments,
+  parAttachments,
   parAudit,
   parMembers,
   parPayerModules,
@@ -272,6 +275,94 @@ describe("VM4-02 — finanțele refuză plata și trimit cererea înapoi", () =>
     callerTenantRole = "teacher";
     await setStatus("in_finance", null);
     const res = await post(`/api/par/${parId}/finance-return`, { reason: "nu vreau" });
+    expect(res.status).toBe(403);
+    callerId = financeUserId;
+    callerTenantRole = "manager";
+  });
+});
+
+describe("VM4-04 — coada dovezilor de plată", () => {
+  it("[blocant] GET /payment-proofs listează plata fără ordin de plată la dosar", async () => {
+    callerId = financeUserId;
+    callerTenantRole = "manager";
+    await setStatus("paid", new Date("2026-09-07T12:00:00Z"));
+
+    const res = await app.request("/api/par/payment-proofs");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      items: { id: string; requestNo: string; paymentRef: string | null; proofs: unknown[] }[];
+      missingCount: number;
+      paidCount: number;
+    };
+    expect(body.paidCount).toBe(1);
+    expect(body.missingCount).toBe(1);
+    expect(body.items[0].requestNo).toBe("PAR-2026-0020");
+    // Referința plății e cheia după care ecranul potrivește fișierele venite de la bancă;
+    // se citește din rândul de plată curent (testele anterioare din fișier au re-plătit cererea).
+    const [pmt] = await testDb.select().from(parPayments).where(eq(parPayments.parId, parId));
+    expect(body.items[0].paymentRef).toBe(pmt.paymentRef);
+    expect(body.items[0].paymentRef).toMatch(/^OP-2026-/);
+    expect(body.items[0].proofs).toHaveLength(0);
+  });
+
+  it("[blocant] după atașarea ordinului de plată, cererea iese din coadă (dar rămâne pe filtrul „toate”)", async () => {
+    callerId = financeUserId;
+    await setStatus("paid", new Date("2026-09-07T12:00:00Z"));
+    const [att] = await testDb
+      .insert(parAttachments)
+      .values({
+        tenantId,
+        parId,
+        fileUrl: "data:application/pdf;base64,JVBERi0=",
+        fileName: "OP-2026-0047.pdf",
+        kind: "payment_order",
+      })
+      .returning();
+
+    const missing = (await (await app.request("/api/par/payment-proofs")).json()) as { items: unknown[]; missingCount: number };
+    expect(missing.items).toHaveLength(0);
+    expect(missing.missingCount).toBe(0);
+
+    const all = (await (await app.request("/api/par/payment-proofs?filter=all")).json()) as {
+      items: { proofs: { fileName: string }[] }[];
+    };
+    expect(all.items).toHaveLength(1);
+    expect(all.items[0].proofs[0].fileName).toBe("OP-2026-0047.pdf");
+
+    await testDb.delete(parAttachments).where(eq(parAttachments.id, att.id));
+  });
+
+  it("un act de alt tip (factura) NU trece drept dovadă de plată", async () => {
+    callerId = financeUserId;
+    await setStatus("paid", new Date("2026-09-07T12:00:00Z"));
+    const [att] = await testDb
+      .insert(parAttachments)
+      .values({
+        tenantId,
+        parId,
+        fileUrl: "data:application/pdf;base64,JVBERi0=",
+        fileName: "factura.pdf",
+        kind: "invoice",
+      })
+      .returning();
+
+    const body = (await (await app.request("/api/par/payment-proofs")).json()) as { missingCount: number };
+    expect(body.missingCount).toBe(1);
+
+    await testDb.delete(parAttachments).where(eq(parAttachments.id, att.id));
+  });
+
+  it("cererile neplătite nu apar în coadă", async () => {
+    callerId = financeUserId;
+    await setStatus("in_finance", null);
+    const body = (await (await app.request("/api/par/payment-proofs?filter=all")).json()) as { paidCount: number };
+    expect(body.paidCount).toBe(0);
+  });
+
+  it("fără rol de finanțe → 403", async () => {
+    callerId = requestorId;
+    callerTenantRole = "teacher";
+    const res = await app.request("/api/par/payment-proofs");
     expect(res.status).toBe(403);
     callerId = financeUserId;
     callerTenantRole = "manager";

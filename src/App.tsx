@@ -44,6 +44,7 @@ const ParExchange = lazyWithTimeout(() => import("./pages/par/ParExchange").then
 const ParVendors = lazyWithTimeout(() => import("./pages/par/ParVendors"));
 const ParVendorProfile = lazyWithTimeout(() => import("./pages/par/ParVendorProfile"));
 const ParEfacturaQueue = lazyWithTimeout(() => import("./pages/par/ParEfacturaQueue"));
+const ParPaymentProofs = lazyWithTimeout(() => import("./pages/par/ParPaymentProofs"));
 
 // DOCMERGE
 const DocDossierPage = lazyWithTimeout(() => import("./pages/business/docs/DocDossierPage").then((m) => ({ default: m.DocDossierPage })));
@@ -283,6 +284,8 @@ function Routes() {
   if (path.startsWith("/business/par/finance")) return <BusinessGuardPage><ParGuardPage requiredRoles={["finance", "par_admin"]}><ParFinanceQueue /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/admin")) return <BusinessGuardPage><ParGuardPage requiredRoles={["par_admin"]}><ParAdminPage /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/efactura")) return <BusinessGuardPage><ParGuardPage requiredRoles={["finance", "par_admin"]}><ParEfacturaQueue /></ParGuardPage></BusinessGuardPage>;
+  // VM4-04: dovezile de plată (ordinul de plată / extrasul ștampilat) atașate în bloc.
+  if (path.startsWith("/business/par/dovezi")) return <BusinessGuardPage><ParGuardPage requiredRoles={["finance", "par_admin"]}><ParPaymentProofs /></ParGuardPage></BusinessGuardPage>;
   // Fișa unui furnizor ÎNAINTE de listă: „/vendors/<id>" începe și el cu „/vendors".
   if (path.startsWith("/business/par/vendors/")) return <BusinessGuardPage><ParGuardPage><ParVendorProfile /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/vendors")) return <BusinessGuardPage><ParGuardPage><ParVendors /></ParGuardPage></BusinessGuardPage>;
