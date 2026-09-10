@@ -117,8 +117,13 @@ function checkbox(label: string, selected: boolean): string {
  * an underline rule. An approved decision shows the "APPROVE" / "APPROVED" stamp word.
  */
 function sigColumn(title: string, approval: ParApproval | null, opts: { stamp?: boolean } = {}): string {
-  const name = approval?.signatureName ?? "";
-  const role = approval?.signatureTitle ?? approval?.approverRoleLabel ?? "";
+  // Aceeași regulă ca pe ecran (ParSignatureBlock): pe formularul tipărit „Name" e numele omului,
+  // nu ce s-a nimerit în caseta de semnătură — trimiterea a scris acolo funcția solicitantului până
+  // pe 2026-09-10, iar formularul ieșea cu „Jurist" la Name și „Jurist" la Title.
+  const resolved = approval?.approverName ?? "";
+  const name =
+    (approval?.step === 0 ? resolved || approval?.signatureName : approval?.signatureName || resolved) ?? "";
+  const role = approval?.signatureTitle ?? approval?.approverTitle ?? approval?.approverRoleLabel ?? "";
   const date = approval?.decision === "approved" ? fmtDate(approval?.decidedAt) : "";
   const approved = approval?.decision === "approved";
   const sigRule = (lbl: string, val: string) => `

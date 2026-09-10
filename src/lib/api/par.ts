@@ -156,6 +156,10 @@ export interface ParApproval {
   step: number;
   approverUserId: string | null;
   approverRoleLabel: string | null;
+  /** Numele titularului, rezolvat din cont (nu din caseta de semnătură completată de om). */
+  approverName?: string | null;
+  /** Funcția lui: instantaneul cererii pentru pasul 0, profilul PAR pentru pașii de aprobare. */
+  approverTitle?: string | null;
   decision: "pending" | "approved" | "rejected" | "changes_requested";
   /** PAR-107/109: true = step locked (prior step not yet approved) */
   locked: boolean;
@@ -175,8 +179,10 @@ export interface ParInboxItem extends ParRequest {
   steps_approved?: number;
   /** Cine a semnat deja, în ordinea pașilor. */
   approvals_done?: Array<{ step: number; name: string | null; roleLabel: string | null; decidedAt: string | null }>;
-  /** Ce semnături mai lipsesc (inclusiv pasul celui care se uită acum). */
-  approvals_pending?: Array<{ step: number; name: string | null; roleLabel: string | null }>;
+  /** Ce semnături mai lipsesc (inclusiv rândul celui care se uită acum). */
+  approvals_pending?: Array<{ id?: string; step: number; name: string | null; roleLabel: string | null }>;
+  /** Rândul de aprobare al celui care se uită — `approvals_pending[].id` corespunzător. */
+  my_step_id?: string | null;
   projectName?: string | null;
   requestedByName?: string | null;
   attachments?: Array<{ id: string; fileName: string; kind: string }>;

@@ -1085,20 +1085,45 @@ parRoutes.get("/:id", async (c) => {
 
   // PAR-114-fix: resolve UUIDs → human-readable names for the PDF/print form.
   // The raw *Id columns are kept for the API; these *_name fields are display labels.
-  const userIdsToResolve = [
+  const userIdsToResolve = [...new Set([
     par.requestedByUserId,
     payment?.receivedByUserId ?? null,
     payment?.assignedToUserId ?? null,
-  ].filter((v): v is string => !!v);
+    // Semnatarii din secțiunile 14–15: forma tipărită cere NUMELE și FUNCȚIA fiecăruia, iar
+    // `signature_name` e o singură casetă, completată de om (și, pe cererile de dinainte de
+    // 2026-09-10, cu funcția în loc de nume). Le rezolvăm din conturi, nu din instantaneu.
+    ...approvals.map((a) => a.approverUserId),
+  ])].filter((v): v is string => !!v);
 
-  const userRows = userIdsToResolve.length
-    ? await db
-        .select({ id: users.id, name: users.name })
-        .from(users)
-        .where(and(eq(users.tenantId, tenantId), inArray(users.id, userIdsToResolve)))
-    : [];
+  const [userRows, profileRows] = await Promise.all([
+    userIdsToResolve.length
+      ? db
+          .select({ id: users.id, name: users.name })
+          .from(users)
+          .where(and(eq(users.tenantId, tenantId), inArray(users.id, userIdsToResolve)))
+      : Promise.resolve([] as Array<{ id: string; name: string }>),
+    userIdsToResolve.length
+      ? db
+          .select({ userId: parMemberProfiles.userId, jobTitle: parMemberProfiles.jobTitle })
+          .from(parMemberProfiles)
+          .where(and(eq(parMemberProfiles.tenantId, tenantId), inArray(parMemberProfiles.userId, userIdsToResolve)))
+      : Promise.resolve([] as Array<{ userId: string; jobTitle: string | null }>),
+  ]);
   const userName = (id: string | null | undefined) =>
     (id && userRows.find((u) => u.id === id)?.name) || null;
+  const userJobTitle = (id: string | null | undefined) =>
+    (id && profileRows.find((p) => p.userId === id)?.jobTitle) || null;
+
+  /**
+   * Fiecare semnătură pleacă spre pagină cu numele și funcția titularului rezolvate din cont.
+   * Pasul 0 (solicitantul) ia funcția din instantaneul cererii — aceea era funcția lui ATUNCI,
+   * nu cea de azi; pașii de aprobare o iau din profilul PAR.
+   */
+  const approvalsForClient = approvals.map((a) => ({
+    ...a,
+    approverName: userName(a.approverUserId),
+    approverTitle: a.step === 0 ? par.requestorTitle ?? null : userJobTitle(a.approverUserId),
+  }));
 
   // PERF (audit 2026-08-29): cele cinci căutări de etichetă (departament, proiect, plătitor, cod
   // bugetar, eveniment) rulau una după alta, deși niciuna nu depinde de rezultatul celeilalte.
@@ -1160,7 +1185,7 @@ parRoutes.get("/:id", async (c) => {
     ...parData,
     above_micro_threshold: par.totalEstimatedCents > threshold,
     line_items: lineItems,
-    approvals,
+    approvals: approvalsForClient,
     /** Can THIS viewer approve/reject right now, and if not, why (drives the detail-page actions). */
     my_decision: myDecision,
     attachments,
@@ -2053,7 +2078,9 @@ parRoutes.get("/:id/dosar", async (c) => {
       approvals: sheetApprovalRows.map((a) => ({
         step: a.step,
         approverRoleLabel: a.approverRoleLabel,
-        name: a.signatureName ?? sheetUserName(a.approverUserId),
+        // Pasul 0 nu e semnat manual de nimeni — trimiterea îi scrie caseta, iar până pe
+        // 2026-09-10 îi scria funcția. Numele din cont e sursa corectă acolo.
+        name: (a.step === 0 ? sheetUserName(a.approverUserId) ?? a.signatureName : a.signatureName ?? sheetUserName(a.approverUserId)),
         decision: a.decision,
         decidedAt: a.decidedAt,
         comment: a.comment,

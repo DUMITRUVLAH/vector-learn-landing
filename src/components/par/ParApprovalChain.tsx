@@ -11,6 +11,22 @@ interface Props {
   approvals: ParApproval[];
 }
 
+/**
+ * Ce scrie în capul unui bloc de semnătură.
+ *
+ * Eticheta pasului vine din matricea DOA, iar builderul o completează automat cu NUMELE persoanei
+ * alese — deci pe un pas semnat capul spunea „15. ANA CHIRITA" fix deasupra semnăturii „Ana
+ * Chirita". Când eticheta doar repetă persoana din bloc, capul devine ce e cu adevărat: rolul.
+ * Pe un pas nesemnat eticheta rămâne, pentru că acolo e singurul loc care spune pe cine așteptăm.
+ */
+function slotLabel(appr: ParApproval): string {
+  const label = appr.approverRoleLabel?.trim();
+  if (!label) return `Pas ${appr.step}`;
+  const person = (appr.signatureName ?? appr.approverName ?? "").trim();
+  if (person && label.toLocaleLowerCase("ro") === person.toLocaleLowerCase("ro")) return "Aprobator";
+  return label;
+}
+
 export function ParApprovalChain({ approvals }: Props) {
   const sorted = [...approvals].sort((a, b) => a.step - b.step);
   const requestorStep = sorted.find((a) => a.step === 0) ?? null;
@@ -34,7 +50,7 @@ export function ParApprovalChain({ approvals }: Props) {
         <ParSignatureBlock
           key={appr.id}
           approval={appr}
-          sectionLabel={`15. ${appr.approverRoleLabel ?? `Pas ${appr.step}`}`}
+          sectionLabel={`15. ${slotLabel(appr)}`}
           isLocked={appr.locked}
         />
       ))}

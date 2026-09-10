@@ -395,8 +395,12 @@ function ApprovalsCell({ item }: { item: ParInboxItem }) {
 
   const shortDate = (iso: string | null) =>
     iso ? new Date(iso).toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit" }) : "";
-  const who = (p: { step: number; name: string | null; roleLabel: string | null }) =>
-    p.step === item.my_step ? "tu" : p.name ?? p.roleLabel ?? `pasul ${p.step}`;
+  // „tu" se decide pe RÂNDUL meu, nu pe numărul pasului: într-un nivel paralel doi oameni diferiți
+  // stau pe același pas, iar comparația după pas îi scria pe amândoi „tu" („mai trebuie 2: tu → tu").
+  const who = (p: { id?: string; step: number; name: string | null; roleLabel: string | null }) =>
+    p.id && item.my_step_id && p.id === item.my_step_id
+      ? "tu"
+      : p.name ?? p.roleLabel ?? `pasul ${p.step}`;
 
   return (
     <div className="space-y-1">
@@ -956,16 +960,6 @@ export default function ParInbox() {
                           {item.purpose !== DEFAULT_PURPOSE && (
                             <div className="mt-0.5 inline-block rounded bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning">
                               {PURPOSE_LABEL[item.purpose] ?? item.purpose}
-                            </div>
-                          )}
-                          {/* Doar pe un pas INTERMEDIAR — pe ultimul pas, "Pasul 2 din 2" nu spune
-                              nimic util (aprobarea oricum trimite la finanțe) și era zgomot pe
-                              fiecare rând. Pe un pas intermediar rămâne esențial: e diferența dintre
-                              "aprob și pleacă la finanțe" și "aprob degeaba" (regresie ATIC, 2026-08-28). */}
-                          {item.my_step != null && (item.steps_total ?? 0) > 1 && item.my_step < (item.steps_total ?? 0) && (
-                            <div className="mt-0.5 text-xs font-medium text-muted-foreground">
-                              Pasul {item.my_step} din {item.steps_total}
-                              {item.my_step_label ? ` · ${item.my_step_label}` : ""}
                             </div>
                           )}
                           {bulkResults[item.id] && (

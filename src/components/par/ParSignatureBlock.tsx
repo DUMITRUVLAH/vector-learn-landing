@@ -72,16 +72,30 @@ export function ParSignatureBlock({ approval, sectionLabel, isLocked }: Props) {
             <span className="text-xs text-muted-foreground">(blocat)</span>
           )}
         </div>
-        {/* Never fall back to `approverUserId`: that printed a raw UUID
-            ("d7516877-4cd6-…") where a person's name belongs, for every approver
-            who hasn't signed yet. The API returns no resolved name for a pending
-            approver — the role label above carries the meaning until they sign. */}
-        <p className="mt-0.5 text-sm font-medium text-foreground">
-          {approval.signatureName ?? (approval.decision === "pending" ? "În așteptarea semnăturii" : "—")}
-        </p>
-        {approval.signatureTitle && (
-          <p className="text-xs text-muted-foreground">{approval.signatureTitle}</p>
-        )}
+        {/* Numele și funcția, nu ce s-a nimerit în caseta de semnătură.
+            `signature_name` e o singură casetă completată de om, iar la trimitere primea (până pe
+            2026-09-10) funcția solicitantului — de unde „Jurist / Jurist" în locul unei persoane.
+            Contul știe cine e omul; instantaneul cererii / profilul PAR știu ce funcție avea.
+            Niciodată `approverUserId` ca rezervă: acolo apărea un UUID brut.
+            Pasul 0 nu e semnat de nimeni manual (îl scrie trimiterea), deci numele din cont are
+            întâietate; pe pașii de aprobare, semnătura tastată e cea care contează — poate fi
+            altcineva decât titularul rândului, prin delegare. */}
+        {(() => {
+          const resolved = approval.approverName ?? null;
+          const signed =
+            approval.step === 0 ? resolved ?? approval.signatureName : approval.signatureName ?? resolved;
+          const title = approval.signatureTitle ?? approval.approverTitle ?? null;
+          return (
+            <>
+              <p className="mt-0.5 text-sm font-medium text-foreground">
+                {signed ?? (approval.decision === "pending" ? "În așteptarea semnăturii" : "—")}
+              </p>
+              {title && title !== signed && (
+                <p className="text-xs text-muted-foreground">{title}</p>
+              )}
+            </>
+          );
+        })()}
         {approval.decidedAt && (
           <p className="text-xs text-muted-foreground">{fmtDate(approval.decidedAt)}</p>
         )}

@@ -138,7 +138,7 @@ describe("ParInbox", () => {
   // muta la pasul următor, adesea al aceleiași persoane. UI-ul nu spunea nimic: modalul se
   // închidea, lista se reîncărca, cererea era tot acolo. De aici "aprob și nu se duce la finanțe".
   it("după aprobarea unui pas intermediar spune explicit că cererea rămâne în inbox", async () => {
-    const item = makeInboxItem({ my_step: 1, my_step_label: "Oricine · Approver", steps_total: 2, steps_approved: 0 });
+    const item = makeInboxItem({ my_step: 1, my_step_label: "Oricine · Approver", steps_total: 2, steps_approved: 0, approvals_done: [], approvals_pending: [{ id: "row-1", step: 1, name: null, roleLabel: "Oricine · Approver" }, { id: "row-2", step: 2, name: "Ion Director", roleLabel: "Oricine · PAR Admin" }] });
     vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [item], total: 1 });
     const approve = vi.spyOn(parApi, "approvePar").mockResolvedValue({
       ...item,
@@ -151,8 +151,11 @@ describe("ParInbox", () => {
     render(<ParInbox />);
     await waitFor(() => expect(screen.getByLabelText(/Aprobă PAR-2026-0001/)).toBeTruthy());
 
-    // Rândul spune din start că semnătura asta nu e ultima.
-    expect(screen.getByText(/Pasul 1 din 2/)).toBeTruthy();
+    // Rândul spune din start că semnătura asta nu e ultima — nu prin subtitlul de sub numărul
+    // cererii (scos la cererea owner-ului, 2026-09-10: repeta ce zice coloana), ci prin coloana
+    // „Aprobări", care numără semnăturile și le arată pe cele care lipsesc.
+    expect(screen.getByText("0 din 2 semnate")).toBeTruthy();
+    expect(screen.queryByText(/Pasul 1 din 2/)).toBeNull();
 
     fireEvent.click(screen.getByLabelText(/Aprobă PAR-2026-0001/));
     const submit = await screen.findByRole("button", { name: "Aprobă" });
@@ -187,13 +190,14 @@ describe("ParInbox", () => {
   it("arată cine a semnat deja și câte semnături mai lipsesc", async () => {
     const item = makeInboxItem({
       my_step: 2,
+      my_step_id: "row-2",
       my_step_label: "Oricine · PAR Admin",
       steps_total: 2,
       steps_approved: 1,
       approvals_done: [
         { step: 1, name: "Violeta", roleLabel: "Oricine · Approver", decidedAt: "2026-08-28T14:12:00.000Z" },
       ],
-      approvals_pending: [{ step: 2, name: null, roleLabel: "Oricine · PAR Admin" }],
+      approvals_pending: [{ id: "row-2", step: 2, name: null, roleLabel: "Oricine · PAR Admin" }],
     });
     vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [item], total: 1 });
 
@@ -207,13 +211,14 @@ describe("ParInbox", () => {
   it("când nimeni nu a semnat încă, listează pașii care urmează în ordine", async () => {
     const item = makeInboxItem({
       my_step: 1,
+      my_step_id: "row-1",
       my_step_label: "Oricine · Approver",
       steps_total: 2,
       steps_approved: 0,
       approvals_done: [],
       approvals_pending: [
-        { step: 1, name: null, roleLabel: "Oricine · Approver" },
-        { step: 2, name: "Ion Director", roleLabel: "Oricine · PAR Admin" },
+        { id: "row-1", step: 1, name: null, roleLabel: "Oricine · Approver" },
+        { id: "row-2", step: 2, name: "Ion Director", roleLabel: "Oricine · PAR Admin" },
       ],
     });
     vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [item], total: 1 });

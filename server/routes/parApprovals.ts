@@ -429,6 +429,7 @@ async function hydrateParRows(tenantId: string, pars: ParRow[]) {
   // "Oricine · PAR Admin" pe care tot el trebuie să-l semneze.
   const chainRows = await db
     .select({
+      id: parApprovals.id,
       parId: parApprovals.parId,
       step: parApprovals.step,
       decision: parApprovals.decision,
@@ -484,6 +485,10 @@ async function hydrateParRows(tenantId: string, pars: ParRow[]) {
       approvals_pending: steps
         .filter((s) => s.decision === "pending")
         .map((s) => ({
+          // Identitatea RÂNDULUI, nu a pasului: pe un nivel paralel două persoane diferite stau pe
+          // același `step`, iar interfața marca „tu" după numărul pasului — deci „mai trebuie 2:
+          // tu → tu", pentru doi oameni diferiți.
+          id: s.id,
           step: s.step,
           name: chainUserName(s.approverUserId),
           roleLabel: s.approverRoleLabel ?? null,
@@ -712,6 +717,8 @@ parApprovalsRoutes.get("/inbox", async (c) => {
     return {
       ...row,
       my_step: myStep?.step ?? null,
+      /** Rândul exact pe care cade semnătura mea — vezi `approvals_pending[].id`. */
+      my_step_id: myStep?.id ?? null,
       my_step_label: myStep?.approverRoleLabel ?? null,
     };
   });
