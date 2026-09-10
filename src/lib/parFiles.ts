@@ -6,15 +6,27 @@
  * descarcă"). Convert the data URL to a Blob object URL and trigger a real download with the
  * original filename. Real http(s) URLs just open in a new tab.
  *
- * Used by ParDetail (secțiunea Atașamente) and ParFinanceQueue (butonul Documente).
+ * Când documentul aparține unui PAR (avem `parId` + `attachmentId`), NU mai deschidem o filă nouă:
+ * îl arătăm în vizualizatorul din aplicație (`ParAttachmentViewer`), peste lista pe care omul
+ * lucrează. Fila nouă rămâne doar ca rezervă, dacă vizualizatorul nu e montat.
+ *
+ * Used by ParDetail (secțiunea Atașamente), ParInbox, ParFolders și ParFinanceQueue (butonul Documente).
  */
+import { openParAttachmentViewer, parAttachmentPreviewUrl } from "@/lib/par/attachmentViewerBus";
+
+/** Deschide un atașament PAR în vizualizatorul din aplicație (rezervă: filă nouă). */
+export function viewParAttachment(parId: string, attachmentId: string, fileName: string): void {
+  if (openParAttachmentViewer({ parId, attachmentId, fileName })) return;
+  window.open(parAttachmentPreviewUrl(parId, attachmentId), "_blank", "noopener,noreferrer");
+}
+
 export async function openParAttachment(fileUrl: string, fileName: string, parId?: string, attachmentId?: string): Promise<void> {
   try {
-    if (!fileUrl) return;
     if (parId && attachmentId) {
-      window.open(`/api/par/${parId}/attachments/${attachmentId}/preview`, "_blank", "noopener,noreferrer");
+      viewParAttachment(parId, attachmentId, fileName);
       return;
     }
+    if (!fileUrl) return;
     if (fileUrl.startsWith("data:")) {
       const blob = await (await fetch(fileUrl)).blob();
       const url = URL.createObjectURL(blob);

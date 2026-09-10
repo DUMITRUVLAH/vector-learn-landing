@@ -24,6 +24,9 @@ import { lazyWithTimeout } from "./lib/lazyWithTimeout";
 // Guard-uri + shell — eager (apar pe fiecare rută, n-au ce câștiga dintr-un chunk separat).
 import { BusinessGuardPage } from "./components/business/BusinessGuardPage";
 import { ParGuardPage } from "./components/par/ParGuardPage";
+// Vizualizatorul de documente PAR — montat o singură dată, ca orice pagină să poată deschide
+// un atașament PESTE ea, fără filă nouă (vezi src/lib/par/attachmentViewerBus.ts).
+import { ParAttachmentViewer } from "./components/par/ParAttachmentViewer";
 // Primul ecran pentru un utilizator nelogat — eager, ca să nu adauge un dus-întors la login.
 import { BusinessLandingPage } from "./pages/business/BusinessLandingPage";
 import { BusinessLoginPage } from "./pages/business/BusinessLoginPage";
@@ -312,6 +315,7 @@ export default function App() {
     <BranchProvider>
       <HashRouter>
         <BoundedRoutes />
+        <ParAttachmentViewer />
       </HashRouter>
     </BranchProvider>
   );

@@ -36,6 +36,7 @@ import {
 } from "@/lib/api/par";
 import { api } from "@/lib/api";
 import { requestParBadgeRefresh } from "@/lib/par/badgeBus";
+import { viewParAttachment } from "@/lib/parFiles";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
@@ -846,9 +847,9 @@ export default function ParInbox() {
                                 <button
                                   key={attachment.id}
                                   type="button"
-                                  onClick={() => window.open(`/api/par/${item.id}/attachments/${attachment.id}/preview`, "_blank", "noopener,noreferrer")}
+                                  onClick={() => viewParAttachment(item.id, attachment.id, attachment.fileName)}
                                   className="inline-flex max-w-full items-center gap-1 text-xs text-primary hover:underline"
-                                  title={`Deschide ${attachment.fileName} în browser`}
+                                  title={`Deschide ${attachment.fileName}`}
                                 >
                                   <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                                   <span className="truncate">{shortFileName(attachment.fileName)}</span>

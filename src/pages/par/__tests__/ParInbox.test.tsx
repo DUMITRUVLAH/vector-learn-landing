@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import ParInbox from "../ParInbox";
+import { ParAttachmentViewer } from "@/components/par/ParAttachmentViewer";
 import * as parApi from "@/lib/api/par";
 import type { ParInboxItem } from "@/lib/api/par";
 
@@ -221,6 +222,43 @@ describe("ParInbox", () => {
 
     await waitFor(() => expect(screen.getByText("0 din 2 semnate")).toBeTruthy());
     expect(screen.getByText(/Mai trebuie 2: tu → Ion Director/)).toBeTruthy();
+  });
+
+  // Documentul e proba pe care se ia decizia: un click pe el trebuie să-l arate PESTE listă,
+  // nu să arunce aprobatorul într-o filă nouă (de unde nu mai găsește rândul la care era).
+  it("un click pe document îl deschide în aplicație, nu într-o filă nouă", async () => {
+    const item = makeInboxItem({
+      attachments: [{ id: "att-1", fileName: "FF AAX42426.pdf", kind: "other" }],
+    });
+    vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [item], total: 1 });
+    vi.stubGlobal("open", vi.fn());
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      blob: async () => new Blob(["%PDF-1.4"], { type: "application/pdf" }),
+    }) as unknown as Response));
+    const createObjectURL = vi.fn(() => "blob:mock-url");
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL: vi.fn() });
+
+    const { unmount } = render(
+      <>
+        <ParInbox />
+        <ParAttachmentViewer />
+      </>,
+    );
+
+    const link = await screen.findByTitle("Deschide FF AAX42426.pdf");
+    fireEvent.click(link);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.getAttribute("aria-label")).toBe("Document: FF AAX42426.pdf");
+    await waitFor(() => expect(dialog.querySelector("iframe")).not.toBeNull());
+    expect(window.open).not.toHaveBeenCalled();
+
+    // Demontăm ÎNAINTE de a scoate stub-urile: curățarea vizualizatorului cheamă
+    // `URL.revokeObjectURL`, care în jsdom există doar cât timp e stubuit.
+    unmount();
+    vi.unstubAllGlobals();
   });
 
   it("shows error state on API failure", async () => {
