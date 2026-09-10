@@ -46,6 +46,7 @@ import { stepMatchesViewer, pickDecidableStep } from "../lib/par/decisionAuthori
 import { slotRoleLabel } from "../lib/par/doa";
 import { blocksOnApprovalLimit, minApprovalLimitCents } from "../lib/par/approvalLimit";
 import { approvalProgressAfterDecision } from "../lib/par/approvalProgress";
+import { countMismatchesByPar } from "../lib/par/documentWarnings";
 import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import {
   notifyStepAdvanced,
@@ -763,10 +764,20 @@ parApprovalsRoutes.get("/inbox", async (c) => {
     )
     .orderBy(desc(parRequests.isUrgent), desc(parRequests.submittedAt));
 
+  // VM5-05: câte nepotriviri document↔cerere are fiecare rând. O singură interogare pentru tot
+  // inboxul — semnul de pe rând e ce împiedică o cerere cu documente greșite să intre tăcut într-o
+  // aprobare în masă.
+  const attachmentRows = await db
+    .select({ parId: parAttachments.parId, analysis: parAttachments.analysis })
+    .from(parAttachments)
+    .where(and(eq(parAttachments.tenantId, tenantId), inArray(parAttachments.parId, parIds)));
+  const mismatchesByPar = countMismatchesByPar(attachmentRows);
+
   const inbox = (await hydrateParRows(tenantId, pars)).map((row) => {
     const myStep = mySteps.find((s) => s.parId === row.id);
     return {
       ...row,
+      document_warnings: mismatchesByPar.get(row.id) ?? 0,
       my_step: myStep?.step ?? null,
       /** Rândul exact pe care cade semnătura mea — vezi `approvals_pending[].id`. */
       my_step_id: myStep?.id ?? null,

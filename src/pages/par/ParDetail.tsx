@@ -72,7 +72,6 @@ import {
   type ParDetail as ParDetailType,
   type ParRequest,
   type ParLineItem,
-  type ParAttachmentAnalysis,
   PAR_STATUS_LABELS,
 } from "@/lib/api/par";
 import { describeParSubmitError } from "@/lib/par/submitErrors";
@@ -85,6 +84,12 @@ import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
 import { parAccessMessage, type ParAccessMessage } from "@/lib/par/accessMessage";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  collectDocumentMismatches,
+  formatCheckValue,
+  parseAttachmentAnalysis,
+  type DocumentMismatch,
+} from "@/lib/par/attachmentWarnings";
 
 // ─── Label helpers ─────────────────────────────────────────────────────────────
 
@@ -110,15 +115,8 @@ function fmtDate(iso: string | null | undefined): string {
   return d.toLocaleDateString("ro-MD", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function parseAttachmentAnalysis(raw: string | null | undefined): ParAttachmentAnalysis | null {
-  if (!raw) return null;
-  try {
-    const value = JSON.parse(raw) as ParAttachmentAnalysis;
-    return value && (value.status === "match" || value.status === "warning") && Array.isArray(value.checks) ? value : null;
-  } catch {
-    return null;
-  }
-}
+// VM5-05: parserul și adunarea nepotrivirilor stau în `@/lib/par/attachmentWarnings`, ca banda de
+// pe fișă, confirmarea de la aprobare și semnul din inbox să citească EXACT aceleași reguli.
 
 // VF-203: format minor units in the PAR's currency (MDL keeps the "L" symbol).
 // Orice sumă care aparține cererii (linii, total, plata reală) trece pe aici — `formatMDL`
@@ -356,6 +354,13 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
   const [errorReasons, setErrorReasons] = useState<string[]>([]);
   // VF-202: advisory over-budget notice after submit (non-blocking).
   const [budgetWarning, setBudgetWarning] = useState<string | null>(null);
+  /**
+   * VM5-05: aprobatorul confirmă explicit când documentele nu corespund cererii. Nu e o simplă
+   * casetă „ești sigur?" — arată câmp cu câmp ce s-a așteptat și ce scrie în document, iar decizia
+   * luată în cunoștință de cauză rămâne în jurnal.
+   */
+  const [showApproveWarning, setShowApproveWarning] = useState(false);
+  const mismatches = collectDocumentMismatches(par.attachments ?? []);
 
   const doSubmit = async () => {
     setBusy("submit");
@@ -548,7 +553,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
         key="approve"
         type="button"
         disabled={!!busy}
-        onClick={() => do_("approve", () => approvePar(par.id, {}))}
+        onClick={() => (mismatches.length ? setShowApproveWarning(true) : do_("approve", () => approvePar(par.id, {})))}
         className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-success px-4 py-2 text-sm font-medium text-success-foreground hover:bg-success/90 disabled:opacity-60"
         aria-label="Aprobă cererea"
       >
@@ -732,6 +737,73 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
       <div className="flex flex-wrap gap-2">
         {actions}
       </div>
+
+      {/* VM5-05: ce nu corespunde între documente și cerere — înainte de semnătură, nu după. */}
+      {showApproveWarning && (
+        <div className="space-y-3 rounded-lg border border-warning/50 bg-warning/5 p-3">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {mismatches.length === 1
+                  ? "O nepotrivire între documente și cerere"
+                  : `${mismatches.length} nepotriviri între documente și cerere`}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Verificarea automată a documentelor atașate a găsit diferențe față de datele cererii.
+              </p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-muted-foreground">
+                  <th className="py-1 pr-3 font-medium">Document</th>
+                  <th className="py-1 pr-3 font-medium">Câmp</th>
+                  <th className="py-1 pr-3 font-medium">În cerere</th>
+                  <th className="py-1 font-medium">În document</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mismatches.map((m: DocumentMismatch, i: number) => (
+                  <tr key={`${m.fileName}-${m.field}-${i}`} className="border-t border-border/60">
+                    <td className="py-1 pr-3 text-muted-foreground">{m.fileName}</td>
+                    <td className="py-1 pr-3 font-medium text-foreground">{m.field}</td>
+                    <td className="py-1 pr-3 text-foreground">{formatCheckValue(m.expected, par.currency)}</td>
+                    <td className="py-1 text-warning">{formatCheckValue(m.found, par.currency)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowApproveWarning(false)}
+              className="min-h-[44px] rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+            >
+              Înapoi, verific
+            </button>
+            <button
+              type="button"
+              disabled={!!busy}
+              onClick={() =>
+                do_("approve", () =>
+                  approvePar(par.id, {
+                    comment: `Aprobat în cunoștință de cauză, cu ${mismatches.length} nepotriviri de documente: ${mismatches
+                      .map((m: DocumentMismatch) => m.field)
+                      .join(", ")}`,
+                  })
+                ).then(() => setShowApproveWarning(false))
+              }
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-success px-3 py-2 text-sm font-medium text-success-foreground hover:bg-success/90 disabled:opacity-60"
+            >
+              {busy === "approve" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
+              Aprob în cunoștință de cauză
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Reject form */}
       {showRejectForm && (
@@ -1034,6 +1106,30 @@ export function ParDetailPage() {
             <DosarButton par={par} />
           </div>
         </div>
+
+        {/* VM5-05: banda de nepotriviri, sus, înaintea acțiunilor — o vede și solicitantul (ca să
+            corecteze), și aprobatorul (ca să nu semneze pe un document care spune altceva). Chip-ul
+            de lângă fiecare fișier rămâne, dar el se vede doar dacă derulezi până la secțiunea 13. */}
+        {(() => {
+          const mismatches = collectDocumentMismatches(par.attachments ?? []);
+          if (!mismatches.length) return null;
+          const fields = [...new Set(mismatches.map((m) => m.field))];
+          return (
+            <div className="flex items-start gap-2 rounded-lg border border-warning/50 bg-warning/10 px-4 py-3">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+              <div className="text-sm">
+                <p className="font-semibold text-foreground">
+                  {mismatches.length === 1
+                    ? "Un document nu corespunde cererii"
+                    : `${mismatches.length} nepotriviri între documente și cerere`}
+                </p>
+                <p className="text-muted-foreground">
+                  Diferențe la: {fields.join(", ")}. Detaliile sunt la secțiunea 13, sub fiecare document.
+                </p>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Role-aware actions */}
         {currentUserId && (

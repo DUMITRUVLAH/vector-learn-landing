@@ -120,6 +120,26 @@ describe("ParInbox", () => {
     });
   });
 
+  /**
+   * VM5-05: în inbox se aprobă în serie, uneori fără să se deschidă cererea. O cerere ale cărei
+   * documente nu corespund trebuie să spună asta chiar pe rând, altfel poate intra tăcut într-o
+   * selecție de „aprobă toate".
+   */
+  it("marchează pe rând cererile cu documente care nu corespund", async () => {
+    const items = [
+      makeInboxItem({ document_warnings: 2 }),
+      makeInboxItem({ id: "par-002", requestNo: "PAR-2026-0002", document_warnings: 0 }),
+    ];
+    vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: items, total: 2 });
+
+    render(<ParInbox />);
+
+    await waitFor(() => {
+      expect(screen.getByText("2 nepotriviri")).toBeTruthy();
+    });
+    expect(screen.queryByText("0 nepotriviri")).toBeNull();
+  });
+
   // Regresie (ATIC, PAR-2026-0027): inboxul trecea orice sumă prin `formatMDL`, deci o cerere de
   // 1.500 USD apărea "1.500,00 L" — aceeași cifră pe care lista solicitantului o scria "1.500,00
   // USD". Aceeași cerere, două ecrane, două monede.

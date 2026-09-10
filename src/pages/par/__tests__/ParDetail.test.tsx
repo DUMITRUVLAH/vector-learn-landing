@@ -270,6 +270,75 @@ describe("ParDetailPage — PAR-118", () => {
     expect(screen.queryByLabelText("Aprobă cererea")).toBeNull();
   });
 
+  /**
+   * VM5-05 — „să se adauge un pop-up unde nu corespunde și aprobatorul să poată vedea/înțelege".
+   * Verificarea documentelor exista, dar verdictul stătea într-un chip mic la secțiunea 13, iar
+   * aprobarea se dădea cu un singur click, fără să treacă prin el.
+   */
+  describe("nepotriviri între documente și cerere (VM5-05)", () => {
+    const cuNepotrivire = {
+      ...mockPar,
+      attachments: [
+        {
+          ...mockPar.attachments[0],
+          fileName: "factura-45.pdf",
+          analysis: JSON.stringify({
+            status: "warning",
+            warnings: 2,
+            checks: [
+              { field: "sumă", expected: 700000, found: 650000, matches: false },
+              { field: "plătitor", expected: "ATIC", found: "Digital Safeguard SRL", matches: false },
+              { field: "valută", expected: "MDL", found: "MDL", matches: true },
+            ],
+          }),
+        },
+      ],
+    };
+
+    it("banda de avertisment o vede și solicitantul, nu doar aprobatorul", async () => {
+      mockGetPar.mockResolvedValue(cuNepotrivire);
+      mockGetParMe.mockResolvedValue({ roles: ["requestor"], userId: "user-requestor", tenantId: "tenant-1" });
+
+      const { default: ParDetailPage } = await import("../ParDetail");
+      render(<ParDetailPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText("2 nepotriviri între documente și cerere")).toBeInTheDocument();
+      }, { timeout: 5000 });
+    });
+
+    it("aprobarea trece printr-o confirmare care arată câmp cu câmp ce nu corespunde", async () => {
+      mockGetPar.mockResolvedValue(cuNepotrivire);
+      mockGetParMe.mockResolvedValue({ roles: ["approver"], userId: "user-approver", tenantId: "tenant-1" });
+
+      const { default: ParDetailPage } = await import("../ParDetail");
+      render(<ParDetailPage />);
+
+      await waitFor(() => expect(screen.getByLabelText("Aprobă cererea")).toBeInTheDocument(), { timeout: 5000 });
+      fireEvent.click(screen.getByLabelText("Aprobă cererea"));
+
+      await waitFor(() => {
+        expect(screen.getByText("Aprob în cunoștință de cauză")).toBeInTheDocument();
+        expect(screen.getByText("Digital Safeguard SRL")).toBeInTheDocument();
+        expect(screen.getByText("Înapoi, verific")).toBeInTheDocument();
+      });
+    });
+
+    it("fără nepotriviri, aprobarea rămâne un singur click", async () => {
+      mockGetParMe.mockResolvedValue({ roles: ["approver"], userId: "user-approver", tenantId: "tenant-1" });
+
+      const { default: ParDetailPage } = await import("../ParDetail");
+      render(<ParDetailPage />);
+
+      await waitFor(() => expect(screen.getByLabelText("Aprobă cererea")).toBeInTheDocument(), { timeout: 5000 });
+      fireEvent.click(screen.getByLabelText("Aprobă cererea"));
+
+      await waitFor(() => {
+        expect(screen.queryByText("Aprob în cunoștință de cauză")).toBeNull();
+      });
+    });
+  });
+
   it("T-PAR-118-2b [normal] active approver sees approve/reject/changes", async () => {
     mockGetParMe.mockResolvedValue({ roles: ["approver"], userId: "user-approver", tenantId: "tenant-1" });
 

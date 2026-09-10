@@ -16,7 +16,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { parRequests, parAttachments, parAudit } from "../db/schema/par";
+import { parRequests, parAttachments, parAudit, parPayers } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { isWorkspaceAdminRole } from "../lib/par/visibility";
@@ -24,6 +24,7 @@ import { parUuidGuard } from "../middleware/parUuidGuard";
 import { readUploadedDoc } from "../lib/ai/readUploadedDoc";
 import { extractParParties } from "../lib/ai/parExtractor";
 import { choosePayee } from "../lib/par/choosePayee";
+import { checkPayerOnDocument } from "../lib/par/payerOnDocument";
 import { randomUUID } from "node:crypto";
 import { mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { attachmentPreviewUrl } from "../lib/par/attachmentUrls";
@@ -275,6 +276,20 @@ async function analyzeAttachmentAgainstPar(
   // back "neverificat" (and the beneficiary a false mismatch) on a perfectly matching document.
   const payee = matchPartyToPar(choice, par);
   const amountCents = choice.amountCents === 0 ? null : choice.amountCents;
+
+  // VM5-04 („plătitorul e altul"): pe cine e emis documentul? Până acum se verifica doar CĂTRE
+  // cine se plătește, deci factura firmei-soră trecea fără o vorbă. Entitatea plătitoare a cererii
+  // vine din `par_payers`; regula care evită alarmele false stă în `payerOnDocument.ts`.
+  const [payerRow] = par.payerId
+    ? await db.select({
+        name: parPayers.name, legalName: parPayers.legalName, idno: parPayers.idno, iban: parPayers.iban,
+      }).from(parPayers).where(and(eq(parPayers.id, par.payerId), eq(parPayers.tenantId, par.tenantId)))
+    : [];
+  const payerCheck = checkPayerOnDocument(
+    choice.options.length ? choice.options : choice.payee ? [choice.payee] : [],
+    payerRow ?? null,
+    payee ?? null,
+  );
   const checks: ReconcileCheck[] = [
     // 0 nu e o sumă citită din act, ci o extragere eșuată — se raportează „nedetectat", nu diferență.
     { field: "sumă", expected: par.totalEstimatedCents, found: amountCents, matches: amountCents == null ? null : amountCents === par.totalEstimatedCents },
@@ -283,6 +298,7 @@ async function analyzeAttachmentAgainstPar(
     { field: "IDNO/IDNP", expected: par.payeeIdnp, found: payee?.idno ?? null, matches: !payee?.idno || !par.payeeIdnp ? null : norm(payee.idno) === norm(par.payeeIdnp) },
     { field: "IBAN", expected: par.payeeIban, found: payee?.iban ?? null, matches: !payee?.iban || !par.payeeIban ? null : norm(payee.iban) === norm(par.payeeIban) },
     { field: "bancă", expected: par.payeeBank, found: payee?.bank ?? null, matches: !payee?.bank || !par.payeeBank ? null : norm(payee.bank) === norm(par.payeeBank) },
+    { field: "plătitor", expected: payerRow?.name ?? null, found: payerCheck.found, matches: payerCheck.matches },
   ];
   const warnings = checks.filter((check) => check.matches === false).length;
   const analysis = { status: warnings ? "warning" : "match", warnings, checks, analyzedAt: new Date().toISOString() };

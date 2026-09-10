@@ -451,12 +451,14 @@ function ApprovalsCell({ item }: { item: ParInboxItem }) {
 
 interface BulkApproveModalProps {
   ids: string[];
+  /** VM5-05: câte nepotriviri de documente sunt în lotul selectat (0 = niciuna). */
+  warnings?: number;
   defaultSignatureName?: string;
   onClose: () => void;
   onDone: (results: Record<string, { ok: boolean; error?: string; status?: string }>) => void;
 }
 
-function BulkApproveModal({ ids, defaultSignatureName, onClose, onDone }: BulkApproveModalProps) {
+function BulkApproveModal({ ids, warnings = 0, defaultSignatureName, onClose, onDone }: BulkApproveModalProps) {
   const [comment, setComment] = useState("");
   const [signatureName, setSignatureName] = useState(defaultSignatureName ?? "");
   const [submitting, setSubmitting] = useState(false);
@@ -490,6 +492,14 @@ function BulkApproveModal({ ids, defaultSignatureName, onClose, onDone }: BulkAp
       size="md"
     >
       <form onSubmit={submit} className="space-y-4">
+        {warnings > 0 && (
+          <Alert variant="warning">
+            {warnings === 1
+              ? "O cerere din lot are un document care nu corespunde datelor ei."
+              : `Cereri din lot au ${warnings} nepotriviri între documente și datele cererii.`}{" "}
+            Deschide-le individual dacă vrei să vezi ce anume diferă.
+          </Alert>
+        )}
         <div className="space-y-1.5">
           <Label htmlFor="bulk-sig">Semnătură / Nume</Label>
           {/* Was `className="vf-input"` — a class that exists in no stylesheet, so this
@@ -1058,6 +1068,19 @@ export default function ParInbox() {
                               <ParUrgentBadge reason={item.urgentReason} reasonNote={item.urgentReasonNote} dueDate={item.urgentDueDate} />
                             </div>
                           )}
+                          {/* VM5-05: documentele atașate nu corespund cererii. Semnul stă pe rând,
+                              nu doar în fișă: aici se aprobă în serie, uneori fără să se deschidă cererea. */}
+                          {(item.document_warnings ?? 0) > 0 && (
+                            <div className="mt-0.5">
+                              <span
+                                className="inline-flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-xs font-medium text-warning"
+                                title="Verificarea documentelor a găsit diferențe față de datele cererii. Deschide cererea pentru detalii."
+                              >
+                                <AlertCircle className="h-3 w-3" aria-hidden="true" />
+                                {item.document_warnings === 1 ? "1 nepotrivire" : `${item.document_warnings} nepotriviri`}
+                              </span>
+                            </div>
+                          )}
                           {/* Datată în urmă: aprobatorul vede asta înainte de a semna, nu după. */}
                           <div className="mt-0.5 empty:mt-0">
                             <ParBackdatedBadge dateOfRequest={item.dateOfRequest} submittedAt={item.submittedAt} />
@@ -1168,6 +1191,9 @@ export default function ParInbox() {
       {bulkOpen && (
         <BulkApproveModal
           ids={[...selectedIds]}
+          warnings={items
+            .filter((i) => selectedIds.has(i.id))
+            .reduce((sum, i) => sum + (i.document_warnings ?? 0), 0)}
           defaultSignatureName={myName}
           onClose={() => setBulkOpen(false)}
           onDone={handleBulkDone}

@@ -186,6 +186,11 @@ export interface ParInboxItem extends ParRequest {
   projectName?: string | null;
   requestedByName?: string | null;
   attachments?: Array<{ id: string; fileName: string; kind: string }>;
+  /**
+   * VM5-05: câte nepotriviri a găsit verificarea documentelor față de datele cererii (0 = niciuna).
+   * Rândul poartă un semn, iar aprobarea în masă avertizează înainte să înghită o cerere marcată.
+   */
+  document_warnings?: number;
   /** Doar în istoric (scope=decided): ce am decis eu pe cererea asta și când. */
   my_decision?: ParDecisionEvent;
   my_decided_at?: string | null;
