@@ -16,6 +16,7 @@
  */
 import type { ParFormData, ParFormSignature } from "./parFormData";
 import { DOC_FONT_FAMILY } from "../docs/pdfFonts";
+import { orderSignatureSlots } from "../../../src/lib/par/signatureSlots";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PdfNode = Record<string, any>;
@@ -35,13 +36,46 @@ export function formAmount(cents: number): string {
 }
 
 /** „10-Sep-26" — formatul de dată al formularului. */
+/**
+ * Fusul în care se citește documentul: al organizației, ca fișa aprobărilor din dosar
+ * (`approvalSheet.ts`). Formularul folosea UTC, deci o aprobare dată la 00:30 la Chișinău apărea
+ * tipărită cu ziua precedentă — pe hârtia care ajunge la audit.
+ */
+const FORM_TZ = "Europe/Chisinau";
+
+const MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Ziua/luna/anul așa cum se citesc în fusul organizației (nu în cel al serverului). */
+function tzParts(d: Date, timeZone: string): { day: string; month: number; year: string } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone, day: "2-digit", month: "2-digit", year: "2-digit",
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return { day: get("day"), month: Number(get("month")), year: get("year") };
+}
+
 export function formDate(v: Date | string | null | undefined): string {
   if (!v) return "";
   const d = new Date(v);
   if (isNaN(d.getTime())) return "";
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()];
-  return `${day}-${mon}-${String(d.getUTCFullYear()).slice(2)}`;
+  // Luna se scrie din tabelul de mai sus, nu din `month: "short"`: ICU-ul modern scrie „Sept" în
+  // engleză, iar formularul tipărit ar fi schimbat formatul datelor peste noapte („08-Sept-26").
+  const { day, month, year } = tzParts(d, FORM_TZ);
+  return `${day}-${MONTHS_EN[month - 1] ?? ""}-${year}`;
+}
+
+/**
+ * VM5-17 („PAR-ul printat să aibă time stamp"): aceeași dată, cu ora. Ziua singură nu ajunge nici
+ * auditului, nici unei dispute despre ordinea semnăturilor.
+ */
+export function formDateTime(v: Date | string | null | undefined): string {
+  if (!v) return "";
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return "";
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone: FORM_TZ, hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(d);
+  return `${formDate(v)} ${time}`;
 }
 
 /** Numărul de secțiune, ca exponent — ca în formularul tipărit. */
@@ -115,7 +149,7 @@ function signatureCell(title: PdfNode[], sig: ParFormSignature | null, showStamp
         : []),
       field(null, "Name", sig?.name ?? ""),
       field(null, "Title", sig?.title ?? ""),
-      field(null, "Date", approved ? formDate(sig?.decidedAt) : ""),
+      field(null, "Date", approved ? formDateTime(sig?.decidedAt) : ""),
       field(null, "Signature", ""),
     ],
   };
@@ -130,8 +164,18 @@ export function buildParFormDefinition(d: ParFormData): PdfNode {
       : [d.requestorTitle, d.requestorCode].filter(Boolean).join(" · ");
   const projectWithEvent = [d.projectName, d.eventName].filter(Boolean).join(" · ");
 
-  const sig14 = d.signatures.find((s) => s.step === 0) ?? null;
-  const approvers = d.signatures.filter((s) => s.step > 0).sort((a, b) => a.step - b.step);
+  // VM5-15: ACELAȘI modul ca pe ecran (`src/lib/par/signatureSlots`), nu o a doua implementare.
+  // Aici se generează PDF-ul pe care oamenii chiar îl descarcă, deci aici trăia bugul lui Iulian:
+  // pe un nivel paralel, ordinea rândurilor venea din baza de date, iar un rând ÎNCĂ NEDECIS putea
+  // ocupa caseta unei aprobări date — la a doua descărcare a aceleiași cereri, o semnătură dispărea.
+  const { requestor: sig14, approvers } = orderSignatureSlots(
+    d.signatures.map((sig) => ({
+      ...sig,
+      decision: sig.decision as "pending" | "approved" | "rejected" | "changes_requested",
+      decidedAt: sig.decidedAt ? new Date(sig.decidedAt).toISOString() : null,
+      approverName: sig.name,
+    }))
+  );
 
   const itemRows =
     d.lineItems.length > 0
@@ -314,17 +358,17 @@ export function buildParFormDefinition(d: ParFormData): PdfNode {
         body: [[
           signatureCell([num(14), { text: " Requestor Signature:", bold: true, fontSize: 8.5 }], sig14),
           {
+            // Câte o casetă pentru FIECARE aprobator din lanț. Formularul avea două locuri fixe: un
+            // lanț cu trei semnături o pierdea pe a treia de pe hârtie, deși omul semnase.
             stack: [
               signatureCell(
                 [num(15), { text: " Approver Signature (DOA Holder, Supervisor, or Tech Lead):", bold: true, fontSize: 8.5 }],
                 approvers[0] ?? null,
               ),
-              ...(approvers.length > 1
-                ? [
-                    { canvas: [{ type: "line", x1: 0, y1: 4, x2: 240, y2: 4, lineWidth: 0.6, lineColor: BORDER }], margin: [0, 4, 0, 6] },
-                    signatureCell([{ text: " ", fontSize: 8.5 }], approvers[1], true),
-                  ]
-                : []),
+              ...approvers.slice(1).flatMap((sig) => [
+                { canvas: [{ type: "line", x1: 0, y1: 4, x2: 240, y2: 4, lineWidth: 0.6, lineColor: BORDER }], margin: [0, 4, 0, 6] },
+                signatureCell([{ text: " ", fontSize: 8.5 }], sig, true),
+              ]),
             ],
           },
         ]],
@@ -373,7 +417,25 @@ export function buildParFormDefinition(d: ParFormData): PdfNode {
       layout: FRAME,
     },
 
-    { text: `PAR No: ${d.requestNo ?? ""}`, fontSize: 7.5, color: FAINT, alignment: "right", margin: [0, 4, 0, 0] },
+    // VM5-17: ștampila de timp a documentului — când a fost depusă cererea, când a fost aprobată și
+    // când a fost tipărită hârtia pe care o ține omul în mână.
+    {
+      columns: [
+        {
+          text: [
+            d.submittedAt ? `Submitted: ${formDateTime(d.submittedAt)}` : "",
+            d.submittedAt && d.approvedAt ? "  ·  " : "",
+            d.approvedAt ? `Approved: ${formDateTime(d.approvedAt)}` : "",
+            (d.submittedAt || d.approvedAt) ? "  ·  " : "",
+            `Generated: ${formDateTime(new Date())}`,
+          ].filter(Boolean).join(""),
+          fontSize: 7.5,
+          color: FAINT,
+        },
+        { text: `PAR No: ${d.requestNo ?? ""}`, fontSize: 7.5, color: FAINT, alignment: "right" },
+      ],
+      margin: [0, 4, 0, 0],
+    },
   ];
 
   return {

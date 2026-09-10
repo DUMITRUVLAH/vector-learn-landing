@@ -35,15 +35,25 @@ export interface ParFormLineItem {
 }
 
 export interface ParFormSignature {
+  /** Rândul de aprobare din care vine caseta — ordonarea casetelor are nevoie de un criteriu final
+   *  stabil, altfel două randări ale acelorași date pot ieși diferit (VM5-15). */
+  id: string;
   step: number;
   name: string | null;
   title: string | null;
   decision: string;
   decidedAt: Date | string | null;
+  /** Titularul rândului, când există. Un rând bazat pe rol nu are — vezi `signatureSlots`. */
+  approverUserId: string | null;
+  /** Numele semnat, separat de `name` (care poate cădea pe titular). Folosit la deduplicare. */
+  signatureName: string | null;
 }
 
 export interface ParFormData {
   requestNo: string | null;
+  /** VM5-17: momentul depunerii și al aprobării, ca formularul tipărit să poarte ștampilă de timp. */
+  submittedAt: Date | string | null;
+  approvedAt: Date | string | null;
   dateOfRequest: Date | string | null;
   requestedByName: string | null;
   requestorTitle: string | null;
@@ -149,6 +159,8 @@ export async function loadParFormData(parId: string, tenantId: string): Promise<
 
   return {
     requestNo: par.requestNo,
+    submittedAt: par.submittedAt,
+    approvedAt: par.approvedAt,
     dateOfRequest: par.dateOfRequest,
     requestedByName: userName(par.requestedByUserId),
     requestorTitle: par.requestorTitle ?? null,
@@ -184,6 +196,9 @@ export async function loadParFormData(parId: string, tenantId: string): Promise<
     // Aceeași regulă ca pe ecran: la pasul 0 numele vine din cont (caseta de semnătură a purtat
     // funcția solicitantului până pe 10.09.2026), la pașii de aprobare din caseta semnată.
     signatures: approvals.map((a) => ({
+      id: a.id,
+      approverUserId: a.approverUserId ?? null,
+      signatureName: a.signatureName ?? null,
       step: a.step,
       name: a.step === 0
         ? userName(a.approverUserId) ?? a.signatureName ?? null

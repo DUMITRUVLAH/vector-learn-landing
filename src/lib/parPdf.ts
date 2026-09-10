@@ -99,11 +99,14 @@ function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return esc(iso);
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: PDF_TZ, day: "2-digit", month: "short", year: "2-digit",
+  // Luna din tabel, nu din `month: "short"`: ICU-ul modern scrie „Sept", iar formularul și-ar
+  // schimba formatul datelor („08-Sept-26" în loc de „08-Sep-26").
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: PDF_TZ, day: "2-digit", month: "2-digit", year: "2-digit",
   }).formatToParts(d);
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("day")}-${get("month")}-${get("year")}`;
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${get("day")}-${months[Number(get("month")) - 1] ?? ""}-${get("year")}`;
 }
 
 /**

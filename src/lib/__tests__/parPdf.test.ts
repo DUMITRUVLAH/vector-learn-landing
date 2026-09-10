@@ -349,6 +349,12 @@ describe("buildParHtml() — T-PAR-114-1 [blocant]", () => {
    * descărcare a ACELEIAȘI cereri. Aici se randează aceleași date de două ori, cu ordinea
    * aprobărilor inversată între randări.
    */
+  /**
+   * Atenție la citire: modulul ăsta e CALEA VECHE (vezi antetul lui `parPdf.ts`). Formularul pe
+   * care îl descarcă oamenii se scrie pe server, iar regresia reală e apărată de
+   * `server/__tests__/par-form-server.routes.test.ts`. Testele de aici țin cele două implementări
+   * consecvente, ca o eventuală întoarcere la randarea în browser să nu reintroducă bugul.
+   */
   describe("sections 14–15 — nivel paralel de aprobare", () => {
     const parallel = (order: number[]) => {
       const rows = [

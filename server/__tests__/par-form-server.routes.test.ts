@@ -34,6 +34,8 @@ let tenantId: string;
 let userId: string;
 let approverId: string;
 let parId: string;
+/** Entitatea plătitoare, refolosită de testele care își fac propria cerere. */
+let payerIdForTests: string;
 
 vi.mock("../db/client", () => ({
   get db() {
@@ -85,6 +87,7 @@ beforeAll(async () => {
   const [tenant] = await testDb.insert(tenants).values({ name: "ATIC", slug: "atic-form" }).returning();
   tenantId = tenant.id;
   const [payer] = await testDb.insert(parPayers).values({ tenantId, name: "ATIC" }).returning();
+  payerIdForTests = payer.id;
   await testDb.insert(parPayerModules).values({ tenantId, payerId: payer.id, moduleKey: "par", enabled: true });
 
   const mk = async (email: string, name: string) => {
@@ -208,6 +211,68 @@ describe("GET /api/par/:id/form.pdf", () => {
     const res = await app.request(`/api/par/00000000-0000-0000-0000-000000000000/form.pdf`);
     expect(res.status).toBe(404);
   });
+});
+
+/**
+ * VM5-15 — bugul lui Iulian, testat pe DRUMUL REAL.
+ *
+ * Formularul pe care oamenii îl descarcă se generează AICI, pe server (`/api/par/:id/form.pdf`);
+ * modulul client `src/lib/parPdf.ts` e vechea cale, cu fotografie a paginii. Ordonarea casetelor
+ * avea în amândouă aceeași greșeală: primele două rânduri din listă, în ordinea bazei de date.
+ */
+describe("GET /api/par/:id/form.pdf — nivel paralel de aprobare (VM5-15)", () => {
+  let parallelParId: string;
+
+  beforeAll(async () => {
+    const [par] = await testDb
+      .insert(parRequests)
+      .values({
+        tenantId, requestNo: "PAR-2026-0099", requestedByUserId: userId, status: "approved",
+        payerId: payerIdForTests, currency: "MDL", totalEstimatedCents: 50000,
+        dateOfRequest: new Date("2026-09-08T00:00:00Z"),
+        submittedAt: new Date("2026-09-08T09:15:00Z"),
+        approvedAt: new Date("2026-09-08T14:20:00Z"),
+      })
+      .returning();
+    parallelParId = par.id;
+
+    // Trei rânduri pe pasul 1, exact ca în producție (ATIC): două semnate de oameni DIFERIȚI plus
+    // unul încă în așteptare, care înainte putea ocupa o casetă și o lăsa goală pe hârtie.
+    await testDb.insert(parApprovals).values([
+      { tenantId, parId: parallelParId, step: 0, approverUserId: userId, approverRoleLabel: "Solicitant", decision: "approved", decidedAt: new Date("2026-09-08T09:15:00Z") },
+      { tenantId, parId: parallelParId, step: 1, approverUserId: null, approverRoleLabel: "Aprobator", signatureName: "Irina Oriol", signatureTitle: "Director executiv", decision: "approved", decidedAt: new Date("2026-09-08T11:00:00Z") },
+      { tenantId, parId: parallelParId, step: 1, approverUserId: approverId, approverRoleLabel: "Aprobator", signatureName: "Ana Chiriță", signatureTitle: "Director financiar", decision: "approved", decidedAt: new Date("2026-09-08T14:20:00Z") },
+      { tenantId, parId: parallelParId, step: 1, approverUserId: null, approverRoleLabel: "Aprobator", decision: "pending" },
+    ]);
+  }, 60_000);
+
+  it("[blocant] ambele semnături apar pe hârtie, deși un rând e încă în așteptare", async () => {
+    const res = await app.request(`/api/par/${parallelParId}/form.pdf`);
+    const text = await pdfText(Buffer.from(await res.arrayBuffer()));
+    expect(text).toContain("Irina Oriol");
+    expect(text).toContain("Ana Chiriță");
+  }, 60_000);
+
+  it("[blocant] două descărcări consecutive dau același formular", async () => {
+    const scoate = async () => {
+      const res = await app.request(`/api/par/${parallelParId}/form.pdf`);
+      const text = await pdfText(Buffer.from(await res.arrayBuffer()));
+      // Momentul generării diferă între descărcări prin construcție — restul nu are voie.
+      return text.replace(/Generated: [^P]*/g, "Generated: — ");
+    };
+    expect(await scoate()).toBe(await scoate());
+  }, 60_000);
+
+  /** VM5-17: „PAR-ul printat să aibă time stamp (când a fost depus, aprobat etc.)". */
+  it("poartă ștampila de timp: depusă, aprobată, generată", async () => {
+    const res = await app.request(`/api/par/${parallelParId}/form.pdf`);
+    const text = await pdfText(Buffer.from(await res.arrayBuffer()));
+    expect(text).toContain("Submitted: 08-Sep-26 12:15");
+    expect(text).toContain("Approved: 08-Sep-26 17:20");
+    expect(text).toContain("Generated:");
+    // Ora deciziei, nu doar ziua (14:20 UTC = 17:20 la Chișinău).
+    expect(text).toContain("08-Sep-26 17:20");
+  }, 60_000);
 });
 
 describe("Dosarul conține formularul chiar dacă nimeni nu l-a atașat", () => {
