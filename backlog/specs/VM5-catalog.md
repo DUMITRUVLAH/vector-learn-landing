@@ -20,16 +20,16 @@
 | ID | Cerință | Stare azi | Claritate |
 |----|---------|-----------|-----------|
 | VM5-01 | Solicitantul primește statutul + motivul respingerii | există, dar emailul e în engleză | 🟢 95% |
-| VM5-02 | Vezi cererile colegilor de echipă (transparență / concediu) | nu există | 🟡 75% |
+| VM5-02 | Vezi cererile colegilor **de pe același proiect** | nu există | 🟢 decis |
 | VM5-03 | Atașamentele se văd în aplicație, nu se descarcă | livrat pentru PDF + imagini | 🟢 90% |
 | VM5-04 | AI verifică dacă documentul corespunde plății | livrat (6 verificări), lipsește plătitorul | 🟢 90% |
 | VM5-05 | Pop-up de nepotrivire, văzut și de aprobator | doar un chip discret | 🟢 95% |
-| VM5-06 | Date retroactive de emitere | badge „datată în urmă" livrat | 🟢 90% |
+| VM5-06 | Date retroactive (rămân **libere**, doar semnalizate) | badge „datată în urmă" livrat | 🟢 decis |
 | VM5-07 | Se păstrează doar digital sau și fizic? | întrebare, nu feature | 🔴 Ana |
 | VM5-08 | Pachetul pentru audit (cerere, PAR, factură — dată, sumă) | dosar + jurnal, dar separat | 🟢 90% |
 | VM5-09 | Dosarul: istoric, acte, workflow per persoană | foldere + jurnal cu filtru pe om | 🟢 85% |
 | VM5-10 | Aprobări în plus pe tipuri de achiziții + documente obligatorii | doar pe sumă/departament/proiect | 🔴 70% |
-| VM5-11 | Emailurile să vină în batch-uri de aprobare | un email per eveniment | 🟡 85% |
+| VM5-11 | Digest de aprobări la **09:00 și 16:00** | un email per eveniment | 🟢 decis |
 | VM5-12 | Ce se întâmplă când unul respinge și altul aprobă | regula există, nu se vede | 🟢 95% |
 | VM5-13 | Buton „respinge toate" | „aprobă toate" există, „respinge" nu | 🟢 100% |
 | VM5-14 | „Dosar complet" citit în aplicație | se descarcă, nu se citește pe loc | 🟢 90% |
@@ -37,14 +37,16 @@
 | VM5-16 | Flux: respinsă → revizuită → aprobată | mecanica există, fluxul nu se vede | 🟢 90% |
 | VM5-16b | Schimbarea manuală a statutului cererii | nu există | 🔴 60% |
 | VM5-17 | PAR-ul printat cu ștampilă de timp | doar data, fără oră | 🟢 100% |
-| VM5-18 | „Posibilitatea datei din urmă a PAR-ului" | — | 🔴 nu știu ce înseamnă |
+| VM5-18 | „Data din urmă" = **dată din trecut** → același lucru cu VM5-06 | — | ✅ închis |
 | VM5-19 | Pragul pentru necesar de achiziții (contorizare pe categorii) | un singur prag global | 🔴 55% |
-| VM5-20 | Evenimentul legat de conturile bugetare (planificat vs cheltuit) | evenimentul n-are buget | 🟢 85% |
+| VM5-20 | Buget de eveniment **pe linii** de cod bugetar | evenimentul n-are buget | 🟢 decis |
 | VM5-21 | Șabloane de documente | motorul există (DOCGEN), fișierele nu | 🟡 Ana |
 
-**Pot începe acum, fără tine: VM5-01, 03, 04, 05, 06, 08, 09, 12, 13, 14, 15, 16, 17, 20** (14 din 21).
-**Aștept o propoziție de la tine: VM5-02, 11, 16b, 18.**
-**Aștept răspuns de la Ana: VM5-07, 10, 19, 21.**
+**Deciziile owner-ului au venit pe 10.09.2026** (vezi fiecare item): aria = **proiectul**, retroactivitatea rămâne **liberă**, digest la **09:00/16:00**, buget de eveniment **pe linii**, „data din urmă" = **dată din trecut** (deci VM5-18 se contopește în VM5-06).
+
+**De construit, fără alte întrebări (18 din 21):** VM5-01, 02, 03, 04, 05, 06, 08, 09, 11, 12, 13, 14, 15, 16, 17, 20.
+**Rămâne deschis un singur punct de decizie:** VM5-16b (schimbarea manuală a statutului) — owner-ul a spus „încă nu știu".
+**Aștept răspuns de la Ana:** VM5-07 (arhivare), VM5-10 (tipuri de achiziții), VM5-19 (praguri), VM5-21 (șabloane).
 
 ---
 
@@ -78,33 +80,32 @@ cerere (rutare cu `#`, cum e deja în `parDeepLink`).
 
 ---
 
-## VM5-02 — Cererile colegilor de echipă — 🟡 75%
+## VM5-02 — Cererile colegilor de proiect — 🟢 decis: aria = PROIECTUL
 
 **Cerința:** „Persoanele să poată vedea inclusiv lista de PAR-uri elaborate de co-echiperi — ex.
 dacă pleacă în concediu etc. (transparența în workplace)".
 
 **Stare azi:** regula de vizibilitate e strictă și e într-un singur loc
 (`server/lib/par/visibility.ts`): îți vezi **doar cererile tale**, dacă nu ai rol de
-aprobator/finanțe/par_admin. Un coleg de departament nu vede nimic. (Există separat delegarea —
-`par_delegations` — dar aia mută dreptul de a *semna*, nu de a *vedea*.)
+aprobator/finanțe/par_admin. Un coleg de pe același proiect nu vede nimic.
 
-**De ce nu construiesc orb:** aici se schimbă o regulă de securitate care astăzi ține IBAN-uri,
-IDNP-uri și documente bancare închise. Aria contează.
-
-**Presupunerea pe care o implementez dacă nu spui altceva:**
-- „Coechiper" = **același departament SAU același proiect**.
-- Se văd **doar cererile trimise** (nu ciornele — o ciornă e a autorului, ca azi).
+**Decizia owner-ului (10.09.2026): aria e PROIECTUL.** Deci:
+- „Coechiper" = cineva înscris pe **același proiect** (`par_project_members`) — nu departamentul,
+  nu toată organizația. Cererile fără proiect (cele la nivel de plătitor) rămân ale autorului.
+- Se văd **doar cererile trimise**, nu ciornele — o ciornă nu a fost rutată către nimeni.
 - **Read-only**: fără aprobare, fără editare, fără comentarii.
-- **Fără date bancare**: IBAN / IDNP / atașamente de tip bancar rămân mascate, ca la regula
-  actuală pentru cine nu e autor sau rol elevat.
-- Un filtru nou în listă: „Toate ale mele / Ale echipei", plus coloana „Solicitant".
+- **Fără date bancare**: IBAN / IDNP / atașamentele bancare rămân mascate, ca azi pentru cine nu e
+  autor sau rol elevat. Transparența cerută e „ce a cerut colegul și unde a ajuns", nu rechizitele.
+- Filtru nou în listă: „Ale mele / Ale proiectului", plus coloana „Solicitant".
 
-**AC:** (1) un requestor fără rol elevat vede cererile trimise ale colegilor din aria lui și
-primește 404 pe restul; (2) ciornele altcuiva rămân invizibile; (3) dosarul și atașamentele
-bancare rămân refuzate (403); (4) testele existente de vizibilitate rămân verzi.
+**De ce proiectul e alegerea potrivită aici:** aria se calculează din apartenența la proiect, deci
+un om adăugat pe proiect la mijlocul lui vede și cererile de dinainte — exact scenariul „preiau de
+la cineva plecat în concediu".
 
-**Întrebarea pentru tine, într-o propoziție:** aria e departamentul, proiectul, sau toată
-organizația?
+**AC:** (1) un requestor fără rol elevat vede cererile trimise ale colegilor de pe proiectele lui și
+primește 404 pe restul; (2) ciornele altcuiva rămân invizibile; (3) dosarul și atașamentele bancare
+rămân refuzate (403); (4) o cerere fără proiect nu devine vizibilă nimănui în plus; (5) testele
+existente de vizibilitate rămân verzi.
 
 ---
 
@@ -192,7 +193,7 @@ altfel oamenii învață să dea click orbește.
 
 ---
 
-## VM5-06 — Datele retroactive de emitere — 🟢 90%
+## VM5-06 — Datele retroactive de emitere — 🟢 decis: rămân LIBERE (include VM5-18)
 
 **Cerința:** „Cum este cu datele retroactive de emitere a documentelor?"
 
@@ -213,8 +214,13 @@ raportare a cazurilor retroactive.
 **AC:** (1) o cerere depusă în aceeași zi arată exact ca azi (fără rând în plus); (2) una datată în
 urmă arată ambele date pe hârtie; (3) filtrul returnează doar cererile cu decalaj > 0.
 
-**Decizia ta (o cifră):** limităm retroactivitatea? Ex. „max 30 de zile, peste — doar par_admin, cu
-motiv". Fără cifră, rămâne liberă și doar semnalizată.
+**Decizia owner-ului (10.09.2026): retroactivitatea rămâne LIBERĂ** — fără plafon, fără rol
+special. Deci nu construiesc nicio poartă; construiesc doar **vizibilitatea**: ambele date pe
+hârtie, badge-ul existent pe ecran și filtrul de revizuire în rapoarte. Cine semnează vede decalajul
+și decide.
+
+**VM5-18 se contopește aici:** owner-ul a confirmat că „data din urmă a PAR-ului" înseamnă **dată
+din trecut**, adică exact acest item.
 
 ---
 
@@ -312,7 +318,7 @@ e o cârjă, nu o soluție.)
 
 ---
 
-## VM5-11 — Emailurile în batch-uri de aprobare — 🟡 85%
+## VM5-11 — Emailurile în batch-uri de aprobare — 🟢 decis: 09:00 și 16:00
 
 **Cerința:** „Emailurile să vină în batch-uri de aprobare."
 
@@ -320,7 +326,7 @@ e o cârjă, nu o soluție.)
 într-o dimineață, aprobatorul primește 20 de emailuri. Nu există niciun mecanism de grupare și
 nicio setare de frecvență.
 
-**Ce construiesc, cu presupunerea declarată:**
+**Orele sunt confirmate de owner (10.09.2026): 09:00 și 16:00.** Ce construiesc:
 - **Digest** „Ai N cereri de aprobat", trimis la ore fixe — **09:00 și 16:00, ora Chișinăului** —
   cu tabel (nr., solicitant, sumă, proiect, de când așteaptă) și link direct pe fiecare rând, plus
   un link „Deschide inboxul".
@@ -333,7 +339,8 @@ nicio setare de frecvență.
 la 10:07 produce email imediat; (3) o cerere deja decisă până la ora digestului nu mai apare în el;
 (4) setarea e per utilizator și se respectă.
 
-**Confirmă-mi doar orele** (09:00/16:00) — restul e decis.
+**Notă de implementare:** ferestrele se calculează în ora Chișinăului, cu o singură sarcină
+programată pe server — nu un cron per utilizator.
 
 ---
 
@@ -403,28 +410,64 @@ derulezi).
 
 ---
 
-## VM5-15 — Bug Iulian: aprobările dispar din PAR-ul descărcat — 🟢 90%
+## VM5-15 — Bug Iulian: aprobările dispar din PAR-ul descărcat — 🟢 cauza găsită
 
 **Cerința:** „La descărcarea PAR prima dată e approve de la ambii, iar ulterior a dispărut (la
 Iulian)."
 
-**Stare azi:** pe `main` s-au reparat pe 10 septembrie exact trei defecte din zona asta
-(`4fc9b63e`, `1506c873`): (1) numele semnatarului se rezolvă din tabela de utilizatori, nu din
-eticheta funcției; (2) un slot rămas fără titular se etichetează „Aprobator", nu cu numele altcuiva;
-(3) `pickDecidableStep` (`server/lib/par/decisionAuthority.ts:94`) preferă rândul **pinned pe mine**
-— înainte, pe un nivel paralel, semnătura unui aprobator putea ateriza pe rândul colegului, iar
-rândul lui rămânea „în așteptare", deci la a doua descărcare o casetă apărea goală. Asta explică
-fix simptomul lui Iulian.
+**Cine e (căutat în producție, 10.09.2026):** **Iulian Lungu** — `ilungu@ict.md`, organizația
+**ATIC**. Cererile lui: `PAR-2026-0018` (respinsă de Ana Chirita la un minut după depunere, „nu
+trebuie noua bons office") și `PAR-2026-0015` (anulată). Deci nu cererile lui sunt cele cu două
+aprobări — a descărcat o cerere cu **nivel paralel de aprobare** (Ana + Irina), tipul care există
+în ATIC: `PAR-2026-0020`, `0023`, `0024`, `0025`, `0026`.
 
-**Ce fac:** cer numărul cererii lui, reproduc descărcarea de două ori pe datele reale, confirm că
-ambele casete se completează. Dacă mai apare, repar și adaug **testul de regresie** care lipsește:
-descarcă de două ori aceeași cerere și compară casetele de semnătură.
+**Cauza reală, găsită în cod și confirmată în date — nu e o presupunere:**
 
-**AC:** (1) două descărcări consecutive produc secțiunile 14–15 identice; (2) fiecare aprobator
-apare pe rândul lui, cu funcția lui; (3) testul cade dacă cineva reintroduce alegerea „primul rând
-returnat de bază".
+Formularul PDF are **două casete de semnătură**: secțiunea 14 (solicitant) și secțiunea 15
+(aprobator). Constructorul le alege așa (`src/lib/parPdf.ts:177–181`):
 
-**Îmi trebuie de la tine:** numărul PAR-ului lui Iulian.
+```
+const approverSigs = approvals.filter(a => a.step > 0).sort((a,b) => a.step - b.step);
+const approver1 = approverSigs[0];   // prima din listă
+const approver2 = approverSigs[1];   // a doua din listă
+```
+
+Pe un **nivel paralel** există mai multe rânduri cu **același `step`**. `sort` e stabil, deci
+ordinea dintre ele rămâne cea în care au venit din API — adică ordinea bazei de date, care **nu e
+garantată între două cereri**. Cine nimerește în cele două casete se poate schimba de la o
+descărcare la alta. Iar în producție sunt și rânduri **în plus** pe același pas:
+
+| Cerere | Pas 1 | Ce conține |
+|--------|-------|------------|
+| `PAR-2026-0025` (ATIC) | 3 rânduri | două aprobate (semnate „Irina Oriol" și „Vlah Dumitru", fără titular) + unul **în așteptare**, fixat pe Irina |
+| `PAR-2026-0024` (ATIC) | 2 rânduri | unul fixat pe Irina + unul fără titular, tot cu semnătura „Irina Oriol" |
+
+Cu trei rânduri și două casete, **rândul „în așteptare" poate intra într-o casetă** — și atunci
+caseta se tipărește **goală**, deși doi oameni aprobaseră. Exact simptomul: prima dată apar ambele
+semnături, a doua oară una dispare.
+
+Rândurile duplicate vin din drift-ul reparat pe 10 septembrie (`4fc9b63e`, `1506c873`): înainte, un
+aprobator putea semna rândul bazat pe rol în loc de rândul lui, iar rândul lui rămânea în așteptare.
+**Reparația oprește apariția unor cazuri noi, dar nu curăță cererile deja stricate și nu repară
+selecția din PDF** — deci bugul lui Iulian e încă viu pe cererile existente.
+
+**Ce construiesc:**
+1. **Selecție deterministă în PDF**: rândurile se ordonează după `step`, apoi **deciziile înaintea
+   celor în așteptare**, apoi `decided_at`, apoi `id`. Două descărcări consecutive nu mai pot da
+   rezultate diferite.
+2. **Casetele arată deciziile, nu rândurile**: un rând în așteptare nu ocupă o casetă cât timp
+   există o aprobare netipărită.
+3. **Toate aprobările încap**: dacă nivelul are trei aprobatori, formularul primește trei casete —
+   azi a treia semnătură pur și simplu nu există pe hârtie.
+4. **Curățare** (o dată, cu raport înainte): pe cererile deja aprobate, rândurile duplicate fără
+   titular care dublează o aprobare reală se marchează ca înlocuite, nu se șterg — jurnalul rămâne.
+5. **Test de regresie**: aceeași cerere randată de două ori, cu ordinea aprobărilor amestecată între
+   randări, trebuie să producă aceleași casete.
+
+**AC:** (1) două descărcări consecutive produc secțiunile 14–15 identice, indiferent de ordinea în
+care API-ul returnează rândurile; (2) o aprobare dată nu poate lipsi de pe hârtie; (3) un rând în
+așteptare nu ocupă locul unei aprobări; (4) testul cade dacă cineva reintroduce alegerea „primele
+două rânduri din listă".
 
 ---
 
@@ -451,7 +494,7 @@ trecut, și nu se vede că o cerere e la a doua rundă.
 
 ---
 
-## VM5-16b — Schimbarea manuală a statutului — 🔴 60%
+## VM5-16b — Schimbarea manuală a statutului — 🔴 owner: „încă nu știu"
 
 Partea a doua a cerinței — „posibilitatea de schimbare a statutului cererii" — o separ intenționat.
 
@@ -462,8 +505,14 @@ că s-a plătit.
 
 **Ce am nevoie ca să-l fac în siguranță:** (1) cine are dreptul (doar par_admin?); (2) din ce stare
 în ce stare e permis (o listă scurtă, nu „oricare în oricare"); (3) motivul obligatoriu, da/nu.
-Cu răspunsurile astea îl construiesc cu tot cu jurnal și marcaj vizibil „status schimbat manual de
-X". Fără ele, nu-l fac.
+
+**Owner, 10.09.2026: „încă nu știu".** Rămâne singurul punct deschis din toată lista — nu-l
+construiesc până nu vine regula.
+
+**Observație care poate face întrebarea să dispară:** cazurile reale de „am pus greșit statutul" au
+deja ieșire proprie — `unpay` (anulează plata, VM4-01), `finance-return` (finanțele întorc cererea,
+VM4-02), `withdraw` (autorul retrage din aprobare), `reopen` (revizuire după respingere). Merită
+verificat pe un caz concret dacă mai lipsește ceva, înainte de a construi un buton general.
 
 ---
 
@@ -485,18 +534,11 @@ românesc, ca peste tot.
 
 ---
 
-## VM5-18 — „Posibilitatea datei din urmă a PAR-ului" — 🔴 nu știu ce înseamnă
+## VM5-18 — „Data din urmă a PAR-ului" — ✅ închis (= VM5-06)
 
-Am notat cerința ca atare: „De inclus posibilitatea datei din urmă a PAR-ului". Am două citiri
-plauzibile și fac lucruri complet diferite:
-
-**(a) Data din trecut** — adică backdating, deci același lucru cu VM5-06 (și e deja posibil + marcat).
-
-**(b) O dată-limită** — până când cererea mai e valabilă / până când trebuie plătită, cu avertisment
-la depășire. (Există deja `date_needed` — „data la care sunt necesare bunurile/serviciile" — deci ar
-fi o a doua dată, cu alt înțeles.)
-
-O propoziție de la tine și o fac. Dacă e (a), item-ul dispare în VM5-06.
+Cerința era ambiguă: putea însemna dată din trecut (backdating) sau dată-limită de valabilitate.
+**Owner, 10.09.2026: „din trecut".** Deci e același lucru cu VM5-06 — retroactivitatea, care rămâne
+liberă și doar semnalizată. Item-ul nu mai are conținut propriu.
 
 ---
 
@@ -524,7 +566,7 @@ de prag), plus un raport „cheltuieli pe categorii vs praguri" pentru revizuire
 
 ---
 
-## VM5-20 — Evenimentul legat de conturile bugetare — 🟢 85%
+## VM5-20 — Evenimentul legat de conturile bugetare — 🟢 decis: buget PE LINII
 
 **Cerința:** „Evenimentul să fie unit cu conturi bugetare (să fie creată logica) — să vadă linia:
 cât era planificat și cât s-a cheltuit; la event nu s-a depășit totalul."
@@ -549,8 +591,9 @@ calculat din ele. Apoi:
 (2) alocarea în EUR se compară corect cu cheltuieli în MDL (curs BNM, ca la codurile bugetare);
 (3) suma liniilor = totalul evenimentului, verificat la salvare.
 
-**Decizia mică:** buget **pe linii** (recomand — „să vadă linia" asta cere) sau doar o sumă globală
-pe eveniment? Dacă nu spui nimic, fac pe linii.
+**Decizia owner-ului (10.09.2026): pe linii.** Fiecare eveniment primește N rânduri (cod bugetar ×
+sumă × monedă), iar totalul evenimentului se calculează din ele — nu se tastează separat, ca să nu
+poată ieși din sincron cu liniile.
 
 ---
 

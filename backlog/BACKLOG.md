@@ -506,7 +506,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | ID | Priority | Title | Status | Spec |
 |----|----------|-------|--------|------|
 | VM5-01 | high | Notificările PAR în română: status + motiv + motivul vizibil în listă | 🟢 todo | [catalog](specs/VM5-catalog.md) |
-| VM5-02 | medium | Cererile colegilor de echipă (read-only, fără date bancare) | 🟡 needs-decision | [catalog](specs/VM5-catalog.md) |
+| VM5-02 | medium | Cererile colegilor **de pe același proiect** (read-only, fără date bancare) | 🟢 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-03 | low | Previzualizare `.docx`/`.xlsx` în vizualizatorul de documente | 🟢 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-04 | high | AI: verificare „plătitor" + data documentului + re-analiză la editare | 🟢 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-05 | high | Avertisment de nepotrivire: bandă pe fișă + confirmare la aprobare | 🟢 todo | [catalog](specs/VM5-catalog.md) |
@@ -515,17 +515,17 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | VM5-08 | high | „Pachet audit": registru XLSX + dosarele PDF pe interval | 🟢 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-09 | medium | Ecran „Activitatea" (ce a făcut o persoană, cu export) | 🟢 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-10 | high | Tip de achiziție: aprobatori în plus + documente obligatorii | 🔴 lipsă taxonomie | [catalog](specs/VM5-catalog.md) |
-| VM5-11 | medium | Digest de aprobări (09:00 / 16:00) + comutator per utilizator | 🟡 todo | [catalog](specs/VM5-catalog.md) |
+| VM5-11 | medium | Digest de aprobări (09:00 / 16:00, confirmat) + comutator per utilizator | 🟢 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-12 | medium | Respingerea pe nivel paralel: se vede de ce s-a oprit cererea | 🟢 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-13 | high | „Respinge selectate" (bulk-reject cu motiv obligatoriu) | 🟢 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-14 | medium | Tab „Dosar": tot dosarul citit în aplicație, în ordine | 🟢 todo | [catalog](specs/VM5-catalog.md) |
-| VM5-15 | high | Verificare bug Iulian (casete de semnătură la a doua descărcare) + test | 🟢 todo | [catalog](specs/VM5-catalog.md) |
+| VM5-15 | high | Bug Iulian: selecția casetelor de semnătură e nedeterministă pe nivel paralel | 🟢 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-16 | medium | Banda de flux a cererii + eticheta „revizuită (v2)" | 🟢 todo | [catalog](specs/VM5-catalog.md) |
-| VM5-16b | low | Schimbarea manuală a statutului (cine, între ce stări) | 🔴 needs-decision | [catalog](specs/VM5-catalog.md) |
+| VM5-16b | low | Schimbarea manuală a statutului (owner: „încă nu știu") | 🔴 needs-decision | [catalog](specs/VM5-catalog.md) |
 | VM5-17 | high | Ștampilă de timp pe formularul PAR printat (depusă / aprobată) | 🟢 todo | [catalog](specs/VM5-catalog.md) |
-| VM5-18 | — | „Data din urmă a PAR-ului" — cerință neclară | 🔴 needs-decision | [catalog](specs/VM5-catalog.md) |
+| VM5-18 | — | „Data din urmă" = dată din trecut → se contopește în VM5-06 | ✅ închis | [catalog](specs/VM5-catalog.md) |
 | VM5-19 | high | Praguri de achiziții + contorizare pe categorii | 🔴 lipsesc pragurile | [catalog](specs/VM5-catalog.md) |
-| VM5-20 | high | Buget de eveniment pe linii: planificat vs angajat vs plătit | 🟢 todo | [catalog](specs/VM5-catalog.md) |
+| VM5-20 | high | Buget de eveniment **pe linii** (confirmat): planificat vs angajat vs plătit | 🟢 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-21 | medium | Șabloanele de documente ale Anei, încărcate în DOCGEN | 🟡 blocat pe fișiere | [catalog](specs/VM5-catalog.md) |
 
 ---
