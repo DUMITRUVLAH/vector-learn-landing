@@ -511,7 +511,9 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | VM5-01 | high | Notificările PAR în română: status + motiv + cine a decis | ✅ done (emailuri) | [catalog](specs/VM5-catalog.md) |
 | VM5-02 | medium | Cererile colegilor **de pe același proiect** (read-only, fără date bancare) | 🟢 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-03 | low | Previzualizare `.docx`/`.xlsx` în vizualizatorul de documente | 🟢 todo | [catalog](specs/VM5-catalog.md) |
-| VM5-04 | high | AI: verificare „plătitor" pe document (data + re-analiză rămân) | ✅ done (plătitor) | [catalog](specs/VM5-catalog.md) |
+| VM5-04 | high | AI: verificare „plătitor" pe document | ✅ done (plătitor) |
+| VM5-04b | high | Suma se compară doar pe documentele care o poartă + versionarea analizei | ✅ done |
+| VM5-04c | medium | Reanaliza documentelor vechi (decizie de cost: leneș, la prima deschidere) | 🟡 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-05 | high | Avertisment de nepotrivire: bandă pe fișă + confirmare la aprobare + semn în inbox | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-06 | medium | Data cererii vs data înregistrării, pe PDF + filtru de retroactive | ✅ done (PDF) | [catalog](specs/VM5-catalog.md) |
 | VM5-07 | — | Arhivare digitală vs fizică (conformitate) | 🔴 întrebare Ana | [catalog](specs/VM5-catalog.md) |

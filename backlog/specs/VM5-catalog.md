@@ -169,6 +169,34 @@ contractului în facturile voastre și dacă e obligatoriu.
 
 ---
 
+## VM5-04b — Ce a arătat măsurarea pe producție (10.09.2026)
+
+După ce avertismentul a devenit blocant (VM5-05), am numărat cât de des ar sări, pe datele reale:
+**17 din 23 de atașamente analizate** raportau cel puțin o nepotrivire, **16 dintre ele pe „sumă"**.
+Un avertisment care apare pe trei sferturi din cereri devine un click reflex, adică nimic.
+
+Cauzele, amândouă reparate la sursă:
+
+| Ce | Cât | De ce nu era o nepotrivire reală |
+|----|-----|----------------------------------|
+| Contracte | 9 din 12 | Valoarea unui contract-cadru nu e plata din cerere (un an de servicii vs. o lună). |
+| Documente fără sumă | 2 | Un buletin scanat, un export de audit, un fișier de test. |
+| Verdicte vechi | restul | Extractoare mai vechi citeau numărul facturii ca sumă: „EBK000758854" → 758.854 lei. |
+
+**Ce s-a schimbat:** suma și valuta se compară doar pe documentele care declară chiar suma de plată
+(factură, ofertă, act de primire, ordin de plată — vezi `server/lib/par/reconcileScope.ts`), iar
+fiecare analiză nouă e ștampilată cu `ANALYSIS_VERSION`. Interfața ia în serios doar analizele
+curente; cele vechi rămân vizibile pe fișă, ca informație, dar nu blochează o semnătură.
+
+**Identitatea (beneficiar, IDNO, IBAN, bancă, plătitor) se verifică peste tot** — acolo semnalul e
+curat: zero alarme false în datele reale.
+
+**Rămâne de făcut:** reanaliza documentelor vechi, ca verdictele lor să conteze din nou. E o
+decizie de cost (fiecare reanaliză e un apel de model), nu una tehnică — se poate face leneș, la
+prima deschidere a cererii de către un aprobator.
+
+---
+
 ## VM5-05 — Pop-up de nepotrivire, văzut și de aprobator — 🟢 95%
 
 **Cerința:** „Să se adauge un pop-up unde nu corespunde și aprobatorul să poată vedea / înțelege
