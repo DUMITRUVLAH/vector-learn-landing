@@ -3,8 +3,13 @@
  *
  * De ce există: decizia de aprobare se ia uitându-te la factură. `window.open` scotea aprobatorul
  * din aplicație (filă nouă, fără rândul pe care lucra, fără drum înapoi), iar pe atașamentele
- * salvate ca `data:` Chrome bloca de-a dreptul navigarea. Aici, documentul e adus autentificat de
- * la ruta de preview, transformat în blob și randat pe loc: PDF în `<iframe>`, imagine în `<img>`.
+ * salvate ca `data:` Chrome bloca de-a dreptul navigarea. Aici, documentul e randat pe loc din chiar
+ * ruta de preview (autorizată pe server, aceeași origine): PDF în `<iframe>`, imagine în `<img>`.
+ *
+ * Sursa e URL-ul rutei, NU un `blob:` construit în pagină: un `blob:` are nevoie de `frame-src blob:`
+ * în CSP, pe care un server mai vechi (sau un CDN cu headere proprii) nu-l are — și atunci
+ * vizualizatorul afișa „This content is blocked". Un URL de pe propria origine trece prin
+ * `default-src 'self'` oriunde. Cererea de verificare de mai jos e citită din cache de `<iframe>`.
  *
  * Se montează O SINGURĂ dată, în `App.tsx`; paginile îl cheamă prin `openParAttachmentViewer`
  * (vezi `src/lib/par/attachmentViewerBus.ts`) sau prin `openParAttachment` din `src/lib/parFiles.ts`.
@@ -23,7 +28,7 @@ import {
 
 type LoadState =
   | { status: "loading" }
-  | { status: "ready"; url: string; mime: string }
+  | { status: "ready"; mime: string }
   | { status: "error"; message: string };
 
 /** Ce poate randa browserul singur; restul (docx, xlsx) primesc butonul de descărcare. */
@@ -59,13 +64,13 @@ export function ParAttachmentViewer() {
     };
   }, [target, close]);
 
-  // Documentul e adus cu cookie-ul de sesiune (ruta de preview verifică accesul la dosar) și ținut
-  // ca blob: așa aflăm tipul real din `Content-Type`, iar un 403/404 devine un mesaj citibil în loc
-  // de un `<iframe>` alb pe care nimeni nu-l poate interpreta.
+  // Documentul e cerut o dată cu cookie-ul de sesiune (ruta de preview verifică accesul la dosar):
+  // așa aflăm tipul real din `Content-Type`, iar un 403/404 devine un mesaj citibil în loc de un
+  // cadru alb sau de un JSON de eroare afișat ca document. Răspunsul are `max-age=60`, deci
+  // `<iframe>`/`<img>` îl iau din cache-ul browserului, fără a doua descărcare.
   useEffect(() => {
     if (!target) return;
     let cancelled = false;
-    let objectUrl: string | null = null;
     setState({ status: "loading" });
     void (async () => {
       try {
@@ -81,10 +86,10 @@ export function ParAttachmentViewer() {
                 : `Serverul a răspuns cu eroarea ${res.status}.`,
           );
         }
-        const blob = await res.blob();
+        const mime = res.headers.get("content-type") ?? "";
+        await res.blob();
         if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setState({ status: "ready", url: objectUrl, mime: blob.type });
+        setState({ status: "ready", mime });
       } catch (err) {
         if (cancelled) return;
         setState({
@@ -95,7 +100,6 @@ export function ParAttachmentViewer() {
     })();
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [target]);
 
@@ -127,7 +131,7 @@ export function ParAttachmentViewer() {
           </h2>
           {state.status === "ready" && (
             <a
-              href={state.url}
+              href={previewUrl}
               download={target.fileName}
               className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent/10 max-sm:h-11"
             >
@@ -171,12 +175,12 @@ export function ParAttachmentViewer() {
           )}
 
           {state.status === "ready" && kind === "pdf" && (
-            <iframe src={state.url} title={target.fileName} className="h-full w-full border-0 bg-background" />
+            <iframe src={previewUrl} title={target.fileName} className="h-full w-full border-0 bg-background" />
           )}
 
           {state.status === "ready" && kind === "image" && (
             <div className="flex min-h-full items-center justify-center p-4">
-              <img src={state.url} alt={target.fileName} className="max-h-full max-w-full rounded-md" />
+              <img src={previewUrl} alt={target.fileName} className="max-h-full max-w-full rounded-md" />
             </div>
           )}
 
@@ -187,7 +191,7 @@ export function ParAttachmentViewer() {
                 Formatul acesta (Word, Excel) nu poate fi randat de browser. Descarcă-l ca să-l deschizi.
               </p>
               <a
-                href={state.url}
+                href={previewUrl}
                 download={target.fileName}
                 className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 max-sm:h-11"
               >

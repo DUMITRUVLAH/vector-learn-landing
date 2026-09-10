@@ -11,7 +11,7 @@
  *
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ParAttachmentViewer } from "../ParAttachmentViewer";
@@ -23,17 +23,14 @@ const TARGET = { parId: "par-1", attachmentId: "att-1", fileName: "FF AAX42426.p
 function mockPreview(body: Blob, ok = true, status = 200) {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => ({ ok, status, blob: async () => body }) as unknown as Response),
+    vi.fn(async () => ({
+      ok,
+      status,
+      headers: new Headers({ "content-type": body.type }),
+      blob: async () => body,
+    }) as unknown as Response),
   );
 }
-
-beforeEach(() => {
-  vi.stubGlobal("URL", {
-    ...URL,
-    createObjectURL: vi.fn(() => "blob:mock-url"),
-    revokeObjectURL: vi.fn(),
-  });
-});
 
 afterEach(() => {
   cleanup();
@@ -48,7 +45,9 @@ describe("ParAttachmentViewer", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("randează PDF-ul într-un iframe peste pagină", async () => {
+  // Sursa iframe-ului trebuie să rămână URL-ul rutei, nu un `blob:` — un `blob:` cere
+  // `frame-src blob:` în CSP și e blocat („This content is blocked") oriunde lipsește.
+  it("randează PDF-ul într-un iframe peste pagină, direct din ruta de preview", async () => {
     mockPreview(new Blob(["%PDF-1.4"], { type: "application/pdf" }));
     render(<ParAttachmentViewer />);
     let accepted = false;
@@ -62,7 +61,7 @@ describe("ParAttachmentViewer", () => {
     await waitFor(() => {
       const frame = dialog.querySelector("iframe");
       expect(frame).not.toBeNull();
-      expect(frame).toHaveAttribute("src", "blob:mock-url");
+      expect(frame).toHaveAttribute("src", "/api/par/par-1/attachments/att-1/preview");
       expect(frame).toHaveAttribute("title", TARGET.fileName);
     });
     expect(global.fetch).toHaveBeenCalledWith(
@@ -79,7 +78,7 @@ describe("ParAttachmentViewer", () => {
     });
 
     const img = await screen.findByAltText("bon.png");
-    expect(img).toHaveAttribute("src", "blob:mock-url");
+    expect(img).toHaveAttribute("src", "/api/par/par-1/attachments/att-1/preview");
   });
 
   it("arată un mesaj citibil când documentul nu e accesibil", async () => {
@@ -104,7 +103,6 @@ describe("ParAttachmentViewer", () => {
 
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
   });
 
   it("fără vizualizator montat, documentul se deschide tot (filă nouă)", () => {

@@ -13,41 +13,52 @@
  *   - exporturile (CSV/PDF/XLSX) folosesc `URL.createObjectURL` → `blob:` la img/media;
  *   - login-ul Google și Stripe Checkout se fac prin redirect de nivel superior, deci au nevoie
  *     doar de `form-action`, nu de `frame-src`;
- *   - vizualizatorul de documente PAR randează atașamentul adus autentificat, ca `blob:`, într-un
- *     `<iframe>` (`src/components/par/ParAttachmentViewer.tsx`) → `frame-src 'self' blob:`. Fără el,
- *     `default-src 'self'` bloca vizualizatorul cu „This content is blocked". Nu slăbește nimic:
- *     `blob:` e conținut pe care CHIAR pagina noastră l-a creat, iar `frame-ancestors 'none'`
- *     rămâne neatins — noi încadrăm, nu suntem încadrați.
+ *   - vizualizatorul de documente PAR randează atașamentul într-un `<iframe>` care arată chiar ruta
+ *     de preview (`src/components/par/ParAttachmentViewer.tsx`) → `frame-src 'self'`.
+ *
+ * SINGURA excepție de la „nimeni nu ne încadrează": chiar răspunsul rutei
+ * `GET /api/par/:id/attachments/:attId/preview`. Un `X-Frame-Options: DENY` pe EL bloca pagina
+ * noastră să-și arate propriul document („This content is blocked"), deși cine cere e tot originea
+ * noastră. Documentul e conținut static (PDF/imagine), fără butoane care să acționeze în numele
+ * cuiva, deci `SAMEORIGIN` + `frame-ancestors 'self'` nu deschid nicio cale de clickjacking; restul
+ * aplicației rămâne pe `DENY` / `'none'`.
  *
  * `frame-ancestors 'none'` + `X-Frame-Options: DENY` sunt intenționat duplicate: primul e
  * standardul, al doilea acoperă browserele/proxy-urile care încă nu-l citesc pe primul.
  */
 import type { MiddlewareHandler } from "hono";
 
-const CSP = [
+const CSP_DIRECTIVES = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
-  "frame-src 'self' blob:",
+  "frame-src 'self'",
   "connect-src 'self'",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self' https://accounts.google.com https://checkout.stripe.com",
-  "frame-ancestors 'none'",
   "upgrade-insecure-requests",
-].join("; ");
+];
+
+const CSP = [...CSP_DIRECTIVES, "frame-ancestors 'none'"].join("; ");
+/** Același CSP, dar documentul poate fi încadrat de propria noastră aplicație. Vezi comentariul de sus. */
+const CSP_SELF_FRAMEABLE = [...CSP_DIRECTIVES, "frame-ancestors 'self'"].join("; ");
+
+/** Ruta care servește atașamentul PAR inline — singurul răspuns pe care îl încadrăm noi înșine. */
+const FRAMEABLE_BY_US = /^\/api\/par\/[^/]+\/attachments\/[^/]+\/preview$/;
 
 const IS_PROD = process.env.NODE_ENV === "production";
 
 export const securityHeaders: MiddlewareHandler = async (c, next) => {
   await next();
 
-  c.header("Content-Security-Policy", CSP);
-  c.header("X-Frame-Options", "DENY");
+  const framedByUs = FRAMEABLE_BY_US.test(new URL(c.req.url).pathname);
+  c.header("Content-Security-Policy", framedByUs ? CSP_SELF_FRAMEABLE : CSP);
+  c.header("X-Frame-Options", framedByUs ? "SAMEORIGIN" : "DENY");
   c.header("X-Content-Type-Options", "nosniff");
   c.header("Referrer-Policy", "strict-origin-when-cross-origin");
   // Aplicația nu cere niciuna dintre aceste capabilități; le refuzăm explicit ca un script

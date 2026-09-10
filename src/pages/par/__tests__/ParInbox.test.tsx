@@ -296,12 +296,10 @@ describe("ParInbox", () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true,
       status: 200,
+      headers: new Headers({ "content-type": "application/pdf" }),
       blob: async () => new Blob(["%PDF-1.4"], { type: "application/pdf" }),
     }) as unknown as Response));
-    const createObjectURL = vi.fn(() => "blob:mock-url");
-    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL: vi.fn() });
-
-    const { unmount } = render(
+    render(
       <>
         <ParInbox />
         <ParAttachmentViewer />
@@ -314,11 +312,11 @@ describe("ParInbox", () => {
     const dialog = await screen.findByRole("dialog");
     expect(dialog.getAttribute("aria-label")).toBe("Document: FF AAX42426.pdf");
     await waitFor(() => expect(dialog.querySelector("iframe")).not.toBeNull());
+    expect(dialog.querySelector("iframe")).toHaveAttribute(
+      "src",
+      "/api/par/par-inbox-001/attachments/att-1/preview",
+    );
     expect(window.open).not.toHaveBeenCalled();
-
-    // Demontăm ÎNAINTE de a scoate stub-urile: curățarea vizualizatorului cheamă
-    // `URL.revokeObjectURL`, care în jsdom există doar cât timp e stubuit.
-    unmount();
     vi.unstubAllGlobals();
   });
 
