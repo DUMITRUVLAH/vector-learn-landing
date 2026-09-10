@@ -42,7 +42,7 @@ import {
 } from "../lib/par/projectApprovers";
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { getActiveDelegators, getDelegatedAuthority } from "../lib/par/delegations";
-import { stepMatchesViewer } from "../lib/par/decisionAuthority";
+import { stepMatchesViewer, pickDecidableStep } from "../lib/par/decisionAuthority";
 import { blocksOnApprovalLimit } from "../lib/par/approvalLimit";
 import { approvalProgressAfterDecision } from "../lib/par/approvalProgress";
 import { accessiblePayerIds, accessibleProjectIds, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
@@ -201,14 +201,10 @@ async function approveParStep(
     userId, parRoles: roles, delegators, allowedOnProject,
     delegatedRoles: delegated.roles, delegatedAllowedOnProject: delegated.allowedOnProject,
   };
-  const stepMatches = (s: typeof approvalSteps[number]) => stepMatchesViewer(s, viewerCtx);
-
-  const lockedStepForUser = approvalSteps.find(
-    (s) => s.step > 0 && s.decision === "pending" && s.locked === true && stepMatches(s)
-  );
-  const activeStep = approvalSteps.find(
-    (s) => s.step > 0 && s.decision === "pending" && s.locked === false && stepMatches(s)
-  );
+  // pickDecidableStep, not `find`: on a parallel level several pending rows match, and the signer
+  // must land on their OWN pinned row instead of whichever row Postgres returned first.
+  const lockedStepForUser = pickDecidableStep(approvalSteps, viewerCtx, { locked: true });
+  const activeStep = pickDecidableStep(approvalSteps, viewerCtx, { locked: false });
 
   if (!activeStep) {
     if (lockedStepForUser) {
@@ -716,19 +712,13 @@ parApprovalsRoutes.post(
     // Same rule set as approve (decisionAuthority.ts) — incl. a step's required par_role, which the
     // hand-rolled copy here used to ignore (a "finance"-gated step was rejectable by any approver).
     const delegated = await getDelegatedAuthority(delegators, tenantId, par.projectId);
-    const stepMatches = (s: typeof approvalSteps[number]) =>
-      stepMatchesViewer(s, {
-        userId: user.id, parRoles: roles, delegators, allowedOnProject,
-        delegatedRoles: delegated.roles, delegatedAllowedOnProject: delegated.allowedOnProject,
-      });
+    const viewerCtx = {
+      userId: user.id, parRoles: roles, delegators, allowedOnProject,
+      delegatedRoles: delegated.roles, delegatedAllowedOnProject: delegated.allowedOnProject,
+    };
 
-    const lockedStepForUserReject = approvalSteps.find(
-      (s) => s.step > 0 && s.decision === "pending" && s.locked === true && stepMatches(s)
-    );
-
-    const activeStep = approvalSteps.find(
-      (s) => s.step > 0 && s.decision === "pending" && s.locked === false && stepMatches(s)
-    );
+    const lockedStepForUserReject = pickDecidableStep(approvalSteps, viewerCtx, { locked: true });
+    const activeStep = pickDecidableStep(approvalSteps, viewerCtx, { locked: false });
 
     if (!activeStep) {
       if (lockedStepForUserReject) {
@@ -823,15 +813,12 @@ parApprovalsRoutes.post(
     const designated = par.projectId ? await getDesignatedApprovers(tenantId, par.projectId) : new Set<string>();
     const allowedOnProject = projectAllowsApprover(par.projectId, user.id, designated);
     const delegated = await getDelegatedAuthority(delegators, tenantId, par.projectId);
-    const stepMatches = (s: typeof approvalSteps[number]) =>
-      stepMatchesViewer(s, {
-        userId: user.id, parRoles: roles, delegators, allowedOnProject,
-        delegatedRoles: delegated.roles, delegatedAllowedOnProject: delegated.allowedOnProject,
-      });
+    const viewerCtx = {
+      userId: user.id, parRoles: roles, delegators, allowedOnProject,
+      delegatedRoles: delegated.roles, delegatedAllowedOnProject: delegated.allowedOnProject,
+    };
 
-    const activeStep = approvalSteps.find(
-      (s) => s.step > 0 && s.decision === "pending" && s.locked === false && stepMatches(s)
-    );
+    const activeStep = pickDecidableStep(approvalSteps, viewerCtx, { locked: false });
 
     if (!activeStep) {
       return c.json({ error: "forbidden: no active step assigned to you" }, 403);
