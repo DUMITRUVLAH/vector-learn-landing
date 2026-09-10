@@ -1086,6 +1086,13 @@
       "when": 1787000200012,
       "tag": "0155_par_rating_prompted_at",
       "breakpoints": true
+    },
+    {
+      "idx": 156,
+      "version": "7",
+      "when": 1787000200013,
+      "tag": "0156_par_eticheta_slot_nu_e_nume",
+      "breakpoints": true
     }
   ]
 }

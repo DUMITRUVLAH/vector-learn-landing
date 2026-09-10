@@ -425,8 +425,10 @@ function ApprovalRuleBuilder({ initial, isNew, saving, departments, payers, proj
     if (value.startsWith("user:")) {
       const userId = value.slice(5);
       if (chosenUserIds.has(userId)) { setAddPick(""); return; }
-      const m = members.find((x) => x.userId === userId);
-      set("approvers", [...draft.approvers, { userId, parRole: null, label: m?.userName ?? m?.userEmail ?? "Aprobator" }]);
+      // Eticheta e ROLUL slotului, nu omul din el: persoana aleasă trăiește în `userId` (de unde o
+      // citește și rândul de mai jos). Scrisă aici, numele ei ajungea titlu de secțiune în lanțul de
+      // semnături — „15. ANA CHIRITA" deasupra semnăturii altcuiva (vezi slotRoleLabel, doa.ts).
+      set("approvers", [...draft.approvers, { userId, parRole: null, label: "Aprobator" }]);
     } else if (value.startsWith("role:")) {
       const role = value.slice(5) as ApproverPick["parRole"];
       const roleLabel = ROLE_OPTIONS.find((o) => o.value === role)?.label ?? String(role);

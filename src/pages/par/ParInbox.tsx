@@ -34,6 +34,7 @@ import {
   rejectPar,
   requestParChanges,
   formatMDL,
+  formatCurrency,
   type ParInboxItem,
   type ApproveOutcome,
 } from "@/lib/api/par";
@@ -99,6 +100,25 @@ const MY_DECISION_META: Record<string, { label: string; className: string }> = {
   submit_signature: { label: "Semnat la depunere", className: "bg-muted text-foreground" },
 };
 
+/**
+ * Suma se scrie în moneda cererii.
+ *
+ * Inboxul o trecea prin `formatMDL` indiferent de monedă, deci o cerere de 1.500 USD apărea
+ * „1.500,00 L" lângă aceeași cerere scrisă „1.500,00 USD" în lista solicitantului — două ecrane,
+ * două monede, aceeași cifră (ATIC, PAR-2026-0027). Echivalentul în lei există separat, ca
+ * `totalMdlCents`, și se arată ca linie secundară acolo unde încape.
+ */
+function inboxAmount(item: Pick<ParInboxItem, "totalEstimatedCents" | "currency">): string {
+  return item.currency && item.currency !== "MDL"
+    ? formatCurrency(item.totalEstimatedCents, item.currency)
+    : formatMDL(item.totalEstimatedCents);
+}
+
+/** Valoarea cu care se compară cereri în monede diferite: lei, de la cursul fixat la depunere. */
+function inboxAmountMdl(item: Pick<ParInboxItem, "totalEstimatedCents" | "currency" | "totalMdlCents">): number {
+  return item.totalMdlCents ?? item.totalEstimatedCents;
+}
+
 type InboxSortKey = "requestNo" | "payeeName" | "projectName" | "requestedByName" | "totalEstimatedCents" | "submittedAt" | "myDecidedAt";
 
 /**
@@ -120,7 +140,7 @@ function sortFilterInbox(
     // Urgență (owner request, 2026-08-28): urgente primele indiferent de coloana aleasă de om —
     // altfel sortarea implicită după "submittedAt" ar anula ordinea urgent-primul dată de server.
     if (urgentFirst && a.isUrgent !== b.isUrgent) return a.isUrgent ? -1 : 1;
-    if (sort.key === "totalEstimatedCents") return (a.totalEstimatedCents - b.totalEstimatedCents) * dir;
+    if (sort.key === "totalEstimatedCents") return (inboxAmountMdl(a) - inboxAmountMdl(b)) * dir;
     if (sort.key === "submittedAt" || sort.key === "myDecidedAt") {
       const field = sort.key === "submittedAt" ? "submittedAt" : "my_decided_at";
       const ta = a[field] ? Date.parse(a[field] as string) : 0;
@@ -284,7 +304,7 @@ function DecisionModal({ par, type, onClose, onSuccess, defaultSignatureName }: 
         <div className="p-4 bg-muted/40 border-b border-border text-sm">
           <div className="font-medium text-foreground">{par.requestNo}</div>
           <div className="text-muted-foreground mt-1">
-            {formatMDL(par.totalEstimatedCents)} · {par.my_step_label ?? "Aprobare"}
+            {inboxAmount(par)} · {par.my_step_label ?? "Aprobare"}
           </div>
         </div>
 
@@ -813,8 +833,8 @@ export default function ParInbox() {
               && (!beneficiaryFilter || (item.payeeName ?? "").toLocaleLowerCase("ro").includes(beneficiaryFilter.toLocaleLowerCase("ro")))
               && (!dateFrom || !!submitted && submitted >= new Date(dateFrom))
               && (!dateTo || !!submitted && submitted <= new Date(`${dateTo}T23:59:59`))
-              && (min == null || item.totalEstimatedCents >= min)
-              && (max == null || item.totalEstimatedCents <= max);
+              && (min == null || inboxAmountMdl(item) >= min)
+              && (max == null || inboxAmountMdl(item) <= max);
           });
           // Hand the on-screen list to the keyboard handler (see visibleRowsRef).
           visibleRowsRef.current = rows;
@@ -981,7 +1001,12 @@ export default function ParInbox() {
                           </td>
                         )}
                         <td className="min-w-[130px] max-w-[190px] px-3 py-3 align-middle font-medium text-foreground"><span className="line-clamp-3" title={item.payeeName ?? ""}>{item.payeeName ?? "—"}</span></td>
-                        <td className="whitespace-nowrap px-3 py-3 text-right align-middle font-mono font-semibold text-foreground">{formatMDL(item.totalEstimatedCents)}</td>
+                        <td className="whitespace-nowrap px-3 py-3 text-right align-middle font-mono font-semibold text-foreground">
+                          {inboxAmount(item)}
+                          {item.currency && item.currency !== "MDL" && item.totalMdlCents != null && (
+                            <span className="block text-[11px] font-normal text-muted-foreground">≈ {formatMDL(item.totalMdlCents)}</span>
+                          )}
+                        </td>
                         <td className="min-w-[150px] max-w-[220px] px-3 py-3 align-middle text-foreground"><span className="line-clamp-3" title={item.endUse ?? ""}>{item.endUse || "—"}</span></td>
                         <td className="max-w-[110px] px-3 py-3 align-middle text-foreground"><span className="line-clamp-2" title={item.projectName ?? ""}>{item.projectName ?? "—"}</span></td>
                         <td className="max-w-[110px] px-3 py-3 align-middle text-foreground"><span className="line-clamp-2" title={item.requestedByName ?? ""}>{item.requestedByName ?? "—"}</span></td>

@@ -120,6 +120,26 @@ describe("ParInbox", () => {
     });
   });
 
+  // Regresie (ATIC, PAR-2026-0027): inboxul trecea orice sumă prin `formatMDL`, deci o cerere de
+  // 1.500 USD apărea "1.500,00 L" — aceeași cifră pe care lista solicitantului o scria "1.500,00
+  // USD". Aceeași cerere, două ecrane, două monede.
+  it("suma unei cereri în valută se scrie în moneda ei, cu echivalentul în lei alături", async () => {
+    const item = makeInboxItem({
+      currency: "USD",
+      totalEstimatedCents: 150000,
+      totalMdlCents: 2805000,
+    });
+    vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [item], total: 1 });
+
+    render(<ParInbox />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/1\.500,00\s*USD/).length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText(/^1\.500,00\s*L$/)).toBeNull();
+    expect(screen.getByText(/≈\s*28\.050,00/)).toBeTruthy();
+  });
+
   it("shows approve, request-changes and reject buttons for each item", async () => {
     const item = makeInboxItem();
     vi.spyOn(parApi, "getParInbox").mockResolvedValue({ inbox: [item], total: 1 });

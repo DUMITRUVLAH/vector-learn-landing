@@ -7,6 +7,7 @@
  */
 import { db } from "../../db/client";
 import { parDoaMatrix, parRequests, parApprovals } from "../../db/schema/par";
+import { users } from "../../db/schema/users";
 import { and, eq, or, isNull, lte, gte, inArray } from "drizzle-orm";
 
 export interface ApprovalStep {
@@ -24,6 +25,25 @@ export interface ResolveApprovalChainParams {
   departmentId?: string | null;
   payerId?: string | null;
   projectId?: string | null;
+}
+
+/**
+ * Eticheta unui slot de aprobare e un ROL („Aprobator", „Director financiar"), nu un om.
+ *
+ * Builderul de reguli DOA o completa automat cu NUMELE persoanei alese, iar numele ăla ajungea
+ * peste tot ca titlu de secțiune: „15. ANA CHIRITA" în lanțul de semnături, în PDF și în inbox —
+ * inclusiv pe rânduri de care persoana nu mai răspunde (slotul solicitantului se elimină la
+ * depunere) sau pe care le semnase deja altcineva. Rezultatul citea ca o minciună: capul spunea un
+ * om, semnătura de dedesubt spunea altul (ATIC, PAR-2026-0025).
+ *
+ * Când eticheta nu e decât numele titularului, slotul se anunță cu ce e: un rol.
+ */
+export function slotRoleLabel(label: string | null | undefined, ownerName: string | null | undefined): string {
+  const l = (label ?? "").trim();
+  if (!l) return "Aprobator";
+  const owner = (ownerName ?? "").trim();
+  if (owner && l.toLocaleLowerCase("ro") === owner.toLocaleLowerCase("ro")) return "Aprobator";
+  return l;
 }
 
 /**
@@ -126,7 +146,21 @@ export async function resolveApprovalChain(
       }));
     });
 
-  return steps;
+  // Regulile salvate înainte de fix încă poartă numele persoanei ca etichetă; o traducem în rol
+  // aici, ca lanțul scris în par_approvals la depunere să fie deja curat.
+  const pinnedIds = [...new Set(steps.map((s) => s.approverUserId).filter((v): v is string => !!v))];
+  if (pinnedIds.length === 0) return steps;
+  const owners = await db
+    .select({ id: users.id, name: users.name })
+    .from(users)
+    .where(inArray(users.id, pinnedIds));
+  return steps.map((s) => ({
+    ...s,
+    approverRoleLabel: slotRoleLabel(
+      s.approverRoleLabel,
+      owners.find((o) => o.id === s.approverUserId)?.name ?? null
+    ),
+  }));
 }
 
 /**
