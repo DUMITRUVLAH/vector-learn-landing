@@ -377,6 +377,30 @@ describe("buildParHtml() — T-PAR-114-2 [blocant] money format", () => {
     expect(html).toContain("TOTAL ESTIMATED COST");
     expect(html).toContain("MDL"); // money lives under an MDL column, like the office form
   });
+
+  /**
+   * Regresie (ATIC, PAR-2026-0027): formularul avea „MDL" scris în capul coloanelor de preț și
+   * lângă TOTAL ESTIMATED COST, deci o cerere de 1.500 USD se printa ca 1.500 de lei — actul
+   * semnat spunea altceva decât ecranul de alături.
+   */
+  it("printează moneda cererii, nu MDL, pentru un PAR în valută", () => {
+    const par = makePar();
+    par.currency = "USD";
+    par.totalEstimatedCents = 150000;
+    par.totalMdlCents = 2585820;
+    par.exchangeRate = "17.2388";
+    par.line_items = [{ ...par.line_items![0], unitPriceCents: 150000, lineTotalCents: 150000 }];
+
+    const html = buildParHtml(par);
+
+    expect(html).toContain("TOTAL ESTIMATED COST*: &nbsp;USD");
+    expect(html).toContain("Est. Unit Price<br/><span style=\"color:#c0392b;font-weight:800;\">USD</span>");
+    expect(html).not.toContain(">MDL</span>");
+    // Echivalentul în lei rămâne pe formular — e cifra după care se verifică pragurile interne.
+    expect(html).toContain("MDL equivalent:");
+    expect(html).toMatch(/25[\s  ]858,20/);
+    expect(html).toContain("17.2388");
+  });
 });
 
 // ─── T-PAR-114-3 [normal]: HTML injection prevention ─────────────────────────

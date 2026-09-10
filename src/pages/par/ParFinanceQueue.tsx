@@ -225,7 +225,7 @@ function mdlStringToCents(s: string): number {
  * ecranele astea sunt cele pe care se execută plata.
  */
 function parAmount(cents: number, currency: string | null | undefined): string {
-  return currency && currency !== "MDL" ? formatCurrency(cents, currency) : formatMDL(cents);
+  return formatCurrency(cents, currency);
 }
 
 /** Echivalentul în lei, scris ca linie secundară — există doar pentru cererile în valută. */

@@ -259,7 +259,7 @@ function AgingTable({ items, loading }: AgingTableProps) {
               <tr className="border-b border-border">
                 <th className="text-left py-2 pr-3 text-xs font-semibold text-muted-foreground">Status</th>
                 <th className="text-right py-2 px-3 text-xs font-semibold text-muted-foreground">Nr.</th>
-                <th className="text-right py-2 px-3 text-xs font-semibold text-muted-foreground">Total estimat</th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-muted-foreground">Total estimat (MDL)</th>
                 <th className="text-right py-2 pl-3 text-xs font-semibold text-muted-foreground">Vârstă medie</th>
               </tr>
             </thead>
@@ -273,6 +273,8 @@ function AgingTable({ items, loading }: AgingTableProps) {
                 <tr key={it.status} className="border-t border-border">
                   <td className="py-2 pr-3 text-foreground">{STATUS_LABELS[it.status] ?? it.status}</td>
                   <td className="py-2 px-3 text-right font-medium text-foreground">{it.count}</td>
+                  {/* currency-exempt: `totalCents` vine deja în lei din SQL —
+                      coalesce(total_mdl_cents, total_estimated_cents) în /reports/aging. */}
                   <td className="py-2 px-3 text-right text-foreground">{formatMDL(it.totalCents)}</td>
                   <td className="py-2 pl-3 text-right text-muted-foreground">{fmtDays(it.avgAgingDays)}</td>
                 </tr>

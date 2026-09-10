@@ -109,9 +109,7 @@ const MY_DECISION_META: Record<string, { label: string; className: string }> = {
  * `totalMdlCents`, și se arată ca linie secundară acolo unde încape.
  */
 function inboxAmount(item: Pick<ParInboxItem, "totalEstimatedCents" | "currency">): string {
-  return item.currency && item.currency !== "MDL"
-    ? formatCurrency(item.totalEstimatedCents, item.currency)
-    : formatMDL(item.totalEstimatedCents);
+  return formatCurrency(item.totalEstimatedCents, item.currency);
 }
 
 /** Valoarea cu care se compară cereri în monede diferite: lei, de la cursul fixat la depunere. */

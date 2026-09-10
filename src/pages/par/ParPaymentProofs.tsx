@@ -35,7 +35,6 @@ import { useRouter } from "@/router/HashRouter";
 import {
   getPaymentProofsQueue,
   uploadAttachment,
-  formatMDL,
   formatCurrency,
   type ParPaymentProofItem,
 } from "@/lib/api/par";
@@ -69,9 +68,7 @@ function amountOf(item: ParPaymentProofItem): number {
 }
 
 function itemLabel(item: ParPaymentProofItem): string {
-  const amount = item.currency && item.currency !== "MDL"
-    ? formatCurrency(amountOf(item), item.currency)
-    : formatMDL(amountOf(item));
+  const amount = formatCurrency(amountOf(item), item.currency);
   return `${item.requestNo} · ${item.payeeName ?? "beneficiar nespecificat"} · ${amount}`;
 }
 
@@ -437,9 +434,7 @@ export default function ParPaymentProofs() {
                   </td>
                   <td className="px-3 py-3 text-foreground">{item.payeeName ?? "—"}</td>
                   <td className="px-3 py-3 text-right font-mono font-semibold whitespace-nowrap text-foreground">
-                    {item.currency && item.currency !== "MDL"
-                      ? formatCurrency(amountOf(item), item.currency)
-                      : formatMDL(amountOf(item))}
+                    {formatCurrency(amountOf(item), item.currency)}
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap text-foreground">
                     {formatDate(item.paymentDate ?? item.paidAt)}

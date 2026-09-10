@@ -638,6 +638,7 @@ parReportsRoutes.get("/export.csv", async (c) => {
       status: parRequests.status,
       totalEstimatedCents: parRequests.totalEstimatedCents,
       currency: parRequests.currency,
+      totalMdlCents: parRequests.totalMdlCents,
       submittedAt: parRequests.submittedAt,
       approvedAt: parRequests.approvedAt,
       paidAt: parRequests.paidAt,
@@ -648,7 +649,9 @@ parReportsRoutes.get("/export.csv", async (c) => {
 
   const data = Array.isArray(rows) ? rows : (rows as { rows?: typeof rows }).rows ?? [];
 
-  const header = "request_no,date_of_request,purpose,charge_to,status,total_estimated,currency,submitted_at,approved_at,paid_at\n";
+  // `total_estimated` e în moneda cererii; `total_mdl` e echivalentul în lei, ca o coloană
+  // sumată într-un spreadsheet să nu adune dolari peste lei.
+  const header = "request_no,date_of_request,purpose,charge_to,status,total_estimated,currency,total_mdl,submitted_at,approved_at,paid_at\n";
   const csvRows = (data as Record<string, unknown>[]).map((r) => [
     r.requestNo,
     r.dateOfRequest,
@@ -657,6 +660,7 @@ parReportsRoutes.get("/export.csv", async (c) => {
     r.status,
     Number(r.totalEstimatedCents ?? 0) / 100,
     r.currency,
+    Number(r.totalMdlCents ?? r.totalEstimatedCents ?? 0) / 100,
     r.submittedAt ?? "",
     r.approvedAt ?? "",
     r.paidAt ?? "",
@@ -693,6 +697,7 @@ parReportsRoutes.get("/export.xlsx", async (c) => {
       status: parRequests.status,
       totalEstimatedCents: parRequests.totalEstimatedCents,
       currency: parRequests.currency,
+      totalMdlCents: parRequests.totalMdlCents,
       submittedAt: parRequests.submittedAt,
       approvedAt: parRequests.approvedAt,
       paidAt: parRequests.paidAt,

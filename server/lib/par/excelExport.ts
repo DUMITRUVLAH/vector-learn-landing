@@ -3,7 +3,7 @@
  * Server-side only (exceljs is never imported into the client bundle).
  *
  * Sheets:
- *   1. Rezumat  — totals by status, department, budget code
+ *   1. Rezumat  — totals by status, department, budget code (agregate în MDL)
  *   2. Cereri   — one row per PAR, names resolved (not UUIDs), amounts numeric
  *   3. Articole — line items with their PAR number
  */
@@ -26,6 +26,8 @@ export interface ExcelParRow {
   status: string;
   totalEstimatedCents: number;
   currency: string;
+  /** VF-203: echivalentul în lei, fixat la depunere. Null pe ciorne și pe cererile în MDL. */
+  totalMdlCents?: number | null;
   submittedAt: Date | string | null;
   approvedAt: Date | string | null;
   paidAt: Date | string | null;
@@ -96,20 +98,29 @@ export async function buildParWorkbook(params: {
   sum.addRow([`Generat: ${new Date().toLocaleString("ro-MD")}`]);
   sum.addRow([]);
 
+  /**
+   * Un total pe mai multe cereri se adună DOAR în lei.
+   *
+   * Rezumatul aduna `totalEstimatedCents` direct, adică dolari peste lei într-o singură celulă
+   * intitulată „Total". Echivalentul MDL e fixat la depunere (`totalMdlCents`); acolo unde
+   * lipsește — ciornă, sau cerere în lei — suma proprie ESTE cea în lei.
+   */
+  const mdlOf = (p: ExcelParRow) => p.totalMdlCents ?? p.totalEstimatedCents;
+
   const agg = (key: (p: ExcelParRow) => string | null) => {
     const m = new Map<string, { count: number; cents: number }>();
     for (const p of pars) {
       const k = key(p) || "—";
       const cur = m.get(k) ?? { count: 0, cents: 0 };
       cur.count += 1;
-      cur.cents += p.totalEstimatedCents;
+      cur.cents += mdlOf(p);
       m.set(k, cur);
     }
     return [...m.entries()].sort((a, b) => b[1].cents - a[1].cents);
   };
 
   const addAggBlock = (title: string, rows: [string, { count: number; cents: number }][]) => {
-    const h = sum.addRow([title, "Număr", "Total"]);
+    const h = sum.addRow([title, "Număr", "Total (MDL)"]);
     styleHeader(h);
     for (const [label, v] of rows) {
       const r = sum.addRow([label, v.count, v.cents / 100]);
@@ -121,7 +132,7 @@ export async function buildParWorkbook(params: {
   addAggBlock("Pe status", agg((p) => p.status));
   addAggBlock("Pe departament", agg((p) => p.departmentName));
   addAggBlock("Pe cod buget", agg((p) => p.budgetCode));
-  const grand = pars.reduce((s, p) => s + p.totalEstimatedCents, 0);
+  const grand = pars.reduce((s, p) => s + mdlOf(p), 0);
   const totalRow = sum.addRow(["TOTAL GENERAL", pars.length, grand / 100]);
   totalRow.font = { bold: true };
   totalRow.getCell(3).numFmt = MONEY_FMT;
@@ -131,7 +142,7 @@ export async function buildParWorkbook(params: {
   const req = wb.addWorksheet("Cereri");
   const reqHeader = req.addRow([
     "Nr. cerere", "Data", "Solicitant", "Departament", "Proiect", "Cod buget",
-    "Scop", "Charge to", "Status", "Total", "Monedă", "Depus", "Aprobat", "Plătit",
+    "Scop", "Charge to", "Status", "Total", "Monedă", "Total (MDL)", "Depus", "Aprobat", "Plătit",
   ]);
   styleHeader(reqHeader);
   for (const p of pars) {
@@ -147,15 +158,17 @@ export async function buildParWorkbook(params: {
       p.status,
       p.totalEstimatedCents / 100,
       p.currency,
+      mdlOf(p) / 100,
       toDate(p.submittedAt),
       toDate(p.approvedAt),
       toDate(p.paidAt),
     ]);
     r.getCell(2).numFmt = DATE_FMT;
     r.getCell(10).numFmt = MONEY_FMT;
-    r.getCell(12).numFmt = DATE_FMT;
+    r.getCell(12).numFmt = MONEY_FMT;
     r.getCell(13).numFmt = DATE_FMT;
     r.getCell(14).numFmt = DATE_FMT;
+    r.getCell(15).numFmt = DATE_FMT;
   }
   req.views = [{ state: "frozen", ySplit: 1 }];
   autoWidth(req);

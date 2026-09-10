@@ -24,10 +24,10 @@ import type { ParDetail, ParApproval, ParLineItem } from "./api/par";
 
 // ─── Palette (PDF-only — inline hex, html2canvas-safe, not design-system tokens) ──────────────
 // The official form is a black-and-white office document. The ONLY colour is a pale rose title
-// band and a red "MDL" accent in the money column headers (matching the source Excel).
+// band and a red currency accent in the money column headers (matching the source Excel).
 
 const TITLE_BG = "#fbe9ec";        // very pale rose — title band background (not a pink fill)
-const RED = "#c0392b";             // red "MDL" accent in price column headers (source Excel)
+const RED = "#c0392b";             // red currency accent in price column headers (source Excel)
 const LINK = "#1155cc";            // blue underlined "here" instruction link
 const INK = "#000000";             // document ink — pure black, like a printed form
 const FIELD = "#1a1a1a";           // filled-in field values
@@ -47,7 +47,7 @@ export function esc(s: string | null | undefined): string {
 
 /**
  * Format minor-unit cents as MDL with comma decimals and space thousands, e.g. "7 000,00".
- * Returns a bare number string (no symbol) — the form puts "MDL" in its own column/label.
+ * Returns a bare number string (no symbol) — the form puts the currency in its own column/label.
  * Always shows two decimals to match the official Excel ("7,000.00" → "7 000,00").
  */
 function amount(cents: number): string {
@@ -62,7 +62,7 @@ function amount(cents: number): string {
 /**
  * Format minor-unit cents as "L 7 000" — locale-independent thousands grouping,
  * decimal only when non-zero. Same algorithm as paymentAccountPdf.money().
- * Kept exported for the test-suite / other callers; the form body uses amount() + an "MDL" label.
+ * Kept exported for the test-suite / other callers; the form body uses amount() + a currency label.
  */
 export function money(cents: number, currency = "MDL"): string {
   const neg = cents < 0;
@@ -196,9 +196,19 @@ export function buildParHtml(par: ParDetail): string {
   // Total
   const total = req.totalEstimatedCents ?? items.reduce((s, i) => s + i.lineTotalCents, 0);
 
-  // Moneda cererii, scrisă în capul coloanelor de preț și pe rândul de total. Formularul avea „MDL"
-  // fix în șablon, deci o cerere în USD se tipărea — și se semna — ca și cum ar fi fost în lei.
+  /**
+   * Moneda cererii, nu „MDL" tipărit din start.
+   *
+   * Formularul avea „MDL" scris în capul coloanelor de preț și lângă TOTAL ESTIMATED COST, așa că
+   * un PAR de 1.500 USD se printa ca 1.500 de lei — actul semnat spunea altceva decât ecranul
+   * (ATIC, PAR-2026-0027). Echivalentul în lei, fixat la depunere, se scrie separat dedesubt, ca
+   * să rămână și cifra după care se verifică pragurile interne.
+   */
   const cur = esc(req.currency || "MDL");
+  const mdlEquivalent =
+    req.currency && req.currency !== "MDL" && req.totalMdlCents != null
+      ? `MDL equivalent: ${amount(req.totalMdlCents)}${req.exchangeRate ? ` (rate ${esc(String(req.exchangeRate))})` : ""}`
+      : "";
 
   // Section 16 — payment data
   const pmt = par.payment;
@@ -260,7 +270,7 @@ export function buildParHtml(par: ParDetail): string {
     </tbody>
   </table>
 
-  <!-- SECTION 10: LINE ITEMS TABLE (plain black-bordered, white header, red MDL accent) -->
+  <!-- SECTION 10: LINE ITEMS TABLE (plain black-bordered, white header, red currency accent) -->
   <table style="width:100%;border-collapse:collapse;border:1px solid ${BORDER};border-top:0;margin-bottom:0;">
     <tbody>
       <tr>
@@ -281,6 +291,7 @@ export function buildParHtml(par: ParDetail): string {
       </tr>
     </tbody>
   </table>
+  ${mdlEquivalent ? `<div style="font-size:9px;color:${INK};text-align:right;padding:2px 2px 0;">${mdlEquivalent}</div>` : ""}
   <div style="font-size:8px;color:${FAINT};font-style:italic;line-height:1.35;padding:3px 2px 0;">
     * For transactions above micro-purchase threshold, if final price for purchase exceeds total estimated cost by more than 10%, purchase shall not proceed without approval from approver below.
   </div>

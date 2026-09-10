@@ -16,6 +16,10 @@ import {
   type SfsInvoiceParty,
 } from "@/lib/api/parEfactura";
 
+/**
+ * currency-exempt: cifrele vin de pe factura de stat (SFS e-Factura), care se emite în lei.
+ * Nu sunt sumele cererii — o cerere în USD are aici tot lei, și așa trebuie să și scrie.
+ */
 function fmtMoney(cents: number | null | undefined): string {
   if (cents == null) return "—";
   return `${(cents / 100).toLocaleString("ro-MD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MDL`;

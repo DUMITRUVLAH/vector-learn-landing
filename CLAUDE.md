@@ -588,6 +588,60 @@ The reviewers:
 - Squash-merge to `main` (or merge-commit if you want to preserve per-item commits in history)
 - Co-author tag: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
 
+### 3.8 Moneda cererii — NENEGOCIABIL (owner, 2026-09-10)
+
+**O sumă care aparține unei singure cereri se scrie ÎNTOTDEAUNA în moneda acelei cereri.**
+Nu există „moneda implicită" la afișare. Leul e o monedă ca oricare alta, nu fundalul aplicației.
+
+Ce a mers prost și de ce regula e scrisă aici: PAR-2026-0027 (ATIC) era de **1.500 USD**. Pagina
+cererii scria „1.500,00 USD"; inboxul aprobatorului, coada de finanțe și PDF-ul oficial scriau
+„**1.500,00 L**" — aceeași cifră, patru ecrane, două monede, o diferență de ~17×. Dialogul de
+plată mergea mai departe și cerea „Suma reală (**MDL**)" cu 1.500 pre-completat, adică îl invita
+pe omul de la finanțe să plătească 1.500 de lei pentru o factură de 1.500 de dolari. Cauza a fost
+de fiecare dată aceeași: `formatMDL()` — o funcție care are moneda scrisă în corpul ei — chemată
+peste o sumă care nu era în lei.
+
+**Cele două unelte, și când se folosește fiecare:**
+
+| Ce afișezi | Ce folosești |
+|---|---|
+| Suma unei cereri, a unei linii, a unei oferte, a unei plăți | `formatCurrency(cents, <obiect>.currency)` |
+| Un TOTAL peste mai multe cereri (KPI, raport, buget, prag DOA) | agregă `totalMdlCents` și scrie-l cu `formatMDL()`; pune „(MDL)" în capul coloanei |
+
+`totalMdlCents` e echivalentul în lei **înghețat la depunere**, la cursul BNM din ziua aceea
+(`exchangeRate`). Pentru o cerere în lei e chiar suma ei. Nu se reconverteşte la afișare — un
+raport nu are voie să-și schimbe cifrele pentru că azi euro stă altfel.
+
+**Reguli derivate, care s-au încălcat deja o dată fiecare:**
+
+1. **Nu compara sume în monede diferite.** Sortarea după „Sumă", filtrele `Min./Max. MDL`, pragul
+   de micro-achiziție, banda din matricea DOA, plafonul unui aprobator, disponibilul unui cod de
+   buget — toate merg pe echivalentul MDL, niciodată pe `totalEstimatedCents`.
+2. **Nu aduna `totalEstimatedCents` peste rânduri.** `SUM(coalesce(total_mdl_cents,
+   total_estimated_cents))`, oriunde, inclusiv în exporturi.
+3. **Nu scrie eticheta monedei de mână** în HTML-ul unui document tipărit („MDL" în capul
+   coloanei de preț, „L" lângă total). Documentul semnat trebuie să spună exact ce spune ecranul.
+4. **Nu boteza o variabilă cu o monedă** pe care nu i-o poți garanta (`actualAmountMdl`,
+   `mdlStringToCents`). Numele a fost, literalmente, ce a convins pe cineva să pună eticheta
+   „(MDL)" peste un câmp cu dolari în el.
+5. **Un ecran nou care afișează bani se verifică pe o cerere în USD, nu doar pe una în lei.**
+
+**Poarta care ține regula pe loc:** `scripts/check-par-currency.mjs`, rulată în
+`scripts/vercel-build.mjs` și în `npm run build`. Caută `formatMDL(...)` peste câmpuri care
+poartă suma nativă și etichete de monedă scrise de mână în formulare. Când valoarea chiar E în
+lei, exceptarea se scrie pe linia de deasupra și **cere un motiv**:
+
+```ts
+// currency-exempt: totalCents vine agregat în lei din SQL (coalesce(total_mdl_cents, …))
+```
+
+Teste care păzesc regula: `src/__tests__/par/par-currency-gate.test.ts` (poarta cade pe o
+fixtură cu violarea reintrodusă), `src/lib/__tests__/parPdf.test.ts`,
+`server/lib/par/__tests__/excelExport.currency.test.ts`,
+`src/pages/par/__tests__/ParDetail.currency.test.tsx`.
+
+---
+
 ### 3.7 What NOT to do
 - Don't add features outside the spec
 - Don't introduce new dependencies casually (if needed, justify in PR body)

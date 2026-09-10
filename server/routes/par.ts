@@ -825,10 +825,16 @@ parRoutes.get("/", async (c) => {
   }
 
   // VF-105: total range (cents).
+  //
+  // Filtrul se cheamă „Min./Max. MDL" în interfață, deci compară LEI. `totalEstimatedCents` e în
+  // moneda cererii: o cerere de 1.500 USD intra în intervalul „până la 2.000 lei" ca și cum ar fi
+  // fost 1.500 de lei, deși valorează ~25.800. Se compară echivalentul MDL fixat la depunere, cu
+  // revenire la suma proprie doar acolo unde nu există (ciornă, sau MDL, unde e aceeași valoare).
+  const totalInMdl = sql<number>`coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})`;
   const minN = minTotal != null ? Number(minTotal) : NaN;
   const maxN = maxTotal != null ? Number(maxTotal) : NaN;
-  if (Number.isFinite(minN)) conditions.push(gte(parRequests.totalEstimatedCents, Math.round(minN)));
-  if (Number.isFinite(maxN)) conditions.push(lte(parRequests.totalEstimatedCents, Math.round(maxN)));
+  if (Number.isFinite(minN)) conditions.push(gte(totalInMdl, Math.round(minN)));
+  if (Number.isFinite(maxN)) conditions.push(lte(totalInMdl, Math.round(maxN)));
 
   /**
    * PERF-007 — plafon dur pe numărul de rânduri.

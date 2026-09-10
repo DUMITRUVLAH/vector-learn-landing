@@ -73,13 +73,16 @@ async function fetchFinDeskKPI(): Promise<FinDeskKPI> {
 async function fetchPARKPI(): Promise<PARkpi> {
   // PAR list with status=pending_approval
   const res = await api<{
-    requests: { totalEstimatedCents: number; status: string }[];
+    requests: { totalEstimatedCents: number; totalMdlCents?: number | null; status: string }[];
     total: number;
   }>("/api/par?status=pending_approval");
 
   const pendingCount = res.total ?? 0;
+  // Cifra se afișează ca „Valoare totală" în lei, deci fiecare cerere intră cu echivalentul ei
+  // MDL, fixat la depunere. Adunarea directă a lui `totalEstimatedCents` punea dolari peste lei:
+  // o cerere de 1.500 USD contribuia cu 1.500, nu cu ~25.800.
   const pendingValueCents = (res.requests ?? []).reduce(
-    (sum, r) => sum + (r.totalEstimatedCents ?? 0),
+    (sum, r) => sum + (r.totalMdlCents ?? r.totalEstimatedCents ?? 0),
     0
   );
   return { pendingCount, pendingValueCents };

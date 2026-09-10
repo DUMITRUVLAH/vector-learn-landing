@@ -176,6 +176,8 @@ export function ParEfacturaCard({ parId, onNavigate }: { parId: string; onNaviga
           </p>
           <p className="text-xs text-muted-foreground">
             Emisă {fmtDate(state.invoiceDate)}
+            {/* currency-exempt: totalul e al facturii de pe SFS (e-Factura de stat), care se
+                emite în lei — nu al cererii, care poate fi în altă monedă. */}
             {state.invoiceTotalCents != null && ` · ${(state.invoiceTotalCents / 100).toFixed(2)} MDL`}
             {state.lastScanAt && ` · verificat ${fmtDateTime(state.lastScanAt)}`}
           </p>

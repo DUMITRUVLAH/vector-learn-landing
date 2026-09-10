@@ -2032,7 +2032,7 @@ export function ParCreateForm() {
 
         {/* VF-501: quotes (RFQ) — only for obtain_quotations PARs */}
         {purpose === "obtain_quotations" && parId && (
-          <QuotesSection parId={parId} vendors={vendors} />
+          <QuotesSection parId={parId} vendors={vendors} currency={currency} />
         )}
 
         {/* 11 End-use */}

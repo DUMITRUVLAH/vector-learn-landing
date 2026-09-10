@@ -9,18 +9,22 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Loader2, FileText, AlertCircle, Check, Award } from "lucide-react";
 import {
-  listParQuotes, addParQuote, deleteParQuote, selectParQuote, formatMDL,
+  listParQuotes, addParQuote, deleteParQuote, selectParQuote, formatCurrency,
   type ParQuote, type ParVendor,
 } from "@/lib/api/par";
 import { cn } from "@/lib/utils";
 import { Alert, Button, Input, Label, Select } from "@/components/ds";
 
 function fmt(cents: number, currency: string): string {
-  if (currency === "MDL") return formatMDL(cents);
-  return `${(cents / 100).toLocaleString("ro-MD", { minimumFractionDigits: 2 })} ${currency}`;
+  return formatCurrency(cents, currency);
 }
 
-export function QuotesSection({ parId, vendors }: { parId: string; vendors: ParVendor[] }) {
+/**
+ * `currency` = moneda cererii. Ofertele se salvează pe server în moneda cererii (vezi
+ * POST /api/par/:id/quotes), deci eticheta câmpului trebuie să spună aceeași monedă — scria
+ * „Sumă (MDL)" pe o cerere în USD și îl trimitea pe om să scrie lei într-un câmp de dolari.
+ */
+export function QuotesSection({ parId, vendors, currency = "MDL" }: { parId: string; vendors: ParVendor[]; currency?: string }) {
   const [quotes, setQuotes] = useState<ParQuote[]>([]);
   const [loading, setLoading] = useState(true);
   const [vendorId, setVendorId] = useState("");
@@ -97,7 +101,7 @@ export function QuotesSection({ parId, vendors }: { parId: string; vendors: ParV
             placeholder="ex. Darwin SRL" aria-label="Nume furnizor" disabled={!!vendorId} />
         </div>
         <div className="sm:col-span-2">
-          <Label className="mb-1 block text-xs text-muted-foreground">Sumă (MDL)</Label>
+          <Label className="mb-1 block text-xs text-muted-foreground">Sumă ({currency})</Label>
           <Input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" aria-label="Sumă ofertă" />
         </div>
         <div className="sm:col-span-2">

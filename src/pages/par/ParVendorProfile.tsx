@@ -358,9 +358,7 @@ export default function ParVendorProfile() {
                         {/* Suma plătită e în moneda cererii, nu în lei: scrisă cu `formatMDL` și un
                             „(USD)" lipit după, ieșea „1.500,00 L (USD)". Pentru cererile în valută
                             se scrie moneda ei, cu echivalentul în lei ca linie secundară. */}
-                        {r.currency && r.currency !== "MDL"
-                          ? formatCurrency(r.actualAmountCents ?? r.totalEstimatedCents, r.currency)
-                          : formatMDL(r.actualAmountCents ?? r.totalMdlCents ?? r.totalEstimatedCents)}
+                        {formatCurrency(r.actualAmountCents ?? r.totalEstimatedCents, r.currency)}
                         {r.currency && r.currency !== "MDL" && r.totalMdlCents != null && (
                           <span className="ml-1 text-xs text-muted-foreground">≈ {formatMDL(r.totalMdlCents)}</span>
                         )}
@@ -797,13 +795,13 @@ function OffersTab({
                 <p className="text-xs text-muted-foreground">
                   {fmtDate(o.offeredAt)}
                   {o.validUntil && ` · valabilă până la ${fmtDate(o.validUntil)}`}
-                  {o.unitLabel && o.unitPriceCents != null && ` · ${formatMDL(o.unitPriceCents)} / ${o.unitLabel}`}
+                  {o.unitLabel && o.unitPriceCents != null && ` · ${formatCurrency(o.unitPriceCents, o.currency)} / ${o.unitLabel}`}
                 </p>
                 {o.notes && <p className="mt-1 text-sm text-muted-foreground">{o.notes}</p>}
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold tabular-nums text-foreground">
-                  {o.amountCents == null ? "—" : formatMDL(o.amountCents)}
+                  {o.amountCents == null ? "—" : formatCurrency(o.amountCents, o.currency)}
                 </span>
                 <Button variant="ghost" size="sm" aria-label={`Șterge oferta ${o.title}`} onClick={() => void onDelete(o.id)}>
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -832,7 +830,7 @@ function OffersTab({
                 </p>
                 {q.notes && <p className="mt-1 text-sm text-muted-foreground">{q.notes}</p>}
               </div>
-              <span className="text-sm font-semibold tabular-nums text-foreground">{formatMDL(q.amountCents)}</span>
+              <span className="text-sm font-semibold tabular-nums text-foreground">{formatCurrency(q.amountCents, q.currency)}</span>
             </Card>
           ))}
         </>

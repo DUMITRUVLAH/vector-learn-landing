@@ -22,6 +22,7 @@ const STEPS = [
   ["referințe nedefinite (TS2304)", "node scripts/check-undefined-refs.mjs"],
   ["rute Hono nemontate", "node scripts/check-route-mounts.mjs"],
   ["linkuri moarte în meniu", "node scripts/check-nav-links.mjs"],
+  ["moneda cererii pe ecrane și în PDF", "node scripts/check-par-currency.mjs"],
   ["statement-breakpoints în migrări", "node scripts/check-migration-breakpoints.mjs"],
 
   // ── Migrările pe baza de date reală. DUPĂ porțile statice (n-are rost să atingem prod-ul dacă

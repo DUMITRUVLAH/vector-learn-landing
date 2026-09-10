@@ -1558,8 +1558,14 @@ export function formatMDL(cents: number): string {
   }).format(amount);
 }
 
-/** VM3-01: format minor units in the PAR's own currency (MDL/EUR/USD), e.g. 700000+"EUR" → "7.000,00 EUR". */
-export function formatCurrency(cents: number, currency: string): string {
+/**
+ * VM3-01: format minor units in the PAR's own currency (MDL/EUR/USD), e.g. 700000+"EUR" → "7.000,00 EUR".
+ *
+ * `currency` acceptă null/undefined pentru că multe rânduri vechi n-au moneda completată — și
+ * pentru că alternativa (call-site-uri care fac ternarul „dacă nu e MDL…") e exact tiparul care
+ * a lăsat sume în dolari scrise cu „L". Lipsă ⇒ lei, o singură dată, aici.
+ */
+export function formatCurrency(cents: number, currency: string | null | undefined): string {
   const amount = cents / 100;
   try {
     return new Intl.NumberFormat("ro-MD", {

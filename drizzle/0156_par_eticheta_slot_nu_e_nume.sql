@@ -14,6 +14,7 @@ FROM "users" u
 WHERE u."id" = d."approver_user_id"
   AND u."name" IS NOT NULL
   AND lower(btrim(d."approver_role_label")) = lower(btrim(u."name"));
+--> statement-breakpoint
 
 -- Pe cererile deja depuse titularul poate lipsi din rând (slot eliberat), așa că numele se caută
 -- printre utilizatorii aceluiași tenant, nu doar în titularul rândului.
