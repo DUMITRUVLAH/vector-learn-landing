@@ -53,8 +53,12 @@ import { MAX_MONEY_CENTS, MAX_LINE_QUANTITY, exceedsMoneyBound, moneyBoundError 
 import { submitPAR, buildBodyForHash } from "../lib/par/submit";
 import { autosaveVendorFromPar } from "../lib/par/vendorAutoSave";
 import { verifyParBodyHash } from "../lib/par/integrity";
-import { buildApprovalSheetLines, type SheetLine } from "../lib/par/approvalSheet";
-import { winAnsiSafe } from "../lib/par/pdfText";
+import type { ApprovalSheetData } from "../lib/par/approvalSheet";
+import {
+  buildDosarPagesDefinition,
+  renderDosarPagesPdf,
+  type DosarSeparator,
+} from "../lib/par/dosarPdf";
 import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { explainMissingPar, parDenial } from "../lib/par/accessReason";
 import { getDesignatedApprovers, projectAllowsApprover } from "../lib/par/projectApprovers";
@@ -1956,8 +1960,10 @@ parRoutes.post("/:id/withdraw", async (c) => {
 // Non-PDF attachments (images, DOCX, XLSX) appear as separator pages only.
 // Romanian diacritics are preserved via pdf-lib UTF-8 support.
 
+// Owner (10.09.2026): „PAR-ul să fie undeva la final, în formatul PDF pe care îl avem."
+// Dosarul se citește ca un dosar de hârtie: întâi fișa aprobărilor, apoi documentele care
+// justifică plata, iar formularul cererii încheie — e piesa pe care o știi deja pe de rost.
 const DOSAR_ORDER: string[] = [
-  "par_pdf",
   "contract",
   "act_of_receipt",
   "quotation",
@@ -1967,6 +1973,7 @@ const DOSAR_ORDER: string[] = [
   "deliverables",
   "payment_order",
   "other",
+  "par_pdf",
 ];
 
 function kindLabel(kind: string): string {
@@ -1993,7 +2000,6 @@ parRoutes.get("/:id/dosar", async (c) => {
   const par = await getPAR(parId, tenantId);
   if (!par) return c.json({ error: "not_found" }, 404);
 
-  const roles = await getUserPARRoles(user.id, tenantId);
   // PARQA-004 (GDPR): the dosar bundles the approval sheet + attachments, which include payee
   // IBAN/IDNP and bank documents. Mirror GET /:id visibility — only the author or an elevated role
   // (approver/finance/par_admin) may download it. A plain requestor viewing someone else's PAR (or
@@ -2074,137 +2080,68 @@ parRoutes.get("/:id/dosar", async (c) => {
         .where(and(eq(parPayers.tenantId, tenantId), eq(parPayers.id, par.payerId)))
     : [];
 
-  const sheetLines = buildApprovalSheetLines(
-    {
-      payer: sheetPayer ?? null,
-      requestNo: par.requestNo,
-      dateOfRequest: par.dateOfRequest,
-      status: par.status,
-      requestedByName: sheetUserName(par.requestedByUserId),
-      payeeName: par.payeeName,
-      payeeIdnp: par.payeeIdnp,
-      payeeIban: par.payeeIban,
-      payeeBank: par.payeeBank,
-      currency: par.currency,
-      totalEstimatedCents: par.totalEstimatedCents,
-      totalMdlCents: (par as { totalMdlCents?: number | null }).totalMdlCents ?? null,
-      projectName: sheetProj?.name ?? null,
-      eventName: sheetEvt?.name ?? null,
-      budgetCodeLabel: sheetBc ? [sheetBc.code, sheetBc.name].filter(Boolean).join(" — ") : null,
-      endUse: par.endUse,
-      approvedAt: par.approvedAt,
-      paidAt: par.paidAt,
-      approvals: sheetApprovalRows.map((a) => ({
-        step: a.step,
-        approverRoleLabel: a.approverRoleLabel,
-        // Pasul 0 nu e semnat manual de nimeni — trimiterea îi scrie caseta, iar până pe
-        // 2026-09-10 îi scria funcția. Numele din cont e sursa corectă acolo.
-        name: (a.step === 0 ? sheetUserName(a.approverUserId) ?? a.signatureName : a.signatureName ?? sheetUserName(a.approverUserId)),
-        decision: a.decision,
-        decidedAt: a.decidedAt,
-        comment: a.comment,
-      })),
-    },
-    new Date()
-  );
+  const sheetData: ApprovalSheetData = {
+    payer: sheetPayer ?? null,
+    requestNo: par.requestNo,
+    dateOfRequest: par.dateOfRequest,
+    status: par.status,
+    requestedByName: sheetUserName(par.requestedByUserId),
+    payeeName: par.payeeName,
+    payeeIdnp: par.payeeIdnp,
+    payeeIban: par.payeeIban,
+    payeeBank: par.payeeBank,
+    currency: par.currency,
+    totalEstimatedCents: par.totalEstimatedCents,
+    totalMdlCents: (par as { totalMdlCents?: number | null }).totalMdlCents ?? null,
+    projectName: sheetProj?.name ?? null,
+    eventName: sheetEvt?.name ?? null,
+    budgetCodeLabel: sheetBc ? [sheetBc.code, sheetBc.name].filter(Boolean).join(" — ") : null,
+    endUse: par.endUse,
+    approvedAt: par.approvedAt,
+    paidAt: par.paidAt,
+    approvals: sheetApprovalRows.map((a) => ({
+      step: a.step,
+      approverRoleLabel: a.approverRoleLabel,
+      // Pasul 0 nu e semnat manual de nimeni — trimiterea îi scrie caseta, iar până pe
+      // 2026-09-10 îi scria funcția. Numele din cont e sursa corectă acolo.
+      name: (a.step === 0 ? sheetUserName(a.approverUserId) ?? a.signatureName : a.signatureName ?? sheetUserName(a.approverUserId)),
+      decision: a.decision,
+      decidedAt: a.decidedAt,
+      comment: a.comment,
+    })),
+};
 
   // ── Dynamic import of pdf-lib (NEVER top-level — exceljs outage lesson) ──
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const { PDFDocument } = await import("pdf-lib");
 
-  const dosar = await PDFDocument.create();
-  const helvetica = await dosar.embedFont(StandardFonts.Helvetica);
-  const helveticaBold = await dosar.embedFont(StandardFonts.HelveticaBold);
-
-  // Helper: add a separator page with centred title.
-  // Titles/subtitles go through winAnsiSafe(): the standard Helvetica font THROWS on ă/ș/ț
-  // (WinAnsi/cp1252), which used to 500 the whole dosar for kinds like "Factură" /
-  // "Ordin de plată" / "Act de recepție". Regression: par-finance-queue.routes.test.ts.
-  const addSeparator = async (title: string, subtitle?: string) => {
-    const page = dosar.addPage([595, 842]); // A4 portrait in points
-    const { width, height } = page.getSize();
-    page.drawText(winAnsiSafe(title), {
-      x: 50,
-      y: height / 2 + 20,
-      size: 18,
-      font: helveticaBold,
-      color: rgb(0.1, 0.1, 0.1),
-      maxWidth: width - 100,
-    });
-    if (subtitle) {
-      page.drawText(winAnsiSafe(subtitle), {
-        x: 50,
-        y: height / 2 - 10,
-        size: 12,
-        font: helvetica,
-        color: rgb(0.4, 0.4, 0.4),
-        maxWidth: width - 100,
-      });
+  /** Octeții unui atașament, din data-URL sau de la URL extern. */
+  const attachmentBytes = async (fileUrl: string): Promise<Uint8Array> => {
+    if (fileUrl.startsWith("data:")) {
+      const base64 = fileUrl.split(",")[1];
+      if (!base64) throw new Error("fișier gol");
+      return new Uint8Array(Buffer.from(base64, "base64"));
     }
+    const resp = await fetch(fileUrl);
+    if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+    return new Uint8Array(await resp.arrayBuffer());
   };
 
-  // ── VM3-02: draw the approval sheet as the FIRST page(s) of the dosar ──
-  {
-    const pageWidth = 595;
-    const pageHeight = 842;
-    const marginX = 50;
-    const maxTextWidth = pageWidth - marginX * 2;
-    let page = dosar.addPage([pageWidth, pageHeight]);
-    let y = pageHeight - 60;
+  const mimeOf = (fileUrl: string): string => fileUrl.match(/^data:([^;,]+)/)?.[1] ?? "";
 
-    // Manual word-wrap: measure with the actual font so wrapped lines advance the cursor.
-    const wrapLine = (line: SheetLine): string[] => {
-      const size = line.size ?? 10;
-      const font = line.bold ? helveticaBold : helvetica;
-      const words = line.text.split(" ");
-      const rows: string[] = [];
-      let current = "";
-      for (const w of words) {
-        const candidate = current ? `${current} ${w}` : w;
-        if (font.widthOfTextAtSize(candidate, size) <= maxTextWidth) {
-          current = candidate;
-        } else {
-          if (current) rows.push(current);
-          current = w;
-        }
-      }
-      if (current) rows.push(current);
-      return rows.length > 0 ? rows : [""];
-    };
+  /** Ce contribuie fiecare atașament la dosar. Se decide ÎNAINTE de a scrie paginile, ca
+   *  separatoarele (inclusiv notele de eroare) să fie cunoscute și să poată fi generate cu
+   *  fontul cu diacritice, într-un singur document. */
+  type DosarPiece =
+    | { type: "pdf"; pages: import("pdf-lib").PDFDocument }
+    | { type: "image"; bytes: Uint8Array; format: "png" | "jpg" }
+    | { type: "note" };
 
-    for (const line of sheetLines) {
-      const size = line.size ?? 10;
-      const font = line.bold ? helveticaBold : helvetica;
-      if (line.gapBefore) y -= line.gapBefore;
-      for (const row of wrapLine(line)) {
-        if (y < 60) {
-          page = dosar.addPage([pageWidth, pageHeight]);
-          y = pageHeight - 60;
-        }
-        page.drawText(row, {
-          x: marginX,
-          y,
-          size,
-          font,
-          color: rgb(0.1, 0.1, 0.1),
-        });
-        y -= size + 5;
-      }
-    }
+  interface PlanEntry {
+    separator?: DosarSeparator;
+    piece?: DosarPiece;
   }
 
-  // If no attachments at all, add an informational page (the approval sheet above still ships)
-  if (attachments.length === 0) {
-    await addSeparator(
-      `Dosar PAR — ${par.requestNo ?? "fără număr"}`,
-      "Nu există atașamente. Generați mai întâi PDF-ul formularului PAR."
-    );
-    const pdfBytes = await dosar.save();
-    c.header("Content-Type", "application/pdf");
-    const fileSafe = (par.requestNo ?? `PAR-${parId.slice(0, 8)}`).replace(/[^\w-]+/g, "_");
-    c.header("Content-Disposition", `attachment; filename="Dosar_PAR_${fileSafe}.pdf"`);
-    return c.body(Buffer.from(pdfBytes));
-  }
-
+  const plan: PlanEntry[] = [];
   let currentSection: string | null = null;
 
   for (const att of attachments) {
@@ -2213,55 +2150,151 @@ parRoutes.get("/:id/dosar", async (c) => {
     // conformitate"), nu genericul „Altele" — altfel dosarul nu spune ce e documentul.
     const section =
       kind === "other" && att.kindOther?.trim() ? att.kindOther.trim() : kindLabel(kind);
-
-    // Add a section separator when the section changes
     if (section !== currentSection) {
       currentSection = section;
-      await addSeparator(section);
+      plan.push({ separator: { title: section.slice(0, 90) } });
     }
 
     const fileUrl = att.fileUrl ?? "";
     const fileName = att.fileName ?? "fișier";
-    const isPdf =
-      fileName.toLowerCase().endsWith(".pdf") ||
-      fileUrl.startsWith("data:application/pdf") ||
-      fileUrl.startsWith("data:application/x-pdf");
+    const shortName = fileName.length > 80 ? `${fileName.slice(0, 79)}…` : fileName;
+    const mime = mimeOf(fileUrl);
+    const lower = fileName.toLowerCase();
+    const isPdf = lower.endsWith(".pdf") || mime === "application/pdf" || mime === "application/x-pdf";
+    // pdf-lib încorporează DOAR PNG și JPEG. WebP/GIF/AVIF rămân cu nota lor — mai bine o spunem
+    // decât să pretindem că le-am pus în dosar.
+    const isPng = mime === "image/png" || lower.endsWith(".png");
+    const isJpg = mime === "image/jpeg" || mime === "image/jpg" || lower.endsWith(".jpg") || lower.endsWith(".jpeg");
 
-    if (!isPdf) {
-      // Non-PDF: add note page
-      const ext = fileName.split(".").pop()?.toUpperCase() ?? "FIȘIER";
-      await addSeparator(
-        `Anexă: ${fileName}`,
-        `(Tipul de fișier ${ext} nu poate fi inclus în PDF — descărcați separat)`
-      );
+    if (isPdf) {
+      try {
+        const src = await PDFDocument.load(await attachmentBytes(fileUrl), { ignoreEncryption: true });
+        plan.push({ piece: { type: "pdf", pages: src } });
+      } catch (err) {
+        plan.push({
+          separator: {
+            title: `Anexă: ${shortName}`,
+            subtitle: `PDF corupt sau inaccesibil — descărcați separat. Detaliu: ${
+              err instanceof Error ? err.message.slice(0, 80) : "necunoscut"
+            }`,
+          },
+          piece: { type: "note" },
+        });
+      }
       continue;
     }
 
-    // PDF: embed pages
-    try {
-      let pdfBytes: Uint8Array;
-      if (fileUrl.startsWith("data:")) {
-        // data URI — strip prefix
-        const base64 = fileUrl.split(",")[1];
-        if (!base64) throw new Error("empty data URI");
-        const binary = atob(base64);
-        pdfBytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) pdfBytes[i] = binary.charCodeAt(i);
-      } else {
-        // External URL — fetch
-        const resp = await fetch(fileUrl);
-        if (!resp.ok) throw new Error(`fetch ${resp.status}`);
-        pdfBytes = new Uint8Array(await resp.arrayBuffer());
+    if (isPng || isJpg) {
+      // Owner (10.09.2026): „nu văd în dosar să fie captura, scrie să descarc separat, chiar nu
+      // poate fi inserată?" Ba da — captura de ecran a ordinului de plată e chiar dovada, deci
+      // intră în dosar ca pagină, nu ca trimitere la un fișier pe care auditorul nu-l are.
+      try {
+        plan.push({ piece: { type: "image", bytes: await attachmentBytes(fileUrl), format: isPng ? "png" : "jpg" } });
+      } catch (err) {
+        plan.push({
+          separator: {
+            title: `Anexă: ${shortName}`,
+            subtitle: `Imaginea nu a putut fi citită — descărcați separat. Detaliu: ${
+              err instanceof Error ? err.message.slice(0, 80) : "necunoscut"
+            }`,
+          },
+          piece: { type: "note" },
+        });
       }
-      const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-      const pages = await dosar.copyPages(srcDoc, srcDoc.getPageIndices());
+      continue;
+    }
+
+    const ext = fileName.split(".").pop()?.toUpperCase() ?? "FIȘIER";
+    plan.push({
+      separator: {
+        title: `Anexă: ${shortName}`,
+        subtitle: `Tipul de fișier ${ext.slice(0, 10)} nu poate fi inclus într-un PDF — descărcați-l separat din cerere.`,
+      },
+      piece: { type: "note" },
+    });
+  }
+
+  if (attachments.length === 0) {
+    plan.push({
+      separator: {
+        title: `Dosar PAR — ${par.requestNo ?? "fără număr"}`,
+        subtitle: "Cererea nu are documente atașate. Fișa aprobărilor de mai sus rămâne valabilă.",
+      },
+      piece: { type: "note" },
+    });
+  }
+
+  // Formularul cererii intră în dosar doar dacă a fost generat (butonul „Download PDF" îl atașează
+  // ca `par_pdf`). Când lipsește, dosarul o spune — un auditor trebuie să știe că nu se uită la un
+  // dosar complet, nu să deducă din absență.
+  if (!attachments.some((a) => (a.kind ?? "") === "par_pdf")) {
+    plan.push({
+      separator: {
+        title: "Formularul PAR",
+        subtitle:
+          "Formularul cererii nu a fost generat pentru această cerere. Se adaugă din pagina cererii, cu butonul „Download PDF”.",
+      },
+      piece: { type: "note" },
+    });
+  }
+
+  // ── Paginile generate (fișa + separatoarele), scrise cu pdfmake + fontul Tinos ──
+  const separators = plan.filter((e): e is PlanEntry & { separator: DosarSeparator } => !!e.separator)
+    .map((e) => e.separator);
+  const generatedBytes = await renderDosarPagesPdf(
+    buildDosarPagesDefinition({ data: sheetData, generatedAt: new Date() }, separators, par.requestNo),
+  );
+  const generatedDoc = await PDFDocument.load(generatedBytes);
+  const sheetPageCount = generatedDoc.getPageCount() - separators.length;
+
+  const dosar = await PDFDocument.create();
+
+  // Fișa aprobărilor deschide dosarul.
+  const sheetPages = await dosar.copyPages(
+    generatedDoc,
+    Array.from({ length: Math.max(sheetPageCount, 0) }, (_, i) => i),
+  );
+  for (const pg of sheetPages) dosar.addPage(pg);
+
+  const A4 = { width: 595, height: 842 };
+  let separatorCursor = 0;
+
+  for (const entry of plan) {
+    if (entry.separator) {
+      const [pg] = await dosar.copyPages(generatedDoc, [sheetPageCount + separatorCursor]);
+      dosar.addPage(pg);
+      separatorCursor += 1;
+    }
+    const piece = entry.piece;
+    if (!piece || piece.type === "note") continue;
+
+    if (piece.type === "pdf") {
+      const pages = await dosar.copyPages(piece.pages, piece.pages.getPageIndices());
       for (const pg of pages) dosar.addPage(pg);
-    } catch (err) {
-      // If embedding fails, add error note page
-      await addSeparator(
-        `Anexă: ${fileName}`,
-        `(PDF corupt sau inaccesibil — descărcați separat. Detaliu: ${err instanceof Error ? err.message : "necunoscut"})`
-      );
+      continue;
+    }
+
+    // Imaginea ocupă o pagină A4, încadrată cu margini și păstrându-și proporțiile.
+    try {
+      const img = piece.format === "png"
+        ? await dosar.embedPng(piece.bytes)
+        : await dosar.embedJpg(piece.bytes);
+      const page = dosar.addPage([A4.width, A4.height]);
+      const margin = 40;
+      const maxW = A4.width - margin * 2;
+      const maxH = A4.height - margin * 2;
+      const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      page.drawImage(img, {
+        x: (A4.width - w) / 2,
+        y: (A4.height - h) / 2,
+        width: w,
+        height: h,
+      });
+    } catch {
+      // O imagine pe care pdf-lib n-o poate încorpora (PNG pe 16 biți, profil exotic) nu are voie
+      // să pice tot dosarul; pagina de separator scrisă mai sus rămâne, cu numele fișierului.
     }
   }
 

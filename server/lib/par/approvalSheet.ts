@@ -68,7 +68,7 @@ export interface SheetLine {
   gapBefore?: number; // extra vertical gap in points before this line
 }
 
-const STATUS_LABELS: Record<string, string> = {
+export const STATUS_LABELS: Record<string, string> = {
   draft: "Ciornă",
   pending_approval: "În aprobare",
   changes_requested: "Modificări cerute",
@@ -80,14 +80,14 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "Anulat",
 };
 
-const DECISION_LABELS: Record<string, string> = {
+export const DECISION_LABELS: Record<string, string> = {
   approved: "APROBAT",
   rejected: "RESPINS",
   changes_requested: "MODIFICĂRI CERUTE",
   pending: "în așteptare",
 };
 
-function fmtDate(v: Date | string | null | undefined): string {
+export function fmtDate(v: Date | string | null | undefined): string {
   if (!v) return "—";
   const d = new Date(v);
   if (isNaN(d.getTime())) return "—";
@@ -99,7 +99,7 @@ function fmtDate(v: Date | string | null | undefined): string {
   });
 }
 
-function fmtDateTime(v: Date | string | null | undefined): string {
+export function fmtDateTime(v: Date | string | null | undefined): string {
   if (!v) return "—";
   const d = new Date(v);
   if (isNaN(d.getTime())) return "—";
@@ -112,7 +112,7 @@ function fmtDateTime(v: Date | string | null | undefined): string {
   return `${date} ${time}`;
 }
 
-function fmtAmount(cents: number, currency: string): string {
+export function fmtAmount(cents: number, currency: string): string {
   return `${(cents / 100).toFixed(2)} ${currency || "MDL"}`;
 }
 

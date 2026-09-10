@@ -98,6 +98,40 @@ atașat trebuia să-l deschizi.
 (4) un fișier de alt tip din dosar (factura) nu e confundat cu dovada; (5) cine nu are drept de
 încărcare vede doar documentul, iar dacă nu există dovadă nu vede niciun card.
 
+## VM4-06 — Dosarul complet: fișă cu tabele și diacritice, capturi incluse, formularul la final — **done**
+
+**Feedback owner (10.09.2026, pe un dosar descărcat):** „nu văd în dosar să fie captura, scrie să
+descarc separat, chiar nu poate fi inserată? … la fel, să fie adăugat și PAR-ul … și parcă e plain
+text aici [datele plății] — mai bine să fie un tabel … PAR-ul să fie undeva la final."
+
+**Gap:** fișa aprobărilor era desenată linie cu linie cu fontul standard Helvetica, care nu are
+ă/ș/ț. Textul trecea printr-un pliator pe ASCII, deci ieșea „FISA APROBARILOR", „Suma estimata",
+„Destinatia platii" — dar cu „în" intact (î există în WinAnsi), ceea ce arăta ca o eroare de
+tastare. Datele plății erau un paragraf continuu în care ochiul nu găsea IBAN-ul. Atașamentele
+non-PDF (deci exact captura de ecran a ordinului de plată) primeau o pagină cu „descărcați
+separat" — adică dovada NU era în dosarul de audit. Formularul cererii deschidea dosarul, deși
+locul lui firesc e la final.
+
+**Livrat:**
+- fișa se scrie cu pdfmake + fontul Tinos (aceeași cale ca actele DOCGEN, fonturile sunt deja în
+  pachetul de producție): diacritice corecte peste tot;
+- „Cererea", „Organizația plătitoare", „Plata" devin tabele etichetă–valoare; lanțul de aprobare e
+  un tabel cu antet (Pas · Rol · Nume · Decizie · Data · Comentariu);
+- capturile PNG/JPEG se încorporează ca pagini A4 (încadrate, cu proporțiile păstrate) — dovada
+  plății intră chiar în dosar; WebP/GIF rămân cu nota lor, pentru că pdf-lib chiar nu le poate;
+- formularul PAR e ultima secțiune; când nu a fost generat, dosarul O SPUNE (auditorul trebuie să
+  știe că se uită la un dosar incomplet, nu să deducă din absență);
+- separatoarele de secțiune și notele de eroare se generează în același document, ca fontul să fie
+  încorporat o singură dată (30 de documente mici cu Tinos ar umfla dosarul cu zeci de MB).
+
+**AC:** (1) textul extras din PDF conține „FIȘA APROBĂRILOR", „Suma estimată", „Destinația plății";
+(2) datele plății apar ca perechi etichetă–valoare, nu ca frază; (3) un PAR cu captură atașată
+produce un dosar cu o imagine încorporată (`/Subtype /Image`), fără nota „nu poate fi inclus";
+(4) factura apare ÎNAINTEA formularului PAR; (5) lipsa formularului e scrisă explicit; (6) un XLSX
+primește în continuare nota cu numele fișierului.
+
+---
+
 ---
 
 ## Amânate deliberat (nu s-au construit acum)
