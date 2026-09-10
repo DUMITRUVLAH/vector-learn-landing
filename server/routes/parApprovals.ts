@@ -837,6 +837,113 @@ parApprovalsRoutes.post("/bulk-approve", zValidator("json", bulkApproveSchema), 
   return c.json({ results, approved, failed: results.length - approved });
 });
 
+// ─── Core reject logic (shared by /:id/reject and /bulk-reject) ───────────────
+// VM5-13: extras din handler exact ca `approveParStep`, ca respingerea în masă să ruleze ACEEAȘI
+// logică per cerere. Fără extragere, „respinge toate" ar fi însemnat o a doua copie a regulilor de
+// autoritate — iar copiile astea au driftat deja o dată (PARQA-010).
+async function rejectParStep(
+  userId: string,
+  tenantId: string,
+  tenantRole: string,
+  parId: string,
+  body: { comment: string; signatureName?: string | null }
+): Promise<ApproveResult> {
+  const roles = await getUserPARRoles(userId, tenantId);
+  const canApprove = roles.includes("approver") || roles.includes("par_admin");
+  // PARQA-010: reject must honor the SAME authority as approve — explicit assignment OR an active
+  // delegation (before, a delegatee who could approve a step couldn't reject it).
+  const delegators = await getActiveDelegators(userId, tenantId);
+  if (!(await canActOnApproval(userId, tenantId, parId, canApprove)) && !(await hasDelegatedPendingStep(userId, tenantId, parId, delegators))) {
+    return { ok: false, status: 403, error: "forbidden: approver role required" };
+  }
+
+  const [par] = await db
+    .select()
+    .from(parRequests)
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+  if (!par) return { ok: false, status: 404, error: "not_found" };
+  if (par.projectId ? !(await mayAccessProject(userId, tenantId, par.projectId, tenantRole)) : !(await mayAccessPayer(userId, tenantId, par.payerId, tenantRole))) {
+    return { ok: false, status: 404, error: "not_found" };
+  }
+
+  if (par.status !== "pending_approval") {
+    return { ok: false, status: 409, error: `conflict: PAR status is '${par.status}'` };
+  }
+
+  // Must be the approver of the active step
+  const approvalSteps = await db
+    .select()
+    .from(parApprovals)
+    .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)))
+    .orderBy(asc(parApprovals.step));
+
+  // PARQA-010: project-scoping applies to reject too — an approver not designated for this PAR's
+  // project can no longer reject it (before, scoping was only enforced on approve/inbox).
+  const designated = par.projectId ? await getDesignatedApprovers(tenantId, par.projectId) : new Set<string>();
+  const allowedOnProject = projectAllowsApprover(par.projectId, userId, designated);
+  // Same rule set as approve (decisionAuthority.ts) — incl. a step's required par_role, which the
+  // hand-rolled copy here used to ignore (a "finance"-gated step was rejectable by any approver).
+  const delegated = await getDelegatedAuthority(delegators, tenantId, par.projectId);
+  const viewerCtx = {
+    userId, parRoles: roles, delegators, allowedOnProject,
+    delegatedRoles: delegated.roles, delegatedAllowedOnProject: delegated.allowedOnProject,
+  };
+
+  const lockedStepForUserReject = pickDecidableStep(approvalSteps, viewerCtx, { locked: true });
+  const activeStep = pickDecidableStep(approvalSteps, viewerCtx, { locked: false });
+
+  if (!activeStep) {
+    if (lockedStepForUserReject) {
+      return {
+        ok: false,
+        status: 409,
+        error: "conflict: approval step is locked — prior step not yet approved",
+        extra: { locked_step: lockedStepForUserReject.step },
+      };
+    }
+    return { ok: false, status: 403, error: "forbidden: no active step assigned to you" };
+  }
+
+  // Mark this step rejected
+  await db
+    .update(parApprovals)
+    .set({
+      decision: "rejected",
+      decidedAt: new Date(),
+      comment: body.comment,
+      signatureName: body.signatureName ?? null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(eq(parApprovals.id, activeStep.id), eq(parApprovals.tenantId, tenantId))
+    );
+
+  // PAR → rejected (terminal)
+  const [rejectedPar] = await db
+    .update(parRequests)
+    .set({ status: "rejected", updatedAt: new Date() })
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
+    .returning();
+
+  await writeAudit({
+    tenantId,
+    parId,
+    actorUserId: userId,
+    event: "rejected",
+    detail: `Step ${activeStep.step} rejected. Comment: ${body.comment.slice(0, 200)}`,
+  });
+
+  // PAR-111: notify requestor (best-effort)
+  await notifyRejected(
+    { tenantId, parId, requestNo: par.requestNo },
+    par.requestedByUserId,
+    body.comment,
+    userId // VM5-01: solicitantul trebuie să vadă CINE a decis, nu doar că s-a decis
+  );
+
+  return { ok: true, status: "rejected", body: { ...rejectedPar, chain_status: "rejected" } };
+}
+
 // ─── POST /api/par/:id/reject ─────────────────────────────────────────────────
 
 parApprovalsRoutes.post(
@@ -844,103 +951,38 @@ parApprovalsRoutes.post(
   zValidator("json", rejectSchema),
   async (c) => {
     const user = c.get("user");
-    const tenantId = user.tenantId;
-    const parId = c.req.param("id");
     const body = c.req.valid("json");
-
-    const roles = await getUserPARRoles(user.id, tenantId);
-    const canApprove = roles.includes("approver") || roles.includes("par_admin");
-    // PARQA-010: reject must honor the SAME authority as approve — explicit assignment OR an active
-    // delegation (before, a delegatee who could approve a step couldn't reject it).
-    const delegators = await getActiveDelegators(user.id, tenantId);
-    if (!(await canActOnApproval(user.id, tenantId, parId, canApprove)) && !(await hasDelegatedPendingStep(user.id, tenantId, parId, delegators))) {
-      return c.json({ error: "forbidden: approver role required" }, 403);
-    }
-
-    const [par] = await db
-      .select()
-      .from(parRequests)
-      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
-    if (!par) return c.json({ error: "not_found" }, 404);
-    if (par.projectId ? !(await mayAccessProject(user.id, tenantId, par.projectId, user.role)) : !(await mayAccessPayer(user.id, tenantId, par.payerId, user.role))) {
-      return c.json({ error: "not_found" }, 404);
-    }
-
-    if (par.status !== "pending_approval") {
-      return c.json({ error: `conflict: PAR status is '${par.status}'` }, 409);
-    }
-
-    // Must be the approver of the active step
-    const approvalSteps = await db
-      .select()
-      .from(parApprovals)
-      .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)))
-      .orderBy(asc(parApprovals.step));
-
-    // PARQA-010: project-scoping applies to reject too — an approver not designated for this PAR's
-    // project can no longer reject it (before, scoping was only enforced on approve/inbox).
-    const designated = par.projectId ? await getDesignatedApprovers(tenantId, par.projectId) : new Set<string>();
-    const allowedOnProject = projectAllowsApprover(par.projectId, user.id, designated);
-    // Same rule set as approve (decisionAuthority.ts) — incl. a step's required par_role, which the
-    // hand-rolled copy here used to ignore (a "finance"-gated step was rejectable by any approver).
-    const delegated = await getDelegatedAuthority(delegators, tenantId, par.projectId);
-    const viewerCtx = {
-      userId: user.id, parRoles: roles, delegators, allowedOnProject,
-      delegatedRoles: delegated.roles, delegatedAllowedOnProject: delegated.allowedOnProject,
-    };
-
-    const lockedStepForUserReject = pickDecidableStep(approvalSteps, viewerCtx, { locked: true });
-    const activeStep = pickDecidableStep(approvalSteps, viewerCtx, { locked: false });
-
-    if (!activeStep) {
-      if (lockedStepForUserReject) {
-        return c.json(
-          { error: "conflict: approval step is locked — prior step not yet approved", locked_step: lockedStepForUserReject.step },
-          409
-        );
-      }
-      return c.json({ error: "forbidden: no active step assigned to you" }, 403);
-    }
-
-    // Mark this step rejected
-    await db
-      .update(parApprovals)
-      .set({
-        decision: "rejected",
-        decidedAt: new Date(),
-        comment: body.comment,
-        signatureName: body.signatureName ?? null,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(eq(parApprovals.id, activeStep.id), eq(parApprovals.tenantId, tenantId))
-      );
-
-    // PAR → rejected (terminal)
-    const [rejectedPar] = await db
-      .update(parRequests)
-      .set({ status: "rejected", updatedAt: new Date() })
-      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
-      .returning();
-
-    await writeAudit({
-      tenantId,
-      parId,
-      actorUserId: user.id,
-      event: "rejected",
-      detail: `Step ${activeStep.step} rejected. Comment: ${body.comment.slice(0, 200)}`,
-    });
-
-    // PAR-111: notify requestor (best-effort)
-    await notifyRejected(
-      { tenantId, parId, requestNo: par.requestNo },
-      par.requestedByUserId,
-      body.comment
-    );
-
-    return c.json({ ...rejectedPar, chain_status: "rejected" });
+    const result = await rejectParStep(user.id, user.tenantId, user.role, c.req.param("id"), body);
+    if (!result.ok) return c.json({ error: result.error, ...result.extra }, result.status as 400);
+    return c.json(result.body);
   }
 );
+
+// ─── POST /api/par/bulk-reject ────────────────────────────────────────────────
+// VM5-13 (ședința de prezentare): „trebuie buton aprobă toate sau respinse toate". Simetricul lui
+// bulk-approve, cu o singură diferență de fond: MOTIVUL E OBLIGATORIU. Nicio respingere din sistem
+// nu e anonimă — solicitantul primește motivul, iar el rămâne în jurnal.
+const bulkRejectSchema = z.object({
+  par_ids: z.array(z.string().uuid()).min(1).max(25),
+  comment: z.string().min(1, "Comment is required for rejection").max(5000),
+  signatureName: z.string().max(300).optional().nullable(),
+});
+
+parApprovalsRoutes.post("/bulk-reject", zValidator("json", bulkRejectSchema), async (c) => {
+  const user = c.get("user");
+  const { par_ids, comment, signatureName } = c.req.valid("json");
+
+  // Secvențial, ca la bulk-approve: fiecare cerere e o tranzacție proprie, iar un eșec (nu e pasul
+  // meu, altă stare, în afara ariei) nu atinge restul lotului.
+  const results = [];
+  for (const parId of [...new Set(par_ids)]) {
+    const r = await rejectParStep(user.id, user.tenantId, user.role, parId, { comment, signatureName });
+    results.push(r.ok ? { id: parId, ok: true, status: r.status } : { id: parId, ok: false, error: r.error });
+  }
+
+  const rejected = results.filter((r) => r.ok).length;
+  return c.json({ results, rejected, failed: results.length - rejected });
+});
 
 // ─── POST /api/par/:id/request-changes ───────────────────────────────────────
 
@@ -1028,7 +1070,8 @@ parApprovalsRoutes.post(
     await notifyChangesRequested(
       { tenantId, parId, requestNo: par.requestNo },
       par.requestedByUserId,
-      body.comment
+      body.comment,
+      user.id // VM5-01
     );
 
     return c.json({ ...changedPar, chain_status: "changes_requested" });

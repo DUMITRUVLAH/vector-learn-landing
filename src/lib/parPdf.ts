@@ -21,6 +21,7 @@
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import type { ParDetail, ParApproval, ParLineItem } from "./api/par";
+import { orderSignatureSlots } from "./par/signatureSlots";
 
 // ─── Palette (PDF-only — inline hex, html2canvas-safe, not design-system tokens) ──────────────
 // The official form is a black-and-white office document. The ONLY colour is a pale rose title
@@ -86,6 +87,22 @@ function fmtDate(iso: string | null | undefined): string {
   return `${day}-${mon}-${yr}`;
 }
 
+/**
+ * Aceeași dată, dar cu ora: „10-Sep-26 14:32".
+ *
+ * VM5-17 (ședința de prezentare): „PAR-ul printat să aibă time stamp (când a fost depus, aprobat
+ * etc.)". Ziua singură nu ajunge nici la audit, nici la o dispută despre ordinea semnăturilor —
+ * fișa aprobărilor din dosar tipărea deja ora, formularul nu.
+ */
+function fmtDateTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return esc(iso);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${fmtDate(iso)} ${hh}:${mm}`;
+}
+
 /** A superscript section number (¹ ² … 16) rendered like the office form's numbering. */
 function num(n: number): string {
   return `<span style="font-size:8px;vertical-align:super;font-weight:700;color:${INK};">${n}</span>`;
@@ -124,7 +141,8 @@ function sigColumn(title: string, approval: ParApproval | null, opts: { stamp?: 
   const name =
     (approval?.step === 0 ? resolved || approval?.signatureName : approval?.signatureName || resolved) ?? "";
   const role = approval?.signatureTitle ?? approval?.approverTitle ?? approval?.approverRoleLabel ?? "";
-  const date = approval?.decision === "approved" ? fmtDate(approval?.decidedAt) : "";
+  // VM5-17: data deciziei cu ora, nu doar ziua.
+  const date = approval?.decision === "approved" ? fmtDateTime(approval?.decidedAt) : "";
   const approved = approval?.decision === "approved";
   const sigRule = (lbl: string, val: string) => `
     <div style="margin-bottom:7px;">
@@ -173,12 +191,45 @@ export function buildParHtml(par: ParDetail): string {
     req.budgetCodeLabel || req.budgetCodeNote ||
     "";
 
-  // Requestor approval = step 0 (the submit signature, section 14)
-  const sig14 = approvals.find((a) => a.step === 0) ?? null;
-  // Non-requestor approvals (sections 15+), sorted by step
-  const approverSigs = approvals.filter((a) => a.step > 0).sort((a, b) => a.step - b.step);
-  const approver1 = approverSigs[0] ?? null;
-  const approver2 = approverSigs[1] ?? null;
+  // VM5-15: casetele de semnătură se aleg determinist — vezi `./par/signatureSlots`. Înainte,
+  // pe un nivel paralel, ordinea venea din baza de date și un rând ÎNCĂ NEDECIS putea ocupa
+  // caseta unei aprobări date: la a doua descărcare a aceleiași cereri o semnătură dispărea.
+  const { requestor: sig14, approvers: approverSigs } = orderSignatureSlots(approvals);
+
+  /**
+   * Casetele de aprobare (secțiunea 15), câte una pentru FIECARE aprobator din lanț. Formularul
+   * avea două locuri fixe: un lanț cu trei aprobatori pierdea a treia semnătură de pe hârtie, deși
+   * omul semnase. Prima casetă poartă eticheta secțiunii, restul continuă coloana; ștampila
+   * „APPROVE" rămâne pe casetele de după prima, ca pe formularul-sursă. Fără niciun aprobator
+   * (ciornă), se tipărește caseta goală etichetată — formularul rămâne același obiect de hârtie.
+   */
+  const approverCell = (a: ParApproval | null, first: boolean, last: boolean) => {
+    const label = first ? `${num(15)} Approver Signature (DOA Holder, Supervisor, or Tech Lead):` : "&nbsp;";
+    const border = last ? "" : `;border-bottom:1px solid ${BORDER}`;
+    return `<tr>${sigColumn(label, a, { stamp: !first }).replace(
+      /^\s*<td style="[^"]*"/,
+      `<td style="padding:8px 10px;vertical-align:top${border}"`
+    )}</tr>`;
+  };
+  /**
+   * VM5-06: o cerere poate fi datată în urmă — decizia owner-ului e ca retroactivitatea să rămână
+   * LIBERĂ, dar vizibilă. Pe ecran există deja badge-ul „datată în urmă"; pe hârtie, până acum,
+   * exista o singură dată — cea declarată — deci auditul nu putea vedea din document că cererea a
+   * fost înregistrată trei săptămâni mai târziu. Al doilea rând apare NUMAI când zilele diferă.
+   */
+  const sameDay = (a: string | null | undefined, b: string | null | undefined) =>
+    !!a && !!b && new Date(a).toDateString() === new Date(b).toDateString();
+  const dateOfRequestPrinted =
+    req.submittedAt && !sameDay(req.dateOfRequest, req.submittedAt)
+      ? `${fmtDate(req.dateOfRequest)} <span style="color:${FAINT};font-size:9.5px;">(registered ${fmtDateTime(req.submittedAt)})</span>`
+      : fmtDate(req.dateOfRequest);
+
+  const approverRows = approverSigs.length
+    ? approverSigs
+        .map((a, i) => approverCell(a, i === 0, i === approverSigs.length - 1))
+        .join("\n              ")
+    : approverCell(null, true, false) +
+      `\n              <tr><td style="padding:8px 10px;vertical-align:top;"><div style="font-size:9.5px;color:${FAINT};">&nbsp;</div></td></tr>`;
 
   // Section 10 — Line items
   const itemRows = items
@@ -231,7 +282,7 @@ export function buildParHtml(par: ParDetail): string {
     <tbody>
       <tr>
         <td style="border:1px solid ${BORDER};padding:5px 10px;vertical-align:top;width:50%;">
-          ${field(1, "Date of Request", fmtDate(req.dateOfRequest))}
+          ${field(1, "Date of Request", dateOfRequestPrinted)}
           ${field(2, "Requested By", esc(requestedBy))}
           ${field(3, "Title of Requestor/Code", esc(requestorIdentity))}
           ${field(4, "Department", esc(department))}
@@ -337,10 +388,7 @@ export function buildParHtml(par: ParDetail): string {
         <td style="border:1px solid ${BORDER};padding:0;vertical-align:top;width:50%;">
           <table style="width:100%;border-collapse:collapse;height:100%;">
             <tbody>
-              <tr>${sigColumn(`${num(15)} Approver Signature (DOA Holder, Supervisor, or Tech Lead):`, approver1).replace(/^\s*<td style="[^"]*"/, '<td style="padding:8px 10px;vertical-align:top;border-bottom:1px solid ' + BORDER + '"')}</tr>
-              ${approver2
-                ? `<tr>${sigColumn("&nbsp;", approver2, { stamp: true }).replace(/^\s*<td style="[^"]*"/, '<td style="padding:8px 10px;vertical-align:top"')}</tr>`
-                : `<tr><td style="padding:8px 10px;vertical-align:top;"><div style="font-size:9.5px;color:${FAINT};">&nbsp;</div></td></tr>`}
+              ${approverRows}
             </tbody>
           </table>
         </td>
@@ -375,7 +423,15 @@ export function buildParHtml(par: ParDetail): string {
     </tbody>
   </table>
 
-  <div style="font-size:9px;color:${FAINT};text-align:right;padding-top:6px;">PAR No: ${esc(req.requestNo)}</div>
+  <!-- VM5-17: ștampila de timp a documentului — depusă / aprobată / momentul tipăririi. -->
+  <div style="font-size:9px;color:${FAINT};padding-top:6px;display:flex;justify-content:space-between;gap:12px;">
+    <span>${[
+      req.submittedAt ? `Submitted: ${fmtDateTime(req.submittedAt)}` : "",
+      req.approvedAt ? `Approved: ${fmtDateTime(req.approvedAt)}` : "",
+      `Generated: ${fmtDateTime(new Date().toISOString())}`,
+    ].filter(Boolean).join(" &nbsp;·&nbsp; ")}</span>
+    <span>PAR No: ${esc(req.requestNo)}</span>
+  </div>
 
 </div>`;
 }

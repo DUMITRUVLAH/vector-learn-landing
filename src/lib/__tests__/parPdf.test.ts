@@ -343,6 +343,89 @@ describe("buildParHtml() — T-PAR-114-1 [blocant]", () => {
     expect(html).toContain("APPROVE");        // approved decision stamp
   });
 
+  /**
+   * VM5-15 (Iulian, ATIC): pe un nivel paralel, formularul lua primele două rânduri din listă.
+   * Când rândul încă nedecis venea primul din baza de date, o semnătură dată dispărea — la a doua
+   * descărcare a ACELEIAȘI cereri. Aici se randează aceleași date de două ori, cu ordinea
+   * aprobărilor inversată între randări.
+   */
+  describe("sections 14–15 — nivel paralel de aprobare", () => {
+    const parallel = (order: number[]) => {
+      const rows = [
+        { id: "p-req", step: 0, approverUserId: "u-req", approverRoleLabel: "Requestor",
+          decision: "approved" as const, locked: false, decidedAt: "2026-09-08T09:00:00Z",
+          comment: null, signatureName: "Iulian Lungu", signatureTitle: "Project Coordinator",
+          createdAt: "2026-09-08T09:00:00Z" },
+        { id: "p-ana", step: 1, approverUserId: "u-ana", approverRoleLabel: "Aprobator",
+          decision: "approved" as const, locked: false, decidedAt: "2026-09-08T10:00:00Z",
+          comment: null, signatureName: "Ana Chirita", signatureTitle: "Strategic Projects Director",
+          createdAt: "2026-09-08T09:00:00Z" },
+        { id: "p-irina", step: 1, approverUserId: "u-irina", approverRoleLabel: "Aprobator",
+          decision: "approved" as const, locked: false, decidedAt: "2026-09-08T11:00:00Z",
+          comment: null, signatureName: "Irina Oriol", signatureTitle: "Executive Director",
+          createdAt: "2026-09-08T09:00:00Z" },
+        { id: "p-pending", step: 1, approverUserId: "u-alt", approverRoleLabel: "Aprobator",
+          decision: "pending" as const, locked: false, decidedAt: null,
+          comment: null, signatureName: null, signatureTitle: null,
+          createdAt: "2026-09-08T09:00:00Z" },
+      ];
+      return makePar({ approvals: order.map((i) => rows[i]) });
+    };
+
+    it("tipărește ambele semnături indiferent de ordinea rândurilor", () => {
+      const a = buildParHtml(parallel([0, 1, 2, 3]));
+      const b = buildParHtml(parallel([3, 2, 1, 0]));
+      for (const html of [a, b]) {
+        expect(html).toContain("Ana Chirita");
+        expect(html).toContain("Irina Oriol");
+      }
+    });
+
+    it("produce exact același formular la două descărcări consecutive", () => {
+      const strip = (h: string) => h.replace(/Generated: [^<]*/g, "Generated: —");
+      expect(strip(buildParHtml(parallel([0, 1, 2, 3])))).toBe(strip(buildParHtml(parallel([2, 3, 0, 1]))));
+    });
+
+    it("dă o casetă fiecărui aprobator, nu doar primilor doi", () => {
+      const html = buildParHtml(parallel([0, 1, 2, 3]));
+      const boxes = html.match(/Signature:<\/span>/g) ?? [];
+      // 1 solicitant + 3 aprobatori (doi semnați + unul în așteptare)
+      expect(boxes.length).toBeGreaterThanOrEqual(4);
+    });
+  });
+
+  /** VM5-17: ștampila de timp pe formularul tipărit. */
+  describe("ștampile de timp", () => {
+    it("scrie momentul depunerii, al aprobării și al generării", () => {
+      const html = buildParHtml(par);
+      expect(html).toContain("Submitted: 10-Jun-26");
+      expect(html).toContain("Approved: 10-Jun-26");
+      expect(html).toContain("Generated:");
+    });
+
+    it("data deciziei include ora, nu doar ziua", () => {
+      const html = buildParHtml(par);
+      expect(html).toMatch(/Date:<\/span>\s*<span[^>]*>10-Jun-26 \d{2}:\d{2}/);
+    });
+
+    /** VM5-06: retroactivitatea rămâne liberă, dar se vede pe hârtie. */
+    it("arată data înregistrării când cererea e datată în urmă", () => {
+      const html = buildParHtml(makePar({
+        dateOfRequest: "2026-05-02T00:00:00Z",
+        submittedAt: "2026-06-10T08:00:00Z",
+      }));
+      expect(html).toContain("registered 10-Jun-26");
+    });
+
+    it("nu adaugă rândul de înregistrare când cererea e depusă în aceeași zi", () => {
+      const html = buildParHtml(makePar({
+        dateOfRequest: "2026-06-10T07:30:00Z",
+        submittedAt: "2026-06-10T08:00:00Z",
+      }));
+      expect(html).not.toContain("registered");
+    });
+  });
+
   it("contains section 16 payment internal use", () => {
     const html = buildParHtml(par);
     expect(html).toContain("Payment Internal Use Only:");

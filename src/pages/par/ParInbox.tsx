@@ -31,6 +31,7 @@ import {
   listEvents,
   approvePar,
   bulkApprovePar,
+  bulkRejectPar,
   rejectPar,
   requestParChanges,
   formatMDL,
@@ -512,6 +513,85 @@ function BulkApproveModal({ ids, defaultSignatureName, onClose, onDone }: BulkAp
   );
 }
 
+// ─── VM5-13: Bulk reject modal ────────────────────────────────────────────────
+
+/**
+ * „Respinge selectate" — perechea lipsă a lui „Aprobă selectate" (ședința de prezentare).
+ *
+ * Două diferențe față de aprobare, amândouă intenționate:
+ *   1. **Motivul e obligatoriu.** Nicio respingere din sistem nu e anonimă: solicitantul primește
+ *      motivul în notificare, iar el rămâne în jurnal. Butonul stă blocat până se scrie ceva.
+ *   2. **Se spune ce se întâmplă mai departe.** Respingerea oprește cererea pe loc, dar nu e o
+ *      fundătură — autorul o poate revizui și retrimite. Fără propoziția asta, oamenii se tem de
+ *      buton și trimit „modificări cerute" în loc de respingere.
+ */
+function BulkRejectModal({ ids, defaultSignatureName, onClose, onDone }: BulkApproveModalProps) {
+  const [comment, setComment] = useState("");
+  const [signatureName, setSignatureName] = useState(defaultSignatureName ?? "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!comment.trim()) {
+      setError("Motivul respingerii e obligatoriu.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await bulkRejectPar({
+        par_ids: ids,
+        comment: comment.trim(),
+        signatureName: signatureName || null,
+      });
+      const map: Record<string, { ok: boolean; error?: string; status?: string }> = {};
+      for (const r of res.results) map[r.id] = { ok: r.ok, error: r.error, status: r.status };
+      onDone(map);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Eroare la respingerea în lot");
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Respinge ${ids.length} ${ids.length === 1 ? "cerere" : "cereri"}`}
+      description="Același motiv se aplică tuturor cererilor selectate. Fiecare solicitant îl primește în notificarea lui. Cererea se oprește aici, dar autorul o poate revizui și retrimite."
+      size="md"
+    >
+      <form onSubmit={submit} className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="bulk-reject-comment">Motivul respingerii *</Label>
+          <Textarea
+            id="bulk-reject-comment"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={3}
+            required
+            placeholder="De ce nu pot fi aprobate aceste cereri?"
+            className="resize-none"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="bulk-reject-sig">Semnătură / Nume</Label>
+          <Input id="bulk-reject-sig" type="text" value={signatureName} onChange={(e) => setSignatureName(e.target.value)} />
+        </div>
+        {error && <Alert variant="destructive">{error}</Alert>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>Anulează</Button>
+          <Button type="submit" variant="destructive" disabled={submitting || !comment.trim()}>
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <XCircle className="h-4 w-4" aria-hidden />}
+            Respinge toate
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ParInbox() {
@@ -543,6 +623,8 @@ export default function ParInbox() {
   // VF-102: bulk-approve selection + results
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
+  // VM5-13: același tipar ca aprobarea în masă — un modal separat, cu motiv obligatoriu.
+  const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
   const [bulkResults, setBulkResults] = useState<Record<string, { ok: boolean; error?: string; status?: string }>>({});
   // Rezultatul ultimei decizii — rămâne pe ecran după reîncărcarea listei.
   const [lastOutcome, setLastOutcome] = useState<DecisionOutcome | null>(null);
@@ -875,9 +957,14 @@ export default function ParInbox() {
                   <Input className="w-28" type="number" value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} placeholder="Max. MDL" aria-label="Sumă maximă" />
                 </div>
                 {selectedIds.size > 0 && (
-                  <Button size="sm" onClick={() => setBulkOpen(true)}>
-                    <CheckCircle className="h-4 w-4" aria-hidden="true" /> Aprobă {selectedIds.size} selectate
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" onClick={() => setBulkOpen(true)}>
+                      <CheckCircle className="h-4 w-4" aria-hidden="true" /> Aprobă {selectedIds.size} selectate
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={() => setBulkRejectOpen(true)}>
+                      <XCircle className="h-4 w-4" aria-hidden="true" /> Respinge {selectedIds.size}
+                    </Button>
+                  </div>
                 )}
               </div>
 
@@ -1059,6 +1146,14 @@ export default function ParInbox() {
               </button>
               <button
                 type="button"
+                onClick={() => setBulkRejectOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md border border-destructive/40 text-destructive hover:bg-destructive/10 min-h-[44px]"
+              >
+                <XCircle className="h-4 w-4" aria-hidden="true" />
+                Respinge {selectedIds.size} selectate
+              </button>
+              <button
+                type="button"
                 onClick={() => setBulkOpen(true)}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 min-h-[44px]"
               >
@@ -1075,6 +1170,15 @@ export default function ParInbox() {
           ids={[...selectedIds]}
           defaultSignatureName={myName}
           onClose={() => setBulkOpen(false)}
+          onDone={handleBulkDone}
+        />
+      )}
+
+      {bulkRejectOpen && (
+        <BulkRejectModal
+          ids={[...selectedIds]}
+          defaultSignatureName={myName}
+          onClose={() => setBulkRejectOpen(false)}
           onDone={handleBulkDone}
         />
       )}

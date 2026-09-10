@@ -332,6 +332,28 @@ async function getFinanceUsers(tenantId: string): Promise<string[]> {
   return rows.map((r) => r.userId);
 }
 
+
+/**
+ * VM5-01 — cine a decis și când, scris în română, pentru corpul notificării.
+ *
+ * Din ședința de prezentare: „persoana care a elaborat PAR să primească feedback cu statutul
+ * PAR-ului și motivul". Mecanica exista, dar emailul era în engleză („PAR-2026-0025 was rejected")
+ * și nu spunea cine a decis — un feedback pe care omul nu-l citește ca feedback.
+ */
+async function decidedByLabel(tenantId: string, decidedByUserId?: string | null): Promise<string> {
+  if (!decidedByUserId) return "";
+  const u = await getUser(decidedByUserId, tenantId);
+  const name = u?.name?.trim() || u?.email?.trim();
+  return name ? ` de ${name}` : "";
+}
+
+/** Momentul deciziei în format românesc: „10.09.2026, 14:32". */
+function nowLabel(): string {
+  return new Date().toLocaleString("ro-MD", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -373,8 +395,8 @@ export async function notifyStepAdvanced(
  */
 export async function notifyFullyApprovedToFinance(ctx: ParNotifyContext): Promise<void> {
   const financeUsers = await getFinanceUsers(ctx.tenantId);
-  const body = `PAR ${ctx.requestNo} is fully approved and ready for payment execution. Link: /business/par/${ctx.parId}`;
-  const subject = `[PAR] ${ctx.requestNo} — ready for payment`;
+  const body = `Cererea ${ctx.requestNo} e aprobată complet și așteaptă execuția plății. Link: /business/par/${ctx.parId}`;
+  const subject = `[PAR] ${ctx.requestNo} — gata de plată`;
 
   for (const userId of financeUsers) {
     await notifyUser({
@@ -410,10 +432,17 @@ export async function notifyApprovedToRequestor(
 export async function notifyRejected(
   ctx: ParNotifyContext,
   requestorUserId: string,
-  comment: string
+  comment: string,
+  decidedByUserId?: string | null
 ): Promise<void> {
-  const body = `PAR ${ctx.requestNo} was rejected. Reason: ${comment.slice(0, 500)}. Link: /business/par/${ctx.parId}`;
-  const subject = `[PAR] ${ctx.requestNo} — rejected`;
+  const who = await decidedByLabel(ctx.tenantId, decidedByUserId);
+  const body = [
+    `Cererea ${ctx.requestNo} a fost RESPINSĂ${who} pe ${nowLabel()}.`,
+    `Motiv: ${comment.slice(0, 500)}`,
+    "Cererea nu se oprește aici: o poți revizui și retrimite din aplicație.",
+    `Link: /business/par/${ctx.parId}`,
+  ].join("\n");
+  const subject = `[PAR] ${ctx.requestNo} — respinsă`;
 
   await notifyUser({
     tenantId: ctx.tenantId,
@@ -430,10 +459,16 @@ export async function notifyRejected(
 export async function notifyChangesRequested(
   ctx: ParNotifyContext,
   requestorUserId: string,
-  comment: string
+  comment: string,
+  decidedByUserId?: string | null
 ): Promise<void> {
-  const body = `PAR ${ctx.requestNo} requires changes: ${comment.slice(0, 500)}. Link: /business/par/${ctx.parId}`;
-  const subject = `[PAR] ${ctx.requestNo} — changes requested`;
+  const who = await decidedByLabel(ctx.tenantId, decidedByUserId);
+  const body = [
+    `Cererea ${ctx.requestNo} a fost trimisă înapoi pentru MODIFICĂRI${who} pe ${nowLabel()}.`,
+    `Ce trebuie modificat: ${comment.slice(0, 500)}`,
+    `Link: /business/par/${ctx.parId}`,
+  ].join("\n");
+  const subject = `[PAR] ${ctx.requestNo} — modificări cerute`;
 
   await notifyUser({
     tenantId: ctx.tenantId,
@@ -451,8 +486,8 @@ export async function notifyPaid(
   ctx: ParNotifyContext,
   requestorUserId: string
 ): Promise<void> {
-  const body = `PAR ${ctx.requestNo} has been paid. Link: /business/par/${ctx.parId}`;
-  const subject = `[PAR] ${ctx.requestNo} — payment executed`;
+  const body = `Plata pentru cererea ${ctx.requestNo} a fost executată. Link: /business/par/${ctx.parId}`;
+  const subject = `[PAR] ${ctx.requestNo} — plată executată`;
 
   await notifyUser({
     tenantId: ctx.tenantId,

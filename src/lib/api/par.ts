@@ -636,6 +636,18 @@ export async function bulkApprovePar(payload: {
   return api("/api/par/bulk-approve", { method: "POST", body: JSON.stringify(payload) });
 }
 
+/**
+ * VM5-13: respinge până la 25 de cereri într-un apel. Motivul e OBLIGATORIU și e comun pe lot —
+ * fiecare solicitant îl primește pe al lui, în notificarea lui.
+ */
+export async function bulkRejectPar(payload: {
+  par_ids: string[];
+  comment: string;
+  signatureName?: string | null;
+}): Promise<{ results: BulkApproveResultItem[]; rejected: number; failed: number }> {
+  return api("/api/par/bulk-reject", { method: "POST", body: JSON.stringify(payload) });
+}
+
 /** Reject a PAR (terminal) */
 export async function rejectPar(id: string, payload: RejectPayload): Promise<ParRequest> {
   return api<ParRequest>(`/api/par/${id}/reject`, {
