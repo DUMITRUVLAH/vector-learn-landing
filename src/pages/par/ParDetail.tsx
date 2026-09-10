@@ -48,6 +48,7 @@ import { ParComments } from "@/components/par/ParComments";
 import { ReceiptSection } from "@/components/par/ReceiptSection";
 import { ThreeWayMatchPanel } from "@/components/par/ThreeWayMatchPanel";
 import { ParEfacturaCard } from "@/components/par/ParEfacturaCard";
+import { ParPaymentProofCard } from "@/components/par/ParPaymentProofCard";
 import { useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
 import {
@@ -1056,6 +1057,19 @@ export function ParDetailPage() {
           />
         )}
 
+        {/* VM4-05: confirmarea plății, SUS. Cine intră aici din „Dovezi de plată" caută un singur
+            lucru — nu are de ce să deruleze până la secțiunea 13 ca să-l vadă sau să-l atașeze. */}
+        {par.status === "paid" && (
+          <ParPaymentProofCard
+            parId={par.id}
+            requestNo={par.requestNo}
+            attachments={par.attachments ?? []}
+            canUpload={currentRoles.includes("finance") || currentRoles.includes("par_admin")}
+            currentUserId={currentUserId}
+            onChanged={load}
+          />
+        )}
+
         {/* SECTIONS 1–7: Header grid */}
         <Section num="1–7" title="Informații cerere">
           <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
@@ -1284,32 +1298,14 @@ export function ParDetailPage() {
               })}
             </ul>
           )}
-          {/* VM1-12: Upload ordin de plată — visible for finance/admin once PAR is paid */}
+          {/* VM1-12 → VM4-05: încărcarea ordinului de plată s-a mutat SUS, în „Confirmarea plății"
+              (card cu tragere de fișier, Ctrl+V pentru captură și previzualizare pe loc). Aici
+              rămâne doar indicatorul, ca secțiunea să nu pară că a pierdut o funcție. */}
           {currentRoles && (currentRoles.includes("finance") || currentRoles.includes("par_admin")) && par.status === "paid" && (
-            <div className="mt-3 pt-3 border-t border-border">
-              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Încarc ordin de plată (post-plată)</label>
-              <input
-                type="file"
-                accept=".pdf"
-                aria-label="Selectează ordinul de plată (PDF)"
-                className="text-xs text-foreground file:mr-2 file:py-1 file:px-2 file:rounded file:border file:border-border file:bg-muted file:text-xs file:cursor-pointer"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = async (ev) => {
-                    const dataUrl = ev.target?.result as string;
-                    try {
-                      await uploadAttachment(par.id, { file_name: file.name, file_url: dataUrl, mime: file.type, kind: "payment_order" });
-                      load();
-                    } catch {
-                      // ignore — user can retry
-                    }
-                  };
-                  reader.readAsDataURL(file);
-                }}
-              />
-            </div>
+            <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
+              Ordinul de plată se adaugă din „Confirmarea plății", în capul paginii — fișierul apare
+              și aici, în dosar.
+            </p>
           )}
         </Section>
 

@@ -72,6 +72,32 @@ aceeași plată — doar cel mai bine punctat rămâne propus; (3) atașarea fol
 atașamente (aceleași validări de tip/mărime); (4) o eroare la un fișier nu oprește lotul;
 (5) un atașament de alt tip (factură) nu trece drept dovadă de plată.
 
+## VM4-05 — „Confirmarea plății" sus pe fișa cererii, cu previzualizare — **done**
+
+**Feedback owner după prima zi pe ecranul de dovezi:** „dacă intri la PAR de acolo, trebuie sus să
+fie dovada… adaugă confirmare plată, să poți adăuga fișier, captură de ecran… acest «choose file»
+parcă e old school, și după ce e adăugat să poți vedea direct documentul confirmativ, și la fel se
+adaugă la dosar."
+
+**Gap:** încărcarea ordinului de plată stătea la coada secțiunii 13, ca `<input type="file">`
+nestilizat, accepta doar `.pdf`, iar după încărcare vedeai un nume de fișier — ca să știi ce ai
+atașat trebuia să-l deschizi.
+
+**Livrat:** card „Confirmarea plății" imediat sub acțiuni, doar pe cereri `paid`:
+- starea în clar („La dosar" / „Lipsește din dosar");
+- zonă de tragere + buton propriu + **Ctrl+V** pentru captura de ecran; PDF sau imagine, max 3 MB,
+  cu mesaj când fișierul e prea mare;
+- **previzualizare pe loc**: PDF în cadru, imaginea ca imagine, plus „Mărește" (vizualizatorul din
+  aplicație) și ștergere pentru cel care a încărcat;
+- fișierul rămâne un atașament obișnuit `payment_order`: apare în secțiunea 13, în dosarul PDF și
+  scoate cererea din coada „Dovezi de plată". Secțiunea 13 trimite acum spre card, ca să nu existe
+  două locuri de încărcare.
+
+**AC:** (1) cardul apare sus pe cereri plătite; (2) fișierul ales SAU lipit se atașează cu tipul
+`payment_order` și numele cererii în denumire; (3) documentul se vede fără să fie deschis;
+(4) un fișier de alt tip din dosar (factura) nu e confundat cu dovada; (5) cine nu are drept de
+încărcare vede doar documentul, iar dacă nu există dovadă nu vede niciun card.
+
 ---
 
 ## Amânate deliberat (nu s-au construit acum)
