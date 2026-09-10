@@ -200,7 +200,9 @@ describe("DG-115 — exportul pentru Word", () => {
     const res = await app.request(`/api/docs/documents/${id}/word`);
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toContain("msword");
-    expect(res.headers.get("Content-Disposition")).toMatch(/\.doc"$/);
+    // Antetul poartă acum și `filename*=UTF-8''…` (RFC 6266) — numele ASCII rămâne în `filename`.
+    expect(res.headers.get("Content-Disposition")).toMatch(/filename="[^"]+\.doc"/);
+    expect(res.headers.get("Content-Disposition")).toContain("filename*=UTF-8''");
 
     const html = await res.text();
     expect(html).toContain("Act de primire-predare");

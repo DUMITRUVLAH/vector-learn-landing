@@ -57,6 +57,7 @@ import { sendDocumentEmail } from "../lib/docs/sendDocumentEmail";
 import { BatchPdfRenderer } from "../lib/docmerge/htmlToPdf";
 import { buildPdfZip } from "../lib/docmerge/zipPdfs";
 import { accessibleProjectIds, mayAccessProject } from "../lib/par/projectScope";
+import { contentDisposition } from "../lib/http/contentDisposition";
 
 export const docsRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -1058,7 +1059,7 @@ docsRoutes.get("/documents/:id/pdf", async (c) => {
     return new Response(bytes, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Content-Disposition": contentDisposition("attachment", fileName),
       },
     });
   }
@@ -1078,7 +1079,7 @@ docsRoutes.get("/documents/:id/pdf", async (c) => {
   return new Response(Buffer.from(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${fileName}"`,
+      "Content-Disposition": contentDisposition("attachment", fileName),
     },
   });
 });
@@ -1892,7 +1893,7 @@ docsRoutes.get("/documents/:id/word", async (c) => {
   return new Response(html, {
     headers: {
       "Content-Type": "application/msword; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${fileName}"`,
+      "Content-Disposition": contentDisposition("attachment", fileName),
     },
   });
 });

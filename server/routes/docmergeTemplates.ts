@@ -29,6 +29,7 @@ import { sanitizeTemplateHtml } from "../lib/docs/sanitizeHtml";
 import { docTemplateVersions } from "../db/schema/docs";
 import { generateBatch } from "../lib/docmerge/generateBatch";
 import { buildPdfZip } from "../lib/docmerge/zipPdfs";
+import { contentDisposition } from "../lib/http/contentDisposition";
 
 export const docmergeTemplatesRoutes = new Hono<{
   Variables: AuthVariables;
@@ -410,7 +411,7 @@ docmergeTemplatesRoutes.post(
         status: 200,
         headers: {
           "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="${file.name}"`,
+          "Content-Disposition": contentDisposition("attachment", file.name),
         },
       });
     }
@@ -436,7 +437,7 @@ docmergeTemplatesRoutes.post(
       status: 200,
       headers: {
         "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${zipFileName}"`,
+        "Content-Disposition": contentDisposition("attachment", zipFileName),
       },
     });
   }

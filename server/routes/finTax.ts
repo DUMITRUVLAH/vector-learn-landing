@@ -36,6 +36,7 @@ import {
   generateDeclaration,
   type ExportFormat,
 } from "../lib/fin/declarationGenerator";
+import { contentDisposition } from "../lib/http/contentDisposition";
 import {
   computeDeadlinesForPeriod,
   declarationTypeLabel,
@@ -408,7 +409,7 @@ finTaxRoutes.get("/declarations/:id/export", async (c) => {
     return new Response(result.data as Buffer, {
       headers: {
         "Content-Type": result.contentType,
-        "Content-Disposition": `attachment; filename="${result.filename}"`,
+        "Content-Disposition": contentDisposition("attachment", result.filename),
       },
     });
   }
@@ -416,7 +417,7 @@ finTaxRoutes.get("/declarations/:id/export", async (c) => {
   return new Response(result.data as string, {
     headers: {
       "Content-Type": result.contentType,
-      "Content-Disposition": `attachment; filename="${result.filename}"`,
+      "Content-Disposition": contentDisposition("attachment", result.filename),
     },
   });
 });

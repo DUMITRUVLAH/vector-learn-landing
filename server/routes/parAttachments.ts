@@ -27,6 +27,7 @@ import { choosePayee } from "../lib/par/choosePayee";
 import { randomUUID } from "node:crypto";
 import { mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { attachmentPreviewUrl } from "../lib/par/attachmentUrls";
+import { contentDisposition } from "../lib/http/contentDisposition";
 
 export const parAttachmentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parAttachmentsRoutes.use("*", requireAuth);
@@ -337,9 +338,10 @@ parAttachmentsRoutes.get("/:parId/attachments/:attId/preview", async (c) => {
   const match = attachment.fileUrl.match(/^data:([^;]+);base64,(.*)$/s);
   if (!match) return c.json({ error: "preview_unavailable" }, 422);
   const bytes = Buffer.from(match[2], "base64");
-  const safeName = attachment.fileName.replace(/[\r\n"]/g, "_");
   c.header("Content-Type", match[1]);
-  c.header("Content-Disposition", `inline; filename="${safeName}"`);
+  // Numele merge prin RFC 6266: un antet HTTP nu poate transporta „ă", iar înainte orice document
+  // botezat românește arunca la runtime, iar vizualizatorul arăta „eroarea 500" (incident 10.09.2026).
+  c.header("Content-Disposition", contentDisposition("inline", attachment.fileName, "atasament"));
   // Conținutul unui atașament nu se schimbă niciodată pentru același id (o modificare = alt
   // atașament), iar de la auditul din 29.08.2026 ruta asta e singura cale prin care interfața
   // deschide fișierele — deci merită o memorare reală, nu 60 de secunde. `private`: rămâne în

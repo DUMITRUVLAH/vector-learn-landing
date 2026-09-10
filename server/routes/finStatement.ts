@@ -54,6 +54,7 @@ import {
 } from "../lib/fin/statementEfactura";
 import { assignInvoicesToLines, type LineCandidate } from "../lib/fin/invoiceLineMatch";
 import { sanitizePgText } from "../lib/fin/money";
+import { contentDisposition } from "../lib/http/contentDisposition";
 
 export const finStatementRoutes = new Hono<{ Variables: AuthVariables }>();
 
@@ -686,7 +687,7 @@ finStatementRoutes.post(
         status: 200,
         headers: {
           "Content-Type": "application/xml; charset=utf-8",
-          "Content-Disposition": `attachment; filename="${files[0].name}"`,
+          "Content-Disposition": contentDisposition("attachment", files[0].name),
         },
       });
     }
