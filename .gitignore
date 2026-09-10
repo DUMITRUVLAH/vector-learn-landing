@@ -52,3 +52,7 @@ HR365*.html
 .mobile-audit.mjs
 .verify.mjs
 .e2e-session.json
+
+# Screenshoturi de research competitiv (binare, păstrate local, nu în git)
+backlog/research/**/screenshots/
+backlog/research/**/TRIAL-ACCOUNT-CREDENTIALS.local.md
