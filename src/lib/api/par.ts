@@ -806,6 +806,28 @@ export async function downloadDosar(parId: string, requestNo?: string | null): P
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Formularul PAR, scris de SERVER ca text (nu fotografiat în browser cu html2canvas). Aceeași
+ * descărcare ca dosarul: cerere autentificată → blob → salvare cu numele oficial.
+ */
+export async function downloadParForm(parId: string, requestNo?: string | null): Promise<void> {
+  const resp = await fetch(`/api/par/${parId}/form.pdf`, { credentials: "include" });
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => "");
+    throw new Error(`Formular PAR: ${resp.status} ${body}`);
+  }
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const fileSafe = (requestNo ?? `par-${parId.slice(0, 8)}`).replace(/[^\w-]+/g, "_");
+  a.download = `PAR_Form_${fileSafe}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ─── PAR-112/113: Finance queue + section 16 + payment execution ─────────────
 
 export interface ParPaymentRecord {

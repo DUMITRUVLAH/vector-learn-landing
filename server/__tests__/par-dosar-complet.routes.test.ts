@@ -1,7 +1,7 @@
 /**
  * @vitest-environment node
- * VM5 — dosarul complet: fișa cu diacritice și tabele, captura de ecran ca pagină, formularul la
- * final. INTEGRATION (rută reală, PGlite, toate migrările).
+ * VM4-06/07 — dosarul complet: fișa cu diacritice și tabele, captura de ecran ca pagină,
+ * formularul PAR generat pe server la final. INTEGRATION (rută reală, PGlite, toate migrările).
  *
  * Owner (10.09.2026, uitându-se la un dosar descărcat): „nu văd în dosar să fie captura, scrie să
  * descarc separat, chiar nu poate fi inserată? … la fel, să fie adăugat și PAR-ul … și parcă e
@@ -221,11 +221,13 @@ describe("Dosarul complet", () => {
     await testDb.delete(parAttachments).where(eq(parAttachments.id, form.id));
   }, 60_000);
 
-  it("când formularul PAR lipsește, dosarul o SPUNE (nu tace)", async () => {
+  it("[blocant] când formularul nu e atașat, dosarul îl GENEREAZĂ (nu doar îl anunță)", async () => {
     const text = await pdfText(await dosar());
     expect(text).toContain("Formularul PAR");
-    expect(text).toContain("nu a fost generat");
-  }, 60_000);
+    // Formularul oficial e chiar înăuntru — vezi par-form-server.routes.test.ts pentru conținut.
+    expect(text).toContain("Payment Action Request (PAR) Form");
+    expect(text).not.toContain("nu a fost generat");
+  }, 90_000);
 
   it("un fișier care chiar nu poate fi inclus (XLSX) primește o notă cu numele lui", async () => {
     const [att] = await testDb

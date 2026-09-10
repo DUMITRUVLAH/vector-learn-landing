@@ -3,8 +3,8 @@
  * Tests: T-PAR-115-1, T-PAR-115-2
  *
  * T-PAR-115-1 [blocant]: Given /app/par/:id, page renders without crash and Download PDF button exists
- * T-PAR-115-2 [normal]: clicking Download PDF calls buildParPdfDoc (dynamically imported) and
- *   uploadAttachment (kind=par_pdf), reusing the SAME generated document for both.
+ * T-PAR-115-2 [normal]: clicking Download PDF cere formularul de la server
+ *   (`GET /api/par/:id/form.pdf`) — fără html2canvas și fără atașare, vezi VM4-07.
  *
  * @vitest-environment jsdom
  */
@@ -224,29 +224,29 @@ describe("ParDetailPage — T-PAR-115-2 [normal]: PDF download + attachment", ()
     });
   });
 
-  it("calls buildParPdfDoc when Download PDF button is clicked, then uploads the same document", async () => {
+  // Formularul se scrie acum pe SERVER (`GET /api/par/:id/form.pdf`), ca text vectorial. Butonul
+  // nu mai rasterizează nimic în browser și nu mai atașează formularul la cerere: dosarul îl
+  // generează singur, deci un al doilea exemplar în atașamente ar fi doar zgomot.
+  it("[blocant] Download PDF cere formularul de la server, fără rasterizare în browser", async () => {
+    const downloadSpy = vi.spyOn(parApi, "downloadParForm").mockResolvedValue(undefined);
     render(<ParDetailPage />);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /descarcă formularul par ca pdf/i })).toBeInTheDocument();
     }, { timeout: 5000 });
 
-    const btn = screen.getByRole("button", { name: /descarcă formularul par ca pdf/i });
-    fireEvent.click(btn);
+    fireEvent.click(screen.getByRole("button", { name: /descarcă formularul par ca pdf/i }));
 
-    // Exactly ONE rasterization for the click — reused for both the local download and the
-    // attachment upload (the bug this refactor fixed: html2canvas used to run twice).
     await waitFor(() => {
-      expect(getMockBuild()).toHaveBeenCalledTimes(1);
+      expect(downloadSpy).toHaveBeenCalledWith("par-uuid-001", "PAR-2026-0001");
     }, { timeout: 5000 });
-    await waitFor(() => {
-      expect(parApi.uploadAttachment).toHaveBeenCalledTimes(1);
-    }, { timeout: 5000 });
+    expect(getMockBuild()).not.toHaveBeenCalled();
+    expect(parApi.uploadAttachment).not.toHaveBeenCalled();
   });
 
   it("button shows loading state during generation", async () => {
-    let resolveDownload!: (doc: { save: () => void; output: () => string }) => void;
-    getMockBuild().mockImplementationOnce(
-      () => new Promise((res) => { resolveDownload = res; })
+    let finish!: () => void;
+    vi.spyOn(parApi, "downloadParForm").mockImplementation(
+      () => new Promise<void>((res) => { finish = res; })
     );
 
     render(<ParDetailPage />);
@@ -260,8 +260,14 @@ describe("ParDetailPage — T-PAR-115-2 [normal]: PDF download + attachment", ()
       expect(screen.getByText(/se generează pdf/i)).toBeInTheDocument();
     }, { timeout: 1000 });
 
-    // Resolve and clean up
-    resolveDownload({ save: () => {}, output: () => "data:application/pdf;base64,MOCK" });
+    finish();
+  });
+
+  it("o eroare de la server e arătată, nu înghițită", async () => {
+    vi.spyOn(parApi, "downloadParForm").mockRejectedValue(new Error("Formular PAR: 403"));
+    render(<ParDetailPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /descarcă formularul par ca pdf/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Formular PAR: 403");
   });
 
   it("calls getPar on load to fetch the full ParDetail", async () => {

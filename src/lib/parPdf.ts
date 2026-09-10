@@ -1,4 +1,12 @@
 /**
+ * ⚠️ NU MAI E CALEA FOLOSITĂ. Formularul oficial se scrie acum pe SERVER, ca text vectorial:
+ * `server/lib/par/parFormPdf.ts` + ruta `GET /api/par/:id/form.pdf` (VM4-07). Butonul „Download
+ * PDF" și dosarul iau formularul de acolo. Orice corectură pe formular se face în modulul de pe
+ * server — o schimbare aici NU ajunge la nimeni.
+ *
+ * Fișierul rămâne temporar ca plasă de siguranță pentru prima săptămână de producție; se șterge
+ * împreună cu testele lui după validare (vezi VM4-08 în backlog/specs/VM4-catalog.md).
+ *
  * PAR-114: client-side PDF generator for a "Payment Action Request (PAR) Form".
  *
  * Reproduces the standard 16-section paper form used by donor-funded NGOs (e.g. ATIC/Digital

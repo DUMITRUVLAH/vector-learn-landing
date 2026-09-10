@@ -53,7 +53,6 @@ import { useRouter } from "@/router/HashRouter";
 import { useSession } from "@/hooks/useSession";
 import {
   getPar,
-  uploadAttachment,
   approvePar,
   rejectPar,
   requestParChanges,
@@ -67,6 +66,7 @@ import {
   getPurchaseOrder,
   issuePurchaseOrder,
   getParMe,
+  downloadParForm,
   formatMDL,
   downloadDosar,
   type ParDetail as ParDetailType,
@@ -244,10 +244,9 @@ function PoButton({ par, orgName }: { par: ParDetailType; orgName: string }) {
 
 interface PdfButtonProps {
   par: ParDetailType;
-  onAttached: () => void;
 }
 
-function PdfDownloadButton({ par, onAttached }: PdfButtonProps) {
+function PdfDownloadButton({ par }: PdfButtonProps) {
   const [status, setStatus] = useState<"idle" | "generating" | "done" | "error">("idle");
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
@@ -256,22 +255,11 @@ function PdfDownloadButton({ par, onAttached }: PdfButtonProps) {
     setStatus("generating");
     setErrMsg(null);
     try {
-      // PERF: html2canvas (~174 KB gzip) + jsPDF only load when someone actually clicks
-      // "Download PDF" — not on every /business/par/:id visit.
-      const { buildParPdfDoc, parPdfFileName } = await import("@/lib/parPdf");
-      // ONE rasterization, reused for both destinations: the local download AND the PAR
-      // attachment upload used to each run their own independent html2canvas snapshot of the
-      // same form on a single click.
-      const pdf = await buildParPdfDoc(par);
-      const fileName = parPdfFileName(par);
-      pdf.save(fileName);
-      try {
-        const dataUrl = pdf.output("datauristring");
-        await uploadAttachment(par.id, { file_name: fileName, file_url: dataUrl, mime: "application/pdf", kind: "par_pdf" });
-        onAttached();
-      } catch {
-        console.warn("[PAR-115] attachment save failed (download succeeded)");
-      }
+      // Formularul se scrie pe SERVER, ca text vectorial (pdfmake + Tinos). Înainte se rasteriza
+      // aici cu html2canvas: ieșea o poză a paginii — text neselectabil, calitate după ecranul
+      // fiecăruia — și ajungea în dosar doar dacă cineva apăsa butonul. Acum dosarul îl generează
+      // singur, deci nu mai atașăm nimic la descărcare.
+      await downloadParForm(par.id, par.requestNo);
       setStatus("done");
       setTimeout(() => setStatus("idle"), 3000);
     } catch (e: unknown) {
@@ -1042,7 +1030,7 @@ export function ParDetailPage() {
           <div className="flex items-center gap-2 flex-shrink-0">
             <DuplicateButton parId={par.id} onNavigate={router.navigate} />
             <PoButton par={par} orgName={orgName} />
-            <PdfDownloadButton par={par} onAttached={load} />
+            <PdfDownloadButton par={par} />
             <DosarButton par={par} />
           </div>
         </div>

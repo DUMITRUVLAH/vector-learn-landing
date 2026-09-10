@@ -491,6 +491,8 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | VM4-04 | high | Dovezi de plată: atașare în bloc + potrivire automată după numele fișierului | done | [catalog](specs/VM4-catalog.md) |
 | VM4-05 | high | „Confirmarea plății" sus pe fișă: tragere/Ctrl+V + previzualizare pe loc | done | [catalog](specs/VM4-catalog.md) |
 | VM4-06 | high | Dosarul complet: fișă cu tabele + diacritice, capturi incluse, formularul la final | done | [catalog](specs/VM4-catalog.md) |
+| VM4-07 | high | Formularul PAR scris pe server (text, nu fotografie) + mereu în dosar | done | [catalog](specs/VM4-catalog.md) |
+| VM4-08 | low | Curățenie: ștergerea generatorului de formular din browser | pending | [catalog](specs/VM4-catalog.md) |
 
 ---
 

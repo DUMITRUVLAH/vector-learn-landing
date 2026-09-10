@@ -132,6 +132,36 @@ primește în continuare nota cu numele fișierului.
 
 ---
 
+## VM4-07 — Formularul PAR scris pe server, nu fotografiat în browser — **done**
+
+**De ce (alegerea owner-ului dintre îmbunătățirile propuse):** formularul oficial se genera cu
+html2canvas — o FOTOGRAFIE a unei pagini ascunse, lipită într-un PDF. Consecințe: text
+neselectabil și necăutabil, calitate după ecranul fiecăruia, și — cel mai grav — formularul ajungea
+în dosarul de audit DOAR dacă cineva apăsa „Download PDF" înainte. Multe dosare nu-l aveau deloc.
+
+**Livrat:**
+- `server/lib/par/parFormData.ts` — datele tipărite (cerere, poziții, semnături, secțiunea 16),
+  citite din aceleași tabele ca ruta de detaliu;
+- `server/lib/par/parFormPdf.ts` — cele 16 secțiuni scrise cu pdfmake + Tinos: chenare, banda de
+  titlu, căsuțe bifate desenate (nu caractere), tabelul pozițiilor cu moneda cererii în antet,
+  casetele de semnătură cu nume/funcție/dată, secțiunea 16 cu datele plății;
+- `GET /api/par/:id/form.pdf` — aceeași regulă de vizibilitate ca dosarul (conține IBAN/IDNP);
+- dosarul generează formularul LIVE când nu e atașat unul semnat — deci fiecare dosar îl are;
+- butonul „Download PDF" descarcă de la server și nu mai atașează un al doilea exemplar la cerere.
+
+**AC:** (1) PDF-ul are text extractibil (fotografia veche n-avea niciunul); (2) diacriticele sunt
+corecte; (3) moneda cererii apare în antetul coloanelor, cu echivalentul MDL dedesubt;
+(4) semnăturile poartă nume, funcție și data aprobării; (5) dosarul conține formularul chiar dacă
+nimeni nu l-a atașat; (6) când un formular semnat e atașat, NU se adaugă o dublură.
+
+## VM4-08 — Curățenie: ștergerea generatorului de formular din browser — **pending**
+
+`src/lib/parPdf.ts` (+ cele 454 de linii de teste) nu mai e folosit de nicio pagină după VM4-07.
+Rămâne o săptămână ca plasă de siguranță, cu un avertisment în capul fișierului; după validarea pe
+producție se șterge, ca nimeni să nu corecteze formularul în fișierul greșit.
+
+---
+
 ---
 
 ## Amânate deliberat (nu s-au construit acum)

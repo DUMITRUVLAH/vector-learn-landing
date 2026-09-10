@@ -59,6 +59,9 @@ import {
   renderDosarPagesPdf,
   type DosarSeparator,
 } from "../lib/par/dosarPdf";
+import { buildParFormDefinition, parFormFileName } from "../lib/par/parFormPdf";
+import { loadParFormData } from "../lib/par/parFormData";
+import { contentDisposition } from "../lib/http/contentDisposition";
 import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { explainMissingPar, parDenial } from "../lib/par/accessReason";
 import { getDesignatedApprovers, projectAllowsApprover } from "../lib/par/projectApprovers";
@@ -1952,6 +1955,30 @@ parRoutes.post("/:id/withdraw", async (c) => {
   });
 });
 
+// ─── GET /api/par/:id/form.pdf — formularul PAR, scris pe server ────────────
+// Owner (10.09.2026): formularul ajungea în dosar doar dacă cineva apăsa „Download PDF" în browser,
+// iar ce ieșea de acolo era o FOTOGRAFIE a paginii (html2canvas): text neselectabil, calitate
+// dependentă de ecran. Aici se scrie ca text vectorial, cu diacritice, oricând — deci și în dosar.
+
+parRoutes.get("/:id/form.pdf", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const parId = c.req.param("id");
+
+  const par = await getPAR(parId, tenantId);
+  if (!par) return c.json({ error: "not_found" }, 404);
+  // Formularul conține IBAN-ul și IDNP-ul beneficiarului: aceeași regulă de vizibilitate ca dosarul.
+  if (!(await canViewPar(user, tenantId, par))) return c.json({ error: "forbidden" }, 403);
+
+  const data = await loadParFormData(parId, tenantId);
+  if (!data) return c.json({ error: "not_found" }, 404);
+
+  const bytes = await renderDosarPagesPdf(buildParFormDefinition(data));
+  c.header("Content-Type", "application/pdf");
+  c.header("Content-Disposition", contentDisposition("attachment", parFormFileName(par.requestNo, parId)));
+  return c.body(bytes);
+});
+
 // ─── GET /api/par/:id/dosar ─────────────────────────────────────────────────
 // VM1-12: Combined dosar PDF — PAR form pages + supporting attachments + payment order.
 // Uses pdf-lib via DYNAMIC import() only (never top-level — exceljs/PAR-port lesson).
@@ -2224,18 +2251,30 @@ parRoutes.get("/:id/dosar", async (c) => {
     });
   }
 
-  // Formularul cererii intră în dosar doar dacă a fost generat (butonul „Download PDF" îl atașează
-  // ca `par_pdf`). Când lipsește, dosarul o spune — un auditor trebuie să știe că nu se uită la un
-  // dosar complet, nu să deducă din absență.
+  // Formularul cererii încheie dosarul ÎNTOTDEAUNA. Dacă cineva l-a atașat (`par_pdf`), aceea e
+  // piesa semnată și rămâne ea; dacă nu, îl scriem acum din datele cererii. Înainte, un dosar de
+  // audit putea să nu conțină deloc formularul — doar pentru că nimeni nu apăsase „Download PDF".
   if (!attachments.some((a) => (a.kind ?? "") === "par_pdf")) {
-    plan.push({
-      separator: {
-        title: "Formularul PAR",
-        subtitle:
-          "Formularul cererii nu a fost generat pentru această cerere. Se adaugă din pagina cererii, cu butonul „Download PDF”.",
-      },
-      piece: { type: "note" },
-    });
+    try {
+      const formData = await loadParFormData(parId, tenantId);
+      if (formData) {
+        const formBytes = await renderDosarPagesPdf(buildParFormDefinition(formData));
+        plan.push({
+          separator: { title: "Formularul PAR" },
+          piece: { type: "pdf", pages: await PDFDocument.load(formBytes) },
+        });
+      }
+    } catch {
+      // Formularul e ultima piesă: dacă scrierea lui pică (fonturi lipsă într-un mediu neconform),
+      // dosarul cu fișa și documentele rămâne livrabil — spune doar că formularul lipsește.
+      plan.push({
+        separator: {
+          title: "Formularul PAR",
+          subtitle: "Formularul nu a putut fi generat automat. Descarcă-l din pagina cererii.",
+        },
+        piece: { type: "note" },
+      });
+    }
   }
 
   // ── Paginile generate (fișa + separatoarele), scrise cu pdfmake + fontul Tinos ──
