@@ -499,6 +499,32 @@ două rânduri din listă".
 
 ---
 
+## VM5-15b — Unde trăia de fapt bugul (lecție, 10.09.2026)
+
+Prima reparație a mers în `src/lib/parPdf.ts` — modulul care randa formularul în browser cu
+html2canvas. Testele erau verzi, codul era corect, **produsul nu-l mai rulează**: de la VM4-07,
+butonul „Descarcă PDF" cheamă `GET /api/par/:id/form.pdf`, iar documentul se scrie pe server ca text
+vectorial (`server/lib/par/parFormPdf.ts` + `parFormData.ts`). Antetul fișierului vechi o spunea
+explicit; eu am editat fără să-l citesc.
+
+Aceeași greșeală era și pe server (`approvers[0]`/`[1]` dintr-o listă în ordinea bazei de date), deci
+bugul lui Iulian era viu chiar dacă versiunea din browser fusese reparată. Acum serverul importă
+**același** modul ca ecranul (`src/lib/par/signatureSlots` — există precedent: `server/lib/par/*`
+importă deja module pure din `src/lib/par/*`), nu o a doua copie care poate drifta.
+
+**Regula, pentru data viitoare:** înainte de a repara ceva la formularul tipărit, verifică ce cale
+rulează în produs — `grep "form.pdf"` în `src/`, nu presupune că fișierul cu numele potrivit e cel
+folosit.
+
+Două capcane prinse de teste pe drum:
+- `Intl.DateTimeFormat` cu `month: "short"` scrie **„Sept"** în engleză, nu „Sep" — formatul
+  datelor de pe formularul oficial s-ar fi schimbat peste noapte. Luna se scrie iar din tabel, doar
+  ziua se citește în fusul organizației.
+- Formularul folosea **UTC**, iar fișa aprobărilor Europe/Chișinău: o aprobare dată la 00:30 apărea
+  tipărită cu ziua precedentă, pe hârtia care ajunge la audit.
+
+---
+
 ## VM5-16 — Fluxul cererii: respinsă → revizuită → aprobată — 🟢 90%
 
 **Cerința:** „Flow-ul per PAR ex.: respinsă, revizuite, aprobat și posibilitatea de schimbare a
