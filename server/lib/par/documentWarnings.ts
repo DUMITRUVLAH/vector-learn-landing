@@ -9,18 +9,28 @@
  * fiecare cerere cu un scan mai slab ar purta un semn de alarmă, iar semnele care apar mereu nu mai
  * sunt citite. Aceeași regulă ca pe client (`src/lib/par/attachmentWarnings.ts`).
  */
+import { ANALYSIS_VERSION } from "./reconcileScope";
 
 interface StoredAnalysis {
+  version?: number;
   status?: string;
   checks?: { matches?: boolean | null }[];
 }
 
-/** Nepotrivirile dintr-o singură analiză salvată (text JSON pe atașament). */
+/**
+ * Nepotrivirile dintr-o singură analiză salvată (text JSON pe atașament).
+ *
+ * Verdictele făcute cu reguli mai vechi nu se numără: pe producție ele raportau contracte-cadru
+ * comparate cu plata unei luni și numere de factură citite drept sumă, iar semnul de pe rând ar fi
+ * apărut pe trei sferturi din cereri. Aceeași regulă ca pe client
+ * (`src/lib/par/attachmentWarnings.ts`).
+ */
 export function countAnalysisMismatches(raw: string | null | undefined): number {
   if (!raw) return 0;
   try {
     const parsed = JSON.parse(raw) as StoredAnalysis;
     if (!parsed || !Array.isArray(parsed.checks)) return 0;
+    if ((parsed.version ?? 0) < ANALYSIS_VERSION) return 0;
     return parsed.checks.filter((c) => c?.matches === false).length;
   } catch {
     return 0;

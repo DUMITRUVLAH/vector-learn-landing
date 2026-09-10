@@ -283,6 +283,8 @@ describe("ParDetailPage — PAR-118", () => {
           ...mockPar.attachments[0],
           fileName: "factura-45.pdf",
           analysis: JSON.stringify({
+            // Verdict făcut cu regulile curente — cele vechi nu blochează o semnătură.
+            version: 2,
             status: "warning",
             warnings: 2,
             checks: [

@@ -19,6 +19,12 @@ export interface AnalysisCheck {
 }
 
 export interface AttachmentAnalysis {
+  /**
+   * Versiunea regulilor cu care s-a făcut analiza (`server/lib/par/reconcileScope.ts`). Lipsește pe
+   * verdictele salvate înainte de 10.09.2026 — unele vizibil greșite, cu numărul facturii citit ca
+   * sumă. Ele rămân afișate, dar nu au voie să blocheze o aprobare.
+   */
+  version?: number;
   status: "match" | "warning";
   warnings: number;
   checks: AnalysisCheck[];
@@ -46,12 +52,21 @@ export function parseAttachmentAnalysis(raw: string | null | undefined): Attachm
   }
 }
 
+/** Regulile curente de reconciliere; ține pas cu `ANALYSIS_VERSION` de pe server. */
+export const CURRENT_ANALYSIS_VERSION = 2;
+
 /**
  * Toate nepotrivirile cererii, în ordinea documentelor.
  *
- * Doar `matches === false` intră aici. Un câmp neverificat (`null`) NU e o nepotrivire: dacă
- * documentul e scanat prost sau nu conține IBAN-ul, asta nu înseamnă că cineva a greșit — iar dacă
- * l-am număra, fiecare aprobare ar trece printr-un avertisment și nimeni nu le-ar mai citi.
+ * Două filtre, amândouă ca avertismentul să rămână credibil:
+ *
+ * 1. Doar `matches === false`. Un câmp neverificat (`null`) NU e o nepotrivire: dacă documentul e
+ *    scanat prost sau nu conține IBAN-ul, asta nu înseamnă că cineva a greșit.
+ * 2. Doar analizele făcute cu regulile curente. Pe producție, 17 din 23 de atașamente purtau un
+ *    verdict vechi, aproape toate pe „sumă" — inclusiv un contract-cadru comparat cu plata unei
+ *    luni și un număr de factură citit drept sumă. Un avertisment care sare pe trei sferturi din
+ *    cereri nu mai e citit de nimeni. Documentele vechi se reevaluează când sunt reîncărcate sau
+ *    reanalizate.
  */
 export function collectDocumentMismatches(
   attachments: readonly { fileName: string; analysis?: string | null }[]
@@ -60,6 +75,7 @@ export function collectDocumentMismatches(
   for (const att of attachments) {
     const analysis = parseAttachmentAnalysis(att.analysis);
     if (!analysis) continue;
+    if ((analysis.version ?? 0) < CURRENT_ANALYSIS_VERSION) continue;
     for (const check of analysis.checks) {
       if (check.matches === false) {
         out.push({ fileName: att.fileName, field: check.field, expected: check.expected, found: check.found });

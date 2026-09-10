@@ -8,8 +8,9 @@
 import { describe, it, expect } from "vitest";
 import { countAnalysisMismatches, countMismatchesByPar } from "../documentWarnings";
 
-const analysis = (matches: (boolean | null)[]) =>
+const analysis = (matches: (boolean | null)[], version: number | null = 2) =>
   JSON.stringify({
+    ...(version === null ? {} : { version }),
     status: matches.includes(false) ? "warning" : "match",
     warnings: matches.filter((m) => m === false).length,
     checks: matches.map((m, i) => ({ field: `câmp-${i}`, expected: "x", found: "y", matches: m })),
@@ -22,6 +23,11 @@ describe("countAnalysisMismatches()", () => {
 
   it("un document concordant nu produce niciun semn", () => {
     expect(countAnalysisMismatches(analysis([true, true, null]))).toBe(0);
+  });
+
+  it("verdictele făcute cu reguli vechi nu se numără", () => {
+    expect(countAnalysisMismatches(analysis([false, false], null))).toBe(0);
+    expect(countAnalysisMismatches(analysis([false, false], 1))).toBe(0);
   });
 
   it("text lipsă sau stricat înseamnă zero, nu excepție", () => {

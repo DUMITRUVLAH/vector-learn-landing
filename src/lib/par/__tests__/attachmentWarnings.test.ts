@@ -8,12 +8,18 @@
 import { describe, it, expect } from "vitest";
 import {
   collectDocumentMismatches,
+  CURRENT_ANALYSIS_VERSION,
   formatCheckValue,
   parseAttachmentAnalysis,
 } from "../attachmentWarnings";
 
-const analysis = (checks: { field: string; expected: unknown; found: unknown; matches: boolean | null }[]) =>
+const analysis = (
+  checks: { field: string; expected: unknown; found: unknown; matches: boolean | null }[],
+  /** `null` = verdict vechi, salvat înainte să existe versionarea. */
+  version: number | null = CURRENT_ANALYSIS_VERSION
+) =>
   JSON.stringify({
+    ...(version === null ? {} : { version }),
     status: checks.some((c) => c.matches === false) ? "warning" : "match",
     warnings: checks.filter((c) => c.matches === false).length,
     checks,
@@ -60,6 +66,25 @@ describe("collectDocumentMismatches()", () => {
       { fileName: "factura.pdf", analysis: analysis([{ field: "plătitor", expected: "ATIC", found: "Digital Safeguard", matches: false }]) },
     ]);
     expect(out.map((m) => m.field)).toEqual(["beneficiar", "plătitor"]);
+  });
+
+  /**
+   * Pe producție (10.09.2026) 17 din 23 de atașamente purtau un verdict vechi, aproape toate pe
+   * „sumă": contracte-cadru comparate cu plata unei luni, un număr de factură citit drept sumă.
+   * Ele rămân vizibile pe fișă, dar nu au voie să blocheze o semnătură.
+   */
+  it("ignoră verdictele făcute cu reguli vechi", () => {
+    const vechi = collectDocumentMismatches([
+      { fileName: "contract.pdf", analysis: analysis([{ field: "sumă", expected: 700000, found: 758854, matches: false }], null) },
+    ]);
+    expect(vechi).toEqual([]);
+  });
+
+  it("numără verdictele făcute cu regulile curente", () => {
+    const nou = collectDocumentMismatches([
+      { fileName: "factura.pdf", analysis: analysis([{ field: "sumă", expected: 700000, found: 650000, matches: false }]) },
+    ]);
+    expect(nou).toHaveLength(1);
   });
 
   it("un document fără analiză nu produce nimic", () => {

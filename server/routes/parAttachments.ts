@@ -25,6 +25,7 @@ import { readUploadedDoc } from "../lib/ai/readUploadedDoc";
 import { extractParParties } from "../lib/ai/parExtractor";
 import { choosePayee } from "../lib/par/choosePayee";
 import { checkPayerOnDocument } from "../lib/par/payerOnDocument";
+import { ANALYSIS_VERSION, comparesAmount } from "../lib/par/reconcileScope";
 import { randomUUID } from "node:crypto";
 import { mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { attachmentPreviewUrl } from "../lib/par/attachmentUrls";
@@ -290,10 +291,19 @@ async function analyzeAttachmentAgainstPar(
     payerRow ?? null,
     payee ?? null,
   );
+  // Suma se compară doar pe documentele care chiar declară suma de plată (vezi `reconcileScope`):
+  // pe un contract-cadru, pe o listă de participanți sau pe un buletin scanat, „suma nu corespunde"
+  // e zgomot garantat, iar zgomotul face avertismentele invizibile.
+  const amountChecks: ReconcileCheck[] = comparesAmount(attachment.kind)
+    ? [
+        // 0 nu e o sumă citită din act, ci o extragere eșuată — se raportează „nedetectat", nu diferență.
+        { field: "sumă", expected: par.totalEstimatedCents, found: amountCents, matches: amountCents == null ? null : amountCents === par.totalEstimatedCents },
+        { field: "valută", expected: par.currency, found: choice.currency, matches: !choice.currency ? null : choice.currency === par.currency },
+      ]
+    : [];
+
   const checks: ReconcileCheck[] = [
-    // 0 nu e o sumă citită din act, ci o extragere eșuată — se raportează „nedetectat", nu diferență.
-    { field: "sumă", expected: par.totalEstimatedCents, found: amountCents, matches: amountCents == null ? null : amountCents === par.totalEstimatedCents },
-    { field: "valută", expected: par.currency, found: choice.currency, matches: !choice.currency ? null : choice.currency === par.currency },
+    ...amountChecks,
     { field: "beneficiar", expected: par.payeeName, found: payee?.name ?? null, matches: !payee?.name || !par.payeeName ? null : norm(payee.name) === norm(par.payeeName) },
     { field: "IDNO/IDNP", expected: par.payeeIdnp, found: payee?.idno ?? null, matches: !payee?.idno || !par.payeeIdnp ? null : norm(payee.idno) === norm(par.payeeIdnp) },
     { field: "IBAN", expected: par.payeeIban, found: payee?.iban ?? null, matches: !payee?.iban || !par.payeeIban ? null : norm(payee.iban) === norm(par.payeeIban) },
@@ -301,7 +311,15 @@ async function analyzeAttachmentAgainstPar(
     { field: "plătitor", expected: payerRow?.name ?? null, found: payerCheck.found, matches: payerCheck.matches },
   ];
   const warnings = checks.filter((check) => check.matches === false).length;
-  const analysis = { status: warnings ? "warning" : "match", warnings, checks, analyzedAt: new Date().toISOString() };
+  // `version`: interfața ia în serios (bandă de avertisment, confirmare la aprobare) doar analizele
+  // făcute cu regulile curente. Verdictele mai vechi rămân vizibile, dar nu blochează o semnătură.
+  const analysis = {
+    version: ANALYSIS_VERSION,
+    status: warnings ? "warning" : "match",
+    warnings,
+    checks,
+    analyzedAt: new Date().toISOString(),
+  };
   await db.transaction(async (tx) => {
     await tx.update(parAttachments).set({ analysis: JSON.stringify(analysis), updatedAt: new Date() })
       .where(and(eq(parAttachments.id, attachment.id), eq(parAttachments.tenantId, par.tenantId)));
