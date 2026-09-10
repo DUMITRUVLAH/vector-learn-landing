@@ -78,6 +78,32 @@ export function stepMatchesViewer(step: DecidableStep, ctx: ViewerContext): bool
   return false;
 }
 
+/**
+ * Which pending step is the viewer's to decide, when SEVERAL of them match?
+ *
+ * A parallel level puts more than one pending row on the same step, and a row whose pinned approver
+ * was dropped at submit (self-approval sanitisation nulls `approver_user_id`) turns into a
+ * role-based row that matches ANY approver. A plain `find` over the rows therefore handed the
+ * signer whichever row the database returned first — that is how one approver's signature landed on
+ * the row still labelled with a colleague's name while their own row stayed pending.
+ *
+ * Preference, so a person always signs their OWN slot when they have one:
+ *   1. a row pinned to me, 2. a row pinned to someone who delegated to me, 3. a role-based row.
+ * Ties keep the lowest step first; `sort` is stable, so rows inside a tier keep their query order.
+ */
+export function pickDecidableStep<T extends DecidableStep>(
+  steps: T[],
+  ctx: ViewerContext,
+  opts: { locked: boolean }
+): T | undefined {
+  const candidates = steps.filter(
+    (s) => s.step > 0 && s.decision === "pending" && s.locked === opts.locked && stepMatchesViewer(s, ctx)
+  );
+  const tier = (s: DecidableStep) =>
+    s.approverUserId === ctx.userId ? 0 : s.approverUserId != null && ctx.delegators.has(s.approverUserId) ? 1 : 2;
+  return [...candidates].sort((a, b) => tier(a) - tier(b) || a.step - b.step)[0];
+}
+
 /** Why the viewer cannot decide right now (drives the on-screen explanation). */
 export type NoDecisionReason =
   | "not_pending_approval"
@@ -122,8 +148,9 @@ export function resolveViewerDecision(params: {
   if (requestedByUserId && requestedByUserId === ctx.userId) return none("self_approval");
   if (ctx.parRoles.length === 0 && ctx.delegators.size === 0) return none("no_par_role");
 
-  const mine = steps.filter((s) => s.step > 0 && s.decision === "pending" && stepMatchesViewer(s, ctx));
-  const active = mine.find((s) => !s.locked);
+  // Same picker the approve/reject routes use, so the step this page announces is the step the
+  // POST will actually sign.
+  const active = pickDecidableStep(steps, ctx, { locked: false });
   if (active) {
     return {
       can_approve: true,
@@ -133,7 +160,7 @@ export function resolveViewerDecision(params: {
       reason: null,
     };
   }
-  const locked = mine.find((s) => s.locked);
+  const locked = pickDecidableStep(steps, ctx, { locked: true });
   if (locked) return none("locked", locked.step);
   return none("not_your_step");
 }

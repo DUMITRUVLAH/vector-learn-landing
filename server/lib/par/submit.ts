@@ -24,6 +24,7 @@ import {
   ParRequest,
   ParLineItem,
 } from "../../db/schema/par";
+import { users } from "../../db/schema/users";
 import { resolveApprovalChain, type ApprovalStep } from "./doa";
 import { toMdlCents } from "../fx";
 import { computeParBodyHash, type ParBodyForHash } from "./integrity";
@@ -230,6 +231,15 @@ export async function submitPAR(params: {
     .delete(parApprovals)
     .where(and(eq(parApprovals.parId, parId), eq(parApprovals.tenantId, tenantId)));
 
+  // Section 14 prints signature_name as the signer and signature_title underneath it. Writing the
+  // job title into BOTH printed "Strategic Projects Director / Strategic Projects Director" where a
+  // person's name belongs, so resolve the submitter's actual name here.
+  const [submitter] = await db
+    .select({ name: users.name, email: users.email })
+    .from(users)
+    .where(eq(users.id, actorUserId));
+  const submitterName = submitter?.name ?? submitter?.email ?? null;
+
   // Insert step-0 row = requestor submit "signature" (sections 14 on the form)
   await db.insert(parApprovals).values({
     tenantId,
@@ -239,7 +249,7 @@ export async function submitPAR(params: {
     approverRoleLabel: "Requestor",
     decision: "approved", // Requestor has "signed" by submitting
     decidedAt: new Date(),
-    signatureName: requestorTitleSnapshot ?? null,
+    signatureName: submitterName,
     signatureTitle: requestorTitleSnapshot ?? null,
     locked: false,
   });

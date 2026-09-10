@@ -9,7 +9,7 @@ import { describe, it, expect } from "vitest";
 import { MAX_MONEY_CENTS, MAX_LINE_QUANTITY, exceedsMoneyBound } from "../moneyBounds";
 import { normalizeIban, isValidMoldovaIBAN } from "../validators";
 import { isWorkspaceAdminRole } from "../roles";
-import { stepMatchesViewer, type DecidableStep, type ViewerContext } from "../decisionAuthority";
+import { stepMatchesViewer, pickDecidableStep, type DecidableStep, type ViewerContext } from "../decisionAuthority";
 
 describe("money bounds — an out-of-range amount is a 400, not an integer-overflow 500", () => {
   it("accepts an amount that fits the integer money column", () => {
@@ -107,5 +107,53 @@ describe("delegation — 'sign for me while I'm away' must reach role-based step
     expect(stepMatchesViewer(financeStep, {
       ...base, delegatedRoles: ["par_admin"], delegatedAllowedOnProject: false,
     })).toBe(false);
+  });
+});
+
+describe("parallel level — an approver signs their OWN slot, not a colleague's", () => {
+  // Live on PAR-2026-0025: a parallel level with one open (role-based) row and one row pinned to
+  // Irina. Irina approved, the route's `find` handed her the open row — the form then read
+  // "15. ANA CHIRITA / Irina Oriol" while Irina's own row stayed "În așteptare". (submit.ts now
+  // also drops a requestor's own slot instead of opening it, but a rule may legitimately mix an
+  // open row with a pinned one, so the picker still has to prefer mine.)
+  const anaSlotDeassigned: DecidableStep = {
+    id: "ana", step: 1, decision: "pending", locked: false,
+    approverUserId: null, approverParRole: "approver", approverRoleLabel: "Aprobator",
+  };
+  const irinaSlot: DecidableStep = {
+    id: "irina", step: 1, decision: "pending", locked: false,
+    approverUserId: "irina-id", approverParRole: null, approverRoleLabel: "Irina Oriol",
+  };
+  const irina: ViewerContext = {
+    userId: "irina-id", parRoles: ["approver"], delegators: new Set(), allowedOnProject: true,
+  };
+
+  it("picks the pinned row even when the open row comes first", () => {
+    expect(pickDecidableStep([anaSlotDeassigned, irinaSlot], irina, { locked: false })?.id).toBe("irina");
+  });
+
+  it("falls back to the open row for an approver who has no slot of their own", () => {
+    const other: ViewerContext = { ...irina, userId: "other-approver" };
+    expect(pickDecidableStep([anaSlotDeassigned, irinaSlot], other, { locked: false })?.id).toBe("ana");
+  });
+
+  it("prefers a delegator's pinned row over an open one, but never over my own", () => {
+    const delegate: ViewerContext = {
+      ...irina, userId: "delegate", delegators: new Set(["irina-id"]),
+    };
+    expect(pickDecidableStep([anaSlotDeassigned, irinaSlot], delegate, { locked: false })?.id).toBe("irina");
+    const mine: DecidableStep = { ...anaSlotDeassigned, id: "mine", approverUserId: "delegate" };
+    expect(pickDecidableStep([irinaSlot, mine], delegate, { locked: false })?.id).toBe("mine");
+  });
+
+  it("still takes the earliest sequential step when nothing is pinned to me", () => {
+    const second: DecidableStep = { ...anaSlotDeassigned, id: "s2", step: 2 };
+    expect(pickDecidableStep([second, anaSlotDeassigned], irina, { locked: false })?.id).toBe("ana");
+  });
+
+  it("never returns a locked row to the unlocked picker", () => {
+    const locked: DecidableStep = { ...irinaSlot, locked: true };
+    expect(pickDecidableStep([locked], irina, { locked: false })).toBeUndefined();
+    expect(pickDecidableStep([locked], irina, { locked: true })?.id).toBe("irina");
   });
 });
