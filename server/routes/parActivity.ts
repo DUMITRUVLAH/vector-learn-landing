@@ -28,7 +28,7 @@ export const parActivityRoutes = new Hono<{ Variables: AuthVariables }>();
 parActivityRoutes.use("*", requireAuth);
 
 /** Evenimentele care merită atenția cuiva pe tabloul de bord; restul sunt zgomot de audit. */
-const NOTABLE_EVENTS = ["submitted", "approved", "rejected", "changes_requested", "paid", "reopened", "withdrawn"];
+const NOTABLE_EVENTS = ["submitted", "approved", "rejected", "changes_requested", "paid", "reopened", "withdrawn", "payment_reverted", "finance_returned"];
 
 const NEVER = "00000000-0000-0000-0000-000000000000";
 

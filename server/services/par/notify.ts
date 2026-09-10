@@ -463,6 +463,48 @@ export async function notifyPaid(
   });
 }
 
+/**
+ * VM4-01 — plata a fost anulată de finanțe (click greșit pe „plătit").
+ * Solicitantul a primit deja „PAR plătit"; fără această a doua notificare ar rămâne
+ * cu informația greșită în inbox.
+ */
+export async function notifyPaymentReverted(
+  ctx: ParNotifyContext,
+  requestorUserId: string,
+  reason: string
+): Promise<void> {
+  const body = `PAR ${ctx.requestNo}: plata a fost ANULATĂ de finanțe și cererea a revenit la plată. Motiv: ${reason.slice(0, 500)}. Link: /business/par/${ctx.parId}`;
+  const subject = `[PAR] ${ctx.requestNo} — plata a fost anulată`;
+
+  await notifyUser({
+    tenantId: ctx.tenantId,
+    userId: requestorUserId,
+    parId: ctx.parId,
+    body,
+    subject,
+  });
+}
+
+/**
+ * VM4-02 — finanțele refuză plata și trimit cererea înapoi la solicitant pentru corectare.
+ */
+export async function notifyFinanceReturned(
+  ctx: ParNotifyContext,
+  requestorUserId: string,
+  reason: string
+): Promise<void> {
+  const body = `PAR ${ctx.requestNo}: finanțele au refuzat plata și au trimis cererea înapoi pentru corectare. Motiv: ${reason.slice(0, 500)}. Link: /business/par/${ctx.parId}`;
+  const subject = `[PAR] ${ctx.requestNo} — plată refuzată de finanțe`;
+
+  await notifyUser({
+    tenantId: ctx.tenantId,
+    userId: requestorUserId,
+    parId: ctx.parId,
+    body,
+    subject,
+  });
+}
+
 // ─── PAR-EFP: e-Factura lipsă de la prestator ─────────────────────────────────
 
 export interface EfacturaReminderInput {

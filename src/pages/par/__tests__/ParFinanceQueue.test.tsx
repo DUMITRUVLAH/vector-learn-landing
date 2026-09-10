@@ -7,7 +7,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ParFinanceQueue from "../ParFinanceQueue";
 import * as parApi from "@/lib/api/par";
 import type { ParFinanceQueueItem } from "@/lib/api/par";
@@ -327,5 +327,90 @@ describe("ParFinanceQueue — VM3-01 (feedback Violeta)", () => {
 
     await screen.findByText("PAR-2026-0001");
     expect(screen.queryByRole("button", { name: /vezi .* documente/i })).not.toBeInTheDocument();
+  });
+});
+
+// ─── VM4-02/VM4-03: refuzul plății + confirmarea plății ──────────────────────
+// Violeta (finanțe): „din greșeală am apăsat plătit… am vrut să apăs refuzat."
+
+describe("VM4 — plata nu se mai execută dintr-un singur click, iar refuzul există", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const openPayModal = async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [makeFinanceItem({ status: "in_finance" })],
+      total: 1,
+    });
+    render(<ParFinanceQueue />);
+    (await screen.findByRole("button", { name: /înregistrează plata/i })).click();
+    await screen.findByText("Înregistrare plată");
+  };
+
+  it("[blocant] primul click pe „Marchează plătit” cere confirmare — NU trimite plata", async () => {
+    const paySpy = vi.spyOn(parApi, "executePayment");
+    await openPayModal();
+
+    screen.getByRole("button", { name: "Marchează plătit" }).click();
+
+    await waitFor(() => {
+      expect(screen.getByText(/confirmi că plata a fost executată/i)).toBeInTheDocument();
+    });
+    expect(paySpy).not.toHaveBeenCalled();
+  });
+
+  it("[blocant] abia al doilea click („Da, confirmă plata”) execută plata", async () => {
+    const paySpy = vi
+      .spyOn(parApi, "executePayment")
+      .mockResolvedValue({ status: "paid", par: { vendorId: null } as never });
+    await openPayModal();
+
+    screen.getByRole("button", { name: "Marchează plătit" }).click();
+    const confirm = await screen.findByRole("button", { name: /da, confirmă plata/i });
+    confirm.click();
+
+    await waitFor(() => expect(paySpy).toHaveBeenCalledTimes(1));
+    expect(paySpy.mock.calls[0][0]).toBe("par-fin-001");
+  });
+
+  it("„Înapoi” din pasul de confirmare lasă cererea neplătită", async () => {
+    const paySpy = vi.spyOn(parApi, "executePayment");
+    await openPayModal();
+
+    screen.getByRole("button", { name: "Marchează plătit" }).click();
+    (await screen.findByRole("button", { name: "Înapoi" })).click();
+
+    await waitFor(() => {
+      expect(screen.queryByText(/confirmi că plata a fost executată/i)).not.toBeInTheDocument();
+    });
+    expect(paySpy).not.toHaveBeenCalled();
+  });
+
+  it("[blocant] „Refuză plata” trimite cererea înapoi cu motiv — apelează finance-return", async () => {
+    const returnSpy = vi
+      .spyOn(parApi, "financeReturnPar")
+      .mockResolvedValue({ status: "changes_requested", par: {} as never });
+    await openPayModal();
+
+    screen.getByRole("button", { name: /refuză plata/i }).click();
+
+    const reason = await screen.findByLabelText(/motivul refuzului/i);
+    fireEvent.change(reason, { target: { value: "IBAN greșit" } });
+    screen.getByRole("button", { name: /confirmă refuzul/i }).click();
+
+    await waitFor(() => expect(returnSpy).toHaveBeenCalledWith("par-fin-001", "IBAN greșit"));
+  });
+
+  it("refuzul fără motiv rămâne blocat (butonul e dezactivat)", async () => {
+    const returnSpy = vi.spyOn(parApi, "financeReturnPar");
+    await openPayModal();
+
+    screen.getByRole("button", { name: /refuză plata/i }).click();
+    const confirm = await screen.findByRole("button", { name: /confirmă refuzul/i });
+
+    expect(confirm).toBeDisabled();
+    confirm.click();
+    expect(returnSpy).not.toHaveBeenCalled();
   });
 });

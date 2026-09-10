@@ -34,6 +34,8 @@ import {
   Send,
   DollarSign,
   UserCheck,
+  RotateCcw,
+  CornerUpLeft,
   History,
   Paperclip,
 } from "lucide-react";
@@ -56,6 +58,8 @@ import {
   requestParChanges,
   submitPar,
   reapproveOverage,
+  unpayPar,
+  financeReturnPar,
   duplicatePar,
   reopenPar,
   withdrawPar,
@@ -352,6 +356,12 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
   const [comment, setComment] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [showChangesForm, setShowChangesForm] = useState(false);
+  // VM4-01/02 — motivul pentru acțiunile de corecție ale finanțelor. Stare separată de `comment`
+  // (folosit de aprobatori): aceeași persoană poate avea ambele roluri, iar un text început într-un
+  // formular nu are ce căuta în celălalt.
+  const [financeReason, setFinanceReason] = useState("");
+  const [showUnpayForm, setShowUnpayForm] = useState(false);
+  const [showFinanceReturnForm, setShowFinanceReturnForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Motivele câmp-cu-câmp când serverul refuză trimiterea (validation_failed). */
   const [errorReasons, setErrorReasons] = useState<string[]>([]);
@@ -635,6 +645,41 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
         </button>
       );
     }
+    // VM4-02: contrapartea lui „Execută plata". Fără ea, finanțele care nu vor să plătească o
+    // cerere (rechizite greșite, document lipsă) nu aveau NICIUN buton — de aici și clickul greșit
+    // pe „plătit" în locul unui „refuzat" care nu exista.
+    if (["approved", "in_finance", "reapproval_required"].includes(status)) {
+      actions.push(
+        <button
+          key="finance-return"
+          type="button"
+          disabled={!!busy}
+          onClick={() => { setShowFinanceReturnForm(true); setShowUnpayForm(false); }}
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-destructive/40 bg-background px-4 py-2 text-sm font-medium text-destructive hover:border-destructive hover:bg-destructive/10 disabled:opacity-60"
+          aria-label="Refuză plata și trimite cererea înapoi la solicitant"
+        >
+          <CornerUpLeft className="h-4 w-4" aria-hidden />
+          Refuză plata
+        </button>
+      );
+    }
+    // VM4-01: „din greșeală am apăsat plătit… cum să fac recall la acest PAR". Plata revine la
+    // finanțe, cu suma păstrată, ca s-o reînregistreze corect sau s-o refuze.
+    if (status === "paid") {
+      actions.push(
+        <button
+          key="unpay"
+          type="button"
+          disabled={!!busy}
+          onClick={() => { setShowUnpayForm(true); setShowFinanceReturnForm(false); }}
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-warning px-4 py-2 text-sm font-medium text-warning hover:bg-warning/10 disabled:opacity-60"
+          aria-label="Anulează plata înregistrată"
+        >
+          <RotateCcw className="h-4 w-4" aria-hidden />
+          Anulează plata
+        </button>
+      );
+    }
   }
 
   // A PAR "în aprobare" with no buttons used to be a dead end — the approver could not tell whether
@@ -758,6 +803,78 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
             </button>
             <button type="button" onClick={() => { setShowChangesForm(false); setComment(""); }} className="px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted min-h-[44px]">
               Anulează
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* VM4-01: anularea plății */}
+      {showUnpayForm && (
+        <div className="space-y-2 pt-2 border-t border-border">
+          <label htmlFor="unpay-reason" className="text-xs font-medium text-foreground">
+            De ce anulezi plata? <span className="text-destructive">*</span>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Cererea revine la finanțe („În procesare la finanțe"), cu suma și referința păstrate.
+            Plata și anularea rămân amândouă în jurnal, iar solicitantul e anunțat.
+          </p>
+          <textarea
+            id="unpay-reason"
+            rows={3}
+            value={financeReason}
+            onChange={(e) => setFinanceReason(e.target.value)}
+            placeholder="ex. am marcat din greșeală ca plătit — plata nu a fost executată"
+            className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 resize-none"
+            aria-label="Motiv anulare plată"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={financeReason.trim().length < 3 || !!busy}
+              onClick={() => do_("unpay", () => unpayPar(par.id, financeReason.trim())).then(() => { setShowUnpayForm(false); setFinanceReason(""); })}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-warning px-3 py-2 text-sm font-medium text-warning-foreground hover:bg-warning/90 disabled:opacity-60"
+            >
+              {busy === "unpay" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+              Confirmă anularea plății
+            </button>
+            <button type="button" onClick={() => { setShowUnpayForm(false); setFinanceReason(""); }} className="px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted min-h-[44px]">
+              Renunță
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* VM4-02: refuzul plății */}
+      {showFinanceReturnForm && (
+        <div className="space-y-2 pt-2 border-t border-border">
+          <label htmlFor="finance-return-reason" className="text-xs font-medium text-foreground">
+            De ce refuzi plata? <span className="text-destructive">*</span>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Cererea se întoarce la solicitant ca „Modificări cerute": o corectează și o retrimite,
+            iar lanțul de aprobare se reia de la capăt.
+          </p>
+          <textarea
+            id="finance-return-reason"
+            rows={3}
+            value={financeReason}
+            onChange={(e) => setFinanceReason(e.target.value)}
+            placeholder="ex. IBAN-ul beneficiarului nu corespunde cu actul atașat"
+            className="w-full rounded-md border border-border bg-background text-sm px-3 py-2 resize-none"
+            aria-label="Motiv refuz plată"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={financeReason.trim().length < 3 || !!busy}
+              onClick={() => do_("finance-return", () => financeReturnPar(par.id, financeReason.trim())).then(() => { setShowFinanceReturnForm(false); setFinanceReason(""); })}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-destructive px-3 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-60"
+            >
+              {busy === "finance-return" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+              Confirmă refuzul
+            </button>
+            <button type="button" onClick={() => { setShowFinanceReturnForm(false); setFinanceReason(""); }} className="px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted min-h-[44px]">
+              Renunță
             </button>
           </div>
         </div>

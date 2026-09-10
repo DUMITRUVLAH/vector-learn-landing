@@ -5,6 +5,8 @@
  *   GET  /api/par/finance                         → finance queue (approved execute_payment + in_finance + reapproval_required)
  *   POST /api/par/:id/finance                     → write section 16; PAR → in_finance
  *   POST /api/par/:id/pay                         → record actual payment; 10% rule; PAR → paid or reapproval_required
+ *   POST /api/par/:id/unpay                       → VM4-01: anulează plata înregistrată din greșeală; PAR → in_finance
+ *   POST /api/par/:id/finance-return              → VM4-02: finanțele refuză plata; PAR → changes_requested
  *
  * Note: POST /api/par/:id/reapprove lives in parApprovals.ts (it's an approval action).
  *
@@ -31,7 +33,7 @@ import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
-import { notifyPaid } from "../services/par/notify";
+import { notifyPaid, notifyPaymentReverted, notifyFinanceReturned } from "../services/par/notify";
 import { applyTenRule } from "../lib/par/payment";
 import { evaluateMatch } from "../lib/par/threeWayMatch";
 import { findVendorByIban, shouldAutoSaveVendor } from "../lib/par/vendorAutoSave";
@@ -41,6 +43,9 @@ import { verifyParBodyHash } from "../lib/par/integrity";
 
 export const parPaymentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parPaymentsRoutes.use("*", requireAuth);
+// „/:id/:action/*" și NU „/:id/*": ruta soră `/finance` e dintr-un singur segment, iar Hono o
+// lasă să se potrivească peste `/:id/*` (wildcard-ul acceptă și gol) — coada de finanțe ar
+// răspunde 404 cu id="finance".
 parPaymentsRoutes.use("/:id/:action/*", parUuidGuard("id"));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -137,6 +142,15 @@ const section16Schema = z.object({
   par_bl: z.string().max(200).optional().nullable(),
   received_by_user_id: z.string().uuid().optional().nullable(),
   assigned_to_user_id: z.string().uuid().optional().nullable(),
+});
+
+/**
+ * VM4-01/VM4-02 — motivul e obligatoriu la ambele acțiuni de corecție.
+ * Anularea unei plăți și refuzul de plată sunt evenimente pe care un auditor le va citi
+ * peste un an: „anulat de X la data Y" fără motiv nu explică nimic.
+ */
+const financeReasonSchema = z.object({
+  reason: z.string().trim().min(3, "Motivul este obligatoriu").max(500),
 });
 
 const paySchema = z.object({
@@ -611,6 +625,149 @@ parPaymentsRoutes.post(
 
       return c.json({ status: "paid", par: updatedPar, match_warning: matchWarning });
     }
+  }
+);
+
+// ─── VM4-01: POST /api/par/:id/unpay — anulează o plată înregistrată din greșeală ──
+// Violeta (finanțe): „din greșeală am apăsat plătit… cum să fac recall la acest PAR, să nu fie
+// plata. Am vrut să apăs refuzat." Până acum `paid` era o fundătură: un click greșit rămânea în
+// istoric ca plată reală, iar singura ieșire era o cerere nouă.
+//
+// Ce face: PAR `paid` → înapoi la `in_finance` (de unde finanțele fie reînregistrează plata
+// corect, fie o refuză prin /finance-return). Rândul din `par_payments` NU se șterge — suma și
+// referința rămân precompletate pentru re-plată, iar `par_audit` păstrează ambele evenimente
+// (`paid`, apoi `payment_reverted` cu motiv). Nimic nu dispare din istoric.
+
+parPaymentsRoutes.post(
+  "/:id/unpay",
+  zValidator("json", financeReasonSchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const parId = c.req.param("id");
+    const { reason } = c.req.valid("json");
+
+    const roles = await getUserPARRoles(user.id, tenantId);
+    const canFinance = roles.includes("finance") || roles.includes("par_admin");
+    if (!canFinance) return c.json({ error: "forbidden: finance role required" }, 403);
+
+    const [par] = await db
+      .select()
+      .from(parRequests)
+      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+    if (!par) return c.json({ error: "not_found" }, 404);
+
+    if (par.projectId ? !(await mayAccessProject(user.id, tenantId, par.projectId, user.role)) : !(await mayAccessPayer(user.id, tenantId, par.payerId, user.role))) {
+      return c.json({ error: "not_found" }, 404);
+    }
+
+    if (par.status !== "paid") {
+      return c.json(
+        { error: `conflict: PAR status is '${par.status}', expected paid` },
+        409
+      );
+    }
+
+    const [payment] = await db
+      .select()
+      .from(parPayments)
+      .where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId)));
+
+    const now = new Date();
+
+    const [updated] = await db
+      .update(parRequests)
+      .set({ status: "in_finance", paidAt: null, updatedAt: now })
+      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
+      .returning();
+
+    await writeAudit({
+      tenantId,
+      parId,
+      actorUserId: user.id,
+      event: "payment_reverted",
+      detail:
+        `Plata anulată (suma înregistrată: ${payment?.actualAmountCents ?? "-"} bani, ` +
+        `ref: ${payment?.paymentRef ?? "-"}). Cererea revine la 'in_finance'. Motiv: ${reason.slice(0, 300)}`,
+    });
+
+    // Solicitantul a primit deja „PAR plătit" — trebuie să afle și că plata a fost anulată.
+    if (par.requestedByUserId) {
+      await notifyPaymentReverted(
+        { tenantId, parId, requestNo: par.requestNo },
+        par.requestedByUserId,
+        reason
+      );
+    }
+
+    return c.json({ status: "in_finance", par: updated, payment: payment ?? null });
+  }
+);
+
+// ─── VM4-02: POST /api/par/:id/finance-return — finanțele refuză plata ────────
+// Contrapartea butonului „Marchează plătit": până acum finanțele puteau doar PLĂTI. Dacă
+// rechizitele erau greșite sau documentul lipsea, nu exista niciun buton de refuz — de aici și
+// clickul greșit pe „plătit" în locul unui „refuzat" inexistent.
+//
+// Ce face: PAR `approved` | `in_finance` | `reapproval_required` → `changes_requested`, adică
+// exact starea editabilă în care solicitantul corectează și retrimite (submit reconstruiește
+// lanțul de aprobare din DOA — o cerere corectată trece din nou pe la aprobatori).
+
+parPaymentsRoutes.post(
+  "/:id/finance-return",
+  zValidator("json", financeReasonSchema),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const parId = c.req.param("id");
+    const { reason } = c.req.valid("json");
+
+    const roles = await getUserPARRoles(user.id, tenantId);
+    const canFinance = roles.includes("finance") || roles.includes("par_admin");
+    if (!canFinance) return c.json({ error: "forbidden: finance role required" }, 403);
+
+    const [par] = await db
+      .select()
+      .from(parRequests)
+      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+    if (!par) return c.json({ error: "not_found" }, 404);
+
+    if (par.projectId ? !(await mayAccessProject(user.id, tenantId, par.projectId, user.role)) : !(await mayAccessPayer(user.id, tenantId, par.payerId, user.role))) {
+      return c.json({ error: "not_found" }, 404);
+    }
+
+    if (!["approved", "in_finance", "reapproval_required"].includes(par.status)) {
+      return c.json(
+        { error: `conflict: PAR status is '${par.status}', expected approved, in_finance or reapproval_required` },
+        409
+      );
+    }
+
+    const now = new Date();
+
+    const [updated] = await db
+      .update(parRequests)
+      .set({ status: "changes_requested", updatedAt: now })
+      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)))
+      .returning();
+
+    await writeAudit({
+      tenantId,
+      parId,
+      actorUserId: user.id,
+      event: "finance_returned",
+      detail: `Finanțele au refuzat plata și au trimis cererea înapoi la solicitant. Motiv: ${reason.slice(0, 300)}`,
+    });
+
+    if (par.requestedByUserId) {
+      await notifyFinanceReturned(
+        { tenantId, parId, requestNo: par.requestNo },
+        par.requestedByUserId,
+        reason
+      );
+    }
+
+    return c.json({ status: "changes_requested", par: updated });
   }
 );
 

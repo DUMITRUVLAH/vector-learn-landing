@@ -863,6 +863,33 @@ export async function executePayment(
   });
 }
 
+/**
+ * VM4-01 — anulează o plată înregistrată din greșeală. PAR-ul revine la `in_finance`, cu suma
+ * și referința păstrate (se re-plătește corectat) și cu motivul în jurnal.
+ */
+export async function unpayPar(
+  parId: string,
+  reason: string
+): Promise<{ status: "in_finance"; par: ParRequest }> {
+  return api(`/api/par/${parId}/unpay`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+/**
+ * VM4-02 — finanțele refuză plata și trimit cererea înapoi la solicitant pentru corectare.
+ */
+export async function financeReturnPar(
+  parId: string,
+  reason: string
+): Promise<{ status: "changes_requested"; par: ParRequest }> {
+  return api(`/api/par/${parId}/finance-return`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
 export async function reapproveOverage(
   parId: string
 ): Promise<{ status: string; overage_reapproved: boolean; par: ParRequest }> {

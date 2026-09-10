@@ -15,6 +15,9 @@ import type { ParDetail } from "@/lib/api/par";
 const mockGetPar = vi.fn();
 const mockGetParMe = vi.fn();
 const mockWithdrawPar = vi.fn();
+// VM4-01/02: acțiunile de corecție ale finanțelor.
+const mockUnpayPar = vi.fn();
+const mockFinanceReturnPar = vi.fn();
 const mockNavigate = vi.fn();
 
 vi.mock("@/router/HashRouter", () => ({
@@ -56,10 +59,15 @@ vi.mock("@/lib/api/par", () => ({
   submitPar: vi.fn().mockResolvedValue({}),
   reopenPar: vi.fn().mockResolvedValue({}),
   withdrawPar: (...args: unknown[]) => mockWithdrawPar(...args),
+  unpayPar: (...args: unknown[]) => mockUnpayPar(...args),
+  financeReturnPar: (...args: unknown[]) => mockFinanceReturnPar(...args),
   duplicatePar: vi.fn().mockResolvedValue({}),
   downloadDosar: vi.fn().mockResolvedValue(undefined),
   reapproveOverage: vi.fn().mockResolvedValue({}),
   getPurchaseOrder: vi.fn().mockResolvedValue(null),
+  // Panoul de 3-way match se montează pe statusurile de finanțe (in_finance/paid) și își cere
+  // singur datele — fără el în mock, orice test pe aceste statusuri crapă în efect, nu în aserție.
+  getThreeWayMatch: vi.fn().mockResolvedValue(null),
   formatMDL: (c: number) => `${(c / 100).toLocaleString()} MDL`,
   PAR_STATUS_LABELS: {
     draft: "Ciornă",
@@ -440,5 +448,70 @@ describe("ParDetailPage — retragere din aprobare pentru corectură", () => {
       expect(screen.getByTestId("app-shell")).toBeInTheDocument();
     }, { timeout: 5000 });
     expect(screen.queryByLabelText("Retrage cererea din aprobare pentru corectură")).toBeNull();
+  });
+});
+
+// ─── VM4-01 / VM4-02: finanțele își pot corecta clickul ──────────────────────
+// Violeta: „din greșeală am apăsat plătit… cum să fac recall la acest PAR" / „am vrut să apăs refuzat".
+
+describe("ParDetailPage — acțiunile de corecție ale finanțelor (VM4)", () => {
+  const paidPar = { ...mockPar, status: "paid" as const, paidAt: "2026-09-07" };
+  const inFinancePar = { ...mockPar, status: "in_finance" as const };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUnpayPar.mockResolvedValue({ status: "in_finance", par: {} });
+    mockFinanceReturnPar.mockResolvedValue({ status: "changes_requested", par: {} });
+  });
+
+  it("[blocant] finanțele văd „Anulează plata” pe o cerere plătită și motivul e obligatoriu", async () => {
+    mockGetPar.mockResolvedValue(paidPar);
+    mockGetParMe.mockResolvedValue({ roles: ["finance"], userId: "user-finance", tenantId: "tenant-1" });
+
+    const { default: ParDetailPage } = await import("../ParDetail");
+    render(<ParDetailPage />);
+
+    const btn = await screen.findByRole("button", { name: /anulează plata înregistrată/i });
+    fireEvent.click(btn);
+
+    const confirm = await screen.findByRole("button", { name: /confirmă anularea plății/i });
+    expect(confirm).toBeDisabled();
+    expect(mockUnpayPar).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText(/motiv anulare plată/i), {
+      target: { value: "am marcat din greșeală" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /confirmă anularea plății/i }));
+
+    await waitFor(() =>
+      expect(mockUnpayPar).toHaveBeenCalledWith("par-test-id", "am marcat din greșeală"),
+    );
+  });
+
+  it("solicitantul NU poate anula plata (butonul nu există pentru el)", async () => {
+    mockGetPar.mockResolvedValue(paidPar);
+    mockGetParMe.mockResolvedValue({ roles: ["requestor"], userId: "user-requestor", tenantId: "tenant-1" });
+
+    const { default: ParDetailPage } = await import("../ParDetail");
+    render(<ParDetailPage />);
+
+    await screen.findByText("PAR-2026-0001");
+    expect(screen.queryByRole("button", { name: /anulează plata înregistrată/i })).not.toBeInTheDocument();
+  });
+
+  it("[blocant] finanțele pot refuza plata unei cereri aflate la ele, cu motiv", async () => {
+    mockGetPar.mockResolvedValue(inFinancePar);
+    mockGetParMe.mockResolvedValue({ roles: ["finance"], userId: "user-finance", tenantId: "tenant-1" });
+
+    const { default: ParDetailPage } = await import("../ParDetail");
+    render(<ParDetailPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /refuză plata și trimite cererea înapoi/i }));
+    fireEvent.change(await screen.findByLabelText(/motiv refuz plată/i), {
+      target: { value: "IBAN greșit" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /confirmă refuzul/i }));
+
+    await waitFor(() => expect(mockFinanceReturnPar).toHaveBeenCalledWith("par-test-id", "IBAN greșit"));
   });
 });

@@ -48,6 +48,7 @@ import {
   getFinanceQueue,
   submitSection16,
   executePayment,
+  financeReturnPar,
   uploadAttachment,
   listAttachments,
   formatMDL,
@@ -205,6 +206,8 @@ interface PayModalProps {
   par: ParFinanceQueueItem;
   onClose: () => void;
   onPaid: () => void;
+  /** VM4-02: deschide dialogul de refuz al plății pentru aceeași cerere. */
+  onRefuse: () => void;
 }
 
 /** Convert a "1234.56" / "1234,56" MDL string to integer cents. */
@@ -213,7 +216,7 @@ function mdlStringToCents(s: string): number {
   return Number.isFinite(major) ? Math.round(major * 100) : NaN;
 }
 
-function PayModal({ par, onClose, onPaid }: PayModalProps) {
+function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
   useEscapeToClose(onClose);
   // Suma reală este în MDL și se pre-completează cu suma integrală (estimatul) — editabilă.
   const [actualAmountMdl, setActualAmountMdl] = useState(
@@ -226,6 +229,11 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
   );
   const [paymentRef, setPaymentRef] = useState(par.payment?.paymentRef ?? "");
   const [proofFile, setProofFile] = useState<File | null>(null);
+  // VM4-04: print screen-ul din bancă vine din clipboard, nu dintr-un fișier salvat pe disc.
+  const [proofPasted, setProofPasted] = useState(false);
+  // VM4-03: pasul de confirmare. „Din greșeală am apăsat plătit" — un singur click nu mai
+  // schimbă statutul cererii; a doua apăsare se face pe un rezumat al plății.
+  const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -256,10 +264,34 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
       r.readAsDataURL(f);
     });
 
+  // VM4-04 — Violeta: „de inserat printr-un comentariu ca imagine când fac print screen la ordinul
+  // de plată". Ordinul de plată e pe ecran exact în momentul plății, dar nu ca fișier: e în
+  // clipboard. Ctrl+V oriunde în dialog îl atașează, fără drumul prin „salvează pe desktop".
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const item = Array.from(e.clipboardData?.items ?? []).find((i) => i.type.startsWith("image/"));
+      if (!item) return;
+      const file = item.getAsFile();
+      if (!file) return;
+      e.preventDefault();
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        setError(attachmentTooLargeMessage("Imaginea lipită"));
+        return;
+      }
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      setError(null);
+      setProofFile(new File([file], `ordin-de-plata-${stamp}.png`, { type: file.type || "image/png" }));
+      setProofPasted(true);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, []);
+
   const handlePay = async () => {
     const amt = mdlStringToCents(actualAmountMdl);
     if (isNaN(amt) || amt <= 0) {
       setError("Suma reală trebuie să fie un număr pozitiv (în MDL).");
+      setConfirming(false);
       return;
     }
     // PERF: uploaded as base64 JSON — see attachmentLimits.ts for why the cap is 3 MB, not 10.
@@ -277,10 +309,12 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
       if (proofFile) {
         const dataUrl = await fileToDataUrl(proofFile);
         await uploadAttachment(par.id, {
-          file_name: `Dovadă plată — ${par.requestNo}${proofFile.name ? ` (${proofFile.name})` : ""}`,
+          file_name: `Ordin de plată — ${par.requestNo}${proofFile.name ? ` (${proofFile.name})` : ""}`,
           file_url: dataUrl,
           mime: proofFile.type || "application/pdf",
-          kind: "other",
+          // Tipul real, nu „Altul": dosarul trebuie să arate un ordin de plată acolo unde e unul,
+          // iar ecranul de dovezi știe astfel care cereri plătite mai au nevoie de dovadă.
+          kind: "payment_order",
         });
       }
       const payload: PayPayload = {
@@ -399,7 +433,7 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
 
           <div>
             <label htmlFor="proof-file" className="block text-sm font-medium text-foreground mb-1">
-              Dovada plății (PDF, opțional)
+              Ordinul de plată <span className="font-normal text-muted-foreground">(PDF sau imagine, opțional)</span>
             </label>
             <Input
               id="proof-file"
@@ -415,29 +449,157 @@ function PayModal({ par, onClose, onPaid }: PayModalProps) {
                 }
                 setError(null);
                 setProofFile(f);
+                setProofPasted(false);
               }}
               className="w-full text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-primary/90 file:cursor-pointer"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              {proofFile ? `Se atașează la dosar: ${proofFile.name}` : `Confirmarea de plată se atașează la dosarul cererii (secțiunea Atașamente) — max ${MAX_ATTACHMENT_LABEL}.`}
+              {proofFile
+                ? `Se atașează la dosar ca „Ordin de plată": ${proofFile.name}${proofPasted ? " — lipit din clipboard" : ""}`
+                : `Fă print screen la ordinul de plată din bancă și apasă Ctrl+V aici — se atașează la dosar (max ${MAX_ATTACHMENT_LABEL}).`}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Extrasul ștampilat de bancă, care vine a doua zi, se adaugă mai târziu — pentru toate
+              plățile odată — din <span className="font-medium">Finanțe → Dovezi de plată</span>.
             </p>
           </div>
         </div>
 
-        <div className="flex gap-2 justify-end pt-2">
+        {/* VM4-03: rezumatul plății, arătat între cele două clickuri. Statutul „Plătită" e
+            ireversibil pentru solicitant (primește notificare pe loc), deci merită o secundă de
+            citit: cui, cât, în ce cont. */}
+        {confirming && (
+          <div className="space-y-1 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+            <p className="font-medium">Confirmi că plata a fost executată?</p>
+            <p>
+              {formatMDL(mdlStringToCents(actualAmountMdl) || 0)} către{" "}
+              <span className="font-medium">{par.payeeName ?? "beneficiar nespecificat"}</span>
+              {par.payeeIban ? <> · <span className="font-mono text-xs">{par.payeeIban}</span></> : null}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Cererea trece în „Plătită", iar solicitantul e anunțat. Dacă ai greșit, plata se poate
+              anula din pagina cererii („Anulează plata").
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+          {/* VM4-02: alternativa lipsă. Până acum dialogul avea un singur drum înainte — „plătit" —
+              chiar și când plata NU trebuia făcută. */}
           <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-md border border-input bg-background text-sm text-foreground hover:bg-accent transition-colors"
+            onClick={onRefuse}
+            disabled={saving}
+            className="mr-auto rounded-md px-3 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
           >
-            Anulare
+            Refuză plata
           </button>
           <button
-            onClick={handlePay}
+            onClick={confirming ? () => setConfirming(false) : onClose}
+            disabled={saving}
+            className="px-4 py-2 rounded-md border border-input bg-background text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+          >
+            {confirming ? "Înapoi" : "Anulare"}
+          </button>
+          <button
+            onClick={() => (confirming ? void handlePay() : setConfirming(true))}
             disabled={saving}
             className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-            Marchează plătit
+            {confirming ? "Da, confirmă plata" : "Marchează plătit"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── VM4-02: refuzul plății ───────────────────────────────────────────────────
+// Violeta: „am vrut să apăs refuzat". Butonul nu exista: finanțele puteau doar plăti. Cererea
+// refuzată se întoarce la solicitant ca „Modificări cerute" — o corectează și o retrimite.
+
+interface RefusePaymentModalProps {
+  par: ParFinanceQueueItem;
+  onClose: () => void;
+  onReturned: () => void;
+}
+
+function RefusePaymentModal({ par, onClose, onReturned }: RefusePaymentModalProps) {
+  useEscapeToClose(onClose);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleRefuse = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await financeReturnPar(par.id, reason.trim());
+      onReturned();
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Eroare la refuzul plății");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="refuse-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+    >
+      <div className="w-full max-w-lg space-y-4 rounded-lg border border-border bg-card p-6 shadow-lg">
+        <h2 id="refuse-title" className="text-lg font-semibold text-card-foreground">
+          Refuză plata
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {par.requestNo} · {par.payeeName ?? "beneficiar nespecificat"} ·{" "}
+          {formatMDL(par.totalEstimatedCents)}
+        </p>
+
+        {error && (
+          <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {error}
+          </div>
+        )}
+
+        <div>
+          <label htmlFor="refuse-reason" className="mb-1 block text-sm font-medium text-foreground">
+            Motivul refuzului <span aria-hidden="true" className="text-destructive">*</span>
+          </label>
+          <Textarea
+            id="refuse-reason"
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="ex. IBAN-ul din cerere nu corespunde cu cel din contract"
+            maxLength={500}
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Cererea se întoarce la solicitant ca „Modificări cerute", cu motivul tău. După
+            corectare o retrimite, iar lanțul de aprobare se reia.
+          </p>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-md border border-input bg-background px-4 py-2 text-sm text-foreground transition-colors hover:bg-accent disabled:opacity-50"
+          >
+            Anulare
+          </button>
+          <button
+            onClick={() => void handleRefuse()}
+            disabled={saving || reason.trim().length < 3}
+            className="flex items-center gap-2 rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 disabled:opacity-50"
+          >
+            {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            Confirmă refuzul
           </button>
         </div>
       </div>
@@ -612,6 +774,7 @@ export default function ParFinanceQueue() {
   const [s16Par, setS16Par] = useState<ParFinanceQueueItem | null>(null);
   const [payPar, setPayPar] = useState<ParFinanceQueueItem | null>(null);
   const [attPar, setAttPar] = useState<ParFinanceQueueItem | null>(null);
+  const [refusePar, setRefusePar] = useState<ParFinanceQueueItem | null>(null);
   const [filterQ, setFilterQ] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -966,6 +1129,14 @@ export default function ParFinanceQueue() {
             par={payPar}
             onClose={() => setPayPar(null)}
             onPaid={() => void load()}
+            onRefuse={() => { setRefusePar(payPar); setPayPar(null); }}
+          />
+        )}
+        {refusePar && (
+          <RefusePaymentModal
+            par={refusePar}
+            onClose={() => setRefusePar(null)}
+            onReturned={() => void load()}
           />
         )}
         {attPar && (
