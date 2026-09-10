@@ -43,6 +43,7 @@ import {
 import { verifyParBodyHash } from "../lib/par/integrity";
 import { getActiveDelegators, getDelegatedAuthority } from "../lib/par/delegations";
 import { stepMatchesViewer, pickDecidableStep } from "../lib/par/decisionAuthority";
+import { slotRoleLabel } from "../lib/par/doa";
 import { blocksOnApprovalLimit, minApprovalLimitCents } from "../lib/par/approvalLimit";
 import { approvalProgressAfterDecision } from "../lib/par/approvalProgress";
 import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
@@ -454,6 +455,19 @@ async function hydrateParRows(tenantId: string, pars: ParRow[]) {
     return u?.name || u?.email || null;
   };
 
+  // Etichetele-nume rămase din regulile DOA vechi (vezi slotRoleLabel + migrarea 0156): un slot pe
+  // care scria „Ana Chirita" se anunța cu numele ei și după ce ajungea în inboxul altcuiva. Numele
+  // cu care comparăm sunt cele deja aduse pentru cererile astea — solicitanții și titularii de pas.
+  const knownNames = [
+    ...userRows.map((r) => r.name),
+    ...chainUserRows.map((r) => r.name),
+  ].filter((n): n is string => !!n);
+  const labelOf = (label: string | null) =>
+    slotRoleLabel(
+      label,
+      knownNames.find((n) => n.trim().toLocaleLowerCase("ro") === (label ?? "").trim().toLocaleLowerCase("ro")) ?? null
+    );
+
   // PERF (audit 2026-08-29): `chainOf` filtra și sorta TOATE rândurile de lanț pentru FIECARE
   // cerere din inbox — O(cereri × pași), plus un `find` liniar prin utilizatori la fiecare nume.
   // Cu 200 de cereri în inbox erau zeci de mii de comparații degeaba. Gruparea se face o dată.
@@ -478,7 +492,7 @@ async function hydrateParRows(tenantId: string, pars: ParRow[]) {
         .map((s) => ({
           step: s.step,
           name: chainUserName(s.approverUserId) ?? s.signatureName ?? null,
-          roleLabel: s.approverRoleLabel ?? null,
+          roleLabel: labelOf(s.approverRoleLabel),
           decidedAt: s.decidedAt,
         })),
       // Câți mai trebuie și cine — inclusiv pasul curent al celui care se uită acum.
@@ -491,7 +505,7 @@ async function hydrateParRows(tenantId: string, pars: ParRow[]) {
           id: s.id,
           step: s.step,
           name: chainUserName(s.approverUserId),
-          roleLabel: s.approverRoleLabel ?? null,
+          roleLabel: labelOf(s.approverRoleLabel),
         })),
     };
   };
@@ -756,7 +770,11 @@ parApprovalsRoutes.get("/inbox", async (c) => {
       my_step: myStep?.step ?? null,
       /** Rândul exact pe care cade semnătura mea — vezi `approvals_pending[].id`. */
       my_step_id: myStep?.id ?? null,
-      my_step_label: myStep?.approverRoleLabel ?? null,
+      // Aceeași etichetă curățată ca în lanțul de mai sus — nu cea brută din rând.
+      my_step_label:
+        row.approvals_pending?.find((s) => s.id === myStep?.id)?.roleLabel ??
+        myStep?.approverRoleLabel ??
+        null,
     };
   });
 
