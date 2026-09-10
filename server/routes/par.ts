@@ -60,6 +60,7 @@ import { explainMissingPar, parDenial } from "../lib/par/accessReason";
 import { getDesignatedApprovers, projectAllowsApprover } from "../lib/par/projectApprovers";
 import { getActiveDelegators, getDelegatedAuthority } from "../lib/par/delegations";
 import { resolveViewerDecision } from "../lib/par/decisionAuthority";
+import { slotRoleLabel } from "../lib/par/doa";
 import { enabledPayerIds, hasPayerModuleEntitlement } from "../middleware/requireModuleEntitlement";
 import { canViewPar, isWorkspaceAdminRole } from "../lib/par/visibility";
 import { archiveApprovalsBeforeReset } from "../lib/par/approvalArchive";
@@ -1121,6 +1122,18 @@ parRoutes.get("/:id", async (c) => {
    */
   const approvalsForClient = approvals.map((a) => ({
     ...a,
+    // Plasă pentru etichetele-nume rămase din regulile DOA vechi (migrarea 0156 le curăță în
+    // bază, dar evidența migrărilor de pe producție e desincronizată). Comparăm doar cu numele
+    // deja aduse pentru cererea asta — printre ele e solicitantul, adică exact cazul în care
+    // slotul lui, eliberat la depunere, continua să poarte numele lui deasupra semnăturii altuia.
+    approverRoleLabel: slotRoleLabel(
+      a.approverRoleLabel,
+      userRows.find(
+        (u) =>
+          !!u.name &&
+          u.name.trim().toLocaleLowerCase("ro") === (a.approverRoleLabel ?? "").trim().toLocaleLowerCase("ro")
+      )?.name ?? null
+    ),
     approverName: userName(a.approverUserId),
     approverTitle: a.step === 0 ? par.requestorTitle ?? null : userJobTitle(a.approverUserId),
   }));
