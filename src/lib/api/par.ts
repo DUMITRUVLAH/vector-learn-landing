@@ -633,12 +633,48 @@ export interface BulkApproveResultItem {
   error?: string;
 }
 
+/**
+ * Câte cereri intră într-un apel. Serverul refuză lotul întreg peste această limită (zod `max(25)`),
+ * iar „Selectează tot" poate bifa oricâte rânduri are inboxul — deci un aprobator cu 30 de cereri
+ * apăsa „Aprobă toate" și NU se întâmpla nimic, cu un 400 pe care nu-l vedea nimeni. Loturile mari
+ * se taie aici, în bucăți, și se raportează ca unul singur.
+ */
+export const BULK_DECISION_CHUNK = 25;
+
+/** Taie o listă în bucăți de cel mult `size`. Pur, ca să poată fi verificat fără rețea. */
+export function chunkIds(ids: readonly string[], size = BULK_DECISION_CHUNK): string[][] {
+  const unique = [...new Set(ids)];
+  const out: string[][] = [];
+  for (let i = 0; i < unique.length; i += size) out.push(unique.slice(i, i + size));
+  return out;
+}
+
+/** Trimite loturile pe rând (nu în paralel — serverul le procesează secvențial oricum) și le unește. */
+async function runBulkDecision(
+  path: string,
+  ids: string[],
+  rest: Record<string, unknown>
+): Promise<{ results: BulkApproveResultItem[]; ok: number; failed: number }> {
+  const results: BulkApproveResultItem[] = [];
+  for (const batch of chunkIds(ids)) {
+    const res = await api<{ results: BulkApproveResultItem[] }>(path, {
+      method: "POST",
+      body: JSON.stringify({ ...rest, par_ids: batch }),
+    });
+    results.push(...(res.results ?? []));
+  }
+  const ok = results.filter((r) => r.ok).length;
+  return { results, ok, failed: results.length - ok };
+}
+
 export async function bulkApprovePar(payload: {
   par_ids: string[];
   comment?: string | null;
   signatureName?: string | null;
 }): Promise<{ results: BulkApproveResultItem[]; approved: number; failed: number }> {
-  return api("/api/par/bulk-approve", { method: "POST", body: JSON.stringify(payload) });
+  const { par_ids, ...rest } = payload;
+  const { results, ok, failed } = await runBulkDecision("/api/par/bulk-approve", par_ids, rest);
+  return { results, approved: ok, failed };
 }
 
 /**
@@ -650,7 +686,9 @@ export async function bulkRejectPar(payload: {
   comment: string;
   signatureName?: string | null;
 }): Promise<{ results: BulkApproveResultItem[]; rejected: number; failed: number }> {
-  return api("/api/par/bulk-reject", { method: "POST", body: JSON.stringify(payload) });
+  const { par_ids, ...rest } = payload;
+  const { results, ok, failed } = await runBulkDecision("/api/par/bulk-reject", par_ids, rest);
+  return { results, rejected: ok, failed };
 }
 
 /** Reject a PAR (terminal) */

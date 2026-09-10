@@ -403,6 +403,21 @@ describe("buildParHtml() — T-PAR-114-1 [blocant]", () => {
       expect(html).toContain("Generated:");
     });
 
+    /**
+     * Fișa aprobărilor din dosar e fixată pe ora Chișinăului. Dacă formularul ar folosi ora
+     * laptopului, două piese din același dosar ar arăta ore diferite pentru cine deschide
+     * aplicația din altă țară.
+     */
+    it("scrie ora organizației, nu a laptopului", () => {
+      const tzOriginal = process.env.TZ;
+      process.env.TZ = "America/New_York";
+      // decidedAt = 2026-06-10T10:00:00Z → 13:00 la Chișinău, 06:00 la New York.
+      const html = buildParHtml(par);
+      expect(html).toContain("10-Jun-26 13:00");
+      expect(html).not.toContain("10-Jun-26 06:00");
+      process.env.TZ = tzOriginal;
+    });
+
     it("data deciziei include ora, nu doar ziua", () => {
       const html = buildParHtml(par);
       expect(html).toMatch(/Date:<\/span>\s*<span[^>]*>10-Jun-26 \d{2}:\d{2}/);

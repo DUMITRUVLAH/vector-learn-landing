@@ -84,15 +84,26 @@ export function money(cents: number, currency = "MDL"): string {
   return `${neg ? "-" : ""}${sym} ${grouped}${dec}`;
 }
 
-/** Format a date string / ISO timestamp as dd-Mon-YY (e.g. "10-Jun-26"). */
+/**
+ * Fusul în care se citește documentul: al organizației, nu al laptopului.
+ *
+ * Fișa aprobărilor din dosar e fixată de mult pe Europa/Chișinău
+ * (`server/lib/par/approvalSheet.ts`), iar formularul folosea ora locală a browserului. Două piese
+ * din ACELAȘI dosar puteau arăta ore diferite pentru cine deschide aplicația din altă țară — exact
+ * genul de diferență pe care un auditor o citește ca document falsificat.
+ */
+const PDF_TZ = "Europe/Chisinau";
+
+/** Format a date string / ISO timestamp as dd-Mon-YY (e.g. "10-Jun-26"), in the org's timezone. */
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return esc(iso);
-  const day = String(d.getDate()).padStart(2, "0");
-  const mon = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
-  const yr = String(d.getFullYear()).slice(2);
-  return `${day}-${mon}-${yr}`;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: PDF_TZ, day: "2-digit", month: "short", year: "2-digit",
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("day")}-${get("month")}-${get("year")}`;
 }
 
 /**
@@ -106,9 +117,10 @@ function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return esc(iso);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${fmtDate(iso)} ${hh}:${mm}`;
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone: PDF_TZ, hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(d);
+  return `${fmtDate(iso)} ${time}`;
 }
 
 /** A superscript section number (¹ ² … 16) rendered like the office form's numbering. */
