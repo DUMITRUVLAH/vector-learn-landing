@@ -477,6 +477,21 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 
 ---
 
+## Milestone VM4 — Feedback Violeta runda 3 (rol finanțe, 2026-09-10)
+
+> Sursă: mesajele Violetei după prima zi de lucru real pe producție (PAR-2026-0020). Toate cele
+> patru găuri au fost verificate în cod înainte de construcție. Catalog cu citate + AC:
+> [`specs/VM4-catalog.md`](specs/VM4-catalog.md). Livrat într-un singur branch (§0.2).
+
+| ID | Priority | Title | Status | Spec |
+|----|----------|-------|--------|------|
+| VM4-01 | high | „Anulează plata" — recall pentru clickul greșit pe „plătit" | done | [catalog](specs/VM4-catalog.md) |
+| VM4-02 | high | Finanțele pot refuza plata (cererea se întoarce la solicitant) | done | [catalog](specs/VM4-catalog.md) |
+| VM4-03 | high | „Marchează plătit" cere confirmare pe un rezumat al plății | done | [catalog](specs/VM4-catalog.md) |
+| VM4-04 | high | Dovezi de plată: atașare în bloc + potrivire automată după numele fișierului | done | [catalog](specs/VM4-catalog.md) |
+
+---
+
 ## Milestone VICU — AI Coworker (Telegram + crm-vector) — CONCEPT, adăugat 2026-07-16
 
 > **Colegul AI al echipei Vector Academy** (v2): bot Telegram bidirecțional (owner 1:1 + grupul

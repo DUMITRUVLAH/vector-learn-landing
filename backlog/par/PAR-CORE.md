@@ -278,8 +278,11 @@ draft ──submit──▶ pending_approval ──(each step approves)──▶
                        │                                   in_finance (received/assigned)
                        ▼                                        │
                    rejected (terminal)                          ▼  enter actual amount
-                                                          ┌── within 10% ──▶ paid (terminal)
+                                                          ┌── within 10% ──▶ paid
 draft/any non-terminal ──cancel──▶ cancelled (terminal)  └── >10% & >threshold ─▶ reapproval_required ─▶ (final approver) ─▶ paid
+
+  paid ──unpay (finanțe, motiv)──▶ in_finance            (VM4-01: recall pentru click greșit)
+  approved/in_finance/reapproval_required ──finance-return (finanțe, motiv)──▶ changes_requested
 ```
 
 - `obtain_quotations` / `provide_estimate` PARs end at **`approved`** (no finance/payout).
@@ -292,6 +295,17 @@ draft/any non-terminal ──cancel──▶ cancelled (terminal)  └── >10
   reconstruiește lanțul din matricea DOA curentă. Doar `pending_approval` e retractabil: după
   `approved`/`in_finance`/`paid` calea e anularea (409 altfel).
 - Un PAR `rejected` poate fi readus în `draft` de autor prin `reopen` (recuperare, PARQA-011).
+- **`paid` nu mai e terminal pentru finanțe (VM4-01).** `POST /api/par/:id/unpay` (rol `finance` /
+  `par_admin`, motiv obligatoriu) readuce cererea în `in_finance` și golește `paid_at`, pentru
+  cazul real „am apăsat plătit din greșeală". Rândul din `par_payments` se PĂSTREAZĂ (suma și
+  referința se refolosesc la re-plată), iar jurnalul păstrează ambele evenimente (`paid`, apoi
+  `payment_reverted`); solicitantul, care primise deja „plătit", e notificat de anulare.
+  Rămâne terminal pentru toți ceilalți: autorul nu-și poate anula propria plată.
+- **Finanțele pot REFUZA plata (VM4-02).** `POST /api/par/:id/finance-return` din
+  `approved` / `in_finance` / `reapproval_required` → `changes_requested`, cu motiv obligatoriu,
+  audit `finance_returned` și notificare. Solicitantul corectează și retrimite, iar lanțul de
+  aprobare se reconstruiește din DOA (ca la orice re-trimitere). Înainte, finanțele aveau un
+  singur drum înainte — „plătit" — chiar și când plata nu trebuia făcută.
 - Every transition writes a `par_audit` row and (where relevant) a notification.
 
 ---
