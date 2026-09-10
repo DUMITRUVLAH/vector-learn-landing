@@ -48,7 +48,7 @@ import {
 import { StarRating } from "@/components/par/VendorStars";
 import { VendorRatingDialog } from "@/components/par/VendorRatingDialog";
 import { cn } from "@/lib/utils";
-import { formatMDL, getParMe } from "@/lib/api/par";
+import { formatCurrency, formatMDL, getParMe } from "@/lib/api/par";
 import {
   getVendorProfile,
   listVendorRatings,
@@ -355,8 +355,15 @@ export default function ParVendorProfile() {
                         </Badge>
                       </td>
                       <td className="p-3 text-right font-medium tabular-nums">
-                        {formatMDL(r.actualAmountCents ?? r.totalMdlCents ?? r.totalEstimatedCents)}
-                        {r.currency !== "MDL" && <span className="ml-1 text-xs text-muted-foreground">({r.currency})</span>}
+                        {/* Suma plătită e în moneda cererii, nu în lei: scrisă cu `formatMDL` și un
+                            „(USD)" lipit după, ieșea „1.500,00 L (USD)". Pentru cererile în valută
+                            se scrie moneda ei, cu echivalentul în lei ca linie secundară. */}
+                        {r.currency && r.currency !== "MDL"
+                          ? formatCurrency(r.actualAmountCents ?? r.totalEstimatedCents, r.currency)
+                          : formatMDL(r.actualAmountCents ?? r.totalMdlCents ?? r.totalEstimatedCents)}
+                        {r.currency && r.currency !== "MDL" && r.totalMdlCents != null && (
+                          <span className="ml-1 text-xs text-muted-foreground">≈ {formatMDL(r.totalMdlCents)}</span>
+                        )}
                       </td>
                       {/* Nota se vede lângă cererea care a generat-o: „cine a zis, la ce cerere". */}
                       <td className="p-3">

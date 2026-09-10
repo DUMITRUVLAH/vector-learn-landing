@@ -234,6 +234,29 @@ describe("ParFinanceQueue — VM3-01 (feedback Violeta)", () => {
       ],
     });
 
+  // Regresie (ATIC, PAR-2026-0027): tabelul scria corect „1.500,00 USD", dar modalul de plată de
+  // deasupra lui cerea „Suma reală (MDL)" și pre-completa 1.500 — adică omul de la finanțe vedea
+  // un câmp în lei peste o cerere în dolari, iar serverul compară suma tastată direct cu estimatul
+  // în valută (applyTenRule). Ecranul pe care se execută plata nu are voie să mintă moneda.
+  it("[blocant] modalul de plată cere suma în moneda cererii, nu în lei", async () => {
+    const usd = makeFinanceItem({
+      status: "in_finance",
+      currency: "USD",
+      totalEstimatedCents: 150000,
+      totalMdlCents: 2805000,
+    });
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: [usd], total: 1 });
+
+    render(<ParFinanceQueue />);
+
+    const payBtn = await screen.findByRole("button", { name: /Înregistrează plata/i });
+    fireEvent.click(payBtn);
+
+    expect(await screen.findByLabelText(/Suma reală \(USD\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Estimat: 1\.500,00\s*USD/)).toBeInTheDocument();
+    expect(screen.getByText(/Pre-completat cu suma estimată \(1\.500,00\s*USD\)/)).toBeInTheDocument();
+  });
+
   it("[blocant] afișează IDNO, IBAN, destinația plății și budget line în coloane separate", async () => {
     vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: [vm3Item()], total: 1 });
 

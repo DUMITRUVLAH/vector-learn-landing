@@ -125,7 +125,8 @@ function Section16Modal({ par, onClose, onSaved }: Section16ModalProps) {
           Secțiunea 16 — Payment Internal Use Only
         </h2>
         <p className="text-sm text-muted-foreground">
-          {par.requestNo} · {formatMDL(par.totalEstimatedCents)}
+          {par.requestNo} · {parAmount(par.totalEstimatedCents, par.currency)}
+          {mdlHint(par) ? ` · ${mdlHint(par)}` : ""}
         </p>
 
         {error && (
@@ -216,9 +217,29 @@ function mdlStringToCents(s: string): number {
   return Number.isFinite(major) ? Math.round(major * 100) : NaN;
 }
 
+/**
+ * Suma unei cereri se scrie în MONEDA ei.
+ *
+ * `formatMDL` pe `totalEstimatedCents` scria „1.500,00 L" pentru o cerere de 1.500 USD — aceeași
+ * greșeală care apărea și în inboxul aprobatorului (PAR-2026-0027). Aici cântărește mai mult:
+ * ecranele astea sunt cele pe care se execută plata.
+ */
+function parAmount(cents: number, currency: string | null | undefined): string {
+  return currency && currency !== "MDL" ? formatCurrency(cents, currency) : formatMDL(cents);
+}
+
+/** Echivalentul în lei, scris ca linie secundară — există doar pentru cererile în valută. */
+function mdlHint(par: { currency: string; totalMdlCents?: number | null }): string | null {
+  return par.currency && par.currency !== "MDL" && par.totalMdlCents != null
+    ? `≈ ${formatMDL(par.totalMdlCents)}`
+    : null;
+}
+
 function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
   useEscapeToClose(onClose);
-  // Suma reală este în MDL și se pre-completează cu suma integrală (estimatul) — editabilă.
+  // Suma reală se introduce în MONEDA CERERII — serverul o compară direct cu estimatul când aplică
+  // regula de 10% (applyTenRule), deci un câmp etichetat „MDL" pe o cerere în USD ar fi trimis lei
+  // într-o comparație făcută în dolari. Se pre-completează cu estimatul integral, editabilă.
   const [actualAmountMdl, setActualAmountMdl] = useState(
     (((par.payment?.actualAmountCents ?? par.totalEstimatedCents) || 0) / 100).toFixed(2)
   );
@@ -247,7 +268,7 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
       const max = Math.floor((par.totalEstimatedCents * 110) / 100);
       setWarning(
         amt > max
-          ? `Suma (${formatMDL(amt)}) depășește estimatul cu >10% (max ${formatMDL(max)}). ` +
+          ? `Suma (${parAmount(amt, par.currency)}) depășește estimatul cu >10% (max ${parAmount(max, par.currency)}). ` +
               "Va fi necesar un re-aprobare înainte de plată."
           : null
       );
@@ -290,7 +311,7 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
   const handlePay = async () => {
     const amt = mdlStringToCents(actualAmountMdl);
     if (isNaN(amt) || amt <= 0) {
-      setError("Suma reală trebuie să fie un număr pozitiv (în MDL).");
+      setError(`Suma reală trebuie să fie un număr pozitiv (în ${par.currency || "MDL"}).`);
       setConfirming(false);
       return;
     }
@@ -355,7 +376,8 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
           Înregistrare plată
         </h2>
         <p className="text-sm text-muted-foreground">
-          {par.requestNo} · Estimat: {formatMDL(par.totalEstimatedCents)}
+          {par.requestNo} · Estimat: {parAmount(par.totalEstimatedCents, par.currency)}
+          {mdlHint(par) ? ` · ${mdlHint(par)}` : ""}
         </p>
 
         {par.above_micro_threshold && (
@@ -386,7 +408,7 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
         <div className="space-y-3">
           <div>
             <label htmlFor="actual-amount" className="block text-sm font-medium text-foreground mb-1">
-              Suma reală (MDL) <span aria-hidden="true" className="text-destructive">*</span>
+              Suma reală ({par.currency || "MDL"}) <span aria-hidden="true" className="text-destructive">*</span>
             </label>
             <Input
               id="actual-amount"
@@ -401,7 +423,7 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
               placeholder="ex. 7000"
                           />
             <p className="text-xs text-muted-foreground mt-1">
-              Pre-completat cu suma estimată ({formatMDL(par.totalEstimatedCents)}). Schimbă dacă plata reală diferă.
+              Pre-completat cu suma estimată ({parAmount(par.totalEstimatedCents, par.currency)}). Schimbă dacă plata reală diferă.
             </p>
           </div>
 
@@ -472,7 +494,7 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
           <div className="space-y-1 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
             <p className="font-medium">Confirmi că plata a fost executată?</p>
             <p>
-              {formatMDL(mdlStringToCents(actualAmountMdl) || 0)} către{" "}
+              {parAmount(mdlStringToCents(actualAmountMdl) || 0, par.currency)} către{" "}
               <span className="font-medium">{par.payeeName ?? "beneficiar nespecificat"}</span>
               {par.payeeIban ? <> · <span className="font-mono text-xs">{par.payeeIban}</span></> : null}
             </p>
@@ -557,7 +579,7 @@ function RefusePaymentModal({ par, onClose, onReturned }: RefusePaymentModalProp
         </h2>
         <p className="text-sm text-muted-foreground">
           {par.requestNo} · {par.payeeName ?? "beneficiar nespecificat"} ·{" "}
-          {formatMDL(par.totalEstimatedCents)}
+          {parAmount(par.totalEstimatedCents, par.currency)}
         </p>
 
         {error && (
@@ -1030,11 +1052,7 @@ export default function ParFinanceQueue() {
                         pe ambele ecrane, deci se scrie la fel pe amândouă. */}
                     <td className="px-3 py-3 text-right font-mono font-semibold text-foreground whitespace-nowrap">
                       <CopyValue
-                        display={
-                          par.currency && par.currency !== "MDL"
-                            ? formatCurrency(par.totalEstimatedCents, par.currency)
-                            : formatMDL(par.totalEstimatedCents)
-                        }
+                        display={parAmount(par.totalEstimatedCents, par.currency)}
                         copyValue={(par.totalEstimatedCents / 100).toFixed(2)}
                         label="Copiază suma"
                         mono

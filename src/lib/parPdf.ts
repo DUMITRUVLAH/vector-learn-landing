@@ -196,6 +196,10 @@ export function buildParHtml(par: ParDetail): string {
   // Total
   const total = req.totalEstimatedCents ?? items.reduce((s, i) => s + i.lineTotalCents, 0);
 
+  // Moneda cererii, scrisă în capul coloanelor de preț și pe rândul de total. Formularul avea „MDL"
+  // fix în șablon, deci o cerere în USD se tipărea — și se semna — ca și cum ar fi fost în lei.
+  const cur = esc(req.currency || "MDL");
+
   // Section 16 — payment data
   const pmt = par.payment;
   const receivedBy = req.receivedByName || "";
@@ -267,12 +271,12 @@ export function buildParHtml(par: ParDetail): string {
         <th style="border:1px solid ${BORDER};padding:6px 8px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:42%;">Description/Specifications of Items or Service</th>
         <th style="border:1px solid ${BORDER};padding:6px 6px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:9%;">Quantity</th>
         <th style="border:1px solid ${BORDER};padding:6px 6px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:9%;">Units</th>
-        <th style="border:1px solid ${BORDER};padding:6px 6px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:17%;">Est. Unit Price<br/><span style="color:${RED};font-weight:800;">MDL</span></th>
-        <th style="border:1px solid ${BORDER};padding:6px 6px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:17%;">Est. Total Price<br/><span style="color:${RED};font-weight:800;">MDL</span></th>
+        <th style="border:1px solid ${BORDER};padding:6px 6px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:17%;">Est. Unit Price<br/><span style="color:${RED};font-weight:800;">${cur}</span></th>
+        <th style="border:1px solid ${BORDER};padding:6px 6px;text-align:center;font-weight:700;font-size:9.5px;color:${INK};width:17%;">Est. Total Price<br/><span style="color:${RED};font-weight:800;">${cur}</span></th>
       </tr>
       ${itemRows || `<tr><td colspan="6" style="border:1px solid ${BORDER};padding:8px;text-align:center;color:${FAINT};font-size:10.5px;">No items</td></tr>`}
       <tr>
-        <td colspan="5" style="border:1px solid ${BORDER};padding:6px 10px;font-size:10.5px;font-weight:700;color:${INK};text-align:right;">TOTAL ESTIMATED COST*: &nbsp;MDL</td>
+        <td colspan="5" style="border:1px solid ${BORDER};padding:6px 10px;font-size:10.5px;font-weight:700;color:${INK};text-align:right;">TOTAL ESTIMATED COST*: &nbsp;${cur}</td>
         <td style="border:1px solid ${BORDER};padding:6px 8px;text-align:right;font-size:11px;font-weight:800;color:${INK};white-space:nowrap;">${amount(total)}</td>
       </tr>
     </tbody>
