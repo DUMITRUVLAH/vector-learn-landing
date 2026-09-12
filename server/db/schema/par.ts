@@ -1015,6 +1015,107 @@ export const parDelegations = pgTable(
   })
 );
 
+// ─── PAR-DRIVE: oglinda dosarelor plătite în Google Drive ────────────────────
+
+/**
+ * Conexiunea Drive a unui workspace — un singur cont Google per tenant.
+ *
+ * Token-ul de refresh e singurul secret aici și stă criptat (AES-256-GCM, server/lib/crypto).
+ * Scope-ul cerut e `drive.file`: aplicația vede și scrie DOAR fișierele pe care le-a creat ea,
+ * deci o conexiune compromisă nu deschide restul Drive-ului.
+ */
+export const parDriveConnections = pgTable(
+  "par_drive_connections",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .unique(),
+    /** Contul Google în al cărui Drive se urcă (afișat în setări, ca omul să știe unde caută). */
+    googleEmail: varchar("google_email", { length: 320 }),
+    /** Refresh token criptat. Fără el nu putem obține access token-uri, deci sync-ul moare. */
+    refreshTokenEnc: text("refresh_token_enc").notNull(),
+    /** Folderul-rădăcină creat de noi în My Drive; null până la primul sync. */
+    rootFolderId: varchar("root_folder_id", { length: 200 }),
+    rootFolderName: varchar("root_folder_name", { length: 200 })
+      .notNull()
+      .default("Dosare PAR plătite"),
+    connectedByUserId: uuid("connected_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
+    syncEnabled: boolean("sync_enabled").notNull().default(true),
+    /** Ziua săptămânii în care rulează jobul, ISO-8601: 1 = luni … 7 = duminică. */
+    syncDayOfWeek: integer("sync_day_of_week").notNull().default(1),
+    lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+    /** ok | partial | error — „partial" = batch-ul s-a oprit la limita de timp, mai are de urcat. */
+    lastSyncStatus: varchar("last_sync_status", { length: 20 }),
+    lastSyncMessage: varchar("last_sync_message", { length: 500 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_drive_connections_tenant_idx").on(t.tenantId),
+  })
+);
+
+/**
+ * Mapele create în Drive, ținute minte după „calea" lor logică (proiect → eveniment → status).
+ *
+ * Fără cache-ul ăsta fiecare rulare ar căuta folderul prin API după nume, iar două rulări
+ * concurente ar putea crea două mape „Plătite" surori — Drive permite nume duplicate.
+ */
+export const parDriveFolders = pgTable(
+  "par_drive_folders",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    /** Cheia logică a mapei, ex. `proj:<uuid>|ev:none|bucket:paid`. Vezi lib/par/driveTree.ts. */
+    pathKey: varchar("path_key", { length: 500 }).notNull(),
+    folderId: varchar("folder_id", { length: 200 }).notNull(),
+    name: varchar("name", { length: 300 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_drive_folders_tenant_idx").on(t.tenantId),
+    pathUniq: uniqueIndex("par_drive_folders_tenant_path_uniq").on(t.tenantId, t.pathKey),
+  })
+);
+
+/** Ce dosar a ajuns în Drive, unde și în ce versiune — jurnalul care face sync-ul idempotent. */
+export const parDriveFiles = pgTable(
+  "par_drive_files",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    parId: uuid("par_id")
+      .notNull()
+      .references(() => parRequests.id, { onDelete: "cascade" }),
+    driveFileId: varchar("drive_file_id", { length: 200 }),
+    /** Mapa în care stă acum; dacă cererea își schimbă proiectul, fișierul se mută. */
+    folderPathKey: varchar("folder_path_key", { length: 500 }),
+    fileName: varchar("file_name", { length: 300 }),
+    /** SHA-256 al PDF-ului urcat: dacă dosarul nu s-a schimbat, nu-l mai urcăm săptămâna viitoare. */
+    contentHash: varchar("content_hash", { length: 64 }),
+    /** synced | error */
+    status: varchar("status", { length: 20 }).notNull().default("synced"),
+    error: varchar("error", { length: 500 }),
+    attempts: integer("attempts").notNull().default(0),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_drive_files_tenant_idx").on(t.tenantId),
+    parUniq: uniqueIndex("par_drive_files_tenant_par_uniq").on(t.tenantId, t.parId),
+  })
+);
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ParRequest = typeof parRequests.$inferSelect;
@@ -1044,6 +1145,10 @@ export type NewParInvite = typeof parInvites.$inferInsert;
 export type ParComment = typeof parComments.$inferSelect;
 export type NewParComment = typeof parComments.$inferInsert;
 export type ParDelegation = typeof parDelegations.$inferSelect;
+export type ParDriveConnection = typeof parDriveConnections.$inferSelect;
+export type NewParDriveConnection = typeof parDriveConnections.$inferInsert;
+export type ParDriveFolder = typeof parDriveFolders.$inferSelect;
+export type ParDriveFile = typeof parDriveFiles.$inferSelect;
 export type NewParDelegation = typeof parDelegations.$inferInsert;
 export type ParQuote = typeof parQuotes.$inferSelect;
 export type NewParQuote = typeof parQuotes.$inferInsert;
