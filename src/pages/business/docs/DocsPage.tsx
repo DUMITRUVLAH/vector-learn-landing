@@ -8,10 +8,12 @@
  * Ce NU face încă (și de ce): PDF-ul (DG-112), editorul de șabloane (DG-104) și formularul complet
  * de completare (DG-109) au item-ele lor. Aici e registrul + acțiunile care schimbă starea.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Plus, Loader2, AlertCircle, Search, Download, FileSpreadsheet, FolderOpen, Banknote, X, Upload } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FileText, Plus, Loader2, AlertCircle, Search, Download, FileSpreadsheet, FolderOpen, Banknote, X, Upload, RefreshCw } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { useRouter } from "@/router/HashRouter";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { ApiError } from "@/lib/api";
 import { listPar, type ParListRow } from "@/lib/api/par";
 import { listDocTemplates, type DocTemplateListItem } from "@/lib/api/docs";
 import { BulkGenerateDialog } from "./BulkGenerateDialog";
@@ -40,6 +42,26 @@ function formatMoney(cents: number, currency: string): string {
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("ro-MD");
+}
+
+/**
+ * De ce nu s-a încărcat lista, pe înțelesul omului.
+ *
+ * Înainte, `catch` fără binding punea același text pentru orice: sesiune expirată, lipsă de
+ * drepturi, server picat sau conexiune moartă arătau identic, iar eroarea reală nu ajungea
+ * nici în consolă. Un motiv greșit trimite omul să caute în locul nepotrivit.
+ */
+function errorText(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.code === "request_timeout" || err.code === "server_timeout" || err.status === 503) {
+      return "Serverul nu a răspuns la timp. Conexiunea pare întreruptă — reîncearcă.";
+    }
+    if (err.status === 401) return "Sesiunea a expirat. Reintră în cont și revino la Acte.";
+    if (err.status === 403) return "Nu ai drepturi pe actele din acest spațiu de lucru.";
+    if (err.status >= 500) return `Serverul a întors o eroare (${err.code}). Reîncearcă.`;
+    return `Nu am putut încărca lista de acte (${err.code}).`;
+  }
+  return "Nu am putut încărca lista de acte. Reîncearcă.";
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -82,21 +104,53 @@ export function DocsPage() {
   const [pendingPdf, setPendingPdf] = useState<DocListItem | null>(null);
 
 
+  /**
+   * Ce cerere e cea „curentă". Lista se reîncărca la fiecare tastă din căutare, fără nicio
+   * gardă: N cereri în paralel, iar răspunsul unei căutări vechi putea ajunge ULTIMUL și
+   * suprascria rezultatul celei noi — pe ecran, un filtru care „nu funcționează". Numărăm
+   * cererile și acceptăm doar răspunsul ultimei.
+   */
+  const loadSeq = useRef(0);
+  /** Ultima eroare de încărcare, păstrată ca obiect: motivul se spune, nu se înghite. */
+  const [loadError, setLoadError] = useState<unknown>(null);
+
+  // Căutarea nu mai lovește serverul la fiecare literă; filtrele de tip select se aplică pe loc.
+  const debouncedQ = useDebouncedValue(filters.q ?? "", 300);
+  const effectiveFilters = useMemo<DocFilters>(
+    () => ({ status: filters.status, kind: filters.kind, q: debouncedQ }),
+    [filters.status, filters.kind, debouncedQ]
+  );
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setError(null);
+    setLoadError(null);
     try {
-      setDocs(await listDocuments(filters));
-    } catch {
-      setError("Nu am putut încărca lista de acte. Reîncearcă.");
+      const items = await listDocuments(effectiveFilters);
+      if (seq !== loadSeq.current) return; // a plecat deja o cerere mai nouă
+      setDocs(items);
+    } catch (err) {
+      if (seq !== loadSeq.current) return;
+      setLoadError(err);
+      setError(errorText(err));
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
-  }, [filters]);
+  }, [effectiveFilters]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Spinner-ul singur nu spune nimic după câteva secunde: omul nu știe dacă mai are rost să
+  // aștepte. Vezi GET_TIMEOUT_MS — cererea se oprește singură, deci hint-ul e și adevărat.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!loading) { setSlow(false); return; }
+    const t = setTimeout(() => setSlow(true), 8_000);
+    return () => clearTimeout(t);
+  }, [loading]);
 
   // Filtrele trăiesc în URL: linkul trimis colegului deschide exact aceeași listă.
   useEffect(() => {
@@ -115,7 +169,7 @@ export function DocsPage() {
       // Nu doar „approved": actul de primire-predare se face și cât cererea e la finanțe, și după
       // plată. Filtrul îngust arăta „nicio cerere" unei organizații care avea zeci.
       const batches = await Promise.all(
-        ["approved", "in_finance", "paid"].map((status) =>
+        (["approved", "in_finance", "paid"] as const).map((status) =>
           listPar({ status }).then((r) => r.requests).catch(() => [])
         )
       );
@@ -262,19 +316,39 @@ export function DocsPage() {
         {error && (
           <div
             role="alert"
-            className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
           >
-            <AlertCircle className="h-4 w-4" aria-hidden="true" />
-            {error}
+            <span className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" aria-hidden="true" />
+              {error}
+            </span>
+            {/* Fără butonul ăsta, singura ieșire dintr-o încărcare picată era reload de pagină.
+                Apare doar pentru lista de acte — un eșec de PDF nu se rezolvă reîncărcând lista. */}
+            {loadError !== null && <button
+              type="button"
+              onClick={() => void load()}
+              className="touch-target inline-flex items-center gap-2 rounded-lg border border-destructive/40 px-3 py-1.5 font-medium hover:bg-destructive/10"
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Reîncearcă
+            </button>}
           </div>
         )}
 
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            Se încarcă actele…
+          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Se încarcă actele…
+            </span>
+            {slow && (
+              <p role="status">
+                Durează mai mult decât de obicei. Dacă serverul nu răspunde, cererea se oprește
+                singură și poți reîncerca.
+              </p>
+            )}
           </div>
-        ) : docs.length === 0 ? (
+        ) : loadError ? null : docs.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-10 text-center">
             <FileText className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
             <p className="mt-3 text-sm font-medium text-foreground">Niciun act încă</p>
