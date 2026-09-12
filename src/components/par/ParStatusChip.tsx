@@ -37,11 +37,18 @@ const STATUS_CLASS: Record<ParStatus, string> = {
 interface ParStatusChipProps {
   status: ParStatus;
   className?: string;
+  /**
+   * Înlocuiește textul chipului, când ecranul știe despre stare mai mult decât numele generic.
+   * Coada de finanțe: o cerere în `changes_requested` pentru că FINANȚELE au refuzat plata se
+   * numește „Refuzată de finanțe" — un singur chip, nu chipul generic plus o a doua etichetă
+   * dedesubt care spune același lucru cu alte cuvinte.
+   */
+  label?: string;
 }
 
-export function ParStatusChip({ status, className }: ParStatusChipProps) {
+export function ParStatusChip({ status, className, label }: ParStatusChipProps) {
   const { t } = useT();
-  const label = t(`par.status.${status}`); // VF-304: etichete de status bilingve
+  const statusLabel = label ?? t(`par.status.${status}`); // VF-304: etichete de status bilingve
   return (
     <span
       className={cn(
@@ -51,9 +58,9 @@ export function ParStatusChip({ status, className }: ParStatusChipProps) {
         STATUS_CLASS[status],
         className,
       )}
-      aria-label={`Status: ${label}`}
+      aria-label={`Status: ${statusLabel}`}
     >
-      {label}
+      {statusLabel}
     </span>
   );
 }

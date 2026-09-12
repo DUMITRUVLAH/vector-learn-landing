@@ -38,8 +38,11 @@ vi.mock("@/components/app/AppShell", () => ({
 }));
 
 vi.mock("@/components/par/ParStatusChip", () => ({
-  ParStatusChip: ({ status }: { status: string }) => (
-    <span data-testid="status-chip">{status}</span>
+  // `label` e păstrat în mock: componenta reală îl afișează în locul numelui de status, iar coada
+  // de finanțe se bazează pe el („Refuzată de finanțe"). Un mock care îl ignoră ar trece testul
+  // pe o pagină ruptă.
+  ParStatusChip: ({ status, label }: { status: string; label?: string }) => (
+    <span data-testid="status-chip">{label ?? status}</span>
   ),
 }));
 
@@ -476,10 +479,31 @@ describe("VM4-02b — cererile refuzate de finanțe se văd în coadă", () => {
     render(<ParFinanceQueue />);
 
     await screen.findByText("PAR-2026-0001");
-    const badge = screen.getByText(/Refuzată de finanțe/);
-    expect(badge).toHaveTextContent("Violeta Contabila");
-    expect(badge).toHaveTextContent("15.07.2026");
-    expect(screen.getByText("Lipsește actul de recepție")).toBeInTheDocument();
+    // Chipul de status ESTE eticheta refuzului — nu mai există un al doilea rând care spune
+    // același lucru sub chipul generic „Modificări solicitate".
+    expect(screen.getByTestId("status-chip")).toHaveTextContent("Refuzată de finanțe");
+    expect(screen.queryByText(/Modificări solicitate/)).not.toBeInTheDocument();
+    // Cine, când și de ce încap pe un singur rând.
+    expect(
+      screen.getByText("Violeta Contabila · 15.07.2026 · Lipsește actul de recepție")
+    ).toBeInTheDocument();
+  });
+
+  it("fără nume și dată, rândul arată doar motivul (fără separatoare orfane)", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [
+        makeFinanceItem({
+          status: "changes_requested",
+          financeReturn: { returnedAt: null, reason: "IBAN greșit", byName: null },
+        }),
+      ],
+      total: 1,
+    });
+
+    render(<ParFinanceQueue />);
+
+    await screen.findByText("PAR-2026-0001");
+    expect(screen.getByText("IBAN greșit")).toBeInTheDocument();
   });
 
   it("o cerere refuzată nu se mai poate plăti din coadă (mingea e la solicitant)", async () => {

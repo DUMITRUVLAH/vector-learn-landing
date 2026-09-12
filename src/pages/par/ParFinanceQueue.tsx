@@ -54,6 +54,7 @@ import {
   formatCurrency,
   downloadDosar,
   type ParFinanceQueueItem,
+  type ParFinanceReturn,
   type ParAttachment,
   type Section16Payload,
   type PayPayload,
@@ -785,6 +786,11 @@ function fmtShortDate(iso: string | Date | null | undefined): string {
   return d.toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+/** „Violeta Bordeniuc · 11.09.2026 · nu există așa companie" — ce încape pe un rând de tabel. */
+function financeReturnLine(ret: ParFinanceReturn): string {
+  return [ret.byName, fmtShortDate(ret.returnedAt), ret.reason].filter(Boolean).join(" · ");
+}
+
 export default function ParFinanceQueue() {
   const { navigate } = useRouter();
   const [items, setItems] = useState<ParFinanceQueueItem[]>([]);
@@ -988,7 +994,14 @@ export default function ParFinanceQueue() {
                     <td className="px-3 py-3">
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <ParStatusChip status={par.status} />
+                          {/* VM4-02b: un singur chip. „Modificări solicitate" plus „Refuzată de
+                              finanțe" dedesubt spuneau același lucru de două ori și făceau rândul
+                              de patru ori mai înalt decât vecinii lui. */}
+                          <ParStatusChip
+                            status={par.status}
+                            label={par.financeReturn ? "Refuzată de finanțe" : undefined}
+                            className={par.financeReturn ? "bg-destructive/10 text-destructive" : undefined}
+                          />
                           {par.isUrgent && (
                             <ParUrgentBadge reason={par.urgentReason} reasonNote={par.urgentReasonNote} dueDate={par.urgentDueDate} />
                           )}
@@ -996,21 +1009,15 @@ export default function ParFinanceQueue() {
                               scrisă pentru alta — semnul apare înainte de plată, nu la reconciliere. */}
                           <ParBackdatedBadge dateOfRequest={par.dateOfRequest} submittedAt={par.submittedAt} />
                         </div>
-                        {/* VM4-02b: cererea refuzată de finanțe rămâne în coadă — dar rândul spune
-                            limpede că mingea e la solicitant, cine a refuzat și de ce. */}
-                        {par.financeReturn && (
-                          <span className="text-xs font-medium text-destructive">
-                            Refuzată de finanțe
-                            {par.financeReturn.byName ? ` · ${par.financeReturn.byName}` : ""}
-                            {par.financeReturn.returnedAt ? ` · ${fmtShortDate(par.financeReturn.returnedAt)}` : ""}
-                          </span>
-                        )}
-                        {par.financeReturn?.reason && (
+                        {/* Cine a refuzat, când și de ce — pe UN rând discret, tăiat la lățimea
+                            coloanei, cu textul întreg în tooltip. Detaliul complet stă oricum în
+                            cronologia cererii; aici e doar cât să recunoști rândul. */}
+                        {par.financeReturn && financeReturnLine(par.financeReturn) && (
                           <span
                             className="max-w-[220px] truncate text-xs text-muted-foreground"
-                            title={par.financeReturn.reason}
+                            title={financeReturnLine(par.financeReturn)}
                           >
-                            {par.financeReturn.reason}
+                            {financeReturnLine(par.financeReturn)}
                           </span>
                         )}
                         {par.status === "reapproval_required" && (
