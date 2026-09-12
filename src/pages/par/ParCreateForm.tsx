@@ -1335,8 +1335,28 @@ export function ParCreateForm() {
     } finally { setUploadingFile(false); }
   };
 
-  const onVendorSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const id = e.target.value; setVendorId(id);
+  /** Cum se numește lista de beneficiari salvați — urmează tipul ales mai sus, ca să nu scrie
+      „companii" peste o listă de persoane fizice. */
+  const savedPayeeLabel = payeeType === "juridic" ? "Companii salvate" : "Beneficiari salvați";
+
+  /** Beneficiarii salvați care se potrivesc cu ce s-a scris: nume, cod fiscal sau IBAN. */
+  const filteredVendors = useMemo(() => {
+    const q = vendorSearch.trim().toLocaleLowerCase("ro");
+    if (!q) return vendors;
+    return vendors.filter((v) =>
+      `${v.name} ${v.idnp ?? ""} ${v.iban ?? ""}`.toLocaleLowerCase("ro").includes(q),
+    );
+  }, [vendors, vendorSearch]);
+
+  /**
+   * Alege un beneficiar salvat și îi coboară rechizitele în câmpuri.
+   *
+   * Primește `id`, nu un eveniment de `<select>`: lista de beneficiari salvați e acum un rând de
+   * rezultate care se filtrează pe măsură ce scrii (ca la registrul public), nu un dropdown care
+   * trebuia deschis separat după căutare.
+   */
+  const applyVendor = (id: string) => {
+    setVendorId(id);
     const v = vendors.find((x) => x.id === id);
     if (v) {
       setPayeeName(v.name);
@@ -2085,13 +2105,19 @@ export function ParCreateForm() {
           {/* Pas 2: cum adaugi beneficiarul — alege UNA din metode, ca să nu apară toate tool-urile deodată. */}
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">Cum adaugi beneficiarul?</p>
+            {/* Ordinea e cea a frecvenței reale (owner, 2026-09-12): scrii singur cel mai des, apoi
+                iei dintre cei cu care ai mai lucrat, apoi documentul, iar registrul public — cel mai
+                lent și cel mai rar — stă ultimul. */}
             <div className="flex flex-wrap gap-2">
-              <PayeeMethodButton icon={Pencil} label="Introdu manual" active={payeeMethod === "manual"} onClick={() => setPayeeMethod("manual")} />
-              {payeeType === "juridic" && (
-                <PayeeMethodButton icon={Building2} label="Caută companie" active={payeeMethod === "registry"} onClick={() => setPayeeMethod("registry")} />
-              )}
+              {/* „Introdu manual" ia locul vechii opțiuni „— Introducere manuală —" din lista de
+                  beneficiari salvați: desface legătura cu beneficiarul ales, lăsând câmpurile
+                  completate ca punct de plecare. */}
+              <PayeeMethodButton icon={Pencil} label="Introdu manual" active={payeeMethod === "manual"} onClick={() => { setPayeeMethod("manual"); setVendorId(""); }} />
+              <PayeeMethodButton icon={BookOpen} label={savedPayeeLabel} active={payeeMethod === "saved"} onClick={() => setPayeeMethod("saved")} />
               <PayeeMethodButton icon={Sparkles} label="Din document (AI)" active={payeeMethod === "ai"} onClick={() => setPayeeMethod("ai")} />
-              <PayeeMethodButton icon={BookOpen} label="Beneficiar salvat" active={payeeMethod === "saved"} onClick={() => setPayeeMethod("saved")} />
+              {payeeType === "juridic" && (
+                <PayeeMethodButton icon={Building2} label="Caută companii din surse publice" active={payeeMethod === "registry"} onClick={() => setPayeeMethod("registry")} />
+              )}
             </div>
           </div>
 
@@ -2382,7 +2408,7 @@ export function ParCreateForm() {
           )}
 
           {/* Metoda: caută companie în registru — doar pentru juridic (companii). */}
-          {payeeMethod === "registry" && payeeType === "juridic" && <Field label="Caută companie (contafirm.md)" htmlFor="reg-q" hint="Introdu cel puțin 2 caractere — caută după nume sau IDNO">
+          {payeeMethod === "registry" && payeeType === "juridic" && <Field label="Caută companii din surse publice" htmlFor="reg-q" hint="Registrul public contafirm.md — introdu cel puțin 2 caractere, după nume sau IDNO">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden />
               <input
@@ -2428,15 +2454,63 @@ export function ParCreateForm() {
             )}
           </Field>}
 
-          {/* Metoda: alege dintr-un beneficiar deja salvat. */}
+          {/* Metoda: alege dintre beneficiarii cu care s-a mai lucrat.
+
+              Era o căutare PLUS un `<select>`: scriai „vector", nu se întâmpla nimic vizibil, și
+              trebuia să deschizi dropdown-ul ca să vezi ce ai filtrat — iar prima linie din el,
+              „— Introducere manuală —", amesteca în listă o metodă care are deja butonul ei sus.
+              Acum rezultatele apar singure sub căutare, ca la registrul public. */}
           {payeeMethod === "saved" && (
             vendors.length > 0 ? (
-              <Field label="Beneficiar salvat" htmlFor="vsel" hint="Alege un beneficiar din registru sau introdu manual mai jos">
-                <input className={inputCls} value={vendorSearch} onChange={(e) => setVendorSearch(e.target.value)} placeholder="Caută după nume, IDNO/IDNP sau IBAN…" aria-label="Caută beneficiar salvat" />
-                <Select id="vsel" className="w-full" value={vendorId} onChange={onVendorSelect} aria-label="Beneficiar salvat">
-                  <option value="">— Introducere manuală —</option>
-                  {vendors.filter((v) => !vendorSearch.trim() || `${v.name} ${v.idnp ?? ""} ${v.iban ?? ""}`.toLocaleLowerCase("ro").includes(vendorSearch.trim().toLocaleLowerCase("ro"))).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </Select>
+              <Field label={savedPayeeLabel} htmlFor="vendor-q" hint="Scrie ca să filtrezi — rezultatele apar dedesubt. Nu e în listă? Treci pe „Introdu manual”.">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden />
+                  <input
+                    id="vendor-q"
+                    type="text"
+                    className={cn(inputCls, "pl-9")}
+                    value={vendorSearch}
+                    onChange={(e) => setVendorSearch(e.target.value)}
+                    placeholder="Caută după nume, IDNO/IDNP sau IBAN…"
+                    autoComplete="off"
+                    aria-label={`Caută în ${savedPayeeLabel.toLocaleLowerCase("ro")}`}
+                  />
+                </div>
+                {filteredVendors.length > 0 ? (
+                  <ul className="mt-1 rounded-lg border border-border bg-popover shadow-md divide-y divide-border max-h-52 overflow-y-auto" role="listbox" aria-label={savedPayeeLabel}>
+                    {filteredVendors.map((v) => (
+                      <li key={v.id}>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={v.id === vendorId}
+                          onClick={() => applyVendor(v.id)}
+                          className={cn(
+                            "w-full text-left px-3 py-2 text-sm transition-colors flex items-start gap-2 min-h-[44px]",
+                            v.id === vendorId ? "bg-primary/10" : "hover:bg-muted",
+                          )}
+                        >
+                          {payeeType === "juridic"
+                            ? <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" aria-hidden />
+                            : <IdCard className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" aria-hidden />}
+                          <span className="min-w-0">
+                            <span className="font-medium text-foreground block truncate">{v.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {v.idnp && <span>{payeeType === "juridic" ? "IDNO" : "IDNP"}: {v.idnp}</span>}
+                              {v.iban && <span className="ml-2">{v.iban}</span>}
+                            </span>
+                          </span>
+                          {v.id === vendorId && <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 ml-auto mt-0.5" aria-hidden />}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground rounded-lg border border-dashed border-border p-3">
+                    Niciun beneficiar salvat nu se potrivește cu „{vendorSearch.trim()}". Treci pe „Introdu manual"
+                    sau caută compania în surse publice — se salvează singură după prima plată.
+                  </p>
+                )}
                 {/* VENDOR360: nota și starea relației, chiar în momentul alegerii. O evaluare pe care
                     o vezi abia pe fișa furnizorului nu influențează decizia care se ia AICI. */}
                 <VendorSignal vendorId={vendorId} />

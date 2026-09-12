@@ -140,10 +140,10 @@ describe("ParCreateForm — patenta de întreprinzător", () => {
     render(<ParCreateForm />);
     await screen.findByRole("button", { name: /adaugă articol/i });
     fireEvent.click(screen.getByRole("button", { name: /persoană fizică/i }));
-    fireEvent.click(screen.getByRole("button", { name: /beneficiar salvat/i }));
+    fireEvent.click(screen.getByRole("button", { name: /beneficiari salvați/i }));
 
-    const select = await screen.findByRole("combobox", { name: /^Beneficiar salvat$/i });
-    fireEvent.change(select, { target: { value: "v-exp" } });
+    // Lista se filtrează live și se alege direct din ea — nu mai există dropdown de deschis.
+    fireEvent.click(await screen.findByRole("option", { name: /Roitman Daria/i }));
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/EXPIRAT/);

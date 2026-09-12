@@ -68,17 +68,47 @@ describe("ParCreateForm — UX (feedback owner 2026-07-19)", () => {
     expect(screen.getByLabelText(/^IBAN/i)).toBeInTheDocument();
   });
 
-  it("„Caută companie” apare doar la persoană juridică", async () => {
+  /**
+   * Owner, 2026-09-12: „când cauți compania să nu fie scris introducere manuală, dar alege din
+   * companiile salvate, și când cauți în search automat să apară — nu să cauți și după să apeși
+   * pe introducere manuală ca să vezi dropdown."
+   */
+  it("companii salvate: rezultatele apar pe măsură ce scrii, fără „Introducere manuală” în listă", async () => {
+    vi.spyOn(parApi, "listVendors").mockResolvedValue({
+      items: [
+        { id: "v-1", name: "S.C. Vector Academy S.R.L.", idnp: "1002600020555", iban: "MD24AG000225100013104168", bank: null, active: true },
+        { id: "v-2", name: "ATIC SRL", idnp: null, iban: null, bank: null, active: true },
+      ],
+    });
+    render(<ParCreateForm />);
+    await screen.findByRole("button", { name: /adaugă articol/i });
+    fireEvent.click(screen.getByRole("button", { name: /companii salvate/i }));
+
+    // Lista se vede imediat, fără dropdown de deschis.
+    expect(await screen.findByRole("option", { name: /Vector Academy/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /ATIC/i })).toBeInTheDocument();
+    // „Introducere manuală" nu mai e o linie în listă — are butonul ei de metodă, sus.
+    expect(screen.queryByText(/Introducere manuală/i)).not.toBeInTheDocument();
+
+    // Se scrie în căutare → lista se strânge singură, fără alt clic.
+    fireEvent.change(screen.getByLabelText(/caută în companii salvate/i), { target: { value: "vector" } });
+    await waitFor(() =>
+      expect(screen.queryByRole("option", { name: /ATIC/i })).not.toBeInTheDocument()
+    );
+    expect(screen.getByRole("option", { name: /Vector Academy/i })).toBeInTheDocument();
+  });
+
+  it("„Caută companii din surse publice” apare doar la persoană juridică", async () => {
     render(<ParCreateForm />);
     await screen.findByRole("button", { name: /adaugă articol/i });
 
     // Implicit: juridic → butonul de registru companii e prezent.
-    expect(screen.getByRole("button", { name: /caută companie/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /caută companii din surse publice/i })).toBeInTheDocument();
 
     // Comut pe persoană fizică → dispare (registrul de companii nu se aplică).
     fireEvent.click(screen.getByRole("button", { name: /persoană fizică/i }));
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /caută companie/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: /caută companii din surse publice/i })).not.toBeInTheDocument()
     );
   });
 });
