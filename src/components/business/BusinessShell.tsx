@@ -40,6 +40,7 @@ import {
   Shield,
   ArrowLeft,
   FolderOpen,
+  CloudUpload,
   ChevronDown,
   Search,
   Menu,
@@ -122,6 +123,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Inbox aprobare", href: "/business/par/inbox", icon: ShieldCheck, tone: "emerald", roles: ["approver", "par_admin"] },
       { label: "Rapoarte PAR", href: "/business/par/reports", icon: FileText, tone: "sky", roles: ["approver", "finance", "par_admin"] },
       { label: "Curs valutar", href: "/business/par/exchange", icon: ArrowLeftRight, tone: "teal" },
+      { label: "Google Drive", href: "/business/par/drive", icon: CloudUpload, tone: "violet", roles: ["par_admin"] },
     ],
   },
   {
@@ -203,6 +205,7 @@ const PAR_NAV_GROUPS: NavGroup[] = [
       // Cursul oficial e informație publică — fără restricție de rol; îl folosește oricine
       // completează o cerere în valută.
       { label: "Curs valutar", href: "/business/par/exchange", icon: ArrowLeftRight, tone: "teal" },
+      { label: "Google Drive", href: "/business/par/drive", icon: CloudUpload, tone: "violet", roles: ["par_admin"] },
     ],
   },
   {

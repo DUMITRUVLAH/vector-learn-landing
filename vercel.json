@@ -1,5 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "node scripts/vercel-build.mjs",
-  "framework": null
+  "framework": null,
+  "crons": [
+    {
+      "path": "/api/par/drive/cron/run-weekly",
+      "schedule": "0 6 * * *"
+    }
+  ]
 }
