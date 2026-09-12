@@ -1094,3 +1094,41 @@ export const parTenderClearances = pgTable(
     uniqueVendorYear: uniqueIndex("par_tender_clearances_vendor_year_uq").on(t.tenantId, t.vendorKey, t.year),
   })
 );
+
+
+/**
+ * VM5-20: bugetul unui eveniment, pe LINII (decizia owner-ului: „să vadă linia — cât era planificat
+ * și cât s-a cheltuit").
+ *
+ * O linie = un cod bugetar × o sumă. Totalul evenimentului se calculează din linii, nu se tastează
+ * separat: altfel cele două ar ieși din sincron chiar în ziua în care cineva ajustează o linie.
+ *
+ * Moneda stă pe linie, ca la codurile bugetare: un grant vine în EUR și linia trebuie păstrată în
+ * moneda lui. Comparațiile cu cheltuielile se fac convertind ambele părți în lei (curs BNM).
+ *
+ * `budgetCodeId` e opțional: o linie fără cod bugetar intră în totalul evenimentului, dar nu poate
+ * fi confruntată cu cheltuielile pe linie — cererile se leagă de buget prin codul bugetar.
+ */
+export const parEventBudgetLines = pgTable(
+  "par_event_budget_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => parEvents.id, { onDelete: "cascade" }),
+    budgetCodeId: uuid("budget_code_id").references(() => parBudgetCodes.id, { onDelete: "set null" }),
+    /** Ce e linia, când nu se sprijină pe un cod bugetar („Catering", „Transport participanți"). */
+    label: varchar("label", { length: 300 }),
+    allocatedCents: integer("allocated_cents").notNull().default(0),
+    currency: varchar("currency", { length: 3 }).notNull().default("MDL"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_event_budget_lines_tenant_idx").on(t.tenantId),
+    eventIdx: index("par_event_budget_lines_event_idx").on(t.eventId),
+  })
+);

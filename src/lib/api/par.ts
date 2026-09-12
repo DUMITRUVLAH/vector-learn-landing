@@ -2167,3 +2167,48 @@ export async function clearTender(payload: {
 }): Promise<{ id: string }> {
   return api("/api/par/tender/clearances", { method: "POST", body: JSON.stringify(payload) });
 }
+
+// ─── VM5-20: bugetul evenimentului, pe linii ─────────────────────────────────
+
+export interface EventBudgetLine {
+  id: string | null;
+  budgetCodeId: string | null;
+  label: string;
+  currency: string;
+  allocatedCents: number;
+  allocatedMdlCents: number;
+  committedMdlCents: number;
+  paidMdlCents: number;
+  /** `null` pe liniile fără cod bugetar: ele nu pot fi confruntate cu cheltuielile. */
+  availableMdlCents: number | null;
+  over: boolean;
+  /** Cheltuială pe un cod care nu apare în planul evenimentului. */
+  unplanned: boolean;
+}
+
+export interface EventBudgetReport {
+  event: { id: string; name: string };
+  lines: EventBudgetLine[];
+  plannedMdlCents: number;
+  committedMdlCents: number;
+  paidMdlCents: number;
+  availableMdlCents: number;
+  hasPlan: boolean;
+  overTotal: boolean;
+}
+
+/** Planul evenimentului + realizatul lui, linie cu linie. */
+export async function getEventBudget(eventId: string): Promise<EventBudgetReport> {
+  return api<EventBudgetReport>(`/api/par/events/${eventId}/budget`);
+}
+
+/**
+ * Înlocuiește TOT planul evenimentului. Salvarea și încărcarea în bloc sunt același drum: interfața
+ * trimite la fel două rânduri scrise de mână sau douăzeci lipite dintr-un Excel.
+ */
+export async function saveEventBudget(
+  eventId: string,
+  lines: Array<{ budget_code_id?: string | null; label?: string | null; allocated_cents: number; currency?: string }>
+): Promise<{ ok: boolean; lines: number }> {
+  return api(`/api/par/events/${eventId}/budget`, { method: "PUT", body: JSON.stringify({ lines }) });
+}

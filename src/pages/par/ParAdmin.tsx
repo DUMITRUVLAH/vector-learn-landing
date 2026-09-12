@@ -13,6 +13,7 @@
  * CORE: backlog/par/PAR-CORE.md §1 (roles), §3 (DOA), §6 (admin screen)
  * Design: Vector 365, light+dark, WCAG AA.
  */
+import { EventBudgetEditor } from "@/components/par/EventBudgetEditor";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Settings,
@@ -42,8 +43,7 @@ import {
   FileSpreadsheet,
   Calendar,
   BarChart2,
-  Wand2,
-} from "lucide-react";
+  Wand2, Wallet,} from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ParImportMappingDialog } from "@/components/par/ParImportMappingDialog";
 import { cn } from "@/lib/utils";
@@ -2500,6 +2500,7 @@ function ParReferenceData({ initialSection }: ParReferenceDataProps) {
         <EventsTable
           events={events}
           projects={projects}
+          budgetCodes={budgetCodes}
           onReload={load}
         />
       )}
@@ -2632,10 +2633,12 @@ function ProjectApproversSection({
 interface EventsTableProps {
   events: ParEvent[];
   projects: import("@/lib/api/par").ParProject[];
+  /** VM5-20: codurile bugetare, pentru liniile de buget ale evenimentului. */
+  budgetCodes: ParBudgetCode[];
   onReload: () => Promise<void>;
 }
 
-function EventsTable({ events, projects, onReload }: EventsTableProps) {
+function EventsTable({ events, projects, budgetCodes, onReload }: EventsTableProps) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<{ name: string; project_id: string; starts_at: string; ends_at: string }>({
@@ -2643,6 +2646,8 @@ function EventsTable({ events, projects, onReload }: EventsTableProps) {
   });
   const [saving, setSaving] = useState(false);
   const [spendByEvent, setSpendByEvent] = useState<Record<string, number>>({});
+  /** VM5-20: evenimentul al cărui buget se editează acum (null = niciunul). */
+  const [budgetFor, setBudgetFor] = useState<ParEvent | null>(null);
 
   useEffect(() => {
     getParReportByEvent()
@@ -2700,6 +2705,15 @@ function EventsTable({ events, projects, onReload }: EventsTableProps) {
 
   return (
     <div className="space-y-4">
+      {/* VM5-20: bugetul evenimentului ales — planul, lipirea din Excel și realizatul, într-un loc. */}
+      {budgetFor && (
+        <EventBudgetEditor
+          eventId={budgetFor.id}
+          eventName={budgetFor.name}
+          budgetCodes={budgetCodes}
+          onClose={() => setBudgetFor(null)}
+        />
+      )}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">Evenimente</h3>
         {!showForm && (
@@ -2824,6 +2838,12 @@ function EventsTable({ events, projects, onReload }: EventsTableProps) {
                     </td>
                     <td className="py-2">
                       <div className="flex items-center gap-1">
+                        {/* VM5-20: bugetul evenimentului — planul și realizatul, în același loc. */}
+                        <button type="button" aria-label={`Buget pentru ${ev.name}`} title="Buget: linii planificate vs cheltuit"
+                          onClick={() => setBudgetFor(ev)}
+                          className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center">
+                          <Wallet className="h-3.5 w-3.5" aria-hidden />
+                        </button>
                         <button type="button" aria-label={`Editează ${ev.name}`}
                           onClick={() => startEdit(ev)}
                           className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center">

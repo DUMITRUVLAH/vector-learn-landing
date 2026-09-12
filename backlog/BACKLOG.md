@@ -510,7 +510,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 |----|----------|-------|--------|------|
 | VM5-01 | high | Notificările PAR în română: status + motiv + cine a decis | ✅ done (emailuri) | [catalog](specs/VM5-catalog.md) |
 | VM5-02 | medium | Cererile colegilor **de pe același proiect** (read-only, fără date bancare) | 🟢 todo | [catalog](specs/VM5-catalog.md) |
-| VM5-03 | low | Previzualizare `.docx`/`.xlsx` în vizualizatorul de documente | 🟢 todo | [catalog](specs/VM5-catalog.md) |
+| VM5-03 | low | Previzualizare `.docx`/`.xlsx` în vizualizatorul de documente | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-04 | high | AI: verificare „plătitor" pe document | ✅ done (plătitor) |
 | VM5-04b | high | Suma se compară doar pe documentele care o poartă + versionarea analizei | ✅ done |
 | VM5-04c | medium | Reanaliza documentelor vechi (decizie de cost: leneș, la prima deschidere) | 🟡 todo | [catalog](specs/VM5-catalog.md) |
@@ -530,7 +530,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | VM5-17 | high | Ștampilă de timp pe formularul PAR printat (depusă / aprobată) | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-18 | — | „Data din urmă" = dată din trecut → se contopește în VM5-06 | ✅ închis | [catalog](specs/VM5-catalog.md) |
 | VM5-19 | high | Prag anual **per prestator** + bifa de tender a finanțelor | ✅ done | [catalog](specs/VM5-catalog.md) |
-| VM5-20 | high | Buget de eveniment **pe linii** (confirmat): planificat vs angajat vs plătit | 🟢 todo | [catalog](specs/VM5-catalog.md) |
+| VM5-20 | high | Buget de eveniment **pe linii** + încărcare + raport planificat vs realizat | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-21 | medium | Șabloanele de documente ale Anei, încărcate în DOCGEN | 🟡 blocat pe fișiere | [catalog](specs/VM5-catalog.md) |
 
 ---

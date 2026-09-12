@@ -2,6 +2,8 @@
  * VM1-04: PAR Events — sub-entities of projects (Proiect → Eveniment → Cerere).
  *
  * GET    /api/par/events                — list events (tenant-scoped, optional ?project_id=)
+ * GET    /api/par/events/:id/budget     — VM5-20: liniile planificate + realizatul lor
+ * PUT    /api/par/events/:id/budget     — VM5-20: înlocuiește liniile (salvare sau încărcare în bloc)
  * POST   /api/par/events                — create event (PAR role + project access)
  * PUT    /api/par/events/:id            — update event (par_admin only)
  * DELETE /api/par/events/:id            — deactivate event (par_admin only, soft-delete via active=false)
@@ -11,9 +13,18 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, eq, asc, inArray } from "drizzle-orm";
+import { and, eq, asc, inArray, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { parEvents, parProjects } from "../db/schema/par";
+import {
+  parEvents,
+  parProjects,
+  parEventBudgetLines,
+  parBudgetCodes,
+  parRequests,
+  parPayments,
+} from "../db/schema/par";
+import { toMdlCents } from "../lib/fx";
+import { buildEventBudgetReport, type EventBudgetLineInput, type EventSpendInput } from "../lib/par/eventBudget";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
@@ -186,3 +197,149 @@ parEventsRoutes.delete("/:id", requirePARRole("par_admin"), async (c) => {
   if (!updated) return c.json({ error: "Not found" }, 404);
   return c.json({ ok: true });
 });
+
+
+// ─── VM5-20: bugetul evenimentului, pe linii ─────────────────────────────────
+//
+// „Evenimentul să fie unit cu conturi bugetare — să vadă linia: cât era planificat și cât s-a
+// cheltuit, la event nu s-a depășit totalul." Owner-ul a ales bugetul PE LINII, nu o sumă globală,
+// iar liniile trebuie să poată fi ÎNCĂRCATE, nu doar tastate: de aceea salvarea e un PUT care
+// înlocuiește tot setul — interfața trimite la fel de bine două rânduri scrise de mână sau
+// douăzeci lipite dintr-un Excel.
+
+/** Convertește o sumă în lei; dacă BNM tace, păstrează cifra brută (raport aproximativ > niciun raport). */
+async function toMdlSafe(cents: number, currency: string): Promise<number> {
+  if (!cents || (currency || "MDL").toUpperCase() === "MDL") return cents;
+  try {
+    return (await toMdlCents(cents, currency)).mdlCents;
+  } catch {
+    return cents;
+  }
+}
+
+/** Evenimentul, dacă există și dacă omul are voie să-l vadă. */
+async function eventInScope(userId: string, tenantId: string, tenantRole: string, eventId: string) {
+  const [evt] = await db
+    .select({ id: parEvents.id, name: parEvents.name, projectId: parEvents.projectId })
+    .from(parEvents)
+    .where(and(eq(parEvents.id, eventId), eq(parEvents.tenantId, tenantId)));
+  if (!evt) return null;
+  if (!(await mayAccessProject(userId, tenantId, evt.projectId, tenantRole))) return null;
+  return evt;
+}
+
+parEventsRoutes.get("/:id/budget", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const eventId = c.req.param("id");
+
+  const evt = await eventInScope(user.id, tenantId, user.role, eventId);
+  if (!evt) return c.json({ error: "not_found" }, 404);
+
+  const lineRows = await db
+    .select({
+      id: parEventBudgetLines.id,
+      budgetCodeId: parEventBudgetLines.budgetCodeId,
+      label: parEventBudgetLines.label,
+      allocatedCents: parEventBudgetLines.allocatedCents,
+      currency: parEventBudgetLines.currency,
+      codeLabel: parBudgetCodes.code,
+      codeName: parBudgetCodes.name,
+    })
+    .from(parEventBudgetLines)
+    .leftJoin(parBudgetCodes, eq(parBudgetCodes.id, parEventBudgetLines.budgetCodeId))
+    .where(and(eq(parEventBudgetLines.tenantId, tenantId), eq(parEventBudgetLines.eventId, eventId)))
+    .orderBy(asc(parEventBudgetLines.createdAt));
+
+  const planned: EventBudgetLineInput[] = [];
+  for (const row of lineRows) {
+    planned.push({
+      id: row.id,
+      budgetCodeId: row.budgetCodeId,
+      label: row.label || [row.codeLabel, row.codeName].filter(Boolean).join(" — ") || "Linie",
+      allocatedCents: row.allocatedCents,
+      currency: row.currency,
+      allocatedMdlCents: await toMdlSafe(row.allocatedCents, row.currency),
+    });
+  }
+
+  // Cheltuielile evenimentului, grupate pe cod bugetar. `total_mdl_cents` e echivalentul înghețat la
+  // depunere — aceeași monedă de comparație ca planul.
+  const spendRows = await db
+    .select({
+      budgetCodeId: parRequests.budgetCodeId,
+      codeLabel: parBudgetCodes.code,
+      codeName: parBudgetCodes.name,
+      committed: sql<number>`cast(coalesce(sum(case when ${parRequests.status}::text in ('pending_approval','changes_requested','approved','in_finance','reapproval_required') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end), 0) as bigint)`,
+      paid: sql<number>`cast(coalesce(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end), 0) as bigint)`,
+    })
+    .from(parRequests)
+    .leftJoin(parBudgetCodes, and(eq(parBudgetCodes.id, parRequests.budgetCodeId), eq(parBudgetCodes.tenantId, tenantId)))
+    .leftJoin(parPayments, and(eq(parPayments.parId, parRequests.id), eq(parPayments.tenantId, tenantId)))
+    .where(and(eq(parRequests.tenantId, tenantId), eq(parRequests.eventId, eventId)))
+    .groupBy(parRequests.budgetCodeId, parBudgetCodes.code, parBudgetCodes.name);
+
+  const spend: EventSpendInput[] = spendRows.map((r) => ({
+    budgetCodeId: r.budgetCodeId,
+    label: [r.codeLabel, r.codeName].filter(Boolean).join(" — ") || "Fără cod bugetar",
+    committedMdlCents: Number(r.committed ?? 0),
+    paidMdlCents: Number(r.paid ?? 0),
+  }));
+
+  return c.json({ event: { id: evt.id, name: evt.name }, ...buildEventBudgetReport(planned, spend) });
+});
+
+const budgetLineSchema = z.object({
+  budget_code_id: z.string().uuid().optional().nullable(),
+  label: z.string().max(300).optional().nullable(),
+  allocated_cents: z.number().int().min(0).max(1_000_000_000_000),
+  currency: z.string().length(3).optional(),
+});
+
+parEventsRoutes.put(
+  "/:id/budget",
+  requirePARRole("finance", "par_admin"),
+  zValidator("json", z.object({ lines: z.array(budgetLineSchema).max(500) })),
+  async (c) => {
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const eventId = c.req.param("id");
+    const { lines } = c.req.valid("json");
+
+    const evt = await eventInScope(user.id, tenantId, user.role, eventId);
+    if (!evt) return c.json({ error: "not_found" }, 404);
+
+    // Codurile bugetare trimise trebuie să existe în organizație — altfel un id greșit ar crea o
+    // linie care nu se confruntă niciodată cu nicio cheltuială și ar arăta etern „0 cheltuit".
+    const codeIds = [...new Set(lines.map((l) => l.budget_code_id).filter((v): v is string => !!v))];
+    if (codeIds.length) {
+      const found = await db
+        .select({ id: parBudgetCodes.id })
+        .from(parBudgetCodes)
+        .where(and(eq(parBudgetCodes.tenantId, tenantId), inArray(parBudgetCodes.id, codeIds)));
+      if (found.length !== codeIds.length) return c.json({ error: "budget_code_not_found" }, 400);
+    }
+
+    // Înlocuire completă, într-o singură tranzacție: bugetul unui eveniment se rescrie ca un tot,
+    // nu prin diferențe — altfel o încărcare parțial eșuată ar lăsa planul pe jumătate vechi.
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(parEventBudgetLines)
+        .where(and(eq(parEventBudgetLines.tenantId, tenantId), eq(parEventBudgetLines.eventId, eventId)));
+      if (lines.length) {
+        await tx.insert(parEventBudgetLines).values(
+          lines.map((l) => ({
+            tenantId,
+            eventId,
+            budgetCodeId: l.budget_code_id ?? null,
+            label: l.label ?? null,
+            allocatedCents: l.allocated_cents,
+            currency: (l.currency ?? "MDL").toUpperCase(),
+          }))
+        );
+      }
+    });
+
+    return c.json({ ok: true, lines: lines.length });
+  }
+);

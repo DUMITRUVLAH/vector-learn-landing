@@ -289,7 +289,12 @@ parReportsRoutes.get("/by-event", async (c) => {
     .select({
       id: parRequests.eventId,
       label: parEvents.name,
-      allocatedCents: sql<number>`cast(0 as integer)`,
+      // VM5-20: alocarea evenimentului = suma liniilor lui de buget. Până acum era zero hardcodat,
+      // deci coloana „disponibil" ieșea mereu negativă și raportul nu putea răspunde la întrebarea
+      // din ședință — „la event nu s-a depășit totalul?". Liniile în valută se convertesc la cursul
+      // înghețat pe cererile evenimentului; fără cerere, rămâne cifra brută (vezi `/events/:id/budget`
+      // pentru raportul detaliat, care convertește la zi).
+      allocatedCents: sql<number>`cast(coalesce((select sum(bl.allocated_cents) from par_event_budget_lines bl where bl.tenant_id = ${tenantId} and bl.event_id = ${parRequests.eventId}), 0) as bigint)`,
       committedCents: sql<number>`cast(sum(case when ${parRequests.status}::text in ('pending_approval','approved','in_finance','reapproval_required','changes_requested') then coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) else 0 end) as bigint)`,
       paidCents: sql<number>`cast(sum(case when ${parRequests.status}::text = 'paid' then case when ${parRequests.currency} = 'MDL' then coalesce(${parPayments.actualAmountCents}, ${parRequests.totalEstimatedCents}) else coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents}) end else 0 end) as bigint)`,
       totalCents: sql<number>`cast(sum(coalesce(${parRequests.totalMdlCents}, ${parRequests.totalEstimatedCents})) as bigint)`,
@@ -307,7 +312,8 @@ parReportsRoutes.get("/by-event", async (c) => {
   const items = (Array.isArray(rows) ? rows : (rows as { rows?: unknown[] }).rows ?? []).map((r: Record<string, unknown>) => {
     const committedCents = Number(r.committedCents ?? 0);
     const paidCents = Number(r.paidCents ?? 0);
-    return { id: r.id as string | null, label: String(r.label ?? "Eveniment necunoscut"), totalCents: Number(r.totalCents ?? 0), count: Number(r.count ?? 0), allocatedCents: 0, committedCents, paidCents, availableCents: -committedCents - paidCents };
+    const allocatedCents = Number(r.allocatedCents ?? 0);
+    return { id: r.id as string | null, label: String(r.label ?? "Eveniment necunoscut"), totalCents: Number(r.totalCents ?? 0), count: Number(r.count ?? 0), allocatedCents, committedCents, paidCents, availableCents: allocatedCents - committedCents - paidCents };
   });
 
   return c.json({ items });
