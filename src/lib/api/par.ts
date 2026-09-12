@@ -1648,6 +1648,15 @@ export function getParReportExportXlsxUrl(filters?: ParReportFilters): string {
   return `/api/par/reports/export.xlsx${parReportQuery(filters)}`;
 }
 
+/**
+ * VM5-08: pachetul pentru audit — registrul, dosarele și actele perioadei, într-un singur ZIP.
+ * Filtrele sunt aceleași ca ale rapoartelor de pe ecran, deci auditul primește exact perioada
+ * la care se uită omul.
+ */
+export function getParAuditPackageUrl(filters?: ParReportFilters): string {
+  return `/api/par/reports/audit-package.zip${parReportQuery(filters)}`;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Format cents as MDL currency string, e.g. 700000 → "7.000,00 MDL" */

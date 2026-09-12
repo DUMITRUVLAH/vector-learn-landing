@@ -22,8 +22,7 @@ import {
   FileDown,
   SlidersHorizontal,
   X,
-  AlertTriangle,
-} from "lucide-react";
+  AlertTriangle, Archive} from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { Link } from "@/router/HashRouter";
 import {
@@ -38,6 +37,7 @@ import {
   getParReportCycleTime,
   getParReportExportUrl,
   getParReportExportXlsxUrl,
+  getParAuditPackageUrl,
   getParReportCurrencyBreakdown,
   getParReportByEvent,
   getParReportBreakdown,
@@ -597,6 +597,8 @@ export function ParReports() {
 
   const exportUrl = getParReportExportUrl(filters);
   const exportXlsxUrl = getParReportExportXlsxUrl(filters);
+  // VM5-08: auditul nu cere o cerere, cere o perioadă — un singur fișier cu tot ce ține de ea.
+  const auditPackageUrl = getParAuditPackageUrl(filters);
 
   return (
     <AppShell
@@ -617,6 +619,16 @@ export function ParReports() {
           >
             <Download className="h-4 w-4" aria-hidden />
             Export Excel
+          </a>
+          <a
+            href={auditPackageUrl}
+            download="pachet-audit.zip"
+            className="inline-flex h-10 max-sm:h-11 items-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground no-underline transition-colors hover:bg-accent/10 hover:no-underline"
+            aria-label="Descarcă pachetul pentru audit (registru + dosare + acte)"
+            title="Registrul perioadei, dosarul fiecărei cereri și actele atașate, într-un singur fișier"
+          >
+            <Archive className="h-4 w-4" aria-hidden />
+            Pachet audit
           </a>
           <a
             href={exportUrl}

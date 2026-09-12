@@ -183,7 +183,7 @@ export async function buildDosar(parId: string, tenantId: string): Promise<Built
 };
 
   // ── Dynamic import of pdf-lib (NEVER top-level — exceljs outage lesson) ──
-  const { PDFDocument } = await import("pdf-lib");
+  const { PDFDocument, StandardFonts } = await import("pdf-lib");
 
   /** Octeții unui atașament, din data-URL sau de la URL extern. */
   const attachmentBytes = async (fileUrl: string): Promise<Uint8Array> => {
@@ -352,8 +352,23 @@ export async function buildDosar(parId: string, tenantId: string): Promise<Built
     if (!piece || piece.type === "note") continue;
 
     if (piece.type === "pdf") {
-      const pages = await dosar.copyPages(piece.pages, piece.pages.getPageIndices());
-      for (const pg of pages) dosar.addPage(pg);
+      // Un PDF pe care pdf-lib nu-l poate citi (trunchiat la încărcare, generat de un scaner
+      // exotic, protejat) NU are voie să pice tot dosarul — exact regula pe care imaginile o aveau
+      // deja mai jos. Înainte, un singur act stricat făcea ca „Descarcă dosarul" să dea eroare pe
+      // toată cererea, fără să spună care document e de vină. Pagina-separator rămâne, deci
+      // dosarul arată în continuare CE act lipsește.
+      try {
+        const pages = await dosar.copyPages(piece.pages, piece.pages.getPageIndices());
+        for (const pg of pages) dosar.addPage(pg);
+      } catch {
+        // Pagina de avertisment se scrie cu fontul standard, care nu are diacritice românești —
+        // de aceea textul e ales să nu aibă nevoie de ele. Pagina-separator dinaintea ei poartă
+        // deja numele actului, scris cu Tinos, deci omul vede DESPRE CE document e vorba.
+        const page = dosar.addPage([595, 842]);
+        page.drawText("Document PDF ilizibil: nu a putut fi inclus in dosar.", {
+          x: 50, y: 780, size: 11, font: await dosar.embedFont(StandardFonts.Helvetica),
+        });
+      }
       continue;
     }
 

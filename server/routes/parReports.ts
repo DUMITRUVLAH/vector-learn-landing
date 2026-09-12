@@ -30,6 +30,8 @@ import {
 import { users } from "../db/schema/users";
 import { tenants } from "../db/schema/tenants";
 import { buildParWorkbook } from "../lib/par/excelExport";
+import { buildDosar } from "../lib/par/buildDosar";
+import { parAttachments as parAttachmentsTable } from "../db/schema/par";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { requirePARRole } from "../middleware/requirePARRole";
 import { accessiblePayerIds, accessibleProjectIds } from "../lib/par/projectScope";
@@ -747,5 +749,149 @@ parReportsRoutes.get("/export.xlsx", async (c) => {
 
   c.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   c.header("Content-Disposition", `attachment; filename="par-export.xlsx"`);
+  return c.body(buffer);
+});
+
+
+// ─── VM5-08: pachetul pentru audit ───────────────────────────────────────────
+//
+// „Pentru audit e important să vadă cererea de plată, PAR, factura — data, suma etc."
+//
+// Auditorul nu cere O cerere, cere o PERIOADĂ. Până acum asta însemna zeci de descărcări separate:
+// un export Excel de aici, un dosar de acolo. Ruta asta împachetează tot ce ține de intervalul
+// cerut, într-un singur fișier:
+//
+//   registru.xlsx            — un rând per cerere: dată, sumă, beneficiar, status, plată
+//   dosare/PAR-xxxx.pdf      — dosarul complet (fișa aprobărilor + formular + acte), generat live
+//   documente/PAR-xxxx/…     — actele atașate, cu numele lor, în ordinea dosarului
+//   CUPRINS.txt              — după ce criterii s-a făcut pachetul și când
+//
+// Filtrele sunt ACELEAȘI ca ale rapoartelor (`buildReportWhere`), inclusiv aria utilizatorului:
+// un par_admin restrâns pe un proiect nu poate extrage alt proiect.
+parReportsRoutes.get("/audit-package.zip", async (c) => {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+  const q = parseReportQuery(c);
+  const where = buildReportWhere(tenantId, q, c.get("parReportScope"));
+
+  const parRows = await db
+    .select({
+      id: parRequests.id,
+      requestNo: parRequests.requestNo,
+      dateOfRequest: parRequests.dateOfRequest,
+      requestorName: users.name,
+      departmentName: parDepartments.name,
+      projectName: parProjects.name,
+      budgetCode: parBudgetCodes.code,
+      purpose: parRequests.purpose,
+      chargeTo: parRequests.chargeTo,
+      status: parRequests.status,
+      totalEstimatedCents: parRequests.totalEstimatedCents,
+      currency: parRequests.currency,
+      totalMdlCents: parRequests.totalMdlCents,
+      submittedAt: parRequests.submittedAt,
+      approvedAt: parRequests.approvedAt,
+      paidAt: parRequests.paidAt,
+    })
+    .from(parRequests)
+    .leftJoin(users, eq(users.id, parRequests.requestedByUserId))
+    .leftJoin(parDepartments, eq(parDepartments.id, parRequests.departmentId))
+    .leftJoin(parProjects, eq(parProjects.id, parRequests.projectId))
+    .leftJoin(parBudgetCodes, eq(parBudgetCodes.id, parRequests.budgetCodeId))
+    .where(where)
+    .orderBy(parRequests.dateOfRequest);
+  const pars = Array.isArray(parRows) ? parRows : (parRows as { rows?: typeof parRows }).rows ?? [];
+
+  // Plafon: un pachet cu mii de cereri ar depăși memoria funcției și oricum nu se descarcă.
+  // Auditul cere trimestre, nu istoria completă — iar mesajul spune ce filtru să strângă.
+  if (pars.length > 300) {
+    return c.json(
+      { error: "too_many", detail: `Intervalul are ${pars.length} cereri. Restrânge perioada sau proiectul (maximum 300 într-un pachet).` },
+      400
+    );
+  }
+  if (pars.length === 0) {
+    return c.json({ error: "empty", detail: "Nicio cerere în intervalul cerut." }, 404);
+  }
+
+  const lineRows = await db
+    .select({
+      requestNo: parRequests.requestNo,
+      position: parLineItems.position,
+      description: parLineItems.description,
+      quantity: parLineItems.quantity,
+      unit: parLineItems.unit,
+      unitPriceCents: parLineItems.unitPriceCents,
+      lineTotalCents: parLineItems.lineTotalCents,
+      currency: parRequests.currency,
+    })
+    .from(parLineItems)
+    .innerJoin(parRequests, eq(parRequests.id, parLineItems.parId))
+    .where(where)
+    .orderBy(parRequests.requestNo, parLineItems.position);
+  const lines = Array.isArray(lineRows) ? lineRows : (lineRows as { rows?: typeof lineRows }).rows ?? [];
+
+  const [tenant] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId));
+
+  const { default: JSZip } = await import("jszip");
+  const zip = new JSZip();
+
+  zip.file(
+    "registru.xlsx",
+    await buildParWorkbook({
+      orgName: tenant?.name ?? "Organizație",
+      pars: pars as Parameters<typeof buildParWorkbook>[0]["pars"],
+      lines: lines as Parameters<typeof buildParWorkbook>[0]["lines"],
+    })
+  );
+
+  const safe = (v: string) => v.replace(/[/:*?"<>|\\]/g, "_").replace(/\s+/g, "_").slice(0, 80);
+
+  for (const par of pars) {
+    const folder = safe(par.requestNo ?? par.id.slice(0, 8));
+
+    // Dosarul complet al cererii, generat live — fișa aprobărilor, formularul și actele, în ordine.
+    // Nu depinde de cineva care a apăsat cândva „descarcă": se construiește acum, din date.
+    try {
+      const dosar = await buildDosar(par.id, tenantId);
+      if (dosar) zip.file(`dosare/${folder}.pdf`, dosar.bytes);
+    } catch {
+      // O cerere al cărei dosar nu se poate genera nu are voie să oprească tot pachetul.
+    }
+
+    // Actele originale, cu numele lor real — pe lângă dosarul PDF. Auditul cere uneori factura ca
+    // fișier (s-o deschidă în programul lui de contabilitate), nu o pagină într-un PDF combinat.
+    const attachmentRows = await db
+      .select({ fileName: parAttachmentsTable.fileName, fileUrl: parAttachmentsTable.fileUrl, kind: parAttachmentsTable.kind })
+      .from(parAttachmentsTable)
+      .where(and(eq(parAttachmentsTable.tenantId, tenantId), eq(parAttachmentsTable.parId, par.id)));
+    for (const att of attachmentRows) {
+      const m = att.fileUrl?.match(/^data:([^;]+);base64,(.*)$/s);
+      if (!m) continue;
+      zip.file(`documente/${folder}/${safe(att.fileName || att.kind || "document")}`, m[2], { base64: true });
+    }
+  }
+
+  const criterii = [
+    `Pachet audit — ${tenant?.name ?? "Organizație"}`,
+    `Generat: ${new Date().toLocaleString("ro-MD", { timeZone: "Europe/Chisinau" })}`,
+    `Cereri incluse: ${pars.length}`,
+    q.from ? `De la: ${q.from}` : null,
+    q.to ? `Până la: ${q.to}` : null,
+    q.project_id ? `Proiect: ${q.project_id}` : null,
+    q.payer_id ? `Plătitor: ${q.payer_id}` : null,
+    q.status ? `Status: ${q.status}` : null,
+    "",
+    "Conținut:",
+    "  registru.xlsx     — un rând per cerere (dată, sumă, beneficiar, status, plată) + poziții",
+    "  dosare/           — dosarul complet al fiecărei cereri (fișa aprobărilor + formular + acte)",
+    "  documente/        — actele atașate fiecărei cereri, cu numele lor original",
+  ].filter(Boolean).join("\n");
+  zip.file("CUPRINS.txt", criterii);
+
+  const buffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  const stamp = new Date().toISOString().slice(0, 10);
+  c.header("Content-Type", "application/zip");
+  c.header("Content-Disposition", `attachment; filename="pachet-audit-${stamp}.zip"`);
   return c.body(buffer);
 });
