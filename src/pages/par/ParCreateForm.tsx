@@ -1344,6 +1344,49 @@ export function ParCreateForm() {
     } finally { setUploadingFile(false); }
   };
 
+  /**
+   * Golește rechizitele beneficiarului — numele, codul fiscal, IBAN-ul, banca, adresa,
+   * administratorul și patenta — plus legătura cu beneficiarul salvat.
+   */
+  const clearPayeeFields = useCallback(() => {
+    setVendorId("");
+    setPayeeName("");
+    setPayeeIdnp("");
+    setPayeeIban("");
+    setPayeeBank("");
+    setPayeeBic("");
+    setPayeeLegalAddress("");
+    setPayeeAdministrator("");
+    setPayeeIsPatentHolder(false);
+    setPayeePatentSeries("");
+    setPayeePatentValidUntil("");
+    setPayeeFilledFrom(null);
+  }, []);
+
+  /**
+   * Schimbarea metodei de completare a beneficiarului.
+   *
+   * Owner, 2026-09-12: „dacă eu am pus întâi la companii salvate și după caut din surse publice,
+   * să fie goale rândurile, nu să le șterg manual." Fiecare metodă vine cu propriile date, deci
+   * pornește pe curat — altfel rămân pe ecran rechizitele altcuiva, iar cererea pleacă cu IBAN-ul
+   * beneficiarului precedent peste numele celui nou. E cel mai scump fel de greșeală din formularul
+   * ăsta: banii chiar pleacă.
+   *
+   * Excepția e „Introdu manual": el ia locul vechii opțiuni „— Introducere manuală —" și
+   * înseamnă „las ce e aici și corectez", nu „începe de la zero". Doar desface legătura cu
+   * beneficiarul salvat, ca modificările să nu pară ale lui.
+   */
+  const choosePayeeMethod = useCallback((method: "manual" | "registry" | "ai" | "saved") => {
+    if (method === payeeMethod) return;
+    setPayeeMethod(method);
+    setRegistryQuery("");
+    setRegistryResults([]);
+    setRegistryError(null);
+    setVendorSearch("");
+    if (method !== "manual") clearPayeeFields();
+    else setVendorId("");
+  }, [payeeMethod, clearPayeeFields]);
+
   /** Cum se numește lista de beneficiari salvați — urmează tipul ales mai sus, ca să nu scrie
       „companii" peste o listă de persoane fizice. */
   const savedPayeeLabel = payeeType === "juridic" ? "Companii salvate" : "Beneficiari salvați";
@@ -2121,11 +2164,11 @@ export function ParCreateForm() {
               {/* „Introdu manual" ia locul vechii opțiuni „— Introducere manuală —" din lista de
                   beneficiari salvați: desface legătura cu beneficiarul ales, lăsând câmpurile
                   completate ca punct de plecare. */}
-              <PayeeMethodButton icon={Pencil} label="Introdu manual" active={payeeMethod === "manual"} onClick={() => { setPayeeMethod("manual"); setVendorId(""); }} />
-              <PayeeMethodButton icon={BookOpen} label={savedPayeeLabel} active={payeeMethod === "saved"} onClick={() => setPayeeMethod("saved")} />
-              <PayeeMethodButton icon={Sparkles} label="Din document (AI)" active={payeeMethod === "ai"} onClick={() => setPayeeMethod("ai")} />
+              <PayeeMethodButton icon={Pencil} label="Introdu manual" active={payeeMethod === "manual"} onClick={() => choosePayeeMethod("manual")} />
+              <PayeeMethodButton icon={BookOpen} label={savedPayeeLabel} active={payeeMethod === "saved"} onClick={() => choosePayeeMethod("saved")} />
+              <PayeeMethodButton icon={Sparkles} label="Din document (AI)" active={payeeMethod === "ai"} onClick={() => choosePayeeMethod("ai")} />
               {payeeType === "juridic" && (
-                <PayeeMethodButton icon={Building2} label="Caută companii din surse publice" active={payeeMethod === "registry"} onClick={() => setPayeeMethod("registry")} />
+                <PayeeMethodButton icon={Building2} label="Caută companii din surse publice" active={payeeMethod === "registry"} onClick={() => choosePayeeMethod("registry")} />
               )}
             </div>
           </div>

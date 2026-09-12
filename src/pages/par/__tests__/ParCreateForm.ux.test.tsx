@@ -98,6 +98,47 @@ describe("ParCreateForm — UX (feedback owner 2026-07-19)", () => {
     expect(screen.getByRole("option", { name: /Vector Academy/i })).toBeInTheDocument();
   });
 
+  /**
+   * Owner, 2026-09-12: „dacă eu am pus întâi la companii salvate și după caut din surse publice,
+   * să fie goale rândurile, nu să le șterg manual."
+   */
+  it("schimbarea metodei pornește pe curat — rechizitele beneficiarului anterior nu rămân pe ecran", async () => {
+    vi.spyOn(parApi, "listVendors").mockResolvedValue({
+      items: [{ id: "v-1", name: "S.C. Vector Academy S.R.L.", idnp: "1002600020555", iban: "MD24AG000225100013104168", bank: "BC Maib S.A.", active: true }],
+    });
+    render(<ParCreateForm />);
+    await screen.findByRole("button", { name: /adaugă articol/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /companii salvate/i }));
+    fireEvent.click(await screen.findByRole("option", { name: /Vector Academy/i }));
+    expect((screen.getByLabelText(/Denumire companie/i) as HTMLInputElement).value).toContain("Vector Academy");
+    expect((screen.getByLabelText(/^IBAN/i, { selector: "input" }) as HTMLInputElement).value).toBe("MD24AG000225100013104168");
+
+    // Trec pe căutarea în surse publice → câmpurile se golesc singure.
+    fireEvent.click(screen.getByRole("button", { name: /caută companii din surse publice/i }));
+    await waitFor(() =>
+      expect((screen.getByLabelText(/Denumire companie/i) as HTMLInputElement).value).toBe("")
+    );
+    expect((screen.getByLabelText(/^IBAN/i, { selector: "input" }) as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText(/^IDNO/i, { selector: "input" }) as HTMLInputElement).value).toBe("");
+  });
+
+  /** „Introdu manual" e excepția: înseamnă „corectez ce e aici", nu „șterge tot". */
+  it("„Introdu manual” păstrează ce e completat — doar desface legătura cu beneficiarul salvat", async () => {
+    vi.spyOn(parApi, "listVendors").mockResolvedValue({
+      items: [{ id: "v-1", name: "S.C. Vector Academy S.R.L.", idnp: "1002600020555", iban: "MD24AG000225100013104168", bank: "BC Maib S.A.", active: true }],
+    });
+    render(<ParCreateForm />);
+    await screen.findByRole("button", { name: /adaugă articol/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /companii salvate/i }));
+    fireEvent.click(await screen.findByRole("option", { name: /Vector Academy/i }));
+    fireEvent.click(screen.getByRole("button", { name: /introdu manual/i }));
+
+    expect((screen.getByLabelText(/Denumire companie/i) as HTMLInputElement).value).toContain("Vector Academy");
+    expect((screen.getByLabelText(/^IBAN/i, { selector: "input" }) as HTMLInputElement).value).toBe("MD24AG000225100013104168");
+  });
+
   it("„Caută companii din surse publice” apare doar la persoană juridică", async () => {
     render(<ParCreateForm />);
     await screen.findByRole("button", { name: /adaugă articol/i });
