@@ -751,7 +751,23 @@ parRoutes.get("/", async (c) => {
   const hasElevatedRole = roles.some((r) =>
     ["approver", "finance", "par_admin"].includes(r)
   );
-  if (!hasElevatedRole) {
+  // VM5-02: „Ale proiectului" — un coleg de pe același proiect vede cererile TRIMISE ale celorlalți
+  // (ex. preia de la cineva plecat în concediu). Nu e implicit: filtrul îl cere explicit, iar lista
+  // rămâne „ale mele" pentru cine nu-l apasă. Regula de fond e aceeași ca la `GET /:id`
+  // (`lib/par/visibility.ts`), ca lista și fișa să nu spună lucruri diferite despre aceeași cerere.
+  const wantsProjectScope = c.req.query("scope") === "project";
+  if (!hasElevatedRole && wantsProjectScope) {
+    const myProjects = await accessibleProjectIds(user.id, tenantId, user.role);
+    const projectClause = myProjects === null
+      ? ne(parRequests.status, "draft")
+      : myProjects.length
+        ? and(ne(parRequests.status, "draft"), inArray(parRequests.projectId, myProjects))
+        : undefined;
+    const mineOrProject = projectClause
+      ? or(eq(parRequests.requestedByUserId, user.id), projectClause)
+      : eq(parRequests.requestedByUserId, user.id);
+    if (mineOrProject) conditions.push(mineOrProject);
+  } else if (!hasElevatedRole) {
     conditions.push(eq(parRequests.requestedByUserId, user.id));
   } else if (!isWorkspaceAdminRole(user.role)) {
     // Others' unsubmitted drafts stay private (same rule as GET /:id above).
@@ -921,7 +937,7 @@ parRoutes.get("/", async (c) => {
     const paymentByPar = new Map(paymentRows.map((p) => [p.parId, p]));
 
     return c.json({
-      requests: result.map((r) => {
+      requests: maskPayeeForOthers(result, user.id, hasElevatedRole).map((r) => {
         const kinds = kindsByPar.get(r.id) ?? [];
         const payment = paymentByPar.get(r.id);
         return {
@@ -943,7 +959,7 @@ parRoutes.get("/", async (c) => {
     });
   }
 
-  return c.json({ requests: result, total: countRow?.n ?? result.length });
+  return c.json({ requests: maskPayeeForOthers(result, user.id, hasElevatedRole), total: countRow?.n ?? result.length });
 });
 
 const parStatusValues = [
@@ -979,9 +995,14 @@ parRoutes.get("/:id", async (c) => {
     ["approver", "finance", "par_admin"].includes(r)
   );
 
-  // Requestors can only see their own PARs (unless elevated role)
+  // Requestors can only see their own PARs (unless elevated role) — cu o singură excepție, VM5-02:
+  // colegii de pe ACELAȘI PROIECT văd cererile TRIMISE ale celorlalți („dacă pleacă în concediu").
+  // Regula stă în `canViewPar`, ca lista și fișa să spună același lucru despre aceeași cerere;
+  // rechizitele beneficiarului rămân ascunse mai jos, prin `canSeePayee`.
   if (!hasElevatedRole && par.requestedByUserId !== user.id) {
-    return c.json(await parDenial(user, "not_requestor"), 404);
+    if (!(await canViewPar(user, tenantId, par))) {
+      return c.json(await parDenial(user, "not_requestor"), 404);
+    }
   }
   // CORE §1/§9: a DRAFT has not been routed to anyone yet, so no approver or finance officer is
   // "the routed approver" — yet an elevated role could open it and read the payee block (name,
@@ -1767,6 +1788,35 @@ parRoutes.post("/:id/submit", async (c) => {
     no_quote_selected: noQuoteSelected,
   });
 });
+
+/**
+ * VM5-02 (GDPR): pe cererile altcuiva, rechizitele beneficiarului nu se văd.
+ *
+ * Aceeași regulă ca `GET /:id` (`canSeePayee`): autorul și rolurile elevate le văd, restul nu.
+ * Contează pentru lista „Ale proiectului": transparența cerută era „ce a cerut colegul și unde a
+ * ajuns", nu IBAN-urile furnizorilor lui.
+ */
+function maskPayeeForOthers<T extends { requestedByUserId: string | null; payeeName?: string | null }>(
+  rows: T[],
+  viewerId: string,
+  hasElevatedRole: boolean
+): T[] {
+  if (hasElevatedRole) return rows;
+  return rows.map((r) =>
+    r.requestedByUserId === viewerId
+      ? r
+      : {
+          ...r,
+          vendorId: null,
+          payeeIdnp: null,
+          payeeIban: null,
+          payeeBank: null,
+          payeeIsPatentHolder: false,
+          payeePatentSeries: null,
+          payeePatentValidUntil: null,
+        }
+  );
+}
 
 /**
  * VF-202: returns { over: true, overByCents } if the budget code is over-allocated (committed +

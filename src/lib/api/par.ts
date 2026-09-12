@@ -521,6 +521,11 @@ export interface ListParFilters {
   max_total?: number;
   /** VM1-10b: attach the dossier summary (doc count/kinds + payment order/proof) to every row. */
   include_docs?: boolean;
+  /**
+   * VM5-02: „mine" (implicit) = doar cererile mele · „project" = și cele TRIMISE ale colegilor de pe
+   * aceleași proiecte, fără rechizitele beneficiarilor lor.
+   */
+  scope?: "mine" | "project";
 }
 
 /**
@@ -563,6 +568,8 @@ export async function listPar(
   if (filters.date_to) params.set("date_to", filters.date_to);
   if (filters.min_total != null) params.set("min_total", String(filters.min_total));
   if (filters.max_total != null) params.set("max_total", String(filters.max_total));
+  // VM5-02: „Ale proiectului" — cererile trimise ale colegilor de pe aceleași proiecte.
+  if (filters.scope) params.set("scope", filters.scope);
   const qs = params.toString();
   return api(`/api/par${qs ? `?${qs}` : ""}`, { signal: opts.signal });
 }

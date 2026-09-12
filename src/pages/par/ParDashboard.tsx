@@ -143,6 +143,12 @@ export function ParDashboard() {
   // VF-105: filters are restored from localStorage so they survive a reload.
   const saved = loadSavedFilters();
   const [statusFilter, setStatusFilter] = useState<ParStatus | "">(urlFilters.status || saved.status || "");
+  /**
+   * VM5-02: „Ale mele" (implicit) sau „Ale proiectului" — cererile TRIMISE ale colegilor de pe
+   * aceleași proiecte. Transparența cerută în ședință („dacă pleacă în concediu"), fără să schimbe
+   * ce vede omul când intră: implicit rămâne lista lui.
+   */
+  const [scope, setScope] = useState<"mine" | "project">("mine");
   const [projectFilter, setProjectFilter] = useState<string>(urlFilters.projectId || "");
   const [projectsMap, setProjectsMap] = useKeepAliveState<Record<string, string>>("par.projectsMap", {});
   const [purposeFilter, setPurposeFilter] = useState<ParPurpose | "">(saved.purpose ?? "");
@@ -278,6 +284,7 @@ export function ParDashboard() {
             date_to: dateTo || undefined,
             min_total: Number.isFinite(minN) ? Math.round(minN * 100) : undefined,
             max_total: Number.isFinite(maxN) ? Math.round(maxN * 100) : undefined,
+            scope: scope === "project" ? "project" : undefined,
           },
           { signal: controller.signal }
         );
@@ -569,6 +576,17 @@ export function ParDashboard() {
         {!loading && !error && (
           <div className="space-y-6">
             {/* My Requests */}
+            {/* VM5-02: comutatorul de arie. Stă lângă filtrele de status, nu într-un meniu — e o
+                întrebare pe care omul și-o pune des („ce a depus colegul cât am lipsit?"). */}
+            <Tabs
+              aria-label="Aria cererilor"
+              value={scope}
+              onChange={(v) => setScope(v as "mine" | "project")}
+              tabs={[
+                { value: "mine", label: "Ale mele" },
+                { value: "project", label: "Ale proiectului" },
+              ]}
+            />
             <Tabs
               aria-label="Cererile mele"
               value={statusFilter === "draft" || statusFilter === "changes_requested" ? statusFilter : "all"}

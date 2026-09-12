@@ -36,7 +36,9 @@ export async function canViewPar(
 ): Promise<boolean> {
   if (par.requestedByUserId === user.id) return true;
   const roles = await getUserPARRoles(user.id, tenantId);
-  if (!roles.some((r) => (ELEVATED_PAR_ROLES as readonly string[]).includes(r))) return false;
+  if (!roles.some((r) => (ELEVATED_PAR_ROLES as readonly string[]).includes(r))) {
+    return canViewAsProjectColleague(user, tenantId, par, roles);
+  }
   if (par.status === "draft" && !isWorkspaceAdminRole(user.role ?? undefined)) return false;
   return parInUserScope(user, tenantId, par);
 }
@@ -55,4 +57,31 @@ async function parInUserScope(
   // Nici proiect, nici plătitor (plătitor șters): nu există arie de verificat, deci o văd doar
   // cei fără restricție de arie — exact ca în listă, unde un asemenea rând nu prinde niciun filtru.
   return (await accessiblePayerIds(user.id, tenantId, user.role ?? undefined)) === null;
+}
+
+/**
+ * VM5-02: „Persoanele să poată vedea inclusiv lista de PAR-uri elaborate de co-echiperi — ex. dacă
+ * pleacă în concediu etc. (transparența în workplace)."
+ *
+ * Aria e PROIECTUL (decizia owner-ului, 10.09.2026), nu departamentul și nu toată organizația. Trei
+ * limite care fac transparența suportabilă:
+ *
+ *   - **doar cererile TRIMISE**: o ciornă n-a fost arătată nimănui, deci rămâne a autorului;
+ *   - **doar cererile legate de un proiect**: una la nivel de plătitor n-are „echipă" de partajat;
+ *   - **doar pentru cine e în PAR**: cineva fără niciun rol PAR n-are ce căuta în cereri.
+ *
+ * Rechizitele beneficiarului (IBAN, IDNP, patenta) NU se văd: `GET /:id` le ascunde pentru oricine
+ * nu e autor sau rol elevat, iar lista face la fel. Transparența cerută era „ce a cerut colegul și
+ * unde a ajuns", nu datele bancare ale furnizorilor lui.
+ */
+async function canViewAsProjectColleague(
+  user: { id: string; role?: string | null },
+  tenantId: string,
+  par: { status?: string | null; projectId: string | null },
+  roles: readonly string[]
+): Promise<boolean> {
+  if (roles.length === 0) return false;
+  if (!par.projectId) return false;
+  if (par.status === "draft") return false;
+  return mayAccessProject(user.id, tenantId, par.projectId, user.role ?? undefined);
 }
