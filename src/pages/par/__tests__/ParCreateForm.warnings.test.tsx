@@ -142,6 +142,40 @@ describe("ParCreateForm — atenționări care nu blochează", () => {
     await waitFor(() => expect(parApi.submitPar).toHaveBeenCalledTimes(1));
   });
 
+  /**
+   * VM5-19: „dacă un prestator într-un an trece de suma X … să apară un semn al exclamării când
+   * faci PAR că trebuie de făcut tender." Semnul stă lângă alegerea beneficiarului, pe formular —
+   * nu într-un raport pe care nimeni nu-l deschide în timp ce scrie cererea.
+   */
+  it("semnalează când prestatorul trece pragul anual de achiziții", async () => {
+    vi.spyOn(parApi, "checkTenderThreshold").mockResolvedValue({
+      applies: true, exceeds: true, warn: true, cleared: false,
+      thresholdCents: 10_000_000, yearToDateCents: 9_500_000, projectedCents: 10_150_000,
+      overByCents: 150_000, year: 2026, vendorKey: "n:bordei viorica", vendorName: "Bordei Viorica",
+    });
+
+    await fillWithSuspiciousIban();
+
+    await waitFor(
+      () => expect(screen.getByText(/e nevoie de procedură \(tender\)/i)).toBeInTheDocument(),
+      { timeout: 3000 }
+    );
+    // Semnalează, nu blochează: butonul de trimitere rămâne acolo.
+    expect(screen.getByRole("button", { name: /trimite cererea pentru aprobare/i })).toBeEnabled();
+  });
+
+  it("nu semnalează nimic când prestatorul e sub prag", async () => {
+    vi.spyOn(parApi, "checkTenderThreshold").mockResolvedValue({
+      applies: true, exceeds: false, warn: false, cleared: false,
+      thresholdCents: 10_000_000, yearToDateCents: 100_000, projectedCents: 250_000,
+      overByCents: 0, year: 2026, vendorKey: "n:bordei viorica", vendorName: "Bordei Viorica",
+    });
+
+    await fillWithSuspiciousIban();
+    await new Promise((r) => setTimeout(r, 900));
+    expect(screen.queryByText(/e nevoie de procedură \(tender\)/i)).toBeNull();
+  });
+
   it("avertismentul e AFIȘAT, nu ascuns — omul vede ce anume nu corespunde", async () => {
     await fillWithSuspiciousIban();
     // Mesajul apare lângă câmp fără să fie nevoie de vreo apăsare.

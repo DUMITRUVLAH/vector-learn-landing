@@ -596,27 +596,41 @@ liberă și doar semnalizată. Item-ul nu mai are conținut propriu.
 
 ---
 
-## VM5-19 — Pragul pentru necesar de achiziții (contorizare pe categorii) — 🔴 55%
+## VM5-19 — Pragul de achiziții per prestator — ✅ livrat (regula a venit pe 12.09.2026)
 
-**Cerința:** „De văzut când se trece pragul pentru necesar de achiziții și să știm că trebuie
-achiziții — necesitatea de contorizare a cheltuielilor, plăților per categorii."
+**Cerința din ședință:** „De văzut când se trece pragul pentru necesar de achiziții, și să știm că
+trebuie achiziții - necesitatea de contorizare a cheltuielilor, plăților per categorii".
 
-**Stare azi:** există **un singur prag**, global pe organizație
-(`par_settings.micro_purchase_threshold_cents`, `server/db/schema/par.ts:436`) și el afectează doar
-numărul de trepte de aprobare. Rapoartele însumează deja pe cod bugetar / proiect / eveniment /
-plătitor / furnizor, cu `angajat` (committed) și `plătit` separat — deci **datele pentru contorizare
-există**, ceea ce lipsește e regula.
+**Regula, dată de owner pe 12.09.2026 — asta lipsea:**
+> „dacă un prestator într-un an trece de suma X, nu contează euro, usd, mdl, să apară un semn al
+> exclamării când faci PAR că trebuie de făcut tender. Și finance manager poate după să bifeze că
+> s-a făcut și după să nu apară pentru acel an."
 
-**De ce nu încep:** trei necunoscute, fiecare schimbând implementarea:
-1. **Pe ce se contorizează** — cod bugetar? tip de achiziție (vezi VM5-10)? furnizor? Legea
-   achizițiilor numără de regulă pe **obiect similar și pe furnizor**, nu pe linie bugetară.
-2. **Pe ce perioadă** — an calendaristic, an de proiect, 12 luni mobile?
-3. **Ce cifre** — pragurile concrete (din regulamentul intern sau din lege).
+Deci contorizarea NU e pe categorii de cheltuieli, ci **pe prestator, pe an calendaristic** — exact
+ce caută să prindă o procedură de achiziție: fracționarea, adică zece plăți mici către același
+furnizor în loc de una mare.
 
-**Ce construiesc imediat ce am cele trei răspunsuri (~1 zi):** contor pe categoria aleasă + două
-avertismente — unul **la creare** („cu această cerere treci de pragul de X pe categoria Y → e nevoie
-de procedură de achiziție, atașează 3 oferte") și unul **în raport** (linii colorate care se apropie
-de prag), plus un raport „cheltuieli pe categorii vs praguri" pentru revizuirea periodică.
+**Ce s-a construit:**
+- **Setare** în administrare: „Prag achiziții per prestator / an (MDL)". `0` = regula e oprită.
+- **Numărare peste monede**: sumele se compară pe echivalentul în lei înghețat la depunere
+  (`total_mdl_cents`, curs BNM), iar cererea în curs de scriere se convertește la cursul zilei.
+  Fără asta, trei plăți de 5.000 EUR ar părea mai mici decât una de 100.000 MDL.
+- **Identitatea prestatorului** ține și când nu e în registru: id-ul din registru, altfel codul
+  fiscal, altfel numele normalizat — ca „SRL Alfa" și „Alfa S.R.L." să nu fie doi furnizori.
+- **Semnul apare pe cererea care trece pragul**, nu pe următoarea: totalul anului include cererea
+  curentă. Avertizează, nu blochează.
+- **Bifa finanțelor** (`finance` sau `par_admin`, niciodată solicitantul) stă pe fișa cererii care a
+  ridicat semnul, cu loc pentru nr. procedurii. După ea, semnul nu mai apare pentru acel prestator
+  până la finalul anului — dar suma continuă să se numere, iar bifa rămâne cu cine a pus-o și când.
+- Ce NU se numără: ciornele, cererile respinse și cele anulate.
+
+**AC acoperite de teste:** 15 pe regulă (`tenderThreshold.test.ts`), 10 pe rute
+(`par-tender-threshold.routes.test.ts`), 2 pe formular. Inclusiv: fracționarea nu scapă, exact pe
+prag nu e depășire, bifa e doar pentru anul ei, a doua bifă nu creează rând nou, iar o bifă pusă din
+greșeală se poate retrage.
+
+**Rămâne deschis:** pragurile în cifre (câți lei) le pui tu în administrare — codul nu presupune
+nicio valoare implicită.
 
 ---
 

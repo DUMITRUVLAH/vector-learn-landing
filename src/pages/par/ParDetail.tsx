@@ -84,6 +84,7 @@ import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
 import { parAccessMessage, type ParAccessMessage } from "@/lib/par/accessMessage";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { checkTenderThreshold, clearTender, type TenderCheck } from "@/lib/api/par";
 import {
   collectDocumentMismatches,
   formatCheckValue,
@@ -362,6 +363,7 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
   const [showApproveWarning, setShowApproveWarning] = useState(false);
   const mismatches = collectDocumentMismatches(par.attachments ?? []);
 
+
   const doSubmit = async () => {
     setBusy("submit");
     setError(null);
@@ -392,6 +394,24 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
 
   const isAdmin = currentRoles.includes("par_admin");
   const isFinance = currentRoles.includes("finance") || isAdmin;
+
+  /**
+   * VM5-19: „finance manager poate după să bifeze că s-a făcut [tenderul] și după să nu apară
+   * pentru acel an". Bifa stă aici, pe cererea care a ridicat semnul — nu într-un ecran separat pe
+   * care ar trebui să-l caute cineva.
+   */
+  const [tender, setTender] = useState<TenderCheck | null>(null);
+  const [tenderNote, setTenderNote] = useState("");
+  const [tenderBusy, setTenderBusy] = useState(false);
+  useEffect(() => {
+    if (!isFinance) return;
+    checkTenderThreshold({
+      vendorId: par.vendorId, payeeIdnp: par.payeeIdnp, payeeName: par.payeeName,
+      amountCents: par.totalEstimatedCents, currency: par.currency, excludeParId: par.id,
+    })
+      .then(setTender)
+      .catch(() => setTender(null));
+  }, [par.id, par.vendorId, par.payeeIdnp, par.payeeName, par.totalEstimatedCents, par.currency, isFinance]);
   const isRequestor = par.requestedByUserId === currentUserId;
 
   const status = par.status;
@@ -737,6 +757,57 @@ function ActionPanel({ par, currentUserId, currentRoles, onRefresh }: ActionPane
       <div className="flex flex-wrap gap-2">
         {actions}
       </div>
+
+      {/* VM5-19: prestatorul a trecut pragul anual — finanțele bifează procedura, aici, pe cererea
+          care a ridicat semnul. Suma rămâne numărată; bifa scutește de avertisment, nu de evidență. */}
+      {isFinance && tender?.warn && (
+        <div className="space-y-2 rounded-lg border border-warning/50 bg-warning/5 p-3">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+            <div className="text-sm">
+              <p className="font-semibold text-foreground">Prag de achiziție depășit în {tender.year}</p>
+              <p className="text-xs text-muted-foreground">
+                {tender.vendorName || "Prestatorul"} a ajuns la {fmtCurrency(tender.projectedCents, "MDL")} anul acesta,
+                peste pragul de {fmtCurrency(tender.thresholdCents, "MDL")}. Dacă procedura de achiziție e făcută,
+                bifeaz-o: semnul nu mai apare la cererile către acest prestator până la finalul anului.
+              </p>
+            </div>
+          </div>
+          <input
+            type="text"
+            value={tenderNote}
+            onChange={(e) => setTenderNote(e.target.value)}
+            placeholder="Nr. procedurii / unde e dosarul (opțional)"
+            aria-label="Referința procedurii de achiziție"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            disabled={tenderBusy || !tender.vendorKey}
+            onClick={async () => {
+              if (!tender.vendorKey) return;
+              setTenderBusy(true);
+              try {
+                await clearTender({
+                  vendor_key: tender.vendorKey,
+                  vendor_id: par.vendorId,
+                  vendor_name: tender.vendorName ?? par.payeeName,
+                  year: tender.year,
+                  note: tenderNote.trim() || null,
+                });
+                setTender({ ...tender, cleared: true, warn: false });
+                setTenderNote("");
+              } finally {
+                setTenderBusy(false);
+              }
+            }}
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-warning px-3 py-2 text-sm font-medium text-warning-foreground hover:bg-warning/90 disabled:opacity-60"
+          >
+            {tenderBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
+            Procedura de achiziție e făcută pentru {tender.year}
+          </button>
+        </div>
+      )}
 
       {/* VM5-05: ce nu corespunde între documente și cerere — înainte de semnătură, nu după. */}
       {showApproveWarning && (

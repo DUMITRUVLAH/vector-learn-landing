@@ -91,6 +91,7 @@ import { parTemplatesRoutes } from "./routes/parTemplates";
 import { parAuditRoutes } from "./routes/parAudit";
 import { parActivityRoutes } from "./routes/parActivity";
 import { parDelegationsRoutes } from "./routes/parDelegations";
+import { parTenderRoutes } from "./routes/parTender";
 import { parPurchaseOrderRoutes } from "./routes/parPurchaseOrders";
 import { parReceiptsRoutes } from "./routes/parReceipts";
 
@@ -336,6 +337,8 @@ app.route("/api/par/reports", parReportsRoutes);
 app.route("/api/par/audit", parAuditRoutes);
 app.route("/api/par/activity", parActivityRoutes);
 app.route("/api/par/delegations", parDelegationsRoutes);
+// VM5-19: pragul anual per prestator + bifa de tender a finanțelor.
+app.route("/api/par/tender", parTenderRoutes);
 app.route("/api/par", parPaymentsRoutes);
 app.route("/api/par", parApprovalsRoutes);
 app.route("/api/par", parTimelineRoutes);

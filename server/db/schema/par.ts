@@ -444,6 +444,15 @@ export const parSettings = pgTable(
     onboardingComplete: boolean("onboarding_complete").notNull().default(false),
     /** VF-505: when true, payments are blocked unless the 3-way match (PO + receipt + amount) passes. */
     enforceThreeWayMatch: boolean("enforce_three_way_match").notNull().default(false),
+    /**
+     * VM5-19: cât poate primi UN prestator într-un an calendaristic înainte să fie nevoie de
+     * procedură de achiziție (tender). 0 = regula e oprită.
+     *
+     * Se ține în LEI, deși cererile pot fi în orice monedă: comparația se face pe echivalentul MDL
+     * înghețat la depunere (`total_mdl_cents`, curs BNM), exact ca rapoartele. Altfel trei plăți de
+     * 5.000 EUR ar părea mai mici decât una de 100.000 MDL.
+     */
+    tenderThresholdCents: integer("tender_threshold_cents").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1046,3 +1055,42 @@ export type ParReceiptLine = typeof parReceiptLines.$inferSelect;
 export type NewParReceiptLine = typeof parReceiptLines.$inferInsert;
 export type ParEvent = typeof parEvents.$inferSelect;
 export type NewParEvent = typeof parEvents.$inferInsert;
+
+
+/**
+ * VM5-19: „finance manager poate după să bifeze că s-a făcut [tenderul] și după să nu apară pentru
+ * acel an".
+ *
+ * Un rând = un prestator, un an, o bifă. Cât timp există rândul, avertismentul de prag nu mai apare
+ * la cererile către acel prestator în acel an — dar suma continuă să se numere, iar bifa rămâne în
+ * istoric cu cine a pus-o și când (auditul întreabă exact asta: „unde e procedura?").
+ *
+ * `vendorKey` e identitatea prestatorului chiar și când nu e în registru: `v:<id>` pentru un
+ * prestator salvat, `i:<IDNO>` când plata e către cineva nesalvat dar identificat fiscal, altfel
+ * `n:<nume normalizat>`. Vezi `server/lib/par/tenderThreshold.ts`.
+ */
+export const parTenderClearances = pgTable(
+  "par_tender_clearances",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    /** Prestatorul din registru, când plata merge către unul salvat. */
+    vendorId: uuid("vendor_id").references(() => parVendors.id, { onDelete: "set null" }),
+    /** Identitatea după care se numără — vezi antetul. */
+    vendorKey: varchar("vendor_key", { length: 300 }).notNull(),
+    /** Numele afișat la momentul bifei (prestatorul poate fi redenumit ulterior). */
+    vendorName: varchar("vendor_name", { length: 300 }),
+    /** Anul calendaristic acoperit de procedură. */
+    year: integer("year").notNull(),
+    clearedByUserId: uuid("cleared_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    /** Nr. procedurii, linkul către dosarul de achiziție — ce scrie omul care bifează. */
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tenantIdx: index("par_tender_clearances_tenant_idx").on(t.tenantId),
+    uniqueVendorYear: uniqueIndex("par_tender_clearances_vendor_year_uq").on(t.tenantId, t.vendorKey, t.year),
+  })
+);

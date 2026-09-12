@@ -529,7 +529,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | VM5-16b | low | Schimbarea manuală a statutului (owner: „încă nu știu") | 🔴 needs-decision | [catalog](specs/VM5-catalog.md) |
 | VM5-17 | high | Ștampilă de timp pe formularul PAR printat (depusă / aprobată) | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-18 | — | „Data din urmă" = dată din trecut → se contopește în VM5-06 | ✅ închis | [catalog](specs/VM5-catalog.md) |
-| VM5-19 | high | Praguri de achiziții + contorizare pe categorii | 🔴 lipsesc pragurile | [catalog](specs/VM5-catalog.md) |
+| VM5-19 | high | Prag anual **per prestator** + bifa de tender a finanțelor | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-20 | high | Buget de eveniment **pe linii** (confirmat): planificat vs angajat vs plătit | 🟢 todo | [catalog](specs/VM5-catalog.md) |
 | VM5-21 | medium | Șabloanele de documente ale Anei, încărcate în DOCGEN | 🟡 blocat pe fișiere | [catalog](specs/VM5-catalog.md) |
 

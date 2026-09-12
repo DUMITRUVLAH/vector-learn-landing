@@ -1179,6 +1179,8 @@ export interface ParSettings {
   requestNoPrefix: string;
   onboardingComplete?: boolean;
   enforceThreeWayMatch?: boolean;
+  /** VM5-19: pragul anual per prestator, în bani (MDL). 0 = regula e oprită. */
+  tenderThresholdCents?: number;
 }
 
 export interface ParMember {
@@ -2110,4 +2112,58 @@ export interface ParActivityItem {
 
 export async function listParActivity(limit = 8): Promise<{ items: ParActivityItem[] }> {
   return api<{ items: ParActivityItem[] }>(`/api/par/activity?limit=${limit}`);
+}
+
+// ─── VM5-19: pragul anual per prestator (tender) ──────────────────────────────
+
+export interface TenderCheck {
+  applies: boolean;
+  exceeds: boolean;
+  warn: boolean;
+  cleared: boolean;
+  thresholdCents: number;
+  yearToDateCents: number;
+  projectedCents: number;
+  overByCents: number;
+  year: number;
+  vendorKey?: string | null;
+  vendorName?: string | null;
+  clearedAt?: string | null;
+  clearedNote?: string | null;
+}
+
+/**
+ * Cât s-a angajat anul acesta către prestatorul cererii și dacă se trece pragul de achiziție.
+ * `amountCents` se trimite în LEI (echivalentul cererii), fiindcă pragul e anual și peste monede.
+ */
+export async function checkTenderThreshold(params: {
+  vendorId?: string | null;
+  payeeIdnp?: string | null;
+  payeeName?: string | null;
+  amountCents: number;
+  /** Moneda sumei de mai sus; serverul o convertește în lei, ca pragul să fie peste monede. */
+  currency?: string | null;
+  year?: number;
+  excludeParId?: string | null;
+}): Promise<TenderCheck> {
+  const q = new URLSearchParams();
+  if (params.vendorId) q.set("vendor_id", params.vendorId);
+  if (params.payeeIdnp) q.set("payee_idnp", params.payeeIdnp);
+  if (params.payeeName) q.set("payee_name", params.payeeName);
+  q.set("amount_cents", String(Math.max(0, Math.round(params.amountCents))));
+  if (params.currency) q.set("currency", params.currency);
+  if (params.year) q.set("year", String(params.year));
+  if (params.excludeParId) q.set("exclude_par_id", params.excludeParId);
+  return api<TenderCheck>(`/api/par/tender/check?${q.toString()}`);
+}
+
+/** Finanțele bifează că procedura de achiziție s-a făcut pentru prestator + an. */
+export async function clearTender(payload: {
+  vendor_key: string;
+  vendor_id?: string | null;
+  vendor_name?: string | null;
+  year: number;
+  note?: string | null;
+}): Promise<{ id: string }> {
+  return api("/api/par/tender/clearances", { method: "POST", body: JSON.stringify(payload) });
 }

@@ -23,6 +23,8 @@ const settingsSchema = z.object({
   requestNoPrefix: z.string().min(1).max(20).optional(),
   onboardingComplete: z.boolean().optional(),
   enforceThreeWayMatch: z.boolean().optional(),
+  // VM5-19: pragul anual per prestator, în bani (MDL). 0 = regula e oprită.
+  tenderThresholdCents: z.number().int().min(0).max(1_000_000_000).optional(),
 });
 
 /** GET /api/par/settings */
@@ -44,6 +46,7 @@ parSettingsRoutes.get("/", async (c) => {
       requestNoPrefix: "PAR",
       onboardingComplete: false,
       enforceThreeWayMatch: false,
+      tenderThresholdCents: 0,
     });
   }
 

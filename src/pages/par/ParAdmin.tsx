@@ -702,6 +702,7 @@ function ParSettingsForm({ onManagePayers }: ParSettingsFormProps) {
         pdfHelpUrl: settings.pdfHelpUrl ?? null,
         requestNoPrefix: settings.requestNoPrefix ?? "PAR",
         enforceThreeWayMatch: settings.enforceThreeWayMatch ?? false,
+        tenderThresholdCents: settings.tenderThresholdCents ?? 0,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -875,6 +876,38 @@ function ParSettingsForm({ onManagePayers }: ParSettingsFormProps) {
             />
             <p className="text-xs text-muted-foreground mt-1">
               Actual: {formatMDL(settings.microPurchaseThresholdCents ?? 1000000)}
+            </p>
+          </div>
+
+          {/* VM5-19: pragul de la care un prestator are nevoie de procedură de achiziție. */}
+          <div>
+            <label htmlFor="par-tender-threshold" className="text-sm font-medium text-foreground block mb-1">
+              Prag achiziții per prestator / an (MDL)
+            </label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Când totalul plăților către ACELAȘI prestator depășește pragul într-un an calendaristic,
+              cererile noi către el arată un semn: e nevoie de procedură de achiziție. Se numără peste
+              monede — sumele în EUR/USD se compară la cursul BNM. Finanțele pot bifa că procedura s-a
+              făcut, iar semnul dispare până la finalul anului. <strong>0 = regula e oprită.</strong>
+            </p>
+            <Input
+              id="par-tender-threshold"
+              type="number"
+              min={0}
+              step={1000}
+              value={(settings.tenderThresholdCents ?? 0) / 100}
+              onChange={(e) =>
+                setSettings((s) => ({
+                  ...s,
+                  tenderThresholdCents: Math.round(parseFloat(e.target.value || "0") * 100),
+                }))
+              }
+              aria-label="Prag achiziții per prestator pe an, în MDL"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              {(settings.tenderThresholdCents ?? 0) > 0
+                ? `Actual: ${formatMDL(settings.tenderThresholdCents ?? 0)} per prestator, pe an`
+                : "Oprit — nu se verifică pragul de achiziții"}
             </p>
           </div>
         </>

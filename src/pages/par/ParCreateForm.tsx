@@ -39,6 +39,7 @@ import {
   listDepartments, listPayers, listProjects, listEvents, listBudgetCodes, listVendors, createVendor,
   getMyParProfile, createEvent, createBudgetCode,
   searchRegistryCompanies, getBudgetCodeBalance,
+  checkTenderThreshold, type TenderCheck,
   listParTemplates, saveParTemplate, instantiateParTemplate,
   listPar, duplicatePar,
   prefillParFromDocument,
@@ -416,6 +417,11 @@ export function ParCreateForm() {
 
   // Feature 2: Budget balance
   const [budgetBalance, setBudgetBalance] = useState<BudgetCodeBalance | null>(null);
+  /**
+   * VM5-19: cât s-a angajat anul acesta către prestatorul ales și dacă cererea asta trece pragul
+   * de la care e nevoie de procedură de achiziție. Verificarea e non-blocantă: semnalează, nu oprește.
+   */
+  const [tender, setTender] = useState<TenderCheck | null>(null);
   const [budgetBalanceLoading, setBudgetBalanceLoading] = useState(false);
 
   // Feature 3: Templates
@@ -788,6 +794,32 @@ export function ParCreateForm() {
     return created.id;
   }, [parId, dateOfRequest, requestorTitle, requestorCode, departmentId, payerId, dateNeeded,
     projectId, eventId, budgetCodeId, budgetCodeNote, purpose, chargeTo, patchHeader]);
+
+  /**
+   * VM5-19: „dacă un prestator într-un an trece de suma X … să apară un semn al exclamării când
+   * faci PAR că trebuie de făcut tender."
+   *
+   * Se verifică atunci când se știe CINE primește banii și CÂT — cu o mică întârziere, ca să nu
+   * plece o cerere la fiecare tastă în câmpul de nume. Cererea curentă se exclude din suma anului
+   * (altfel s-ar număra de două ori la editarea unei ciorne deja salvate).
+   */
+  useEffect(() => {
+    const hasPayee = !!(vendorId || payeeIdnp.trim() || payeeName.trim());
+    if (!hasPayee || totalCents <= 0) { setTender(null); return; }
+    const timer = setTimeout(() => {
+      checkTenderThreshold({
+        vendorId: vendorId || null,
+        payeeIdnp: payeeIdnp || null,
+        payeeName: payeeName || null,
+        amountCents: totalCents,
+        currency,
+        excludeParId: parId || null,
+      })
+        .then(setTender)
+        .catch(() => setTender(null));
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [vendorId, payeeIdnp, payeeName, totalCents, currency, parId]);
 
   // Feature 2: fetch budget balance when a budget code is selected
   useEffect(() => {
@@ -2122,6 +2154,32 @@ export function ParCreateForm() {
         {/* 12 Payee */}
         <Section n="12" title="Beneficiar plată" icon={Wallet}>
           {fieldErrors.payee && <p className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="h-3 w-3" aria-hidden />{fieldErrors.payee}</p>}
+
+          {/* VM5-19: semnul exclamării când prestatorul trece pragul anual — aici, lângă alegerea
+              beneficiarului, nu într-un raport pe care nimeni nu-l deschide când face cererea.
+              Avertizează, nu blochează: decizia de a face procedura e a omului, nu a formularului. */}
+          {tender?.warn && (
+            <div className="flex items-start gap-2 rounded-lg border border-warning/50 bg-warning/10 px-3 py-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" aria-hidden />
+              <div className="text-sm">
+                <p className="font-semibold text-foreground">
+                  Pragul de achiziție e depășit — e nevoie de procedură (tender)
+                </p>
+                <p className="text-muted-foreground">
+                  Cu această cerere, {tender.vendorName || "prestatorul"} ajunge la{" "}
+                  <strong className="text-foreground">{fmtMoney(tender.projectedCents, "MDL")}</strong> în {tender.year},
+                  peste pragul de {fmtMoney(tender.thresholdCents, "MDL")} (din care {fmtMoney(tender.yearToDateCents, "MDL")} deja angajați).
+                  Poți trimite cererea; după ce procedura e făcută, finanțele o bifează și semnul nu mai apare anul acesta.
+                </p>
+              </div>
+            </div>
+          )}
+          {tender?.applies && tender.exceeds && tender.cleared && (
+            <p className="flex items-center gap-1.5 text-xs text-success">
+              <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
+              Prestatorul e peste pragul anual, dar procedura de achiziție e deja bifată pentru {tender.year}.
+            </p>
+          )}
 
           {/* Pas 1: Tip beneficiar (fizic / juridic) — se alege întâi. */}
           <div className="flex items-center gap-2" role="group" aria-label="Tip beneficiar">

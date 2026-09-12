@@ -68,6 +68,13 @@ vi.mock("@/lib/api/par", () => ({
   // Panoul de 3-way match se montează pe statusurile de finanțe (in_finance/paid) și își cere
   // singur datele — fără el în mock, orice test pe aceste statusuri crapă în efect, nu în aserție.
   getThreeWayMatch: vi.fn().mockResolvedValue(null),
+  // VM5-19: fișa întreabă dacă prestatorul a trecut pragul anual. Fără mock, finanțele ar deschide
+  // o fișă care cade în efect — nu în aserție — și testele VM4 ar pica fără legătură cu ele.
+  checkTenderThreshold: vi.fn().mockResolvedValue({
+    applies: false, exceeds: false, warn: false, cleared: false,
+    thresholdCents: 0, yearToDateCents: 0, projectedCents: 0, overByCents: 0, year: 2026,
+  }),
+  clearTender: vi.fn().mockResolvedValue({ id: "clearance-1" }),
   formatMDL: (c: number) => `${(c / 100).toLocaleString()} MDL`,
   PAR_STATUS_LABELS: {
     draft: "Ciornă",

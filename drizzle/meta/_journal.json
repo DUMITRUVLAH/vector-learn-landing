@@ -1093,6 +1093,13 @@
       "when": 1787000200013,
       "tag": "0156_par_eticheta_slot_nu_e_nume",
       "breakpoints": true
+    },
+    {
+      "idx": 157,
+      "version": "7",
+      "when": 1787000201013,
+      "tag": "0157_par_prag_tender_per_prestator",
+      "breakpoints": true
     }
   ]
 }
