@@ -28,6 +28,23 @@ import {
   tenants,
 } from "../db/schema";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
+import { buildObjectPath, downloadObject, uploadObject } from "../lib/storage/objectStore";
+import { contentDisposition } from "../lib/http/contentDisposition";
+
+/** Bucket privat cu documentele urcate de clienți prin portalul financiar. */
+const CLIENT_PORTAL_BUCKET = "fin-client-portal";
+
+/**
+ * Ce știe lista despre un document — metadate, niciodată conținutul. `storagePath` e înadins
+ * absent: pe rândurile vechi acolo stă data-URL-ul base64 al fișierului întreg.
+ */
+interface ClientPortalDocumentSummary {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedAt: Date;
+}
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -167,15 +184,73 @@ adminRouter.get("/admin/documents", async (c) => {
   if (tokenRows.length === 0) return c.json({ documents: [] });
 
   const tokenIds = tokenRows.map((r) => r.id);
-  const docs = normalizeRows<typeof finClientPortalDocuments.$inferSelect>(
+  // Proiecție explicită, fără `storagePath`: acolo stătea conținutul fișierului (base64, pe
+  // rândurile vechi), deci un `select()` complet trimitea fiecare document încărcat vreodată de
+  // client la simpla afișare a listei. Lista are nevoie de nume, tip, mărime — nu de conținut.
+  const docs = normalizeRows<ClientPortalDocumentSummary>(
     await db
-      .select()
+      .select({
+        id: finClientPortalDocuments.id,
+        originalName: finClientPortalDocuments.originalName,
+        mimeType: finClientPortalDocuments.mimeType,
+        sizeBytes: finClientPortalDocuments.sizeBytes,
+        uploadedAt: finClientPortalDocuments.uploadedAt,
+      })
       .from(finClientPortalDocuments)
       .where(sql`${finClientPortalDocuments.portalTokenId} = ANY(ARRAY[${sql.join(tokenIds.map((id) => sql`${id}::uuid`))}])`)
       .orderBy(sql`${finClientPortalDocuments.uploadedAt} DESC`)
   );
 
   return c.json({ documents: docs });
+});
+
+/**
+ * GET /admin/documents/:id/download — servește un document urcat de client.
+ *
+ * De când conținutul stă în Storage, lista nu-l mai trimite inline, deci trebuie o cale prin care
+ * documentul chiar poate fi deschis. Serverul descarcă obiectul și îl trimite mai departe: URL-ul
+ * semnat nu pleacă niciodată la browser, deci accesul rămâne verificat aici, pe tenant.
+ * Rândurile vechi, cu data-URL base64 în `storage_path`, se servesc la fel — decodate pe loc.
+ */
+adminRouter.get("/admin/documents/:id/download", async (c) => {
+  const id = c.req.param("id");
+  const { tenantId } = c.get("user");
+  if (!UUID_REGEX.test(id)) return c.json({ error: "invalid_id" }, 400);
+
+  const rows = normalizeRows<{
+    originalName: string; mimeType: string; storagePath: string; inObjectStore: boolean;
+  }>(
+    await db
+      .select({
+        originalName: finClientPortalDocuments.originalName,
+        mimeType: finClientPortalDocuments.mimeType,
+        storagePath: finClientPortalDocuments.storagePath,
+        inObjectStore: finClientPortalDocuments.inObjectStore,
+      })
+      .from(finClientPortalDocuments)
+      .where(and(eq(finClientPortalDocuments.id, id), eq(finClientPortalDocuments.tenantId, tenantId)))
+      .limit(1)
+  );
+  const doc = rows[0];
+  if (!doc) return c.json({ error: "not_found" }, 404);
+
+  let bytes: Buffer;
+  if (doc.inObjectStore) {
+    try {
+      bytes = await downloadObject(CLIENT_PORTAL_BUCKET, doc.storagePath);
+    } catch {
+      return c.json({ error: "document_unavailable" }, 502);
+    }
+  } else {
+    const match = doc.storagePath.match(/^data:[^;]+;base64,(.*)$/s);
+    if (!match) return c.json({ error: "document_unavailable" }, 422);
+    bytes = Buffer.from(match[1], "base64");
+  }
+
+  c.header("Content-Type", doc.mimeType || "application/octet-stream");
+  c.header("Content-Disposition", contentDisposition("attachment", doc.originalName, "document"));
+  c.header("X-Content-Type-Options", "nosniff");
+  return c.body(new Uint8Array(bytes));
 });
 
 // ─── Public router (no auth — token param required) ──────────────────────────
@@ -317,10 +392,18 @@ publicRouter.post("/documents", async (c) => {
     return c.json({ error: "Format neacceptat (PDF, JPG, PNG, WebP)" }, 415);
   }
 
-  // Store as base64 in DB (filesystem storage deferred — no FS in Vercel serverless)
+  // Conținutul merge în Supabase Storage, nu în Postgres. Înainte se scria aici ca data-URL
+  // base64 („filesystem storage deferred — no FS in Vercel serverless"), dar alternativa la
+  // filesystem nu e baza de date: 10 MB de fișier deveneau ~13,4 MB de rând, iar planul are 500 MB
+  // de bază de date cu totul. În DB rămâne doar calea obiectului.
   const arrayBuffer = await file.arrayBuffer();
-  const base64Content = Buffer.from(arrayBuffer).toString("base64");
-  const storagePath = `data:${file.type};base64,${base64Content}`;
+  let storagePath: string;
+  try {
+    storagePath = buildObjectPath(record.tenantId, file.name);
+    await uploadObject(CLIENT_PORTAL_BUCKET, storagePath, Buffer.from(arrayBuffer), file.type);
+  } catch {
+    return c.json({ error: "Documentul nu a putut fi salvat. Încearcă din nou." }, 503);
+  }
 
   const inserted = normalizeRows<typeof finClientPortalDocuments.$inferSelect>(
     await db
@@ -332,6 +415,7 @@ publicRouter.post("/documents", async (c) => {
         mimeType: file.type,
         sizeBytes: file.size,
         storagePath,
+        inObjectStore: true,
       })
       .returning()
   );
@@ -354,9 +438,18 @@ publicRouter.get("/documents", async (c) => {
   const record = await validatePortalToken(token);
   if (!record) return c.json({ error: "invalid_or_expired_token" }, 401);
 
-  const docs = normalizeRows<typeof finClientPortalDocuments.$inferSelect>(
+  // Răspunsul selecta oricum doar metadate, dar `select()` citea și `storagePath` — adică pe
+  // rândurile vechi conținutul base64 al fiecărui document, transferat din bază la server ca să
+  // fie aruncat imediat. Proiecția explicită oprește citirea de la sursă.
+  const docs = normalizeRows<ClientPortalDocumentSummary>(
     await db
-      .select()
+      .select({
+        id: finClientPortalDocuments.id,
+        originalName: finClientPortalDocuments.originalName,
+        mimeType: finClientPortalDocuments.mimeType,
+        sizeBytes: finClientPortalDocuments.sizeBytes,
+        uploadedAt: finClientPortalDocuments.uploadedAt,
+      })
       .from(finClientPortalDocuments)
       .where(
         and(
@@ -368,15 +461,7 @@ publicRouter.get("/documents", async (c) => {
       .limit(50)
   );
 
-  return c.json({
-    documents: docs.map((d) => ({
-      id: d.id,
-      originalName: d.originalName,
-      mimeType: d.mimeType,
-      sizeBytes: d.sizeBytes,
-      uploadedAt: d.uploadedAt,
-    })),
-  });
+  return c.json({ documents: docs });
 });
 
 // ─── Combined export ──────────────────────────────────────────────────────────

@@ -1,12 +1,13 @@
 /**
  * CLIENTPORTAL-003: Documents uploaded by a client through the financial portal.
- * Stores file metadata + content (base64 in storagePath for Vercel serverless compatibility).
+ * Ține metadatele fișierului; conținutul stă în Supabase Storage, nu în Postgres.
  */
 import {
   pgTable,
   uuid,
   varchar,
   integer,
+  boolean,
   text,
   timestamp,
   index,
@@ -27,8 +28,15 @@ export const finClientPortalDocuments = pgTable(
     originalName: varchar("original_name", { length: 500 }).notNull(),
     mimeType: varchar("mime_type", { length: 100 }).notNull(),
     sizeBytes: integer("size_bytes").notNull(),
-    /** Base64 data URL (data:<mime>;base64,<content>) or a filesystem path */
+    /**
+     * Moștenire: putea fi un data-URL base64 („data:<mime>;base64,…"), adică fișierul stătea în
+     * Postgres. Din 2026-09-12 conține calea obiectului din Supabase Storage (bucket
+     * `fin-client-portal`), iar conținutul nu mai atinge baza de date. Rândurile vechi rămân
+     * base64 până le urcă backfill-ul; `objectPath` de mai jos spune care e care.
+     */
     storagePath: text("storage_path").notNull(),
+    /** true = `storagePath` e o cale de obiect în Storage; false/null = data-URL base64 vechi. */
+    inObjectStore: boolean("in_object_store").notNull().default(false),
     uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

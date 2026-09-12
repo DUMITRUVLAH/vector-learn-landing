@@ -110,7 +110,14 @@ export interface ParAttachment {
   kindOther?: string | null;
   uploadedBy: string | null;
   createdAt: string;
-  fileUrl: string;
+  /**
+   * Tipul real al fișierului, coloană în baza de date de când conținutul stă în Storage.
+   * Înainte se deducea din prefixul data-URL-ului, ceea ce obliga listarea să care fișierul
+   * întreg doar ca să se afle dacă e PDF sau imagine. Null pe rândurile vechi, încă nemutate —
+   * `previewKind` cade atunci pe extensia din nume.
+   */
+  mimeType?: string | null;
+  sizeBytes?: number | null;
   analysis?: string | null;
 }
 

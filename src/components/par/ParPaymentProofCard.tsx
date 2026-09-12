@@ -37,10 +37,6 @@ export interface ParPaymentProofCardProps {
   onChanged: () => void;
 }
 
-/** Tipul real e în prefixul data-URL-ului („data:application/pdf;base64,…"); lista nu îl trimite separat. */
-function mimeOf(fileUrl: string | null | undefined): string {
-  return fileUrl?.match(/^data:([^;]+)[;,]/)?.[1] ?? "";
-}
 
 /** Ce poate randa browserul pe loc; restul primesc butonul de deschidere. */
 function previewKind(fileName: string, mime?: string | null): "pdf" | "image" | "none" {
@@ -159,7 +155,7 @@ export function ParPaymentProofCard({
 
       {/* Documentul, vizibil pe loc — nu doar numele lui. */}
       {proofs.map((att) => {
-        const kind = previewKind(att.fileName, mimeOf(att.fileUrl));
+        const kind = previewKind(att.fileName, att.mimeType);
         const url = parAttachmentPreviewUrl(parId, att.id);
         return (
           <div key={att.id} className="space-y-2 rounded-md border border-border p-2">

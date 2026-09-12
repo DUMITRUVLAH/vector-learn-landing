@@ -319,9 +319,9 @@ describe("ParFinanceQueue — VM3-01 (feedback Violeta)", () => {
     vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({ items: [vm3Item()], total: 1 });
     const listSpy = vi.spyOn(parApi, "listAttachments").mockResolvedValue({
       items: [
-        { id: "att-1", fileName: "factura-42.pdf", kind: "invoice", uploadedBy: null, createdAt: "", fileUrl: "data:application/pdf;base64,x" },
-        { id: "att-2", fileName: "contract-42.pdf", kind: "contract", uploadedBy: null, createdAt: "", fileUrl: "data:application/pdf;base64,y" },
-        { id: "att-3", fileName: "certificat.pdf", kind: "other", kindOther: "Certificat de conformitate", uploadedBy: null, createdAt: "", fileUrl: "data:application/pdf;base64,z" },
+        { id: "att-1", fileName: "factura-42.pdf", kind: "invoice", uploadedBy: null, createdAt: "", mimeType: "application/pdf" },
+        { id: "att-2", fileName: "contract-42.pdf", kind: "contract", uploadedBy: null, createdAt: "", mimeType: "application/pdf" },
+        { id: "att-3", fileName: "certificat.pdf", kind: "other", kindOther: "Certificat de conformitate", uploadedBy: null, createdAt: "", mimeType: "application/pdf" },
       ],
     });
 

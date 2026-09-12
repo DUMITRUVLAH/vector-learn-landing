@@ -59,7 +59,7 @@ import {
   type PayPayload,
 } from "@/lib/api/par";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_LABEL, attachmentTooLargeMessage } from "@/lib/par/attachmentLimits";
-import { openParAttachment } from "@/lib/parFiles";
+import { viewParAttachment } from "@/lib/parFiles";
 import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
 import { useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
@@ -756,7 +756,7 @@ function AttachmentsModal({ par, onClose }: AttachmentsModalProps) {
                 <div className="flex-1 min-w-0">
                   <button
                     type="button"
-                    onClick={() => void openParAttachment(att.fileUrl, att.fileName, par.id, att.id)}
+                    onClick={() => viewParAttachment(par.id, att.id, att.fileName)}
                     className="text-sm text-primary hover:underline truncate block max-w-full text-left"
                     aria-label={`Deschide ${att.fileName}`}
                   >

@@ -9,7 +9,9 @@
  *   GET    /api/par/:id/attachments            → list attachments for PAR
  *   DELETE /api/par/:id/attachments/:attId     → delete attachment (author, draft/changes_requested only)
  *
- * Reuses the same base64 data-URL storage pattern as lead/contract attachments.
+ * Conținutul fișierelor stă în Supabase Storage (bucket `par-attachments`), nu în Postgres.
+ * Rândurile de dinainte de 2026-09-12 mai au data-URL base64 în `file_url` și rămân citibile;
+ * `loadAttachmentBytes` alege singur sursa.
  */
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
@@ -30,6 +32,13 @@ import { randomUUID } from "node:crypto";
 import { mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { attachmentPreviewUrl } from "../lib/par/attachmentUrls";
 import { contentDisposition } from "../lib/http/contentDisposition";
+import {
+  PAR_ATTACHMENT_BUCKET,
+  loadAttachmentBytes,
+  parseDataUrl,
+  storeAttachmentBytes,
+} from "../lib/par/attachmentStore";
+import { removeObjects } from "../lib/storage/objectStore";
 
 export const parAttachmentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parAttachmentsRoutes.use("*", requireAuth);
@@ -218,6 +227,11 @@ parAttachmentsRoutes.get("/:parId/attachments", async (c) => {
       kindOther: parAttachments.kindOther,
       uploadedBy: parAttachments.uploadedBy,
       createdAt: parAttachments.createdAt,
+      // Tipul și mărimea sunt coloane reale de la mutarea în Storage. Înainte interfața le
+      // deducea din prefixul data-URL-ului, ceea ce însemna că lista trebuia să care conținutul
+      // fișierului doar ca să se afle dacă e PDF sau imagine.
+      mimeType: parAttachments.mimeType,
+      sizeBytes: parAttachments.sizeBytes,
       analysis: parAttachments.analysis,
     })
     .from(parAttachments)
@@ -258,10 +272,7 @@ async function analyzeAttachmentAgainstPar(
   attachment: typeof parAttachments.$inferSelect,
   actorUserId: string,
 ) {
-  const match = attachment.fileUrl.match(/^data:([^;]+);base64,(.*)$/s);
-  if (!match) throw new Error("analysis_unavailable");
-  const mime = match[1];
-  const buffer = Buffer.from(match[2], "base64");
+  const { bytes: buffer, mime } = await loadAttachmentBytes(attachment);
   // ACEEAȘI citire ca la prefill (`readUploadedDoc`). Varianta locală de dinainte făcea
   // `toString("utf8")` pe orice nu era PDF sau imagine: un .docx/.xlsx e un ZIP, deci extractorul
   // primea gunoi binar și raporta „sumă: document 0" pe un act care scria 6000 MDL. Un PDF scanat
@@ -368,11 +379,15 @@ parAttachmentsRoutes.get("/:parId/attachments/:attId/preview", async (c) => {
     eq(parAttachments.id, attId), eq(parAttachments.parId, parId), eq(parAttachments.tenantId, tenantId),
   ));
   if (!attachment) return c.json({ error: "not_found" }, 404);
-  if (/^https?:\/\//i.test(attachment.fileUrl)) return c.redirect(attachment.fileUrl);
-  const match = attachment.fileUrl.match(/^data:([^;]+);base64,(.*)$/s);
-  if (!match) return c.json({ error: "preview_unavailable" }, 422);
-  const bytes = Buffer.from(match[2], "base64");
-  c.header("Content-Type", match[1]);
+  if (attachment.fileUrl && /^https?:\/\//i.test(attachment.fileUrl)) return c.redirect(attachment.fileUrl);
+  let bytes: Buffer;
+  let mime: string;
+  try {
+    ({ bytes, mime } = await loadAttachmentBytes(attachment));
+  } catch {
+    return c.json({ error: "preview_unavailable" }, 422);
+  }
+  c.header("Content-Type", mime);
   // Numele merge prin RFC 6266: un antet HTTP nu poate transporta „ă", iar înainte orice document
   // botezat românește arunca la runtime, iar vizualizatorul arăta „eroarea 500" (incident 10.09.2026).
   c.header("Content-Disposition", contentDisposition("inline", attachment.fileName, "atasament"));
@@ -382,7 +397,7 @@ parAttachmentsRoutes.get("/:parId/attachments/:attId/preview", async (c) => {
   // browserul unui singur utilizator, verificarea de acces s-a făcut deja mai sus.
   c.header("Cache-Control", "private, max-age=3600");
   c.header("X-Content-Type-Options", "nosniff");
-  return c.body(bytes);
+  return c.body(new Uint8Array(bytes));
 });
 
 // ─── POST /:parId/attachments ─────────────────────────────────────────────────
@@ -462,12 +477,30 @@ parAttachmentsRoutes.post(
       );
     }
 
+    // Conținutul pleacă în Storage; în baza de date rămâne doar calea. Dacă Storage-ul nu e
+    // configurat sau refuză, upload-ul EȘUEAZĂ — nu ne întoarcem în tăcere la base64 în DB, că
+    // exact asta a umplut baza. Un 503 clar e mai bun decât o regresie invizibilă.
+    const raw = parseDataUrl(body.file_url);
+    if (!raw) return c.json({ error: "invalid_file", detail: "Fișierul nu a ajuns întreg." }, 400);
+    let stored;
+    try {
+      stored = await storeAttachmentBytes(tenantId, body.file_name, raw.bytes, effectiveMime);
+    } catch {
+      return c.json(
+        { error: "storage_unavailable", detail: "Fișierul nu a putut fi salvat. Încearcă din nou." },
+        503
+      );
+    }
+
     const [attachment] = await db
       .insert(parAttachments)
       .values({
         tenantId,
         parId,
-        fileUrl: body.file_url,
+        storagePath: stored.storagePath,
+        mimeType: stored.mimeType,
+        sizeBytes: stored.sizeBytes,
+        fileUrl: null,
         fileName: body.file_name,
         kind: body.kind,
         // Numele liber are sens doar pentru „Altul" — pe restul tipurilor ar dubla eticheta.
@@ -545,6 +578,12 @@ parAttachmentsRoutes.delete("/:parId/attachments/:attId", async (c) => {
     .returning();
 
   if (deleted.length === 0) return c.json({ error: "not_found" }, 404);
+
+  // Rândul a plecat; obiectul trebuie să plece după el, altfel fișierele șterse din interfață ar
+  // ocupa în continuare spațiu în Storage la nesfârșit. Best-effort înadins: dacă ștergerea din
+  // Storage pică, rândul e deja dus și cererea nu trebuie să eșueze pentru un obiect orfan.
+  const orphans = deleted.map((row) => row.storagePath).filter((p): p is string => !!p);
+  if (orphans.length) await removeObjects(PAR_ATTACHMENT_BUCKET, orphans);
 
   return c.json({ deleted: true });
 });

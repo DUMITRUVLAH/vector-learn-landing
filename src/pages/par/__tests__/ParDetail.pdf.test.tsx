@@ -158,7 +158,7 @@ describe("ParDetailPage — T-PAR-115-1 [blocant]: render without crash", () => 
       kind: "par_pdf",
       uploadedBy: null,
       createdAt: new Date().toISOString(),
-      fileUrl: "data:application/pdf;base64,MOCK",
+      mimeType: "application/pdf",
     });
   });
 
@@ -220,7 +220,7 @@ describe("ParDetailPage — T-PAR-115-2 [normal]: PDF download + attachment", ()
       kind: "par_pdf",
       uploadedBy: null,
       createdAt: new Date().toISOString(),
-      fileUrl: "data:application/pdf;base64,MOCK",
+      mimeType: "application/pdf",
     });
   });
 

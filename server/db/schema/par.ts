@@ -731,10 +731,19 @@ export const parAttachments = pgTable(
     parId: uuid("par_id")
       .notNull()
       .references(() => parRequests.id, { onDelete: "cascade" }),
-    // base64 data URLs (megabytes) are stored here — MUST be text, not varchar(2000), or any real
-    // file upload fails with "value too long for type character varying(2000)".
-    fileUrl: text("file_url").notNull(),
+    // Calea obiectului în Supabase Storage (bucket `par-attachments`), forma
+    // `<tenantId>/<timestamp>-<random>-<nume>`. Sursa de adevăr pentru orice atașament nou.
+    storagePath: text("storage_path"),
+    // Moștenire: data-URL base64 pentru rândurile de dinainte de mutarea în Storage (2026-09-12).
+    // Rămâne text (nu varchar(2000)) cât timp mai există rânduri vechi — altfel orice citire a
+    // lor ar pica. Se golește pe măsură ce backfill-ul le urcă în Storage. Nullable: rândurile
+    // noi nu mai țin conținut în baza de date.
+    fileUrl: text("file_url"),
     fileName: varchar("file_name", { length: 500 }).notNull(),
+    // Tipul real al fișierului. Înainte se deducea din prefixul data-URL-ului, ceea ce obliga
+    // lista să trimită tot conținutul base64 doar ca să afle dacă e PDF sau imagine.
+    mimeType: varchar("mime_type", { length: 100 }),
+    sizeBytes: integer("size_bytes"),
     kind: parAttachmentKindEnum("kind").notNull().default("other"),
     /** Pentru kind='other': ce document e, scris de utilizator ("Certificat de conformitate"). */
     kindOther: varchar("kind_other", { length: 200 }),
@@ -771,7 +780,9 @@ export const parPayments = pgTable(
     actualAmountCents: integer("actual_amount_cents"),
     paymentDate: timestamp("payment_date", { withTimezone: true }),
     paymentRef: varchar("payment_ref", { length: 500 }),
-    // may hold a base64 proof image — text, not varchar(2000), for the same reason as file_url.
+    // Un link către dovadă, nu dovada însăși: validarea o ține la 2000 de caractere
+    // (`parPayments.ts`), deci un fișier real nu încape aici. Rămâne `text` pentru rândurile
+    // vechi, de pe vremea când chiar se scria base64 și varchar(2000) le rupea.
     proofUrl: text("proof_url"),
     /** True if the 10%-overage rule triggered and a re-approval was granted */
     overageReapproved: boolean("overage_reapproved").notNull().default(false),

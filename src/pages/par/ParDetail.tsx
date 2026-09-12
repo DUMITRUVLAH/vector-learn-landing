@@ -77,7 +77,7 @@ import {
 import { describeParSubmitError } from "@/lib/par/submitErrors";
 // NU se re-adaugă `import { downloadParPdf }`: pe main, parPdf (html2canvas + jsPDF, ~174 KB gzip)
 // se încarcă abia la click — un import static aici l-ar aduce înapoi în pachetul principal.
-import { openParAttachment } from "@/lib/parFiles";
+import { viewParAttachment } from "@/lib/parFiles";
 import { validateIban } from "@/lib/par/iban";
 import { patentStatus, formatPatentDate } from "@/lib/par/patent";
 import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
@@ -1424,7 +1424,7 @@ export function ParDetailPage() {
                   <li key={att.id} className="rounded-md border border-border p-2 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
                       <Paperclip className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" aria-hidden />
-                      <button type="button" onClick={() => openParAttachment(att.fileUrl, att.fileName, par.id, att.id)} className="max-w-full truncate text-left text-primary hover:underline" aria-label={`Deschide ${att.fileName}`}>
+                      <button type="button" onClick={() => viewParAttachment(par.id, att.id, att.fileName)} className="max-w-full truncate text-left text-primary hover:underline" aria-label={`Deschide ${att.fileName}`}>
                         {att.fileName}
                       </button>
                       <span className="text-xs text-muted-foreground">

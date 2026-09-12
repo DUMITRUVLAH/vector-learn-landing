@@ -69,7 +69,7 @@ import {
   type BucketKey,
   type FolderLocation,
 } from "@/lib/par/folders";
-import { openParAttachment } from "@/lib/parFiles";
+import { openParAttachment, viewParAttachment } from "@/lib/parFiles";
 import { cn } from "@/lib/utils";
 import { Alert, Badge, Button, Card, EmptyState, Input, KpiTile, PastelIcon, Skeleton } from "@/components/ds";
 import type { ChipTone } from "@/components/ds";
@@ -586,7 +586,7 @@ function DocRow({ att, parId }: { att: ParAttachment; parId: string }) {
   return (
     <button
       type="button"
-      onClick={() => void openParAttachment(att.fileUrl, att.fileName, parId, att.id)}
+      onClick={() => viewParAttachment(parId, att.id, att.fileName)}
       aria-label={`Deschide documentul ${att.fileName}`}
       className="flex min-h-[52px] w-full items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >

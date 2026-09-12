@@ -13,8 +13,6 @@ import { ParPaymentProofCard } from "../ParPaymentProofCard";
 import * as parApi from "@/lib/api/par";
 import type { ParAttachment } from "@/lib/api/par";
 
-const PDF_DATA_URL = "data:application/pdf;base64,JVBERi0=";
-const PNG_DATA_URL = "data:image/png;base64,iVBORw0KGgo=";
 
 function proof(overrides: Partial<ParAttachment> = {}): ParAttachment {
   return {
@@ -23,7 +21,7 @@ function proof(overrides: Partial<ParAttachment> = {}): ParAttachment {
     kind: "payment_order",
     uploadedBy: "user-finance",
     createdAt: "2026-09-10",
-    fileUrl: PDF_DATA_URL,
+    mimeType: "application/pdf",
     ...overrides,
   };
 }
@@ -34,7 +32,7 @@ const invoice = (): ParAttachment => ({
   kind: "invoice",
   uploadedBy: "user-requestor",
   createdAt: "2026-09-07",
-  fileUrl: PDF_DATA_URL,
+  mimeType: "application/pdf",
 });
 
 function renderCard(props: Partial<React.ComponentProps<typeof ParPaymentProofCard>> = {}) {
@@ -107,7 +105,7 @@ describe("ParPaymentProofCard", () => {
       <ParPaymentProofCard
         parId="par-1"
         requestNo="PAR-2026-0020"
-        attachments={[proof({ fileName: "captura.png", fileUrl: PNG_DATA_URL })]}
+        attachments={[proof({ fileName: "captura.png", mimeType: "image/png" })]}
         canUpload
         currentUserId="user-finance"
         onChanged={vi.fn()}

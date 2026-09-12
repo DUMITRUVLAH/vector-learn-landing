@@ -179,7 +179,7 @@ const mockPar: ParDetail = {
       kind: "act_of_receipt",
       uploadedBy: "user-requestor",
       createdAt: "2026-06-10",
-      fileUrl: "/files/att-1",
+      mimeType: "application/pdf",
     },
   ],
   payment: null,
