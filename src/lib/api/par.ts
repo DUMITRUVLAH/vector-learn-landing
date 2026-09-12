@@ -904,6 +904,13 @@ export interface ParAttachmentMeta {
   kind: ParAttachmentKind;
 }
 
+/** VM4-02b: cine din finanțe a refuzat plata, când și de ce (din jurnalul de audit). */
+export interface ParFinanceReturn {
+  returnedAt: string | null;
+  reason: string | null;
+  byName: string | null;
+}
+
 export interface ParFinanceQueueItem extends ParRequest {
   above_micro_threshold: boolean;
   payment: ParPaymentRecord | null;
@@ -913,6 +920,8 @@ export interface ParFinanceQueueItem extends ParRequest {
   approverDecisions?: ParApproverDecision[];
   budgetCodeLabel?: string | null;
   attachmentsMeta?: ParAttachmentMeta[];
+  /** Nenul doar pentru cererile pe care finanțele le-au refuzat și le-au trimis la solicitant. */
+  financeReturn?: ParFinanceReturn | null;
 }
 
 export async function getFinanceQueue(): Promise<{

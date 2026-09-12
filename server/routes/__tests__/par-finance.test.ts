@@ -14,6 +14,7 @@
  */
 import { describe, it, expect } from "vitest";
 import type { ParRequest } from "../../db/schema/par";
+import { belongsInFinanceQueue, financeReturnReason } from "../../lib/par/financeQueue";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,15 +41,13 @@ function makePar(
   } as Pick<ParRequest, "purpose" | "status" | "totalEstimatedCents">;
 }
 
-// Finance queue filter logic (mirrors parPayments.ts GET /api/par/finance)
+// Regula reală folosită de GET /api/par/finance (server/lib/par/financeQueue.ts) — nu o copie
+// paralelă care poate să divergă de rută.
 function isInFinanceQueue(
-  par: Pick<ParRequest, "purpose" | "status">
+  par: Pick<ParRequest, "purpose" | "status">,
+  returnedByFinance = false
 ): boolean {
-  const financeStatuses: ParStatus[] = ["approved", "in_finance", "reapproval_required"];
-  return (
-    par.purpose === "execute_payment" &&
-    financeStatuses.includes(par.status as ParStatus)
-  );
+  return belongsInFinanceQueue(par, { returnedByFinance });
 }
 
 // ─── T-PAR-112-4 [normal]: obtain_quotations/provide_estimate excluded ────────
@@ -88,9 +87,44 @@ describe("PAR-112 finance queue filter", () => {
     const par = makePar({ purpose: "execute_payment", status: "rejected" });
     expect(isInFinanceQueue(par)).toBe(false);
   });
+
+  // VM4-02b: ce refuză finanțele trebuie să rămână vizibil pentru finanțe.
+  it("[blocant] cerere REFUZATĂ DE FINANȚE → rămâne în coadă", () => {
+    const par = makePar({ purpose: "execute_payment", status: "changes_requested" });
+    expect(isInFinanceQueue(par, true)).toBe(true);
+  });
+
+  it("changes_requested cerut de un APROBATOR → NU intră în coada finanțelor (n-a ajuns la ele)", () => {
+    const par = makePar({ purpose: "execute_payment", status: "changes_requested" });
+    expect(isInFinanceQueue(par)).toBe(false);
+  });
+
+  it("obtain_quotations refuzat → tot în afara cozii (filtrul de scop rămâne primul)", () => {
+    const par = makePar({ purpose: "obtain_quotations", status: "changes_requested" });
+    expect(isInFinanceQueue(par, true)).toBe(false);
+  });
 });
 
 // ─── T-PAR-112-2 [blocant]: section 16 triggers in_finance transition ─────────
+
+describe("VM4-02b motivul refuzului, citit din jurnal", () => {
+  it("[blocant] extrage doar motivul din fraza scrisă de rută", () => {
+    expect(
+      financeReturnReason(
+        "Finanțele au refuzat plata și au trimis cererea înapoi la solicitant. Motiv: IBAN greșit"
+      )
+    ).toBe("IBAN greșit");
+  });
+
+  it("un detaliu fără prefix se întoarce întreg (nu pierdem informație)", () => {
+    expect(financeReturnReason("Lipsește factura")).toBe("Lipsește factura");
+  });
+
+  it("fără detaliu → null, nu string gol (rândul nu afișează o linie goală)", () => {
+    expect(financeReturnReason(null)).toBeNull();
+    expect(financeReturnReason("Motiv:   ")).toBeNull();
+  });
+});
 
 describe("PAR-112 section 16 state transition", () => {
   it("T-PAR-112-2 [blocant] finance submitting section 16 on approved PAR transitions to in_finance", () => {

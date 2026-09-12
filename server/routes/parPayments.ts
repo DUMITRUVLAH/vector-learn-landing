@@ -40,6 +40,13 @@ import { evaluateMatch } from "../lib/par/threeWayMatch";
 import { findVendorByIban, shouldAutoSaveVendor } from "../lib/par/vendorAutoSave";
 import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import { buildBodyForHash } from "../lib/par/submit";
+import {
+  FINANCE_QUEUE_STATUSES,
+  FINANCE_RETURN_EVENT,
+  belongsInFinanceQueue,
+  financeReturnReason,
+  isFinanceReturnedStatus,
+} from "../lib/par/financeQueue";
 import { verifyParBodyHash } from "../lib/par/integrity";
 
 export const parPaymentsRoutes = new Hono<{ Variables: AuthVariables }>();
@@ -188,7 +195,12 @@ parPaymentsRoutes.get("/finance", async (c) => {
   // so nobody assumes a control that isn't running. Default false = no behavior change.
   const threeWayMatchEnforced = settings?.enforceMatch ?? false;
 
-  // Only execute_payment PARs in the relevant statuses
+  // Only execute_payment PARs in the relevant statuses.
+  // VM4-02b: `changes_requested` intră în coadă DOAR pentru cererile pe care finanțele le-au
+  // refuzat ele însele (Violeta: „ce am refuzat trebuie să văd unde s-a dus"). Fără asta, o cerere
+  // refuzată dispărea din ecranul finanțelor în secunda în care era refuzată, iar dacă
+  // solicitantul o abandona, nimeni din finanțe nu mai știa de ea. Cererile întoarse de un
+  // APROBATOR rămân în afara cozii — n-au ajuns niciodată la finanțe.
   const rawQueue = await db
     .select()
     .from(parRequests)
@@ -196,14 +208,46 @@ parPaymentsRoutes.get("/finance", async (c) => {
       and(
         eq(parRequests.tenantId, tenantId),
         eq(parRequests.purpose, "execute_payment"),
-        inArray(parRequests.status, ["approved", "in_finance", "reapproval_required"])
+        inArray(parRequests.status, [...FINANCE_QUEUE_STATUSES])
       )
     )
     .orderBy(desc(parRequests.isUrgent), desc(parRequests.createdAt));
+
+  // Cine a refuzat plata, când și cu ce motiv — citit din `par_audit`, ca să nu adăugăm o coloană
+  // nouă pentru un fapt pe care jurnalul îl știe deja. Cel mai recent refuz câștigă (o cerere
+  // poate fi refuzată, corectată, retrimisă și refuzată din nou).
+  const returnedCandidateIds = rawQueue
+    .filter((p) => isFinanceReturnedStatus(p.status))
+    .map((p) => p.id);
+  const returnRows = returnedCandidateIds.length
+    ? await db
+        .select({
+          parId: parAudit.parId,
+          detail: parAudit.detail,
+          createdAt: parAudit.createdAt,
+          actorUserId: parAudit.actorUserId,
+        })
+        .from(parAudit)
+        .where(
+          and(
+            eq(parAudit.tenantId, tenantId),
+            eq(parAudit.event, FINANCE_RETURN_EVENT),
+            inArray(parAudit.parId, returnedCandidateIds)
+          )
+        )
+        .orderBy(desc(parAudit.createdAt))
+    : [];
+  const returnByPar = new Map<string, (typeof returnRows)[number]>();
+  for (const r of returnRows) if (!returnByPar.has(r.parId)) returnByPar.set(r.parId, r);
+
   const { projects: projectScope, payers: payerScope } = await accessibleScopes(user.id, tenantId, user.role);
-  const queue = rawQueue.filter((par) => par.projectId
-    ? projectScope === null || projectScope.includes(par.projectId)
-    : !!par.payerId && (payerScope === null || payerScope.includes(par.payerId)));
+  const queue = rawQueue.filter((par) => {
+    const inScope = par.projectId
+      ? projectScope === null || projectScope.includes(par.projectId)
+      : !!par.payerId && (payerScope === null || payerScope.includes(par.payerId));
+    if (!inScope) return false;
+    return belongsInFinanceQueue(par, { returnedByFinance: returnByPar.has(par.id) });
+  });
 
   // Attach existing par_payments section-16 data
   const parIds = queue.map((p) => p.id);
@@ -229,6 +273,8 @@ parPaymentsRoutes.get("/finance", async (c) => {
     ...new Set([
       ...queue.map((p) => p.requestedByUserId).filter((v): v is string => !!v),
       ...approvalRows.filter((a) => a.step >= 1 && a.decision === "approved" && a.approverUserId).map((a) => a.approverUserId as string),
+      // Cine din finanțe a refuzat plata — coada arată numele, nu un UUID.
+      ...queue.map((p) => returnByPar.get(p.id)?.actorUserId).filter((v): v is string => !!v),
     ]),
   ];
   const projRows = projectIds.length
@@ -292,6 +338,15 @@ parPaymentsRoutes.get("/finance", async (c) => {
     approverDecisions: approverDecisionsFor(p.id),
     budgetCodeLabel: budgetLabel(p.budgetCodeId),
     attachmentsMeta: attachmentsFor(p.id),
+    financeReturn: (() => {
+      const r = returnByPar.get(p.id);
+      if (!r) return null;
+      return {
+        returnedAt: r.createdAt,
+        reason: financeReturnReason(r.detail),
+        byName: userName(r.actorUserId),
+      };
+    })(),
   }));
 
   return c.json({ items, total: items.length, threeWayMatchEnforced });

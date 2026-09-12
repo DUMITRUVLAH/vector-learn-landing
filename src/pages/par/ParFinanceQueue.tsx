@@ -24,7 +24,6 @@ import {
   Check,
   FileText,
   X,
-  ShieldAlert,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import {
@@ -791,8 +790,6 @@ export default function ParFinanceQueue() {
   const [items, setItems] = useState<ParFinanceQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // PARQA-014: whether the 3-way match control is enforced for this tenant (default OFF).
-  const [threeWayMatchEnforced, setThreeWayMatchEnforced] = useState<boolean>(true);
   const [s16Par, setS16Par] = useState<ParFinanceQueueItem | null>(null);
   const [payPar, setPayPar] = useState<ParFinanceQueueItem | null>(null);
   const [attPar, setAttPar] = useState<ParFinanceQueueItem | null>(null);
@@ -811,7 +808,6 @@ export default function ParFinanceQueue() {
     try {
       const data = await getFinanceQueue();
       setItems(data.items);
-      setThreeWayMatchEnforced(data.threeWayMatchEnforced ?? false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Eroare la încărcarea cozii");
     } finally {
@@ -848,26 +844,11 @@ export default function ParFinanceQueue() {
     >
       <div className="space-y-6">
 
-        {/* PARQA-014: 3-way match control disabled — finance is paying without PO/receipt/amount
-            verification. Make the missing control impossible to miss so nobody assumes it's running.
-            Toggle it on in Admin → Setări PAR ("Aplică 3-way match"). */}
-        {!loading && !error && !threeWayMatchEnforced && (
-          <Alert
-            variant="warning"
-            icon={<ShieldAlert className="h-5 w-5" />}
-            title="Control 3-way match dezactivat"
-          >
-            Plățile se pot înregistra fără verificarea automată comandă (PO) + recepție + sumă.
-            Activează controlul din <span className="font-medium">Admin → Setări PAR</span> pentru
-            a bloca plata când documentele nu se potrivesc.
-          </Alert>
-        )}
-
         {!loading && !error && items.length > 0 && (
           <Card className="flex flex-wrap gap-2 p-3">
             <Input value={filterQ} onChange={(e) => setFilterQ(e.target.value)} placeholder="Caută PAR, beneficiar, IBAN…" aria-label="Caută în coada finanțe" className="min-w-[240px] flex-1" />
             <Select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} aria-label="Filtru proiect" className="w-auto"><option value="">Toate proiectele</option>{[...new Set(items.map((i) => i.projectName).filter(Boolean))].map((p) => <option key={p!} value={p!}>{p}</option>)}</Select>
-            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filtru statut" className="w-auto"><option value="">Toate statusurile</option><option value="approved">Aprobate</option><option value="in_finance">În finanțe</option><option value="reapproval_required">Reaprobare</option></Select>
+            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filtru statut" className="w-auto"><option value="">Toate statusurile</option><option value="approved">Aprobate</option><option value="in_finance">În finanțe</option><option value="reapproval_required">Reaprobare</option><option value="changes_requested">Refuzate de finanțe</option></Select>
             <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} aria-label="De la" className="w-auto" />
             <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} aria-label="Până la" className="w-auto" />
             <Input type="number" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="Min. MDL" aria-label="Sumă minimă" className="w-28" />
@@ -1015,6 +996,23 @@ export default function ParFinanceQueue() {
                               scrisă pentru alta — semnul apare înainte de plată, nu la reconciliere. */}
                           <ParBackdatedBadge dateOfRequest={par.dateOfRequest} submittedAt={par.submittedAt} />
                         </div>
+                        {/* VM4-02b: cererea refuzată de finanțe rămâne în coadă — dar rândul spune
+                            limpede că mingea e la solicitant, cine a refuzat și de ce. */}
+                        {par.financeReturn && (
+                          <span className="text-xs font-medium text-destructive">
+                            Refuzată de finanțe
+                            {par.financeReturn.byName ? ` · ${par.financeReturn.byName}` : ""}
+                            {par.financeReturn.returnedAt ? ` · ${fmtShortDate(par.financeReturn.returnedAt)}` : ""}
+                          </span>
+                        )}
+                        {par.financeReturn?.reason && (
+                          <span
+                            className="max-w-[220px] truncate text-xs text-muted-foreground"
+                            title={par.financeReturn.reason}
+                          >
+                            {par.financeReturn.reason}
+                          </span>
+                        )}
                         {par.status === "reapproval_required" && (
                           <span className="text-xs font-medium text-warning">
                             Re-aprobare necesară (&gt;10% depășire)

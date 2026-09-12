@@ -437,3 +437,79 @@ describe("VM4 — plata nu se mai execută dintr-un singur click, iar refuzul ex
     expect(returnSpy).not.toHaveBeenCalled();
   });
 });
+
+// ─── VM4-02b: ce a refuzat finanțele rămâne vizibil pentru finanțe ────────────
+
+describe("VM4-02b — cererile refuzate de finanțe se văd în coadă", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("nu mai există avertismentul de control 3-way match în coadă", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [makeFinanceItem()],
+      total: 1,
+      threeWayMatchEnforced: false,
+    });
+
+    render(<ParFinanceQueue />);
+
+    await screen.findByText("PAR-2026-0001");
+    expect(screen.queryByText(/3-way match/i)).not.toBeInTheDocument();
+  });
+
+  it("[blocant] rândul refuzat arată cine a refuzat, când și motivul", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [
+        makeFinanceItem({
+          status: "changes_requested",
+          financeReturn: {
+            returnedAt: "2026-07-15T09:00:00.000Z",
+            reason: "Lipsește actul de recepție",
+            byName: "Violeta Contabila",
+          },
+        }),
+      ],
+      total: 1,
+    });
+
+    render(<ParFinanceQueue />);
+
+    await screen.findByText("PAR-2026-0001");
+    const badge = screen.getByText(/Refuzată de finanțe/);
+    expect(badge).toHaveTextContent("Violeta Contabila");
+    expect(badge).toHaveTextContent("15.07.2026");
+    expect(screen.getByText("Lipsește actul de recepție")).toBeInTheDocument();
+  });
+
+  it("o cerere refuzată nu se mai poate plăti din coadă (mingea e la solicitant)", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [
+        makeFinanceItem({
+          status: "changes_requested",
+          financeReturn: { returnedAt: null, reason: "IBAN greșit", byName: null },
+        }),
+      ],
+      total: 1,
+    });
+
+    render(<ParFinanceQueue />);
+
+    await screen.findByText("PAR-2026-0001");
+    expect(screen.queryByRole("button", { name: /înregistrează plata/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /secțiunea 16/i })).not.toBeInTheDocument();
+  });
+
+  it("coada are un filtru pentru cererile refuzate de finanțe", async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [makeFinanceItem({ status: "in_finance" })],
+      total: 1,
+    });
+
+    render(<ParFinanceQueue />);
+
+    await screen.findByText("PAR-2026-0001");
+    const statusFilter = screen.getByLabelText("Filtru statut");
+    expect(statusFilter).toHaveTextContent("Refuzate de finanțe");
+  });
+});
