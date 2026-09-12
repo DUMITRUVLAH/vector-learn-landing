@@ -76,10 +76,14 @@ export function ParDocxPreview({ file, fileName, onFailed }: ParOfficePreviewPro
   return (
     <div className="min-h-full">
       {phase === "loading" && <Loading />}
-      {/* `bg-white` intenționat, nu un token: e hârtia documentului, nu suprafața aplicației. */}
+      {/*
+        Fără fundal și fără centrare de la noi: `docx-preview` își randează propriul `.docx-wrapper`
+        (fundal gri, pagini albe centrate, umbră) — exact aspectul unui vizualizator de documente.
+        Un `bg-*` al nostru ar sta oricum dedesubt, nevăzut.
+      */}
       <div
         ref={hostRef}
-        className={phase === "ready" ? "flex justify-center bg-white py-4" : "hidden"}
+        className={phase === "ready" ? "" : "hidden"}
         aria-label={`Conținutul documentului ${fileName}`}
       />
     </div>

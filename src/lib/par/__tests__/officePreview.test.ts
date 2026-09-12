@@ -116,6 +116,26 @@ describe("readXlsxSheets", () => {
     expect(sheet.truncated).toBe(true);
   });
 
+  // `actualColumnCount` numără și coloanele doar formatate: un fișier real de 5 coloane raporta 14
+  // și se randa cu 9 coloane de celule goale după el.
+  it("taie coloanele goale de la coada foii, dar păstrează întinderea îmbinărilor", async () => {
+    const blob = await workbookBlob((wb) => {
+      const ws = wb.addWorksheet("Meniu");
+      ws.mergeCells("A1:D1");
+      ws.getCell("A1").value = "4.07.2026 — 12 persoane";
+      ws.addRow(["Produs", "gramaj", "cantitate", "preț"]);
+      ws.addRow(["Salată", "150 g", 12, 45]);
+      // Coloane doar formatate, fără conținut — exact ce umfla tabelul.
+      for (const address of ["K1", "L1", "N3"]) ws.getCell(address).border = { top: { style: "thin" } };
+    });
+
+    const [sheet] = await readXlsxSheets(blob);
+    expect(sheet.rows[1].map((c) => c.text)).toEqual(["Produs", "gramaj", "cantitate", "preț"]);
+    expect(sheet.rows[2]).toHaveLength(4);
+    // Titlul îmbinat pe A1:D1 rămâne întins pe toate cele 4 coloane păstrate.
+    expect(sheet.rows[0][0].colSpan).toBe(4);
+  });
+
   it("nu lasă rânduri goale la coada previzualizării", async () => {
     const blob = await workbookBlob((wb) => {
       const ws = wb.addWorksheet("Coadă");

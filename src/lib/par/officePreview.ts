@@ -149,12 +149,15 @@ function readSheet(sheet: import("exceljs").Worksheet): XlsxSheet {
   const spans = mergeSpans(sheet);
   const rowCount = Math.min(sheet.rowCount, XLSX_MAX_ROWS);
   const colCount = Math.min(Math.max(sheet.actualColumnCount, sheet.columnCount), XLSX_MAX_COLS);
+  // `actualColumnCount` numără și coloanele doar formatate: un deviz de 5 coloane raportează 14 și
+  // ar fi randat cu 9 coloane de celule goale după el (măsurat pe un fișier real). Tăiem coada.
+  const lastCol = lastUsedColumn(sheet, rowCount, colCount, spans);
 
   const rows: XlsxCell[][] = [];
   for (let r = 1; r <= rowCount; r += 1) {
     const row = sheet.getRow(r);
     const cells: XlsxCell[] = [];
-    for (let c = 1; c <= colCount; c += 1) {
+    for (let c = 1; c <= lastCol; c += 1) {
       const cell = row.getCell(c);
       // Celulele acoperite de o îmbinare nu primesc `<td>` propriu: `colSpan`/`rowSpan` de pe
       // celula-stăpână le acoperă deja. Un `<td>` în plus ar deplasa tot rândul la dreapta.
@@ -162,7 +165,8 @@ function readSheet(sheet: import("exceljs").Worksheet): XlsxSheet {
       const span = spans.get(`${r}:${c}`);
       cells.push({
         text: cellText(cell),
-        colSpan: span?.colSpan ?? 1,
+        // O îmbinare care trecea de ultima coloană păstrată ar lăți tabelul înapoi la loc.
+        colSpan: Math.min(span?.colSpan ?? 1, lastCol - c + 1),
         rowSpan: span?.rowSpan ?? 1,
         bold: cell.font?.bold === true,
         numeric: typeof cell.value === "number",
@@ -180,6 +184,30 @@ function readSheet(sheet: import("exceljs").Worksheet): XlsxSheet {
     rows,
     truncated: sheet.rowCount > XLSX_MAX_ROWS || sheet.actualColumnCount > XLSX_MAX_COLS,
   };
+}
+
+/**
+ * Ultima coloană care chiar are conținut (sau e acoperită de o îmbinare pornită din ea).
+ * Minim 1, ca o foaie goală să rămână un tabel valid în loc de zero coloane.
+ */
+function lastUsedColumn(
+  sheet: import("exceljs").Worksheet,
+  rowCount: number,
+  colCount: number,
+  spans: Map<string, { colSpan: number; rowSpan: number }>,
+): number {
+  let last = 1;
+  for (let r = 1; r <= rowCount; r += 1) {
+    const row = sheet.getRow(r);
+    for (let c = colCount; c > last; c -= 1) {
+      if (cellText(row.getCell(c)) === "") continue;
+      // O celulă îmbinată se întinde peste coloane din dreapta care, citite singure, par goale.
+      const span = spans.get(`${r}:${c}`);
+      last = Math.min(colCount, c + (span ? span.colSpan - 1 : 0));
+      break;
+    }
+  }
+  return last;
 }
 
 /**
