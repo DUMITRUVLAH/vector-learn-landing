@@ -235,17 +235,15 @@ export function buildParHtml(par: ParDetail): string {
     )}</tr>`;
   };
   /**
-   * VM5-06: o cerere poate fi datată în urmă — decizia owner-ului e ca retroactivitatea să rămână
-   * LIBERĂ, dar vizibilă. Pe ecran există deja badge-ul „datată în urmă"; pe hârtie, până acum,
-   * exista o singură dată — cea declarată — deci auditul nu putea vedea din document că cererea a
-   * fost înregistrată trei săptămâni mai târziu. Al doilea rând apare NUMAI când zilele diferă.
+   * VM5-06 (decizia owner-ului, 12.09.2026): pe documentul de audit apare O SINGURĂ dată — cea a
+   * cererii. Că a fost scrisă retroactiv se vede în aplicație (badge-ul „datată în urmă", jurnalul),
+   * nu pe hârtie: două date pe același act se citesc ca o contradicție, iar data oficială a
+   * documentului e cea declarată.
    */
   const sameDay = (a: string | null | undefined, b: string | null | undefined) =>
-    !!a && !!b && new Date(a).toDateString() === new Date(b).toDateString();
-  const dateOfRequestPrinted =
-    req.submittedAt && !sameDay(req.dateOfRequest, req.submittedAt)
-      ? `${fmtDate(req.dateOfRequest)} <span style="color:${FAINT};font-size:9.5px;">(registered ${fmtDateTime(req.submittedAt)})</span>`
-      : fmtDate(req.dateOfRequest);
+    !!a && !!b && fmtDate(a) === fmtDate(b);
+  const dateOfRequestPrinted = fmtDate(req.dateOfRequest);
+  const showSubmitted = !!req.submittedAt && sameDay(req.dateOfRequest, req.submittedAt);
 
   const approverRows = approverSigs.length
     ? approverSigs
@@ -449,7 +447,7 @@ export function buildParHtml(par: ParDetail): string {
   <!-- VM5-17: ștampila de timp a documentului — depusă / aprobată / momentul tipăririi. -->
   <div style="font-size:9px;color:${FAINT};padding-top:6px;display:flex;justify-content:space-between;gap:12px;">
     <span>${[
-      req.submittedAt ? `Submitted: ${fmtDateTime(req.submittedAt)}` : "",
+      showSubmitted ? `Submitted: ${fmtDateTime(req.submittedAt)}` : "",
       req.approvedAt ? `Approved: ${fmtDateTime(req.approvedAt)}` : "",
       `Generated: ${fmtDateTime(new Date().toISOString())}`,
     ].filter(Boolean).join(" &nbsp;·&nbsp; ")}</span>

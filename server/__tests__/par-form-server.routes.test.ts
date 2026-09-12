@@ -263,6 +263,35 @@ describe("GET /api/par/:id/form.pdf — nivel paralel de aprobare (VM5-15)", () 
     expect(await scoate()).toBe(await scoate());
   }, 60_000);
 
+  /**
+   * VM5-06 (owner, 12.09.2026): pe o cerere DATATĂ ÎN URMĂ, documentul de audit poartă o singură
+   * dată — cea a cererii. Momentul înregistrării rămâne în aplicație, nu pe hârtie.
+   */
+  it("[blocant] o cerere datată în urmă nu arată pe hârtie data înregistrării", async () => {
+    const [retro] = await testDb
+      .insert(parRequests)
+      .values({
+        tenantId, requestNo: "PAR-2026-0098", requestedByUserId: userId, status: "approved",
+        payerId: payerIdForTests, currency: "MDL", totalEstimatedCents: 12000,
+        dateOfRequest: new Date("2026-05-02T00:00:00Z"),
+        submittedAt: new Date("2026-09-08T09:15:00Z"),
+        approvedAt: new Date("2026-09-08T14:20:00Z"),
+      })
+      .returning();
+    await testDb.insert(parApprovals).values({
+      tenantId, parId: retro.id, step: 0, approverUserId: userId,
+      approverRoleLabel: "Solicitant", decision: "approved", decidedAt: new Date("2026-09-08T09:15:00Z"),
+    });
+
+    const res = await app.request(`/api/par/${retro.id}/form.pdf`);
+    const text = await pdfText(Buffer.from(await res.arrayBuffer()));
+
+    expect(text).toContain("02-May-26");
+    expect(text).not.toContain("Submitted:");
+    // Aprobarea rămâne — ea nu contrazice data documentului, o completează.
+    expect(text).toContain("Approved:");
+  }, 60_000);
+
   /** VM5-17: „PAR-ul printat să aibă time stamp (când a fost depus, aprobat etc.)". */
   it("poartă ștampila de timp: depusă, aprobată, generată", async () => {
     const res = await app.request(`/api/par/${parallelParId}/form.pdf`);

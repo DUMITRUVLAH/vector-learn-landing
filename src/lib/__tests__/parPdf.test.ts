@@ -429,21 +429,26 @@ describe("buildParHtml() — T-PAR-114-1 [blocant]", () => {
       expect(html).toMatch(/Date:<\/span>\s*<span[^>]*>10-Jun-26 \d{2}:\d{2}/);
     });
 
-    /** VM5-06: retroactivitatea rămâne liberă, dar se vede pe hârtie. */
-    it("arată data înregistrării când cererea e datată în urmă", () => {
+    /**
+     * VM5-06 (owner, 12.09.2026): retroactivitatea rămâne liberă, dar documentul de audit poartă o
+     * SINGURĂ dată — cea a cererii. Că a fost scrisă în urmă se vede în aplicație, nu pe hârtie.
+     */
+    it("pe o cerere datată în urmă tipărește doar data cererii", () => {
       const html = buildParHtml(makePar({
         dateOfRequest: "2026-05-02T00:00:00Z",
         submittedAt: "2026-06-10T08:00:00Z",
       }));
-      expect(html).toContain("registered 10-Jun-26");
+      expect(html).toContain("02-May-26");
+      expect(html).not.toContain("registered");
+      expect(html).not.toContain("Submitted:");
     });
 
-    it("nu adaugă rândul de înregistrare când cererea e depusă în aceeași zi", () => {
+    it("pe o cerere depusă în aceeași zi, momentul depunerii rămâne în subsol", () => {
       const html = buildParHtml(makePar({
         dateOfRequest: "2026-06-10T07:30:00Z",
         submittedAt: "2026-06-10T08:00:00Z",
       }));
-      expect(html).not.toContain("registered");
+      expect(html).toContain("Submitted: 10-Jun-26");
     });
   });
 

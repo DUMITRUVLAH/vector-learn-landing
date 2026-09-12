@@ -168,6 +168,11 @@ export function buildParFormDefinition(d: ParFormData): PdfNode {
   // Aici se generează PDF-ul pe care oamenii chiar îl descarcă, deci aici trăia bugul lui Iulian:
   // pe un nivel paralel, ordinea rândurilor venea din baza de date, iar un rând ÎNCĂ NEDECIS putea
   // ocupa caseta unei aprobări date — la a doua descărcare a aceleiași cereri, o semnătură dispărea.
+  // Cererea e datată în urmă dacă ziua declarată diferă de ziua depunerii (în fusul organizației).
+  const sameDay = (a: Date | string | null | undefined, b: Date | string | null | undefined) =>
+    !!a && !!b && formDate(a) === formDate(b);
+  const showSubmitted = !!d.submittedAt && sameDay(d.dateOfRequest, d.submittedAt);
+
   const { requestor: sig14, approvers } = orderSignatureSlots(
     d.signatures.map((sig) => ({
       ...sig,
@@ -419,14 +424,19 @@ export function buildParFormDefinition(d: ParFormData): PdfNode {
 
     // VM5-17: ștampila de timp a documentului — când a fost depusă cererea, când a fost aprobată și
     // când a fost tipărită hârtia pe care o ține omul în mână.
+    //
+    // VM5-06 (decizia owner-ului, 12.09.2026): pe o cerere DATATĂ ÎN URMĂ, documentul de audit
+    // poartă o singură dată — cea a cererii. Momentul înregistrării în sistem rămâne în aplicație
+    // (badge-ul „datată în urmă", jurnalul), nu pe hârtie: două date diferite pe același act se
+    // citesc ca o contradicție, iar data oficială a documentului e cea declarată.
     {
       columns: [
         {
           text: [
-            d.submittedAt ? `Submitted: ${formDateTime(d.submittedAt)}` : "",
-            d.submittedAt && d.approvedAt ? "  ·  " : "",
+            showSubmitted ? `Submitted: ${formDateTime(d.submittedAt)}` : "",
+            showSubmitted && d.approvedAt ? "  ·  " : "",
             d.approvedAt ? `Approved: ${formDateTime(d.approvedAt)}` : "",
-            (d.submittedAt || d.approvedAt) ? "  ·  " : "",
+            (showSubmitted || d.approvedAt) ? "  ·  " : "",
             `Generated: ${formDateTime(new Date())}`,
           ].filter(Boolean).join(""),
           fontSize: 7.5,
