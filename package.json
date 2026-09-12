@@ -55,6 +55,7 @@
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "docx-preview": "^0.4.0",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.36.4",
     "exceljs": "^4.4.0",

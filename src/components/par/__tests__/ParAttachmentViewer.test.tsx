@@ -8,6 +8,12 @@
  *   - un 404 devine mesaj citibil, nu cadru alb
  *   - Escape închide și revocă blob-ul
  *   - fără vizualizator montat, `viewParAttachment` cade înapoi pe fila nouă
+ *   - un Excel ajunge în tabel, un Word în randorul de docx — nu pe butonul de descărcare
+ *   - un Office pe care biblioteca nu-l poate deschide cade ÎNAPOI pe descărcare, cu motivul spus
+ *
+ * Parserele Office sunt mock-uite: ele au suita lor (`src/lib/par/__tests__/officePreview.test.ts`),
+ * iar aici se verifică DRUMUL — ce ramură de randare primește fiecare tip de fișier. `previewKind`
+ * rămâne cel real, pentru că el e chiar decizia testată.
  *
  * @vitest-environment jsdom
  */
@@ -17,6 +23,24 @@ import userEvent from "@testing-library/user-event";
 import { ParAttachmentViewer } from "../ParAttachmentViewer";
 import { openParAttachmentViewer } from "@/lib/par/attachmentViewerBus";
 import { viewParAttachment } from "@/lib/parFiles";
+
+const renderDocxInto = vi.fn(async (host: HTMLElement, _file: Blob) => {
+  host.append(Object.assign(document.createElement("p"), { textContent: "Act de predare-primire" }));
+});
+const readXlsxSheets = vi.fn();
+
+vi.mock("@/lib/par/officePreview", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/par/officePreview")>()),
+  renderDocxInto: (host: HTMLElement, file: Blob) => renderDocxInto(host, file),
+  readXlsxSheets: (file: Blob) => readXlsxSheets(file),
+}));
+
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+function cell(text: string, extra: Record<string, unknown> = {}) {
+  return { text, colSpan: 1, rowSpan: 1, bold: false, numeric: false, ...extra };
+}
 
 const TARGET = { parId: "par-1", attachmentId: "att-1", fileName: "FF AAX42426.pdf" };
 
@@ -35,7 +59,7 @@ function mockPreview(body: Blob, ok = true, status = 200) {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 describe("ParAttachmentViewer", () => {
@@ -103,6 +127,61 @@ describe("ParAttachmentViewer", () => {
 
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("un Excel se deschide ca tabel în aplicație, nu pe butonul de descărcare", async () => {
+    readXlsxSheets.mockResolvedValue([
+      {
+        name: "Deviz",
+        truncated: false,
+        rows: [[cell("Articol", { bold: true }), cell("Preț", { bold: true })], [cell("Traduceri"), cell("1234.5", { numeric: true })]],
+      },
+    ]);
+    mockPreview(new Blob(["PK"], { type: XLSX_MIME }));
+    render(<ParAttachmentViewer />);
+    act(() => {
+      openParAttachmentViewer({ ...TARGET, fileName: "PAR_IPTekwill_TA_01.xlsx" });
+    });
+
+    expect(await screen.findByText("Traduceri")).toBeInTheDocument();
+    expect(screen.getByText("1234.5")).toBeInTheDocument();
+    expect(screen.queryByText(/nu pot fi randate de browser/i)).toBeNull();
+  });
+
+  it("un Word se randează în aplicație", async () => {
+    mockPreview(new Blob(["PK"], { type: DOCX_MIME }));
+    render(<ParAttachmentViewer />);
+    act(() => {
+      openParAttachmentViewer({ ...TARGET, fileName: "act.docx" });
+    });
+
+    expect(await screen.findByText("Act de predare-primire")).toBeInTheDocument();
+    expect(renderDocxInto).toHaveBeenCalledTimes(1);
+  });
+
+  // Documentul EXISTĂ (s-a descărcat), doar că biblioteca nu l-a putut deschide. Un ecran de
+  // eroare ar minți; descărcarea rămâne drumul bun, iar motivul se spune pe față.
+  it("un Excel deteriorat cade înapoi pe descărcare, cu motivul spus", async () => {
+    readXlsxSheets.mockRejectedValue(new Error("zip corupt"));
+    mockPreview(new Blob(["nu-i zip"], { type: XLSX_MIME }));
+    render(<ParAttachmentViewer />);
+    act(() => {
+      openParAttachmentViewer({ ...TARGET, fileName: "deviz.xlsx" });
+    });
+
+    expect(await screen.findByText(/deteriorat sau protejat cu parolă/i)).toBeInTheDocument();
+    expect(screen.getByText(/Descarcă deviz\.xlsx/)).toBeInTheDocument();
+  });
+
+  // .doc/.xls/.ppt sunt acceptate la upload, dar nicio bibliotecă de browser nu le citește.
+  it("un .doc vechi rămâne pe descărcare", async () => {
+    mockPreview(new Blob(["\xd0\xcf"], { type: "application/msword" }));
+    render(<ParAttachmentViewer />);
+    act(() => {
+      openParAttachmentViewer({ ...TARGET, fileName: "adresa.doc" });
+    });
+
+    expect(await screen.findByText(/Formatele Office vechi/i)).toBeInTheDocument();
   });
 
   it("fără vizualizator montat, documentul se deschide tot (filă nouă)", () => {
