@@ -4,7 +4,7 @@
   "framework": null,
   "crons": [
     {
-      "path": "/api/par/drive/cron/run-weekly",
+      "path": "/api/cron/par-drive/run-weekly",
       "schedule": "0 6 * * *"
     }
   ]

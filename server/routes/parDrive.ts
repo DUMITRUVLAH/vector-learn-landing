@@ -9,7 +9,7 @@
  *   POST   /api/par/drive/sync-now        → rulează un lot acum (par_admin)
  *   POST   /api/par/drive/resync-all      → uită amprentele și reurcă tot (par_admin)
  *   POST   /api/par/drive/disconnect      → revocă token-ul și șterge conexiunea (par_admin)
- *   GET    /api/par/drive/cron/run-weekly → intrarea cron-ului, apărată de CRON_SECRET
+ *   GET    /api/cron/par-drive/run-weekly  → intrarea cron-ului, apărată de CRON_SECRET
  *
  * Secretul (refresh token-ul) NU iese niciodată din server: `/status` spune doar dacă există o
  * conexiune și pe ce adresă de e-mail.
@@ -52,8 +52,9 @@ function settingsUrl(result: string): string {
 }
 
 // ─── Cron (fără sesiune) ─────────────────────────────────────────────────────
-// Montat ÎNAINTEA lui requireAuth, altfel cron-ul Vercel ar primi 401. Aceeași apărare ca la
-// AUTOBILL: Vercel atașează singur `Authorization: Bearer <CRON_SECRET>`.
+// Montat în afara prefixului /api/par: acolo `app.use("/api/par/*", requireAuth)` răspunde 401
+// oricui n-are sesiune, iar un cron n-are cum să aibă una. Aceeași apărare ca la AUTOBILL —
+// Vercel atașează singur `Authorization: Bearer <CRON_SECRET>`, iar noi respingem orice altceva.
 
 export const parDriveCronRoutes = new Hono<{ Variables: AuthVariables }>();
 

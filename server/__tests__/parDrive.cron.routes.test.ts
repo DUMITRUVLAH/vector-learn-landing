@@ -21,24 +21,24 @@ import { Hono } from "hono";
 import { parDriveCronRoutes } from "../routes/parDrive";
 
 const app = new Hono();
-app.route("/api/par/drive/cron", parDriveCronRoutes);
+app.route("/api/cron/par-drive", parDriveCronRoutes);
 
 beforeEach(() => {
   runWeeklyDriveSync.mockClear();
   delete process.env.CRON_SECRET;
 });
 
-describe("GET /api/par/drive/cron/run-weekly", () => {
+describe("GET /api/cron/par-drive/run-weekly", () => {
   it("[blocant] 503 când CRON_SECRET nu e setat — nu rulează niciodată deschis", async () => {
-    const res = await app.request("/api/par/drive/cron/run-weekly");
+    const res = await app.request("/api/cron/par-drive/run-weekly");
     expect(res.status).toBe(503);
     expect(runWeeklyDriveSync).not.toHaveBeenCalled();
   });
 
   it("[blocant] 401 fără Bearer-ul corect", async () => {
     process.env.CRON_SECRET = "s3cr3t";
-    expect((await app.request("/api/par/drive/cron/run-weekly")).status).toBe(401);
-    const wrong = await app.request("/api/par/drive/cron/run-weekly", {
+    expect((await app.request("/api/cron/par-drive/run-weekly")).status).toBe(401);
+    const wrong = await app.request("/api/cron/par-drive/run-weekly", {
       headers: { authorization: "Bearer nope" },
     });
     expect(wrong.status).toBe(401);
@@ -47,7 +47,7 @@ describe("GET /api/par/drive/cron/run-weekly", () => {
 
   it("rulează cu secretul corect", async () => {
     process.env.CRON_SECRET = "s3cr3t";
-    const res = await app.request("/api/par/drive/cron/run-weekly", {
+    const res = await app.request("/api/cron/par-drive/run-weekly", {
       headers: { authorization: "Bearer s3cr3t" },
     });
     expect(res.status).toBe(200);

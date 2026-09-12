@@ -254,6 +254,9 @@ app.route("/api/analytics/fin", finAnalyticsRoutes);
 // by the broad /api/fin catch of finCapturesRoutes/finEinvoicesRoutes.
 app.route("/api/fin/statement", finStatementRoutes);
 app.route("/api/fin/cron", finCronRoutes);
+// PAR-DRIVE: ÎN AFARA lui /api/par — acolo `app.use("/api/par/*", requireAuth)` ar da 401 unui
+// cron care nu are (și nu poate avea) sesiune de browser. Apărarea lui e CRON_SECRET.
+app.route("/api/cron/par-drive", parDriveCronRoutes);
 
 // FinDesk
 app.route("/api/fin/invoices", finInvoicesRoutes);
@@ -330,7 +333,6 @@ app.route("/api/par/events", parEventsRoutes);
 app.route("/api/par/vendors", parVendorProfileRoutes);
 app.route("/api/par/vendors", parVendorsRoutes);
 app.route("/api/par/settings", parSettingsRoutes);
-app.route("/api/par/drive/cron", parDriveCronRoutes);
 app.route("/api/par/drive", parDriveRoutes);
 app.route("/api/par/efactura", parEfacturaRoutes);
 app.route("/api/par/fx", parFxRoutes);
