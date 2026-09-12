@@ -37,8 +37,7 @@ import {
   RotateCcw,
   CornerUpLeft,
   History,
-  Paperclip,
-} from "lucide-react";
+  Paperclip, BookOpen} from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { ParBackdatedBadge } from "@/components/par/ParBackdatedBadge";
 import { ParStatusChip } from "@/components/par/ParStatusChip";
@@ -78,6 +77,7 @@ import { describeParSubmitError } from "@/lib/par/submitErrors";
 // NU se re-adaugă `import { downloadParPdf }`: pe main, parPdf (html2canvas + jsPDF, ~174 KB gzip)
 // se încarcă abia la click — un import static aici l-ar aduce înapoi în pachetul principal.
 import { viewParAttachment } from "@/lib/parFiles";
+import { openParAttachmentViewer, parDosarViewerTarget } from "@/lib/par/attachmentViewerBus";
 import { validateIban } from "@/lib/par/iban";
 import { patentStatus, formatPatentDate } from "@/lib/par/patent";
 import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
@@ -312,6 +312,20 @@ function DosarButton({ par }: { par: ParDetailType }) {
 
   return (
     <div className="flex flex-col items-start gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        {/* VM5-14: „«Descarcă dosar complet» — să poată fi vizualizat în aplicație." Dosarul E deja
+            un singur PDF, în ordinea dosarului (fișa aprobărilor, contract, act, ofertă, factură,
+            ordin de plată) — deci se citește pe loc, în același vizualizator ca documentele, fără
+            descărcare și fără o a doua filă. */}
+        <button
+          type="button"
+          onClick={() => openParAttachmentViewer(parDosarViewerTarget(par.id, par.requestNo))}
+          aria-label="Citește dosarul complet în aplicație"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card text-sm font-medium hover:bg-muted transition-colors min-h-[44px]"
+        >
+          <BookOpen className="h-4 w-4" aria-hidden />
+          Citește dosarul
+        </button>
       <button
         type="button"
         onClick={handleDownload}
@@ -322,8 +336,9 @@ function DosarButton({ par }: { par: ParDetailType }) {
         {status === "loading"
           ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
           : <Paperclip className="h-4 w-4" aria-hidden />}
-        {status === "loading" ? "Se generează dosarul..." : "Descarcă dosarul complet (PDF)"}
+        {status === "loading" ? "Se generează dosarul..." : "Descarcă dosarul (PDF)"}
       </button>
+      </div>
       {status === "error" && errMsg && (
         <p role="alert" className="text-xs text-destructive">{errMsg}</p>
       )}

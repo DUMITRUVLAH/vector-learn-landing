@@ -523,7 +523,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | VM5-11 | medium | Digest de aprobări (09:00 / 16:00) — cere `CRON_SECRET` în Vercel | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-12 | medium | Respingerea pe nivel paralel: se vede de ce s-a oprit cererea | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-13 | high | „Respinge selectate" (bulk-reject cu motiv obligatoriu) | ✅ done | [catalog](specs/VM5-catalog.md) |
-| VM5-14 | medium | Tab „Dosar": tot dosarul citit în aplicație, în ordine | 🟢 todo | [catalog](specs/VM5-catalog.md) |
+| VM5-14 | medium | Dosarul complet citit în aplicație, în ordine | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-15 | high | Bug Iulian: selecția casetelor de semnătură e nedeterministă pe nivel paralel | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-16 | medium | Banda de flux a cererii + eticheta „revizuită (v2)" | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-16b | low | Schimbarea manuală a statutului (owner: „încă nu știu") | 🔴 needs-decision | [catalog](specs/VM5-catalog.md) |

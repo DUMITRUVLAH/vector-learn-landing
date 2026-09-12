@@ -19,6 +19,12 @@ export interface ParAttachmentTarget {
   parId: string;
   attachmentId: string;
   fileName: string;
+  /**
+   * VM5-14: ruta care servește documentul, când nu e un atașament obișnuit — de exemplu DOSARUL
+   * complet al cererii (`/api/par/:id/dosar`), care e tot un PDF autorizat pe server, doar că e
+   * construit din fișa aprobărilor plus toate actele, în ordinea dosarului.
+   */
+  url?: string;
 }
 
 type Listener = (target: ParAttachmentTarget) => void;
@@ -28,6 +34,16 @@ let listener: Listener | null = null;
 /** Ruta care servește documentul inline, cu autorizarea făcută pe server. */
 export function parAttachmentPreviewUrl(parId: string, attachmentId: string): string {
   return `/api/par/${parId}/attachments/${attachmentId}/preview`;
+}
+
+/** VM5-14: dosarul complet, citit în aplicație (aceeași autorizare ca la descărcare). */
+export function parDosarViewerTarget(parId: string, requestNo: string | null): ParAttachmentTarget {
+  return {
+    parId,
+    attachmentId: "dosar",
+    fileName: `Dosar ${requestNo ?? ""}`.trim(),
+    url: `/api/par/${parId}/dosar`,
+  };
 }
 
 /** Înregistrează vizualizatorul montat. Întoarce funcția de dezabonare. */

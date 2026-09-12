@@ -21,7 +21,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ParAttachmentViewer } from "../ParAttachmentViewer";
-import { openParAttachmentViewer } from "@/lib/par/attachmentViewerBus";
+import { parDosarViewerTarget, openParAttachmentViewer } from "@/lib/par/attachmentViewerBus";
 import { viewParAttachment } from "@/lib/parFiles";
 
 const renderDocxInto = vi.fn(async (host: HTMLElement, _file: Blob) => {
@@ -193,5 +193,27 @@ describe("ParAttachmentViewer", () => {
       "_blank",
       "noopener,noreferrer",
     );
+  });
+
+  /**
+   * VM5-14: aceeași fereastră deschide și DOSARUL complet — un PDF construit pe server din fișa
+   * aprobărilor plus toate actele. Fără asta, „descarcă dosarul" rămânea singurul drum.
+   */
+  it("deschide dosarul complet din ruta lui, nu din cea de atașament", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Blob(["%PDF-1.4"], { type: "application/pdf" }), {
+        status: 200,
+        headers: { "content-type": "application/pdf" },
+      }) as never
+    );
+
+    render(<ParAttachmentViewer />);
+    act(() => {
+      openParAttachmentViewer(parDosarViewerTarget("par-1", "PAR-2026-0031"));
+    });
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    expect(String(fetchSpy.mock.calls[0][0])).toBe("/api/par/par-1/dosar");
+    fetchSpy.mockRestore();
   });
 });

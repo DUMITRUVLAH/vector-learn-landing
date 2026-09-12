@@ -81,7 +81,7 @@ export function ParAttachmentViewer() {
     setOfficeFailure(null);
     void (async () => {
       try {
-        const res = await fetch(parAttachmentPreviewUrl(target.parId, target.attachmentId), {
+        const res = await fetch(target.url ?? parAttachmentPreviewUrl(target.parId, target.attachmentId), {
           credentials: "include",
         });
         if (!res.ok) {
@@ -112,7 +112,9 @@ export function ParAttachmentViewer() {
 
   if (!target) return null;
 
-  const previewUrl = parAttachmentPreviewUrl(target.parId, target.attachmentId);
+  // VM5-14: ținta poate fi și DOSARUL complet (un PDF construit pe server din fișa aprobărilor +
+  // toate actele), nu doar un atașament — de aceea ruta poate veni gata făcută.
+  const previewUrl = target.url ?? parAttachmentPreviewUrl(target.parId, target.attachmentId);
   const kind =
     state.status === "ready" && officeFailure === null
       ? previewKind(state.mime, target.fileName)
