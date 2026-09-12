@@ -13,6 +13,7 @@
  * CORE: backlog/par/PAR-CORE.md §1 (roles), §3 (DOA), §6 (admin screen)
  * Design: Vector 365, light+dark, WCAG AA.
  */
+import { sendApprovalDigestNow } from "@/lib/api/par";
 import { EventBudgetEditor } from "@/components/par/EventBudgetEditor";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
@@ -672,6 +673,10 @@ function ParSettingsForm({ onManagePayers }: ParSettingsFormProps) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logoBroken, setLogoBroken] = useState(false);
+  // VM5-11: starea butonului „trimite digestul acum". Hook-urile stau AICI, nu lângă locul unde se
+  // folosesc: mai jos e un `if (loading) return`, iar un useState după el schimbă ordinea hook-urilor.
+  const [digestBusy, setDigestBusy] = useState(false);
+  const [digestResult, setDigestResult] = useState<string | null>(null);
 
   useEffect(() => {
     getParSettings().then((s) => {
@@ -911,6 +916,45 @@ function ParSettingsForm({ onManagePayers }: ParSettingsFormProps) {
             </p>
           </div>
         </>
+      ))}
+
+      {section("Notificări", "Cum primesc aprobatorii cererile care îi așteaptă.", (
+        /* VM5-11: digestul pleacă automat la 09:00 și 16:00 (ora Chișinăului). Butonul e pentru
+           verificare: îl trimite acum, fără să dubleze emailul cuiva care l-a primit deja. */
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Aprobatorii primesc un singur email cu toate cererile care îi așteaptă, de două ori pe zi
+            — la <strong>09:00</strong> și <strong>16:00</strong>. Respingerile și cererile de
+            modificare rămân instant.
+          </p>
+          <button
+            type="button"
+            disabled={digestBusy}
+            onClick={async () => {
+              setDigestBusy(true);
+              setDigestResult(null);
+              try {
+                const r = await sendApprovalDigestNow();
+                setDigestResult(
+                  r.emails === 0 && r.skipped > 0
+                    ? `Nimic de trimis acum: ${r.skipped} aprobatori au primit deja digestul recent.`
+                    : r.emails === 0
+                      ? "Nicio cerere nu așteaptă aprobare — nu s-a trimis niciun email."
+                      : `Trimis către ${r.emails} ${r.emails === 1 ? "aprobator" : "aprobatori"}.`
+                );
+              } catch {
+                setDigestResult("Digestul nu a putut fi trimis.");
+              } finally {
+                setDigestBusy(false);
+              }
+            }}
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border border-input px-3 text-sm hover:bg-muted disabled:opacity-60"
+          >
+            {digestBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Mail className="h-4 w-4" aria-hidden />}
+            Trimite digestul acum
+          </button>
+          {digestResult && <p className="text-xs text-muted-foreground">{digestResult}</p>}
+        </div>
       ))}
 
       {section("Control financiar", "Verificări suplimentare înainte de plată.", (

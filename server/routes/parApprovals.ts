@@ -47,6 +47,7 @@ import { slotRoleLabel } from "../lib/par/doa";
 import { blocksOnApprovalLimit, minApprovalLimitCents } from "../lib/par/approvalLimit";
 import { approvalProgressAfterDecision } from "../lib/par/approvalProgress";
 import { countMismatchesByPar } from "../lib/par/documentWarnings";
+import { loadOpenApprovalSteps, filterStepsForUser } from "../lib/par/pendingForUser";
 import { accessiblePayerIds, accessibleProjectIds, accessibleScopes, mayAccessPayer, mayAccessProject } from "../lib/par/projectScope";
 import {
   notifyStepAdvanced,
@@ -663,84 +664,21 @@ parApprovalsRoutes.get("/inbox", async (c) => {
     }
   }
 
-  // Find all pending (unlocked) approval steps for this user:
-  //   - approverUserId = user.id (specific assignment)  OR
-  //   - approverUserId IS NULL and the user has the 'approver' or 'par_admin' par_role
-  //     (role-based routing)
-
-  // Fetch all active (unlocked, pending) approval steps tenant-scoped
-  const pendingSteps = await db
-    .select({
-      step: parApprovals.step,
-      parId: parApprovals.parId,
-      approverUserId: parApprovals.approverUserId,
-      approverRoleLabel: parApprovals.approverRoleLabel,
-      approverParRole: parApprovals.approverParRole,
-      id: parApprovals.id,
-    })
-    .from(parApprovals)
-    .where(
-      and(
-        eq(parApprovals.tenantId, tenantId),
-        eq(parApprovals.decision, "pending"),
-        eq(parApprovals.locked, false)
-      )
-    );
-
-  // Project-scoped approvers: for role-based steps, the user must be a designated approver of the
-  // PAR's project (projects with no designated approvers stay open to any approver).
-  const projectApproverMap = await getProjectApproverMap(tenantId);
-  const stepParIds = [...new Set(pendingSteps.map((s) => s.parId))];
-  const scopeByPar = new Map<string, { projectId: string | null; payerId: string | null; requestedByUserId?: string | null }>();
-  if (stepParIds.length > 0) {
-    const projRows = await db
-      .select({
-        id: parRequests.id,
-        projectId: parRequests.projectId,
-        payerId: parRequests.payerId,
-        requestedByUserId: parRequests.requestedByUserId,
-      })
-      .from(parRequests)
-      .where(and(eq(parRequests.tenantId, tenantId), inArray(parRequests.id, stepParIds)));
-    for (const r of projRows) scopeByPar.set(r.id, {
-      projectId: r.projectId ?? null,
-      payerId: r.payerId ?? null,
-      requestedByUserId: r.requestedByUserId,
-    });
-  }
-  const { projects: accessibleProjects, payers: accessiblePayers } = await accessibleScopes(user.id, tenantId, user.role);
-
-  // Filter to steps the current user can decide
-  const mySteps = pendingSteps.filter((s) => {
-    const parScope = scopeByPar.get(s.parId);
-    const allowedByMembership = parScope?.projectId
-      ? accessibleProjects === null || accessibleProjects.includes(parScope.projectId)
-      : !!parScope?.payerId && (accessiblePayers === null || accessiblePayers.includes(parScope.payerId));
-    if (!allowedByMembership) return false;
-    // Segregation of duties (PARQA-003): approve/reject refuse your OWN request with 403, so it has
-    // no business sitting in your approval inbox with an "Aprobă" button next to it — an approver who
-    // files a request saw it queued as if it were waiting on them, and clicking through gave an error.
-    if (parScope?.requestedByUserId && parScope.requestedByUserId === user.id) return false;
-    // Same rule set as approve/reject (decisionAuthority.ts): explicit assignment bypasses project
-    // scoping; a role-based step needs project permission AND the role the step requires; a step
-    // assigned to a delegator (X→me active) is mine. Nothing lands in the inbox that approve 403s on.
-    return stepMatchesViewer(
-      { ...s, decision: "pending", locked: false },
-      {
-        userId: user.id,
-        parRoles: roles,
-        delegators,
-        delegatedRoles: inboxDelegatedRoles,
-        // The inbox spans many projects; per-project delegation scoping is re-checked by
-        // approve/reject, which is the gate that matters.
-        delegatedAllowedOnProject: inboxDelegatedRoles.length > 0,
-        allowedOnProject: projectAllowsApprover(
-          parScope?.projectId,
-          user.id,
-          projectApproverMap.get(parScope?.projectId ?? ""),
-        ),
-      },
-    );
+  // VM5-11: „ce pași sunt ai mei" trăiește în `lib/par/pendingForUser`, ca inboxul și digestul de
+  // email să răspundă IDENTIC. Un email care spune „ai 5 cereri" lângă un inbox care arată 3
+  // distruge încrederea în amândouă. Regula de fond rămâne `stepMatchesViewer`, aceeași pe care o
+  // aplică approve/reject.
+  const [{ steps: pendingSteps, scopeByPar }, projectApproverMap] = await Promise.all([
+    loadOpenApprovalSteps(tenantId),
+    getProjectApproverMap(tenantId),
+  ]);
+  const mySteps = await filterStepsForUser({
+    userId: user.id,
+    tenantId,
+    tenantRole: user.role,
+    steps: pendingSteps,
+    scopeByPar,
+    projectApproverMap,
   });
 
   if (mySteps.length === 0) {

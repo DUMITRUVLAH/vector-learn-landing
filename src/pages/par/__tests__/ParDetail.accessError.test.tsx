@@ -21,6 +21,12 @@ vi.mock("@/components/app/AppShell", () => ({
 }));
 
 vi.mock("@/lib/api/par", () => ({
+  // VM5-19: fișa întreabă dacă prestatorul a trecut pragul anual (doar pentru finanțe).
+  checkTenderThreshold: vi.fn().mockResolvedValue({
+    applies: false, exceeds: false, warn: false, cleared: false,
+    thresholdCents: 0, yearToDateCents: 0, projectedCents: 0, overByCents: 0, year: 2026,
+  }),
+  clearTender: vi.fn().mockResolvedValue({ id: "clearance-1" }),
   getPar: (...args: unknown[]) => mockGetPar(...args),
   getParMe: (...args: unknown[]) => mockGetParMe(...args),
   uploadAttachment: vi.fn(),

@@ -2212,3 +2212,13 @@ export async function saveEventBudget(
 ): Promise<{ ok: boolean; lines: number }> {
   return api(`/api/par/events/${eventId}/budget`, { method: "PUT", body: JSON.stringify({ lines }) });
 }
+
+/**
+ * VM5-11: trimite acum digestul de aprobări pentru organizația mea (test, fără să aștept ora fixă).
+ * Nu dublează emailul cuiva care a primit deja unul în ultimele ore.
+ */
+export async function sendApprovalDigestNow(): Promise<{
+  ok: boolean; recipients: number; emails: number; skipped: number;
+}> {
+  return api("/api/par/cron/digest-now", { method: "POST" });
+}
