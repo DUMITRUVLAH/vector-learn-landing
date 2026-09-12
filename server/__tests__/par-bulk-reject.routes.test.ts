@@ -210,6 +210,44 @@ describe("POST /api/par/bulk-reject", () => {
     expect(despreParA).not.toMatch(/\b(was rejected|requires changes|has been paid|Reason:)\b/i);
   });
 
+  /**
+   * VM5-12: „ce se întâmplă când unul respinge, iar altul aprobă". Răspunsul aplicației e că prima
+   * respingere oprește tot — corect, dar trebuie SPUS: până acum cererea dispărea din inboxul
+   * celorlalți fără o vorbă.
+   */
+  it("ceilalți aprobatori ai lanțului află că cererea s-a oprit", async () => {
+    const [alDoilea] = await testDb
+      .insert(users)
+      .values({ tenantId, email: "irina@atic.md", passwordHash: "x", name: "Irina Oriol", role: "teacher" })
+      .returning();
+    await testDb.insert(parMembers).values({ tenantId, userId: alDoilea.id, role: "approver" });
+    await testDb.insert(parPayerMembers).values({ tenantId, payerId, userId: alDoilea.id });
+
+    const [par] = await testDb
+      .insert(parRequests)
+      .values({
+        tenantId, payerId, requestNo: "PAR-2026-0106", requestedByUserId: solicitant,
+        status: "pending_approval", totalEstimatedCents: 70000, submittedAt: new Date(),
+      })
+      .returning();
+    // Nivel paralel: eu și Irina, amândoi pe pasul 1.
+    await testDb.insert(parApprovals).values([
+      { tenantId, parId: par.id, step: 1, approverUserId: aprobator, approverRoleLabel: "Aprobator", decision: "pending", locked: false },
+      { tenantId, parId: par.id, step: 1, approverUserId: alDoilea.id, approverRoleLabel: "Aprobator", decision: "pending", locked: false },
+    ]);
+
+    await bulkReject({ par_ids: [par.id], comment: "nu se justifică" });
+
+    const notificari = await testDb
+      .select()
+      .from(inAppNotifications)
+      .where(eq(inAppNotifications.recipientUserId, alDoilea.id));
+    const corp = String((notificari[0]?.payload as { body?: string })?.body ?? "");
+    expect(corp).toContain("PAR-2026-0106");
+    expect(corp).toMatch(/nu mai așteaptă decizia ta/i);
+    expect(corp).toContain("nu se justifică");
+  });
+
   it("o cerere pe care nu o pot decide eșuează singură, restul lotului trece", async () => {
     // parA e deja respinsă (testul anterior) → conflict; parPropriu e a mea → segregare.
     const [parC] = await testDb

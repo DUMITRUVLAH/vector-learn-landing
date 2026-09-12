@@ -48,9 +48,15 @@ interface Props {
   approval: ParApproval;
   sectionLabel?: string; // e.g. "14. Solicitant" or "15. Aprobator"
   isLocked?: boolean;
+  /**
+   * VM5-12: cererea s-a oprit (a fost respinsă) înainte ca pasul ăsta să fie decis. Fără steagul
+   * ăsta, blocul scria „În așteptarea semnăturii" pe o cerere moartă, iar colegul care mai avea
+   * rândul deschis nu înțelegea de ce i-a dispărut din inbox.
+   */
+  stoppedBy?: { name: string | null; at: string | null } | null;
 }
 
-export function ParSignatureBlock({ approval, sectionLabel, isLocked }: Props) {
+export function ParSignatureBlock({ approval, sectionLabel, isLocked, stoppedBy }: Props) {
   return (
     <div
       className={[
@@ -88,7 +94,16 @@ export function ParSignatureBlock({ approval, sectionLabel, isLocked }: Props) {
           return (
             <>
               <p className="mt-0.5 text-sm font-medium text-foreground">
-                {signed ?? (approval.decision === "pending" ? "În așteptarea semnăturii" : "—")}
+                {signed ??
+                  (approval.decision === "pending"
+                    ? stoppedBy
+                      ? `Nu mai e necesar — cererea a fost respinsă${stoppedBy.name ? ` de ${stoppedBy.name}` : ""}${
+                          stoppedBy.at
+                            ? ` pe ${new Date(stoppedBy.at).toLocaleString("ro-MD", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
+                            : ""
+                        }`
+                      : "În așteptarea semnăturii"
+                    : "—")}
               </p>
               {title && title !== signed && (
                 <p className="text-xs text-muted-foreground">{title}</p>

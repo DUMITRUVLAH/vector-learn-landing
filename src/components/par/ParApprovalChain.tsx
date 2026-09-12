@@ -9,6 +9,8 @@ import { ParSignatureBlock } from "./ParSignatureBlock";
 
 interface Props {
   approvals: ParApproval[];
+  /** VM5-12: cererea a fost respinsă — pașii rămași deschiși nu mai așteaptă pe nimeni. */
+  parStatus?: string | null;
 }
 
 /**
@@ -27,10 +29,21 @@ function slotLabel(appr: ParApproval): string {
   return label;
 }
 
-export function ParApprovalChain({ approvals }: Props) {
+export function ParApprovalChain({ approvals, parStatus }: Props) {
   const sorted = [...approvals].sort((a, b) => a.step - b.step);
   const requestorStep = sorted.find((a) => a.step === 0) ?? null;
   const approverSteps = sorted.filter((a) => a.step > 0);
+  /**
+   * VM5-12: „ce se întâmplă când unul respinge, iar altul aprobă". Răspunsul aplicației e că prima
+   * respingere oprește tot — corect, dar până acum invizibil: colegul care mai avea rândul deschis
+   * vedea „în așteptarea semnăturii" pe o cerere care nu mai mergea nicăieri.
+   */
+  const rejectedBy = parStatus === "rejected"
+    ? sorted.find((a) => a.decision === "rejected") ?? null
+    : null;
+  const stoppedBy = rejectedBy
+    ? { name: rejectedBy.signatureName ?? rejectedBy.approverName ?? null, at: rejectedBy.decidedAt }
+    : null;
 
   if (sorted.length === 0) {
     return (
@@ -52,6 +65,7 @@ export function ParApprovalChain({ approvals }: Props) {
           approval={appr}
           sectionLabel={`15. ${slotLabel(appr)}`}
           isLocked={appr.locked}
+          stoppedBy={appr.decision === "pending" ? stoppedBy : null}
         />
       ))}
     </div>

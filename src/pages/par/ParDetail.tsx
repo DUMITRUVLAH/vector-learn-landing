@@ -84,7 +84,8 @@ import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
 import { parAccessMessage, type ParAccessMessage } from "@/lib/par/accessMessage";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { checkTenderThreshold, clearTender, type TenderCheck } from "@/lib/api/par";
+import { checkTenderThreshold, clearTender, getParTimeline, type TenderCheck } from "@/lib/api/par";
+import { buildFlowSteps, revisionLabel, type FlowStep } from "@/lib/par/flowBand";
 import {
   collectDocumentMismatches,
   formatCheckValue,
@@ -1039,6 +1040,12 @@ export function ParDetailPage() {
 
   const [par, setPar] = useState<ParDetailType | null>(null);
   /**
+   * VM5-16: etapele prin care a trecut cererea, derivate din jurnal (aceleași date pe care le arată
+   * și ParTimeline mai jos — o singură sursă, nu un al doilea adevăr despre același traseu).
+   */
+  const [flowSteps, setFlowSteps] = useState<FlowStep[]>([]);
+  const [flowRevision, setFlowRevision] = useState<string | null>(null);
+  /**
    * Verificarea IBAN-ului se face la AFIȘARE, nu se stochează: cererea poate fi trimisă cu
    * rechizite care nu trec validarea (atenționăm, nu blocăm), deci semnalul trebuie recalculat
    * din aceeași bibliotecă oriunde e arătat IBAN-ul.
@@ -1083,6 +1090,17 @@ export function ParDetailPage() {
       setPar(data);
       setCurrentUserId(me.userId ?? null);
       setCurrentRoles(me.roles ?? []);
+      // Traseul e informativ: dacă jurnalul nu se poate citi, fișa se deschide fără bandă.
+      getParTimeline(id)
+        .then((t) => {
+          const events = (t.timeline ?? []).map((e) => ({ event: e.event, created_at: e.created_at }));
+          setFlowSteps(buildFlowSteps(events));
+          setFlowRevision(revisionLabel(events));
+        })
+        .catch(() => {
+          setFlowSteps([]);
+          setFlowRevision(null);
+        });
     } catch (e: unknown) {
       // 404 pe cerere = „nu ai acces / nu e aici", iar codul sec (`not_found`) nu spune nimic:
       // arătăm motivul trimis de server, nu identificatorul erorii.
@@ -1177,6 +1195,33 @@ export function ParDetailPage() {
             <DosarButton par={par} />
           </div>
         </div>
+
+        {/* VM5-16: traseul cererii — pe unde a trecut și a câta rundă e. Chip-ul de status spune
+            doar unde e ACUM; un PAR respins, revizuit și aprobat arăta identic cu unul aprobat din
+            prima, iar diferența contează la audit. */}
+        {flowSteps.length > 1 && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-card px-4 py-2.5 text-sm">
+            {flowSteps.map((s: FlowStep, i: number) => (
+              <span key={s.key} className="flex items-center gap-2">
+                {i > 0 && <span className="text-muted-foreground" aria-hidden>→</span>}
+                <span
+                  className={cn(
+                    "font-medium",
+                    s.tone === "bad" ? "text-destructive" : s.tone === "warn" ? "text-warning" : "text-foreground"
+                  )}
+                >
+                  {s.label}
+                </span>
+                <span className="text-xs text-muted-foreground">{fmtDate(s.at)}</span>
+              </span>
+            ))}
+            {flowRevision && (
+              <span className="ml-1 rounded bg-warning/15 px-1.5 py-0.5 text-xs font-medium text-warning">
+                {flowRevision}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* VM5-05: banda de nepotriviri, sus, înaintea acțiunilor — o vede și solicitantul (ca să
             corecteze), și aprobatorul (ca să nu semneze pe un document care spune altceva). Chip-ul
@@ -1466,7 +1511,7 @@ export function ParDetailPage() {
 
         {/* SECTIONS 14–15: Approval chain */}
         <Section num="14–15" title="Semnături și aprobări">
-          <ParApprovalChain approvals={approvals} />
+          <ParApprovalChain approvals={approvals} parStatus={par.status} />
         </Section>
 
         {/* SECTION 16: Finance */}

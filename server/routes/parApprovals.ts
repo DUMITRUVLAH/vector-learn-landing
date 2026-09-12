@@ -55,6 +55,7 @@ import {
   notifyApprovedToRequestor,
   notifyRejected,
   notifyChangesRequested,
+  notifyOthersRequestStopped,
 } from "../services/par/notify";
 import { parPayments } from "../db/schema/par";
 
@@ -889,6 +890,21 @@ async function rejectParStep(
     body.comment,
     userId // VM5-01: solicitantul trebuie să vadă CINE a decis, nu doar că s-a decis
   );
+
+  // VM5-12: ceilalți oameni ai lanțului — cei care mai aveau un rând deschis și cei care semnaseră
+  // deja — află că cererea s-a oprit. Altfel dispare din inboxul lor fără explicație.
+  const ceilalti = approvalSteps
+    .filter((s) => s.id !== activeStep.id && s.approverUserId && s.approverUserId !== userId)
+    .map((s) => s.approverUserId!)
+    .filter((id) => id !== par.requestedByUserId);
+  if (ceilalti.length) {
+    await notifyOthersRequestStopped(
+      { tenantId, parId, requestNo: par.requestNo },
+      ceilalti,
+      userId,
+      body.comment
+    );
+  }
 
   return { ok: true, status: "rejected", body: { ...rejectedPar, chain_status: "rejected" } };
 }

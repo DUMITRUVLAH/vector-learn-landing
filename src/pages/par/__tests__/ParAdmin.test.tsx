@@ -21,6 +21,8 @@ vi.mock("@/components/app/AppShell", () => ({
 }));
 
 vi.mock("@/lib/api/par", () => ({
+  // VM5-16: fișa citește jurnalul pentru banda de traseu (informativ — fără el se deschide la fel).
+  getParTimeline: vi.fn().mockResolvedValue({ timeline: [], total: 0 }),
   listParDoaMatrix: vi.fn().mockResolvedValue({ rows: [] }),
   createParDoaRow: vi.fn().mockResolvedValue({ id: "row-1", step: 1, approverRoleLabel: "Test" }),
   updateParDoaRow: vi.fn().mockResolvedValue({}),

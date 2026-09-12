@@ -603,3 +603,32 @@ export async function notifyEfacturaMissing(
     return { emailed: false, toAddress: userRecord.email };
   }
 }
+
+/**
+ * VM5-12: ceilalți aprobatori ai aceleiași cereri află că nu mai au ce decide.
+ *
+ * Întrebarea din ședință: „ce se întâmplă când unul respinge, iar altul aprobă". Regula aplicației
+ * e că prima respingere oprește tot — corectă, dar până acum tăcută: cererea dispărea din inboxul
+ * celorlalți fără o vorbă, iar cine semnase deja nu afla că decizia lui a fost anulată de altcineva.
+ */
+export async function notifyOthersRequestStopped(
+  ctx: ParNotifyContext,
+  recipientUserIds: readonly string[],
+  decidedByUserId: string | null,
+  comment: string
+): Promise<void> {
+  const who = await decidedByLabel(ctx.tenantId, decidedByUserId);
+  const body = [
+    `Cererea ${ctx.requestNo} a fost RESPINSĂ${who} pe ${nowLabel()}, așa că nu mai așteaptă decizia ta.`,
+    `Motiv: ${comment.slice(0, 500)}`,
+    "Prima respingere oprește cererea, chiar dacă alți aprobatori semnaseră deja. Solicitantul o poate revizui și retrimite — atunci lanțul de aprobare pornește din nou.",
+    `Link: /business/par/${ctx.parId}`,
+  ].join("\n");
+  const subject = `[PAR] ${ctx.requestNo} — respinsă de altcineva, nu mai așteaptă decizia ta`;
+
+  await Promise.allSettled(
+    [...new Set(recipientUserIds)].map((userId) =>
+      notifyUser({ tenantId: ctx.tenantId, userId, parId: ctx.parId, body, subject })
+    )
+  );
+}

@@ -21,6 +21,8 @@ vi.mock("@/components/app/AppShell", () => ({
 }));
 
 vi.mock("@/lib/api/par", () => ({
+  // VM5-16: fișa citește jurnalul pentru banda de traseu (informativ — fără el se deschide la fel).
+  getParTimeline: vi.fn().mockResolvedValue({ timeline: [], total: 0 }),
   // VM5-19: fișa întreabă dacă prestatorul a trecut pragul anual (doar pentru finanțe).
   checkTenderThreshold: vi.fn().mockResolvedValue({
     applies: false, exceeds: false, warn: false, cleared: false,

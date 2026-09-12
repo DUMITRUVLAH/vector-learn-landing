@@ -50,6 +50,8 @@ vi.mock("@/lib/parPdf", () => ({
 }));
 
 vi.mock("@/lib/api/par", () => ({
+  // VM5-16: fișa citește jurnalul pentru banda de traseu (informativ — fără el se deschide la fel).
+  getParTimeline: vi.fn().mockResolvedValue({ timeline: [], total: 0 }),
   getPar: (...args: unknown[]) => mockGetPar(...args),
   getParMe: (...args: unknown[]) => mockGetParMe(...args),
   uploadAttachment: vi.fn(),
