@@ -120,6 +120,17 @@ async function main() {
     `UPDATE fin_agreements SET auto_billing = false WHERE auto_billing IS NULL`,
     `ALTER TABLE fin_agreements ALTER COLUMN auto_billing SET DEFAULT false`,
     `ALTER TABLE fin_agreements ALTER COLUMN auto_billing SET NOT NULL`,
+    // Migrarea 0158 mută conținutul atașamentelor în Storage, deci rândurile noi se scriu cu
+    // `file_url = NULL`. Heal-ul generic de mai sus adaugă doar coloane LIPSĂ — nu relaxează o
+    // constrângere existentă. Dacă 0158 nu prinde pe prod (tracking desincronizat), fiecare
+    // upload ar pica pe not-null, adică exact clasa de 500 care ajunge la clientul plătitor.
+    `ALTER TABLE par_attachments ALTER COLUMN file_url DROP NOT NULL`,
+    // Steagul care spune dacă documentul de portal e deja obiect în Storage. Coloana o adaugă
+    // heal-ul generic, dar fără default — pe rândurile vechi ar rămâne NULL. NULL se comportă
+    // deja ca „nu e în Storage" peste tot, dar contractul din schemă e NOT NULL DEFAULT false.
+    `UPDATE fin_client_portal_documents SET in_object_store = false WHERE in_object_store IS NULL`,
+    `ALTER TABLE fin_client_portal_documents ALTER COLUMN in_object_store SET DEFAULT false`,
+    `ALTER TABLE fin_client_portal_documents ALTER COLUMN in_object_store SET NOT NULL`,
   ];
   for (const stmt of ENSURE_COLUMN_STMTS) {
     try {
