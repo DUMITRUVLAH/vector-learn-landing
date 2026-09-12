@@ -464,6 +464,8 @@ export function ParCreateForm() {
   const [projectId, setProjectId] = useState(lastUsed.projectId ?? "");
   const [eventId, setEventId] = useState(""); // VM1-04
   const [budgetCodeId, setBudgetCodeId] = useState("");
+  /** Omul a șters codul cu X: auto-completarea nu i-o mai pune înapoi în același context. */
+  const [budgetCodeCleared, setBudgetCodeCleared] = useState(false);
   const [budgetCodeNote, setBudgetCodeNote] = useState("");
   /** Adăugarea rapidă de cod bugetar apare la cerere — altfel ținea un rând gol în permanență. */
   const [showNewBudgetCode, setShowNewBudgetCode] = useState(false);
@@ -801,6 +803,12 @@ export function ParCreateForm() {
 
   // Keep the budget selection inside the selected payer/project scope and remove one
   // unnecessary click when that scope has exactly one eligible code.
+  //
+  // `budgetCodeCleared` e ștergerea făcută de om cu X pe „Cod bugetar". Fără ea,
+  // auto-completarea se reaplica imediat: efectul vedea un câmp gol cu un singur cod
+  // eligibil și îl punea înapoi, deci pe ecran „nu se întâmpla nimic" la apăsarea lui X
+  // (raportat de un utilizator). Comoditatea nu are drept de veto peste o decizie
+  // explicită; se reoferă doar când se reia contextul (alt plătitor / alt proiect).
   useEffect(() => {
     if (!payerId) {
       if (budgetCodeId) setBudgetCodeId("");
@@ -810,11 +818,12 @@ export function ParCreateForm() {
       code.payerId === payerId && (!code.projectId || (!!projectId && code.projectId === projectId))
     );
     if (budgetCodeId && !eligible.some((code) => code.id === budgetCodeId)) {
+      // Selecția nu mai aparține scopului curent — o corectăm, nu o lăsăm greșită.
       setBudgetCodeId(eligible.length === 1 ? eligible[0].id : "");
-    } else if (!budgetCodeId && eligible.length === 1) {
+    } else if (!budgetCodeId && !budgetCodeCleared && eligible.length === 1) {
       setBudgetCodeId(eligible[0].id);
     }
-  }, [payerId, projectId, budgetCodes, budgetCodeId]);
+  }, [payerId, projectId, budgetCodes, budgetCodeId, budgetCodeCleared]);
 
   // Feature 1: Registry company search (debounced 400ms)
   const doRegistrySearch = useCallback((q: string) => {
@@ -1733,7 +1742,7 @@ export function ParCreateForm() {
               <Field label="Plătitor / Organizație" htmlFor="payer">
                 <Select id="payer" className="w-full" value={payerId} onChange={(e) => {
                   const next = e.target.value;
-                  setPayerId(next); setEventId(""); setBudgetCodeId("");
+                  setPayerId(next); setEventId(""); setBudgetCodeId(""); setBudgetCodeCleared(false);
                   const eligible = projects.filter((p) => !next || p.payerId === next);
                   setProjectId(eligible.length === 1 ? eligible[0].id : "");
                 }}>
@@ -1744,7 +1753,7 @@ export function ParCreateForm() {
               <Field label="Proiect / Program" htmlFor="proj">
                 <Select id="proj" className="w-full" value={projectId}
                   onChange={(e) => {
-                    const next = e.target.value; setProjectId(next); setEventId(""); setBudgetCodeId("");
+                    const next = e.target.value; setProjectId(next); setEventId(""); setBudgetCodeId(""); setBudgetCodeCleared(false);
                     const selected = projects.find((p) => p.id === next); if (selected?.payerId) setPayerId(selected.payerId);
                   }}
                   aria-label="Proiect">
@@ -1804,7 +1813,7 @@ export function ParCreateForm() {
                       id="bc"
                       aria-label="Cod bugetar"
                       value={budgetCodeId}
-                      onChange={setBudgetCodeId}
+                      onChange={(next) => { setBudgetCodeId(next); setBudgetCodeCleared(!next); }}
                       options={eligibleCodes.map((b) => ({ value: b.id, label: b.code, hint: b.name }))}
                       placeholder={payerId ? "Caută după cod sau denumire…" : "Alege întâi plătitorul"}
                       emptyText={payerId ? "Niciun cod bugetar care să se potrivească" : "Alege întâi plătitorul"}
