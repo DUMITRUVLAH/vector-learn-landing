@@ -2133,8 +2133,17 @@ export interface ParActivityItem {
   projectName: string | null;
 }
 
-export async function listParActivity(limit = 8): Promise<{ items: ParActivityItem[] }> {
-  return api<{ items: ParActivityItem[] }>(`/api/par/activity?limit=${limit}`);
+export async function listParActivity(
+  opts: number | { limit?: number; actorUserId?: string; from?: string; to?: string } = 8
+): Promise<{ items: ParActivityItem[] }> {
+  // VM5-09: feedul de pe tabloul de bord cheamă cu un număr („ultimele 8"); ecranul „Activitatea"
+  // cheamă cu filtre. Amândouă trec prin aceeași rută, cu aceleași reguli de vizibilitate.
+  const o = typeof opts === "number" ? { limit: opts } : opts;
+  const q = new URLSearchParams({ limit: String(o.limit ?? 8) });
+  if (o.actorUserId) q.set("actor_user_id", o.actorUserId);
+  if (o.from) q.set("from", o.from);
+  if (o.to) q.set("to", o.to);
+  return api<{ items: ParActivityItem[] }>(`/api/par/activity?${q.toString()}`);
 }
 
 // ─── VM5-19: pragul anual per prestator (tender) ──────────────────────────────

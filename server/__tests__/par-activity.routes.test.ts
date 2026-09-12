@@ -202,3 +202,37 @@ describe("GET /api/par/activity", () => {
     expect([...dates].sort().reverse()).toEqual(dates);
   });
 });
+
+/**
+ * VM5-09 — „work-flow-ul per persoană": ce a făcut un om, pe un interval.
+ *
+ * Filtrele se aplică pe AMBELE surse ale feedului (jurnal + comentarii). Dacă s-ar aplica doar pe
+ * una, „ce a făcut Iulian" ar întoarce și comentariile tuturor — exact genul de răspuns în care ai
+ * încredere până în ziua în care te bazezi pe el.
+ */
+describe("filtre: persoană și interval", () => {
+  it("întoarce doar ce a făcut persoana cerută", async () => {
+    const toateRes = await app.request("/api/par/activity?limit=100");
+    const toate = (await toateRes.json()) as { items: Array<{ actorName: string | null }> };
+    const nume = [...new Set(toate.items.map((i) => i.actorName))].filter(Boolean);
+    expect(nume.length).toBeGreaterThan(0);
+
+    const res = await app.request(`/api/par/activity?limit=100&actor_user_id=${approverA}`);
+    const doarEl = (await res.json()) as { items: Array<{ actorName: string | null }> };
+    const numeFiltrate = [...new Set(doarEl.items.map((i) => i.actorName))];
+    expect(numeFiltrate.length).toBeLessThanOrEqual(1);
+  });
+
+  it("respectă intervalul de date", async () => {
+    const viitor = "2099-01-01";
+    const res = await app.request(`/api/par/activity?limit=100&from=${viitor}`);
+    const gol = (await res.json()) as { items: unknown[] };
+    expect(gol.items).toHaveLength(0);
+  });
+
+  it("plafonul rămâne: nu se poate trage tot jurnalul dintr-o dată", async () => {
+    const res = await app.request("/api/par/activity?limit=99999");
+    const r = (await res.json()) as { items: unknown[] };
+    expect(r.items.length).toBeLessThanOrEqual(300);
+  });
+});

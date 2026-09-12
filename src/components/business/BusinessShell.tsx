@@ -44,8 +44,7 @@ import {
   ChevronDown,
   Search,
   Menu,
-  X,
-} from "lucide-react";
+  X, Activity} from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
 import { ImpersonationBanner } from "@/components/platform/ImpersonationBanner";
@@ -201,6 +200,8 @@ const PAR_NAV_GROUPS: NavGroup[] = [
       { label: "Documente", href: DOCS_BASE, icon: FileText, tone: "sky" },
       { label: "Furnizori", href: "/business/par/vendors", icon: Building2, tone: "violet" },
       { label: "Foldere proiecte", href: "/business/par/folders", icon: FolderOpen, tone: "teal", roles: ["approver", "finance", "par_admin"] },
+      // VM5-09: activitatea e deschisă tuturor — feedul arată oricum doar ce poate vedea omul.
+      { label: "Activitate", href: "/business/par/activitate", icon: Activity, tone: "teal" },
       { label: "Rapoarte & statistici", href: "/business/par/reports", icon: BarChart3, tone: "sky", roles: ["approver", "finance", "par_admin"] },
       // Cursul oficial e informație publică — fără restricție de rol; îl folosește oricine
       // completează o cerere în valută.

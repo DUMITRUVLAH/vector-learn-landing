@@ -518,7 +518,7 @@ a second product surface. Recommendation: daycare-first (KINDER-001/002/003) for
 | VM5-06 | medium | Data cererii vs data înregistrării, pe PDF + filtru de retroactive | ✅ done (PDF) | [catalog](specs/VM5-catalog.md) |
 | VM5-07 | — | Arhivare digitală vs fizică (conformitate) | 🔴 întrebare Ana | [catalog](specs/VM5-catalog.md) |
 | VM5-08 | high | „Pachet audit": registru XLSX + dosarele PDF pe interval | 🟢 todo | [catalog](specs/VM5-catalog.md) |
-| VM5-09 | medium | Ecran „Activitatea" (ce a făcut o persoană, cu export) | 🟢 todo | [catalog](specs/VM5-catalog.md) |
+| VM5-09 | medium | Ecran „Activitatea" (ce a făcut o persoană, cu export) | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-10 | high | Tip de achiziție: aprobatori în plus + documente obligatorii | 🔴 lipsă taxonomie | [catalog](specs/VM5-catalog.md) |
 | VM5-11 | medium | Digest de aprobări (09:00 / 16:00) — cere `CRON_SECRET` în Vercel | ✅ done | [catalog](specs/VM5-catalog.md) |
 | VM5-12 | medium | Respingerea pe nivel paralel: se vede de ce s-a oprit cererea | ✅ done | [catalog](specs/VM5-catalog.md) |

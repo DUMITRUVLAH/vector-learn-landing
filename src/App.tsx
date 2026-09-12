@@ -42,6 +42,8 @@ const ParDetailPage = lazyWithTimeout(() => import("./pages/par/ParDetail").then
 const ParAdmin = lazyWithTimeout(() => import("./pages/par/ParAdmin").then((m) => ({ default: m.ParAdmin })));
 const ParReports = lazyWithTimeout(() => import("./pages/par/ParReports").then((m) => ({ default: m.ParReports })));
 const ParFolders = lazyWithTimeout(() => import("./pages/par/ParFolders").then((m) => ({ default: m.ParFolders })));
+// VM5-09: „Activitatea" — ce a făcut o persoană, transversal peste cereri.
+const ParActivity = lazyWithTimeout(() => import("./pages/par/ParActivity").then((m) => ({ default: m.ParActivity })));
 const ParDrive = lazyWithTimeout(() => import("./pages/par/ParDrive").then((m) => ({ default: m.ParDrive })));
 // FX-001: curs valutar BNM — lazy, ca recharts să nu intre în bundle-ul de login.
 const ParExchange = lazyWithTimeout(() => import("./pages/par/ParExchange").then((m) => ({ default: m.ParExchange })));
@@ -296,6 +298,7 @@ function Routes() {
   if (path.startsWith("/business/par/exchange")) return <BusinessGuardPage><ParGuardPage><ParExchange /></ParGuardPage></BusinessGuardPage>;
   // PAR-DRIVE: setările oglinzii din Google Drive — doar administratorul PAR conectează contul.
   if (path.startsWith("/business/par/drive")) return <BusinessGuardPage><ParGuardPage requiredRoles={["par_admin"]}><ParDrive /></ParGuardPage></BusinessGuardPage>;
+  if (path.startsWith("/business/par/activitate")) return <BusinessGuardPage><ParGuardPage><ParActivity /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/folders")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "finance", "par_admin"]}><ParFolders /></ParGuardPage></BusinessGuardPage>;
   if (path.startsWith("/business/par/reports")) return <BusinessGuardPage><ParGuardPage requiredRoles={["approver", "finance", "par_admin"]}><ParReports /></ParGuardPage></BusinessGuardPage>;
   // PARQA-001: edit an existing draft / changes_requested PAR (ParCreateForm loads it by :id).
