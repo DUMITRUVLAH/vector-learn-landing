@@ -52,6 +52,7 @@ import {
   type DocTrail,
 } from "@/lib/api/docs";
 import { listProjects, createVendor, type ParProject } from "@/lib/api/par";
+import { getVendorProfile } from "@/lib/api/parVendorProfile";
 import { fieldLabel } from "@/lib/docs/fieldCatalog";
 import { parseMoneyRo, formatMoneyRo } from "@/lib/docs/money";
 import { downloadDocumentPdf, ensureStoredPdf, fetchPrintable } from "@/lib/docs/documentPdfClient";
@@ -100,6 +101,17 @@ export function DocEditorPage() {
   // Citirea id-ului stă în `@/lib/docs/paths`, comună cu ruta veche și cu testele: un prefix
   // scris de mână aici s-ar rupe tăcut la următoarea mutare a modulului.
   const docId = useMemo(() => documentIdFromPath(path), [path]);
+
+  /**
+   * Actul poate porni din fișa unui furnizor: `/business/docs/nou?vendor=<id>&kind=<tip>`.
+   * Fără asta, omul care tocmai se uita la furnizor trebuia să-l caute din nou aici — exact
+   * retastarea pe care ecranul ăsta promite că o elimină.
+   */
+  const prefill = useMemo(() => {
+    const qi = path.indexOf("?");
+    const qs = new URLSearchParams(qi >= 0 ? path.slice(qi + 1) : "");
+    return { vendorId: qs.get("vendor"), kind: qs.get("kind") };
+  }, [path]);
 
   const [doc, setDoc] = useState<DocDetail | null>(null);
   const [templates, setTemplates] = useState<DocTemplateListItem[]>([]);
@@ -167,8 +179,28 @@ export function DocEditorPage() {
         setTemplates(tpls);
         setProjects(prj);
         if (!docId && !templateChosenByUser.current) {
-          const forKind = tpls.find((t) => t.kind === "act_primire_predare");
+          const startKind = prefill.kind && DOC_KIND_LABELS[prefill.kind] ? prefill.kind : "act_primire_predare";
+          if (startKind !== "act_primire_predare") setKind(startKind);
+          const forKind = tpls.find((t) => t.kind === startKind) ?? tpls.find((t) => t.kind === "act_primire_predare");
           if (forKind) setTemplateId(forKind.id);
+        }
+
+        // Furnizorul venit din fișa lui: rechizitele se citesc din registru, nu se retastează.
+        if (!docId && prefill.vendorId) {
+          const v = await getVendorProfile(prefill.vendorId).then((r) => r.vendor).catch(() => null);
+          if (cancelled) return;
+          if (v) {
+            setVendorId(v.id);
+            setSaveToRegistry(false);
+            setParty({
+              name: v.name,
+              idno: v.idnp ?? "",
+              iban: v.iban ?? "",
+              bank: v.bank ?? "",
+              address: v.legalAddress ?? "",
+              administrator: v.administratorName ?? "",
+            });
+          }
         }
 
         if (docId) {
@@ -218,7 +250,7 @@ export function DocEditorPage() {
     return () => {
       cancelled = true;
     };
-  }, [docId]);
+  }, [docId, prefill.kind, prefill.vendorId]);
 
   // Căutarea merge la server: acolo se unesc registrul și beneficiarii scriși pe cereri de plată.
   useEffect(() => {

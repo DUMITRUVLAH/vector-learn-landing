@@ -103,6 +103,14 @@ vi.mock("@/lib/api/docs", async () => {
   };
 });
 
+const getVendorProfile = vi.fn();
+vi.mock("@/lib/api/parVendorProfile", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api/parVendorProfile")>(
+    "@/lib/api/parVendorProfile"
+  );
+  return { ...actual, getVendorProfile: (...a: unknown[]) => getVendorProfile(...a) };
+});
+
 const { DocEditorPage } = await import("@/pages/business/docs/DocEditorPage");
 
 const FINAL_DOC: DocDetail = {
@@ -177,7 +185,19 @@ beforeEach(() => {
   createVendor.mockResolvedValue({ id: "v-new", name: "SRL Nou" });
   listDocTemplates.mockResolvedValue([
     { id: "tpl-1", name: "Act de primire-predare", kind: "act_primire_predare", category: null, isSystem: true, version: 1, placeholders: [], updatedAt: "" },
+    { id: "tpl-2", name: "Contract de prestări servicii", kind: "contract_servicii", category: null, isSystem: true, version: 1, placeholders: [], updatedAt: "" },
   ]);
+  getVendorProfile.mockResolvedValue({
+    vendor: {
+      id: "v1",
+      name: 'SRL "Tehnica Nouă"',
+      idnp: "1234567890123",
+      iban: "MD48ML000002259A19498121",
+      bank: "BC Moldindconbank SA",
+      legalAddress: "mun. Chișinău, bd. Dacia 45",
+      administratorName: "Andrei Rusu",
+    },
+  });
   createDocument.mockResolvedValue({ ...FINAL_DOC, id: "doc-new", status: "draft", docNumber: null, missing: [] });
   getDocumentTrail.mockResolvedValue({ document: FINAL_DOC, basedOn: [], derived: [], paymentRequests: [] });
   listDerivableKinds.mockResolvedValue({ kinds: [] });
@@ -795,5 +815,34 @@ describe("Previzualizarea actului", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Previzualizarea nu a putut fi generată/);
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+/**
+ * Actul pornit din fișa furnizorului (VENDOR360): „direct din furnizori să poți crea diferite
+ * documente pe baza lui" (owner, 2026-09-12). Dacă prefill-ul n-ar funcționa, omul ar căuta a doua
+ * oară exact furnizorul de pe ecranul de unde tocmai a plecat.
+ */
+describe("act nou pornit din fișa furnizorului", () => {
+  it("[blocant] furnizorul din URL vine completat, fără nicio căutare", async () => {
+    currentPath = "/business/docs/nou?vendor=v1&kind=contract_servicii";
+    render(<DocEditorPage />);
+
+    await waitFor(() => expect(getVendorProfile).toHaveBeenCalledWith("v1"));
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('SRL "Tehnica Nouă"')).toBeInTheDocument()
+    );
+    expect(screen.getByDisplayValue("MD48ML000002259A19498121")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("1234567890123")).toBeInTheDocument();
+  });
+
+  it("[blocant] tipul cerut din URL alege și șablonul tipului", async () => {
+    currentPath = "/business/docs/nou?vendor=v1&kind=contract_servicii";
+    render(<DocEditorPage />);
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Tipul actului/i)).toHaveValue("contract_servicii")
+    );
+    expect(screen.getByLabelText(/^Șablon/i)).toHaveValue("tpl-2");
   });
 });

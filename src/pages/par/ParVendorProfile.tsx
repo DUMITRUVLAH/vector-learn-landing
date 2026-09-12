@@ -18,6 +18,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarClock,
+  FilePlus2,
+  FileSignature,
   FileText,
   Info,
   Loader2,
@@ -49,6 +51,12 @@ import { StarRating } from "@/components/par/VendorStars";
 import { VendorRatingDialog } from "@/components/par/VendorRatingDialog";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatMDL, getParMe } from "@/lib/api/par";
+import {
+  listDocuments,
+  DOC_KIND_LABELS,
+  DOC_STATUS_LABELS,
+  type DocListItem,
+} from "@/lib/api/docs";
 import {
   getVendorProfile,
   listVendorRatings,
@@ -123,6 +131,8 @@ export default function ParVendorProfile() {
   const [offers, setOffers] = useState<VendorOffer[]>([]);
   const [quotes, setQuotes] = useState<VendorQuoteOffer[]>([]);
   const [documents, setDocuments] = useState<VendorDocument[]>([]);
+  /** Actele generate în aplicație (contracte, acte de primire-predare) pentru acest furnizor. */
+  const [acts, setActs] = useState<DocListItem[]>([]);
   const [categories, setCategories] = useState<VendorCategory[]>([]);
 
   const [rateOpen, setRateOpen] = useState(false);
@@ -132,6 +142,7 @@ export default function ParVendorProfile() {
   const [offerOpen, setOfferOpen] = useState(false);
   const [docOpen, setDocOpen] = useState(false);
   const [catsOpen, setCatsOpen] = useState(false);
+  const [newActOpen, setNewActOpen] = useState(false);
 
   const loadProfile = useCallback(async () => {
     if (!id) return;
@@ -152,17 +163,20 @@ export default function ParVendorProfile() {
 
   const loadTabs = useCallback(async () => {
     if (!id) return;
-    const [r, n, o, d] = await Promise.all([
+    const [r, n, o, d, a] = await Promise.all([
       listVendorRatings(id).catch(() => ({ ratings: [], summary: null })),
       listVendorNotes(id).catch(() => ({ notes: [] })),
       listVendorOffers(id).catch(() => ({ offers: [], quotes: [] })),
       listVendorDocuments(id).catch(() => ({ documents: [] })),
+      // Actele făcute din aplicație stau lângă hârtiile încărcate manual: e același dosar.
+      listDocuments({ counterpartyId: id }).catch(() => [] as DocListItem[]),
     ]);
     setRatings(r.ratings);
     setNotes(n.notes);
     setOffers(o.offers);
     setQuotes(o.quotes);
     setDocuments(d.documents);
+    setActs(a);
   }, [id]);
 
   useEffect(() => {
@@ -216,7 +230,15 @@ export default function ParVendorProfile() {
       ].filter(Boolean).join(" · ")}
       actions={
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => { setRateTarget(null); setRateOpen(true); }}>
+          {/*
+            „Fac un contract cu ăștia" e o acțiune care pornea din altă parte a aplicației, unde
+            rechizitele se recăutau de la zero. De aici actul pleacă deja cu furnizorul completat.
+          */}
+          <Button onClick={() => setNewActOpen(true)}>
+            <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+            Act nou
+          </Button>
+          <Button variant="outline" onClick={() => { setRateTarget(null); setRateOpen(true); }}>
             <Star className="h-4 w-4" aria-hidden="true" />
             Evaluează
           </Button>
@@ -273,25 +295,6 @@ export default function ParVendorProfile() {
           </ul>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard label="Plătit în total" value={formatMDL(profile.kpis.paidCents)} hint={`${profile.kpis.paidCount} plăți`} />
-          <KpiCard
-            label="Angajat acum"
-            value={formatMDL(profile.kpis.committedCents)}
-            hint="cereri în lucru"
-          />
-          <KpiCard
-            label="Cerere medie"
-            value={profile.kpis.avgRequestCents == null ? "—" : formatMDL(profile.kpis.avgRequestCents)}
-            hint={`${profile.kpis.requestCount} cereri`}
-          />
-          <KpiCard
-            label="De la aprobare la plată"
-            value={profile.kpis.avgDaysApprovalToPayment == null ? "—" : `${profile.kpis.avgDaysApprovalToPayment} zile`}
-            hint="cât de repede ne ținem noi de cuvânt"
-          />
-        </div>
-
         <Tabs
           aria-label="Secțiunile fișei"
           value={tab}
@@ -305,6 +308,26 @@ export default function ParVendorProfile() {
             { value: "notes", label: "Note interne", count: notes.length },
           ]}
         />
+
+        {/*
+          Cifrele stau pe UN rând subțire, nu în patru carduri cât un ecran: sunt context pentru
+          ce urmează, nu conținutul paginii. Cardurile mari împingeau meniul fișei sub pliu, deci
+          omul derula ca să ajungă la ce căutase de fapt (owner, 2026-09-12).
+        */}
+        <Card className="grid grid-cols-2 divide-border sm:grid-cols-4 sm:divide-x">
+          <KpiCell label="Plătit în total" value={formatMDL(profile.kpis.paidCents)} hint={`${profile.kpis.paidCount} plăți`} />
+          <KpiCell label="Angajat acum" value={formatMDL(profile.kpis.committedCents)} hint="cereri în lucru" />
+          <KpiCell
+            label="Cerere medie"
+            value={profile.kpis.avgRequestCents == null ? "—" : formatMDL(profile.kpis.avgRequestCents)}
+            hint={`${profile.kpis.requestCount} cereri`}
+          />
+          <KpiCell
+            label="Aprobare → plată"
+            value={profile.kpis.avgDaysApprovalToPayment == null ? "—" : `${profile.kpis.avgDaysApprovalToPayment} zile`}
+            hint="cât de repede ne ținem de cuvânt"
+          />
+        </Card>
 
         {tab === "overview" && (
           <OverviewTab
@@ -399,7 +422,14 @@ export default function ParVendorProfile() {
         )}
 
         {tab === "documents" && (
-          <DocumentsTab documents={documents} onAdd={() => setDocOpen(true)} onDelete={async (docId) => { await deleteVendorDocument(docId); refreshAll(); }} />
+          <DocumentsTab
+            documents={documents}
+            acts={acts}
+            vendorId={id}
+            onNewAct={() => setNewActOpen(true)}
+            onAdd={() => setDocOpen(true)}
+            onDelete={async (docId) => { await deleteVendorDocument(docId); refreshAll(); }}
+          />
         )}
 
         {tab === "notes" && (
@@ -452,6 +482,13 @@ export default function ParVendorProfile() {
         }}
       />
 
+      <NewActDialog
+        open={newActOpen}
+        onClose={() => setNewActOpen(false)}
+        vendorId={id}
+        vendorName={v.name}
+      />
+
       <CategoryPickDialog
         open={catsOpen}
         onClose={() => setCatsOpen(false)}
@@ -466,13 +503,14 @@ export default function ParVendorProfile() {
   );
 }
 
-function KpiCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/** O cifră din banda de sus: eticheta mică, valoarea citibilă, explicația în șoaptă. */
+function KpiCell({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <Card className="flex flex-col gap-1 p-4">
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className="text-xl font-semibold tabular-nums text-foreground">{value}</span>
+    <div className="flex flex-col gap-0.5 px-4 py-3">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-base font-semibold tabular-nums text-foreground">{value}</span>
       {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
-    </Card>
+    </div>
   );
 }
 
@@ -839,30 +877,152 @@ function OffersTab({
   );
 }
 
+/**
+ * Actele pe care le poți face cu un furnizor, în ordinea în care apar în viața unei colaborări.
+ * Lista e scurtă intenționat: tipurile rare se aleg din editor, unde oricum se completează restul.
+ */
+const ACT_CHOICES: { kind: string; label: string; hint: string }[] = [
+  { kind: "contract_servicii", label: "Contract de prestări servicii", hint: "Începutul colaborării: obiect, preț, termene." },
+  { kind: "act_primire_predare", label: "Act de primire-predare", hint: "Confirmă ce s-a predat efectiv, pe bază de contract." },
+  { kind: "proces_verbal", label: "Proces-verbal de recepție", hint: "Recepția lucrării sau a serviciului, înainte de plată." },
+  { kind: "contract_vanzare", label: "Contract de vânzare-cumpărare", hint: "Când cumperi bunuri, nu servicii." },
+  { kind: "act_aditional", label: "Act adițional", hint: "Modifică un contract existent: sumă, termen, obiect." },
+  { kind: "act_compensare", label: "Act de compensare", hint: "Stinge datorii reciproce, fără transfer de bani." },
+];
+
+/**
+ * Alegerea tipului de act. Actul se deschide în editorul de acte cu furnizorul deja completat —
+ * IDNO, IBAN, banca și adresa vin din registru, nu de la tastatura omului.
+ */
+function NewActDialog({
+  open,
+  onClose,
+  vendorId,
+  vendorName,
+}: {
+  open: boolean;
+  onClose: () => void;
+  vendorId: string;
+  vendorName: string;
+}) {
+  const { navigate } = useRouter();
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Act nou"
+      description={`Rechizitele lui ${vendorName} se completează automat în act.`}
+      size="lg"
+    >
+      <div className="grid gap-2 sm:grid-cols-2">
+        {ACT_CHOICES.map((choice) => (
+          <button
+            key={choice.kind}
+            type="button"
+            onClick={() => {
+              onClose();
+              navigate(`/business/docs/nou?vendor=${vendorId}&kind=${choice.kind}`);
+            }}
+            className="touch-target flex flex-col gap-1 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="flex items-center gap-2 font-medium text-foreground">
+              <FileSignature className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              {choice.label}
+            </span>
+            <span className="text-xs text-muted-foreground">{choice.hint}</span>
+          </button>
+        ))}
+      </div>
+    </Dialog>
+  );
+}
+
+/** Actele pot fi în altă monedă decât leul — cifra fără monedă e o cifră greșită. */
+function actMoney(cents: number, currency: string): string {
+  if (currency === "MDL") return formatMDL(cents);
+  return `${(cents / 100).toLocaleString("ro-MD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+}
+
 function DocumentsTab({
   documents,
+  acts,
+  vendorId,
+  onNewAct,
   onAdd,
   onDelete,
 }: {
   documents: VendorDocument[];
+  acts: DocListItem[];
+  vendorId: string;
+  onNewAct: () => void;
   onAdd: () => void;
   onDelete: (id: string) => Promise<void>;
 }) {
   const now = Date.now();
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex justify-end">
-        <Button onClick={onAdd}>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button onClick={onNewAct}>
+          <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+          Act nou
+        </Button>
+        <Button variant="outline" onClick={onAdd}>
           <Plus className="h-4 w-4" aria-hidden="true" />
           Adaugă document
         </Button>
       </div>
 
+      {/*
+        Actele făcute în aplicație și hârtiile încărcate manual sunt același dosar pentru omul care
+        întreabă „ce avem semnat cu ei?" — deci stau pe același ecran, nu în două module.
+      */}
+      {acts.length > 0 && (
+        <Card className="overflow-x-auto p-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+            <h2 className="font-medium text-foreground">Acte generate în aplicație</h2>
+            <Link to={`/business/docs/contraparte/${vendorId}`} className="text-sm text-primary hover:underline">
+              Vezi dosarul complet
+            </Link>
+          </div>
+          <table className="w-full min-w-[40rem] text-sm">
+            <thead className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="p-3">Act</th>
+                <th className="p-3">Tip</th>
+                <th className="p-3">Data</th>
+                <th className="p-3">Stare</th>
+                <th className="p-3 text-right">Sumă</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {acts.map((a) => (
+                <tr key={a.id} className="hover:bg-muted/30">
+                  <td className="p-3">
+                    <Link to={`/business/docs/${a.id}`} className="font-medium text-primary hover:underline">
+                      {a.docNumber ? `Nr. ${a.docNumber}` : "Ciornă"}
+                    </Link>
+                    <p className="max-w-md truncate text-xs text-muted-foreground">{a.title}</p>
+                  </td>
+                  <td className="p-3 text-muted-foreground">{DOC_KIND_LABELS[a.kind] ?? a.kind}</td>
+                  <td className="p-3 text-muted-foreground">{fmtDate(a.docDate)}</td>
+                  <td className="p-3">
+                    <Badge variant={a.status === "final" ? "success" : a.status === "cancelled" ? "destructive" : "secondary"}>
+                      {DOC_STATUS_LABELS[a.status] ?? a.status}
+                    </Badge>
+                  </td>
+                  <td className="p-3 text-right font-medium tabular-nums">{actMoney(a.totalCents, a.currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
       {documents.length === 0 ? (
         <EmptyState
           icon={<FileText className="h-6 w-6" />}
-          title="Niciun document"
-          description="Contracte, certificate, licențe — cu data până la care sunt valabile. Fișa avertizează când se apropie expirarea."
+          title="Nicio hârtie încărcată"
+          description="Contracte semnate, certificate, licențe — cu data până la care sunt valabile. Fișa avertizează când se apropie expirarea."
         />
       ) : (
         documents.map((d) => {

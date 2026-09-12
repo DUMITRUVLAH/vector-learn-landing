@@ -22,12 +22,11 @@ import {
   X,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
-import { Link } from "@/router/HashRouter";
+import { Link, useRouter } from "@/router/HashRouter";
 import {
   Alert,
   Badge,
   Button,
-  Card,
   Dialog,
   EmptyState,
   Input,
@@ -62,6 +61,47 @@ const RELATIONSHIP_VARIANT: Record<string, "success" | "secondary" | "warning" |
   blocked: "destructive",
 };
 
+/** Sortările pe care le știe serverul; fiecare are o singură direcție firească. */
+type VendorSort = "name" | "paid" | "rating" | "recent";
+
+/**
+ * Cap de coloană care sortează, ca în inbox. Direcția nu se comută: „alfabetic" merge crescător,
+ * restul descrescător — nimeni nu caută „cel mai prost notat furnizor" ca prim gest.
+ */
+function SortTh({
+  k,
+  label,
+  align = "left",
+  sort,
+  onSort,
+}: {
+  k: VendorSort;
+  label: string;
+  align?: "left" | "right";
+  sort: VendorSort;
+  onSort: (next: VendorSort) => void;
+}) {
+  return (
+    <th
+      aria-sort={sort === k ? (k === "name" ? "ascending" : "descending") : "none"}
+      className={cn(
+        "whitespace-nowrap px-3 py-3 font-medium text-muted-foreground",
+        align === "right" ? "text-right" : "text-left"
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(k)}
+        className="inline-flex items-center hover:text-foreground"
+        aria-label={`Sortează după ${label}`}
+      >
+        {label}
+        {sort === k && <span className="text-primary">{k === "name" ? " ▲" : " ▼"}</span>}
+      </button>
+    </th>
+  );
+}
+
 function lastPaidLabel(iso: string | null): string {
   if (!iso) return "Nicio plată";
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -73,6 +113,7 @@ function lastPaidLabel(iso: string | null): string {
 }
 
 export default function ParVendors() {
+  const { navigate } = useRouter();
   const [vendors, setVendors] = useState<VendorDirectoryItem[]>([]);
   const [categories, setCategories] = useState<VendorCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,7 +124,7 @@ export default function ParVendors() {
   const [category, setCategory] = useState("");
   const [relationship, setRelationship] = useState("");
   const [minRating, setMinRating] = useState("");
-  const [sort, setSort] = useState<"name" | "paid" | "rating" | "recent">("name");
+  const [sort, setSort] = useState<VendorSort>("name");
 
   const [addOpen, setAddOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
@@ -229,15 +270,6 @@ export default function ParVendors() {
               <option value="3">3 stele și peste</option>
             </Select>
           </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="vendor-sort">Sortare</Label>
-            <Select id="vendor-sort" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
-              <option value="name">Alfabetic</option>
-              <option value="paid">Cei mai plătiți</option>
-              <option value="rating">Cei mai bine notați</option>
-              <option value="recent">Plătiți recent</option>
-            </Select>
-          </div>
           {activeFilters > 0 && (
             <Button
               variant="ghost"
@@ -275,53 +307,95 @@ export default function ParVendors() {
             }
           />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {vendors.map((v) => (
-              <Link
-                key={v.id}
-                to={`/business/par/vendors/${v.id}`}
-                className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Card className="flex h-full flex-col gap-3 p-4 transition-shadow hover:shadow-md">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <h2 className="truncate font-medium text-foreground">{v.name}</h2>
+          /*
+            Tabel, nu carduri: furnizorii se aleg comparând cifre — cât s-a plătit, ce notă are,
+            de când n-am mai lucrat cu el. Cardurile puneau fiecare cifră în altă poziție, deci
+            comparația cerea citit, nu privit. Banda e aceeași cu a inboxului de cereri și a cozii
+            de finanțe, ca cele trei ecrane să arate a același produs.
+          */
+          <div className="overflow-x-auto rounded-lg border border-border bg-card">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50">
+                  <SortTh k="name" label="Furnizor" sort={sort} onSort={setSort} />
+                  <th className="whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">Domenii</th>
+                  <th className="whitespace-nowrap px-3 py-3 text-left font-medium text-muted-foreground">Stare</th>
+                  <SortTh k="rating" label="Notă" sort={sort} onSort={setSort} />
+                  <th className="whitespace-nowrap px-3 py-3 text-right font-medium text-muted-foreground">Cereri</th>
+                  <SortTh k="paid" label="Plătit" align="right" sort={sort} onSort={setSort} />
+                  <SortTh k="recent" label="Ultima plată" sort={sort} onSort={setSort} />
+                </tr>
+              </thead>
+              <tbody>
+                {vendors.map((v, idx) => (
+                  <tr
+                    key={v.id}
+                    onClick={() => navigate(`/business/par/vendors/${v.id}`)}
+                    className={cn(
+                      "cursor-pointer border-b border-border last:border-0 hover:bg-muted/30",
+                      idx % 2 ? "bg-muted/10" : "bg-background"
+                    )}
+                  >
+                    <td className="min-w-[14rem] px-3 py-3 align-middle">
+                      {/* Numele rămâne link adevărat: tastatura și „deschide în tab nou" nu depind de click pe rând. */}
+                      <Link
+                        to={`/business/par/vendors/${v.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="font-medium text-foreground hover:underline"
+                      >
+                        {v.name}
+                      </Link>
                       <p className="text-xs text-muted-foreground">
                         {v.idnp ? `Cod fiscal ${v.idnp}` : "Fără cod fiscal"}
                       </p>
-                    </div>
-                    <Badge variant={RELATIONSHIP_VARIANT[v.relationship] ?? "secondary"}>
-                      {RELATIONSHIP_LABEL[v.relationship] ?? v.relationship}
-                    </Badge>
-                  </div>
-
-                  {v.relationship === "blocked" && v.blockedReason && (
-                    <p className="flex items-start gap-1.5 rounded-md bg-destructive/10 p-2 text-xs text-destructive">
-                      <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      {v.blockedReason}
-                    </p>
-                  )}
-
-                  {v.categories.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {v.categories.map((cat) => (
-                        <span key={cat.id} className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                          {cat.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
-                    <StarRating value={v.ratingAvg} count={v.ratingCount || undefined} />
-                    <span className="text-sm font-medium tabular-nums text-foreground">{formatMDL(v.paidCents)}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {v.requestCount} cereri · {lastPaidLabel(v.lastPaidAt)}
-                  </p>
-                </Card>
-              </Link>
-            ))}
+                      {v.relationship === "blocked" && v.blockedReason && (
+                        <p className="mt-1 flex items-start gap-1 text-xs text-destructive">
+                          <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          {v.blockedReason}
+                        </p>
+                      )}
+                    </td>
+                    <td className="max-w-[16rem] px-3 py-3 align-middle">
+                      {v.categories.length === 0 ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {v.categories.map((cat) => (
+                            <span
+                              key={cat.id}
+                              className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                            >
+                              {cat.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 align-middle">
+                      <Badge variant={RELATIONSHIP_VARIANT[v.relationship] ?? "secondary"}>
+                        {RELATIONSHIP_LABEL[v.relationship] ?? v.relationship}
+                      </Badge>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 align-middle">
+                      {v.ratingCount > 0 ? (
+                        <StarRating value={v.ratingAvg} count={v.ratingCount} />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Neevaluat</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-right align-middle tabular-nums text-muted-foreground">
+                      {v.requestCount}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right align-middle font-medium tabular-nums text-foreground">
+                      {formatMDL(v.paidCents)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-3 align-middle text-muted-foreground">
+                      {lastPaidLabel(v.lastPaidAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
