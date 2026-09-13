@@ -53,6 +53,9 @@ HR365*.html
 .verify.mjs
 .e2e-session.json
 
+# Capturi lăsate în rădăcină de sesiunile de lucru — utile local, fără loc în istoric
+/Screenshot *.png
+
 # Screenshoturi de research competitiv (binare, păstrate local, nu în git)
 backlog/research/**/screenshots/
 backlog/research/**/TRIAL-ACCOUNT-CREDENTIALS.local.md

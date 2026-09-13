@@ -1,0 +1,311 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 228 76% 52%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 228 76% 52%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --info: 210 92% 45%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 228 76% 52%;
+
+    --radius: 0.875rem;
+
+    /* HR365 — sidebar scope (own token family: the sidebar is white, not tinted) */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 228 76% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 228 76% 96%;
+    --sidebar-accent-foreground: 228 76% 52%;
+    --sidebar-border: 220 13% 93%;
+    --sidebar-ring: 228 76% 52%;
+    --sidebar-muted: 220 9% 46%;
+
+    /* HR365 — layout constants lifted from the shell */
+    --sidebar-width: 260px;
+    --sidebar-width-sheet: 280px;
+    --content-max: 80rem;
+
+    /* HR365 — motion */
+    --duration-fast: 150ms;
+    --duration-base: 200ms;
+    --duration-slide: 300ms;
+    --duration-fade: 400ms;
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+    --lift-hover: -2px;
+
+    --pastel-mint: 158 64% 92%;
+    --pastel-lavender: 250 80% 94%;
+    --pastel-peach: 20 100% 93%;
+    --pastel-sky: 200 80% 92%;
+    --pastel-rose: 340 80% 94%;
+    --pastel-lemon: 50 90% 92%;
+    --pastel-teal: 175 60% 90%;
+
+    --pastel-mint-fg: 158 40% 28%;
+    --pastel-lavender-fg: 250 40% 38%;
+    --pastel-peach-fg: 20 50% 34%;
+    --pastel-sky-fg: 200 60% 30%;
+    --pastel-rose-fg: 340 50% 38%;
+    --pastel-lemon-fg: 38 70% 32%;
+    --pastel-teal-fg: 175 50% 26%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(228, 76%, 52%), hsl(228, 76%, 42%));
+    --gradient-hero: linear-gradient(135deg, hsl(228, 76%, 52%), hsl(250, 76%, 52%));
+    --gradient-card: linear-gradient(180deg, hsl(0, 0%, 100%), hsl(220, 20%, 97%));
+
+    --shadow-sm: 0 1px 3px 0 hsl(222 47% 11% / 0.03), 0 1px 2px -1px hsl(222 47% 11% / 0.02);
+    --shadow-md: 0 4px 8px -2px hsl(222 47% 11% / 0.05), 0 2px 4px -2px hsl(222 47% 11% / 0.03);
+    --shadow-lg: 0 10px 20px -4px hsl(222 47% 11% / 0.06), 0 4px 8px -4px hsl(222 47% 11% / 0.03);
+    --shadow-xl: 0 20px 30px -8px hsl(222 47% 11% / 0.08), 0 8px 12px -6px hsl(222 47% 11% / 0.04);
+    /* HR365 — the active sidebar row gets a colored halo instead of a neutral shadow */
+    --shadow-primary: 0 4px 8px -2px hsl(228 76% 52% / 0.2);
+
+    /* HR365 icon-chip pairs (tint behind a 14–20px glyph): sidebar rows, KPI tiles,
+       card headers. One tint per category — never two adjacent. */
+    --chip-indigo-bg: #EEF2FF;  --chip-indigo-fg: #4F46E5;
+    --chip-violet-bg: #F5F3FF;  --chip-violet-fg: #7C3AED;
+    --chip-sky-bg: #F0F9FF;     --chip-sky-fg: #0284C7;
+    --chip-emerald-bg: #ECFDF5; --chip-emerald-fg: #059669;
+    --chip-amber-bg: #FFFBEB;   --chip-amber-fg: #D97706;
+    --chip-rose-bg: #FFF1F2;    --chip-rose-fg: #E11D48;
+    --chip-blue-bg: #EFF6FF;    --chip-blue-fg: #2563EB;
+    --chip-orange-bg: #FFF7ED;  --chip-orange-fg: #EA580C;
+    --chip-teal-bg: #F0FDFA;    --chip-teal-fg: #0D9488;
+
+    /* HR365 module-launcher tones: flat saturated-100 card + matching -700 ink */
+    --module-indigo-bg: #E0E7FF;  --module-indigo-fg: #4338CA;
+    --module-violet-bg: #EDE9FE;  --module-violet-fg: #6D28D9;
+    --module-cyan-bg: #CFFAFE;    --module-cyan-fg: #155E75;
+    --module-emerald-bg: #D1FAE5; --module-emerald-fg: #047857;
+    --module-orange-bg: #FFEDD5;  --module-orange-fg: #C2410C;
+    --module-teal-bg: #CCFBF1;    --module-teal-fg: #0F766E;
+    --module-sky-bg: #E0F2FE;     --module-sky-fg: #0369A1;
+    --module-rose-bg: #FFE4E6;    --module-rose-fg: #BE123C;
+    --module-amber-bg: #FEF3C7;   --module-amber-fg: #92400E;
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 220 14% 96%;
+    --card: 222 47% 9%;
+    --card-foreground: 220 14% 96%;
+    --popover: 222 47% 9%;
+    --popover-foreground: 220 14% 96%;
+    --primary: 228 76% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 30% 16%;
+    --secondary-foreground: 220 14% 96%;
+    --muted: 222 30% 16%;
+    --muted-foreground: 220 9% 60%;
+    --accent: 228 76% 60%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 220 14% 96%;
+    --border: 222 30% 20%;
+    --input: 222 30% 20%;
+    --ring: 228 76% 60%;
+
+    --pastel-mint: 158 30% 18%;
+    --pastel-lavender: 250 30% 18%;
+    --pastel-peach: 20 30% 18%;
+    --pastel-sky: 200 30% 18%;
+    --pastel-rose: 340 30% 18%;
+    --pastel-lemon: 50 30% 18%;
+    --pastel-teal: 175 30% 18%;
+
+    /* HR365 — sidebar scope in dark: same surface as the page, not white */
+    --sidebar-background: 222 47% 6%;
+    --sidebar-foreground: 220 14% 96%;
+    --sidebar-primary: 228 76% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 40% 14%;
+    --sidebar-accent-foreground: 220 14% 96%;
+    --sidebar-border: 222 30% 16%;
+    --sidebar-ring: 228 76% 60%;
+    --sidebar-muted: 220 9% 60%;
+
+    --shadow-primary: 0 4px 8px -2px hsl(228 76% 60% / 0.35);
+
+    /* Chips in dark: deep desaturated tint + a light glyph (AA on the tint). */
+    --chip-indigo-bg: hsl(239 40% 16%);  --chip-indigo-fg: hsl(239 85% 78%);
+    --chip-violet-bg: hsl(258 40% 16%);  --chip-violet-fg: hsl(258 85% 80%);
+    --chip-sky-bg: hsl(200 40% 16%);     --chip-sky-fg: hsl(200 85% 74%);
+    --chip-emerald-bg: hsl(160 40% 14%); --chip-emerald-fg: hsl(160 70% 66%);
+    --chip-amber-bg: hsl(38 40% 16%);    --chip-amber-fg: hsl(38 90% 68%);
+    --chip-rose-bg: hsl(350 40% 16%);    --chip-rose-fg: hsl(350 85% 78%);
+    --chip-blue-bg: hsl(217 40% 16%);    --chip-blue-fg: hsl(217 90% 76%);
+    --chip-orange-bg: hsl(25 40% 16%);   --chip-orange-fg: hsl(25 90% 70%);
+    --chip-teal-bg: hsl(174 40% 14%);    --chip-teal-fg: hsl(174 70% 64%);
+
+    --module-indigo-bg: hsl(239 38% 18%);  --module-indigo-fg: hsl(239 85% 82%);
+    --module-violet-bg: hsl(258 38% 18%);  --module-violet-fg: hsl(258 85% 84%);
+    --module-cyan-bg: hsl(188 38% 16%);    --module-cyan-fg: hsl(188 75% 74%);
+    --module-emerald-bg: hsl(160 38% 15%); --module-emerald-fg: hsl(160 70% 70%);
+    --module-orange-bg: hsl(25 38% 18%);   --module-orange-fg: hsl(25 90% 74%);
+    --module-teal-bg: hsl(174 38% 15%);    --module-teal-fg: hsl(174 70% 68%);
+    --module-sky-bg: hsl(200 38% 17%);     --module-sky-fg: hsl(200 85% 78%);
+    --module-rose-bg: hsl(350 38% 18%);    --module-rose-fg: hsl(350 85% 82%);
+    --module-amber-bg: hsl(38 38% 17%);    --module-amber-fg: hsl(38 90% 72%);
+
+    --pastel-mint-fg: 158 50% 75%;
+    --pastel-lavender-fg: 250 50% 80%;
+    --pastel-peach-fg: 20 60% 78%;
+    --pastel-sky-fg: 200 60% 78%;
+    --pastel-rose-fg: 340 60% 80%;
+    --pastel-lemon-fg: 50 70% 78%;
+    --pastel-teal-fg: 175 50% 75%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 {
+    @apply font-sans font-bold tracking-tight;
+  }
+  html {
+    scroll-behavior: smooth;
+    /* Bara de derulare care apare/dispare când conținutul crește mută toată pagina lateral;
+       rezervăm mereu culoarul, ca lățimea să nu mai sară între pagini. */
+    scrollbar-gutter: stable;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-[hsl(250,76%,52%)];
+  }
+
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+  }
+
+  .glass {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50;
+  }
+
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px];
+  }
+
+  /**
+   * MOB-002 — controalele native de formular ating 44 px pe telefon.
+   *
+   * Primitivele din design system (`ds/Button`, `ds/Field`) sunt reparate la sursă, dar auditul
+   * a găsit zeci de `<select>` și `<input>` scrise direct în pagini, cu `h-9`/`h-10` în className
+   * (38–40 px). Regula asta le prinde pe toate deodată, fără să umble prin 17 fișiere — și,
+   * important, prinde și pe cele care se vor scrie mâine.
+   *
+   * Doar sub 640 px (telefoane): pe desktop ținta e cursorul, iar densitatea proiectată rămâne.
+   * Excluse: bifele și butoanele radio (au dimensiune proprie și ținta reală e `<label>`-ul),
+   * intrările ascunse și cele `.sr-only` (input-uri de fișier ascunse în spatele unui buton).
+   */
+  @media (max-width: 639px) {
+    select,
+    textarea,
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not(.sr-only) {
+      min-height: 44px;
+    }
+  }
+
+  /**
+   * MOB-001: bandă care derulează pe orizontală fără bară vizibilă de scroll.
+   * Folosită de rândurile care nu au voie să lățească pagina (taburi, bare de acțiuni).
+   * Derularea rămâne funcțională la deget și la trackpad; doar indicatorul e ascuns,
+   * pentru că pe un rând de 44 px o bară de scroll ocupă cât conținutul.
+   */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /**
+   * MOB-001: rând de acțiuni care, pe ecran îngust, derulează în loc să lățească pagina.
+   * `-mx-*` + `px-*` lasă primul și ultimul element să atingă marginile ecranului la capete,
+   * altfel ultimul buton pare tăiat de padding.
+   */
+  .action-row-scroll {
+    @apply -mx-5 flex max-w-[100vw] items-center gap-2 overflow-x-auto px-5 sm:mx-0 sm:max-w-none sm:px-0;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .action-row-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pastel-mint { background-color: hsl(var(--pastel-mint)); }
+  .pastel-lavender { background-color: hsl(var(--pastel-lavender)); }
+  .pastel-peach { background-color: hsl(var(--pastel-peach)); }
+  .pastel-sky { background-color: hsl(var(--pastel-sky)); }
+  .pastel-rose { background-color: hsl(var(--pastel-rose)); }
+  .pastel-lemon { background-color: hsl(var(--pastel-lemon)); }
+  .pastel-teal { background-color: hsl(var(--pastel-teal)); }
+
+  .text-pastel-mint-fg { color: hsl(var(--pastel-mint-fg)); }
+  .text-pastel-lavender-fg { color: hsl(var(--pastel-lavender-fg)); }
+  .text-pastel-peach-fg { color: hsl(var(--pastel-peach-fg)); }
+  .text-pastel-sky-fg { color: hsl(var(--pastel-sky-fg)); }
+  .text-pastel-rose-fg { color: hsl(var(--pastel-rose-fg)); }
+  .text-pastel-lemon-fg { color: hsl(var(--pastel-lemon-fg)); }
+  .text-pastel-teal-fg { color: hsl(var(--pastel-teal-fg)); }
+
+  .grid-pattern {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.5) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.5) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  .radial-mask {
+    mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+    -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+  }
+
+  .glow {
+    box-shadow: 0 0 80px -20px hsl(228 76% 52% / 0.5);
+  }
+}

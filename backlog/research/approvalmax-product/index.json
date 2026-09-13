@@ -1,0 +1,325 @@
+{
+  "scrapedAt": "2026-08-29T13:08:41.182Z",
+  "tree": {
+    "label": "Product",
+    "children": [
+      {
+        "label": "Approvals",
+        "children": [
+          {
+            "label": "Multi-level approvals",
+            "url": "https://approvalmax.com/features/approval-workflows"
+          },
+          {
+            "label": "Approval channels",
+            "url": "https://approvalmax.com/features/collaboration"
+          }
+        ]
+      },
+      {
+        "label": "Workflows",
+        "children": [
+          {
+            "label": "Purchase orders",
+            "url": "https://approvalmax.com/ap-automation/purchase-order-software"
+          },
+          {
+            "label": "Vendors",
+            "url": "https://approvalmax.com/features/approval-workflows/vendor-approvals"
+          },
+          {
+            "label": "Invoices",
+            "url": "https://approvalmax.com/ap-automation/invoice-approval-software"
+          },
+          {
+            "label": "Credit notes",
+            "url": "https://approvalmax.com/features/approval-workflows/credit-note-approvals"
+          },
+          {
+            "label": "Standalone workflows",
+            "url": "https://approvalmax.com/features/approval-workflows/standalone-workflows"
+          },
+          {
+            "label": "Expenses",
+            "url": "https://approvalmax.com/ap-automation/expense-approval-software"
+          }
+        ]
+      },
+      {
+        "label": "Financial Controls",
+        "children": [
+          {
+            "label": "Bill-to-PO matching",
+            "url": "https://approvalmax.com/ap-automation/po-matching"
+          },
+          {
+            "label": "Audit readiness",
+            "url": "https://approvalmax.com/features/audit-and-fraud-control"
+          },
+          {
+            "label": "Segregation of duties",
+            "url": "https://approvalmax.com/features/approval-workflows/segregation-of-duties"
+          },
+          {
+            "label": "Platform security",
+            "url": "https://approvalmax.com/features/security"
+          },
+          {
+            "label": "Budget controls",
+            "url": "https://approvalmax.com/ap-automation/budget-checking-software"
+          }
+        ]
+      },
+      {
+        "label": "Payments",
+        "children": [
+          {
+            "label": "ApprovalMax Pay",
+            "url": "https://approvalmax.com/features/approvalmax-pay"
+          }
+        ]
+      },
+      {
+        "label": "OCR",
+        "children": [
+          {
+            "label": "ApprovalMax Capture",
+            "url": "https://approvalmax.com/features/approvalmax-capture"
+          }
+        ]
+      },
+      {
+        "label": "Integrations",
+        "children": [
+          {
+            "label": "Xero",
+            "url": "https://approvalmax.com/integrations/xero"
+          },
+          {
+            "label": "QuickBooks Online",
+            "url": "https://approvalmax.com/integrations/quickbooks-online"
+          },
+          {
+            "label": "Netsuite",
+            "url": "https://approvalmax.com/integrations/netsuite"
+          },
+          {
+            "label": "All integrations",
+            "url": "https://approvalmax.com/integrations"
+          }
+        ]
+      }
+    ]
+  },
+  "pages": [
+    {
+      "label": "Multi-level approvals",
+      "url": "https://approvalmax.com/features/approval-workflows",
+      "parents": [
+        "Product",
+        "Approvals"
+      ],
+      "slug": "features__approval-workflows",
+      "title": "Approval Workflow Software: Multi-Level Sign-Off | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Purchase orders",
+      "url": "https://approvalmax.com/ap-automation/purchase-order-software",
+      "parents": [
+        "Product",
+        "Workflows"
+      ],
+      "slug": "ap-automation__purchase-order-software",
+      "title": "Purchase Order Approval Software for AP Automation | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Approval channels",
+      "url": "https://approvalmax.com/features/collaboration",
+      "parents": [
+        "Product",
+        "Approvals"
+      ],
+      "slug": "features__collaboration",
+      "title": "Collaborate and Approve by Email, Slack, Mobile or Web | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Invoices",
+      "url": "https://approvalmax.com/ap-automation/invoice-approval-software",
+      "parents": [
+        "Product",
+        "Workflows"
+      ],
+      "slug": "ap-automation__invoice-approval-software",
+      "title": "Invoice Approval Software for Xero, QuickBooks and NetSuite | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Credit notes",
+      "url": "https://approvalmax.com/features/approval-workflows/credit-note-approvals",
+      "parents": [
+        "Product",
+        "Workflows"
+      ],
+      "slug": "features__approval-workflows__credit-note-approvals",
+      "title": "Credit Note Approval Workflows for Xero | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Vendors",
+      "url": "https://approvalmax.com/features/approval-workflows/vendor-approvals",
+      "parents": [
+        "Product",
+        "Workflows"
+      ],
+      "slug": "features__approval-workflows__vendor-approvals",
+      "title": "Vendor Workflows: Automate Supplier Onboarding | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Standalone workflows",
+      "url": "https://approvalmax.com/features/approval-workflows/standalone-workflows",
+      "parents": [
+        "Product",
+        "Workflows"
+      ],
+      "slug": "features__approval-workflows__standalone-workflows",
+      "title": "Standalone & Custom Approval Workflow Software | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Expenses",
+      "url": "https://approvalmax.com/ap-automation/expense-approval-software",
+      "parents": [
+        "Product",
+        "Workflows"
+      ],
+      "slug": "ap-automation__expense-approval-software",
+      "title": "Expense Approval Software | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Bill-to-PO matching",
+      "url": "https://approvalmax.com/ap-automation/po-matching",
+      "parents": [
+        "Product",
+        "Financial Controls"
+      ],
+      "slug": "ap-automation__po-matching",
+      "title": "PO Matching Software: Automate Bill-to-PO Matching | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Audit readiness",
+      "url": "https://approvalmax.com/features/audit-and-fraud-control",
+      "parents": [
+        "Product",
+        "Financial Controls"
+      ],
+      "slug": "features__audit-and-fraud-control",
+      "title": "Accounts Payable Audit Software with Audit Trails | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Segregation of duties",
+      "url": "https://approvalmax.com/features/approval-workflows/segregation-of-duties",
+      "parents": [
+        "Product",
+        "Financial Controls"
+      ],
+      "slug": "features__approval-workflows__segregation-of-duties",
+      "title": "Segregation of Duties in Approval Workflows | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Platform security",
+      "url": "https://approvalmax.com/features/security",
+      "parents": [
+        "Product",
+        "Financial Controls"
+      ],
+      "slug": "features__security",
+      "title": "Platform Security: ISO 27001, SSO and 2FA | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Budget controls",
+      "url": "https://approvalmax.com/ap-automation/budget-checking-software",
+      "parents": [
+        "Product",
+        "Financial Controls"
+      ],
+      "slug": "ap-automation__budget-checking-software",
+      "title": "Budget Approval Software for Bills and POs | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "ApprovalMax Pay",
+      "url": "https://approvalmax.com/features/approvalmax-pay",
+      "parents": [
+        "Product",
+        "Payments"
+      ],
+      "slug": "features__approvalmax-pay",
+      "title": "ApprovalMax Pay: Pay Xero Bills with Approval Controls | ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "ApprovalMax Capture",
+      "url": "https://approvalmax.com/features/approvalmax-capture",
+      "parents": [
+        "Product",
+        "OCR"
+      ],
+      "slug": "features__approvalmax-capture",
+      "title": "Invoice OCR & Data Capture Software | ApprovalMax Capture",
+      "ok": true
+    },
+    {
+      "label": "Xero",
+      "url": "https://approvalmax.com/integrations/xero",
+      "parents": [
+        "Product",
+        "Integrations"
+      ],
+      "slug": "integrations__xero",
+      "title": "Xero Integration with ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "QuickBooks Online",
+      "url": "https://approvalmax.com/integrations/quickbooks-online",
+      "parents": [
+        "Product",
+        "Integrations"
+      ],
+      "slug": "integrations__quickbooks-online",
+      "title": "QuickBooks Online Integration with ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "Netsuite",
+      "url": "https://approvalmax.com/integrations/netsuite",
+      "parents": [
+        "Product",
+        "Integrations"
+      ],
+      "slug": "integrations__netsuite",
+      "title": "NetSuite Integration with ApprovalMax",
+      "ok": true
+    },
+    {
+      "label": "All integrations",
+      "url": "https://approvalmax.com/integrations",
+      "parents": [
+        "Product",
+        "Integrations"
+      ],
+      "slug": "integrations",
+      "title": "ApprovalMax Integrations",
+      "ok": true
+    }
+  ]
+}
