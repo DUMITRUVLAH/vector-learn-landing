@@ -129,3 +129,30 @@ Ordinea liniară recomandată pentru autopilot:
 > în secvență. Nu îl implementa în PR-ul curent.
 
 _(gol la momentul scrierii — secvența acoperă tot inventarul din CORE §2)_
+
+---
+
+## Backlog descoperit — Faza 1 (modulul CRM în FinFlow, 2026-09-13)
+
+Livrat: modulul `/business/crm` cu **Pipeline** (kanban pe cele 5 etape din
+`lead_stage`) și **Produse** (`crm_products`). Restul submodulelor apar pe pagina
+modulului marcate „În curând".
+
+Descoperit pe parcurs și **neimplementat** (în afara scopului fazei):
+
+1. **42 de teste orfane în `src/__tests__/crm/`** — rămase din modulul scos în
+   `43859c43`. Importă `@/pages/app/LeadsPage` și `@/components/crm/*` care nu
+   mai există, deci sunt roșii pe `main` de atunci. De decis: reînviate contra
+   noilor pagini, sau șterse. Acum doar adaugă zgomot în suită.
+2. **`src/lib/api/leads.ts` (582 linii) e cod mort** — cheamă `/api/leads/*`,
+   endpointuri care nu există. Noul modul folosește `/api/crm/*` și un client
+   propriu. De curățat sau de re-pointat.
+3. **Etape configurabile.** `src/lib/api/pipeline.ts` așteaptă `pipeline_stages`,
+   tabelă care nu există; etapele sunt azi un `pgEnum` fix. Kanbanul CORE §5.1
+   presupune etape per-tenant — cere tabelă + migrare.
+4. **Leadurile n-au monedă.** `valueCents` e un întreg fără `currency`; Faza 1
+   fixează MDL. Multi-monedă cere coloană, nu ghicit în UI.
+5. **Ștergerea de leaduri** nu există (corect — CORE cere păstrarea istoricului),
+   dar nici arhivare. De definit ce înseamnă „scoate-l din pâlnie".
+6. **`vatPercent` vine ca string** din Postgres `numeric`; UI-ul îl convertește
+   defensiv. Merită un tip comun dacă apar alți consumatori.
