@@ -34,7 +34,7 @@ import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { getUserPARRoles } from "../middleware/requirePARRole";
 import { parUuidGuard } from "../middleware/parUuidGuard";
-import { notifyPaid, notifyPaymentReverted, notifyFinanceReturned } from "../services/par/notify";
+import { notifyPaid, notifyPaymentReverted, notifyFinanceReturned, notifyReapprovalRequired } from "../services/par/notify";
 import { applyTenRule } from "../lib/par/payment";
 import { evaluateMatch } from "../lib/par/threeWayMatch";
 import { findVendorByIban, shouldAutoSaveVendor } from "../lib/par/vendorAutoSave";
@@ -627,21 +627,18 @@ parPaymentsRoutes.post(
       const finalStep = finalApproval.filter((a) => a.decision === "approved").sort((a, b) => b.step - a.step)[0];
       const finalApproverUserId = finalStep?.approverUserId ?? null;
 
+      // Notificarea asta trăia aici, scrisă de mână, doar in-app și în engleză — aprobatorul
+      // care TREBUIE să decidă afla doar dacă intra în aplicație. Acum trece prin serviciul
+      // de notificări, deci pleacă și pe email, cu ambele sume și diferența.
       if (finalApproverUserId) {
-        try {
-          const { inAppNotifications } = await import("../db/schema/inAppNotifications");
-          await db.insert(inAppNotifications).values({
-            tenantId,
-            recipientUserId: finalApproverUserId,
-            kind: "par",
-            payload: {
-              body: `PAR ${par.requestNo} requires re-approval: actual payment exceeds estimate by >10%. Link: /business/par/${parId}`,
-              par_id: parId,
-            },
-          });
-        } catch {
-          // best-effort
-        }
+        await notifyReapprovalRequired(
+          { tenantId, parId, requestNo: par.requestNo },
+          finalApproverUserId,
+          {
+            estimatedCents: par.totalEstimatedCents ?? 0,
+            actualAmountCents: body.actual_amount_cents,
+          }
+        );
       }
 
       return c.json({
@@ -668,7 +665,8 @@ parPaymentsRoutes.post(
       // Notify requestor
       await notifyPaid(
         { tenantId, parId, requestNo: par.requestNo },
-        par.requestedByUserId
+        par.requestedByUserId,
+        { actualAmountCents: body.actual_amount_cents }
       );
 
       // VM1-05: remember this payee (IBAN etc.) in the vendor registry for reuse.

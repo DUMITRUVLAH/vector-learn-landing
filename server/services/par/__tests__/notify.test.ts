@@ -29,9 +29,11 @@ vi.mock("../../../db/client", () => ({
   },
 }));
 
+const mockSendMessage = vi.fn().mockResolvedValue({ status: "sent" });
+
 vi.mock("../../messaging/index", () => ({
   MessagingService: vi.fn().mockImplementation(() => ({
-    sendMessage: vi.fn().mockResolvedValue(undefined),
+    sendMessage: (...args: unknown[]) => mockSendMessage(...args),
   })),
 }));
 
@@ -48,6 +50,8 @@ import {
   notifySubmitted,
   notifyStepAdvanced,
   notifyFullyApprovedToFinance,
+  notifyApprovedToRequestor,
+  notifyReapprovalRequired,
   notifyRejected,
   notifyChangesRequested,
   notifyPaid,
@@ -255,7 +259,8 @@ describe("PAR-111 notifyPaid", () => {
       payload: { body: string };
     };
     expect(insertArg.recipientUserId).toBe("user-requestor-1");
-    expect(insertArg.payload.body).toContain("paid");
+    // Copy-ul e în română („a fost achitată"), la fel ca restul notificărilor PAR.
+    expect(insertArg.payload.body).toContain("a fost achitată");
   });
 });
 
@@ -295,8 +300,8 @@ describe("stripInAppLink — calea relativă nu ajunge în email", () => {
     const { stripInAppLink } = await import("../notify");
 
     expect(
-      stripInAppLink("PAR PAR-2026-0003 has been paid. Link: /business/par/675c33af-b475-463f-9f4e-23becff5c694")
-    ).toBe("PAR PAR-2026-0003 has been paid.");
+      stripInAppLink("PAR PAR-2026-0003 a fost achitată. Link: /business/par/675c33af-b475-463f-9f4e-23becff5c694")
+    ).toBe("PAR PAR-2026-0003 a fost achitată.");
   });
 
   it("lasă neatins un corp fără cale relativă", async () => {
@@ -305,5 +310,142 @@ describe("stripInAppLink — calea relativă nu ajunge în email", () => {
     expect(stripInAppLink("PAR PAR-2026-0003 a fost respinsă. Motiv: lipsă factură")).toBe(
       "PAR PAR-2026-0003 a fost respinsă. Motiv: lipsă factură"
     );
+  });
+});
+
+/**
+ * Notificările de rezultat spuneau doar „PAR PAR-2026-0026 a fost aprobată" — numărul cererii
+ * nu e informație pentru om, așa că destinatarul trebuia să deschidă aplicația ca să afle
+ * despre CE plată e vorba. Acum prima propoziție poartă motivul, beneficiarul și suma, iar
+ * emailul are și blocul de detalii.
+ */
+describe("notificări informative — suma, beneficiarul și motivul în prima propoziție", () => {
+  const parRow = {
+    totalEstimatedCents: 1250000,
+    currency: "MDL",
+    endUse: "chirie birou august",
+    purpose: "execute_payment",
+    payeeName: "ACME SRL",
+    vendorId: null,
+    projectId: null,
+    eventId: null,
+    budgetCodeId: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockValues.mockResolvedValue(undefined);
+    mockInsertFn.mockReturnValue({ values: mockValues });
+    mockSelectChain.from.mockReturnThis();
+    mockSelectFn.mockReturnValue(mockSelectChain);
+    mockSendMessage.mockResolvedValue({ status: "sent" });
+    // 1) loadParFacts (par_requests) 2) getUser 3) accountFooter (tenants)
+    mockSelectChainWhere
+      .mockResolvedValueOnce([parRow])
+      .mockResolvedValueOnce([{ name: "Ion", email: "ion@example.md" }])
+      .mockResolvedValue([{ name: "ATIC" }]);
+  });
+
+  const emailArg = () => mockSendMessage.mock.calls[0][1] as { subject: string; body: string };
+
+  it("aprobare: in-app și email spun pentru ce, către cine și cât", async () => {
+    await notifyApprovedToRequestor(ctx, "user-requestor-1");
+
+    const inApp = (mockValues.mock.calls[0][0] as { payload: { body: string } }).payload.body;
+    expect(inApp).toContain("Plata pentru chirie birou august către ACME SRL în sumă de");
+    expect(inApp).toContain("a fost aprobată");
+    expect(inApp).toContain("cererea PAR-2026-0001");
+
+    const email = emailArg();
+    expect(email.subject).toContain("aprobată");
+    expect(email.subject).toContain("ACME SRL");
+    expect(email.body).toContain("Detalii plată:");
+    expect(email.body).toContain("• Către: ACME SRL");
+    expect(email.body).toContain("• Motiv: chirie birou august");
+    // linkul relativ din corpul in-app nu ajunge în email
+    expect(email.body).not.toContain("Link: /business/par/");
+    expect(email.body).toContain("Deschide cererea: ");
+  });
+
+  it("respingere: păstrează motivul respingerii pe lângă descrierea plății", async () => {
+    await notifyRejected(ctx, "user-requestor-1", "lipsește oferta a doua");
+
+    const email = emailArg();
+    expect(email.body).toContain("a fost RESPINSĂ");
+    expect(email.body).toContain("Motiv: lipsește oferta a doua");
+    expect(email.body).toContain("• Sumă: ");
+  });
+
+  it("plată executată: folosește suma chiar achitată, nu estimarea", async () => {
+    await notifyPaid(ctx, "user-requestor-1", { actualAmountCents: 1300000 });
+
+    const inApp = (mockValues.mock.calls[0][0] as { payload: { body: string } }).payload.body;
+    expect(inApp).toContain("13.000,00 MDL");
+    expect(inApp).toContain("a fost achitată");
+
+    const email = emailArg();
+    // blocul de detalii arată ambele sume când diferă de estimare
+    expect(email.body).toContain("• Sumă: 12.500,00 MDL");
+    expect(email.body).toContain("• Sumă achitată: 13.000,00 MDL");
+  });
+
+  it("cade înapoi pe numărul cererii când datele nu pot fi citite", async () => {
+    mockSelectChainWhere.mockReset();
+    mockSelectChainWhere.mockResolvedValue([]);
+
+    await notifyApprovedToRequestor(ctx, "user-requestor-1");
+
+    const inApp = (mockValues.mock.calls[0][0] as { payload: { body: string } }).payload.body;
+    expect(inApp).toContain("Cererea PAR-2026-0001 a fost aprobată.");
+  });
+});
+
+/**
+ * Re-aprobarea (plata a depășit estimarea cu >10%) era singura notificare PAR fără email și
+ * scrisă în engleză: aprobatorul care trebuie să decidă afla doar dacă intra în aplicație.
+ */
+describe("notifyReapprovalRequired — ambele sume, în email, nu doar in-app", () => {
+  const parRow = {
+    totalEstimatedCents: 1250000,
+    currency: "MDL",
+    endUse: "chirie birou august",
+    purpose: "execute_payment",
+    payeeName: "ACME SRL",
+    vendorId: null,
+    projectId: null,
+    eventId: null,
+    budgetCodeId: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockValues.mockResolvedValue(undefined);
+    mockInsertFn.mockReturnValue({ values: mockValues });
+    mockSelectChain.from.mockReturnThis();
+    mockSelectFn.mockReturnValue(mockSelectChain);
+    mockSendMessage.mockResolvedValue({ status: "sent" });
+    mockSelectChainWhere
+      .mockResolvedValueOnce([parRow])
+      .mockResolvedValueOnce([{ name: "Ana", email: "ana@example.md" }])
+      .mockResolvedValue([{ name: "ATIC" }]);
+  });
+
+  it("spune ce s-a achitat și cu cât s-a depășit estimarea", async () => {
+    await notifyReapprovalRequired(ctx, "user-approver-1", {
+      estimatedCents: 1250000,
+      actualAmountCents: 1400000,
+    });
+
+    const inApp = (mockValues.mock.calls[0][0] as { payload: { body: string } }).payload.body;
+    expect(inApp).toContain("Plata pentru chirie birou august către ACME SRL");
+    expect(inApp).toContain("necesită re-aprobare");
+    expect(inApp).toContain("s-a achitat 14.000,00 MDL");
+    expect(inApp).toContain("cu 1.500,00 MDL peste estimare");
+
+    const email = mockSendMessage.mock.calls[0][1] as { subject: string; body: string };
+    expect(email.subject).toContain("re-aprobare necesară");
+    expect(email.body).toContain("• Sumă: 12.500,00 MDL");
+    expect(email.body).toContain("• Sumă achitată: 14.000,00 MDL");
+    expect(email.body).toContain("Deschide cererea: ");
   });
 });

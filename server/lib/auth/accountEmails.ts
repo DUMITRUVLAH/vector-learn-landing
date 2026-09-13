@@ -4,6 +4,7 @@
  * request. The reset link points at the business SPA route (/#/business/reset).
  */
 import { emailSendDecision } from "../emailGuard";
+import { buildHtml } from "../../services/messaging/providers";
 
 function appUrl(): string {
   return process.env.APP_URL ?? "http://localhost:5173";
@@ -23,7 +24,18 @@ export async function sendPasswordResetEmail(params: { to: string; url: string }
     return false;
   }
   const from =
-    process.env.EMAIL_FROM ?? process.env.RESEND_FROM ?? "Vector Finance <onboarding@resend.dev>";
+    process.env.EMAIL_FROM ?? process.env.RESEND_FROM ?? "FinFlow <onboarding@resend.dev>";
+  // Randat cu șablonul comun (`buildHtml`): aceeași identitate FinFlow ca restul emailurilor și
+  // buton clicabil și în Outlook, care nu autolinka URL-urile din text.
+  const subject = "Resetare parolă — FinFlow";
+  const body = [
+    `Ai cerut resetarea parolei pentru contul FinFlow ${params.to}.`,
+    "",
+    "Linkul expiră în 1 oră și poate fi folosit o singură dată.",
+    "Dacă nu tu ai cerut resetarea, ignoră acest mesaj — parola rămâne neschimbată.",
+    "",
+    `Setează o parolă nouă: ${params.url}`,
+  ].join("\n");
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -34,11 +46,9 @@ export async function sendPasswordResetEmail(params: { to: string; url: string }
       body: JSON.stringify({
         from,
         to: [params.to],
-        subject: "Resetare parolă — Vector Finance",
-        html: `<p>Ai cerut resetarea parolei pentru contul tău Vector Finance.</p>
-<p><a href="${params.url}">Setează o parolă nouă</a></p>
-<p>Sau copiază linkul: ${params.url}</p>
-<p>Linkul expiră în 1 oră. Dacă nu tu ai cerut resetarea, ignoră acest mesaj.</p>`,
+        subject,
+        html: buildHtml(subject, body),
+        text: body,
       }),
     });
     if (!res.ok) {

@@ -71,12 +71,29 @@ const PURPOSE_LABELS: Record<string, string> = {
   provide_estimate: "Oferă o estimare",
 };
 
+/** Ce se știe despre o cerere, în formă deja formatată pentru text de email. */
+interface ParFacts {
+  currency: string;
+  amountLabel: string;
+  payeeName: string;
+  reason: string;
+  projectName: string;
+  eventName: string;
+  budgetLabel: string;
+}
+
+/** Taie un text lung ca să încapă în prima propoziție a emailului sau în subiect. */
+function shorten(text: string, max: number): string {
+  const t = text.trim();
+  return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
+}
+
 /**
  * VM1-08 — payment details shown to the approver in the email (NO IBAN / bank data;
  * those stay in-app per the owner's decision). Includes amount, payee, reason, project,
  * budget. Best-effort: returns a multi-line block, or null if the PAR can't be loaded.
  */
-async function loadParSummary(tenantId: string, parId: string): Promise<string | null> {
+async function loadParFacts(tenantId: string, parId: string): Promise<ParFacts | null> {
   try {
     const [p] = await db
       .select({
@@ -131,29 +148,81 @@ async function loadParSummary(tenantId: string, parId: string): Promise<string |
       if (bc) budgetLabel = [bc.code, bc.name].filter(Boolean).join(" — ");
     }
 
-    const reason = p.endUse?.trim() || PURPOSE_LABELS[p.purpose] || "";
-
-    const lines = ["Detalii plată:", `• Sumă: ${formatParAmount(p.totalEstimatedCents, p.currency)}`];
-    if (payeeName) lines.push(`• Către: ${payeeName}`);
-    if (reason) lines.push(`• Motiv: ${reason}`);
-    if (projectName) lines.push(`• Proiect: ${projectName}`);
-    if (eventName) lines.push(`• Eveniment: ${eventName}`);
-    if (budgetLabel) lines.push(`• Buget: ${budgetLabel}`);
-    return lines.join("\n");
+    return {
+      currency: p.currency ?? "MDL",
+      amountLabel: formatParAmount(p.totalEstimatedCents, p.currency),
+      payeeName,
+      reason: p.endUse?.trim() || PURPOSE_LABELS[p.purpose] || "",
+      projectName,
+      eventName,
+      budgetLabel,
+    };
   } catch {
     return null;
   }
+}
+
+/** Blocul de detalii din email — o listă scanabilă sub prima propoziție. */
+function summaryBlock(facts: ParFacts, extra?: { paidAmountLabel?: string | null }): string {
+  const lines = ["Detalii plată:", `• Sumă: ${facts.amountLabel}`];
+  if (extra?.paidAmountLabel && extra.paidAmountLabel !== facts.amountLabel) {
+    lines.push(`• Sumă achitată: ${extra.paidAmountLabel}`);
+  }
+  if (facts.payeeName) lines.push(`• Către: ${facts.payeeName}`);
+  if (facts.reason) lines.push(`• Motiv: ${facts.reason}`);
+  if (facts.projectName) lines.push(`• Proiect: ${facts.projectName}`);
+  if (facts.eventName) lines.push(`• Eveniment: ${facts.eventName}`);
+  if (facts.budgetLabel) lines.push(`• Buget: ${facts.budgetLabel}`);
+  return lines.join("\n");
+}
+
+/**
+ * Prima propoziție a notificării: „Plata pentru chirie birou către ACME SRL în sumă de
+ * 12.500,00 MDL a fost aprobată (cererea PAR-2026-0026)."
+ *
+ * De ce așa: un email care spune doar „PAR-2026-0026 a fost aprobată" nu-i spune nimic
+ * destinatarului fără să deschidă aplicația — numărul cererii nu e informație pentru om.
+ * Suma, beneficiarul și motivul sunt. Când cererea nu poate fi citită, se cade înapoi pe
+ * numărul cererii, ca notificarea să plece oricum.
+ */
+function outcomeLine(
+  facts: ParFacts | null,
+  requestNo: string,
+  verbPhrase: string,
+  opts?: { amountLabel?: string; stepLabel?: string },
+): string {
+  const ref = [`cererea ${requestNo}`, opts?.stepLabel ? `pas: ${opts.stepLabel}` : null]
+    .filter(Boolean)
+    .join(", ");
+  if (!facts) return `Cererea ${requestNo} ${verbPhrase}${opts?.stepLabel ? ` (pas: ${opts.stepLabel})` : ""}.`;
+  const parts = ["Plata"];
+  if (facts.reason) parts.push(`pentru ${shorten(facts.reason, 90)}`);
+  if (facts.payeeName) parts.push(`către ${shorten(facts.payeeName, 60)}`);
+  parts.push(`în sumă de ${opts?.amountLabel ?? facts.amountLabel}`);
+  return `${parts.join(" ")} ${verbPhrase} (${ref}).`;
+}
+
+/**
+ * Subiectul poartă suma și beneficiarul, ca notificarea să fie utilă din lista de inbox,
+ * fără deschidere. Prefixul „[PAR] <număr>" rămâne neschimbat — filtrele existente pe el.
+ */
+function subjectFor(facts: ParFacts | null, requestNo: string, label: string, amountLabel?: string): string {
+  const base = `[PAR] ${requestNo} — ${label}`;
+  if (!facts) return base;
+  const amount = amountLabel ?? facts.amountLabel;
+  return facts.payeeName ? `${base} · ${amount} către ${shorten(facts.payeeName, 40)}` : `${base} · ${amount}`;
 }
 
 /**
  * VM1-08 — full approver email body: one-line intro + payment details + deep link.
  * Used for the "someone submitted a PAR → approver" email (and the next-step email).
  */
-async function buildApproverEmailBody(ctx: ParNotifyContext, stepLabel?: string): Promise<string> {
-  const summary = await loadParSummary(ctx.tenantId, ctx.parId);
-  const intro = `Cererea ${ctx.requestNo} așteaptă aprobarea ta${stepLabel ? ` (pas: ${stepLabel})` : ""}.`;
+function buildApproverEmailBody(facts: ParFacts | null, ctx: ParNotifyContext, stepLabel?: string): string {
+  const intro = outcomeLine(facts, ctx.requestNo, "așteaptă aprobarea ta", { stepLabel });
   const link = `Deschide cererea: ${parDeepLink(ctx.parId)}`;
-  return [intro, "", summary, summary ? "" : null, link].filter((l) => l !== null).join("\n");
+  return [intro, "", facts ? summaryBlock(facts) : null, facts ? "" : null, link]
+    .filter((l) => l !== null)
+    .join("\n");
 }
 
 /**
@@ -163,12 +232,13 @@ async function buildApproverEmailBody(ctx: ParNotifyContext, stepLabel?: string)
 async function notifyApprovers(params: {
   ctx: ParNotifyContext;
   specificUserId: string | null;
-  inAppBody: string;
-  subject: string;
   stepLabel?: string;
 }): Promise<void> {
-  const { ctx, specificUserId, inAppBody, subject, stepLabel } = params;
-  const emailBody = await buildApproverEmailBody(ctx, stepLabel);
+  const { ctx, specificUserId, stepLabel } = params;
+  const facts = await loadParFacts(ctx.tenantId, ctx.parId);
+  const emailBody = buildApproverEmailBody(facts, ctx, stepLabel);
+  const inAppBody = `${outcomeLine(facts, ctx.requestNo, "așteaptă aprobarea ta", { stepLabel })} Link: /business/par/${ctx.parId}`;
+  const subject = subjectFor(facts, ctx.requestNo, stepLabel ? `aprobare necesară (${stepLabel})` : "aprobare necesară");
 
   let recipients: string[];
   if (specificUserId) {
@@ -286,7 +356,9 @@ async function sendEmail(params: {
  * adăugat mai jos. Se scoate ca destinatarul să vadă un singur link, cel care chiar funcționează.
  */
 export function stripInAppLink(body: string): string {
-  return body.replace(/\s*Link:\s*\/business\/par\/[0-9a-f-]+\.?/gi, "").trim();
+  // `\S+` și nu doar hex: identificatorul cererii nu e garantat un UUID, iar o cale
+  // nerecunoscută însemna un link mort lăsat în email — exact ce funcția asta trebuie să scoată.
+  return body.replace(/\s*Link:\s*\/business\/par\/\S+/gi, "").trim();
 }
 
 /** Notify a single user (in-app + email) */
@@ -296,6 +368,12 @@ async function notifyUser(params: {
   parId: string;
   body: string;
   subject: string;
+  /**
+   * In-app rămâne o singură linie (lista de notificări e o listă, nu un raport), iar emailul
+   * primește în plus blocul de detalii — acolo destinatarul chiar are nevoie de context,
+   * fiindcă nu are aplicația în față.
+   */
+  detailsBlock?: string | null;
 }): Promise<void> {
   await sendInApp({
     tenantId: params.tenantId,
@@ -304,14 +382,30 @@ async function notifyUser(params: {
     parId: params.parId,
   });
 
-  // Optional email — best-effort only
-  const userRecord = await getUser(params.userId, params.tenantId);
+  // Optional email — best-effort only. Căutarea destinatarului e și ea best-effort: notificarea
+  // pleacă după ce acțiunea (plata, respingerea) s-a scris deja în DB, așa că o eroare aici nu
+  // are voie să întoarcă 500 pe o operațiune care a reușit.
+  let userRecord: { name: string; email: string } | null = null;
+  try {
+    userRecord = await getUser(params.userId, params.tenantId);
+  } catch {
+    return;
+  }
   if (userRecord?.email) {
+    const emailBody = [
+      stripInAppLink(params.body),
+      "",
+      params.detailsBlock ?? null,
+      params.detailsBlock ? "" : null,
+      `Deschide cererea: ${parDeepLink(params.parId)}`,
+    ]
+      .filter((l) => l !== null)
+      .join("\n");
     await sendEmail({
       tenantId: params.tenantId,
       toAddress: userRecord.email,
       subject: params.subject,
-      body: `${stripInAppLink(params.body)}\n\nDeschide cererea: ${parDeepLink(params.parId)}`,
+      body: emailBody,
     });
   }
 }
@@ -364,12 +458,7 @@ function nowLabel(): string {
 export async function notifySubmitted(ctx: ParNotifyContext, approverUserId: string | null): Promise<void> {
   // VM1-08: approver email carries the payment details (amount/payee/reason/project/budget);
   // role-based routing now emails every eligible approver too (was in-app only).
-  await notifyApprovers({
-    ctx,
-    specificUserId: approverUserId,
-    inAppBody: `PAR ${ctx.requestNo} așteaptă aprobarea ta. Link: /business/par/${ctx.parId}`,
-    subject: `[PAR] ${ctx.requestNo} — aprobare necesară`,
-  });
+  await notifyApprovers({ ctx, specificUserId: approverUserId });
 }
 
 /**
@@ -381,13 +470,7 @@ export async function notifyStepAdvanced(
   nextStepLabel: string
 ): Promise<void> {
   // VM1-08: same enriched email for the next approver in the chain.
-  await notifyApprovers({
-    ctx,
-    specificUserId: nextApproverUserId,
-    inAppBody: `PAR ${ctx.requestNo} (pas: ${nextStepLabel}) așteaptă aprobarea ta. Link: /business/par/${ctx.parId}`,
-    subject: `[PAR] ${ctx.requestNo} — aprobare necesară (${nextStepLabel})`,
-    stepLabel: nextStepLabel,
-  });
+  await notifyApprovers({ ctx, specificUserId: nextApproverUserId, stepLabel: nextStepLabel });
 }
 
 /**
@@ -395,8 +478,12 @@ export async function notifyStepAdvanced(
  */
 export async function notifyFullyApprovedToFinance(ctx: ParNotifyContext): Promise<void> {
   const financeUsers = await getFinanceUsers(ctx.tenantId);
-  const body = `Cererea ${ctx.requestNo} e aprobată complet și așteaptă execuția plății. Link: /business/par/${ctx.parId}`;
-  const subject = `[PAR] ${ctx.requestNo} — gata de plată`;
+  if (financeUsers.length === 0) return;
+
+  const facts = await loadParFacts(ctx.tenantId, ctx.parId);
+  const body = `${outcomeLine(facts, ctx.requestNo, "e aprobată complet și așteaptă execuția plății")} Link: /business/par/${ctx.parId}`;
+  const subject = subjectFor(facts, ctx.requestNo, "gata de plată");
+  const detailsBlock = facts ? summaryBlock(facts) : null;
 
   for (const userId of financeUsers) {
     await notifyUser({
@@ -405,6 +492,7 @@ export async function notifyFullyApprovedToFinance(ctx: ParNotifyContext): Promi
       parId: ctx.parId,
       body,
       subject,
+      detailsBlock,
     });
   }
 }
@@ -417,12 +505,14 @@ export async function notifyApprovedToRequestor(
   ctx: ParNotifyContext,
   requestorUserId: string
 ): Promise<void> {
+  const facts = await loadParFacts(ctx.tenantId, ctx.parId);
   await notifyUser({
     tenantId: ctx.tenantId,
     userId: requestorUserId,
     parId: ctx.parId,
-    body: `PAR ${ctx.requestNo} a fost aprobată. Link: /business/par/${ctx.parId}`,
-    subject: `[PAR] ${ctx.requestNo} — aprobată`,
+    body: `${outcomeLine(facts, ctx.requestNo, "a fost aprobată")} Link: /business/par/${ctx.parId}`,
+    subject: subjectFor(facts, ctx.requestNo, "aprobată"),
+    detailsBlock: facts ? summaryBlock(facts) : null,
   });
 }
 
@@ -435,21 +525,22 @@ export async function notifyRejected(
   comment: string,
   decidedByUserId?: string | null
 ): Promise<void> {
+  const facts = await loadParFacts(ctx.tenantId, ctx.parId);
   const who = await decidedByLabel(ctx.tenantId, decidedByUserId);
   const body = [
-    `Cererea ${ctx.requestNo} a fost RESPINSĂ${who} pe ${nowLabel()}.`,
+    outcomeLine(facts, ctx.requestNo, `a fost RESPINSĂ${who} pe ${nowLabel()}`),
     `Motiv: ${comment.slice(0, 500)}`,
     "Cererea nu se oprește aici: o poți revizui și retrimite din aplicație.",
     `Link: /business/par/${ctx.parId}`,
   ].join("\n");
-  const subject = `[PAR] ${ctx.requestNo} — respinsă`;
 
   await notifyUser({
     tenantId: ctx.tenantId,
     userId: requestorUserId,
     parId: ctx.parId,
     body,
-    subject,
+    subject: subjectFor(facts, ctx.requestNo, "respinsă"),
+    detailsBlock: facts ? summaryBlock(facts) : null,
   });
 }
 
@@ -462,39 +553,75 @@ export async function notifyChangesRequested(
   comment: string,
   decidedByUserId?: string | null
 ): Promise<void> {
+  const facts = await loadParFacts(ctx.tenantId, ctx.parId);
   const who = await decidedByLabel(ctx.tenantId, decidedByUserId);
   const body = [
-    `Cererea ${ctx.requestNo} a fost trimisă înapoi pentru MODIFICĂRI${who} pe ${nowLabel()}.`,
+    outcomeLine(facts, ctx.requestNo, `a fost trimisă înapoi pentru MODIFICĂRI${who} pe ${nowLabel()}`),
     `Ce trebuie modificat: ${comment.slice(0, 500)}`,
     `Link: /business/par/${ctx.parId}`,
   ].join("\n");
-  const subject = `[PAR] ${ctx.requestNo} — modificări cerute`;
 
   await notifyUser({
     tenantId: ctx.tenantId,
     userId: requestorUserId,
     parId: ctx.parId,
     body,
-    subject,
+    subject: subjectFor(facts, ctx.requestNo, "modificări cerute"),
+    detailsBlock: facts ? summaryBlock(facts) : null,
   });
 }
 
 /**
  * On paid → notify the requestor.
+ *
+ * `actualAmountCents` vine din secțiunea de plată și poate diferi de estimare (regula de 10%);
+ * când îl avem, notificarea spune suma chiar achitată, nu estimarea.
  */
 export async function notifyPaid(
   ctx: ParNotifyContext,
-  requestorUserId: string
+  requestorUserId: string,
+  paid?: { actualAmountCents?: number | null }
 ): Promise<void> {
-  const body = `Plata pentru cererea ${ctx.requestNo} a fost executată. Link: /business/par/${ctx.parId}`;
-  const subject = `[PAR] ${ctx.requestNo} — plată executată`;
+  const facts = await loadParFacts(ctx.tenantId, ctx.parId);
+  const paidAmountLabel =
+    paid?.actualAmountCents != null ? formatParAmount(paid.actualAmountCents, facts?.currency) : null;
+  const body = `${outcomeLine(facts, ctx.requestNo, "a fost achitată", { amountLabel: paidAmountLabel ?? undefined })} Link: /business/par/${ctx.parId}`;
 
   await notifyUser({
     tenantId: ctx.tenantId,
     userId: requestorUserId,
     parId: ctx.parId,
     body,
-    subject,
+    subject: subjectFor(facts, ctx.requestNo, "plată executată", paidAmountLabel ?? undefined),
+    detailsBlock: facts ? summaryBlock(facts, { paidAmountLabel }) : null,
+  });
+}
+
+/**
+ * Suma achitată depășește estimarea cu peste 10% → cererea se întoarce la ultimul aprobator.
+ *
+ * Era singura notificare PAR fără email (doar in-app, în engleză, scrisă direct în ruta de
+ * plată): omul care TREBUIE să decidă afla doar dacă intra în aplicație. Acum primește și
+ * email, cu ambele sume și diferența — exact ce-i trebuie ca să știe dacă mai aprobă.
+ */
+export async function notifyReapprovalRequired(
+  ctx: ParNotifyContext,
+  approverUserId: string,
+  amounts: { estimatedCents: number; actualAmountCents: number }
+): Promise<void> {
+  const facts = await loadParFacts(ctx.tenantId, ctx.parId);
+  const currency = facts?.currency ?? "MDL";
+  const actualLabel = formatParAmount(amounts.actualAmountCents, currency);
+  const overLabel = formatParAmount(amounts.actualAmountCents - amounts.estimatedCents, currency);
+  const verb = `necesită re-aprobare: s-a achitat ${actualLabel}, cu ${overLabel} peste estimare`;
+
+  await notifyUser({
+    tenantId: ctx.tenantId,
+    userId: approverUserId,
+    parId: ctx.parId,
+    body: `${outcomeLine(facts, ctx.requestNo, verb)} Link: /business/par/${ctx.parId}`,
+    subject: subjectFor(facts, ctx.requestNo, "re-aprobare necesară", actualLabel),
+    detailsBlock: facts ? summaryBlock(facts, { paidAmountLabel: actualLabel }) : null,
   });
 }
 
@@ -508,15 +635,16 @@ export async function notifyPaymentReverted(
   requestorUserId: string,
   reason: string
 ): Promise<void> {
-  const body = `PAR ${ctx.requestNo}: plata a fost ANULATĂ de finanțe și cererea a revenit la plată. Motiv: ${reason.slice(0, 500)}. Link: /business/par/${ctx.parId}`;
-  const subject = `[PAR] ${ctx.requestNo} — plata a fost anulată`;
+  const facts = await loadParFacts(ctx.tenantId, ctx.parId);
+  const body = `${outcomeLine(facts, ctx.requestNo, "a fost ANULATĂ de finanțe, iar cererea a revenit la plată")} Motiv: ${reason.slice(0, 500)}. Link: /business/par/${ctx.parId}`;
 
   await notifyUser({
     tenantId: ctx.tenantId,
     userId: requestorUserId,
     parId: ctx.parId,
     body,
-    subject,
+    subject: subjectFor(facts, ctx.requestNo, "plata a fost anulată"),
+    detailsBlock: facts ? summaryBlock(facts) : null,
   });
 }
 
@@ -528,15 +656,16 @@ export async function notifyFinanceReturned(
   requestorUserId: string,
   reason: string
 ): Promise<void> {
-  const body = `PAR ${ctx.requestNo}: finanțele au refuzat plata și au trimis cererea înapoi pentru corectare. Motiv: ${reason.slice(0, 500)}. Link: /business/par/${ctx.parId}`;
-  const subject = `[PAR] ${ctx.requestNo} — plată refuzată de finanțe`;
+  const facts = await loadParFacts(ctx.tenantId, ctx.parId);
+  const body = `${outcomeLine(facts, ctx.requestNo, "a fost refuzată de finanțe, iar cererea s-a întors la tine pentru corectare")} Motiv: ${reason.slice(0, 500)}. Link: /business/par/${ctx.parId}`;
 
   await notifyUser({
     tenantId: ctx.tenantId,
     userId: requestorUserId,
     parId: ctx.parId,
     body,
-    subject,
+    subject: subjectFor(facts, ctx.requestNo, "plată refuzată de finanțe"),
+    detailsBlock: facts ? summaryBlock(facts) : null,
   });
 }
 
@@ -617,18 +746,20 @@ export async function notifyOthersRequestStopped(
   decidedByUserId: string | null,
   comment: string
 ): Promise<void> {
+  const facts = await loadParFacts(ctx.tenantId, ctx.parId);
   const who = await decidedByLabel(ctx.tenantId, decidedByUserId);
   const body = [
-    `Cererea ${ctx.requestNo} a fost RESPINSĂ${who} pe ${nowLabel()}, așa că nu mai așteaptă decizia ta.`,
+    `${outcomeLine(facts, ctx.requestNo, `a fost RESPINSĂ${who} pe ${nowLabel()}`)} Nu mai așteaptă decizia ta.`,
     `Motiv: ${comment.slice(0, 500)}`,
     "Prima respingere oprește cererea, chiar dacă alți aprobatori semnaseră deja. Solicitantul o poate revizui și retrimite — atunci lanțul de aprobare pornește din nou.",
     `Link: /business/par/${ctx.parId}`,
   ].join("\n");
-  const subject = `[PAR] ${ctx.requestNo} — respinsă de altcineva, nu mai așteaptă decizia ta`;
+  const subject = subjectFor(facts, ctx.requestNo, "respinsă de altcineva, nu mai așteaptă decizia ta");
+  const detailsBlock = facts ? summaryBlock(facts) : null;
 
   await Promise.allSettled(
     [...new Set(recipientUserIds)].map((userId) =>
-      notifyUser({ tenantId: ctx.tenantId, userId, parId: ctx.parId, body, subject })
+      notifyUser({ tenantId: ctx.tenantId, userId, parId: ctx.parId, body, subject, detailsBlock })
     )
   );
 }

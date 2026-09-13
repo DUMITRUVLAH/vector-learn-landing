@@ -89,7 +89,13 @@ parInvitesRoutes.post("/", requirePARRole("par_admin"), zValidator("json", invit
 
   const url = inviteUrl(token);
   const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, tenantId) });
-  const emailed = await sendInviteEmail({ to: normalizedEmail, orgName: tenant?.name ?? "organizație", url });
+  const emailed = await sendInviteEmail({
+    to: normalizedEmail,
+    orgName: tenant?.name ?? "organizație",
+    url,
+    parRole: par_role,
+    invitedByName: user.name,
+  });
 
   return c.json({ id: invite.id, email: invite.email, parRole: invite.parRole, payerIds, inviteUrl: url, emailed }, 201);
 });
