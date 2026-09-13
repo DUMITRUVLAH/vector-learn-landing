@@ -776,6 +776,84 @@ function AttachmentsModal({ par, onClose }: AttachmentsModalProps) {
   );
 }
 
+// ─── Dosar PDF: progres vizibil ───────────────────────────────────────────────
+// Dosarul se construiește pe server din formular + toate documentele atașate și poate dura
+// câteva secunde bune. Până acum butonul nu spunea nimic în tot acest timp — nici spinner, nici
+// eroare (catch-ul era gol) — așa că finanțele apăsau, nu se întâmpla nimic vizibil și credeau
+// că s-a blocat aplicația. Acum apăsarea deschide o fereastră care spune ce se întâmplă, iar
+// dacă generarea eșuează rămâne acolo cu motivul și cu „Reîncearcă".
+
+interface DosarJob {
+  par: ParFinanceQueueItem;
+  status: "loading" | "error";
+  error?: string;
+}
+
+interface DosarProgressModalProps {
+  job: DosarJob;
+  onClose: () => void;
+  onRetry: () => void;
+}
+
+function DosarProgressModal({ job, onClose, onRetry }: DosarProgressModalProps) {
+  useEscapeToClose(onClose);
+  const loading = job.status === "loading";
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dosar-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+    >
+      <div className="w-full max-w-md space-y-4 rounded-lg border border-border bg-card p-6 shadow-lg">
+        <div className="flex items-start gap-3">
+          {loading ? (
+            <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-primary" aria-hidden="true" />
+          ) : (
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" aria-hidden="true" />
+          )}
+          <div className="space-y-1">
+            <h2 id="dosar-title" className="text-lg font-semibold text-card-foreground">
+              {loading ? "Generăm dosarul PDF…" : "Dosarul nu a putut fi generat"}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {job.par.requestNo}
+              {job.par.payeeName ? ` · ${job.par.payeeName}` : ""}
+            </p>
+          </div>
+        </div>
+
+        {loading ? (
+          <p className="text-sm text-muted-foreground">
+            Punem la un loc formularul și toate documentele atașate într-un singur PDF. Poate dura
+            câteva secunde — fereastra se închide singură când începe descărcarea.
+          </p>
+        ) : (
+          <p role="alert" className="text-sm text-destructive">
+            {job.error ?? "Eroare necunoscută."}
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          {loading ? (
+            <Button variant="outline" onClick={onClose}>
+              Ascunde
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" onClick={onClose}>
+                Închide
+              </Button>
+              <Button onClick={onRetry}>Reîncearcă</Button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 /** VM3-01: "cine a aprobat și la ce dată" — short ro-MD date for the queue. */
@@ -799,6 +877,7 @@ export default function ParFinanceQueue() {
   const [s16Par, setS16Par] = useState<ParFinanceQueueItem | null>(null);
   const [payPar, setPayPar] = useState<ParFinanceQueueItem | null>(null);
   const [attPar, setAttPar] = useState<ParFinanceQueueItem | null>(null);
+  const [dosarJob, setDosarJob] = useState<DosarJob | null>(null);
   const [refusePar, setRefusePar] = useState<ParFinanceQueueItem | null>(null);
   const [filterQ, setFilterQ] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
@@ -824,6 +903,21 @@ export default function ParFinanceQueue() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /** Descărcarea dosarului, cu fereastra de progres pornită ÎNAINTE de cerere. */
+  const startDosar = useCallback(async (par: ParFinanceQueueItem) => {
+    setDosarJob({ par, status: "loading" });
+    try {
+      await downloadDosar(par.id, par.requestNo);
+      setDosarJob(null);
+    } catch (e: unknown) {
+      setDosarJob({
+        par,
+        status: "error",
+        error: e instanceof Error ? e.message : "Dosarul nu a putut fi generat.",
+      });
+    }
+  }, []);
 
   const filteredItems = items.filter((par) => {
     const haystack = `${par.requestNo} ${par.payeeName ?? ""} ${par.payeeIdnp ?? ""} ${par.payeeIban ?? ""} ${par.projectName ?? ""} ${par.endUse ?? ""}`.toLocaleLowerCase("ro");
@@ -965,14 +1059,16 @@ export default function ParFinanceQueue() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={async () => {
-                            try { await downloadDosar(par.id, par.requestNo); }
-                            catch { /* silent — user can retry */ }
-                          }}
+                          onClick={() => void startDosar(par)}
+                          disabled={dosarJob?.status === "loading" && dosarJob.par.id === par.id}
                           aria-label={`Descarcă dosarul complet PDF pentru ${par.requestNo}`}
                           title="Descarcă dosarul complet (PDF)"
                         >
-                          <Paperclip className="h-4 w-4" aria-hidden="true" />
+                          {dosarJob?.status === "loading" && dosarJob.par.id === par.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Paperclip className="h-4 w-4" aria-hidden="true" />
+                          )}
                           Dosar PDF
                         </Button>
                       </div>
@@ -1166,6 +1262,13 @@ export default function ParFinanceQueue() {
           <AttachmentsModal
             par={attPar}
             onClose={() => setAttPar(null)}
+          />
+        )}
+        {dosarJob && (
+          <DosarProgressModal
+            job={dosarJob}
+            onClose={() => setDosarJob(null)}
+            onRetry={() => void startDosar(dosarJob.par)}
           />
         )}
       </div>

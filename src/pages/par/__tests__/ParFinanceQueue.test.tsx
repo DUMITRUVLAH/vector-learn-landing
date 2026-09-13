@@ -537,3 +537,77 @@ describe("VM4-02b — cererile refuzate de finanțe se văd în coadă", () => {
     expect(statusFilter).toHaveTextContent("Refuzate de finanțe");
   });
 });
+
+// ─── Dosar PDF: apăsarea trebuie să spună că se lucrează ─────────────────────
+
+describe("ParFinanceQueue — generarea dosarului PDF nu mai pare blocaj", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const renderQueue = async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [makeFinanceItem({ status: "in_finance" })],
+      total: 1,
+    });
+    render(<ParFinanceQueue />);
+    return screen.findByRole("button", { name: /descarcă dosarul complet pdf/i });
+  };
+
+  it("[blocant] cât se generează, apare fereastra de progres și butonul e blocat", async () => {
+    // Descărcare care NU se termină: exact fereastra de timp în care utilizatorul credea că
+    // aplicația s-a blocat.
+    let finish: () => void = () => {};
+    vi.spyOn(parApi, "downloadDosar").mockImplementation(
+      () => new Promise<void>((resolve) => { finish = resolve; })
+    );
+
+    const btn = await renderQueue();
+    btn.click();
+
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent(/Generăm dosarul PDF/i));
+    expect(screen.getByRole("dialog")).toHaveTextContent("PAR-2026-0001");
+    expect(btn).toBeDisabled();
+
+    finish();
+    // Când descărcarea începe, fereastra dispare singură.
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(btn).not.toBeDisabled());
+  });
+
+  it("[blocant] o generare eșuată spune de ce și oferă „Reîncearcă” — nu mai tace", async () => {
+    const spy = vi
+      .spyOn(parApi, "downloadDosar")
+      .mockRejectedValueOnce(new Error("Dosar: 500 timeout la îmbinarea documentelor"))
+      .mockResolvedValueOnce(undefined);
+
+    const btn = await renderQueue();
+    btn.click();
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/timeout la îmbinarea documentelor/i)
+    );
+
+    screen.getByRole("button", { name: "Reîncearcă" }).click();
+
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("„Ascunde” închide fereastra fără să oprească descărcarea pornită", async () => {
+    let finish: () => void = () => {};
+    vi.spyOn(parApi, "downloadDosar").mockImplementation(
+      () => new Promise<void>((resolve) => { finish = resolve; })
+    );
+
+    const btn = await renderQueue();
+    btn.click();
+
+    await screen.findByRole("dialog");
+    screen.getByRole("button", { name: "Ascunde" }).click();
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    finish();
+    await waitFor(() => expect(btn).not.toBeDisabled());
+  });
+});
