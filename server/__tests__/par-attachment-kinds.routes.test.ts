@@ -44,6 +44,28 @@ vi.mock("../middleware/requireAuth", () => ({
 }));
 
 // Reconcilierea AI e best-effort la upload; o scurtcircuităm ca testul să fie offline + rapid.
+// Conținutul atașamentelor stă în Supabase Storage din 12.09.2026, nu în Postgres. Testul de față
+// e despre tipurile de document (kind/kind_other), nu despre transport, deci Storage-ul e simulat
+// în memorie — fără el, fiecare upload se opreștea în `storage_unavailable` (503).
+const testStorage = new Map<string, Buffer>();
+vi.mock("../lib/storage/objectStore", () => ({
+  uploadObject: async (_b: string, p: string, bytes: Buffer) => {
+    testStorage.set(p, bytes);
+  },
+  downloadObject: async (_b: string, p: string) => {
+    const v = testStorage.get(p);
+    if (!v) throw new Error("download_failed_404");
+    return v;
+  },
+  removeObjects: async (_b: string, paths: string[]) => {
+    for (const p of paths) testStorage.delete(p);
+  },
+  signUploads: async (_b: string, tid: string, files: { fileName: string }[]) =>
+    files.map((f) => ({ fileName: f.fileName, path: `${tid}/${f.fileName}`, signedUrl: "https://storage.test/x" })),
+  buildObjectPath: (tid: string, name: string) => `${tid}/${Date.now()}-${name}`,
+  isStorageConfigured: () => true,
+}));
+
 vi.mock("../lib/ai/pdfText", () => ({ extractPdfText: async () => "" }));
 vi.mock("../lib/ai/parExtractor", () => ({
   extractParParties: async () => {

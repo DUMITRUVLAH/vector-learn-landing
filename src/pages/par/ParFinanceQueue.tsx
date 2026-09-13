@@ -48,7 +48,7 @@ import {
   submitSection16,
   executePayment,
   financeReturnPar,
-  uploadAttachment,
+  uploadAttachmentDirect,
   listAttachments,
   formatMDL,
   formatCurrency,
@@ -277,14 +277,6 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
     }
   };
 
-  const fileToDataUrl = (f: File) =>
-    new Promise<string>((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result));
-      r.onerror = reject;
-      r.readAsDataURL(f);
-    });
-
   // VM4-04 — Violeta: „de inserat printr-un comentariu ca imagine când fac print screen la ordinul
   // de plată". Ordinul de plată e pe ecran exact în momentul plății, dar nu ca fișier: e în
   // clipboard. Ctrl+V oriunde în dialog îl atașează, fără drumul prin „salvează pe desktop".
@@ -328,14 +320,11 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
     try {
       // Attach the payment-confirmation PDF to the dossier (section 13) BEFORE recording the payment.
       if (proofFile) {
-        const dataUrl = await fileToDataUrl(proofFile);
-        await uploadAttachment(par.id, {
-          file_name: `Ordin de plată — ${par.requestNo}${proofFile.name ? ` (${proofFile.name})` : ""}`,
-          file_url: dataUrl,
-          mime: proofFile.type || "application/pdf",
+        await uploadAttachmentDirect(par.id, proofFile, {
           // Tipul real, nu „Altul": dosarul trebuie să arate un ordin de plată acolo unde e unul,
           // iar ecranul de dovezi știe astfel care cereri plătite mai au nevoie de dovadă.
           kind: "payment_order",
+          fileName: `Ordin de plată — ${par.requestNo}${proofFile.name ? ` (${proofFile.name})` : ""}`,
         });
       }
       const payload: PayPayload = {

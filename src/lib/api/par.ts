@@ -819,6 +819,53 @@ export async function uploadAttachment(
   });
 }
 
+/**
+ * Încarcă un fișier la dosar FĂRĂ să-l treacă prin funcția serverless.
+ *
+ * `uploadAttachment` de mai sus trimite fișierul ca data-URL base64 în corpul cererii. Vercel
+ * plafonează corpul la ~4,5 MB, iar base64 umflă cu ~33%, deci pe acolo nu trec fișiere peste
+ * ~3,3 MB — un scan de contract pica fără explicație. Aici serverul doar semnează, browserul urcă
+ * binarul direct în Storage, iar serverul confirmă la final după ce se uită la octeții reali.
+ *
+ * Trei cereri, dar doar una duce date: cele către server sunt JSON de câteva sute de octeți.
+ */
+export async function uploadAttachmentDirect(
+  parId: string,
+  file: File,
+  opts: { kind?: ParAttachmentKind; kind_other?: string; fileName?: string } = {}
+): Promise<ParAttachment> {
+  // Numele sub care documentul apare la dosar poate diferi de cel de pe disc (dovada de plată e
+  // botezată după cerere, ca să se recunoască în listă).
+  const displayName = opts.fileName ?? file.name;
+  const { path, signed_url } = await api<{ path: string; signed_url: string }>(
+    `/api/par/${parId}/attachment-upload/sign`,
+    {
+      method: "POST",
+      body: JSON.stringify({ file_name: displayName, mime: file.type, size_bytes: file.size }),
+    }
+  );
+
+  // Direct în Storage. `credentials` lipsește înadins: URL-ul e deja semnat, iar trimiterea
+  // cookie-urilor noastre către alt origin n-ar face decât să le expună.
+  const put = await fetch(signed_url, {
+    method: "PUT",
+    headers: { "content-type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!put.ok) throw new Error("Încărcarea fișierului nu a reușit. Verifică conexiunea și reîncearcă.");
+
+  return api<ParAttachment>(`/api/par/${parId}/attachment-upload/finalize`, {
+    method: "POST",
+    body: JSON.stringify({
+      path,
+      file_name: displayName,
+      mime: file.type,
+      kind: opts.kind ?? "other",
+      ...(opts.kind === "other" && opts.kind_other ? { kind_other: opts.kind_other } : {}),
+    }),
+  });
+}
+
 export async function listAttachments(parId: string): Promise<{ items: ParAttachment[] }> {
   return api(`/api/par/${parId}/attachments`);
 }

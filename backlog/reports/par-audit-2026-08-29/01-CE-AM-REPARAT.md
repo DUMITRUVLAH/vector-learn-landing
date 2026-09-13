@@ -60,9 +60,12 @@ căutarea din listă e debounced, cu anulare și gardă de staleness.
    configurare, iar rescrierea buclelor atinge logica de deduplicare (IBAN → denumire, „completează
    doar ce lipsește"). Un refactor grăbit acolo schimbă tăcut ce date ajung în registru — risc
    prost pentru un câștig care nu se vede în uzul zilnic.
-2. **Atașamentele peste ~3 MB.** Plafonul din interfață a coborât la 3 MB, cu motivul scris în
-   mesaj. Soluția reală nu e `multipart` (mută limita de la 3,3 la 4,4 MB), ci mutarea fișierelor în
-   object storage, cum face deja FinDesk. Pașii sunt scriși în `FRONTEND-NEEDS-SERVER.md`.
+2. **Atașamentele peste ~3 MB.** ~~Plafonul din interfață a coborât la 3 MB.~~ **REZOLVAT
+   (13.09.2026).** Fișierele stau în Supabase Storage, iar browserul le urcă direct printr-un URL
+   semnat (`/attachment-upload/sign` + `/finalize`): binarul nu mai trece prin funcția serverless,
+   deci limita de corp nu se mai aplică deloc. Plafonul e din nou 10 MB, de data asta o decizie de
+   produs, nu un ocol. Planul din `FRONTEND-NEEDS-SERVER.md` s-a executat integral, iar fișierul a
+   fost șters.
 3. **Segregarea „cine cere / cine plătește" nu e blocantă.** Plata înregistrată chiar de solicitant
    scrie un rând explicit `sod_self_payment` în audit, dar nu e refuzată: într-un ONG mic aceeași
    persoană chiar ține și cererea, și banca, iar plata a fost deja aprobată de altcineva

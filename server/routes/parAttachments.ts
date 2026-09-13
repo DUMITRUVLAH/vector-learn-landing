@@ -38,7 +38,10 @@ import {
   parseDataUrl,
   storeAttachmentBytes,
 } from "../lib/par/attachmentStore";
-import { removeObjects } from "../lib/storage/objectStore";
+import { downloadObject, removeObjects, signUploads } from "../lib/storage/objectStore";
+import { isSafeTenantObjectPath } from "../lib/storage/safePath";
+import { MAX_ATTACHMENT_BYTES } from "../../src/lib/par/attachmentLimits";
+import type { Context } from "hono";
 
 export const parAttachmentsRoutes = new Hono<{ Variables: AuthVariables }>();
 parAttachmentsRoutes.use("*", requireAuth);
@@ -93,12 +96,21 @@ const ALLOWED_MIME_TYPES = [
 function magicBytesMatch(dataUrl: string, mime: string): boolean {
   const m = dataUrl.match(/^data:[^;]*;base64,(.*)$/s);
   if (!m) return false;
-  let b: Buffer;
   try {
-    b = Buffer.from(m[1].slice(0, 32), "base64"); // ~24 bytes — enough for every signature below
+    return magicBytesMatchBuffer(Buffer.from(m[1].slice(0, 32), "base64"), mime);
   } catch {
     return false;
   }
+}
+
+/**
+ * Aceeași verificare, pe octeți. Calea de upload direct în Storage nu mai vede niciun data-URL:
+ * browserul urcă binarul, iar serverul descarcă obiectul și îi controlează primii octeți înainte
+ * să scrie rândul. Tipul declarat rămâne controlat de client oriunde, deci verificarea trebuie să
+ * existe pe ambele căi.
+ */
+export function magicBytesMatchBuffer(bytes: Buffer, mime: string): boolean {
+  const b = bytes.subarray(0, 24); // destul pentru fiecare semnătură de mai jos
   if (b.length < 4) return false;
   const at = (...sig: number[]) => sig.every((v, i) => b[i] === v);
   const atOffset = (offset: number, ...sig: number[]) => sig.every((v, i) => b[offset + i] === v);
@@ -186,6 +198,69 @@ const uploadAttachmentSchema = z.object({
 
 /** Editable statuses — same as in par.ts */
 const EDITABLE_STATUSES = ["draft", "changes_requested"] as const;
+
+/**
+ * Poate utilizatorul să adauge un fișier la dosarul ăsta, și mai e loc?
+ *
+ * Aceleași reguli pentru toate cele trei căi de încărcare (upload base64, semnare de URL,
+ * finalizare) — dacă ar trăi copiate în fiecare, ar diverge la prima schimbare de flux, iar
+ * divergența ar apărea exact pe calea cea mai puțin testată. Întoarce `null` când e permis, sau
+ * răspunsul de eroare gata format.
+ */
+async function guardAttachmentWrite(
+  c: Context<{ Variables: AuthVariables }>,
+  parId: string,
+): Promise<
+  | { ok: true; par: typeof parRequests.$inferSelect }
+  | { ok: false; response: Response }
+> {
+  const user = c.get("user");
+  const tenantId = user.tenantId;
+
+  const [par] = await db
+    .select()
+    .from(parRequests)
+    .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+
+  if (!par) return { ok: false, response: c.json({ error: "not_found" }, 404) };
+  if (!(await hasScopedDossierAccess(user, par)))
+    return { ok: false, response: c.json({ error: "not_found" }, 404) };
+
+  // Autorul atașează cât timp cererea e editabilă (draft/changes_requested). ÎN PLUS,
+  // finanțele/par_admin pot pune dovada plății la etapa de finanțe — dovada trebuie să stea cu
+  // cererea, nu separat.
+  const roles = await getUserPARRoles(user.id, tenantId);
+  const isFinance = roles.includes("finance") || roles.includes("par_admin");
+  const FINANCE_STAGE_STATUSES = ["approved", "in_finance", "reapproval_required", "paid"];
+  const authorCanEdit =
+    par.requestedByUserId === user.id &&
+    EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number]);
+  const financeCanAttach = isFinance && FINANCE_STAGE_STATUSES.includes(par.status);
+  if (!authorCanEdit && !financeCanAttach) {
+    return {
+      ok: false,
+      response: c.json({ error: `forbidden: cannot add attachments (status '${par.status}')` }, 403),
+    };
+  }
+
+  // VM1-06: plafonul se impune pe server (interfața îl păzește și ea, dar serverul e sursa de
+  // adevăr — al 10-lea fișier e în regulă, al 11-lea e refuzat).
+  const existing = await db
+    .select({ id: parAttachments.id })
+    .from(parAttachments)
+    .where(and(eq(parAttachments.parId, parId), eq(parAttachments.tenantId, tenantId)));
+  if (existing.length >= MAX_ATTACHMENTS_PER_PAR) {
+    return {
+      ok: false,
+      response: c.json(
+        { error: "too_many_attachments", detail: `Maxim ${MAX_ATTACHMENTS_PER_PAR} fișiere per cerere.` },
+        409
+      ),
+    };
+  }
+
+  return { ok: true, par };
+}
 
 async function hasScopedDossierAccess(
   user: { id: string; tenantId: string; role: string },
@@ -411,47 +486,9 @@ parAttachmentsRoutes.post(
     const tenantId = user.tenantId;
     const body = c.req.valid("json");
 
-    // Verify PAR exists + tenant scope
-    const [par] = await db
-      .select()
-      .from(parRequests)
-      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
-
-    if (!par) return c.json({ error: "not_found" }, 404);
-    if (!(await hasScopedDossierAccess(user, par))) return c.json({ error: "not_found" }, 404);
-
-    // Permission: the author may attach while the PAR is editable (draft/changes_requested). ADDITIONALLY,
-    // finance/par_admin may attach the payment-confirmation doc to the dossier at the finance stage
-    // (approved/in_finance/paid/reapproval_required) — the proof of payment must live with the request.
-    const roles = await getUserPARRoles(user.id, tenantId);
-    const isFinance = roles.includes("finance") || roles.includes("par_admin");
-    const FINANCE_STAGE_STATUSES = ["approved", "in_finance", "reapproval_required", "paid"];
-    const authorCanEdit =
-      par.requestedByUserId === user.id &&
-      EDITABLE_STATUSES.includes(par.status as typeof EDITABLE_STATUSES[number]);
-    const financeCanAttach = isFinance && FINANCE_STAGE_STATUSES.includes(par.status);
-    if (!authorCanEdit && !financeCanAttach) {
-      return c.json(
-        { error: `forbidden: cannot add attachments (status '${par.status}')` },
-        403
-      );
-    }
-
-    // VM1-06: enforce the max-attachments limit on the server (UI guards too, but the
-    // server is the source of truth — a 10th upload is fine, the 11th is rejected).
-    const existing = await db
-      .select({ id: parAttachments.id })
-      .from(parAttachments)
-      .where(and(eq(parAttachments.parId, parId), eq(parAttachments.tenantId, tenantId)));
-    if (existing.length >= MAX_ATTACHMENTS_PER_PAR) {
-      return c.json(
-        {
-          error: "too_many_attachments",
-          detail: `Maxim ${MAX_ATTACHMENTS_PER_PAR} fișiere per cerere.`,
-        },
-        409
-      );
-    }
+    const guard = await guardAttachmentWrite(c, parId);
+    if (!guard.ok) return guard.response;
+    const { par } = guard;
 
     // Validate MIME type from data URL prefix or mime field
     const mimeFromDataUrl = body.file_url.match(/^data:([^;]+);base64,/)?.[1];
@@ -511,6 +548,158 @@ parAttachmentsRoutes.post(
 
     // Reconciliation is best-effort: an unavailable AI provider must never make a valid
     // document upload fail. When it succeeds, the response already carries the comparison.
+    try {
+      const analysis = await analyzeAttachmentAgainstPar(par, attachment, user.id);
+      return c.json({ ...attachment, analysis: JSON.stringify(analysis) }, 201);
+    } catch {
+      return c.json(attachment, 201);
+    }
+  }
+);
+
+// ─── Upload direct în Storage (fișiere mari) ─────────────────────────────────
+//
+// De ce există pe lângă calea base64 de mai sus: corpul unei cereri către funcția serverless de pe
+// Vercel e plafonat la ~4,5 MB, iar base64 umflă fișierul cu ~33%. Rezultatul era că orice fișier
+// peste ~3,3 MB pica cu un 413 fără explicație, deși interfața promitea 10 MB — motiv pentru care
+// plafonul din interfață fusese coborât la 3 MB ca oprire onestă (`src/lib/par/attachmentLimits.ts`).
+//
+// Aici binarul nu mai trece deloc prin funcția noastră: browserul îl urcă direct în Supabase
+// Storage printr-un URL semnat de scurtă durată, iar prin server trec doar două cereri JSON mici.
+// Plafonul de platformă dispare complet — nu urcă de la 3 la 4 MB, ci nu mai există.
+//
+// Secvența, și de ce în ordinea asta:
+// Căile stau sub `/attachment-upload/`, nu sub `/attachments/`, înadins: garda `parUuidGuard("attId")`
+// e montată pe `/:parId/attachments/:attId` și ar citi „sign" ca identificator invalid, întorcând 404
+// pe o rută perfect validă. Garda e corectă și nu se slăbește — se ocolește cu un segment propriu.
+//
+//   1. `sign`     — verifică dreptul de a atașa ÎNAINTE să dea un URL de scriere;
+//   2. browserul PUT-ează fișierul direct în Storage;
+//   3. `finalize` — descarcă obiectul, îi verifică octeții reali, abia apoi scrie rândul.
+// Verificarea la pasul 3 nu e opțională: între 1 și 3 clientul poate urca ORICE la calea semnată,
+// deci tipul declarat rămâne o afirmație neverificată până când serverul se uită la conținut.
+
+const signUploadSchema = z.object({
+  file_name: z.string().min(1).max(MAX_FILE_NAME_LEN),
+  mime: z.string().max(100),
+  size_bytes: z.number().int().min(1).max(MAX_ATTACHMENT_BYTES),
+});
+
+parAttachmentsRoutes.post(
+  "/:parId/attachment-upload/sign",
+  zValidator("json", signUploadSchema),
+  async (c) => {
+    const { parId } = c.req.param();
+    const user = c.get("user");
+    const body = c.req.valid("json");
+
+    const guard = await guardAttachmentWrite(c, parId);
+    if (!guard.ok) return guard.response;
+
+    if (!ALLOWED_MIME_TYPES.includes(body.mime)) {
+      return c.json(
+        {
+          error: "invalid_file_type",
+          detail: `Allowed: PDF, imagini, Word, Excel, PowerPoint, OpenDocument, text/CSV, ZIP. Got: ${body.mime}`,
+        },
+        400
+      );
+    }
+
+    try {
+      const [signed] = await signUploads(PAR_ATTACHMENT_BUCKET, user.tenantId, [
+        { fileName: body.file_name },
+      ]);
+      return c.json({ path: signed.path, signed_url: signed.signedUrl });
+    } catch {
+      return c.json(
+        { error: "storage_unavailable", detail: "Nu pot pregăti încărcarea. Încearcă din nou." },
+        503
+      );
+    }
+  }
+);
+
+const finalizeUploadSchema = z.object({
+  path: z.string().min(1).max(512),
+  file_name: z.string().min(1).max(MAX_FILE_NAME_LEN),
+  mime: z.string().max(100),
+  kind: z.enum(parAttachmentKindValues).default("other"),
+  kind_other: z.string().trim().max(200).optional(),
+});
+
+parAttachmentsRoutes.post(
+  "/:parId/attachment-upload/finalize",
+  zValidator("json", finalizeUploadSchema),
+  async (c) => {
+    const { parId } = c.req.param();
+    const user = c.get("user");
+    const tenantId = user.tenantId;
+    const body = c.req.valid("json");
+
+    const guard = await guardAttachmentWrite(c, parId);
+    if (!guard.ok) return guard.response;
+    const { par } = guard;
+
+    // Calea vine de la client. Un simplu `startsWith(tenantId)` nu e o gardă: normalizarea de URL
+    // colapsează `..` înainte ca cererea să plece, deci „<tenant A>/../<tenant B>/x.pdf" ar trece
+    // prefixul și ar citi obiectul altui tenant (auditul din 29.08.2026). Forma se impune, nu se
+    // presupune.
+    if (!isSafeTenantObjectPath(body.path, tenantId)) {
+      return c.json({ error: "invalid_path" }, 400);
+    }
+
+    if (!ALLOWED_MIME_TYPES.includes(body.mime)) {
+      return c.json({ error: "invalid_file_type" }, 400);
+    }
+
+    // Obiectul urcat e conținut necontrolat până în clipa asta. Îl aducem și îl judecăm după
+    // octeți; dacă nu trece, îl ștergem — altfel un fișier respins ar rămâne să ocupe spațiu.
+    let bytes: Buffer;
+    try {
+      bytes = await downloadObject(PAR_ATTACHMENT_BUCKET, body.path);
+    } catch {
+      return c.json(
+        { error: "upload_not_found", detail: "Fișierul nu a ajuns în întregime. Încearcă din nou." },
+        400
+      );
+    }
+
+    const reject = async (error: string, detail: string) => {
+      await removeObjects(PAR_ATTACHMENT_BUCKET, [body.path]);
+      return c.json({ error, detail }, 400);
+    };
+
+    if (bytes.byteLength === 0) {
+      return reject("empty_file", "Fișierul e gol.");
+    }
+    if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+      return reject(
+        "file_too_large",
+        `Fișierul depășește ${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB.`
+      );
+    }
+    if (!magicBytesMatchBuffer(bytes, body.mime)) {
+      return reject("file_content_mismatch", "Conținutul fișierului nu corespunde tipului declarat.");
+    }
+
+    const [attachment] = await db
+      .insert(parAttachments)
+      .values({
+        tenantId,
+        parId,
+        storagePath: body.path,
+        mimeType: body.mime,
+        sizeBytes: bytes.byteLength,
+        fileUrl: null,
+        fileName: body.file_name,
+        kind: body.kind,
+        kindOther: body.kind === "other" && body.kind_other ? body.kind_other : null,
+        uploadedBy: user.id,
+      })
+      .returning();
+
+    // Analiza e consultativă: un furnizor de AI căzut nu are voie să facă o încărcare validă să pice.
     try {
       const analysis = await analyzeAttachmentAgainstPar(par, attachment, user.id);
       return c.json({ ...attachment, analysis: JSON.stringify(analysis) }, 201);

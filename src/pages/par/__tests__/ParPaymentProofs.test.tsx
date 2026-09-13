@@ -90,7 +90,7 @@ describe("ParPaymentProofs — dovezile în bloc", () => {
 
   it("[blocant] atașează toate dovezile potrivite, cu tipul „ordin de plată”", async () => {
     vi.spyOn(parApi, "getPaymentProofsQueue").mockResolvedValue(queue([makeItem()]));
-    const uploadSpy = vi.spyOn(parApi, "uploadAttachment").mockResolvedValue({} as never);
+    const uploadSpy = vi.spyOn(parApi, "uploadAttachmentDirect").mockResolvedValue({} as never);
     render(<ParPaymentProofs />);
     await screen.findByText("PAR-2026-0020");
 
@@ -98,15 +98,17 @@ describe("ParPaymentProofs — dovezile în bloc", () => {
     fireEvent.click(await screen.findByRole("button", { name: /atașează 1 dovadă/i }));
 
     await waitFor(() => expect(uploadSpy).toHaveBeenCalledTimes(1));
-    const [parId, payload] = uploadSpy.mock.calls[0];
+    const [parId, file, opts] = uploadSpy.mock.calls[0];
     expect(parId).toBe("par-1");
-    expect(payload.kind).toBe("payment_order");
-    expect(payload.file_url.startsWith("data:application/pdf;base64,")).toBe(true);
+    expect(opts?.kind).toBe("payment_order");
+    // Fișierul pleacă acum ca File direct în Storage, nu ca text base64 prin server.
+    expect(file).toBeInstanceOf(File);
+    expect(file.name).toBe("OP-2026-0047.pdf");
   });
 
   it("[blocant] un fișier nepotrivit rămâne de ales manual și NU se atașează singur", async () => {
     vi.spyOn(parApi, "getPaymentProofsQueue").mockResolvedValue(queue([makeItem()]));
-    const uploadSpy = vi.spyOn(parApi, "uploadAttachment").mockResolvedValue({} as never);
+    const uploadSpy = vi.spyOn(parApi, "uploadAttachmentDirect").mockResolvedValue({} as never);
     render(<ParPaymentProofs />);
     await screen.findByText("PAR-2026-0020");
 
@@ -135,7 +137,7 @@ describe("ParPaymentProofs — dovezile în bloc", () => {
       queue([makeItem(), makeItem({ id: "par-2", requestNo: "PAR-2026-0021", payeeName: "Alfa Trans SRL", paymentRef: "OP-2026-0048" })])
     );
     const uploadSpy = vi
-      .spyOn(parApi, "uploadAttachment")
+      .spyOn(parApi, "uploadAttachmentDirect")
       .mockRejectedValueOnce(new Error("fișier prea mare"))
       .mockResolvedValue({} as never);
     render(<ParPaymentProofs />);

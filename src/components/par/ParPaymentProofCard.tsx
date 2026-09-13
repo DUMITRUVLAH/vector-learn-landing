@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, ExternalLink, FileText, Loader2, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ds";
-import { deleteAttachment, uploadAttachment, type ParAttachment } from "@/lib/api/par";
+import { deleteAttachment, uploadAttachmentDirect, type ParAttachment } from "@/lib/api/par";
 import { parAttachmentPreviewUrl } from "@/lib/par/attachmentViewerBus";
 import { viewParAttachment } from "@/lib/parFiles";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_LABEL, attachmentTooLargeMessage } from "@/lib/par/attachmentLimits";
@@ -46,15 +46,6 @@ function previewKind(fileName: string, mime?: string | null): "pdf" | "image" | 
   return "none";
 }
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 export function ParPaymentProofCard({
   parId,
   requestNo,
@@ -79,12 +70,9 @@ export function ParPaymentProofCard({
       setUploading(true);
       setError(null);
       try {
-        const dataUrl = await fileToDataUrl(file);
-        await uploadAttachment(parId, {
-          file_name: `Confirmare plată — ${requestNo} (${file.name})`,
-          file_url: dataUrl,
-          mime: file.type || "application/pdf",
+        await uploadAttachmentDirect(parId, file, {
           kind: "payment_order",
+          fileName: `Confirmare plată — ${requestNo} (${file.name})`,
         });
         setJustAdded(true);
         onChanged();

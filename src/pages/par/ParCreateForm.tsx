@@ -34,7 +34,7 @@ import { PAR_FIELD_MESSAGES } from "@/lib/par/submitErrors";
 import {
   createPar, getPar, updatePar, submitPar,
   addLineItem, deleteLineItem,
-  uploadAttachment, deleteAttachment,
+  uploadAttachmentDirect, deleteAttachment,
   reconcileAttachment,
   listDepartments, listPayers, listProjects, listEvents, listBudgetCodes, listVendors, createVendor,
   getMyParProfile, createEvent, createBudgetCode,
@@ -181,14 +181,6 @@ function suggestTemplateName(lines: ParLineItem[], payeeName: string, requestNo:
   return base.length > 60 ? `${base.slice(0, 57)}…` : base;
 }
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => resolve(e.target?.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** VM3-03: sugestii pentru unitatea de măsură (Violeta: „adăugăm bucăți… servicii"). Text liber. */
@@ -1357,11 +1349,11 @@ export function ParCreateForm() {
           setError(`${file.name}: tip neacceptat (PDF, imagini, Word, Excel, PowerPoint, text/CSV, ZIP).`);
           continue;
         }
-        // PERF: uploaded as base64 JSON (see attachmentLimits.ts for why 3 MB, not 10 MB).
         if (file.size > MAX_ATTACHMENT_BYTES) { setError(attachmentTooLargeMessage(file.name)); continue; }
-        const dataUrl = await fileToDataUrl(file);
-        const att = await uploadAttachment(draftId, {
-          file_name: file.name, file_url: dataUrl, mime: file.type, kind: uploadKind, size_bytes: file.size,
+        // Direct în Storage: binarul nu trece prin funcția serverless, deci plafonul ei de corp
+        // (~4,5 MB, pe care base64 îl atingea de la ~3,3 MB de fișier) nu se mai aplică.
+        const att = await uploadAttachmentDirect(draftId, file, {
+          kind: uploadKind,
           ...(uploadKind === "other" ? { kind_other: kindOther } : {}),
         });
         setAttachments((p) => [...p, att]);

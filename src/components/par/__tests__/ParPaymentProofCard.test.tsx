@@ -64,7 +64,7 @@ describe("ParPaymentProofCard", () => {
   });
 
   it("[blocant] fișierul ales se atașează la dosar ca „ordin de plată”", async () => {
-    const uploadSpy = vi.spyOn(parApi, "uploadAttachment").mockResolvedValue(proof());
+    const uploadSpy = vi.spyOn(parApi, "uploadAttachmentDirect").mockResolvedValue(proof());
     const onChanged = vi.fn();
     renderCard({ onChanged });
 
@@ -73,15 +73,16 @@ describe("ParPaymentProofCard", () => {
     });
 
     await waitFor(() => expect(uploadSpy).toHaveBeenCalledTimes(1));
-    const [parId, payload] = uploadSpy.mock.calls[0];
+    const [parId, file, opts] = uploadSpy.mock.calls[0];
     expect(parId).toBe("par-1");
-    expect(payload.kind).toBe("payment_order");
-    expect(payload.file_name).toContain("PAR-2026-0020");
+    expect(file.name).toBe("OP-0047.pdf");
+    expect(opts?.kind).toBe("payment_order");
+    expect(opts?.fileName).toContain("PAR-2026-0020");
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
 
   it("[blocant] o captură de ecran lipită cu Ctrl+V devine dovadă, fără drum prin disc", async () => {
-    const uploadSpy = vi.spyOn(parApi, "uploadAttachment").mockResolvedValue(proof());
+    const uploadSpy = vi.spyOn(parApi, "uploadAttachmentDirect").mockResolvedValue(proof());
     renderCard();
 
     const png = new File([new Uint8Array([137, 80, 78, 71])], "clipboard.png", { type: "image/png" });
@@ -92,8 +93,8 @@ describe("ParPaymentProofCard", () => {
     window.dispatchEvent(event);
 
     await waitFor(() => expect(uploadSpy).toHaveBeenCalledTimes(1));
-    expect(uploadSpy.mock.calls[0][1].mime).toBe("image/png");
-    expect(uploadSpy.mock.calls[0][1].kind).toBe("payment_order");
+    expect(uploadSpy.mock.calls[0][1].type).toBe("image/png");
+    expect(uploadSpy.mock.calls[0][2]?.kind).toBe("payment_order");
   });
 
   it("[blocant] documentul atașat se vede pe loc: PDF în cadru, imaginea ca imagine", () => {
@@ -116,14 +117,14 @@ describe("ParPaymentProofCard", () => {
   });
 
   it("un fișier prea mare e refuzat cu un motiv, nu în tăcere", async () => {
-    const uploadSpy = vi.spyOn(parApi, "uploadAttachment");
+    const uploadSpy = vi.spyOn(parApi, "uploadAttachmentDirect");
     renderCard();
 
     const huge = new File([new Uint8Array(10)], "extras.pdf", { type: "application/pdf" });
-    Object.defineProperty(huge, "size", { value: 5 * 1024 * 1024 });
+    Object.defineProperty(huge, "size", { value: 12 * 1024 * 1024 });
     fireEvent.change(screen.getByLabelText(/alege confirmarea plății/i), { target: { files: [huge] } });
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/depășește 3 MB/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/depășește 10 MB/i);
     expect(uploadSpy).not.toHaveBeenCalled();
   });
 

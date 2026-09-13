@@ -34,7 +34,7 @@ import { Alert, Button, Card, Select, Table } from "@/components/ds";
 import { useRouter } from "@/router/HashRouter";
 import {
   getPaymentProofsQueue,
-  uploadAttachment,
+  uploadAttachmentDirect,
   formatCurrency,
   type ParPaymentProofItem,
 } from "@/lib/api/par";
@@ -76,15 +76,6 @@ function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("ro-MD", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-
-function fileToDataUrl(f: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = reject;
-    r.readAsDataURL(f);
-  });
 }
 
 // ─── Pagina ───────────────────────────────────────────────────────────────────
@@ -188,19 +179,16 @@ export default function ParPaymentProofs() {
 
   const attachAll = async () => {
     setUploading(true);
-    // Secvențial, nu în paralel: fișierele merg ca data-URL (base64), iar 30 de cereri simultane
-    // de câteva MB pică pe limita de corp a serverului.
+    // Secvențial, nu în paralel: fișierele urcă direct în Storage, iar 30 de încărcări simultane
+    // de câteva MB ar sufoca legătura utilizatorului și ar face progresul imposibil de citit.
     for (const proof of proofs) {
       if (!proof.parId || proof.state === "done") continue;
       setProofs((prev) => prev.map((p) => (p.key === proof.key ? { ...p, state: "uploading" } : p)));
       try {
-        const dataUrl = await fileToDataUrl(proof.file);
         const target = items.find((i) => i.id === proof.parId);
-        await uploadAttachment(proof.parId, {
-          file_name: `Ordin de plată — ${target?.requestNo ?? ""} (${proof.file.name})`.trim(),
-          file_url: dataUrl,
-          mime: proof.file.type || "application/pdf",
+        await uploadAttachmentDirect(proof.parId, proof.file, {
           kind: "payment_order",
+          fileName: `Ordin de plată — ${target?.requestNo ?? ""} (${proof.file.name})`.trim(),
         });
         setProofs((prev) => prev.map((p) => (p.key === proof.key ? { ...p, state: "done" } : p)));
       } catch (e: unknown) {
