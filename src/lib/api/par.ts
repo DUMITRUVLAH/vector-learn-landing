@@ -878,6 +878,21 @@ export async function uploadAttachmentDirect(
   });
 }
 
+/**
+ * Cere verdictul AI pentru un atașament, fără ca cineva să aștepte după el.
+ *
+ * `finalize` nu mai rulează analiza pe drumul răspunsului (ținea confirmarea 5–10 secunde, vezi
+ * server/routes/parAttachments.ts). Ecranele care AFIȘEAZĂ verdictul îl cer ele și îi arată starea;
+ * pentru ordinele de plată nu-l afișează nimeni, dar rezultatul tot e nevoie să existe: din el se
+ * scriu evenimentele din jurnalul cererii („Actul nu se potrivește cu cererea") și numărătoarea de
+ * neconcordanțe din digestul săptămânal. Fără apelul ăsta, ele ar dispărea în tăcere.
+ */
+export function reconcileInBackground(parId: string, attachmentId: string): void {
+  void reconcileAttachment(parId, attachmentId).catch(() => {
+    /* consultativ: un furnizor de AI căzut nu are voie să strice o încărcare reușită */
+  });
+}
+
 export async function listAttachments(parId: string): Promise<{ items: ParAttachment[] }> {
   return api(`/api/par/${parId}/attachments`);
 }

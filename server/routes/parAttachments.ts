@@ -699,13 +699,20 @@ parAttachmentsRoutes.post(
       })
       .returning();
 
-    // Analiza e consultativă: un furnizor de AI căzut nu are voie să facă o încărcare validă să pice.
-    try {
-      const analysis = await analyzeAttachmentAgainstPar(par, attachment, user.id);
-      return c.json({ ...attachment, analysis: JSON.stringify(analysis) }, 201);
-    } catch {
-      return c.json(attachment, 201);
-    }
+    // Analiza NU mai rulează aici, deși e ieftin de scris pe același drum.
+    //
+    // Ținea răspunsul 5–10 secunde (extragerea textului din PDF + un apel la model), iar interfața
+    // adaugă fișierul în listă abia când răspunsul vine: omul alegea documentul și rămânea cu un
+    // ecran în care nu se schimba nimic, fără să știe dacă a ajuns sau nu („is your document
+    // uploaded or not?", owner, 13.09.2026). `finalize` confirmă acum doar ce poate confirma
+    // imediat — fișierul E în dosar — iar verdictul AI vine separat, prin
+    // `POST /:parId/attachments/:attId/reconcile`, cu starea lui vizibilă lângă fișier.
+    //
+    // Pe deasupra, analiza rula de DOUĂ ori pentru fiecare fișier: o dată aici și încă o dată în
+    // `reconcile`-ul pe care clientul îl cerea oricum imediat după (ParCreateForm). Al doilea apel
+    // suprascria rezultatul primului, deci primul era plătit degeaba — la fel și pentru dovezile
+    // de plată, unde verdictul nici nu se afișează nicăieri.
+    return c.json(attachment, 201);
   }
 );
 

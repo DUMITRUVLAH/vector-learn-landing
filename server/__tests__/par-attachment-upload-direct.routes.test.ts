@@ -81,11 +81,13 @@ vi.mock("../lib/storage/objectStore", () => ({
 vi.mock("../lib/ai/readUploadedDoc", () => ({
   readUploadedDoc: async () => ({ rawText: "", imageDataUrl: null, fileDataUrl: null }),
 }));
-vi.mock("../lib/ai/parExtractor", () => ({
-  extractParParties: async () => {
+/** Spion, nu doar mock: un test verifică faptul că `finalize` NU cheamă deloc analiza. */
+const extractParPartiesSpy = vi.hoisted(() =>
+  vi.fn(async () => {
     throw new Error("ai_disabled_in_test");
-  },
-}));
+  })
+);
+vi.mock("../lib/ai/parExtractor", () => ({ extractParParties: extractParPartiesSpy }));
 
 import { Hono } from "hono";
 
@@ -196,6 +198,30 @@ describe("Încărcare directă în Storage", () => {
     const [row] = await testDb.select().from(parAttachments).where(eq(parAttachments.id, att.id));
     expect(row.fileUrl).toBeNull();
     expect(row.mimeType).toBe("application/pdf");
+  });
+
+  /**
+   * „Is your document uploaded or not?" (owner, 13.09.2026). `finalize` aștepta verdictul AI —
+   * extragerea textului plus un apel la model, 5–10 secunde — și abia apoi răspundea, deci
+   * interfața nu putea confirma nimic în tot acest timp. Confirmarea trebuie să vină cât ține un
+   * scris în baza de date; comparația cu cererea e un al doilea pas, cerut separat prin
+   * `/reconcile`, unde întârzierea are unde să se vadă.
+   */
+  it("[blocant] finalize confirmă fișierul fără să aștepte analiza AI", async () => {
+    const bytes = pdfOfSize(1024);
+    const signRes = await sign({ file_name: "act.pdf", mime: "application/pdf", size_bytes: bytes.byteLength });
+    const { path: objectPath } = (await signRes.json()) as { path: string };
+    storage.set(objectPath, bytes);
+
+    extractParPartiesSpy.mockClear();
+    const res = await finalize({ path: objectPath, file_name: "act.pdf", mime: "application/pdf", kind: "act_of_receipt" });
+
+    expect(res.status).toBe(201);
+    const att = (await res.json()) as { id: string; analysis?: string | null };
+    expect(att.id).toBeTruthy();
+    // Fără verdict în răspuns ȘI fără apel la model: altfel răspunsul ar depinde iar de el.
+    expect(att.analysis ?? null).toBeNull();
+    expect(extractParPartiesSpy).not.toHaveBeenCalled();
   });
 
   it("[blocant] un fișier care nu e ce pretinde e refuzat ȘI șters din Storage", async () => {

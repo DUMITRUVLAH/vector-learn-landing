@@ -49,6 +49,7 @@ import {
   executePayment,
   financeReturnPar,
   uploadAttachmentDirect,
+  reconcileInBackground,
   listAttachments,
   formatMDL,
   formatCurrency,
@@ -320,12 +321,13 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
     try {
       // Attach the payment-confirmation PDF to the dossier (section 13) BEFORE recording the payment.
       if (proofFile) {
-        await uploadAttachmentDirect(par.id, proofFile, {
+        const att = await uploadAttachmentDirect(par.id, proofFile, {
           // Tipul real, nu „Altul": dosarul trebuie să arate un ordin de plată acolo unde e unul,
           // iar ecranul de dovezi știe astfel care cereri plătite mai au nevoie de dovadă.
           kind: "payment_order",
           fileName: `Ordin de plată — ${par.requestNo}${proofFile.name ? ` (${proofFile.name})` : ""}`,
         });
+        reconcileInBackground(par.id, att.id);
       }
       const payload: PayPayload = {
         actual_amount_cents: amt,

@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, ExternalLink, FileText, Loader2, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ds";
-import { deleteAttachment, uploadAttachmentDirect, type ParAttachment } from "@/lib/api/par";
+import { deleteAttachment, reconcileInBackground, uploadAttachmentDirect, type ParAttachment } from "@/lib/api/par";
 import { parAttachmentPreviewUrl } from "@/lib/par/attachmentViewerBus";
 import { viewParAttachment } from "@/lib/parFiles";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_LABEL, attachmentTooLargeMessage } from "@/lib/par/attachmentLimits";
@@ -70,10 +70,11 @@ export function ParPaymentProofCard({
       setUploading(true);
       setError(null);
       try {
-        await uploadAttachmentDirect(parId, file, {
+        const att = await uploadAttachmentDirect(parId, file, {
           kind: "payment_order",
           fileName: `Confirmare plată — ${requestNo} (${file.name})`,
         });
+        reconcileInBackground(parId, att.id);
         setJustAdded(true);
         onChanged();
       } catch (e: unknown) {

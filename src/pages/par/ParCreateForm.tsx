@@ -560,6 +560,16 @@ export function ParCreateForm() {
   /** Doar pentru „Altul": ce document e. Obligatoriu, altfel dosarul rămâne cu „Alt document". */
   const [uploadKindOther, setUploadKindOther] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
+  /**
+   * Ce se întâmplă cu fiecare fișier, ca omul să nu se uite la un ecran care nu se schimbă.
+   *
+   * `pending` = fișierul E în dosar, dar verdictul AI încă se calculează (extragere text + un apel
+   * la model, 5–10 s). `failed` = analiza n-a răspuns; fișierul rămâne atașat, iar tăcerea ar
+   * lăsa impresia că documentul a fost verificat și e în regulă.
+   */
+  const [analysisState, setAnalysisState] = useState<Record<string, "pending" | "failed">>({});
+  /** Numele fișierelor aflate în drum spre Storage — un rând vizibil cât ține urcarea. */
+  const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const [draftSavedMessage, setDraftSavedMessage] = useState<string | null>(null);
   const [newEventName, setNewEventName] = useState("");
   const [showNewEvent, setShowNewEvent] = useState(false);
@@ -1352,14 +1362,36 @@ export function ParCreateForm() {
         if (file.size > MAX_ATTACHMENT_BYTES) { setError(attachmentTooLargeMessage(file.name)); continue; }
         // Direct în Storage: binarul nu trece prin funcția serverless, deci plafonul ei de corp
         // (~4,5 MB, pe care base64 îl atingea de la ~3,3 MB de fișier) nu se mai aplică.
-        const att = await uploadAttachmentDirect(draftId, file, {
-          kind: uploadKind,
-          ...(uploadKind === "other" ? { kind_other: kindOther } : {}),
-        });
+        setUploadingNames((prev) => [...prev, file.name]);
+        let att: ParAttachment;
+        try {
+          att = await uploadAttachmentDirect(draftId, file, {
+            kind: uploadKind,
+            ...(uploadKind === "other" ? { kind_other: kindOther } : {}),
+          });
+        } finally {
+          setUploadingNames((prev) => {
+            const i = prev.indexOf(file.name);
+            return i === -1 ? prev : [...prev.slice(0, i), ...prev.slice(i + 1)];
+          });
+        }
         setAttachments((p) => [...p, att]);
+        // Fișierul e deja în dosar; verdictul AI e un al doilea pas, anunțat ca atare în listă.
+        setAnalysisState((prev) => ({ ...prev, [att.id]: "pending" }));
         reconcileAttachment(draftId, att.id)
-          .then(({ analysis }) => setAttachments((prev) => prev.map((item) => item.id === att.id ? { ...item, analysis: JSON.stringify(analysis) } : item)))
-          .catch(() => { /* advisory analysis must never block upload */ });
+          .then(({ analysis }) => {
+            setAttachments((prev) => prev.map((item) => item.id === att.id ? { ...item, analysis: JSON.stringify(analysis) } : item));
+            setAnalysisState((prev) => {
+              const next = { ...prev };
+              delete next[att.id];
+              return next;
+            });
+          })
+          .catch(() => {
+            // Analiza e consultativă — nu anulează încărcarea, dar nici nu tace: fără rândul ăsta,
+            // un document neverificat arată exact ca unul verificat și găsit în regulă.
+            setAnalysisState((prev) => ({ ...prev, [att.id]: "failed" }));
+          });
         setAttachmentsPresent(true);
         slots--;
       }
@@ -2865,8 +2897,21 @@ export function ParCreateForm() {
             </label>
             <span className="text-xs text-muted-foreground">PDF, imagini, Word, Excel, PowerPoint, CSV, ZIP — max {MAX_ATTACHMENT_LABEL} · {attachments.length}/10 fișiere</span>
           </div>
-          {attachments.length > 0 && (
+          {(attachments.length > 0 || uploadingNames.length > 0) && (
             <ul className="space-y-2" aria-label="Fișiere atașate">
+              {/* Fișierele aflate în urcare au rândul lor: altfel, între „am ales fișierul" și
+                  „apare în listă" nu se schimbă nimic pe ecran, iar la un fișier mare pauza e
+                  destul de lungă cât să pară că nu s-a întâmplat nimic. */}
+              {uploadingNames.map((name) => (
+                <li key={`urcare-${name}`} role="status"
+                  className="flex items-center gap-2 p-3 rounded-lg bg-muted/60 border border-dashed border-border">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-foreground truncate">{name}</span>
+                    <span className="block text-xs text-muted-foreground">Se încarcă în dosar…</span>
+                  </span>
+                </li>
+              ))}
               {attachments.map((a) => {
                 const analysis = attachmentAnalysis(a.analysis);
                 return (
@@ -2876,6 +2921,17 @@ export function ParCreateForm() {
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-foreground truncate">{a.fileName}</span>
                       <span className="block text-xs text-muted-foreground">{attachmentKindLabel(a.kind, a.kindOther)}</span>
+                      {analysisState[a.id] === "pending" && (
+                        <span role="status" className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" aria-hidden />
+                          Atașat. AI-ul compară documentul cu cererea…
+                        </span>
+                      )}
+                      {analysisState[a.id] === "failed" && (
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          Atașat. Verificarea AI nu a răspuns — documentul NU a fost comparat cu cererea.
+                        </span>
+                      )}
                       {analysis && <AttachmentAnalysisSummary analysis={analysis} currency={currency} />}
                     </span>
                   </span>

@@ -35,6 +35,7 @@ import { useRouter } from "@/router/HashRouter";
 import {
   getPaymentProofsQueue,
   uploadAttachmentDirect,
+  reconcileInBackground,
   formatCurrency,
   type ParPaymentProofItem,
 } from "@/lib/api/par";
@@ -186,10 +187,11 @@ export default function ParPaymentProofs() {
       setProofs((prev) => prev.map((p) => (p.key === proof.key ? { ...p, state: "uploading" } : p)));
       try {
         const target = items.find((i) => i.id === proof.parId);
-        await uploadAttachmentDirect(proof.parId, proof.file, {
+        const att = await uploadAttachmentDirect(proof.parId, proof.file, {
           kind: "payment_order",
           fileName: `Ordin de plată — ${target?.requestNo ?? ""} (${proof.file.name})`.trim(),
         });
+        reconcileInBackground(proof.parId, att.id);
         setProofs((prev) => prev.map((p) => (p.key === proof.key ? { ...p, state: "done" } : p)));
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : "Eroare la atașare";
