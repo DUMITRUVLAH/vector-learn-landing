@@ -85,7 +85,10 @@ const AREAS = {
       ["GET", "/api/par/vendors/pending-ratings", (j) => Array.isArray(j?.pending)],
     ],
     routes: ["/business/par", "/business/par/inbox", "/business/par/new", "/business/par/folders", "/business/par/finance", "/business/par/reports", "/business/par/exchange", "/business/par/admin", "/business/par/vendors"],
-    deep: ["e2e-par-sweep.mjs", "e2e-par-write-sweep.mjs", "e2e-par-scope.mjs", "e2e-par-timeline-human.mjs", "e2e-par-patenta.mjs"],
+    // `e2e-par-mobile.mjs`: ce e ATINGIBIL pe un ecran de telefon, nu doar prezent în DOM. Dialogul
+    // de plată a fost o vreme mai înalt decât ecranul, fără derulare — „Da, confirmă plata" cădea
+    // sub margine, deci plata nu se putea încheia de pe telefon, iar toate testele erau verzi.
+    deep: ["e2e-par-sweep.mjs", "e2e-par-write-sweep.mjs", "e2e-par-scope.mjs", "e2e-par-timeline-human.mjs", "e2e-par-patenta.mjs", "e2e-par-mobile.mjs"],
   },
   fin: {
     label: "FinDesk",

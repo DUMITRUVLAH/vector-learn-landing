@@ -611,3 +611,106 @@ describe("ParFinanceQueue — generarea dosarului PDF nu mai pare blocaj", () =>
     await waitFor(() => expect(btn).not.toBeDisabled());
   });
 });
+
+/**
+ * Owner, 13.09.2026: „confirmarea plății e foarte lentă… omul ar trebui să vadă că da, s-a
+ * înregistrat, dar acum facem asta". Secundele nu se pot desființa toate (fișierul chiar urcă,
+ * plata chiar se scrie, solicitantul chiar e anunțat) — dar tăcerea, da. Cât timp lucrează,
+ * dialogul spune la ce pas e.
+ */
+describe("Plata spune ce face cât lucrează", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const openConfirm = async () => {
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [makeFinanceItem({ status: "in_finance" })],
+      total: 1,
+    });
+    render(<ParFinanceQueue />);
+    (await screen.findByRole("button", { name: /înregistrează plata/i })).click();
+    await screen.findByText("Înregistrare plată");
+    screen.getByRole("button", { name: "Marchează plătit" }).click();
+    return await screen.findByRole("button", { name: /da, confirmă plata/i });
+  };
+
+  it("[blocant] cât se scrie plata, dialogul spune ce se întâmplă — nu tace cu un buton blocat", async () => {
+    let release: (v: { status: "paid"; par: { vendorId: null } }) => void = () => {};
+    vi.spyOn(parApi, "executePayment").mockReturnValue(
+      new Promise((resolve) => { release = resolve as never; }) as never,
+    );
+
+    (await openConfirm()).click();
+
+    // Mesajul e într-o regiune „status", ca cititorul de ecran să-l anunțe fără să mute focusul.
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent(/se înregistrează plata/i);
+    expect(screen.getByRole("button", { name: /se înregistrează/i })).toBeDisabled();
+
+    release({ status: "paid", par: { vendorId: null } });
+    await waitFor(() => expect(screen.queryByText("Înregistrare plată")).not.toBeInTheDocument());
+  });
+
+  it("dacă plata eșuează, mesajul de progres dispare și rămâne motivul", async () => {
+    vi.spyOn(parApi, "executePayment").mockRejectedValue(new Error("Fondurile sunt blocate."));
+
+    (await openConfirm()).click();
+
+    expect(await screen.findByText("Fondurile sunt blocate.")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Coada e un tabel de 13 coloane (`min-w-[1280px]`). Pe un telefon asta însemna o fereastră de o
+ * coloană deschisă peste „Acțiuni": trei butoane și niciun număr de cerere, niciun beneficiar,
+ * nicio sumă (verificat în browser la 390px, 13.09.2026). Pe telefon aceleași cereri se citesc ca
+ * niște carduri.
+ */
+describe("Pe telefon, coada se citește fără să tragi pagina lateral", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const asPhone = (isPhone: boolean) => {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      configurable: true,
+      value: (query: string) => ({
+        matches: isPhone && query.includes("max-width"),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    });
+  };
+
+  it("[blocant] pe telefon: carduri, cu numărul, suma, beneficiarul și butonul de plată vizibile", async () => {
+    asPhone(true);
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [makeFinanceItem({ status: "in_finance", payeeName: "Centrul de Resurse Juridice" })],
+      total: 1,
+    });
+
+    render(<ParFinanceQueue />);
+
+    await screen.findByText("Centrul de Resurse Juridice");
+    expect(document.querySelector("table")).toBeNull();
+    expect(screen.getByRole("button", { name: /deschide cererea PAR-2026-0001/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /înregistrează plata/i })).toBeInTheDocument();
+  });
+
+  it("pe ecran mare rămâne tabelul cu toate coloanele", async () => {
+    asPhone(false);
+    vi.spyOn(parApi, "getFinanceQueue").mockResolvedValue({
+      items: [makeFinanceItem({ status: "in_finance" })],
+      total: 1,
+    });
+
+    render(<ParFinanceQueue />);
+
+    await screen.findByRole("button", { name: /înregistrează plata/i });
+    expect(document.querySelector("table")).not.toBeNull();
+  });
+});

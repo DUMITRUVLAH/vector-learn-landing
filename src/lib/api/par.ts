@@ -832,7 +832,17 @@ export async function uploadAttachment(
 export async function uploadAttachmentDirect(
   parId: string,
   file: File,
-  opts: { kind?: ParAttachmentKind; kind_other?: string; fileName?: string } = {}
+  opts: {
+    kind?: ParAttachmentKind;
+    kind_other?: string;
+    fileName?: string;
+    /**
+     * Anunță interfața la ce pas suntem. Încărcarea directă are două etape cu durate foarte
+     * diferite — fișierul urcă în Storage, apoi serverul îl verifică — iar un buton care tace pe
+     * tot parcursul arată identic cu o aplicație blocată (owner, 13.09.2026, dialogul de plată).
+     */
+    onStep?: (step: "upload" | "finalize") => void;
+  } = {}
 ): Promise<ParAttachment> {
   // Numele sub care documentul apare la dosar poate diferi de cel de pe disc (dovada de plată e
   // botezată după cerere, ca să se recunoască în listă).
@@ -845,6 +855,7 @@ export async function uploadAttachmentDirect(
     }
   );
 
+  opts.onStep?.("upload");
   // Direct în Storage. `credentials` lipsește înadins: URL-ul e deja semnat, iar trimiterea
   // cookie-urilor noastre către alt origin n-ar face decât să le expună.
   //
@@ -866,6 +877,7 @@ export async function uploadAttachmentDirect(
   }
   if (!put.ok) throw new Error("Încărcarea fișierului nu a reușit. Verifică conexiunea și reîncearcă.");
 
+  opts.onStep?.("finalize");
   return api<ParAttachment>(`/api/par/${parId}/attachment-upload/finalize`, {
     method: "POST",
     body: JSON.stringify({

@@ -65,6 +65,7 @@ import { viewParAttachment } from "@/lib/parFiles";
 import { attachmentKindLabel } from "@/lib/par/attachmentKinds";
 import { useRouter } from "@/router/HashRouter";
 import { cn } from "@/lib/utils";
+import { useIsPhone } from "@/hooks/useIsPhone";
 
 // ─── Section-16 modal ─────────────────────────────────────────────────────────
 
@@ -119,9 +120,9 @@ function Section16Modal({ par, onClose, onSaved }: Section16ModalProps) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="s16-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/80 p-4 backdrop-blur-sm"
     >
-      <div className="bg-card border border-border rounded-lg shadow-lg p-6 w-full max-w-lg space-y-4">
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg">
         <h2 id="s16-title" className="text-lg font-semibold text-card-foreground">
           Secțiunea 16 — Payment Internal Use Only
         </h2>
@@ -236,6 +237,13 @@ function mdlHint(par: { currency: string; totalMdlCents?: number | null }): stri
     : null;
 }
 
+/** Ce scrie sub buton la fiecare pas — în cuvintele omului de la finanțe, nu ale sistemului. */
+const PAY_STEP_LABEL: Record<"upload" | "verify" | "pay", string> = {
+  upload: "Se urcă ordinul de plată…",
+  verify: "Se verifică fișierul și se atașează la dosar…",
+  pay: "Se înregistrează plata și e anunțat solicitantul…",
+};
+
 function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
   useEscapeToClose(onClose);
   // Suma reală se introduce în MONEDA CERERII — serverul o compară direct cu estimatul când aplică
@@ -257,6 +265,13 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
   // schimbă statutul cererii; a doua apăsare se face pe un rezumat al plății.
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
+  /**
+   * La ce pas suntem. Confirmarea plății nu e o singură cerere: fișierul urcă în Storage, serverul
+   * îl verifică și abia apoi se scrie plata și pleacă notificarea. Owner-ul, 13.09: „confirmarea e
+   * foarte lentă" — jumătate din problemă era că butonul nu spunea NIMIC în tot acest timp, deci
+   * secundele arătau ca o aplicație blocată, nu ca o treabă în curs.
+   */
+  const [step, setStep] = useState<null | "upload" | "verify" | "pay">(null);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   // VM1-05: show "salvat în registru ✓" indicator when vendor was auto-saved on payment
@@ -317,6 +332,7 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
     }
 
     setSaving(true);
+    setStep(proofFile ? "upload" : "pay");
     setError(null);
     try {
       // Attach the payment-confirmation PDF to the dossier (section 13) BEFORE recording the payment.
@@ -326,9 +342,11 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
           // iar ecranul de dovezi știe astfel care cereri plătite mai au nevoie de dovadă.
           kind: "payment_order",
           fileName: `Ordin de plată — ${par.requestNo}${proofFile.name ? ` (${proofFile.name})` : ""}`,
+          onStep: (s) => setStep(s === "upload" ? "upload" : "verify"),
         });
         reconcileInBackground(par.id, att.id);
       }
+      setStep("pay");
       const payload: PayPayload = {
         actual_amount_cents: amt,
         payment_date: paymentDate,
@@ -352,6 +370,7 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
       setError(e instanceof Error ? e.message : "Eroare la procesarea plății");
     } finally {
       setSaving(false);
+      setStep(null);
     }
   };
 
@@ -360,9 +379,9 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="pay-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/80 p-4 backdrop-blur-sm"
     >
-      <div className="bg-card border border-border rounded-lg shadow-lg p-6 w-full max-w-lg space-y-4">
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg">
         <h2 id="pay-title" className="text-lg font-semibold text-card-foreground">
           Înregistrare plată
         </h2>
@@ -496,6 +515,19 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
           </div>
         )}
 
+        {/* Ce se întâmplă ACUM. Fără linia asta, între click și închiderea dialogului treceau
+            secunde în care ecranul arăta identic cu unul înghețat. */}
+        {step && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground"
+          >
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+            <span>{PAY_STEP_LABEL[step]}</span>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
           {/* VM4-02: alternativa lipsă. Până acum dialogul avea un singur drum înainte — „plătit" —
               chiar și când plata NU trebuia făcută. */}
@@ -519,7 +551,7 @@ function PayModal({ par, onClose, onPaid, onRefuse }: PayModalProps) {
             className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-            {confirming ? "Da, confirmă plata" : "Marchează plătit"}
+            {saving ? "Se înregistrează…" : confirming ? "Da, confirmă plata" : "Marchează plătit"}
           </button>
         </div>
       </div>
@@ -562,9 +594,9 @@ function RefusePaymentModal({ par, onClose, onReturned }: RefusePaymentModalProp
       role="dialog"
       aria-modal="true"
       aria-labelledby="refuse-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/80 p-4 backdrop-blur-sm"
     >
-      <div className="w-full max-w-lg space-y-4 rounded-lg border border-border bg-card p-6 shadow-lg">
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg">
         <h2 id="refuse-title" className="text-lg font-semibold text-card-foreground">
           Refuză plata
         </h2>
@@ -703,9 +735,9 @@ function AttachmentsModal({ par, onClose }: AttachmentsModalProps) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="att-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/80 p-4 backdrop-blur-sm"
     >
-      <div className="bg-card border border-border rounded-lg shadow-lg p-6 w-full max-w-lg space-y-4 max-h-[80vh] overflow-y-auto">
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id="att-title" className="text-lg font-semibold text-card-foreground">
@@ -795,9 +827,9 @@ function DosarProgressModal({ job, onClose, onRetry }: DosarProgressModalProps) 
       role="dialog"
       aria-modal="true"
       aria-labelledby="dosar-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/80 p-4 backdrop-blur-sm"
     >
-      <div className="w-full max-w-md space-y-4 rounded-lg border border-border bg-card p-6 shadow-lg">
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg">
         <div className="flex items-start gap-3">
           {loading ? (
             <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-primary" aria-hidden="true" />
@@ -845,6 +877,161 @@ function DosarProgressModal({ job, onClose, onRetry }: DosarProgressModalProps) 
   );
 }
 
+
+/**
+ * Acțiunile unui rând din coadă — o singură definiție, folosită și de tabel (ecran mare) și de
+ * carduri (telefon). În două locuri, un buton nou ar fi apărut doar într-unul, iar cine lucrează de
+ * pe telefon ar fi rămas fără el fără să observe cineva.
+ *
+ * Toate trec prin DS Button: diferă prin variantă, nu prin dimensiune. Pe telefon se împachetează
+ * pe rânduri (`wrap`), pe ecran mare stau într-o linie.
+ */
+interface QueueActionsProps {
+  par: ParFinanceQueueItem;
+  dosarJob: DosarJob | null;
+  onSection16: (par: ParFinanceQueueItem) => void;
+  onPay: (par: ParFinanceQueueItem) => void;
+  onDosar: (par: ParFinanceQueueItem) => void;
+  wrap?: boolean;
+}
+
+function QueueActions({ par, dosarJob, onSection16, onPay, onDosar, wrap = false }: QueueActionsProps) {
+  return (
+    <div className={cn("flex items-center justify-start gap-2", wrap ? "flex-wrap" : "flex-nowrap")}>
+      {/* Secțiunea 16 — pe cererile aprobate / ajunse la finanțe */}
+      {["approved", "in_finance"].includes(par.status) && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onSection16(par)}
+          aria-label={`Completează secțiunea 16 pentru ${par.requestNo}`}
+        >
+          Secț. 16
+        </Button>
+      )}
+      {/* Plata — pe cererile ajunse la finanțe */}
+      {par.status === "in_finance" && (
+        <Button size="sm" onClick={() => onPay(par)} aria-label={`Înregistrează plata pentru ${par.requestNo}`}>
+          <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
+          Înregistrează plata
+        </Button>
+      )}
+      {/* După re-aprobarea depășirii, plata se poate relua */}
+      {par.status === "reapproval_required" && par.payment?.overageReapproved && (
+        <Button
+          size="sm"
+          onClick={() => onPay(par)}
+          aria-label={`Reîncearcă plata pentru ${par.requestNo} (re-aprobare acordată)`}
+        >
+          <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
+          Plătește (re-aprobat)
+        </Button>
+      )}
+      {par.status === "reapproval_required" && !par.payment?.overageReapproved && (
+        <span className="whitespace-nowrap text-sm text-warning">Așteptare re-aprobare…</span>
+      )}
+      {/* VM1-12: dosarul complet PDF — pe orice status */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onDosar(par)}
+        disabled={dosarJob?.status === "loading" && dosarJob.par.id === par.id}
+        aria-label={`Descarcă dosarul complet PDF pentru ${par.requestNo}`}
+        title="Descarcă dosarul complet (PDF)"
+      >
+        {dosarJob?.status === "loading" && dosarJob.par.id === par.id ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <Paperclip className="h-4 w-4" aria-hidden="true" />
+        )}
+        Dosar PDF
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * Un rând din coadă, așa cum încape pe un telefon.
+ *
+ * Coada e un tabel de 13 coloane cu `min-w-[1280px]`: pe un ecran de 390px asta însemna o fereastră
+ * de o coloană, deschisă chiar peste „Acțiuni" — omul de la finanțe vedea trei butoane și niciun
+ * număr de cerere, niciun beneficiar, nicio sumă, decât dacă trăgea pagina lateral. Aceleași date,
+ * în ordinea în care le citește: CINE, CÂT, PENTRU CE, apoi ce poate face.
+ */
+interface QueueCardProps extends Omit<QueueActionsProps, "wrap"> {
+  onOpen: (par: ParFinanceQueueItem) => void;
+  onDocuments: (par: ParFinanceQueueItem) => void;
+}
+
+function QueueCard({ par, dosarJob, onSection16, onPay, onDosar, onOpen, onDocuments }: QueueCardProps) {
+  return (
+    <li className="space-y-3 rounded-lg border border-border bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => onOpen(par)}
+          className="font-mono text-sm text-foreground hover:text-primary hover:underline"
+          aria-label={`Deschide cererea ${par.requestNo}`}
+        >
+          {par.requestNo}
+        </button>
+        <span className="font-mono text-base font-semibold text-foreground">
+          {parAmount(par.totalEstimatedCents, par.currency)}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <ParStatusChip
+          status={par.status}
+          label={par.financeReturn ? "Refuzată de finanțe" : undefined}
+          className={par.financeReturn ? "bg-destructive/10 text-destructive" : undefined}
+        />
+        {par.isUrgent && (
+          <ParUrgentBadge reason={par.urgentReason} reasonNote={par.urgentReasonNote} dueDate={par.urgentDueDate} />
+        )}
+        <ParBackdatedBadge dateOfRequest={par.dateOfRequest} submittedAt={par.submittedAt} />
+      </div>
+
+      {/* Beneficiarul și IBAN-ul rămân copiabile: de aici se completează ordinul în bancă, inclusiv
+          de pe telefon. */}
+      <div className="space-y-1 text-sm">
+        <p className="font-medium text-foreground">{par.payeeName ?? "Beneficiar nespecificat"}</p>
+        {par.payeeIban && <CopyValue display={par.payeeIban} label="Copiază IBAN" mono maxWidthClass="max-w-full" />}
+        {par.payeeIdnp && <CopyValue display={par.payeeIdnp} label="Copiază IDNO" mono maxWidthClass="max-w-full" />}
+        {par.endUse && <p className="text-muted-foreground">{par.endUse}</p>}
+        {(par.projectName || par.budgetCodeLabel) && (
+          <p className="text-xs text-muted-foreground">
+            {[par.projectName, par.budgetCodeLabel].filter(Boolean).join(" · ")}
+          </p>
+        )}
+        {par.approverDecisions && par.approverDecisions.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Aprobat de {par.approverDecisions.map((d) => d.name).join(", ")}
+          </p>
+        )}
+        {par.status === "reapproval_required" && (
+          <p className="text-xs font-medium text-warning">Re-aprobare necesară (&gt;10% depășire)</p>
+        )}
+      </div>
+
+      <div className="space-y-2 border-t border-border pt-3">
+        <QueueActions par={par} dosarJob={dosarJob} onSection16={onSection16} onPay={onPay} onDosar={onDosar} wrap />
+        {par.attachmentsMeta && par.attachmentsMeta.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onDocuments(par)}
+            aria-label={`Vezi ${par.attachmentsMeta.length} documente pentru ${par.requestNo}`}
+          >
+            <FileText className="h-4 w-4" aria-hidden="true" />
+            {par.attachmentsMeta.length} doc.
+          </Button>
+        )}
+      </div>
+    </li>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 /** VM3-01: "cine a aprobat și la ce dată" — short ro-MD date for the queue. */
@@ -869,6 +1056,8 @@ export default function ParFinanceQueue() {
   const [payPar, setPayPar] = useState<ParFinanceQueueItem | null>(null);
   const [attPar, setAttPar] = useState<ParFinanceQueueItem | null>(null);
   const [dosarJob, setDosarJob] = useState<DosarJob | null>(null);
+  // Tabelul de 13 coloane nu încape pe un telefon; acolo aceleași cereri se citesc ca niște carduri.
+  const isPhone = useIsPhone();
   const [refusePar, setRefusePar] = useState<ParFinanceQueueItem | null>(null);
   const [filterQ, setFilterQ] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
@@ -973,7 +1162,25 @@ export default function ParFinanceQueue() {
 
         {/* Queue table — VM3-01: coloanele cerute de finance (IDNO / IBAN / sumă / destinație /
             budget line), text copiabil, nr. PAR clickabil, aprobatori cu data deciziei. */}
-        {!loading && !error && items.length > 0 && (
+        {/* Pe telefon: carduri. De la tabletă în sus: tabelul complet, cu toate coloanele. */}
+        {!loading && !error && items.length > 0 && isPhone && (
+          <ul className="space-y-3" aria-label="Coadă finanțe">
+            {filteredItems.map((par) => (
+              <QueueCard
+                key={par.id}
+                par={par}
+                dosarJob={dosarJob}
+                onSection16={setS16Par}
+                onPay={setPayPar}
+                onDosar={(p) => void startDosar(p)}
+                onOpen={(p) => navigate(`/business/par/${p.id}`)}
+                onDocuments={setAttPar}
+              />
+            ))}
+          </ul>
+        )}
+
+        {!loading && !error && items.length > 0 && !isPhone && (
           <Table className="min-w-[1280px]" aria-label="Coadă finanțe">
               <thead>
                 <tr className="bg-muted/50 border-b border-border">
@@ -1002,67 +1209,13 @@ export default function ParFinanceQueue() {
                     )}
                   >
                     <td className="px-3 py-3">
-                      {/* Toate acțiunile pe UN rând, la aceeași înălțime și aceeași greutate de text.
-                          Înainte fiecare buton își scria singur clasele (px-3/px-2, py-1.5, text-xs,
-                          font-medium doar pe unul) și se împachetau pe trei rânduri — de aici
-                          impresia de „trei design-uri într-o singură celulă". Acum toate trec prin
-                          DS Button, deci diferă doar prin variantă, nu prin dimensiune. */}
-                      <div className="flex flex-nowrap items-center justify-start gap-2">
-                        {/* Section 16 button — available on approved / in_finance */}
-                        {["approved", "in_finance"].includes(par.status) && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setS16Par(par)}
-                            aria-label={`Completează secțiunea 16 pentru ${par.requestNo}`}
-                          >
-                            Secț. 16
-                          </Button>
-                        )}
-                        {/* Pay button — available on in_finance */}
-                        {par.status === "in_finance" && (
-                          <Button
-                            size="sm"
-                            onClick={() => setPayPar(par)}
-                            aria-label={`Înregistrează plata pentru ${par.requestNo}`}
-                          >
-                            <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
-                            Înregistrează plata
-                          </Button>
-                        )}
-                        {/* Note for reapproval_required — after re-approval the pay button re-enables */}
-                        {par.status === "reapproval_required" && par.payment?.overageReapproved && (
-                          <Button
-                            size="sm"
-                            onClick={() => setPayPar(par)}
-                            aria-label={`Reîncearcă plata pentru ${par.requestNo} (re-aprobare acordată)`}
-                          >
-                            <BanknoteIcon className="h-4 w-4" aria-hidden="true" />
-                            Plătește (re-aprobat)
-                          </Button>
-                        )}
-                        {par.status === "reapproval_required" && !par.payment?.overageReapproved && (
-                          <span className="whitespace-nowrap text-sm text-warning">
-                            Așteptare re-aprobare…
-                          </span>
-                        )}
-                        {/* VM1-12: Dosar complet PDF — visible for all statuses */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void startDosar(par)}
-                          disabled={dosarJob?.status === "loading" && dosarJob.par.id === par.id}
-                          aria-label={`Descarcă dosarul complet PDF pentru ${par.requestNo}`}
-                          title="Descarcă dosarul complet (PDF)"
-                        >
-                          {dosarJob?.status === "loading" && dosarJob.par.id === par.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                          ) : (
-                            <Paperclip className="h-4 w-4" aria-hidden="true" />
-                          )}
-                          Dosar PDF
-                        </Button>
-                      </div>
+                      <QueueActions
+                        par={par}
+                        dosarJob={dosarJob}
+                        onSection16={setS16Par}
+                        onPay={setPayPar}
+                        onDosar={(p) => void startDosar(p)}
+                      />
                     </td>
                     <td className="px-3 py-3">
                       {/* VM3-01: deschide PAR-ul direct din coadă ("tu nu poți să deschizi aici") */}

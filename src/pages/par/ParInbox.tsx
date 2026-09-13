@@ -276,7 +276,7 @@ function DecisionModal({ par, type, onClose, onSuccess, defaultSignatureName }: 
   return (
     /* Backdrop */
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
@@ -284,7 +284,7 @@ function DecisionModal({ par, type, onClose, onSuccess, defaultSignatureName }: 
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-background border border-border rounded-lg w-full max-w-md shadow-xl">
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-border bg-background shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h2 id="modal-title" className="font-semibold text-foreground">

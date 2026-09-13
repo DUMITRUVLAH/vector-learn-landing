@@ -366,14 +366,17 @@ parPaymentsRoutes.post(
     const parId = c.req.param("id");
     const body = c.req.valid("json");
 
-    const roles = await getUserPARRoles(user.id, tenantId);
+    // Rolul și cererea se citesc ODATĂ, nu una după alta: pe Supabase fiecare interogare e un
+    // drum dus-întors, iar ruta asta face deja destule. Owner, 13.09: „confirmarea plății e foarte
+    // lentă" — pe lângă analiza AI (scoasă din calea plății), aici erau ~15 interogări în șir.
+    const [roles, parRows] = await Promise.all([
+      getUserPARRoles(user.id, tenantId),
+      db.select().from(parRequests).where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId))),
+    ]);
     const canFinance = roles.includes("finance") || roles.includes("par_admin");
     if (!canFinance) return c.json({ error: "forbidden: finance role required" }, 403);
 
-    const [par] = await db
-      .select()
-      .from(parRequests)
-      .where(and(eq(parRequests.id, parId), eq(parRequests.tenantId, tenantId)));
+    const [par] = parRows;
     if (!par) return c.json({ error: "not_found" }, 404);
 
     if (par.projectId ? !(await mayAccessProject(user.id, tenantId, par.projectId, user.role)) : !(await mayAccessPayer(user.id, tenantId, par.payerId, user.role))) {
@@ -490,12 +493,24 @@ parPaymentsRoutes.post(
       );
     }
 
+    // Tot ce urmează are nevoie de aceleași patru citiri, iar niciuna nu depinde de cealaltă:
+    // plata existentă, setările tenantului, potrivirea în trei și corpul pe care se verifică
+    // sigiliul. Se cer în paralel; verificările de mai jos rămân în EXACT aceeași ordine, ca
+    // motivul cu care se oprește o plată să nu se schimbe.
+    const [existing, settingsRows, match, bodyForHash] = await Promise.all([
+      db.select().from(parPayments).where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId))),
+      db
+        .select({ threshold: parSettings.microPurchaseThresholdCents, enforceMatch: parSettings.enforceThreeWayMatch })
+        .from(parSettings)
+        .where(eq(parSettings.tenantId, tenantId)),
+      evaluateMatch(parId, tenantId, body.actual_amount_cents),
+      par.bodyHash ? buildBodyForHash(parId, tenantId) : Promise.resolve(null),
+    ]);
+    const [settings] = settingsRows;
+
     // If reapproval_required, must check overage_reapproved flag first
     if (par.status === "reapproval_required") {
-      const [pmtRow] = await db
-        .select()
-        .from(parPayments)
-        .where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId)));
+      const [pmtRow] = existing;
 
       if (!pmtRow?.overageReapproved) {
         return c.json(
@@ -510,7 +525,6 @@ parPaymentsRoutes.post(
     // nu — deci o modificare a IBAN-ului sau a sumei strecurată ÎNTRE ultima semnătură și
     // execuție trecea neobservată exact acolo unde contează. Aceeași verificare, aceeași funcție.
     if (par.bodyHash) {
-      const bodyForHash = await buildBodyForHash(parId, tenantId);
       if (bodyForHash) {
         const integrity = verifyParBodyHash(bodyForHash, par.bodyHash);
         if (!integrity.valid) {
@@ -538,18 +552,10 @@ parPaymentsRoutes.post(
       });
     }
 
-    const [settings] = await db
-      .select({
-        threshold: parSettings.microPurchaseThresholdCents,
-        enforceMatch: parSettings.enforceThreeWayMatch,
-      })
-      .from(parSettings)
-      .where(eq(parSettings.tenantId, tenantId));
     const threshold = settings?.threshold ?? 1000000;
 
     // VF-505: 3-way match (PO + receipt + amount). If enforced and it fails → block with 409.
     // Otherwise attach a non-blocking warning to the response.
-    const match = await evaluateMatch(parId, tenantId, body.actual_amount_cents);
     if (settings?.enforceMatch && !match.ok) {
       return c.json({ error: "three_way_match_failed", issues: match.issues }, 409);
     }
@@ -567,12 +573,7 @@ parPaymentsRoutes.post(
 
     const now = new Date();
 
-    // Upsert par_payments with actual payment details
-    const existing = await db
-      .select()
-      .from(parPayments)
-      .where(and(eq(parPayments.parId, parId), eq(parPayments.tenantId, tenantId)));
-
+    // Upsert par_payments with actual payment details (rândul e deja citit mai sus).
     // PAR-113: once the overage was explicitly re-approved (reapprove → overageReapproved=true,
     // PAR back to in_finance), re-running the 10% rule must NOT bounce the payment back to
     // reapproval_required again — otherwise the same overage can never be paid (infinite loop).
