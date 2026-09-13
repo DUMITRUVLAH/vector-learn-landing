@@ -52,6 +52,17 @@ export const MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
     defaultEnabled: false,
   },
   {
+    key: "crm",
+    label: "CRM — Vânzări",
+    description: "Pipeline de leaduri și catalogul de produse. Restul submodulelor vin pe rând.",
+    route: "/business/crm",
+    // Pornit implicit: modulul e nou, deci workspace-urile existente NU au rând
+    // în `tenant_modules` și cad pe implicitul de aici (vezi
+    // isModuleEnabledForTenant). Așa ajunge vizibil pe finflow.best fără o
+    // migrare de date; se poate opri oricând per workspace din Consola Platformă.
+    defaultEnabled: true,
+  },
+  {
     key: "docmerge",
     label: "Document Merge",
     description: "Generare de documente în masă din șablon + Excel.",

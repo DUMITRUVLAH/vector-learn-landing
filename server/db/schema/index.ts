@@ -57,6 +57,8 @@ export * from "./payroll";
 export * from "./consent";
 export * from "./messages";
 export * from "./leads";
+// CRM — catalogul de produse/servicii (CRM Faza 1)
+export * from "./crmProducts";
 export * from "./families";
 export * from "./teachers";
 export * from "./branches";

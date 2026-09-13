@@ -23,8 +23,7 @@ import {
   Settings,
   Receipt,
   Users2,
-  BarChart3,
-} from "lucide-react";
+  BarChart3, KanbanSquare } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { DashboardCustomizer } from "@/components/DashboardCustomizer";
 import { Link } from "@/router/HashRouter";
@@ -160,6 +159,14 @@ const MODULE_TILES: ModuleTile[] = [
     icon: <ClipboardList className="h-7 w-7" />,
     tone: "violet",
     moduleKey: "par",
+  },
+  {
+    label: "CRM — Vânzări",
+    description: "Pipeline de leaduri și catalogul de produse.",
+    href: "/business/crm",
+    icon: <KanbanSquare className="h-7 w-7" />,
+    tone: "amber",
+    moduleKey: "crm",
   },
   {
     label: "ITPark — Rezidenți",

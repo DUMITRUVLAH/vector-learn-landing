@@ -124,6 +124,9 @@ import { finCronRoutes } from "./routes/finCron";
 
 // DOCMERGE module (DOCMERGE-001)
 import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
+// CRM module (CRM Faza 1) — pipeline de leaduri + catalog de produse
+import { crmLeadsRoutes } from "./routes/crmLeads";
+import { crmProductsRoutes } from "./routes/crmProducts";
 import { publicErrorMessage } from "./lib/publicError";
 import { docsRoutes } from "./routes/docs";
 import { denyWhenImpersonating, logImpersonatedWrites } from "./middleware/impersonationGuard";
@@ -368,6 +371,9 @@ app.route("/api/telemetry", telemetryRoutes);
 
 // DOCMERGE-001: Document Merge templates
 app.route("/api/docmerge", docmergeTemplatesRoutes);
+// CRM Faza 1: leaduri/pipeline + produse. Montat înainte de catch-all-ul /api/*.
+app.route("/api/crm/leads", crmLeadsRoutes);
+app.route("/api/crm/products", crmProductsRoutes);
 // DG-102: registrul de acte (generare documente → PDF → PAR)
 app.route("/api/docs", docsRoutes);
 

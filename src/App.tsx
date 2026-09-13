@@ -58,6 +58,10 @@ const DocEditorPage = lazyWithTimeout(() => import("./pages/business/docs/DocEdi
 const DocTemplatesPage = lazyWithTimeout(() => import("./pages/business/docs/DocTemplatesPage").then((m) => ({ default: m.DocTemplatesPage })));
 const DocsPage = lazyWithTimeout(() => import("./pages/business/docs/DocsPage").then((m) => ({ default: m.DocsPage })));
 
+// CRM Faza 1 — modul nou: pagina de modul (cu submodulele „În curând"), pipeline, produse
+const CrmHomePage = lazyWithTimeout(() => import("./pages/business/crm/CrmHomePage").then((m) => ({ default: m.CrmHomePage })));
+const CrmPipelinePage = lazyWithTimeout(() => import("./pages/business/crm/CrmPipelinePage").then((m) => ({ default: m.CrmPipelinePage })));
+const CrmProductsPage = lazyWithTimeout(() => import("./pages/business/crm/CrmProductsPage").then((m) => ({ default: m.CrmProductsPage })));
 const DocMergeTemplatesPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeTemplatesPage").then((m) => ({ default: m.DocMergeTemplatesPage })));
 const DocMergeJobPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeJobPage").then((m) => ({ default: m.DocMergeJobPage })));
 const DocMergeWizardPage = lazyWithTimeout(() => import("./pages/business/docmerge/DocMergeWizardPage").then((m) => ({ default: m.DocMergeWizardPage })));
@@ -307,6 +311,10 @@ function Routes() {
   if (path.startsWith("/business/par")) return <BusinessGuardPage><ParGuardPage><ParDashboard /></ParGuardPage></BusinessGuardPage>;
 
   // DOCMERGE-001/002/003/004: Document Merge — more specific routes first
+  // CRM Faza 1 — de la specific la general, ca restul dispecerului.
+  if (path.startsWith("/business/crm/pipeline")) return <BusinessGuardPage><CrmPipelinePage /></BusinessGuardPage>;
+  if (path.startsWith("/business/crm/produse")) return <BusinessGuardPage><CrmProductsPage /></BusinessGuardPage>;
+  if (path.startsWith("/business/crm")) return <BusinessGuardPage><CrmHomePage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/wizard")) return <BusinessGuardPage><DocMergeWizardPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge/job")) return <BusinessGuardPage><DocMergeJobPage /></BusinessGuardPage>;
   if (path.startsWith("/business/docmerge")) return <BusinessGuardPage><DocMergeTemplatesPage /></BusinessGuardPage>;

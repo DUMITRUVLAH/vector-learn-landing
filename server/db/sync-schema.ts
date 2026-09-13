@@ -393,6 +393,29 @@ async function main() {
     `CREATE UNIQUE INDEX IF NOT EXISTS "bnm_rates_date_code_idx" ON "bnm_rates" ("rate_date","code")`,
     `CREATE INDEX IF NOT EXISTS "bnm_rates_date_idx" ON "bnm_rates" ("rate_date")`,
     `CREATE INDEX IF NOT EXISTS "bnm_rates_code_idx" ON "bnm_rates" ("code")`,
+    // Migrarea 0161: catalogul de produse al CRM-ului. Tabelă NOUĂ pe calea de
+    // request — healul generic adaugă doar coloane, nu tabele, iar Vercel pune
+    // codul în producție înainte să termine migrările. Fără blocul ăsta, pagina
+    // /business/crm/produse ar da 500 („relation crm_products does not exist")
+    // până se aplică migrarea.
+    `CREATE TABLE IF NOT EXISTS "crm_products" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL REFERENCES "tenants"("id") ON DELETE cascade,
+      "sku" varchar(60),
+      "name" varchar(200) NOT NULL,
+      "category" varchar(120),
+      "description" text,
+      "unit" varchar(30) NOT NULL DEFAULT 'buc',
+      "list_price_cents" integer NOT NULL DEFAULT 0,
+      "currency" varchar(8) NOT NULL DEFAULT 'MDL',
+      "vat_percent" numeric NOT NULL DEFAULT '0',
+      "is_active" boolean NOT NULL DEFAULT true,
+      "order_index" integer NOT NULL DEFAULT 0,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS "crm_products_tenant_idx" ON "crm_products" ("tenant_id")`,
+    `CREATE INDEX IF NOT EXISTS "crm_products_active_idx" ON "crm_products" ("tenant_id","is_active")`,
     // Migrarea 0149: flag de urgență pe cerere. is_urgent e NOT NULL DEFAULT false — healul
     // generic de mai sus adaugă coloana FĂRĂ modificatori, deci rândurile existente ar rămâne
     // NULL. Explicit aici, ca la par_budget_codes.currency (migrarea 0147).

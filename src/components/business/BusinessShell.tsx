@@ -44,7 +44,7 @@ import {
   ChevronDown,
   Search,
   Menu,
-  X, Activity} from "lucide-react";
+  X, Activity, KanbanSquare, Package} from "lucide-react";
 import { FinFlowMark } from "@/components/business/FinFlowLogo";
 import { Link, useRouter } from "@/router/HashRouter";
 import { ImpersonationBanner } from "@/components/platform/ImpersonationBanner";
@@ -155,6 +155,17 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Rezidenți ITPark", href: "/business/fin/itpark", icon: Building2, tone: "violet" },
       { label: "Securitate", href: "/business/fin/settings/security", icon: Shield, tone: "rose" },
       { label: "Audit AI", href: "/business/fin/settings/ai-audit", icon: Settings, tone: "amber" },
+    ],
+  },
+  {
+    // CRM Faza 1 — vizibil doar pe rutele /business/crm/*, ca DocMerge. Doar
+    // Pipeline și Produse sunt funcționale; restul submodulelor apar pe pagina
+    // modulului marcate „În curând", nu în meniu.
+    section: "CRM",
+    prefix: "/business/crm",
+    items: [
+      { label: "Pipeline", href: "/business/crm/pipeline", icon: KanbanSquare, tone: "sky" },
+      { label: "Produse", href: "/business/crm/produse", icon: Package, tone: "emerald" },
     ],
   },
   {
@@ -548,6 +559,8 @@ export function BusinessShell({
         if (g.section === "FinDesk — Finanțe") return isEnabled("findesk");
         // DocMerge apare în sidebar doar când ești pe rutele DocMerge
         if (g.section === "Document Merge") return isEnabled("docmerge") && path.startsWith("/business/docmerge");
+      // CRM: la fel ca DocMerge — meniul lui apare doar când ești în modul.
+      if (g.section === "CRM") return isEnabled("crm") && path.startsWith("/business/crm");
         return true;
       });
 
