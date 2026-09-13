@@ -229,6 +229,43 @@ describe("Dosarul complet", () => {
     expect(text).not.toContain("nu a fost generat");
   }, 90_000);
 
+  it("[blocant] actul .docx e CONVERTIT în dosar, nu înlocuit cu „descărcați-l separat\u201d", async () => {
+    // Actele de primire-predare sosesc în Word. Până acum dosarul „complet" nu conținea tocmai
+    // actul de recepție — doar o trimitere la un fișier pe care auditorul nu-l are.
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    zip.file(
+      "word/document.xml",
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
+        "<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>ACT DE PRIMIRE PREDARE</w:t></w:r></w:p>" +
+        "<w:p><w:r><w:t>Recepția serviciilor, suma achitată: 7000 MDL, IDNO 1006600034927</w:t></w:r></w:p>" +
+        "</w:body></w:document>",
+    );
+    const docx = Buffer.from(await zip.generateAsync({ type: "nodebuffer" })).toString("base64");
+
+    const [att] = await testDb
+      .insert(parAttachments)
+      .values({
+        tenantId,
+        parId,
+        fileUrl: `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${docx}`,
+        fileName: "ACT DE PRIMIRE PREDARE.docx",
+        kind: "act_of_receipt",
+        uploadedBy: userId,
+      })
+      .returning();
+
+    const text = await pdfText(await dosar());
+    expect(text).toContain("ACT DE PRIMIRE PREDARE");
+    expect(text).toContain("7000 MDL");
+    // Diacriticele rămân întregi: conversia folosește Tinos, ca restul dosarului.
+    expect(text).toContain("Recepția serviciilor");
+    // Testul negativ: nota veche NU mai apare pentru .docx.
+    expect(text).not.toContain("nu poate fi inclus");
+
+    await testDb.delete(parAttachments).where(eq(parAttachments.id, att.id));
+  }, 60_000);
+
   it("un fișier care chiar nu poate fi inclus (XLSX) primește o notă cu numele lui", async () => {
     const [att] = await testDb
       .insert(parAttachments)

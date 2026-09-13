@@ -275,6 +275,32 @@ export async function buildDosar(parId: string, tenantId: string): Promise<Built
       continue;
     }
 
+    // .docx: îl CONVERTIM și îl punem în dosar. Actele de primire-predare vin aproape
+    // întotdeauna în Word, iar până acum dosarul „complet" nu conținea tocmai actul de recepție —
+    // doar o trimitere la un fișier pe care auditorul nu-l are. Conversia e pur JS (pdfmake +
+    // Tinos, ca fișa aprobărilor), pentru că pe serverless nu există LibreOffice.
+    const isDocx =
+      lower.endsWith(".docx") ||
+      mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    if (isDocx) {
+      try {
+        const { renderDocxAsPdf } = await import("./docxToPdf");
+        const converted = await renderDocxAsPdf(await attachmentBytes(fileUrl), { fileName });
+        plan.push({ piece: { type: "pdf", pages: await PDFDocument.load(converted) } });
+      } catch (err) {
+        plan.push({
+          separator: {
+            title: `Anexă: ${shortName}`,
+            subtitle: `Documentul Word nu a putut fi convertit — descărcați-l separat din cerere. Detaliu: ${
+              err instanceof Error ? err.message.slice(0, 80) : "necunoscut"
+            }`,
+          },
+          piece: { type: "note" },
+        });
+      }
+      continue;
+    }
+
     const ext = fileName.split(".").pop()?.toUpperCase() ?? "FIȘIER";
     plan.push({
       separator: {
