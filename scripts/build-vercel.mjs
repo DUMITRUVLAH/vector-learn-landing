@@ -15,6 +15,7 @@
 import { build } from "esbuild";
 import { cpSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { csp, storageOriginFromEnv, SUPABASE_HOST_WILDCARD } from "../shared/csp.mjs";
 
 const OUT = ".vercel/output";
 rmSync(OUT, { recursive: true, force: true });
@@ -143,24 +144,22 @@ writeFileSync(
  * DOCUMENTUL într-un iframe, peste butoanele de aprobare a plăților. Un `X-Frame-Options` pe un
  * răspuns JSON nu apără nimic.
  *
- * Valorile sunt ținute identice cu cele din middleware. Dacă se schimbă acolo, se schimbă și aici.
+ * CSP-ul vine din `shared/csp.mjs`, aceeași funcție pe care o folosește middleware-ul. Cât timp
+ * erau două liste ținute egale printr-un comentariu, au și divergit în efect: politica de pe
+ * DOCUMENT (asta) e cea care decide ce poate face aplicația în browser, deci o directivă uitată
+ * aici nu e o inconsecvență de stil, e o pană (2026-09-13: `connect-src 'self'` bloca urcarea
+ * fișierelor direct în Storage — „Failed to fetch" la fiecare plată cu ordin atașat).
  */
+const STORAGE_ORIGIN = storageOriginFromEnv();
+if (STORAGE_ORIGIN === SUPABASE_HOST_WILDCARD) {
+  console.warn(
+    "[build-vercel] SUPABASE_URL lipsește din mediul de build — connect-src rămâne pe " +
+      `${SUPABASE_HOST_WILDCARD} (funcțional, dar mai larg decât e nevoie).`
+  );
+}
+
 const SECURITY_HEADERS = {
-  "content-security-policy": [
-    "default-src 'self'",
-    "script-src 'self'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: blob:",
-    "media-src 'self' blob:",
-    "connect-src 'self'",
-    "worker-src 'self' blob:",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self' https://accounts.google.com https://checkout.stripe.com",
-    "frame-ancestors 'none'",
-    "upgrade-insecure-requests",
-  ].join("; "),
+  "content-security-policy": csp({ storageOrigin: STORAGE_ORIGIN }),
   "x-frame-options": "DENY",
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",

@@ -847,11 +847,23 @@ export async function uploadAttachmentDirect(
 
   // Direct în Storage. `credentials` lipsește înadins: URL-ul e deja semnat, iar trimiterea
   // cookie-urilor noastre către alt origin n-ar face decât să le expună.
-  const put = await fetch(signed_url, {
-    method: "PUT",
-    headers: { "content-type": file.type || "application/octet-stream" },
-    body: file,
-  });
+  //
+  // `fetch` aruncă (nu întoarce un răspuns cu status) când cererea nici nu pleacă: rețea căzută
+  // sau — cum s-a întâmplat în producție pe 13.09 — un `connect-src` care nu permitea originea
+  // Storage-ului. Mesajul brut al browserului, „Failed to fetch", ajungea așa cum e în dialogul
+  // de plată: omul de la finanțe citea o eroare care nu-i spune nici ce a picat, nici ce să facă.
+  let put: Response;
+  try {
+    put = await fetch(signed_url, {
+      method: "PUT",
+      headers: { "content-type": file.type || "application/octet-stream" },
+      body: file,
+    });
+  } catch {
+    throw new Error(
+      "Fișierul nu a ajuns la server (conexiune întreruptă). Cererea NU a fost înregistrată ca plătită — reîncearcă."
+    );
+  }
   if (!put.ok) throw new Error("Încărcarea fișierului nu a reușit. Verifică conexiunea și reîncearcă.");
 
   return api<ParAttachment>(`/api/par/${parId}/attachment-upload/finalize`, {

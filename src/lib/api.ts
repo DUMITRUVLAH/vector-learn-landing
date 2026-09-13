@@ -109,6 +109,17 @@ async function rawApi<T>(url: string, init: RequestInit): Promise<T> {
       });
       throw new ApiError(0, "request_timeout");
     }
+    // `fetch` respinge cu un TypeError sec — „Failed to fetch" — când cererea nici nu pleacă:
+    // internet căzut, server inaccesibil, sau o politică a paginii care oprește conexiunea.
+    // Fără traducerea asta, jargonul browserului ajunge direct în ecranele noastre de eroare
+    // (raportat de owner pe 13.09, în dialogul de înregistrare a plății).
+    if (err instanceof TypeError) {
+      throw new ApiError(
+        0,
+        "network_error",
+        "Conexiunea nu a putut fi făcută — cererea nu a ajuns la server. Verifică internetul și reîncearcă."
+      );
+    }
     throw err;
   } finally {
     if (timer) clearTimeout(timer);

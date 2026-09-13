@@ -49,3 +49,32 @@ describe("securityHeaders — încadrarea", () => {
     expect(res.headers.get("Content-Security-Policy")).toContain("frame-src 'self'");
   });
 });
+
+/**
+ * Regresia din 13.09.2026, raportată de owner ca „Failed to fetch" în dialogul de înregistrare a
+ * plății: de o zi fișierele urcau DIRECT în Supabase Storage, dar CSP-ul rămăsese pe
+ * `connect-src 'self'` — browserul oprea PUT-ul înainte să plece. Un header de securitate care
+ * blochează o funcție a produsului e o pană, nu o protecție.
+ */
+describe("securityHeaders — conexiunile pe care aplicația chiar le face", () => {
+  it("connect-src permite originea Supabase Storage (upload direct din browser)", async () => {
+    const res = await appWith("/api/health").request("/api/health");
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+    const connectSrc = csp.split(";").map((d) => d.trim()).find((d) => d.startsWith("connect-src"));
+    expect(connectSrc).toBeDefined();
+    expect(connectSrc).toContain("'self'");
+    expect(connectSrc).toMatch(/supabase/);
+  });
+
+  it("ruta de preview păstrează aceleași permisiuni de conexiune, nu o politică paralelă", async () => {
+    const res = await appWith("/api/par/:parId/attachments/:attId/preview").request(PREVIEW);
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+    expect(csp.split(";").map((d) => d.trim())).toContain(
+      (await appWith("/api/health").request("/api/health")).headers
+        .get("Content-Security-Policy")!
+        .split(";")
+        .map((d) => d.trim())
+        .find((d) => d.startsWith("connect-src"))!
+    );
+  });
+});

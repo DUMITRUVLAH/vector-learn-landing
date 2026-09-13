@@ -13,6 +13,7 @@
  * Used by ParDetail (secțiunea Atașamente), ParInbox, ParFolders și ParFinanceQueue (butonul Documente).
  */
 import { openParAttachmentViewer, parAttachmentPreviewUrl } from "@/lib/par/attachmentViewerBus";
+import { dataUrlToBlob } from "@/lib/dataUrl";
 
 /** Deschide un atașament PAR în vizualizatorul din aplicație (rezervă: filă nouă). */
 export function viewParAttachment(parId: string, attachmentId: string, fileName: string): void {
@@ -28,7 +29,9 @@ export async function openParAttachment(fileUrl: string, fileName: string, parId
     }
     if (!fileUrl) return;
     if (fileUrl.startsWith("data:")) {
-      const blob = await (await fetch(fileUrl)).blob();
+      // Decodat local, NU cu `fetch(fileUrl)`: sub CSP-ul din producție o cerere către o schemă
+      // `data:` e refuzată de `connect-src`, iar `catch`-ul de mai jos o înghițea în tăcere.
+      const blob = dataUrlToBlob(fileUrl);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

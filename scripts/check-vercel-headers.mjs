@@ -100,6 +100,20 @@ for (const h of REQUIRED_SECURITY) {
   if (!htmlHeaders[h]) problems.push(`pagina "/" nu emite headerul de securitate "${h}"`);
 }
 
+// 1bis. CSP-ul paginii trebuie să permită ce face efectiv aplicația în browser.
+//    Bug 2026-09-13: fișierele urcă direct în Supabase Storage printr-un URL semnat, dar
+//    `connect-src 'self'` interzicea conexiunea — browserul oprea cererea înainte s-o trimită,
+//    iar utilizatorul vedea „Failed to fetch" în dialogul de plată. Un header de securitate care
+//    blochează o funcție a produsului e o pană, nu o protecție; poarta o prinde în artefact.
+const csp = htmlHeaders["content-security-policy"] ?? "";
+const connectSrc = (csp.split(";").map((d) => d.trim()).find((d) => d.startsWith("connect-src")) ?? "");
+if (!/supabase/.test(connectSrc)) {
+  problems.push(
+    `connect-src nu permite Storage-ul ("${connectSrc || "lipsă"}") — urcarea fișierelor ` +
+      "direct în Supabase (atașamente PAR, capturi Finanțe) va pica cu „Failed to fetch\""
+  );
+}
+
 // 2. Assets-urile cu hash trebuie să fie imutabile — altfel revine simptomul „refresh-ul
 //    reîncarcă tot", care e chiar motivul pentru care au fost adăugate headerele.
 const assetHeaders = headersFor("/assets/index-ABC12345.js");

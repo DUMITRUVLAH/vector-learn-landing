@@ -5,16 +5,10 @@
  * încadrată într-un iframe (clickjacking pe butoanele de aprobare a plăților), browserul avea
  * voie să ghicească tipul conținutului, iar `Referer` pleca întreg către terți.
  *
- * CSP-ul e croit pe ce folosește efectiv aplicația (verificat, nu presupus):
- *   - zero `<script>` inline și zero `dangerouslySetInnerHTML` → `script-src 'self'` fără
- *     `unsafe-inline` (protecția reală anti-XSS);
- *   - React + Tailwind scriu atribute `style` → `style-src` are nevoie de `'unsafe-inline'`;
- *   - fonturile vin de la Google Fonts (vezi `index.html`);
- *   - exporturile (CSV/PDF/XLSX) folosesc `URL.createObjectURL` → `blob:` la img/media;
- *   - login-ul Google și Stripe Checkout se fac prin redirect de nivel superior, deci au nevoie
- *     doar de `form-action`, nu de `frame-src`;
- *   - vizualizatorul de documente PAR randează atașamentul într-un `<iframe>` care arată chiar ruta
- *     de preview (`src/components/par/ParAttachmentViewer.tsx`) → `frame-src 'self'`.
+ * CSP-ul propriu-zis trăiește în `shared/csp.mjs`, pentru că pe Vercel PAGINA e servită de CDN
+ * (regulile din `scripts/build-vercel.mjs`), nu de middleware-ul ăsta — iar politica de pe
+ * document e cea care decide ce poate face aplicația în browser. Două copii ținute egale „prin
+ * comentariu" au produs deja o pană (vezi acolo).
  *
  * SINGURA excepție de la „nimeni nu ne încadrează": chiar răspunsul rutei
  * `GET /api/par/:id/attachments/:attId/preview`. Un `X-Frame-Options: DENY` pe EL bloca pagina
@@ -27,26 +21,22 @@
  * standardul, al doilea acoperă browserele/proxy-urile care încă nu-l citesc pe primul.
  */
 import type { MiddlewareHandler } from "hono";
+import { csp } from "../../shared/csp.mjs";
+import { bySuffix } from "../db/env";
 
-const CSP_DIRECTIVES = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com data:",
-  "img-src 'self' data: blob:",
-  "media-src 'self' blob:",
-  "frame-src 'self'",
-  "connect-src 'self'",
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self' https://accounts.google.com https://checkout.stripe.com",
-  "upgrade-insecure-requests",
-];
+/** Originea Storage-ului se citește o dată, la pornire — nu se schimbă în timpul vieții funcției. */
+const STORAGE_ORIGIN = (() => {
+  const url = bySuffix("SUPABASE_URL");
+  try {
+    return url ? new URL(url).origin : undefined;
+  } catch {
+    return undefined;
+  }
+})();
 
-const CSP = [...CSP_DIRECTIVES, "frame-ancestors 'none'"].join("; ");
+const CSP = csp({ storageOrigin: STORAGE_ORIGIN });
 /** Același CSP, dar documentul poate fi încadrat de propria noastră aplicație. Vezi comentariul de sus. */
-const CSP_SELF_FRAMEABLE = [...CSP_DIRECTIVES, "frame-ancestors 'self'"].join("; ");
+const CSP_SELF_FRAMEABLE = csp({ storageOrigin: STORAGE_ORIGIN, frameAncestors: "'self'" });
 
 /** Ruta care servește atașamentul PAR inline — singurul răspuns pe care îl încadrăm noi înșine. */
 const FRAMEABLE_BY_US = /^\/api\/par\/[^/]+\/attachments\/[^/]+\/preview$/;

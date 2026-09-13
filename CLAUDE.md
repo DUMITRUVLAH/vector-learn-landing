@@ -444,6 +444,13 @@ app is broken. Every backend/full-stack item must also pass these (enforced by `
   file (`server/db/schema/*.ts`) in the SAME commit. A column in the DB but not in the schema makes
   `table.column` `undefined` at runtime → `db.select` 500s with "Cannot convert undefined or null to
   object". (`schema-drift.test.ts` only catches the opposite direction.)
+- **O funcție nouă care face BROWSERUL să vorbească cu o origine nouă cere, în același commit, o
+  directivă CSP și o poartă pe artefact.** Upload-ul direct în Supabase Storage a ajuns în prod cu
+  `connect-src 'self'` pe pagină: browserul oprea `PUT`-ul înainte să plece, iar omul de la finanțe
+  citea „Failed to fetch" în dialogul de plată (13.09.2026). Nu se vede în dev — Vite nu servește
+  CSP-ul; politica de pe DOCUMENT vine de la CDN (`scripts/build-vercel.mjs`). Politica trăiește
+  o singură dată, în `shared/csp.mjs`, și `check-vercel-headers.mjs` o verifică în
+  `.vercel/output/config.json`. Vezi [docs/solutions/security-issues/csp-connect-src-blocks-direct-upload.md].
 - **Webhook/callback handlers that mutate financial state** must REJECT anything they cannot
   cryptographically verify — "no secret configured" means "don't trust" (400), never "skip the check".
   Secrets at rest use AES-256-GCM (`server/lib/crypto.ts`), never base64.

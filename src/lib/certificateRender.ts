@@ -164,12 +164,21 @@ export async function generateCertificatePdf(
   format: ExportFormat = "pdf"
 ): Promise<Blob> {
   const canvas = await generateCertificateCanvas(options);
-  const jpegDataUrl = canvas.toDataURL("image/jpeg", 0.92);
 
   if (format === "jpg") {
-    const res = await fetch(jpegDataUrl);
-    return res.blob();
+    // `canvas.toBlob`, nu `fetch(canvas.toDataURL(…))`: sub CSP-ul din producție o cerere către o
+    // schemă `data:` e refuzată de `connect-src` („Failed to fetch"), iar drumul prin base64 e
+    // oricum o copie în plus a imaginii.
+    return await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("Imaginea nu a putut fi generată."))),
+        "image/jpeg",
+        0.92
+      )
+    );
   }
+
+  const jpegDataUrl = canvas.toDataURL("image/jpeg", 0.92);
 
   // PDF: A4 landscape (297×210mm)
   const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });

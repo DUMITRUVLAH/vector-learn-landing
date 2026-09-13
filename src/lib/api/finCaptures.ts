@@ -348,11 +348,23 @@ export async function signCaptureUploads(
 
 /** PUT the file body straight to Supabase Storage's signed URL (bypasses our function). */
 export async function putToSignedUrl(signedUrl: string, file: File): Promise<void> {
-  const r = await fetch(signedUrl, {
-    method: "PUT",
-    headers: { "content-type": file.type || "application/octet-stream", "x-upsert": "true" },
-    body: file,
-  });
+  // Un `fetch` care nici nu pleacă (rețea căzută, sau CSP-ul paginii care nu permite originea
+  // Storage-ului) aruncă un TypeError „Failed to fetch". Îl traducem, ca lista de fișiere să arate
+  // un motiv, nu jargonul browserului. Vezi `shared/csp.mjs`.
+  let r: Response;
+  try {
+    r = await fetch(signedUrl, {
+      method: "PUT",
+      headers: { "content-type": file.type || "application/octet-stream", "x-upsert": "true" },
+      body: file,
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      "storage_put_network",
+      "Fișierul nu a ajuns la server (conexiune întreruptă). Reîncearcă."
+    );
+  }
   if (!r.ok) throw new ApiError(r.status, `storage_put_${r.status}`);
 }
 
