@@ -100,6 +100,21 @@ const PROBES: { name: string; run: () => Promise<unknown> }[] = [
   { name: "crm_sales_settings", run: () => db.execute(sql`SELECT id, tenant_id, user_id, is_active, daily_capacity, weight FROM crm_sales_settings LIMIT 0`) },
   { name: "crm_assignment_log", run: () => db.execute(sql`SELECT id, tenant_id, lead_id, user_id, reason FROM crm_assignment_log LIMIT 0`) },
   { name: "doc_documents_accepta_crm_lead", run: () => db.execute(sql`SELECT id, counterparty_kind, counterparty_id FROM doc_documents LIMIT 0`) },
+  // Faza 9 (paritate cu crm-vector). Aceeași regulă: fiecare e pe calea unui ecran, iar migrările
+  // 0166-0169 pot întârzia pe un workspace. Coloanele cerute sunt cele pe care codul chiar le
+  // citește — o probă pe `SELECT 1` ar trece și cu o coloană lipsă.
+  { name: "crm_pipelines", run: () => db.execute(sql`SELECT id, tenant_id, name, order_index, is_default FROM crm_pipelines LIMIT 0`) },
+  { name: "crm_pipeline_stages_are_pipeline_id", run: () => db.execute(sql`SELECT id, pipeline_id FROM crm_pipeline_stages LIMIT 0`) },
+  { name: "leads_are_pipeline_id", run: () => db.execute(sql`SELECT id, pipeline_id FROM leads LIMIT 0`) },
+  { name: "crm_saved_views", run: () => db.execute(sql`SELECT id, tenant_id, name, filters, is_shared FROM crm_saved_views LIMIT 0`) },
+  { name: "lead_contacts", run: () => db.execute(sql`SELECT id, tenant_id, lead_id, full_name, is_primary FROM lead_contacts LIMIT 0`) },
+  { name: "custom_fields", run: () => db.execute(sql`SELECT id, tenant_id, key, label, type, options FROM custom_fields LIMIT 0`) },
+  { name: "lead_field_values", run: () => db.execute(sql`SELECT id, tenant_id, lead_id, field_id, value FROM lead_field_values LIMIT 0`) },
+  { name: "lead_attachments_are_storage_path", run: () => db.execute(sql`SELECT id, tenant_id, lead_id, file_name, storage_path FROM lead_attachments LIMIT 0`) },
+  { name: "crm_cadences", run: () => db.execute(sql`SELECT id, tenant_id, name, trigger_stage, enabled, steps FROM crm_cadences LIMIT 0`) },
+  { name: "crm_cadence_enrollments", run: () => db.execute(sql`SELECT id, tenant_id, lead_id, cadence_id, status, current_step, next_fire_at FROM crm_cadence_enrollments LIMIT 0`) },
+  { name: "crm_reengagement_rules", run: () => db.execute(sql`SELECT id, tenant_id, name, after_months, action, cadence_id FROM crm_reengagement_rules LIMIT 0`) },
+  { name: "crm_reengagement_runs", run: () => db.execute(sql`SELECT id, tenant_id, rule_id, lead_id, result FROM crm_reengagement_runs LIMIT 0`) },
 ];
 
 /**
