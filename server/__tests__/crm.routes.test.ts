@@ -399,3 +399,32 @@ describe.skipIf(!hasCrmProducts)("POST /api/crm/products — unicitate SKU", () 
     expect(otherTenant.status).toBe(201);
   });
 });
+
+describe("Schemă în urma codului (producție)", () => {
+  it("[blocant] o coloană lipsă pe `leads` NU dărâmă pipeline-ul — arată tabla goală", async () => {
+    // Pe producție baza rămâne uneori în urma codului: migrările nu se aplică
+    // fiabil acolo, iar `sync-schema` vindecă abia la deploy. Înainte de fixul
+    // ăsta, o singură coloană lipsă transforma pagina într-un „internal_error"
+    // roșu — exact ce a văzut ownerul pe finflow.best.
+    currentUser = { id: userA, tenantId: tenantA, role: "admin", email: "ana@test-a.md" };
+    await pglite.exec(`ALTER TABLE "leads" DROP COLUMN IF EXISTS "deal_name"`);
+    try {
+      const res = await app.request("/api/crm/leads/pipeline");
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.schemaLag).toBe(true);
+      expect(body.totalValueCents).toBe(0);
+      expect(Object.keys(body.grouped)).toHaveLength(5);
+    } finally {
+      await pglite.exec(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "deal_name" varchar(300)`);
+    }
+  });
+
+  it("după ce coloana revine, pipeline-ul funcționează din nou normal", async () => {
+    currentUser = { id: userA, tenantId: tenantA, role: "admin", email: "ana@test-a.md" };
+    const res = await app.request("/api/crm/leads/pipeline");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.schemaLag).toBeUndefined();
+  });
+});

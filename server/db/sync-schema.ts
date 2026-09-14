@@ -416,6 +416,60 @@ async function main() {
     )`,
     `CREATE INDEX IF NOT EXISTS "crm_products_tenant_idx" ON "crm_products" ("tenant_id")`,
     `CREATE INDEX IF NOT EXISTS "crm_products_active_idx" ON "crm_products" ("tenant_id","is_active")`,
+    // CRM Faza 1: modulul citește `leads` + `lead_interactions` la fiecare
+    // încărcare a pipeline-ului. Tabelele există din migrarea 0001, dar au
+    // acumulat coloane mult mai târziu (valoare, companie, nume de oportunitate),
+    // iar healul GENERIC de mai sus le adaugă fără DEFAULT/NOT NULL — ceea ce
+    // pentru `value_cents`/`debt_cents` (NOT NULL DEFAULT 0) e insuficient.
+    // Le punem explicit, ca la `par_requests.is_urgent`.
+    `DO $$ BEGIN
+      CREATE TYPE "lead_stage" AS ENUM ('new', 'contacted', 'trial', 'paid', 'lost');
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+    `DO $$ BEGIN
+      CREATE TYPE "lead_source" AS ENUM ('webform', 'manual', 'facebook_ad', 'google_ads', 'referral', 'phone_in', 'instagram', 'import', 'other');
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+    `DO $$ BEGIN
+      CREATE TYPE "interaction_type" AS ENUM ('note', 'call', 'email', 'whatsapp', 'sms', 'meeting', 'stage_change', 'system');
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+    `DO $$ BEGIN
+      CREATE TYPE "interaction_direction" AS ENUM ('inbound', 'outbound', 'internal');
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+    `CREATE TABLE IF NOT EXISTS "leads" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL,
+      "full_name" varchar(200) NOT NULL,
+      "stage" "lead_stage" NOT NULL DEFAULT 'new',
+      "source" "lead_source" NOT NULL DEFAULT 'manual',
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS "lead_interactions" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+      "tenant_id" uuid NOT NULL,
+      "lead_id" uuid NOT NULL,
+      "type" "interaction_type" NOT NULL,
+      "direction" "interaction_direction" NOT NULL DEFAULT 'internal',
+      "body" varchar(2000),
+      "metadata" jsonb,
+      "user_id" uuid,
+      "occurred_at" timestamp with time zone NOT NULL DEFAULT now()
+    )`,
+    // Coloanele adăugate după 0001, cu modificatorii lor — healul generic le-ar
+    // pune fără DEFAULT, iar rândurile existente ar rămâne NULL pe NOT NULL.
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "value_cents" integer DEFAULT 0 NOT NULL`,
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "debt_cents" integer DEFAULT 0 NOT NULL`,
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "company" varchar(300)`,
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "deal_name" varchar(300)`,
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "interest_course" varchar(200)`,
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "lost_reason" varchar(500)`,
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "assigned_to" uuid`,
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "phone" varchar(32)`,
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "phone_normalized" varchar(32)`,
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "email" varchar(255)`,
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "email_normalized" varchar(255)`,
+    `CREATE INDEX IF NOT EXISTS "leads_tenant_idx" ON "leads" ("tenant_id")`,
+    `CREATE INDEX IF NOT EXISTS "leads_stage_idx" ON "leads" ("tenant_id","stage")`,
+    `CREATE INDEX IF NOT EXISTS "li_lead_idx" ON "lead_interactions" ("lead_id","occurred_at")`,
     // Migrarea 0149: flag de urgență pe cerere. is_urgent e NOT NULL DEFAULT false — healul
     // generic de mai sus adaugă coloana FĂRĂ modificatori, deci rândurile existente ar rămâne
     // NULL. Explicit aici, ca la par_budget_codes.currency (migrarea 0147).

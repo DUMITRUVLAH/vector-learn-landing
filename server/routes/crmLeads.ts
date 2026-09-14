@@ -26,6 +26,45 @@ import { leads, leadInteractions, type NewLead, type NewLeadInteraction } from "
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { normalizePhone, normalizeEmail } from "../lib/crm/normalize";
 
+/**
+ * Coloanele pe care le întoarce API-ul — EXACT cele din `CrmLead` (src/lib/api/crm.ts).
+ *
+ * De ce nu `db.select()`: selectul implicit cere toate coloanele declarate în
+ * schema drizzle, iar `leads` a acumulat de-a lungul timpului coloane pe care o
+ * bază mai veche (producția) poate să nu le aibă încă — schema din cod merge
+ * înaintea bazei, iar `sync-schema` rulează abia la deploy și e non-fatal.
+ * O singură coloană lipsă transforma TOATĂ pagina într-un 500. Cerând doar ce
+ * afișăm, suprafața de rupere scade de la ~30 de coloane la 15.
+ */
+const LEAD_COLS = {
+  id: leads.id,
+  fullName: leads.fullName,
+  dealName: leads.dealName,
+  phone: leads.phone,
+  email: leads.email,
+  company: leads.company,
+  interestCourse: leads.interestCourse,
+  source: leads.source,
+  stage: leads.stage,
+  valueCents: leads.valueCents,
+  assignedTo: leads.assignedTo,
+  lostReason: leads.lostReason,
+  createdAt: leads.createdAt,
+  updatedAt: leads.updatedAt,
+} as const;
+
+/**
+ * Baza de producție poate rămâne în urma codului (migrările nu se aplică fiabil
+ * acolo — vezi server/db/sync-schema.ts). Când lipsește o tabelă sau o coloană,
+ * pagina trebuie să arate o stare goală, nu un dreptunghi roșu „internal_error".
+ * Regula e scrisă explicit în CLAUDE.md: „make the query degrade gracefully
+ * (catch missing-table → empty result) so a lag never crashes the page".
+ */
+function isMissingSchemaError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /does not exist|relation .* does not exist|column .* does not exist|undefined_table|undefined_column/i.test(msg);
+}
+
 export const crmLeadsRoutes = new Hono<{ Variables: AuthVariables }>();
 crmLeadsRoutes.use("/*", requireAuth);
 
@@ -103,52 +142,65 @@ const createInteractionSchema = z.object({
 crmLeadsRoutes.get("/pipeline", async (c) => {
   const user = c.get("user");
   const tenantId = user.tenantId;
+  try {
 
-  // Cardurile afișate: max 50 pe etapă, cele mai recente primele.
-  const cappedByStage = await Promise.all(
-    LEAD_STAGES.map((stage) =>
-      db
-        .select()
-        .from(leads)
-        .where(and(eq(leads.tenantId, tenantId), eq(leads.stage, stage)))
-        .orderBy(desc(leads.createdAt))
-        .limit(50)
-    )
-  );
+    // Cardurile afișate: max 50 pe etapă, cele mai recente primele.
+    const cappedByStage = await Promise.all(
+      LEAD_STAGES.map((stage) =>
+        db
+          .select(LEAD_COLS)
+          .from(leads)
+          .where(and(eq(leads.tenantId, tenantId), eq(leads.stage, stage)))
+          .orderBy(desc(leads.createdAt))
+          .limit(50)
+      )
+    );
 
-  const grouped = {} as Record<LeadStage, (typeof cappedByStage)[number]>;
-  LEAD_STAGES.forEach((stage, i) => {
-    grouped[stage] = cappedByStage[i];
-  });
+    const grouped = {} as Record<LeadStage, (typeof cappedByStage)[number]>;
+    LEAD_STAGES.forEach((stage, i) => {
+      grouped[stage] = cappedByStage[i];
+    });
 
-  // IMPORTANT: numărătorile/sumele NU se calculează din `grouped` (plafonat la 50) — trebuie să
-  // reflecte TOATE lead-urile tenantului, altfel o coloană cu >50 lead-uri ar minți pe dashboard.
-  const aggRows = await db
-    .select({
-      stage: leads.stage,
-      cnt: sql<number>`count(*)::int`,
-      sumValue: sql<number>`coalesce(sum(${leads.valueCents}), 0)::int`,
-    })
-    .from(leads)
-    .where(eq(leads.tenantId, tenantId))
-    .groupBy(leads.stage);
+    // IMPORTANT: numărătorile/sumele NU se calculează din `grouped` (plafonat la 50) — trebuie să
+    // reflecte TOATE lead-urile tenantului, altfel o coloană cu >50 lead-uri ar minți pe dashboard.
+    const aggRows = await db
+      .select({
+        stage: leads.stage,
+        cnt: sql<number>`count(*)::int`,
+        sumValue: sql<number>`coalesce(sum(${leads.valueCents}), 0)::int`,
+      })
+      .from(leads)
+      .where(eq(leads.tenantId, tenantId))
+      .groupBy(leads.stage);
 
-  const counts = {} as Record<LeadStage, number>;
-  const valueSums = {} as Record<LeadStage, number>;
-  LEAD_STAGES.forEach((stage) => {
-    counts[stage] = 0;
-    valueSums[stage] = 0;
-  });
+    const counts = {} as Record<LeadStage, number>;
+    const valueSums = {} as Record<LeadStage, number>;
+    LEAD_STAGES.forEach((stage) => {
+      counts[stage] = 0;
+      valueSums[stage] = 0;
+    });
 
-  let totalValueCents = 0;
-  for (const row of aggRows) {
-    const stage = row.stage as LeadStage;
-    counts[stage] = row.cnt;
-    valueSums[stage] = row.sumValue;
-    totalValueCents += row.sumValue;
+    let totalValueCents = 0;
+    for (const row of aggRows) {
+      const stage = row.stage as LeadStage;
+      counts[stage] = row.cnt;
+      valueSums[stage] = row.sumValue;
+      totalValueCents += row.sumValue;
+    }
+
+    return c.json({ grouped, counts, valueSums, totalValueCents });
+  } catch (e) {
+    if (isMissingSchemaError(e)) {
+      // Schema din bază e în urma codului: răspundem cu o tablă goală, ca
+      // utilizatorul să vadă „niciun lead" în loc de o eroare roșie. Logăm tare,
+      // fiindcă asta înseamnă că `sync-schema` n-a apucat să vindece încă.
+      console.error("[crm/pipeline] schemă incompletă în bază:", e instanceof Error ? e.message : e);
+      const empty = Object.fromEntries(LEAD_STAGES.map((st) => [st, [] as unknown[]]));
+      const zeros = Object.fromEntries(LEAD_STAGES.map((st) => [st, 0]));
+      return c.json({ grouped: empty, counts: zeros, valueSums: zeros, totalValueCents: 0, schemaLag: true });
+    }
+    throw e;
   }
-
-  return c.json({ grouped, counts, valueSums, totalValueCents });
 });
 
 // ─── GET / — listă paginată ───────────────────────────────────────────────────
@@ -209,7 +261,7 @@ crmLeadsRoutes.get("/", async (c) => {
 
   const [rows, countResult] = await Promise.all([
     db
-      .select()
+      .select(LEAD_COLS)
       .from(leads)
       .where(where)
       .orderBy(orderFn(sortColumn))
@@ -231,7 +283,7 @@ crmLeadsRoutes.get("/:id", async (c) => {
   const id = c.req.param("id");
 
   const [row] = await db
-    .select()
+    .select(LEAD_COLS)
     .from(leads)
     .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)));
 
