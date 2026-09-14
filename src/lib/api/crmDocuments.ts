@@ -17,6 +17,7 @@ export const CRM_DOC_KIND_LABELS: Record<CrmDocKind, string> = {
 
 export const CRM_DOC_STATUS_LABELS: Record<string, string> = {
   draft: "Ciornă",
+  pending_approval: "La aprobare",
   final: "Finalizat",
   sent: "Trimis",
   signed: "Semnat",
@@ -37,6 +38,26 @@ export interface CrmDocument {
   counterpartyName: string | null;
   finalizedAt: string | null;
   cancelledAt: string | null;
+  /** Când a plecat la client — se scrie singur la trimiterea pe e-mail. */
+  sentAt?: string | null;
+  /** Când clientul a semnat sau a refuzat. */
+  outcomeAt?: string | null;
+  /** De ce a refuzat — obligatoriu la refuz. */
+  outcomeReason?: string | null;
+}
+
+/**
+ * Ce a răspuns clientul (cerințele 42 și 45). „Trimis" îl știe sistemul; asta o știe doar omul
+ * care a vorbit cu el, deci se marchează manual. La refuz, motivul e obligatoriu.
+ */
+export function setCrmDocumentOutcome(
+  documentId: string,
+  body: { status: "signed" | "rejected"; reason?: string }
+): Promise<CrmDocument> {
+  return api<CrmDocument>(`/api/docs/documents/${documentId}/outcome`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function listCrmDocuments(leadId?: string | null): Promise<{ items: CrmDocument[] }> {

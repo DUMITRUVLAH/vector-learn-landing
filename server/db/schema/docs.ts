@@ -51,8 +51,25 @@ export const docDocuments = pgTable(
     docYear: integer("doc_year"),
     docDate: timestamp("doc_date", { withTimezone: true }).notNull().defaultNow(),
     title: varchar("title", { length: 300 }).notNull(),
-    /** draft | final | cancelled */
+    /**
+     * Ciclul de viață al actului:
+     *   `draft` → `pending_approval` (opțional) → `final` → `sent` → `signed` | `rejected`
+     * plus `cancelled`, care poate veni din orice stare.
+     *
+     * `sent` se scrie SINGUR la trimiterea pe e-mail — e singurul semnal adevărat că actul a
+     * plecat. `signed`/`rejected` le marchează omul: ele descriu ce a făcut clientul, iar noi nu
+     * avem de unde ști asta singuri (cerințele 42 și 45 din caietul de sarcini Ecosolar).
+     *
+     * Sigiliul de integritate se pune la `final` și rămâne valabil în stările de după: un act
+     * trimis sau semnat e tot cel finalizat, nu altul.
+     */
     status: varchar("status", { length: 20 }).notNull().default("draft"),
+    /** Când a plecat la client (prima trimitere pe e-mail). */
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    /** Când a fost semnat sau refuzat, după caz. */
+    outcomeAt: timestamp("outcome_at", { withTimezone: true }),
+    /** De ce a refuzat clientul — aceeași disciplină ca la motivul pierderii unui lead. */
+    outcomeReason: varchar("outcome_reason", { length: 500 }),
     projectId: uuid("project_id").references(() => parProjects.id, { onDelete: "set null" }),
     eventId: uuid("event_id").references(() => parEvents.id, { onDelete: "set null" }),
     /** Organizația „noastră" (partea care emite actul). */

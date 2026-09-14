@@ -1205,6 +1205,13 @@
       "when": 1787000203026,
       "tag": "0172_crm_capture_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 173,
+      "version": "7",
+      "when": 1787000203027,
+      "tag": "0173_doc_lifecycle",
+      "breakpoints": true
     }
   ]
 }

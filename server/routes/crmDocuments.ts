@@ -105,6 +105,9 @@ crmDocumentsRoutes.get("/", async (c) => {
         counterpartyId: docDocuments.counterpartyId,
         counterpartyName: docDocuments.counterpartyName,
         finalizedAt: docDocuments.finalizedAt,
+        sentAt: docDocuments.sentAt,
+        outcomeAt: docDocuments.outcomeAt,
+        outcomeReason: docDocuments.outcomeReason,
         cancelledAt: docDocuments.cancelledAt,
       })
       .from(docDocuments)

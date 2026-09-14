@@ -21,6 +21,7 @@ import { z } from "zod";
 import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { db } from "../db/client";
+import { createNotification } from "../lib/createNotification";
 import {
   docDocuments,
   docDocumentLines,
@@ -1851,7 +1852,92 @@ docsRoutes.post("/documents/:id/email", async (c) => {
   if (!result.sent) {
     return c.json({ sent: false, reason: result.reason, message: result.detail }, 200);
   }
+
+  // Actul a plecat efectiv → starea îl urmează. Doar din `final`: o ciornă trimisă cuiva spre
+  // verificare nu e o ofertă transmisă clientului, iar un act deja semnat nu se întoarce la
+  // „trimis" fiindcă i s-a mai trimis o copie.
+  if (doc.status === "final") {
+    await db
+      .update(docDocuments)
+      .set({ status: "sent", sentAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(docDocuments.id, doc.id), eq(docDocuments.tenantId, user.tenantId)));
+    await writeAudit(user.tenantId, doc.id, user.id, "status:sent", { to });
+  }
+
   return c.json({ sent: true, to });
+});
+
+// ─── POST /documents/:id/outcome — ce a răspuns clientul ─────────────────────
+
+/**
+ * Semnat sau refuzat (cerințele 42 și 45). Spre deosebire de „trimis", pe care îl știm singuri,
+ * asta o știe doar omul care a vorbit cu clientul — deci se marchează manual.
+ *
+ * Motivul refuzului e obligatoriu, din aceeași disciplină ca motivul pierderii unui lead: fără
+ * el, raportul de mai târziu nu poate răspunde la „de ce ne refuză clienții".
+ */
+const outcomeSchema = z.object({
+  status: z.enum(["signed", "rejected"]),
+  reason: z.string().trim().max(500).optional().nullable(),
+});
+
+docsRoutes.post("/documents/:id/outcome", zValidator("json", outcomeSchema), async (c) => {
+  const user = c.get("user");
+  const body = c.req.valid("json");
+  const [doc] = await db
+    .select()
+    .from(docDocuments)
+    .where(and(eq(docDocuments.id, c.req.param("id")), eq(docDocuments.tenantId, user.tenantId)));
+  if (!doc) return c.json({ error: "not_found" }, 404);
+  if (!maySeeDocument(doc.projectId, await visibilityFilter(user as { id: string; tenantId: string; role?: string }))) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  // O ciornă n-a ajuns la nimeni: n-are cum să fie semnată sau refuzată.
+  if (doc.status === "draft" || doc.status === "pending_approval") {
+    return c.json({ error: "document_not_final", message: "Finalizează și trimite actul înainte de a marca răspunsul clientului." }, 409);
+  }
+  if (doc.status === "cancelled") {
+    return c.json({ error: "document_cancelled", message: "Actul e anulat." }, 409);
+  }
+  if (body.status === "rejected" && !body.reason?.trim()) {
+    return c.json({ error: "reason_required", message: "Scrie de ce a refuzat clientul — altfel raportul nu poate spune mai târziu de ce pierdem." }, 400);
+  }
+
+  const [row] = await db
+    .update(docDocuments)
+    .set({
+      status: body.status,
+      outcomeAt: new Date(),
+      outcomeReason: body.status === "rejected" ? body.reason?.trim() ?? null : null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(docDocuments.id, doc.id), eq(docDocuments.tenantId, user.tenantId)))
+    .returning();
+
+  await writeAudit(user.tenantId, doc.id, user.id, `status:${body.status}`, {
+    from: doc.status,
+    reason: body.reason ?? null,
+  });
+
+  // Cel care a făcut actul află ce a răspuns clientul, chiar dacă răspunsul l-a primit altcineva
+  // (cerința 46). Best-effort: o notificare picată nu răstoarnă marcarea.
+  if (doc.createdByUserId && doc.createdByUserId !== user.id) {
+    try {
+      await createNotification({
+        tenantId: user.tenantId,
+        userId: doc.createdByUserId,
+        type: body.status === "signed" ? "doc_signed" : "doc_rejected",
+        title: body.status === "signed" ? "Act semnat" : "Act refuzat",
+        body: `${doc.title}${body.reason ? ` — ${body.reason}` : ""}`,
+        link: `/business/docs/${doc.id}`,
+      });
+    } catch {
+      /* notificarea e utilă, nu obligatorie */
+    }
+  }
+
+  return c.json(row);
 });
 
 /**

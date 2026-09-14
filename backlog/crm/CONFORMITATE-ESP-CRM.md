@@ -92,7 +92,7 @@ onestă spune de la început ce se cumpără și ce se construiește.
 | 39 | Export PDF | **Da** | |
 | 40 | Salvare automată în fișa clientului | **Da** | |
 | 41 | Transmitere către client din CRM | **Da** | Cu urmă în cronologie. |
-| 42 | Urmărire: transmisă, vizualizată, acceptată, respinsă | **Parțial** | Transmisă / semnată / refuzată / anulată — da. „Vizualizată" cere pixel de urmărire sau portal de client (portalul există pentru facturi; extinderea la oferte e ~2 zile). |
+| 42 | Urmărire: transmisă, vizualizată, acceptată, respinsă | **Parțial** | Transmisă (se scrie singură la trimiterea pe e-mail), acceptată și respinsă (se marchează din fișa leadului, cu motiv obligatoriu la refuz) — da. „Vizualizată" rămâne descoperită: cere pixel de urmărire sau portal de client (portalul există pentru facturi; extinderea la oferte e ~2 zile). |
 
 ## 4.8 Generarea contractelor
 
@@ -100,8 +100,8 @@ onestă spune de la început ce se cumpără și ce se construiește.
 |---|---|---|---|
 | 43 | Generare din șablon aprobat, cu datele din CRM | **Da** | Același motor ca ofertele. |
 | 44 | Versionare (istoricul variantelor) | **Da** | Versiuni de șablon + înghețarea rechizitelor la finalizare. |
-| 45 | Flux: Draft → Aprobare → Transmis → Semnat → Respins | **Parțial** | Ciornă → Finalizat → Trimis → Semnat / Refuzat / Anulat. Pasul intern „Aprobare" nu există ca stare proprie (aprobările trăiesc azi în modulul PAR). Se adaugă ca stare în ~1 zi. |
-| 46 | Notificări la schimbarea statusului | **Parțial** | Urma în cronologie: da. Notificare in-app/e-mail către responsabil: nu încă. |
+| 45 | Flux: Draft → Aprobare → Transmis → Semnat → Respins | **Parțial** | Ciornă → Finalizat → **Trimis → Semnat / Refuzat** → (Anulat). „Trimis" se scrie singur când pleacă e-mailul — singurul semnal adevărat; „Semnat"/„Refuzat" le marchează omul care a vorbit cu clientul. Pasul intern „Aprobare" rămâne descoperit ca stare a actului: aprobările trăiesc în modulul PAR, cu flux multi-nivel, iar un act se poate trimite acolo (`/documents/:id/to-par`). Un al doilea mecanism de aprobare, mai slab, ar concura cu el. |
+| 46 | Notificări la schimbarea statusului | **Da** | Cine a făcut actul primește notificare in-app când clientul semnează sau refuză, chiar dacă răspunsul l-a primit altcineva. Fiecare schimbare lasă și urmă în jurnalul actului. |
 
 ## 4.9 Administrarea produselor
 
@@ -166,8 +166,8 @@ Toate cele 76 de cerințe din Anexa B sunt acoperite mai sus, în ordinea din ca
 
 | Conform | Număr | Procent |
 |---|---|---|
-| Da | 51 | 67% |
-| Parțial | 18 | 24% |
+| Da | 52 | 68% |
+| Parțial | 17 | 22% |
 | Nu | 7 | 9% |
 
 Cele șapte „Nu" rămase sunt, toate, același lucru: **telefonia (20, 22, 23, 25, 65) și mesageria

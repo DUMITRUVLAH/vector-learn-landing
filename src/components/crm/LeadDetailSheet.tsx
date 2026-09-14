@@ -41,6 +41,7 @@ import { SendEmailDialog } from "./SendEmailDialog";
 import { whatsappLink, logCrmTouch } from "@/lib/api/crmComms";
 import {
   listCrmDocuments,
+  setCrmDocumentOutcome,
   CRM_DOC_KIND_LABELS,
   CRM_DOC_STATUS_LABELS,
   type CrmDocument,
@@ -231,6 +232,8 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
   // Acte (oferte/contracte) — lista e a motorului de acte, CRM-ul doar o arată.
   const [documents, setDocuments] = useState<CrmDocument[]>([]);
   const [newDocOpen, setNewDocOpen] = useState(false);
+  /** Actul pe care se marchează chiar acum răspunsul clientului. */
+  const [docOutcomeId, setDocOutcomeId] = useState<string | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
 
   // Taskuri
@@ -447,6 +450,32 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut salva modificările." });
     } finally {
       setSavingDetails(false);
+    }
+  }
+
+  /**
+   * Ce a răspuns clientul la ofertă/contract (cerințele 42 și 45). „Trimis" îl știe sistemul din
+   * momentul trimiterii; asta o știe doar omul care a vorbit cu clientul.
+   */
+  async function markOutcome(documentId: string, status: "signed" | "rejected") {
+    let reason: string | undefined;
+    if (status === "rejected") {
+      // Motivul e obligatoriu, ca la pierderea unui lead: fără el, raportul de mai târziu nu
+      // poate spune de ce ne refuză clienții. Serverul îl cere oricum.
+      const answer = prompt("De ce a refuzat clientul?");
+      if (!answer?.trim()) return;
+      reason = answer.trim();
+    }
+    setDocOutcomeId(documentId);
+    try {
+      await setCrmDocumentOutcome(documentId, { status, ...(reason ? { reason } : {}) });
+      reloadDocuments();
+      onToast({ kind: "success", message: status === "signed" ? "Act marcat ca semnat." : "Act marcat ca refuzat." });
+      onChanged();
+    } catch (err) {
+      onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut marca răspunsul." });
+    } finally {
+      setDocOutcomeId(null);
     }
   }
 
@@ -1111,14 +1140,49 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
               ) : (
                 <ul className="flex flex-col gap-2">
                   {documents.map((d) => (
-                    <li key={d.id} className="flex items-center justify-between gap-2 text-sm">
-                      <Link to={docPath(d.id)} className="inline-flex items-center gap-1 hover:underline">
-                        {d.docNumber ? `${CRM_DOC_KIND_LABELS[d.kind as keyof typeof CRM_DOC_KIND_LABELS] ?? d.kind} nr. ${d.docNumber}` : d.title}
-                        <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                      </Link>
-                      <Badge variant={d.status === "draft" ? "secondary" : "default"}>
-                        {CRM_DOC_STATUS_LABELS[d.status] ?? d.status}
-                      </Badge>
+                    <li key={d.id} className="flex flex-col gap-1 rounded-lg border border-border p-2.5">
+                      <div className="flex items-center justify-between gap-2 text-sm">
+                        <Link to={docPath(d.id)} className="inline-flex items-center gap-1 hover:underline">
+                          {d.docNumber ? `${CRM_DOC_KIND_LABELS[d.kind as keyof typeof CRM_DOC_KIND_LABELS] ?? d.kind} nr. ${d.docNumber}` : d.title}
+                          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                        </Link>
+                        <Badge variant={d.status === "draft" ? "secondary" : "default"}>
+                          {CRM_DOC_STATUS_LABELS[d.status] ?? d.status}
+                        </Badge>
+                      </div>
+
+                      {d.outcomeReason && (
+                        <p className="text-xs text-destructive">Motiv refuz: {d.outcomeReason}</p>
+                      )}
+
+                      {/* Ce a răspuns clientul. Apare doar după ce actul a plecat: o ciornă n-a
+                          ajuns la nimeni, deci n-are cum să fie semnată sau refuzată. */}
+                      {(d.status === "sent" || d.status === "final") && (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={docOutcomeId === d.id}
+                            onClick={() => void markOutcome(d.id, "signed")}
+                          >
+                            {docOutcomeId === d.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                            ) : (
+                              <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                            )}
+                            Semnat
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={docOutcomeId === d.id}
+                            onClick={() => void markOutcome(d.id, "rejected")}
+                          >
+                            <X className="h-3.5 w-3.5" aria-hidden="true" />
+                            Refuzat
+                          </Button>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
