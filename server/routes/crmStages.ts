@@ -3,8 +3,9 @@
  *
  * Mounted at /api/crm/stages (app.ts: app.route("/api/crm/stages", crmStagesRoutes))
  *
- * GET    /api/crm/stages           — listă, ordonată după orderIndex (seed automat dacă tenantul
- *                                     nu are încă nicio etapă — vezi ensureTenantStages)
+ * GET    /api/crm/stages?pipelineId= — etapele UNEI pâlnii, ordonate după orderIndex (seed automat
+ *                                     dacă pâlnia n-are încă nicio etapă — vezi ensureTenantStages).
+ *                                     Fără `pipelineId` → pâlnia implicită a workspace-ului.
  * POST   /api/crm/stages           — creare (cheia se derivă din etichetă dacă nu e dată explicit)
  * POST   /api/crm/stages/reorder   — { ids: string[] } → rescrie orderIndex după poziția din listă
  * PATCH  /api/crm/stages/:id       — rename/culoare/probabilitate/isWon/isLost — NU și `key`
@@ -21,12 +22,14 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { crmPipelineStages, type NewCrmPipelineStage } from "../db/schema/crmPipelineStages";
 import { leads } from "../db/schema/leads";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
 import { ensureTenantStages } from "../lib/crm/stages";
+import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
+import { crmPipelines } from "../db/schema/crmPipelines";
 
 export const crmStagesRoutes = new Hono<{ Variables: AuthVariables }>();
 crmStagesRoutes.use("/*", requireAuth);
@@ -55,6 +58,8 @@ function slugifyLabel(label: string): string {
 // ─── Validation schemas ───────────────────────────────────────────────────────
 
 const createStageSchema = z.object({
+  /** Pâlnia în care intră etapa; absentă = implicita workspace-ului. */
+  pipelineId: z.string().uuid().optional(),
   label: z.string().min(1, "Eticheta este obligatorie"),
   key: z.string().max(64).optional(),
   color: z.string().max(40).optional(),
@@ -78,22 +83,48 @@ const reorderSchema = z.object({
   ids: z.array(z.string().uuid()).min(1),
 });
 
+
+// ─── Rezolvarea pâlniei cerute ────────────────────────────────────────────────
+
+/**
+ * Pâlnia pe care operează cererea: `pipelineId` din query/body dacă aparține tenantului, altfel
+ * implicita lui. Un id dintr-un alt workspace NU cade pe implicită în tăcere — întoarce `null`,
+ * iar apelantul răspunde 404 (nu confirmăm existența unei pâlnii străine).
+ */
+async function resolvePipeline(
+  tenantId: string,
+  requestedId?: string | null
+): Promise<{ id: string; isDefault: boolean } | null> {
+  if (requestedId) {
+    const [row] = await db
+      .select({ id: crmPipelines.id, isDefault: crmPipelines.isDefault })
+      .from(crmPipelines)
+      .where(and(eq(crmPipelines.id, requestedId), eq(crmPipelines.tenantId, tenantId)));
+    return row ?? null;
+  }
+  const def = await ensureTenantPipeline(tenantId);
+  return def ? { id: def.id, isDefault: def.isDefault } : null;
+}
+
 // ─── GET / ────────────────────────────────────────────────────────────────────
 
 crmStagesRoutes.get("/", async (c) => {
   const user = c.get("user");
 
-  // Workspace nou / migrarea 0162 nu l-a atins încă → primește cele 5 etape implicite acum, nu
-  // rămâne cu o pâlnie goală.
-  await ensureTenantStages(user.tenantId);
+  const pipeline = await resolvePipeline(user.tenantId, c.req.query("pipelineId"));
+  if (!pipeline) return c.json({ error: "not_found" }, 404);
+
+  // Pâlnie nouă / migrarea 0162 nu a atins încă workspace-ul → primește cele 5 etape implicite
+  // acum, nu rămâne un Kanban fără coloane.
+  await ensureTenantStages(user.tenantId, pipeline.id);
 
   const items = await db
     .select()
     .from(crmPipelineStages)
-    .where(eq(crmPipelineStages.tenantId, user.tenantId))
+    .where(and(eq(crmPipelineStages.tenantId, user.tenantId), eq(crmPipelineStages.pipelineId, pipeline.id)))
     .orderBy(asc(crmPipelineStages.orderIndex));
 
-  return c.json({ items });
+  return c.json({ items, pipelineId: pipeline.id });
 });
 
 // ─── POST / ───────────────────────────────────────────────────────────────────
@@ -103,14 +134,18 @@ crmStagesRoutes.post("/", zValidator("json", createStageSchema), async (c) => {
   const body = c.req.valid("json");
   const key = (body.key?.trim() ? body.key.trim() : slugifyLabel(body.label)).slice(0, 64);
 
-  // Etapa nouă intră implicit la finalul ordinii curente a tenantului.
+  const pipeline = await resolvePipeline(user.tenantId, body.pipelineId);
+  if (!pipeline) return c.json({ error: "not_found" }, 404);
+
+  // Etapa nouă intră la finalul ordinii curente A PÂLNIEI (nu a workspace-ului).
   const [{ maxOrder }] = await db
     .select({ maxOrder: sql<number>`coalesce(max(${crmPipelineStages.orderIndex}), -1)::int` })
     .from(crmPipelineStages)
-    .where(eq(crmPipelineStages.tenantId, user.tenantId));
+    .where(and(eq(crmPipelineStages.tenantId, user.tenantId), eq(crmPipelineStages.pipelineId, pipeline.id)));
 
   const values: NewCrmPipelineStage = {
     tenantId: user.tenantId,
+    pipelineId: pipeline.id,
     key,
     label: body.label,
     orderIndex: (maxOrder ?? -1) + 1,
@@ -121,8 +156,8 @@ crmStagesRoutes.post("/", zValidator("json", createStageSchema), async (c) => {
   if (body.isLost !== undefined) values.isLost = body.isLost;
 
   // onConflictDoNothing + .returning(): 0 rânduri întoarse = coliziune pe indexul unic
-  // (tenant_id,key) — fie cheia explicită era deja folosită, fie eticheta s-a derivat la o cheie
-  // deja existentă. Evită o cursă (check-then-insert) între verificare și scriere.
+  // (tenant_id,pipeline_id,key) — fie cheia explicită era deja folosită ÎN PÂLNIE, fie eticheta
+  // s-a derivat la o cheie deja existentă acolo. Evită o cursă (check-then-insert) între verificare și scriere.
   const [row] = await db.insert(crmPipelineStages).values(values).onConflictDoNothing().returning();
   if (!row) return c.json({ error: "stage_key_taken" }, 409);
 
@@ -207,7 +242,12 @@ crmStagesRoutes.delete("/:id", async (c) => {
   const id = c.req.param("id");
 
   const [existing] = await db
-    .select({ id: crmPipelineStages.id, key: crmPipelineStages.key, isDefault: crmPipelineStages.isDefault })
+    .select({
+      id: crmPipelineStages.id,
+      key: crmPipelineStages.key,
+      isDefault: crmPipelineStages.isDefault,
+      pipelineId: crmPipelineStages.pipelineId,
+    })
     .from(crmPipelineStages)
     .where(and(eq(crmPipelineStages.id, id), eq(crmPipelineStages.tenantId, user.tenantId)));
   if (!existing) return c.json({ error: "not_found" }, 404);
@@ -219,10 +259,21 @@ crmStagesRoutes.delete("/:id", async (c) => {
 
   // Ștergerea NU are voie să orfanizeze lead-uri: dacă etapa mai are vreunul, refuzăm. Ăsta e
   // singurul motiv pentru care DELETE există ca rută separată de PATCH, nu un simplu soft-delete.
-  const [{ cnt }] = await db
-    .select({ cnt: count() })
-    .from(leads)
-    .where(and(eq(leads.tenantId, user.tenantId), eq(leads.stage, existing.key)));
+  // Numărătoarea e pe PÂLNIA etapei, nu pe tot workspace-ul: de la migrarea 0166 aceeași cheie
+  // („new") poate exista în două pâlnii, iar leadurile celeilalte n-au nicio treabă cu ștergerea
+  // asta.
+  const stagePipeline = existing.pipelineId
+    ? await resolvePipeline(user.tenantId, existing.pipelineId)
+    : await resolvePipeline(user.tenantId, null);
+  const scope = stagePipeline
+    ? and(
+        eq(leads.tenantId, user.tenantId),
+        eq(leads.stage, existing.key),
+        leadsInPipeline(stagePipeline.id, stagePipeline.isDefault)
+      )
+    : and(eq(leads.tenantId, user.tenantId), eq(leads.stage, existing.key), isNull(leads.pipelineId));
+
+  const [{ cnt }] = await db.select({ cnt: count() }).from(leads).where(scope);
   if (cnt > 0) {
     return c.json({ error: "stage_not_empty", leads: cnt }, 409);
   }

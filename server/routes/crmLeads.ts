@@ -3,7 +3,7 @@
  *
  * Mounted at /api/crm/leads (app.ts: app.route("/api/crm/leads", crmLeadsRoutes))
  *
- * GET    /api/crm/leads/pipeline          — lead-uri grupate pe etapă (kanban), plafonate la
+ * GET    /api/crm/leads/pipeline?pipelineId= — lead-uri grupate pe etapă (kanban), plafonate la
  *                                            50/coloană, dar cu numărători/sume pe SETUL COMPLET.
  *                                            Coloanele vin din `crm_pipeline_stages`, per tenant
  *                                            (nu mai sunt hardcodate) — vezi server/lib/crm/stages.ts.
@@ -13,6 +13,8 @@
  * POST   /api/crm/leads                   — creare
  * PATCH  /api/crm/leads/:id               — actualizare parțială
  * PATCH  /api/crm/leads/:id/stage         — schimbare etapă (cu regulile de business de mai jos)
+ * PATCH  /api/crm/leads/:id/pipeline      — mutare în altă pâlnie (etapa se reașază pe prima
+ *                                            etapă a pâlniei țintă — cheile nu sunt comune)
  * GET    /api/crm/leads/:id/interactions  — istoricul lead-ului (note/apeluri/schimbări de etapă)
  * POST   /api/crm/leads/:id/interactions  — adaugă o interacțiune
  *
@@ -27,7 +29,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, leadInteractions, type NewLead, type NewLeadInteraction } from "../db/schema/leads";
 import { crmPipelineStages, type CrmPipelineStage } from "../db/schema/crmPipelineStages";
@@ -36,6 +38,8 @@ import { runAutomations } from "./crmAutomations";
 import { assignLeadAutomatically } from "./crmAssignment";
 import { normalizePhone, normalizeEmail } from "../lib/crm/normalize";
 import { ensureTenantStages, DEFAULT_STAGES } from "../lib/crm/stages";
+import { crmPipelines, type CrmPipeline } from "../db/schema/crmPipelines";
+import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
 
 /**
  * Coloanele pe care le întoarce API-ul — EXACT cele din `CrmLead` (src/lib/api/crm.ts).
@@ -57,6 +61,7 @@ const LEAD_COLS = {
   interestCourse: leads.interestCourse,
   source: leads.source,
   stage: leads.stage,
+  pipelineId: leads.pipelineId,
   valueCents: leads.valueCents,
   assignedTo: leads.assignedTo,
   lostReason: leads.lostReason,
@@ -128,6 +133,8 @@ const leadFieldsSchema = z.object({
   // tenantului, dar POST/PATCH generice pe lead nu forțează validarea asta (doar PATCH
   // /:id/stage, ruta dedicată schimbării de etapă, o face — vezi mai jos).
   stage: z.string().min(1).max(64).optional(),
+  /** Pâlnia leadului; absentă = implicita workspace-ului. */
+  pipelineId: z.string().uuid().optional().nullable(),
   valueCents: z.number().int().min(0).optional(),
   assignedTo: z.string().uuid().optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
@@ -148,6 +155,48 @@ const createInteractionSchema = z.object({
   metadata: z.record(z.unknown()).optional(),
 });
 
+
+// ─── Pâlnia unei cereri ───────────────────────────────────────────────────────
+
+/**
+ * Pâlnia pe care operează cererea: cea cerută explicit (dacă e a tenantului) sau implicita.
+ * `null` doar în cazul degradat în care tabela de pâlnii nu poate fi citită — apelanții scriu
+ * atunci `pipeline_id = NULL`, care înseamnă tot „implicita".
+ */
+async function resolveRequestPipeline(
+  tenantId: string,
+  requestedId: string | null
+): Promise<{ id: string; isDefault: boolean } | null> {
+  if (requestedId) {
+    const [row] = await db
+      .select({ id: crmPipelines.id, isDefault: crmPipelines.isDefault })
+      .from(crmPipelines)
+      .where(and(eq(crmPipelines.id, requestedId), eq(crmPipelines.tenantId, tenantId)));
+    return row ?? null;
+  }
+  const def = await ensureTenantPipeline(tenantId);
+  return def ? { id: def.id, isDefault: def.isDefault } : null;
+}
+
+/** Etapele unei pâlnii, în ordine. Pentru `null` (degradat) — etapele fără pâlnie ale tenantului. */
+async function stagesOfPipeline(tenantId: string, pipelineId: string | null) {
+  return db
+    .select({
+      id: crmPipelineStages.id,
+      key: crmPipelineStages.key,
+      label: crmPipelineStages.label,
+      isLost: crmPipelineStages.isLost,
+      orderIndex: crmPipelineStages.orderIndex,
+    })
+    .from(crmPipelineStages)
+    .where(
+      pipelineId
+        ? and(eq(crmPipelineStages.tenantId, tenantId), eq(crmPipelineStages.pipelineId, pipelineId))
+        : and(eq(crmPipelineStages.tenantId, tenantId), isNull(crmPipelineStages.pipelineId))
+    )
+    .orderBy(asc(crmPipelineStages.orderIndex));
+}
+
 // ─── GET /pipeline (ÎNAINTE de /:id — altfel "pipeline" ar fi citit ca un id) ─
 
 crmLeadsRoutes.get("/pipeline", async (c) => {
@@ -157,17 +206,46 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
   // pice (schemă în urma codului), degradăm cu etapele REALE ale tenantului — nu cu cele 5
   // implicite hardcodate — ca o pâlnie redenumită/particularizată să nu-și piardă coloanele.
   let stageRows: CrmPipelineStage[] = [];
+  let pipelineRows: CrmPipeline[] = [];
   try {
-    // Workspace nou / migrarea 0162 nu l-a atins încă → primește cele 5 etape implicite acum, nu
-    // rămâne cu o pâlnie goală.
-    await ensureTenantStages(tenantId);
+    // Pâlnia cerută (sau implicita). Toate coloanele, numărătorile și cardurile de mai jos sunt
+    // ale UNEI pâlnii — de la migrarea 0166 un workspace poate avea mai multe, iar amestecarea
+    // lor ar pune leadurile B2B peste cele de retail, pe coloane care nu le aparțin.
+    const defaultPipeline = await ensureTenantPipeline(tenantId);
+    pipelineRows = await db
+      .select()
+      .from(crmPipelines)
+      .where(eq(crmPipelines.tenantId, tenantId))
+      .orderBy(asc(crmPipelines.orderIndex), asc(crmPipelines.createdAt));
+
+    const requestedId = c.req.query("pipelineId");
+    const active =
+      (requestedId ? pipelineRows.find((p) => p.id === requestedId) : null) ??
+      pipelineRows.find((p) => p.isDefault) ??
+      pipelineRows[0] ??
+      defaultPipeline;
+    // Un `pipelineId` dintr-un alt workspace nu cade în tăcere pe implicită — ar arăta alte date
+    // decât cele cerute, fără niciun semn.
+    if (requestedId && (!active || active.id !== requestedId)) return c.json({ error: "not_found" }, 404);
+
+    // Pâlnie nouă / migrarea 0162 nu a atins încă workspace-ul → primește cele 5 etape implicite
+    // acum, nu rămâne cu un Kanban gol.
+    await ensureTenantStages(tenantId, active?.id ?? null);
 
     stageRows = await db
       .select()
       .from(crmPipelineStages)
-      .where(eq(crmPipelineStages.tenantId, tenantId))
+      .where(
+        active
+          ? and(eq(crmPipelineStages.tenantId, tenantId), eq(crmPipelineStages.pipelineId, active.id))
+          : and(eq(crmPipelineStages.tenantId, tenantId), isNull(crmPipelineStages.pipelineId))
+      )
       .orderBy(asc(crmPipelineStages.orderIndex));
     const stageKeys = stageRows.map((s) => s.key);
+
+    const leadScope = active
+      ? and(eq(leads.tenantId, tenantId), leadsInPipeline(active.id, active.isDefault))
+      : eq(leads.tenantId, tenantId);
 
     // O SINGURĂ interogare pentru carduri, nu una pe etapă.
     // De ce contează: pe Vercel pool-ul e `max: 3` cu `connect_timeout: 10`
@@ -178,7 +256,7 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
     const recent = await db
       .select(LEAD_COLS)
       .from(leads)
-      .where(eq(leads.tenantId, tenantId))
+      .where(leadScope)
       .orderBy(desc(leads.createdAt))
       .limit(500);
 
@@ -209,7 +287,7 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
         sumValue: sql<string>`coalesce(sum(${leads.valueCents}), 0)::bigint`,
       })
       .from(leads)
-      .where(eq(leads.tenantId, tenantId))
+      .where(leadScope)
       .groupBy(leads.stage);
 
     let totalValueCents = 0;
@@ -225,7 +303,15 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
       }
     }
 
-    return c.json({ stages: stageRows, grouped, counts, valueSums, totalValueCents });
+    return c.json({
+      stages: stageRows,
+      grouped,
+      counts,
+      valueSums,
+      totalValueCents,
+      pipelines: pipelineRows,
+      pipelineId: active?.id ?? null,
+    });
   } catch (e) {
     if (isMissingSchemaError(e)) {
       // Schema din bază e în urma codului: răspundem cu o tablă goală, ca
@@ -244,6 +330,8 @@ crmLeadsRoutes.get("/pipeline", async (c) => {
         counts: zeros,
         valueSums: zeros,
         totalValueCents: 0,
+        pipelines: pipelineRows,
+        pipelineId: pipelineRows.find((p) => p.isDefault)?.id ?? pipelineRows[0]?.id ?? null,
         schemaLag: true,
       });
     }
@@ -284,6 +372,7 @@ crmLeadsRoutes.get("/", async (c) => {
     stage,
     source,
     assignedTo,
+    pipelineId,
     sort,
     dir,
   } = c.req.query();
@@ -310,6 +399,18 @@ crmLeadsRoutes.get("/", async (c) => {
   if (stage) conditions.push(eq(leads.stage, stage));
   if (source && isLeadSource(source)) conditions.push(eq(leads.source, source));
   if (assignedTo) conditions.push(eq(leads.assignedTo, assignedTo));
+
+  // Filtrul pe pâlnie e citit prin aceeași regulă ca pe kanban: pentru implicită intră și
+  // leadurile fără `pipeline_id` (cele dinainte de migrarea 0166).
+  if (pipelineId) {
+    const [p] = await db
+      .select({ id: crmPipelines.id, isDefault: crmPipelines.isDefault })
+      .from(crmPipelines)
+      .where(and(eq(crmPipelines.id, pipelineId), eq(crmPipelines.tenantId, tenantId)));
+    if (!p) return c.json({ error: "not_found" }, 404);
+    const cond = leadsInPipeline(p.id, p.isDefault);
+    if (cond) conditions.push(cond);
+  }
 
   const where = and(...conditions);
 
@@ -391,9 +492,14 @@ crmLeadsRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
   const user = c.get("user");
   const body = c.req.valid("json");
 
+  // Leadul se naște într-o pâlnie. Fără asta ar cădea pe „implicita" doar prin convenția NULL,
+  // iar mutarea lui ulterioară n-ar avea de unde să știe ce etape îi sunt permise.
+  const targetPipeline = await resolveRequestPipeline(user.tenantId, body.pipelineId ?? null);
+
   const values: NewLead = {
     tenantId: user.tenantId,
     fullName: body.fullName,
+    pipelineId: targetPipeline?.id ?? null,
     phoneNormalized: normalizePhone(body.phone),
     emailNormalized: normalizeEmail(body.email),
   };
@@ -403,7 +509,14 @@ crmLeadsRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
   if (body.dealName !== undefined) values.dealName = body.dealName;
   if (body.interestCourse !== undefined) values.interestCourse = body.interestCourse;
   if (body.source !== undefined) values.source = body.source;
-  if (body.stage !== undefined) values.stage = body.stage;
+  if (body.stage !== undefined) {
+    values.stage = body.stage;
+  } else if (targetPipeline) {
+    // Fără etapă explicită, leadul intră pe PRIMA etapă a pâlniei lui — nu pe literalul „new",
+    // care într-o pâlnie personalizată poate să nici nu existe.
+    const [first] = await stagesOfPipeline(user.tenantId, targetPipeline.id);
+    if (first) values.stage = first.key;
+  }
   if (body.valueCents !== undefined) values.valueCents = body.valueCents;
   if (body.assignedTo !== undefined) values.assignedTo = body.assignedTo;
   if (body.notes !== undefined) values.notes = body.notes;
@@ -473,6 +586,8 @@ crmLeadsRoutes.patch("/:id", zValidator("json", updateLeadSchema), async (c) => 
   if (body.interestCourse !== undefined) updates.interestCourse = body.interestCourse;
   if (body.source !== undefined) updates.source = body.source;
   if (body.stage !== undefined) updates.stage = body.stage;
+  // `pipelineId` NU se schimbă din PATCH-ul generic: mutarea între pâlnii reașază și etapa și
+  // lasă urmă în istoric — are rută proprie (`PATCH /:id/pipeline`).
   if (body.valueCents !== undefined) updates.valueCents = body.valueCents;
   if (body.assignedTo !== undefined) updates.assignedTo = body.assignedTo;
   if (body.notes !== undefined) updates.notes = body.notes;
@@ -493,13 +608,22 @@ crmLeadsRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async 
   const id = c.req.param("id");
   const { stage, lostReason } = c.req.valid("json");
 
-  // Cheia țintă trebuie să existe printre etapele TENANTULUI curent — o cheie necunoscută (ștearsă,
-  // typo din UI, dintr-un alt workspace) nu are voie să scrie un `leads.stage` „orfan", fără nicio
-  // coloană din pâlnie care să-l mai arate.
-  const [targetStage] = await db
-    .select({ key: crmPipelineStages.key, isLost: crmPipelineStages.isLost })
-    .from(crmPipelineStages)
-    .where(and(eq(crmPipelineStages.tenantId, user.tenantId), eq(crmPipelineStages.key, stage)));
+  // Leadul întâi, ca să știm în ce pâlnie e: de la migrarea 0166 cheia „new" poate exista în mai
+  // multe pâlnii, iar o validare pe tot workspace-ul ar accepta o etapă din pâlnia greșită și ar
+  // muta leadul pe o coloană care nu se vede în tabla lui.
+  const [existing] = await db
+    .select({ id: leads.id, stage: leads.stage, pipelineId: leads.pipelineId })
+    .from(leads)
+    .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)));
+  if (!existing) return c.json({ error: "not_found" }, 404);
+
+  const leadPipeline = await resolveRequestPipeline(user.tenantId, existing.pipelineId);
+  const pipelineStages = await stagesOfPipeline(user.tenantId, leadPipeline?.id ?? null);
+
+  // Cheia țintă trebuie să existe printre etapele PÂLNIEI leadului — o cheie necunoscută (ștearsă,
+  // typo din UI, dintr-un alt workspace sau din altă pâlnie) nu are voie să scrie un `leads.stage`
+  // „orfan", fără nicio coloană care să-l mai arate.
+  const targetStage = pipelineStages.find((st) => st.key === stage);
   if (!targetStage) return c.json({ error: "unknown_stage" }, 400);
 
   // Regulă de business: nu se poate marca un lead „pierdut" fără un motiv — altfel raportul de
@@ -509,12 +633,6 @@ crmLeadsRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async 
   if (targetStage.isLost && (!lostReason || lostReason.trim().length === 0)) {
     return c.json({ error: "lost_reason_required" }, 400);
   }
-
-  const [existing] = await db
-    .select({ id: leads.id, stage: leads.stage })
-    .from(leads)
-    .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)));
-  if (!existing) return c.json({ error: "not_found" }, 404);
 
   const fromStage = existing.stage;
 
@@ -553,6 +671,86 @@ crmLeadsRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async 
     .from(leads)
     .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)));
   return c.json(fresh ?? row);
+});
+
+
+// ─── PATCH /:id/pipeline — mutarea leadului în altă pâlnie ───────────────────
+
+/**
+ * De ce nu e un simplu `PATCH /:id { pipelineId }`: cheile de etapă nu sunt comune între pâlnii.
+ * Un lead mutat din „Vânzări" (etapa `trial`) în „B2B", care n-are `trial`, ar rămâne cu un stage
+ * fără coloană — invizibil pe tablă, exact bug-ul pe care regula „unknown_stage" îl previne la
+ * mutarea normală. Așa că mutarea reașază etapa pe prima etapă a pâlniei țintă (sau pe cea cerută
+ * explicit, dacă există acolo) și scrie o urmă în istoric.
+ */
+const pipelineChangeSchema = z.object({
+  pipelineId: z.string().uuid(),
+  /** Etapa dorită în pâlnia țintă; absentă sau inexistentă acolo → prima etapă a pâlniei. */
+  stage: z.string().min(1).max(64).optional(),
+});
+
+crmLeadsRoutes.patch("/:id/pipeline", zValidator("json", pipelineChangeSchema), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const body = c.req.valid("json");
+
+  const [existing] = await db
+    .select({ id: leads.id, stage: leads.stage, pipelineId: leads.pipelineId })
+    .from(leads)
+    .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)));
+  if (!existing) return c.json({ error: "not_found" }, 404);
+
+  const target = await resolveRequestPipeline(user.tenantId, body.pipelineId);
+  // Pâlnie din alt workspace → 404, nu 403: nu confirmăm că există.
+  if (!target) return c.json({ error: "not_found" }, 404);
+
+  const targetStages = await stagesOfPipeline(user.tenantId, target.id);
+  if (targetStages.length === 0) return c.json({ error: "pipeline_has_no_stages" }, 409);
+
+  const wanted = body.stage ? targetStages.find((st) => st.key === body.stage) : undefined;
+  const nextStage = wanted ?? targetStages[0];
+
+  // O etapă de tip „pierdut" cere motivul (regula de pe /:id/stage). Mutarea între pâlnii nu are
+  // de unde să-l ceară, deci nu aterizează niciodată direct într-o astfel de etapă: alegem prima
+  // etapă care nu e „pierdut", ca leadul să rămână în lucru.
+  const landing = nextStage.isLost ? targetStages.find((st) => !st.isLost) ?? nextStage : nextStage;
+
+  const [row] = await db
+    .update(leads)
+    .set({ pipelineId: target.id, stage: landing.key, updatedAt: new Date() })
+    .where(and(eq(leads.id, id), eq(leads.tenantId, user.tenantId)))
+    .returning();
+
+  const [fromPipelineRow] = existing.pipelineId
+    ? await db
+        .select({ name: crmPipelines.name })
+        .from(crmPipelines)
+        .where(and(eq(crmPipelines.id, existing.pipelineId), eq(crmPipelines.tenantId, user.tenantId)))
+    : [];
+  const [toPipelineRow] = await db
+    .select({ name: crmPipelines.name })
+    .from(crmPipelines)
+    .where(and(eq(crmPipelines.id, target.id), eq(crmPipelines.tenantId, user.tenantId)));
+
+  const interaction: NewLeadInteraction = {
+    tenantId: user.tenantId,
+    leadId: id,
+    type: "system",
+    direction: "internal",
+    body: `Mutat în pâlnia „${toPipelineRow?.name ?? "—"}” (etapa ${landing.label})`,
+    metadata: {
+      fromPipelineId: existing.pipelineId,
+      fromPipelineName: fromPipelineRow?.name ?? null,
+      toPipelineId: target.id,
+      toPipelineName: toPipelineRow?.name ?? null,
+      fromStage: existing.stage,
+      toStage: landing.key,
+    },
+    userId: user.id,
+  };
+  await db.insert(leadInteractions).values(interaction);
+
+  return c.json(row);
 });
 
 // ─── GET /:id/interactions ────────────────────────────────────────────────────

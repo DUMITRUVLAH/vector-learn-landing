@@ -13,7 +13,7 @@
  * cererea care a chemat-o — apelanții (GET /api/crm/stages, GET /api/crm/leads/pipeline) oricum
  * degradează la o listă/pâlnie goală, nu la un 500.
  */
-import { eq, count } from "drizzle-orm";
+import { and, eq, count } from "drizzle-orm";
 import { db } from "../../db/client";
 import { crmPipelineStages, type NewCrmPipelineStage } from "../../db/schema/crmPipelineStages";
 
@@ -62,19 +62,23 @@ export const DEFAULT_STAGES: readonly DefaultStageSeed[] = [
  * apelantul (o rută GET) trebuie să răspundă cu o listă goală, nu cu un 500 cauzat de un
  * best-effort seed care ar fi putut oricum să nu fie necesar.
  */
-export async function ensureTenantStages(tenantId: string): Promise<void> {
+export async function ensureTenantStages(tenantId: string, pipelineId?: string | null): Promise<void> {
   try {
-    const [existing] = await db
-      .select({ cnt: count() })
-      .from(crmPipelineStages)
-      .where(eq(crmPipelineStages.tenantId, tenantId));
+    // Garda numără etapele PÂLNIEI, nu ale tenantului: o pâlnie nouă („B2B") trebuie să primească
+    // etapele ei chiar dacă workspace-ul are deja etape în pâlnia implicită.
+    const scope = pipelineId
+      ? and(eq(crmPipelineStages.tenantId, tenantId), eq(crmPipelineStages.pipelineId, pipelineId))
+      : eq(crmPipelineStages.tenantId, tenantId);
+
+    const [existing] = await db.select({ cnt: count() }).from(crmPipelineStages).where(scope);
 
     if ((existing?.cnt ?? 0) > 0) {
-      return; // tenantul are deja etape — nu re-semăna
+      return; // pâlnia are deja etape — nu re-semăna
     }
 
     const rows: NewCrmPipelineStage[] = DEFAULT_STAGES.map((stage) => ({
       tenantId,
+      pipelineId: pipelineId ?? null,
       ...stage,
       isDefault: true,
     }));

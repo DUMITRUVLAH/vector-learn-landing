@@ -38,6 +38,9 @@ export const leads = pgTable(
     email: varchar("email", { length: 255 }),
     emailNormalized: varchar("email_normalized", { length: 255 }),
     interestCourse: varchar("interest_course", { length: 200 }),
+    /** Pâlnia în care stă leadul (migrarea 0166). `null` = pâlnia implicită a workspace-ului —
+     *  așa migrarea nu trebuie să rescrie fiecare lead existent ca produsul să fie corect. */
+    pipelineId: uuid("pipeline_id"),
     /** Cheia etapei din `crm_pipeline_stages`. Varchar, nu enum: etapele sunt
      *  proces comercial per workspace, nu constante de produs (migrarea 0162).
      *  `leadStageEnum` rămâne exportat — alt cod încă îl referențiază. */

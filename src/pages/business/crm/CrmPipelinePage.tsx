@@ -17,8 +17,8 @@
  * DnD: id-ul leadului circulă prin `e.dataTransfer`, niciodată prin state — altfel handler-ul de
  * `drop` citește o valoare învechită (stale closure).
  */
-import { useCallback, useEffect, useState } from "react";
-import { Plus, Phone, Mail, Loader2, AlertCircle, Users, Settings, Search } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Plus, Phone, Mail, Loader2, AlertCircle, Users, Settings, Search, GitBranch } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
 import { Alert, Button, Dialog, EmptyState, Input, Label, Select, Switch } from "@/components/ds";
 import { cn } from "@/lib/utils";
@@ -31,12 +31,14 @@ import {
   type CrmLeadStage,
   type CrmLeadSource,
   type CrmStage,
+  type CrmPipeline,
 } from "@/lib/api/crm";
 import { CRM_DEFAULT_STAGES, CRM_SOURCE_LABEL, crmStageLabel, crmSourceLabel, stageColorClasses } from "@/components/crm/constants";
 import { formatCents, leadValueToCents, leadTitle } from "@/components/crm/format";
 import { LostReasonDialog } from "@/components/crm/LostReasonDialog";
 import { LeadDetailSheet } from "@/components/crm/LeadDetailSheet";
 import { StageEditorDialog } from "@/components/crm/StageEditorDialog";
+import { PipelineManagerDialog } from "@/components/crm/PipelineManagerDialog";
 
 type ToastState = { kind: "success" | "error"; message: string } | null;
 
@@ -50,6 +52,13 @@ export function CrmPipelinePage() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [valueSums, setValueSums] = useState<Record<string, number>>({});
   const [stages, setStages] = useState<CrmStage[]>(CRM_DEFAULT_STAGES as CrmStage[]);
+  /** Pâlniile workspace-ului + cea afișată. Tabla arată o singură pâlnie — amestecarea lor ar
+   *  pune leadurile B2B peste cele de retail, pe coloane care nu le aparțin. */
+  const [pipelines, setPipelines] = useState<CrmPipeline[]>([]);
+  const [activePipelineId, setActivePipelineId] = useState<string | null>(null);
+  /** Aceeași valoare, dar citibilă din `loadPipeline` fără s-o pună în dependențe: altfel fiecare
+   *  răspuns al serverului ar schimba identitatea funcției și ar declanșa încă o încărcare. */
+  const activePipelineRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +67,7 @@ export function CrmPipelinePage() {
 
   const [showAddLead, setShowAddLead] = useState(false);
   const [showStageEditor, setShowStageEditor] = useState(false);
+  const [showPipelineManager, setShowPipelineManager] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [lostReasonFor, setLostReasonFor] = useState<{ leadId: string; toStage: string } | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
@@ -67,15 +77,23 @@ export function CrmPipelinePage() {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [onlyMine, setOnlyMine] = useState(false);
 
-  const loadPipeline = useCallback(async (opts?: { silent?: boolean }) => {
+  const loadPipeline = useCallback(async (opts?: { silent?: boolean; pipelineId?: string | null }) => {
     const silent = opts?.silent ?? false;
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const res = await getCrmPipeline();
+      // `pipelineId` explicit bate state-ul: la comutarea din selector, `activePipelineId` încă
+      // n-a apucat să se propage prin render (stale closure) — exact capcana de la drag & drop.
+      const requested = opts && "pipelineId" in opts ? opts.pipelineId : activePipelineRef.current;
+      const res = await getCrmPipeline(requested);
       setGrouped(res.grouped ?? {});
       setCounts(res.counts ?? {});
       setValueSums(res.valueSums ?? {});
+      setPipelines(res.pipelines ?? []);
+      if (res.pipelineId !== undefined) {
+        activePipelineRef.current = res.pipelineId;
+        setActivePipelineId(res.pipelineId);
+      }
       const nextStages = res.stages && res.stages.length > 0 ? res.stages : (CRM_DEFAULT_STAGES as CrmStage[]);
       setStages([...nextStages].sort((a, b) => a.orderIndex - b.orderIndex));
     } catch (err) {
@@ -90,6 +108,15 @@ export function CrmPipelinePage() {
   useEffect(() => {
     void loadPipeline();
   }, [loadPipeline]);
+
+  /** Comutarea pâlniei: ref-ul întâi (îl citește `loadPipeline`), apoi cererea explicită. */
+  function switchPipeline(id: string) {
+    if (id === activePipelineId) return;
+    activePipelineRef.current = id;
+    setActivePipelineId(id);
+    setSelectedLeadId(null);
+    void loadPipeline({ pipelineId: id });
+  }
 
   useEffect(() => {
     if (!toast) return;
@@ -214,6 +241,31 @@ export function CrmPipelinePage() {
       pageDescription={`${totalLeads} lead${totalLeads === 1 ? "" : "uri"} · conversie ${conversionRate}%`}
       actions={
         <>
+          {/* Selectorul apare doar când chiar EXISTĂ mai multe pâlnii: un workspace cu una
+              singură n-are ce alege, iar un select cu o opțiune e doar zgomot. */}
+          {pipelines.length > 1 && (
+            <>
+              <Label htmlFor="crm-pipeline-select" className="sr-only">
+                Pâlnie
+              </Label>
+              <Select
+                id="crm-pipeline-select"
+                value={activePipelineId ?? ""}
+                onChange={(e) => switchPipeline(e.target.value)}
+                className="w-[180px]"
+              >
+                {pipelines.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </>
+          )}
+          <Button variant="outline" onClick={() => setShowPipelineManager(true)}>
+            <GitBranch className="h-4 w-4" aria-hidden="true" />
+            Pâlnii
+          </Button>
           <Button variant="outline" onClick={() => setShowStageEditor(true)}>
             <Settings className="h-4 w-4" aria-hidden="true" />
             Etape
@@ -387,6 +439,7 @@ export function CrmPipelinePage() {
 
       <AddLeadDialog
         open={showAddLead}
+        pipelineId={activePipelineId}
         onClose={() => setShowAddLead(false)}
         onCreated={() => {
           setShowAddLead(false);
@@ -418,9 +471,32 @@ export function CrmPipelinePage() {
         onToast={setToast}
       />
 
+      <PipelineManagerDialog
+        open={showPipelineManager}
+        pipelines={pipelines}
+        onClose={() => setShowPipelineManager(false)}
+        onChanged={(opts) => {
+          // Pâlnia ștearsă nu mai poate fi cea afișată — cădem pe implicită, altfel tabla ar cere
+          // serverului un id care nu mai există (404) și ecranul ar rămâne pe eroare.
+          if (opts?.removedId && opts.removedId === activePipelineId) {
+            activePipelineRef.current = null;
+            setActivePipelineId(null);
+            void loadPipeline({ pipelineId: null, silent: true });
+            return;
+          }
+          if (opts?.selectId) {
+            switchPipeline(opts.selectId);
+            return;
+          }
+          void loadPipeline({ silent: true });
+        }}
+        onToast={setToast}
+      />
+
       <StageEditorDialog
         open={showStageEditor}
         stages={stages}
+        pipelineId={activePipelineId}
         onClose={() => setShowStageEditor(false)}
         onChanged={() => void loadPipeline({ silent: true })}
         onToast={setToast}
@@ -542,10 +618,13 @@ function LeadCard({
 
 function AddLeadDialog({
   open,
+  pipelineId,
   onClose,
   onCreated,
 }: {
   open: boolean;
+  /** Leadul se naște în pâlnia AFIȘATĂ, nu în implicită — altfel ar dispărea din tabla curentă. */
+  pipelineId: string | null;
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -579,6 +658,7 @@ function AddLeadDialog({
     try {
       await createCrmLead({
         fullName: name.trim(),
+        ...(pipelineId ? { pipelineId } : {}),
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
         company: company.trim() || undefined,

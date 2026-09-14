@@ -17,6 +17,7 @@
  */
 import { pgTable, uuid, varchar, integer, boolean, timestamp, index, unique } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants";
+import { crmPipelines } from "./crmPipelines";
 
 export const crmPipelineStages = pgTable(
   "crm_pipeline_stages",
@@ -25,6 +26,10 @@ export const crmPipelineStages = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
+    /** Pâlnia căreia îi aparține etapa (migrarea 0166). Nullable pe coloană, nu în produs:
+     *  `sync-schema` nu poate adăuga o coloană NOT NULL peste rânduri existente, iar rândurile
+     *  vechi sunt adoptate de pâlnia implicită la prima citire (`ensureTenantPipeline`). */
+    pipelineId: uuid("pipeline_id").references(() => crmPipelines.id, { onDelete: "cascade" }),
     /** Cheia scrisă în `leads.stage`. Stabilă — eticheta se poate redenumi fără
      *  să atingă lead-urile existente. */
     key: varchar("key", { length: 64 }).notNull(),
@@ -42,7 +47,8 @@ export const crmPipelineStages = pgTable(
   },
   (t) => [
     index("crm_stages_tenant_idx").on(t.tenantId, t.orderIndex),
-    unique("crm_stages_tenant_key_uniq").on(t.tenantId, t.key),
+    // Cheia e unică ÎN PÂLNIE, nu în workspace: două pâlnii au amândouă dreptul la „new".
+    unique("crm_stages_tenant_pipeline_key_uniq").on(t.tenantId, t.pipelineId, t.key),
   ]
 );
 

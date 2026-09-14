@@ -128,6 +128,7 @@ import { docmergeTemplatesRoutes } from "./routes/docmergeTemplates";
 import { crmHealthRoutes } from "./routes/crmHealth";
 import { crmLeadsRoutes } from "./routes/crmLeads";
 import { crmStagesRoutes } from "./routes/crmStages";
+import { crmPipelinesRoutes } from "./routes/crmPipelines";
 import { crmReportsRoutes } from "./routes/crmReports";
 import { crmCompaniesRoutes } from "./routes/crmCompanies";
 import { crmTagsRoutes } from "./routes/crmTags";
@@ -387,6 +388,7 @@ app.route("/api/docmerge", docmergeTemplatesRoutes);
 // Diagnostic de schemă, fără autentificare și fără date de tenant (vezi fișierul).
 app.route("/api/crm/health", crmHealthRoutes);
 app.route("/api/crm/stages", crmStagesRoutes);
+app.route("/api/crm/pipelines", crmPipelinesRoutes);
 app.route("/api/crm/reports", crmReportsRoutes);
 app.route("/api/crm/companies", crmCompaniesRoutes);
 app.route("/api/crm/tags", crmTagsRoutes);

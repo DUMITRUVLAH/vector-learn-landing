@@ -46,6 +46,8 @@ export interface CrmLead {
   interestCourse: string | null;
   source: CrmLeadSource;
   stage: CrmLeadStage;
+  /** Pâlnia leadului; `null` = pâlnia implicită a workspace-ului (leaduri de dinainte de 0166). */
+  pipelineId?: string | null;
   /** Bani în cenți — schema nu are un câmp de monedă per lead (single-currency, tenant-wide). */
   valueCents: number;
   assignedTo: string | null;
@@ -67,10 +69,53 @@ export interface CrmPipelineResponse {
    * `CRM_DEFAULT_STAGES` din `components/crm/constants.ts`.
    */
   stages?: CrmStage[];
+  /** Toate pâlniile workspace-ului — tabla arată UNA, dar selectorul are nevoie de listă. */
+  pipelines?: CrmPipeline[];
+  /** Pâlnia efectiv afișată (cea cerută sau implicita). */
+  pipelineId?: string | null;
 }
 
-export function getCrmPipeline(): Promise<CrmPipelineResponse> {
-  return api<CrmPipelineResponse>("/api/crm/leads/pipeline");
+/** `pipelineId` absent = pâlnia implicită a workspace-ului. Un id străin → 404 (nu tabla proprie). */
+export function getCrmPipeline(pipelineId?: string | null): Promise<CrmPipelineResponse> {
+  return api<CrmPipelineResponse>(
+    `/api/crm/leads/pipeline${pipelineId ? `?pipelineId=${encodeURIComponent(pipelineId)}` : ""}`
+  );
+}
+
+// ─── Pâlnii (multiple per workspace) ──────────────────────────────────────────
+
+export interface CrmPipeline {
+  id: string;
+  name: string;
+  orderIndex: number;
+  /** Pâlnia în care aterizează leadurile fără pâlnie explicită — nu se poate șterge. */
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListCrmPipelinesResponse {
+  items: CrmPipeline[];
+  /** `true` când baza e în urma codului: UI-ul rămâne pe o singură pâlnie, fără să crape. */
+  schemaLag?: boolean;
+}
+
+export function listCrmPipelines(): Promise<ListCrmPipelinesResponse> {
+  return api<ListCrmPipelinesResponse>("/api/crm/pipelines");
+}
+
+/** Pâlnia nouă se naște cu cele 5 etape implicite ale ei — altfel Kanbanul ei ar fi fără coloane. */
+export function createCrmPipeline(name: string): Promise<CrmPipeline> {
+  return api<CrmPipeline>("/api/crm/pipelines", { method: "POST", body: JSON.stringify({ name }) });
+}
+
+export function renameCrmPipeline(id: string, name: string): Promise<CrmPipeline> {
+  return api<CrmPipeline>(`/api/crm/pipelines/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+}
+
+/** 400 `pipeline_is_default` sau 409 `{ error: "pipeline_not_empty", leads: n }`. */
+export function deleteCrmPipeline(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/pipelines/${id}`, { method: "DELETE" });
 }
 
 // ─── Etape pipeline (configurabile per workspace) ──────────────────────────────
@@ -98,11 +143,16 @@ export interface ListCrmStagesResponse {
   items: CrmStage[];
 }
 
-export function getCrmStages(): Promise<ListCrmStagesResponse> {
-  return api<ListCrmStagesResponse>("/api/crm/stages");
+/** Etapele UNEI pâlnii. `pipelineId` absent = pâlnia implicită. */
+export function getCrmStages(pipelineId?: string | null): Promise<ListCrmStagesResponse> {
+  return api<ListCrmStagesResponse>(
+    `/api/crm/stages${pipelineId ? `?pipelineId=${encodeURIComponent(pipelineId)}` : ""}`
+  );
 }
 
 export interface CreateCrmStageBody {
+  /** Pâlnia în care intră etapa; absentă = implicita. */
+  pipelineId?: string;
   label: string;
   color?: CrmStageColor;
   probabilityPct?: number;
@@ -135,6 +185,8 @@ export function deleteCrmStage(id: string): Promise<{ ok: true }> {
 }
 
 export interface CrmLeadListParams {
+  /** Filtrează lista pe o pâlnie (pentru implicită intră și leadurile fără `pipelineId`). */
+  pipelineId?: string;
   page?: number;
   pageSize?: number;
   search?: string;
@@ -182,6 +234,8 @@ export function getCrmLeadDetail(id: string): Promise<CrmLeadDetailResponse> {
 
 export interface CreateCrmLeadBody {
   fullName: string;
+  /** Pâlnia în care se naște leadul; absentă = implicita workspace-ului. */
+  pipelineId?: string | null;
   /** Câmpurile de mai jos sunt `optional().nullable()` pe server: `undefined` = neschimbat la
    *  PATCH, `null` = golit explicit, string = setat. Un string gol NU trebuie trimis pentru
    *  `email` — validarea `.email()` de pe server îl respinge (vezi `emptyToNull` din `format.ts`). */
@@ -214,6 +268,20 @@ export interface MoveCrmLeadStageBody {
 
 export function moveCrmLeadStage(id: string, body: MoveCrmLeadStageBody): Promise<CrmLead> {
   return api<CrmLead>(`/api/crm/leads/${id}/stage`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export interface MoveCrmLeadPipelineBody {
+  pipelineId: string;
+  /** Etapa dorită în pâlnia țintă; absentă sau inexistentă acolo → prima etapă a pâlniei. */
+  stage?: string;
+}
+
+/**
+ * Mutarea între pâlnii e o rută separată, nu un `PATCH /:id { pipelineId }`: cheile de etapă nu
+ * sunt comune între pâlnii, deci serverul reașază etapa și scrie o urmă în istoric.
+ */
+export function moveCrmLeadPipeline(id: string, body: MoveCrmLeadPipelineBody): Promise<CrmLead> {
+  return api<CrmLead>(`/api/crm/leads/${id}/pipeline`, { method: "PATCH", body: JSON.stringify(body) });
 }
 
 export type CrmInteractionType =

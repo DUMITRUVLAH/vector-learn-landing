@@ -44,6 +44,8 @@ export interface StageEditorDialogToast {
 export interface StageEditorDialogProps {
   open: boolean;
   stages: readonly CrmStage[];
+  /** Pâlnia ale cărei etape se editează; absentă = implicita workspace-ului. */
+  pipelineId?: string | null;
   onClose: () => void;
   /** Apelat după orice mutație reușită — părintele reîncarcă etapele + board-ul, silențios. */
   onChanged: () => void;
@@ -66,7 +68,7 @@ function stageErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "A apărut o eroare neașteptată.";
 }
 
-export function StageEditorDialog({ open, stages, onClose, onChanged, onToast }: StageEditorDialogProps) {
+export function StageEditorDialog({ open, stages, pipelineId, onClose, onChanged, onToast }: StageEditorDialogProps) {
   const [localStages, setLocalStages] = useState<CrmStage[]>([]);
   const [mutating, setMutating] = useState(false);
   const [newLabel, setNewLabel] = useState("");
@@ -139,7 +141,13 @@ export function StageEditorDialog({ open, stages, onClose, onChanged, onToast }:
     if (!newLabel.trim()) return;
     setAdding(true);
     try {
-      const created = await createCrmStage({ label: newLabel.trim(), color: newColor });
+      // Etapa intră în pâlnia AFIȘATĂ, nu în implicită: altfel o coloană adăugată din „B2B” ar
+      // apărea pe tabla de retail.
+      const created = await createCrmStage({
+        label: newLabel.trim(),
+        color: newColor,
+        ...(pipelineId ? { pipelineId } : {}),
+      });
       setLocalStages((list) => [...list, created]);
       setNewLabel("");
       setNewColor("sky");

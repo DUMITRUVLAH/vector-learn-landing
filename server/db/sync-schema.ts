@@ -6,6 +6,7 @@ import { resolveDatabaseUrl } from "./env";
 import { DOCGEN_ENSURE_STATEMENTS } from "./ensure/docgen";
 import { PAR_VENDOR_PROFILE_ENSURE_STATEMENTS } from "./ensure/parVendorProfile";
 import { PAR_DRIVE_ENSURE_STATEMENTS } from "./ensure/parDriveSync";
+import { CRM_PARITY_ENSURE_STATEMENTS } from "./ensure/crmParity";
 
 /**
  * Self-healing schema sync — runs at deploy AFTER migrations (see scripts/vercel-migrate.mjs).
@@ -666,6 +667,7 @@ async function main() {
     ...DOCGEN_ENSURE_STATEMENTS,
     ...PAR_VENDOR_PROFILE_ENSURE_STATEMENTS,
     ...PAR_DRIVE_ENSURE_STATEMENTS,
+    ...CRM_PARITY_ENSURE_STATEMENTS,
     // Migrarea 0154 (audit perf): indexuri compuse/parțiale pe interogările hot-path ale PAR —
     // fără migrări fiabile pe prod, indexurile trebuie create explicit aici, nu doar în migrare.
     `CREATE INDEX IF NOT EXISTS "par_payer_modules_tenant_module_idx" ON "par_payer_modules" ("tenant_id","module_key")`,

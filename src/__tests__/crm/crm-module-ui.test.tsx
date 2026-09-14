@@ -126,6 +126,12 @@ vi.mock("@/lib/api/crm", () => ({
   addCrmLeadTag: (...args: unknown[]) => addCrmLeadTag(...args),
   removeCrmLeadTag: (...args: unknown[]) => removeCrmLeadTag(...args),
   listCrmTagSuggestions: (...args: unknown[]) => listCrmTagSuggestions(...args),
+  // Pâlnii multiple (Faza 9) — mock-uri inerte aici: acest fișier testează o singură pâlnie.
+  listCrmPipelines: vi.fn().mockResolvedValue({ items: [] }),
+  createCrmPipeline: vi.fn(),
+  renameCrmPipeline: vi.fn(),
+  deleteCrmPipeline: vi.fn(),
+  moveCrmLeadPipeline: vi.fn(),
 }));
 
 const { CrmHomePage } = await import("@/pages/business/crm/CrmHomePage");
