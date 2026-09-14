@@ -61,6 +61,7 @@ export * from "./leads";
 export * from "./crmProducts";
 export * from "./crmPipelines";
 export * from "./crmSavedViews";
+export * from "./crmCadences";
 export * from "./crmPipelineStages";
 export * from "./crmTasks";
 export * from "./crmCompanies";

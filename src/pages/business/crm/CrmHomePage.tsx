@@ -15,6 +15,7 @@ import {
   Zap,
   BarChart3,
   FileText,
+  RefreshCw,
   ArrowRight,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
@@ -85,6 +86,14 @@ const CRM_MODULES: CrmModuleTile[] = [
     description: "Reguli care mișcă singure leadurile, creează taskuri și le împart pe agenți.",
     href: "/business/crm/automatizari",
     icon: Zap,
+    available: true,
+  },
+  {
+    id: "cadente",
+    label: "Cadențe și reactivare",
+    description: "Secvențe de urmărire pas cu pas și trezirea clienților pierduți de luni de zile.",
+    href: "/business/crm/cadente",
+    icon: RefreshCw,
     available: true,
   },
   {

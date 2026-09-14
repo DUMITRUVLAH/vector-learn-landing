@@ -42,6 +42,7 @@ import { normalizePhone, normalizeEmail } from "../lib/crm/normalize";
 import { ensureTenantStages, DEFAULT_STAGES } from "../lib/crm/stages";
 import { crmPipelines, type CrmPipeline } from "../db/schema/crmPipelines";
 import { ensureTenantPipeline, leadsInPipeline } from "../lib/crm/pipelines";
+import { enrollByStage } from "../lib/crm/cadences";
 
 /**
  * Coloanele pe care le întoarce API-ul — EXACT cele din `CrmLead` (src/lib/api/crm.ts).
@@ -667,6 +668,10 @@ crmLeadsRoutes.patch("/:id/stage", zValidator("json", stageChangeSchema), async 
     kind: "lead.stage_changed",
     toStage: stage,
   });
+
+  // Cadențele cu etapă declanșatoare: intrarea în etapă înscrie leadul în secvența de urmărire.
+  // Idempotent pe (lead, cadență) activă — o mutare înainte-înapoi nu-l înscrie de două ori.
+  await enrollByStage(user.tenantId, id, stage);
 
   const [fresh] = await db
     .select()

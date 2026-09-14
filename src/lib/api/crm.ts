@@ -809,3 +809,156 @@ export interface CrmPersonHistoryResponse {
 export function getCrmPersonHistory(leadId: string): Promise<CrmPersonHistoryResponse> {
   return api<CrmPersonHistoryResponse>(`/api/crm/leads/${leadId}/person-history`);
 }
+
+// ─── Cadențe (secvențe de urmărire) ────────────────────────────────────────────
+
+export type CrmCadenceStepAction = "task" | "note";
+
+export interface CrmCadenceStep {
+  /** Zile după înscriere (primul pas) sau după pasul precedent. */
+  dayOffset: number;
+  action: CrmCadenceStepAction;
+  title: string;
+}
+
+export interface CrmCadence {
+  id: string;
+  name: string;
+  /** Etapa care înscrie automat leadul; `null` = doar înscriere manuală. */
+  triggerStage: string | null;
+  enabled: boolean;
+  steps: CrmCadenceStep[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrmCadenceEnrollment {
+  id: string;
+  leadId: string;
+  cadenceId: string;
+  status: "active" | "done" | "cancelled";
+  currentStep: number;
+  nextFireAt: string | null;
+  enrolledAt: string;
+  cadenceName?: string;
+}
+
+export function listCrmCadences(): Promise<{ items: CrmCadence[] }> {
+  return api<{ items: CrmCadence[] }>("/api/crm/cadences");
+}
+
+export interface CreateCrmCadenceBody {
+  name: string;
+  triggerStage?: string | null;
+  enabled?: boolean;
+  steps?: CrmCadenceStep[];
+}
+
+export function createCrmCadence(body: CreateCrmCadenceBody): Promise<CrmCadence> {
+  return api<CrmCadence>("/api/crm/cadences", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function updateCrmCadence(id: string, body: Partial<CreateCrmCadenceBody>): Promise<CrmCadence> {
+  return api<CrmCadence>(`/api/crm/cadences/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export function deleteCrmCadence(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/cadences/${id}`, { method: "DELETE" });
+}
+
+export function listCrmLeadEnrollments(leadId: string): Promise<{ items: CrmCadenceEnrollment[] }> {
+  return api<{ items: CrmCadenceEnrollment[] }>(`/api/crm/cadences/enrollments?leadId=${leadId}`);
+}
+
+export function enrollCrmLeadInCadence(leadId: string, cadenceId: string): Promise<CrmCadenceEnrollment> {
+  return api<CrmCadenceEnrollment>("/api/crm/cadences/enroll", {
+    method: "POST",
+    body: JSON.stringify({ leadId, cadenceId }),
+  });
+}
+
+export function cancelCrmEnrollment(id: string): Promise<CrmCadenceEnrollment> {
+  return api<CrmCadenceEnrollment>(`/api/crm/cadences/enrollments/${id}/cancel`, { method: "POST" });
+}
+
+/** Aprinde acum pașii scadenți ai workspace-ului curent (în rest o face cronul zilnic). */
+export function runCrmCadencesNow(): Promise<{ ok: true; due: number; advanced: number; errors: number }> {
+  return api<{ ok: true; due: number; advanced: number; errors: number }>("/api/crm/cadences/run", { method: "POST" });
+}
+
+// ─── Reactivarea clienților pierduți ───────────────────────────────────────────
+
+export type CrmReengagementAction = "create_task" | "enroll_cadence" | "add_tag";
+
+export interface CrmReengagementRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  afterMonths: number;
+  /** `[]` = orice motiv de pierdere. */
+  lostReasons: string[];
+  /** `[]` = orice etapă marcată „pierdut". */
+  stageKeys: string[];
+  action: CrmReengagementAction;
+  cadenceId: string | null;
+  /** Titlul taskului (create_task) sau eticheta (add_tag). */
+  taskTitle: string | null;
+  orderIndex: number;
+}
+
+export interface CrmReengagementPreviewItem {
+  ruleId: string;
+  ruleName: string;
+  action: CrmReengagementAction;
+  leadId: string;
+  leadName: string;
+  lostAt: string | null;
+  lostReason: string | null;
+}
+
+export function listCrmReengagementRules(): Promise<{ items: CrmReengagementRule[] }> {
+  return api<{ items: CrmReengagementRule[] }>("/api/crm/cadences/reengagement/rules");
+}
+
+export interface CreateCrmReengagementRuleBody {
+  name: string;
+  enabled?: boolean;
+  afterMonths: number;
+  lostReasons?: string[];
+  stageKeys?: string[];
+  action: CrmReengagementAction;
+  cadenceId?: string | null;
+  taskTitle?: string | null;
+}
+
+export function createCrmReengagementRule(body: CreateCrmReengagementRuleBody): Promise<CrmReengagementRule> {
+  return api<CrmReengagementRule>("/api/crm/cadences/reengagement/rules", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateCrmReengagementRule(
+  id: string,
+  body: Partial<CreateCrmReengagementRuleBody>
+): Promise<CrmReengagementRule> {
+  return api<CrmReengagementRule>(`/api/crm/cadences/reengagement/rules/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteCrmReengagementRule(id: string): Promise<{ ok: true }> {
+  return api<{ ok: true }>(`/api/crm/cadences/reengagement/rules/${id}`, { method: "DELETE" });
+}
+
+/** Ce s-ar trezi acum, FĂRĂ efecte — asta se vede înainte de „Rulează acum". */
+export function previewCrmReengagement(): Promise<{ items: CrmReengagementPreviewItem[] }> {
+  return api<{ items: CrmReengagementPreviewItem[] }>("/api/crm/cadences/reengagement/preview");
+}
+
+export function runCrmReengagement(): Promise<{ ok: true; due: number; applied: number; failed: number }> {
+  return api<{ ok: true; due: number; applied: number; failed: number }>("/api/crm/cadences/reengagement/run", {
+    method: "POST",
+  });
+}
