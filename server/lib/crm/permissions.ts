@@ -104,3 +104,35 @@ export function canAny(role: string, permissions: readonly CrmPermission[]): boo
 export function listPermissions(role: string): CrmPermission[] {
   return [...permissionsOf(role)];
 }
+
+
+// ─── Excepții pe om (cerința 60) ──────────────────────────────────────────────
+
+/** O excepție citită din `crm_user_permissions`. */
+export interface PermissionOverride {
+  permission: string;
+  granted: boolean;
+}
+
+/**
+ * Drepturile EFECTIVE ale unui om: matricea rolului, plus ce i s-a acordat în plus, minus ce i
+ * s-a retras. Pură — stratul de date doar îi aduce excepțiile.
+ *
+ * Ordinea contează: retragerea bate acordarea. Dacă cineva a scris ambele pentru același drept
+ * (n-ar trebui — indexul unic o împiedică), interpretarea sigură e cea restrictivă.
+ */
+export function effectivePermissions(role: string, overrides: readonly PermissionOverride[]): CrmPermission[] {
+  const set = new Set<string>(permissionsOf(role));
+  for (const o of overrides) if (o.granted) set.add(o.permission);
+  for (const o of overrides) if (!o.granted) set.delete(o.permission);
+  return [...set] as CrmPermission[];
+}
+
+/** Pură: are omul dreptul, ținând cont de excepții? */
+export function canWithOverrides(
+  role: string,
+  overrides: readonly PermissionOverride[],
+  permission: CrmPermission
+): boolean {
+  return effectivePermissions(role, overrides).includes(permission);
+}

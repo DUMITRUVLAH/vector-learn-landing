@@ -1212,6 +1212,13 @@
       "when": 1787000203027,
       "tag": "0173_doc_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 174,
+      "version": "7",
+      "when": 1787000203028,
+      "tag": "0174_crm_user_permissions",
+      "breakpoints": true
     }
   ]
 }

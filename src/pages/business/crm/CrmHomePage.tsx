@@ -17,6 +17,7 @@ import {
   FileText,
   RefreshCw,
   History,
+  ShieldCheck,
   ArrowRight,
 } from "lucide-react";
 import { BusinessShell } from "@/components/business/BusinessShell";
@@ -108,6 +109,15 @@ const CRM_MODULES: CrmModuleTile[] = [
     href: "/business/crm/rapoarte",
     icon: BarChart3,
     available: true,
+  },
+  {
+    id: "drepturi",
+    label: "Drepturi",
+    description: "Cine ce poate face: rolul dă temelia, excepțiile se scriu pe om.",
+    href: "/business/crm/drepturi",
+    icon: ShieldCheck,
+    available: true,
+    requires: "audit.view",
   },
   {
     id: "jurnal",

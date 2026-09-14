@@ -176,6 +176,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Automatizări", href: "/business/crm/automatizari", icon: Zap, tone: "indigo" },
       { label: "Cadențe", href: "/business/crm/cadente", icon: RefreshCw, tone: "amber" },
       { label: "Jurnal", href: "/business/crm/jurnal", icon: HistoryIcon, tone: "violet" },
+      { label: "Drepturi", href: "/business/crm/drepturi", icon: ShieldCheck, tone: "teal" },
       { label: "Rapoarte", href: "/business/crm/rapoarte", icon: BarChart3, tone: "violet" },
     ],
   },

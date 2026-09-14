@@ -130,7 +130,7 @@ onestă spune de la început ce se cumpără și ce se construiește.
 | Nr. | Cerință | Conform | Observații |
 |---|---|---|---|
 | 59 | Minimum 4 niveluri de acces | **Parțial** | Există patru roluri reale (administrator, manager, agent, recepție) peste care stă matricea CRM. Denumirile din caiet (Director Comercial, Team Leader, Sales Manager) se pot mapa 1:1, dar azi rolul „Team Leader" nu are o arie proprie de echipă — vede tot workspace-ul. |
-| 60 | Drepturi diferențiate, configurabile per rol/utilizator | **Parțial** | Diferențiate per rol, da (14 drepturi, verificate pe server). Configurabile per UTILIZATOR din interfață: nu — matricea e cod, nu date. |
+| 60 | Drepturi diferențiate, configurabile per rol/utilizator | **Da** | 14 drepturi, verificate pe server la fiecare cerere. Rolul dă temelia (rămâne cod: așa un rol nou nu primește din greșeală drepturi), iar excepțiile se scriu pe OM, din ecranul „Drepturi": acordat anume, sau retras deși rolul îl are. Un drept retras se aplică imediat — verificarea nu e memorată. |
 | 61 | Jurnalizare (audit log) | **Da** | Leaduri, pâlnii, etape, cadențe, reguli, câmpuri — cu cine, când și ce s-a schimbat. |
 | 62 | Backup periodic, cu restaurare | **Parțial** | Asigurat de furnizorul de bază de date (backup zilnic, restaurare punctuală). Nu e o funcție a aplicației; se documentează în oferta tehnică. |
 | 63 | Conformitate GDPR / legislația RM | **Da** | Pe fișa leadului: export JSON al tuturor datelor (acces + portabilitate), retragerea consimțământului (nu șterge nimic — e alt drept) și ștergerea datelor personale prin anonimizare. Anonimizarea scoate numele, telefonul, emailul, notele și contactele, dar păstrează valoarea, etapa și motivul pierderii: sunt fapte ale firmei, nu date ale persoanei — altfel rapoartele de anul trecut s-ar schimba retroactiv. |
@@ -166,8 +166,8 @@ Toate cele 76 de cerințe din Anexa B sunt acoperite mai sus, în ordinea din ca
 
 | Conform | Număr | Procent |
 |---|---|---|
-| Da | 52 | 68% |
-| Parțial | 17 | 22% |
+| Da | 53 | 70% |
+| Parțial | 16 | 21% |
 | Nu | 7 | 9% |
 
 Cele șapte „Nu" rămase sunt, toate, același lucru: **telefonia (20, 22, 23, 25, 65) și mesageria

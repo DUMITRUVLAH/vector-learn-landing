@@ -993,7 +993,40 @@ export type CrmPermission =
 
 export interface CrmPermissionsResponse {
   role: string;
+  /** Drepturile EFECTIVE: rolul, plus ce i s-a acordat, minus ce i s-a retras. */
   permissions: CrmPermission[];
+  /** Doar cele din rol — ca ecranul de administrare să arate de unde vine fiecare drept. */
+  fromRole?: CrmPermission[];
+}
+
+export interface CrmTeamMemberPermissions {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  /** Excepțiile scrise pe om: `granted: false` = retras, deși rolul îl are. */
+  overrides: { permission: string; granted: boolean }[];
+  effective: CrmPermission[];
+}
+
+export interface CrmTeamPermissionsResponse {
+  /** Ce poate fiecare rol — temelia peste care stau excepțiile. */
+  roleMatrix: Record<string, CrmPermission[]>;
+  members: CrmTeamMemberPermissions[];
+}
+
+/** Cere `audit.view`. */
+export function getCrmTeamPermissions(): Promise<CrmTeamPermissionsResponse> {
+  return api<CrmTeamPermissionsResponse>("/api/crm/permissions/team");
+}
+
+/** `granted: null` șterge excepția — omul revine la ce-i dă rolul. Doar administratorii. */
+export function setCrmUserPermission(body: {
+  userId: string;
+  permission: string;
+  granted: boolean | null;
+}): Promise<{ ok: true }> {
+  return api<{ ok: true }>("/api/crm/permissions/team", { method: "PUT", body: JSON.stringify(body) });
 }
 
 /**
