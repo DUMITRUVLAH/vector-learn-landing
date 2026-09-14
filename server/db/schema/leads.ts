@@ -38,6 +38,17 @@ export const leads = pgTable(
     email: varchar("email", { length: 255 }),
     emailNormalized: varchar("email_normalized", { length: 255 }),
     interestCourse: varchar("interest_course", { length: 200 }),
+    /** Produsul/serviciul vândut, din catalogul `crm_products` (migrarea 0170).
+     *  Până acum „produsul" unui lead era textul liber din `interest_course`, iar raportul „pe
+     *  produs" grupa după ce a tastat fiecare — „Panouri 10kW", „panouri 10 kw" și „PV 10" erau
+     *  trei produse diferite. `interest_course` rămâne, ca notă a ce a cerut clientul; deciziile
+     *  și rapoartele se sprijină pe legătura asta. FK-ul e declarat în migrare, nu aici, ca
+     *  schema să nu depindă de ordinea importurilor între fișiere. */
+    productId: uuid("product_id"),
+    /** Probabilitatea de câștig A ACESTEI oportunități, 0-100. `null` = se moștenește de la
+     *  etapă (`crm_pipeline_stages.probability_pct`). Caietul de sarcini (cerința 10) o cere per
+     *  oportunitate, nu doar per etapă: două afaceri în aceeași etapă nu au aceeași șansă. */
+    probabilityPct: integer("probability_pct"),
     /** Pâlnia în care stă leadul (migrarea 0166). `null` = pâlnia implicită a workspace-ului —
      *  așa migrarea nu trebuie să rescrie fiecare lead existent ca produsul să fie corect. */
     pipelineId: uuid("pipeline_id"),

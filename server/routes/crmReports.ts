@@ -20,6 +20,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { leads, leadInteractions } from "../db/schema/leads";
 import { crmPipelineStages } from "../db/schema/crmPipelineStages";
+import { crmProducts } from "../db/schema/crmProducts";
 import { crmLeadTasks } from "../db/schema/crmTasks";
 import { users } from "../db/schema/users";
 import { requireAuth, type AuthVariables } from "../middleware/requireAuth";
@@ -83,6 +84,7 @@ crmReportsRoutes.get("/", async (c) => {
         createdAt: leads.createdAt,
         lostReason: leads.lostReason,
         interestCourse: leads.interestCourse,
+        productId: leads.productId,
       })
       .from(leads)
       .where(eq(leads.tenantId, tenantId))
@@ -121,6 +123,12 @@ crmReportsRoutes.get("/", async (c) => {
       .where(eq(crmLeadTasks.tenantId, tenantId))
       .limit(MAX_ROWS);
 
+    const productRows = await db
+      .select({ id: crmProducts.id, name: crmProducts.name })
+      .from(crmProducts)
+      .where(eq(crmProducts.tenantId, tenantId));
+    const productNameById = Object.fromEntries(productRows.map((p) => [p.id, p.name]));
+
     const memberRows = await db
       .select({ id: users.id, name: users.name })
       .from(users)
@@ -135,6 +143,7 @@ crmReportsRoutes.get("/", async (c) => {
       createdAt: iso(l.createdAt) ?? new Date(0).toISOString(),
       lostReason: l.lostReason,
       interestCourse: l.interestCourse,
+      productId: l.productId,
     }));
 
     const reportTasks: ReportTask[] = taskRows.map((t) => ({
@@ -205,7 +214,9 @@ crmReportsRoutes.get("/", async (c) => {
       conversion: stageConversion(scopedChanges, reportStages),
       cycleDays: averageCycleDays(reportLeads, scopedChanges, reportStages),
       perOwner: perOwnerBreakdown(reportLeads, reportInteractions, reportTasks, stageChanges, reportStages, range, owners),
-      perProduct: perProductBreakdown(scopedLeads, reportStages),
+      // Cu harta de nume, raportul grupează după PRODUSUL din catalog; textul liber
+      // (`interest_course`) rămâne doar pentru leadurile cărora nu li s-a ales unul.
+      perProduct: perProductBreakdown(scopedLeads, reportStages, productNameById),
       lostReasons: lostReasonBreakdown(reportLeads, {
         stageChanges: scopedChanges,
         stages: reportStages,

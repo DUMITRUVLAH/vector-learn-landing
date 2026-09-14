@@ -150,4 +150,9 @@ export const CRM_PARITY_ENSURE_STATEMENTS: string[] = [
     "result" varchar(20) DEFAULT 'ok' NOT NULL,
     CONSTRAINT "crm_reeng_runs_rule_lead_uniq" UNIQUE("rule_id","lead_id")
   )`,
+
+  // ── Produsul și probabilitatea pe oportunitate (migrarea 0170) ─────────────
+  `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "product_id" uuid`,
+  `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "probability_pct" integer`,
+  `CREATE INDEX IF NOT EXISTS "leads_product_idx" ON "leads" ("tenant_id","product_id")`,
 ];

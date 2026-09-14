@@ -52,6 +52,8 @@ const enrollCrmLeadInCadence = vi.fn();
 const listCrmAudit = vi.fn().mockResolvedValue({ items: [] });
 
 vi.mock("@/lib/api/crm", () => ({
+  // Catalogul de produse: fișa îl cere pentru select-ul „Produs".
+  listCrmProducts: vi.fn().mockResolvedValue({ items: [] }),
   // Drepturile utilizatorului: ecranele CRM le cer ca să știe ce butoane să arate.
   getCrmPermissions: vi.fn().mockResolvedValue({ role: "admin", permissions: ["leads.view_all", "leads.edit", "pipelines.manage", "products.manage", "cadences.manage", "automations.manage", "assignment.manage", "audit.view"] }),
   getCrmLeadDetail: (...a: unknown[]) => getCrmLeadDetail(...a),

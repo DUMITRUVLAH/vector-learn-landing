@@ -63,6 +63,8 @@ const LEAD_COLS = {
   email: leads.email,
   company: leads.company,
   interestCourse: leads.interestCourse,
+  productId: leads.productId,
+  probabilityPct: leads.probabilityPct,
   source: leads.source,
   stage: leads.stage,
   pipelineId: leads.pipelineId,
@@ -132,6 +134,10 @@ const leadFieldsSchema = z.object({
   company: z.string().max(300).optional().nullable(),
   dealName: z.string().max(300).optional().nullable(),
   interestCourse: z.string().max(200).optional().nullable(),
+  /** Produsul din catalog (`crm_products`). `null` = fără produs ales. */
+  productId: z.string().uuid().optional().nullable(),
+  /** Probabilitatea acestei oportunități; `null` = se moștenește de la etapă. */
+  probabilityPct: z.number().int().min(0).max(100).optional().nullable(),
   source: z.enum(LEAD_SOURCES).optional(),
   // Liber, nu mai e un enum static — cheia trebuie să existe în `crm_pipeline_stages` a
   // tenantului, dar POST/PATCH generice pe lead nu forțează validarea asta (doar PATCH
@@ -512,6 +518,8 @@ crmLeadsRoutes.post("/", zValidator("json", createLeadSchema), async (c) => {
   if (body.company !== undefined) values.company = body.company;
   if (body.dealName !== undefined) values.dealName = body.dealName;
   if (body.interestCourse !== undefined) values.interestCourse = body.interestCourse;
+  if (body.productId !== undefined) values.productId = body.productId;
+  if (body.probabilityPct !== undefined) values.probabilityPct = body.probabilityPct;
   if (body.source !== undefined) values.source = body.source;
   if (body.stage !== undefined) {
     values.stage = body.stage;
@@ -598,6 +606,8 @@ crmLeadsRoutes.patch("/:id", zValidator("json", updateLeadSchema), async (c) => 
   if (body.company !== undefined) updates.company = body.company;
   if (body.dealName !== undefined) updates.dealName = body.dealName;
   if (body.interestCourse !== undefined) updates.interestCourse = body.interestCourse;
+  if (body.productId !== undefined) updates.productId = body.productId;
+  if (body.probabilityPct !== undefined) updates.probabilityPct = body.probabilityPct;
   if (body.source !== undefined) updates.source = body.source;
   if (body.stage !== undefined) updates.stage = body.stage;
   // `pipelineId` NU se schimbă din PATCH-ul generic: mutarea între pâlnii reașază și etapa și

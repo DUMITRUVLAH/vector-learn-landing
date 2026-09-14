@@ -42,8 +42,12 @@ export interface CrmLead {
   phone: string | null;
   email: string | null;
   company: string | null;
-  /** Cursul / interesul leadului (ex. „Engleză B2"). */
+  /** Cursul / interesul leadului, cu cuvintele clientului (ex. „Engleză B2"). */
   interestCourse: string | null;
+  /** Produsul din catalog (`crm_products`) — pe el se sprijină raportul „pe produs". */
+  productId?: string | null;
+  /** Probabilitatea acestei oportunități; `null` = se moștenește de la etapă. */
+  probabilityPct?: number | null;
   source: CrmLeadSource;
   stage: CrmLeadStage;
   /** Pâlnia leadului; `null` = pâlnia implicită a workspace-ului (leaduri de dinainte de 0166). */
@@ -244,6 +248,8 @@ export interface CreateCrmLeadBody {
   email?: string | null;
   company?: string | null;
   interestCourse?: string | null;
+  productId?: string | null;
+  probabilityPct?: number | null;
   source?: CrmLeadSource;
   valueCents?: number;
   /** `user_id` responsabil (uuid) — `null` = neasignat. */

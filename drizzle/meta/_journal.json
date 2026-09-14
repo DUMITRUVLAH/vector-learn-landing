@@ -1191,6 +1191,20 @@
       "when": 1787000203024,
       "tag": "0170_par_verify_qr",
       "breakpoints": true
+    },
+    {
+      "idx": 171,
+      "version": "7",
+      "when": 1787000203025,
+      "tag": "0171_crm_lead_product",
+      "breakpoints": true
+    },
+    {
+      "idx": 172,
+      "version": "7",
+      "when": 1787000203026,
+      "tag": "0172_crm_capture_sources",
+      "breakpoints": true
     }
   ]
 }

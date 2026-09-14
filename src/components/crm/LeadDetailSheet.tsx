@@ -60,6 +60,7 @@ import {
   addCrmLeadTag,
   removeCrmLeadTag,
   listCrmTagSuggestions,
+  listCrmProducts,
   type CrmLead,
   type CrmLeadDetailResponse,
   type CrmLeadInteraction,
@@ -174,6 +175,10 @@ function sortTasksForDisplay(tasks: CrmLeadTask[]): CrmLeadTask[] {
 
 interface DetailFormState {
   fullName: string;
+  /** Produsul din catalog; „" = niciunul. */
+  productId: string;
+  /** Probabilitatea proprie; „" = se moștenește de la etapă. */
+  probabilityText: string;
   dealName: string;
   company: string;
   phone: string;
@@ -188,6 +193,8 @@ interface DetailFormState {
 function toFormState(lead: CrmLead): DetailFormState {
   return {
     fullName: lead.fullName,
+    productId: lead.productId ?? "",
+    probabilityText: lead.probabilityPct == null ? "" : String(lead.probabilityPct),
     dealName: lead.dealName ?? "",
     company: lead.company ?? "",
     phone: lead.phone ?? "",
@@ -217,6 +224,8 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
   const [noteBody, setNoteBody] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [loggingCall, setLoggingCall] = useState(false);
+  /** „Ce urmează?" — apare după o activitate care lasă leadul fără niciun pas următor. */
+  const [askNextAction, setAskNextAction] = useState(false);
 
   // Acte (oferte/contracte) — lista e a motorului de acte, CRM-ul doar o arată.
   const [documents, setDocuments] = useState<CrmDocument[]>([]);
@@ -231,6 +240,9 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
   /** id-ul taskului pe care rulează chiar acum o acțiune (bifare/amânare/ștergere) — dezactivează
    *  DOAR rândul lui, nu toată lista. */
   const [taskActionId, setTaskActionId] = useState<string | null>(null);
+
+  /** Catalogul de produse — pentru select-ul din „Detalii". Se cere o dată, la deschidere. */
+  const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
 
   // Etichete
   const [tags, setTags] = useState<CrmLeadTag[]>([]);
@@ -304,6 +316,15 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
   useEffect(() => {
     reloadDocuments();
   }, [reloadDocuments]);
+
+  useEffect(() => {
+    if (!leadId) return;
+    // Separat de `Promise.all`-ul fișei, ca la acte: un catalog care nu răspunde nu are voie să
+    // golească fișa leadului.
+    listCrmProducts()
+      .then((res) => setProducts(res.items.map((p) => ({ id: p.id, name: p.name }))))
+      .catch(() => setProducts([]));
+  }, [leadId]);
 
   function retryLoad() {
     if (!leadId) return;
@@ -390,6 +411,9 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       phone: emptyToNull(form.phone),
       email: emptyToNull(form.email),
       interestCourse: emptyToNull(form.interestCourse),
+      productId: form.productId ? form.productId : null,
+      // Gol = „moștenește de la etapă", nu „0%": diferența contează la prognoză.
+      probabilityPct: form.probabilityText.trim() === "" ? null : Math.max(0, Math.min(100, Number(form.probabilityText) || 0)),
       valueCents: leadValueToCents(form.valueText),
       source: form.source,
       assignedTo: form.assignedTo ? form.assignedTo : null,
@@ -402,6 +426,8 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
       phone: patch.phone ?? null,
       email: patch.email ?? null,
       interestCourse: patch.interestCourse ?? null,
+      productId: patch.productId ?? null,
+      probabilityPct: patch.probabilityPct ?? null,
       valueCents: patch.valueCents ?? detail.lead.valueCents,
       source: patch.source ?? detail.lead.source,
       assignedTo: patch.assignedTo ?? null,
@@ -443,6 +469,10 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
     try {
       const created = await createCrmLeadInteraction(leadId, { type: "call", direction: "outbound" });
       setInteractions((prev) => [created, ...prev]);
+      // Cerințele 10 și 17 din caietul de sarcini: fiecare activitate se încheie cu un pas
+      // următor. Un lead fără pas următor e un lead uitat — nu-l cere nimeni, nu-l sună nimeni.
+      // Nu blocăm apelul (acela s-a întâmplat deja), ci cerem pasul imediat după.
+      if (!tasks.some((t) => t.status !== "done")) setAskNextAction(true);
       onToast({ kind: "success", message: "Apel notat în istoric." });
     } catch (err) {
       onToast({ kind: "error", message: err instanceof Error ? err.message : "Nu am putut nota apelul." });
@@ -465,6 +495,7 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
         dueAt: newTaskDueDate ? new Date(`${newTaskDueDate}T12:00:00`).toISOString() : null,
       });
       setTasks((prev) => sortTasksForDisplay([...prev, created]));
+      setAskNextAction(false);
       setNewTaskTitle("");
       setNewTaskDueDate("");
       // Un task nou poate scoate lead-ul din „fără pas următor" pe orice ecran care arată „Azi".
@@ -730,6 +761,19 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
 
             {tab === "activitate" && (
               <div className="flex flex-col gap-6">
+                {askNextAction && (
+                  <Alert variant="warning" icon={<AlertCircle className="h-4 w-4" aria-hidden="true" />}>
+                    <div className="flex flex-col gap-2">
+                      <p>
+                        Ai notat activitatea, dar leadul a rămas fără pas următor. Adaugă un task mai jos — altfel
+                        nimeni nu știe când se revine la el.
+                      </p>
+                      <Button variant="outline" size="sm" className="w-fit" onClick={() => setAskNextAction(false)}>
+                        Am înțeles
+                      </Button>
+                    </div>
+                  </Alert>
+                )}
                 {/* Cadențele stau lângă taskuri, nu într-o filă proprie: sunt tot „ce urmează",
                     doar că programat dinainte. Secțiunea dispare complet dacă workspace-ul n-are
                     nicio cadență. */}
@@ -951,6 +995,33 @@ export function LeadDetailSheet({ leadId, stages, onClose, onChanged, onToast, o
                     id="lead-sheet-interest"
                     value={form.interestCourse}
                     onChange={(e) => setForm({ ...form, interestCourse: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="lead-sheet-product">Produs</Label>
+                  <Select
+                    id="lead-sheet-product"
+                    value={form.productId}
+                    onChange={(e) => setForm({ ...form, productId: e.target.value })}
+                  >
+                    <option value="">— fără produs —</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="lead-sheet-probability">Probabilitate (%)</Label>
+                  <Input
+                    id="lead-sheet-probability"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={form.probabilityText}
+                    onChange={(e) => setForm({ ...form, probabilityText: e.target.value })}
+                    placeholder={currentStage ? `implicit ${currentStage.probabilityPct}%` : "din etapă"}
                   />
                 </div>
                 <div className="flex flex-col gap-1">

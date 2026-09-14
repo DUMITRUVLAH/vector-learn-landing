@@ -95,6 +95,9 @@ listCrmLostReasons.mockResolvedValue({
 // Idem: liste goale implicite pentru taskuri/etichete, ca fișa leadului să nu crape în testele
 // care nu au nimic de-a face cu ele.
 listCrmLeadTasks.mockResolvedValue({ items: [] });
+// Fișa leadului cere catalogul de produse pentru select-ul „Produs"; testele care nu-l verifică
+// n-au de ce să-l moacheze fiecare în parte.
+listCrmProducts.mockResolvedValue({ items: [] });
 listCrmLeadTags.mockResolvedValue({ items: [] });
 listCrmTagSuggestions.mockResolvedValue({ items: [] });
 
